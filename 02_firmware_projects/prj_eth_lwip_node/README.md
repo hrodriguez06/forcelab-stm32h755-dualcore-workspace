@@ -61,12 +61,10 @@ prj_eth_lwip_node/
 │       └── lan8742_phy.[ch]         # SMI/MDIO transceiver driver
 ├── docs/
 │   └── ETHERNET_BRINGUP.md          # Verification guide
-└── tools/
+└── tools/                           # shims; the scripts live in <workspace>/tools/
     ├── env.ps1                      # puts CMake/Ninja/GCC on PATH for the session
     ├── flash.py                     # flashes CPU1/CPU2, reads option bytes
-    ├── monitor.py                   # follows the USART3 log on the ST-LINK VCP
-    └── openocd/
-        └── stm32h755_dualcore.cfg   # board config (ST ships none for this Nucleo)
+    └── monitor.py                   # follows the USART3 log on the ST-LINK VCP
 ```
 
 ---
@@ -218,8 +216,9 @@ STM32_Programmer_CLI -c port=SWD mode=UR -w build/debug/CM7/cm7_firmware.elf -v 
 > values before writing any name taken from a manual.
 
 > **OpenOCD backend.** ST ships no board file for this Nucleo, so
-> [`tools/openocd/stm32h755_dualcore.cfg`](tools/openocd/stm32h755_dualcore.cfg)
-> is part of the project. It declares CPU2 only when a CPU2 image is being
+> [`tools/openocd/stm32h755_dualcore.cfg`](../../tools/openocd/stm32h755_dualcore.cfg)
+> is written here, once for the workspace. It declares CPU2 only when a CPU2
+> image is being
 > programmed: while CPU2 is held in reset its access port is unreachable and
 > every reset fails. It also forces SYSRESETREQ over the script default of
 > VECTRESET, which hangs on the Cortex-M7.

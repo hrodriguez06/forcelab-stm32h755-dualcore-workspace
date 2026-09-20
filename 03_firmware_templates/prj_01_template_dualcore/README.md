@@ -172,7 +172,10 @@ prj_01_template_dualcore/
 ├── CM4/                         # CPU2: bare metal, D2 domain
 │   ├── linker/stm32h755zi_cm4.ld            [golden copy]
 │   └── Core/                    # main (handshake + super-loop), interrupts
-└── tools/                       # env.ps1, flash.py, monitor.py, openocd/
+└── tools/                       # shims onto <workspace>/tools/
+    ├── env.ps1                  # toolchain onto PATH
+    ├── flash.py                 # flashes CPU1/CPU2, reads option bytes
+    └── monitor.py               # follows the console on the ST-LINK VCP
 ```
 
 No `Custom_Drivers/` here: CPU1 links `stm32h7_driver_led` and
@@ -261,10 +264,10 @@ the move this file spelled them as `GPIO_PIN_x` masks that nothing read.
 > toggles the green one only. Red means a fault only when it is the *only* one
 > lit, which is what `LED_PanicRed()` leaves behind.
 
-### Known rough edge
+### About `tools/`
 
-`tools/monitor.py` here has no `--timeout`, so it cannot be used unattended;
-the copy in `02_firmware_projects/prj_02_eth_lwip_dualcore/` grew that flag and
-this one did not. The tools under `tools/` are copied per project and have
-started to drift the same way the drivers did before they moved to
-`01_shared_drivers/`.
+The scripts under `tools/` are three-line shims; the implementations live once
+in the workspace, at `<workspace>/tools/`. They used to be copied per project
+and had already drifted - `--timeout` existed in one tree and not the others,
+which is what made this capture awkward to automate. `py tools/flash.py` and
+`tools/env.ps1` work from here exactly as before.

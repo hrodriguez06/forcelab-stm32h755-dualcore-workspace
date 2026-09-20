@@ -38,9 +38,15 @@ stm32h755/                                       # Workspace Root [GIT REPO - se
 ├── .gitignore                                   # Excludes build output, PDFs and vendored checkouts
 ├── .gitattributes                               # Line-ending policy, fixed at the initial commit
 │
-├── tools/                                       # Workspace-level maintenance
+├── tools/                                       # Every executable in the workspace, one copy each
+│   ├── env.ps1                                  # Resolves the CubeIDE/CubeCLT toolchain onto $env:PATH
+│   ├── flash.py                                 # Dual-core flasher (STM32CubeProgrammer / OpenOCD)
+│   ├── monitor.py                               # Follows the console on the ST-LINK VCP, no dependencies
+│   ├── openocd/stm32h755_dualcore.cfg           # Board config; ST ships none for this Nucleo
 │   ├── init_cube_submodule.ps1                  # Restores the STM32CubeH7 submodule (partial + sparse)
 │   └── sync_docs_cube.ps1                       # Rebuilds the greppable Cube mirror in the docs hub
+│                                                # Projects reach the first three through tools/ shims,
+│                                                # so `py tools/flash.py` still works from a project
 │
 ├── 00_docs_stm32h7/                             # [IMMUTABLE] Master Hardware & Knowledge Hub
 │   ├── CLAUDE.md                                # Core programming rules, errata, cache & DMA constraints
@@ -246,15 +252,12 @@ prj_01_template_dualcore/
 │       ├── spi_ll.h   / spi_ll.c
 │       └── spi_bm.h   / spi_bm.c
 │
-└── tools/                              # Project Automation & Verification Tools
-    ├── env.ps1                         # Resolves the CubeIDE/CubeCLT toolchain onto $env:PATH
-    ├── flash.py                        # Automated dual-core flasher (STM32CubeProg / OpenOCD)
-    ├── flash.sh                        # Fast shell wrapper for CLI flashing
-    ├── monitor.py                      # Follows the USART3 log on the ST-LINK VCP (read-only, no deps)
-    ├── test_server.py                  # Local mock TCP/UDP server for network testing
-    └── openocd/
-        └── stm32h755_dualcore.cfg      # OpenOCD board config (interface comes from ST's stlink-dap.cfg)
-        └── stlink_v3.cfg               # Interface configuration for ST-LINK/V3
+└── tools/                              # Shims onto <workspace>/tools/, three lines each
+    ├── env.ps1                         # Toolchain onto $env:PATH
+    ├── flash.py                        # Dual-core flasher (STM32CubeProg / OpenOCD)
+    └── monitor.py                      # Follows the USART3 log on the ST-LINK VCP
+                                        # No openocd/ here: the board config is
+                                        # shared, like the scripts themselves
 ```
 
 ---
