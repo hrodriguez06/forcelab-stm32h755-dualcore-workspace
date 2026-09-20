@@ -91,7 +91,7 @@ py tools/monitor.py
 
 ## 6. Hardware Verification
 
-Last run: **2026-09-20**, commit `784febb`, on a NUCLEO-H755ZI-Q (silicon
+Last run: **2026-09-20**, commit `68ec30a`, on a NUCLEO-H755ZI-Q (silicon
 revision `0x2003` = rev V), ST-LINK V3 under reset, host on the same
 192.168.1.0/24 segment.
 
@@ -104,7 +104,7 @@ Clean configure and build of both cores: **0 warnings, 0 errors**.
 
 | Region | CPU1 (M7) | CPU2 (M4) |
 | :--- | ---: | ---: |
-| FLASH | 85 540 B / 1 MB (8.16 %) | 2 604 B / 1 MB (0.25 %) |
+| FLASH | 85 568 B / 1 MB (8.16 %) | 2 604 B / 1 MB (0.25 %) |
 | DTCM | 101 440 B / 128 KB (77.39 %) | - |
 | SRAM2 (D2) | - | 12 344 B / 128 KB (9.42 %) |
 | SRAM3 `.eth_ram` | 18 624 B / 32 KB (56.84 %) | - |
@@ -129,17 +129,25 @@ CPU2 was released and the check in `app_main()` let the tasks start.
 
 ### Inter-core IPC
 
-`m4_heartbeat` over 35 s of capture, sampled every 2 s:
-
 ```text
-1 -> 16 -> 32 -> 47 -> 62 -> 78 -> 93 -> 109 -> 124 -> 139
-  -> 155 -> 170 -> 185 -> 201 -> 216 -> 232 -> 247 -> 262 -> 278
+[ipc] m7=1 m4=1  (CPU2 alive)
 ```
 
-Strictly monotonic from 1. A counter that climbs and then drops back near zero
-is the signature of `Shared_Init()` running after the HSEM release and wiping
-what CPU2 already wrote; this ordering is what section 4 step 4 exists to
-prevent.
+`m4_heartbeat` from there, sampled every 2 s:
+
+```text
+1 -> 16 -> 32 -> 47 -> 62 -> 78 -> 93 -> 109 -> 124 -> 139 -> 155 -> 170
+```
+
+Strictly monotonic from 1. The first line reads `alive`, not `starting`: CPU2
+has already incremented by the time this firmware reaches `Status_Task`, since
+the banner, the magic check and lwIP init give it the time. The template, which
+is leaner before the scheduler, loses that race and reports `starting` there -
+the label only means "no earlier sample to compare against", never a verdict.
+
+A counter that climbs and then drops back near zero is the signature of
+`Shared_Init()` running after the HSEM release and wiping what CPU2 already
+wrote; this ordering is what section 4 step 4 exists to prevent.
 
 ### Ethernet
 
