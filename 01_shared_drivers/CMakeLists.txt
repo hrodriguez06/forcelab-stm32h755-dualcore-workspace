@@ -14,9 +14,17 @@
 
 cmake_minimum_required(VERSION 3.22)
 
+# 00_gpio is the bottom of the stack: everything that drives a pin needs its
+# port clocked first, so the drivers below link it rather than each carrying a
+# private copy of the same register write.
+add_library(stm32h7_driver_gpio INTERFACE)
+target_include_directories(stm32h7_driver_gpio INTERFACE ${CMAKE_CURRENT_LIST_DIR}/00_gpio)
+target_sources(stm32h7_driver_gpio INTERFACE ${CMAKE_CURRENT_LIST_DIR}/00_gpio/gpio_bm.c)
+
 add_library(stm32h7_driver_led INTERFACE)
 target_include_directories(stm32h7_driver_led INTERFACE ${CMAKE_CURRENT_LIST_DIR}/01_led)
 target_sources(stm32h7_driver_led INTERFACE ${CMAKE_CURRENT_LIST_DIR}/01_led/led_bm.c)
+target_link_libraries(stm32h7_driver_led INTERFACE stm32h7_driver_gpio)
 
 add_library(stm32h7_driver_uart INTERFACE)
 target_include_directories(stm32h7_driver_uart INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart)
@@ -28,10 +36,12 @@ target_sources(stm32h7_driver_eth INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/08_eth/eth_hal.c
     ${CMAKE_CURRENT_LIST_DIR}/08_eth/lan8742_phy.c
 )
+target_link_libraries(stm32h7_driver_eth INTERFACE stm32h7_driver_gpio)
 
 # Umbrella interface library, linking all available shared drivers for backwards compatibility
 add_library(stm32h7_shared_drivers INTERFACE)
 target_link_libraries(stm32h7_shared_drivers INTERFACE
+    stm32h7_driver_gpio
     stm32h7_driver_led
     stm32h7_driver_uart
     stm32h7_driver_eth

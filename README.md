@@ -95,7 +95,7 @@ stm32h755/                                       # Workspace Root [GIT REPO - se
 ├── 01_shared_drivers/                           # Centralized Plan A 3-tier reusable peripheral drivers
 │   │                                            # NN_ prefix = bring-up order, not the alphabet
 │   ├── CMakeLists.txt                           # INTERFACE target: stm32h7_shared_drivers
-│   ├── 00_gpio/                                 # Pin muxing & EXTI - prerequisite of everything below
+│   ├── 00_gpio/                                 # gpio_bm: port clocks, linked by 01_led and 08_eth
 │   ├── 01_led/                                  # 3-bit boot diagnosis, works before the clock tree
 │   ├── 02_dma/                                  # DMA1/2, BDMA, MDMA alignment & cache helpers
 │   ├── 03_tim/                                  # Time base (TIM1-17, LPTIM)

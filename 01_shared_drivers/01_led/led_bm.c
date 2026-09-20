@@ -6,6 +6,7 @@
   */
 
 #include "led_bm.h"
+#include "gpio_bm.h"
 #include "stm32h7xx.h"
 #include <stddef.h>
 
@@ -43,21 +44,6 @@ static led_driver_config_t g_led_config = {
     }
 };
 
-/**
-  * @brief  Dynamically enables AHB4 clock for any GPIO port (GPIOA..GPIOK).
-  */
-static inline void enable_gpio_clock(GPIO_TypeDef *port)
-{
-    if ((port >= GPIOA) && (port <= GPIOK))
-    {
-        uint32_t port_idx = ((uint32_t)port - (uint32_t)GPIOA) / 0x400UL;
-        RCC->AHB4ENR |= (1UL << port_idx);
-        /* Read back: the RCC enable takes a couple of cycles to land */
-        volatile uint32_t dummy = RCC->AHB4ENR;
-        (void)dummy;
-    }
-}
-
 void LED_Init_Config(const led_driver_config_t *config)
 {
     if (config == NULL)
@@ -74,7 +60,7 @@ void LED_Init_Config(const led_driver_config_t *config)
 
         if (port != NULL)
         {
-            enable_gpio_clock(port);
+            (void)GPIO_BM_EnablePortClock(port);
 
             /* MODER: 0b01 = general purpose output. */
             MODIFY_REG(port->MODER, (3UL << (bit * 2U)), (1UL << (bit * 2U)));
@@ -156,7 +142,7 @@ void LED_PanicRed(void)
 
     if (red_port != NULL)
     {
-        enable_gpio_clock(red_port);
+        (void)GPIO_BM_EnablePortClock(red_port);
         MODIFY_REG(red_port->MODER, (3UL << (red_bit * 2U)), (1UL << (red_bit * 2U)));
         red_port->BSRR = (1UL << red_bit);
     }

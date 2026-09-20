@@ -19,6 +19,7 @@
   */
 
 #include "eth_hal.h"
+#include "gpio_bm.h"
 #include <stddef.h>
 #include <string.h>
 
@@ -82,20 +83,6 @@ static const eth_gpio_pin_t s_rmii_pins[] = {
     { BOARD_ETH_TXD0_PORT,    BOARD_ETH_TXD0_PIN },
     { BOARD_ETH_TXD1_PORT,    BOARD_ETH_TXD1_PIN },
 };
-
-/**
-  * @brief  Dynamically enables AHB4 clock for any GPIO port (GPIOA..GPIOK).
-  */
-static inline void eth_enable_gpio_clock(GPIO_TypeDef *port)
-{
-    if (port != NULL && (uint32_t)port >= (uint32_t)GPIOA && (uint32_t)port <= (uint32_t)GPIOK)
-    {
-        uint32_t port_idx = ((uint32_t)port - (uint32_t)GPIOA) / 0x400UL;
-        RCC->AHB4ENR |= (1UL << port_idx);
-        volatile uint32_t dummy = RCC->AHB4ENR;
-        (void)dummy;
-    }
-}
 
 /* ---- Interrupt priority ------------------------------------------------ *
  * The ETH ISR signals FreeRTOS objects, so its priority must be numerically
@@ -268,7 +255,7 @@ __weak void ETH_HAL_MspInit_User(ETH_HandleTypeDef *heth)
     {
         if (s_rmii_pins[i].port != NULL)
         {
-            eth_enable_gpio_clock(s_rmii_pins[i].port);
+            (void)GPIO_BM_EnablePortClock(s_rmii_pins[i].port);
             gpio.Pin = s_rmii_pins[i].pin;
             HAL_GPIO_Init(s_rmii_pins[i].port, &gpio);
         }
