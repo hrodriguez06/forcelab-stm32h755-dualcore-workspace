@@ -12,7 +12,11 @@
   *                       A CPU2 counter that stays at zero is the single most
   *                       useful symptom this template can give you: it means
   *                       CPU2 never ran, which is an option-byte or a Flash
-  *                       bank 2 problem, not an application one.
+  *                       bank 2 problem, not an application one. The first
+  *                       sample reports "starting" rather than a verdict,
+  *                       because there is no earlier sample to compare it
+  *                       with - from the second one on, "NOT RESPONDING"
+  *                       means it.
   *
   *          Replace both with the real application. Keep the shared-memory
   *          access pattern: every field is volatile and anything wider than a
@@ -25,6 +29,8 @@
 #include "main.h"
 #include "led_bm.h"
 #include "shared_memory.h"
+
+#include <stdbool.h>
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -103,19 +109,42 @@ static void Status_Task(void *arg)
 {
     TickType_t last = xTaskGetTickCount();
     uint32_t   previous_m4 = 0U;
+    bool       have_previous = false;
 
     (void)arg;
 
     for (;;)
     {
-        uint32_t m4 = g_shared.m4_heartbeat;
+        uint32_t    m4 = g_shared.m4_heartbeat;
+        const char *state;
+
+        /* The verdict compares two samples, so the first pass has nothing to
+           compare against. Saying NOT RESPONDING there is a lie the timing
+           makes easy to hit: Shared_Init() leaves the block zeroed, and CPU1
+           can reach this task before CPU2 has woken from STOP and reached its
+           first increment - all the more so once the application before the
+           scheduler is leaner than this template's. Reporting "starting"
+           instead costs one sample of delay and keeps a zero counter meaning
+           what the file header says it means. */
+        if (m4 != previous_m4)
+        {
+            state = "alive";
+        }
+        else if (!have_previous)
+        {
+            state = "starting";
+        }
+        else
+        {
+            state = "NOT RESPONDING";
+        }
 
         APP_LOG("[ipc] m7=%lu m4=%lu  (CPU2 %s)",
                 (unsigned long)g_shared.m7_heartbeat,
-                (unsigned long)m4,
-                (m4 != previous_m4) ? "alive" : "NOT RESPONDING");
+                (unsigned long)m4, state);
 
-        previous_m4 = m4;
+        previous_m4   = m4;
+        have_previous = true;
         vTaskDelayUntil(&last, pdMS_TO_TICKS(STATUS_PERIOD_MS));
     }
 }

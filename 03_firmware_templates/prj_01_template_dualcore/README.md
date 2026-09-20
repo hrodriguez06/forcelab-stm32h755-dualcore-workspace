@@ -22,11 +22,18 @@ seconds:
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [ipc] shared block at 0x38008000, magic=0x48375353
 [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[ipc] m7=1 m4=0  (CPU2 starting)
 [ipc] m7=4 m4=15  (CPU2 alive)
 ```
 
-**`m4=0` and `CPU2 NOT RESPONDING` is the useful failure**, and it has three
-causes worth separating before touching any application code:
+The first status line says `starting`, not a verdict: the check compares two
+samples and there is no earlier one yet. CPU1 routinely gets there before CPU2
+has woken from STOP, so a verdict at that point would be a coin toss. From the
+second line on the label means what it says.
+
+**`m4=0` and `CPU2 NOT RESPONDING` on the second line and after is the useful
+failure**, and it has three causes worth separating before touching any
+application code:
 
 1. **CPU2 never left reset** - an option-byte or Flash-bank-2 problem. Check
    with `py tools/flash.py --read-ob`, and confirm the image is there:
@@ -194,3 +201,70 @@ first, then propagate. Section 7 of that README has the `diff` commands.
 5. Put every DMA-visible buffer in the right section - `.dma_buf`, `.eth_ram`,
    `.d3_ram` - and align it to 32 bytes. The linker script header lists them
    and `mpu_config.c` marks them non-cacheable.
+
+## 7. Hardware verification
+
+Last run: **2026-09-20**, on a NUCLEO-H755ZI-Q (silicon revision `0x2003` =
+rev V), both images programmed under reset. Re-run it with the commands in
+section 4; the numbers below belong to that run and should be refreshed with
+it.
+
+This was the first run after the template stopped vendoring its drivers and
+started linking `01_shared_drivers/`, so it is mainly a check that the console
+and the LEDs still work when they come from the library.
+
+### Console - the shared `uart_hal`
+
+```text
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[ipc] m7=1 m4=0  (CPU2 starting)
+[ipc] m7=4 m4=15  (CPU2 alive)
+```
+
+A banner at all is the test: `UART_Console_Init()` and `UART_Console_Write()`
+now come from `01_shared_drivers/04_uart`. `magic` reads back as
+`SHARED_MAGIC`, and `m4_heartbeat` climbs monotonically from there -
+`15 -> 30 -> 46 -> 61 -> ... -> 277` over 35 s.
+
+### LEDs - the shared `led_bm`, read over SWD
+
+The board is not always in front of whoever runs this, and the LEDs are
+readable without it:
+
+```powershell
+# MODER: are the three pins outputs, on the ports board_def.h names?
+STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x58020400 4 -r32 0x58021000 4
+
+# ODR: LD1 toggles every 500 ms, so two reads a few hundred ms apart differ
+STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x58020414 1
+```
+
+| Register | Value | Meaning |
+| :--- | :--- | :--- |
+| `GPIOB_MODER` | `0xDFFFFEBD` | PB0 `bits[1:0]=01`, PB14 `bits[29:28]=01` - both outputs |
+| `GPIOE_MODER` | `0xFFFFFFF7` | PE1 `bits[3:2]=01` - output |
+| `GPIOB_ODR` | alternates `0x4000` / `0x4001` | LD1 toggling, LD3 steady on |
+| `GPIOE_ODR` | `0x00000002` | LD2 steady on |
+
+The pins land where `board_def.h` puts them, which is what makes
+`BOARD_LED_<x>_BIT` worth writing: the shared driver reads those, and before
+the move this file spelled them as `GPIO_PIN_x` masks that nothing read.
+
+> [!NOTE]
+> **LD2 and LD3 steady on is correct here, not a fault.** `LED_BOOT_SCHEDULER`
+> is 7, and `LED_BootStage()` writes the stage as a 3-bit code across the three
+> LEDs, so handing over to FreeRTOS lights all three. The heartbeat task then
+> toggles the green one only. Red means a fault only when it is the *only* one
+> lit, which is what `LED_PanicRed()` leaves behind.
+
+### Known rough edge
+
+`tools/monitor.py` here has no `--timeout`, so it cannot be used unattended;
+the copy in `02_firmware_projects/prj_02_eth_lwip_dualcore/` grew that flag and
+this one did not. The tools under `tools/` are copied per project and have
+started to drift the same way the drivers did before they moved to
+`01_shared_drivers/`.
