@@ -29,11 +29,21 @@
 
 #define HEARTBEAT_DELAY_LOOPS   2000000UL
 
+/* Liveness markers in CPU2's OWN SRAM2, deliberately not in the shared block.
+   If g_shared.m4_heartbeat never moves, these say why: cpu2_woke tells you
+   whether the HSEM handshake completed at all, and cpu2_loops whether the
+   super-loop is running. A debugger can read them without halting anything -
+   nothing else on the board writes SRAM2. */
+volatile uint32_t cpu2_woke  = 0UL;
+volatile uint32_t cpu2_loops = 0UL;
+
 static void CPU2_WaitForCPU1(void);
 
 int main(void)
 {
     CPU2_WaitForCPU1();
+
+    cpu2_woke = 0xC0FFEEUL;
 
     /* The clock tree is up and owned by CPU1. From here CPU2 configures only
        what belongs to it. HAL_Init() sets up the SysTick of THIS core and the
@@ -52,6 +62,7 @@ int main(void)
         /* A single aligned word, so the increment is atomic on this core and
            needs no HSEM. Anything wider - or a read-modify-write that CPU1
            also performs - must be taken under SHARED_LOCK(). */
+        cpu2_loops++;
         g_shared.m4_heartbeat++;
 
         /* A crude delay on purpose: this template does not claim a timer for
@@ -79,12 +90,37 @@ static void CPU2_WaitForCPU1(void)
     /* Subscribe this core to HSEM 0 before sleeping. */
     HAL_HSEM_ActivateNotification(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT));
 
+    /* SEVONPEND: wake on an interrupt that is merely PENDING, without enabling
+       it in the NVIC and without vectoring to a handler.
+     *
+     * This line is why CPU2 wakes at all, and leaving it out fails silently.
+     * HAL_PWREx_EnterSTOPMode() issues a single __WFE(), and WFE resumes only
+     * on an *event*. Releasing HSEM 0 sets HSEM_C2ISR and HSEM_C2MISR, but a
+     * pending interrupt is not an event unless it is NVIC-enabled or
+     * SEVONPEND is set - and enabling HSEM2_IRQn instead would vector into the
+     * weak Default_Handler, which is an infinite loop.
+     *
+     * ST's reference CM4 code (Projects/NUCLEO-H745ZI-Q/Applications/FreeRTOS/
+     * FreeRTOS_AMP_Dual_RTOS/CM4/Src/main.c) omits it, because there CPU1
+     * leaves the D2 domain idle and the domain exits DSTOP through the
+     * peripheral wake-up path instead. Here CPU1 holds D2 awake - the console
+     * USART3 sits on APB1, in D2 - so CPU2 is only in CSleep and the core's
+     * own event logic is the only way back.
+     *
+     * Symptom when it is missing: HSEM_C2IER = 1 and HSEM_C2MISR = 1 (the
+     * handshake worked), CPU1 runs normally, and CPU2 never leaves this
+     * function. Nothing faults. */
+    SET_BIT(SCB->SCR, SCB_SCR_SEVONPEND_Msk);
+
     /* Enter STOP on D2. Dropping D2CKRDY is the signal CPU1 polls for. */
     HAL_PWREx_ClearPendingEvent();
     HAL_PWREx_EnterSTOPMode(PWR_MAINREGULATOR_ON, PWR_STOPENTRY_WFE, PWR_D2_DOMAIN);
 
-    /* Woken by the HSEM notification: unsubscribe and clear it. */
+    /* Woken by the HSEM notification: unsubscribe, clear it, and put the core
+       back to its normal wake-up behaviour. */
     __HAL_HSEM_CLEAR_FLAG(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT));
+    HAL_HSEM_DeactivateNotification(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT));
+    CLEAR_BIT(SCB->SCR, SCB_SCR_SEVONPEND_Msk);
 }
 
 void Error_Handler(void)

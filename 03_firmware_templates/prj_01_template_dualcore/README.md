@@ -22,12 +22,19 @@ seconds:
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [ipc] shared block at 0x38008000, magic=0x48375353
 [ipc] CPU2 boot handshake: enabled (HSEM 0)
-[ipc] m7=4 m4=37  (CPU2 alive)
+[ipc] m7=4 m4=15  (CPU2 alive)
 ```
 
-**`m4=0` and `CPU2 NOT RESPONDING` is the useful failure.** It means CPU2 never
-ran, which is an option-byte or a Flash-bank-2 problem, not an application one.
-Check `BCM4` with `py tools/flash.py --read-ob`.
+**`m4=0` and `CPU2 NOT RESPONDING` is the useful failure**, and it has three
+causes worth separating before touching any application code:
+
+1. **CPU2 never left reset** - an option-byte or Flash-bank-2 problem. Check
+   with `py tools/flash.py --read-ob`, and confirm the image is there:
+   `-r32 0x08100000` should show the CPU2 stack pointer and reset vector.
+2. **CPU2 booted but never woke** from the HSEM handshake. `cpu2_woke` in
+   CPU2 SRAM2 stays 0. See section 3, "Two things this cost to get right".
+3. **CPU2 runs but cannot reach the shared block.** `cpu2_woke` is
+   `0x00C0FFEE` and `cpu2_loops` advances while `m4_heartbeat` does not.
 
 ## 2. The boot handshake
 
@@ -68,19 +75,64 @@ because it is 110 MB and identical for every product. Override with
 
 ### Verified build
 
-Both cores link clean - no errors, no warnings - against Cube `8ec3113d`
-(HAL `e3c518e`, CMSIS device `81db1ec`, FreeRTOS V10.6.2 `e41c220`) with
-`arm-none-eabi-gcc` 14.3.1.
+Both cores link clean from a full rebuild - **no errors, no warnings** - against
+Cube `8ec3113d` (HAL `e3c518e`, CMSIS device `81db1ec`, FreeRTOS V10.6.2
+`e41c220`) with `arm-none-eabi-gcc` 14.3.1.
 
 | | FLASH | RAM |
 | :--- | ---: | ---: |
-| CPU1 | 27 356 B (2.61 %) | DTCM 55 544 B (42.38 %) |
-| CPU2 | 2 540 B (0.24 %) | SRAM2 12 336 B (9.41 %) |
+| CPU1 | 27 404 B (2.61 %) | DTCM 55 544 B (42.38 %) |
+| CPU2 | 2 604 B (0.25 %) | SRAM2 12 344 B (9.42 %) |
+| shared | - | SRAM4 160 B, at `0x38008000` in **both** images |
 
-`.shared_ram` starts at `0x38008000` in **both** ELF files and `g_shared`
-resolves to that address in both - the check from
-`00_docs_stm32h7/docs/00_core_and_system/linker_templates/README.md` section 6.
-No CPU1 symbol lands in CPU2's SRAM2.
+`g_shared` resolves to `0x38008000` in both ELF files - the check from
+`00_docs_stm32h7/docs/00_core_and_system/linker_templates/README.md` section 6 -
+and no CPU1 symbol lands in CPU2's SRAM2.
+
+### Verified on hardware
+
+Nucleo-H755ZI-Q, ST-LINK/V3 `0016000C4142501220353451`, silicon rev V:
+
+```text
+[   0.914] === STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[   0.919] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[   0.931] [ipc] shared block at 0x38008000, magic=0x48375353
+[   0.938] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[   2.907] [ipc] m7=4 m4=15  (CPU2 alive)
+[  10.814] [ipc] m7=20 m4=77  (CPU2 alive)
+```
+
+Both counters advance: CPU1 at four per two seconds, which is its 500 ms task
+period, and CPU2 freely in its super-loop. The handshake completes and CPU2
+reaches SRAM4 across the domain boundary.
+
+### Two things this cost to get right
+
+Both failed *silently* - the build was clean and nothing faulted - and both are
+now commented where they live, because a template that hides them is worse than
+no template.
+
+**1. `SysTick_Handler` went missing with lwIP.** `FreeRTOSConfig.h` does not map
+`xPortSysTickHandler` onto `SysTick_Handler` when `cmsis_os2.c` is in the build,
+because that file defines it. Dropping lwIP from the reference project also drops
+`cmsis_os2.c`, and then **nothing** defines it: the vector resolves to the weak
+`Default_Handler`, an infinite loop. The link succeeds. The board freezes inside
+the first tick, `m7_heartbeat` stuck at 1, **CFSR and HFSR both zero** - no fault
+at all. The only evidence is `xPSR`: `IPSR = 15 = SysTick`.
+
+**2. CPU2 never woke from `WFE`.** ST's reference CM4 code omits `SEVONPEND`, and
+copying it verbatim left CPU2 asleep for ever while every register said the
+handshake had worked - `HSEM_C2IER = 1`, `HSEM_C2MISR = 1`, semaphore released.
+`HAL_PWREx_EnterSTOPMode` issues a single `__WFE()`, and a *pending* interrupt is
+not an *event* unless it is NVIC-enabled or `SEVONPEND` is set. ST's example gets
+away with it because CPU1 leaves D2 idle there and the domain exits DSTOP through
+the peripheral wake-up path; here CPU1 holds D2 awake, since the console USART3
+is on APB1 in D2, so CPU2 only reaches CSleep and needs a real core event.
+
+`cpu2_woke` and `cpu2_loops` in `CM4/Core/Src/main.c` exist because of the
+second one. They live in CPU2's own SRAM2, which nothing else writes, so a
+debugger can tell "CPU2 is asleep" from "CPU2 runs but cannot reach the shared
+block" without halting anything.
 
 ## 4. Flash and watch
 

@@ -53,13 +53,16 @@ target_include_directories(${TARGET} PRIVATE
     ${HAL_DIR}/Inc
 )
 
-# DUAL_CORE and CORE_CM4 together are what system_stm32h7xx.c tests to take
-# the CPU2 paths; CORE_CM7 must NOT be defined here, which is why
-# COMMON_DEFINITIONS is expanded by hand instead of reused.
+# CORE_CM4 is what system_stm32h7xx.c and the HAL test to take the CPU2 paths.
+# COMMON_DEFINITIONS is expanded by hand rather than reused because it carries
+# CORE_CM7, which must NOT be defined here.
+#
+# DUAL_CORE is deliberately absent: stm32h755xx.h already defines it, and
+# passing it on the command line as well produces a "DUAL_CORE redefined"
+# warning on every translation unit.
 target_compile_definitions(${TARGET} PRIVATE
     STM32H755xx
     USE_HAL_DRIVER
-    DUAL_CORE
     CORE_CM4
 )
 
@@ -75,7 +78,12 @@ target_link_options(${TARGET} PRIVATE
     ${CPU_FLAGS_CM4}
     -T${LINKER_SCRIPT}
     --specs=nano.specs
-    --specs=nosys.specs
+    # No --specs=nosys.specs. CPU2 calls nothing that needs a syscall, and
+    # adding it only pulls in newlib's stubs, which each emit a link warning
+    # ("_write is not implemented and will always fail"). CPU1 does not need it
+    # either: it has Core/Src/syscalls.c. If CPU2 ever gains printf, give it the
+    # same file rather than nosys - a stub that silently fails is worse than a
+    # link error that tells you what is missing.
     -Wl,--gc-sections
     -Wl,-Map=${TARGET}.map,--cref
     -Wl,--print-memory-usage

@@ -115,18 +115,32 @@ extern uint32_t SystemCoreClock;
     if ((x) == 0) { taskDISABLE_INTERRUPTS(); for (;;) {} }
 
 /* ---- Handler names ----------------------------------------------------- *
- * The port supplies these two under the CMSIS vector-table names, so
+ * The port supplies all three under the CMSIS vector-table names, so
  * stm32h7xx_it.c must not define them.
  *
- * xPortSysTickHandler is deliberately NOT mapped onto SysTick_Handler:
- * cmsis_os2.c already defines SysTick_Handler and calls xPortSysTickHandler()
- * from it (guarded by xTaskGetSchedulerState()). Mapping it here as well gives
- * two definitions of SysTick_Handler and the link fails.
+ * SysTick belongs to the kernel, which is why HAL_GetTick() is moved to TIM6
+ * (README.md section 5.B rule 3).
  *
- * SysTick therefore still belongs to the kernel, which is why HAL_GetTick() is
- * moved to TIM6 (README.md section 5.B rule 3).
+ * Whether xPortSysTickHandler is mapped here depends on ONE thing: whether
+ * cmsis_os2.c is in the build.
+ *
+ *   in the build  -> it defines SysTick_Handler itself and calls
+ *                    xPortSysTickHandler() from it. Mapping it here too gives
+ *                    two definitions and the LINK FAILS. That is the case in
+ *                    02_firmware_projects/prj_eth_lwip_node, because ST's lwIP
+ *                    sys_arch is written against CMSIS-RTOS v2.
+ *   not in build  -> nothing defines SysTick_Handler. It resolves to the weak
+ *                    Default_Handler in the CMSIS startup file, which is an
+ *                    infinite loop. The LINK SUCCEEDS and the board freezes
+ *                    inside the first tick, with no fault set: CFSR and HFSR
+ *                    read 0 and only xPSR gives it away, IPSR = 15 = SysTick.
+ *
+ * This template does not build cmsis_os2.c, so it maps it. Add CMSIS-RTOS v2
+ * later and this line has to go, or the build stops with a duplicate symbol -
+ * which is the harmless direction to get it wrong in.
  */
 #define vPortSVCHandler                          SVC_Handler
 #define xPortPendSVHandler                       PendSV_Handler
+#define xPortSysTickHandler                      SysTick_Handler
 
 #endif /* FREERTOS_CONFIG_H */
