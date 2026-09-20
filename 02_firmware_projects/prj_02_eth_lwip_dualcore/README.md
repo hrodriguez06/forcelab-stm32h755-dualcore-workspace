@@ -91,9 +91,10 @@ py tools/monitor.py
 
 ## 6. Hardware Verification
 
-Last run: **2026-09-20**, commit `68ec30a`, on a NUCLEO-H755ZI-Q (silicon
-revision `0x2003` = rev V), ST-LINK V3 under reset, host on the same
-192.168.1.0/24 segment.
+Last run: **2026-09-20**, firmware at `68ec30a` - unchanged since, as the
+commits after it touch only `tools/` and documentation - on a
+NUCLEO-H755ZI-Q (silicon revision `0x2003` = rev V), ST-LINK V3 under reset,
+host on the same 192.168.1.0/24 segment.
 
 Re-run it with the commands in section 5; every number below comes from that
 run and should be refreshed whenever this section is.
@@ -161,15 +162,48 @@ Autonegotiation reaches the LAN8742A over MDIO, which is one of the nine RMII
 signals `08_eth/eth_hal.c` brings up pin by pin from `BOARD_ETH_*` - so a clean
 link is also the check that no signal is being configured on the wrong port.
 
-Driven from the host, since the counters stay flat while nothing talks to the
-board:
+The counters stay flat while nothing talks to the board, so the receive path
+has to be driven from the host.
 
-| Test | Result |
-| :--- | :--- |
-| `ping 192.168.1.150`, 4 packets | 4/4, 0 % loss, 1 ms |
-| UDP echo on port 7, 5 datagrams | 5/5 byte-identical, 1.1-2.0 ms |
-| `rx` / `tx` counters | 0/1 idle after boot -> 7/6 after the tests |
-| `rx_nobuf`, `tx_nobuf`, `dma_err` | 0 throughout |
+**ICMP.** `ping 192.168.1.150`, 4 packets: 4/4, 0 % loss. The first reply
+takes ~100 ms because the host still has to ARP for the station address; the
+rest are 1 ms.
+
+**UDP echo on port 7, by datagram size.** The sizes matter more than the
+count: 1472 B is the largest payload that still fits one frame
+(1500 MTU - 20 IP - 8 UDP), and it is what actually exercises the 1536 B
+buffers in `.eth_ram`. A pool mis-sized or mis-aligned shows up there, not in
+small packets.
+
+| Payload | Result | RTT |
+| ---: | :--- | ---: |
+| 1 B | byte-identical | 1.37 ms |
+| 25 B | byte-identical | 1.14 ms |
+| 512 B | byte-identical | 1.55 ms |
+| 1024 B | byte-identical | 1.57 ms |
+| 1472 B | byte-identical | 1.80 ms |
+
+**UDP echo under burst.** 100 datagrams back to back with no pause:
+**100 returned, 0 lost**. This is the one that stresses buffer recycling -
+the Rx pool is 8 buffers and the Tx pool 4, so they have to turn over faster
+than frames arrive. A leak in `ETH_Driver_ReclaimTxBuffers()` or in the Rx
+segment release would surface here as losses or as a non-zero `tx_nobuf`.
+
+**What the firmware counted.** `rx` / `tx` went from `1` / `1` before the
+tests to **`133` / `113`** after, with `rx_nobuf`, `tx_nobuf` and `dma_err`
+all still **0** across 105 consecutive round trips. `rx` runs ahead of what
+the host sent because the MAC counts everything it accepts, broadcast and
+other stations' ARP included.
+
+That covers the data path in both directions, across the whole size range and
+under buffer pressure: descriptors in non-cacheable SRAM3, the nine RMII
+signals, and the recycling of both pools.
+
+> [!NOTE]
+> The size sweep and the burst were driven by a throwaway script, not by
+> anything in this repository. `ping` and a few `nc`-style datagrams
+> reproduce the first two rows; reproducing the burst means writing the loop
+> again.
 
 ### Not covered here
 
