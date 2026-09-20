@@ -133,27 +133,31 @@ cmake --build --preset debug
 
 #### Restoring STM32CubeH7 after a fresh clone
 
-`external/STM32CubeH7` is a submodule of the workspace repository. Restoring it
-is **not** a plain `--recursive`, for two reasons: ST's `Projects/` tree has
-paths that pass the Windows 260-character limit once nested this deep, and
-`--recursive` would fetch 48 BSP repositories for boards this product does not
-have. Take only the libraries, from the **workspace root**:
-
 ```powershell
-git submodule update --init --depth 1 `
-    02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7
-
-cd 02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7
-git sparse-checkout init --cone
-git sparse-checkout set Drivers Middlewares
-git submodule update --init --depth 1 -- `
-    Drivers/STM32H7xx_HAL_Driver Drivers/CMSIS/Device/ST/STM32H7xx `
-    Middlewares/Third_Party/LwIP Middlewares/Third_Party/FreeRTOS
+..\..\tools\init_cube_submodule.ps1        # from the project directory
 ```
 
-That is ~110 MB instead of ~1 GB, and it is what the "Verified build" table
-below was measured against. `CMakeLists.txt` prints these same commands if the
-package is missing when you configure.
+`git submodule update --init --recursive` does **not** work here, and the
+failure modes are not obvious, which is why this is a script rather than a line
+in a README:
+
+| What goes wrong | Why |
+| :--- | :--- |
+| `Filename too long` | ST's `Projects/` tree passes the Windows 260-character limit once nested this deep. The checkout dies and git rolls the registration back, leaving nothing. |
+| 48 unwanted repositories | `--recursive` initialises every inner submodule, including 44 BSP repositories for boards this product does not have. |
+| ~350 MB of object store | A plain `--depth 1` still downloads every blob in the package, for ~40 MB of files anyone here will open. |
+
+The script does a partial (`--filter=blob:none`), shallow (`--depth 1`), sparse
+clone limited to `Drivers` and `Middlewares`, then initialises only the four
+inner submodules the firmware compiles against. Measured end to end on this
+workspace: **~30 seconds, 7.7 MiB of workspace pack plus 6.2 MiB for the
+package**, against 359 MB for the naive approach.
+
+It takes the commit from the gitlink recorded in the index rather than from
+whatever `master` is that day, and fetches that exact object if upstream has
+moved, so it keeps working over time. `-Check` reports without changing
+anything and exits 1 when the package is missing - useful in CI.
+`CMakeLists.txt` points at this script when the package is absent.
 
 > **The FreeRTOS version changed when this became a real submodule.** The
 > vendored copy that preceded it carried kernel **V11.2.0**, which is *newer*

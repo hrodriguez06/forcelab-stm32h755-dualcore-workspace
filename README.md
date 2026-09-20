@@ -39,6 +39,7 @@ stm32h755/                                       # Workspace Root [GIT REPO - se
 ├── .gitattributes                               # Line-ending policy, fixed at the initial commit
 │
 ├── tools/                                       # Workspace-level maintenance
+│   ├── init_cube_submodule.ps1                  # Restores the STM32CubeH7 submodule (partial + sparse)
 │   └── sync_docs_cube.ps1                       # Rebuilds the greppable Cube mirror in the docs hub
 │
 ├── 00_docs_stm32h7/                             # [IMMUTABLE] Master Hardware & Knowledge Hub
@@ -470,14 +471,24 @@ So `02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7` is a real
 submodule: `.gitmodules` at this root declares it and the index records the
 commit (`8ec3113d`), not the files.
 
-Restoring it is deliberately **not** `--recursive`. Two things break that:
-ST's `Projects/` tree has paths that pass the Windows 260-character limit once
-nested this deep, and `--recursive` pulls 48 BSP repositories for boards this
-product does not have. The submodule is therefore sparse-checked-out to
-`Drivers` and `Middlewares`, with only the four inner submodules the build needs
-initialised - ~110 MB instead of ~1 GB. The exact commands are in
-`02_firmware_projects/prj_eth_lwip_node/README.md` section 6, and
-`CMakeLists.txt` prints them when the package is missing.
+Restoring it is deliberately **not** `--recursive`, and the reasons are specific
+enough that it is a script rather than a documented command:
+
+```powershell
+.\tools\init_cube_submodule.ps1        # -Check to report without changing anything
+```
+
+`--recursive` fails outright - ST's `Projects/` tree passes the Windows
+260-character limit once nested this deep, so the checkout dies and git rolls
+the registration back - and it would pull 48 BSP repositories for boards this
+product does not have. Even a plain `--depth 1` downloads every blob in the
+package: 350 MB of object store for ~40 MB of files anyone opens.
+
+The script does a partial (`--filter=blob:none`), shallow, sparse clone limited
+to `Drivers` and `Middlewares`, with only the four inner submodules the build
+needs. Measured: **~30 seconds, 7.7 MiB workspace pack + 6.2 MiB package**,
+against 359 MB the naive way. It reads the commit from the recorded gitlink, not
+from `master`, and fetches that object if upstream has moved.
 
 One consequence worth knowing: the outer repository records the STM32CubeH7
 commit, **not** the commits of submodules nested inside it. A version override
