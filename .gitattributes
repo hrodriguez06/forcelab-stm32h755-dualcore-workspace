@@ -15,6 +15,15 @@
 *.s         text
 *.cmake     text
 
+# The vendored ST package is kept byte for byte as shipped. Normalising it would
+# rewrite 66 854 lines of ST's own example projects on the first commit and make
+# every future diff against a fresh download unreadable. Their line endings are
+# ST's problem, not this repository's.
+00_docs_stm32h7/docs/01_drivers_and_hal/STM32CubeH7/** -text
+
+# ...except the note explaining the prune, which is ours and follows our rules.
+00_docs_stm32h7/docs/01_drivers_and_hal/STM32CubeH7/PRUNED.md text
+
 # Never normalise these, even though most are gitignored - a stray one must not
 # be corrupted by EOL translation.
 *.pdf       binary
