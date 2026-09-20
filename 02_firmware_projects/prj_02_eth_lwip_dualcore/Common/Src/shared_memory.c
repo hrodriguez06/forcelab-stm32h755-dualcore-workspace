@@ -1,11 +1,11 @@
 /**
   ******************************************************************************
   * @file    shared_memory.c
-  * @brief   The single definition of the M7 <-> M4 shared block.
+  * @brief   The shared data block between CPU1 (M7) and CPU2 (M4).
   *
-  *          Compiled into the CPU1 image only. CPU2 declares the same extern
-  *          from the same header and reaches the same bytes because both
-  *          linker scripts place .shared_ram at 0x38008000.
+  *          Compiled into BOTH images (CPU1 and CPU2). Neither image carries
+  *          content for it because .shared_ram is NOLOAD in both linker scripts,
+  *          reserving 0x38008000 (SRAM4) without symbol or allocation conflict.
   *
   *          Why SRAM4 and not AXI SRAM: SRAM4 sits in the D3 domain, is not
   *          cached by the M7, and the M4 has no data cache at all. Neither

@@ -74,8 +74,12 @@ CORES = {
 OPENOCD_CHIPNAME = "stm32h755"
 
 # Directories whose sources feed the firmware, for the staleness check.
-SOURCE_DIRS = ("CM7", "CM4", "Common", "Custom_Drivers")
+SOURCE_DIRS = ("CM7", "CM4", "Common")
 SOURCE_SUFFIXES = (".c", ".h", ".s", ".ld")
+
+SHARED_DRIVERS_DIR = Path(
+    os.environ.get("STM32_SHARED_DRIVERS", PROJECT_ROOT / ".." / ".." / "01_shared_drivers")
+).resolve()
 
 
 # --------------------------------------------------------------------------
@@ -170,8 +174,10 @@ def artifact(preset: str, core: str, explicit: Path | None = None) -> Path | Non
 
 def newest_source_mtime() -> float:
     newest = 0.0
-    for name in SOURCE_DIRS:
-        root = PROJECT_ROOT / name
+    dirs = [PROJECT_ROOT / name for name in SOURCE_DIRS]
+    if SHARED_DRIVERS_DIR.is_dir():
+        dirs.append(SHARED_DRIVERS_DIR)
+    for root in dirs:
         if not root.is_dir():
             continue
         for path in root.rglob("*"):

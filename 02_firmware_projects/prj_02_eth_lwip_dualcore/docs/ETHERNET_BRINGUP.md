@@ -454,8 +454,8 @@ Budget the pools first: SRAM3 is 32 KB total and the current layout already uses
 | :--- | :--- |
 | MPU regions, cache attributes | `CM7/App/Src/mpu_config.c` |
 | Memory sections | `CM7/linker/stm32h755zi_cm7.ld` |
-| MAC, RMII pins, errata, buffer pools | `Custom_Drivers/08_eth/eth_hal.c` |
-| PHY, link detection | `Custom_Drivers/08_eth/lan8742_phy.c` |
+| MAC, RMII pins, errata, buffer pools | `01_shared_drivers/08_eth/eth_hal.c` |
+| PHY, link detection | `01_shared_drivers/08_eth/lan8742_phy.c` |
 | lwIP glue, Rx thread, link thread | `CM7/App/Src/ethernetif.c` |
 | Stack start-up, addressing, services | `CM7/App/Src/net_task.c` |
 | Addresses, threading, timeouts | `CM7/App/Inc/net_config.h` |

@@ -33,9 +33,8 @@ from the console, so there is nothing to type at.
 
 See also
 --------
-Custom_Drivers/04_uart/uart_hal.h     the UART contract this mirrors
-CM7/App/Src/app_log.c                 what produces these lines
-README.md section 8                   the LED codes, for when nothing arrives
+01_shared_drivers/04_uart/uart_hal.h  the UART contract this mirrors
+docs/ETHERNET_BRINGUP.md              what the banner lines should read
 """
 
 from __future__ import annotations
@@ -54,7 +53,7 @@ import winreg
 
 SCRIPT_NAME = f"{Path(__file__).parent.name}/{Path(__file__).name}"
 
-# Custom_Drivers/04_uart/uart_hal.h: UART_CONSOLE_DEFAULT_BAUDRATE, 8N1.
+# 01_shared_drivers/04_uart/uart_hal.h: UART_CONSOLE_DEFAULT_BAUDRATE, 8N1.
 DEFAULT_BAUD = 115200
 
 # ST-LINK USB vendor id. The PID varies with the ST-LINK generation

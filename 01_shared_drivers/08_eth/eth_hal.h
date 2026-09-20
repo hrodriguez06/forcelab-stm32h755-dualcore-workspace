@@ -202,6 +202,22 @@ void ETH_Driver_ApplyErrataRxErrorPackets(void);
   */
 void ETH_Driver_SetRxWatchdog(uint8_t rwt, uint8_t rwtu);
 
+/* ---- MSP Override Hooks ------------------------------------------------ */
+/**
+  * @brief  Weak user hook for Ethernet RMII GPIO pinout and clock initialization.
+  * @note   Two ways to customize Ethernet hardware:
+  *         1. Implement a strong ETH_HAL_MspInit_User() in application code.
+  *         2. Define ETH_HAL_CUSTOM_MSP at compile time (or before including eth_hal.h):
+  *            suppresses HAL_ETH_MspInit() in eth_hal.c entirely, allowing full
+  *            control from a project-local stm32h7xx_hal_msp.c without duplicate symbol errors.
+  */
+void ETH_HAL_MspInit_User(ETH_HandleTypeDef *heth);
+
+/**
+  * @brief  Weak user hook for Ethernet MSP de-initialization.
+  */
+void ETH_HAL_MspDeInit_User(ETH_HandleTypeDef *heth);
+
 #ifdef __cplusplus
 }
 #endif

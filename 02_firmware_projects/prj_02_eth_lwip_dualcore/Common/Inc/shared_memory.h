@@ -31,7 +31,7 @@
 
 #define SHARED_MBOX_SIZE        64U  /* multiple of 32 (cache line)          */
 
-typedef struct
+typedef struct __attribute__((aligned(32)))
 {
     volatile uint32_t magic;          /* 0xH755SHM sentinel, written by M7   */
     volatile uint32_t m7_heartbeat;   /* incremented by M7                   */

@@ -23,6 +23,32 @@
 
 #if defined(HAL_ETH_MODULE_ENABLED)
 
+#if __has_include("board_def.h")
+#include "board_def.h"
+#endif
+
+/* Fallback RMII pin map for Nucleo-144 if not overridden in board_def.h */
+#ifndef BOARD_ETH_REF_CLK_PORT
+#define BOARD_ETH_REF_CLK_PORT    GPIOA
+#define BOARD_ETH_REF_CLK_PIN     GPIO_PIN_1
+#define BOARD_ETH_MDIO_PORT       GPIOA
+#define BOARD_ETH_MDIO_PIN        GPIO_PIN_2
+#define BOARD_ETH_CRS_DV_PORT     GPIOA
+#define BOARD_ETH_CRS_DV_PIN      GPIO_PIN_7
+#define BOARD_ETH_TXD1_PORT       GPIOB
+#define BOARD_ETH_TXD1_PIN        GPIO_PIN_13
+#define BOARD_ETH_MDC_PORT        GPIOC
+#define BOARD_ETH_MDC_PIN         GPIO_PIN_1
+#define BOARD_ETH_RXD0_PORT       GPIOC
+#define BOARD_ETH_RXD0_PIN        GPIO_PIN_4
+#define BOARD_ETH_RXD1_PORT       GPIOC
+#define BOARD_ETH_RXD1_PIN        GPIO_PIN_5
+#define BOARD_ETH_TX_EN_PORT      GPIOG
+#define BOARD_ETH_TX_EN_PIN       GPIO_PIN_11
+#define BOARD_ETH_TXD0_PORT       GPIOG
+#define BOARD_ETH_TXD0_PIN        GPIO_PIN_13
+#endif
+
 /* ---- Interrupt priority ------------------------------------------------ *
  * The ETH ISR signals FreeRTOS objects, so its priority must be numerically
  * greater than or equal to configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY (5).
@@ -194,21 +220,18 @@ __weak void ETH_HAL_MspInit_User(ETH_HandleTypeDef *heth)
     gpio.Speed     = GPIO_SPEED_FREQ_VERY_HIGH;   /* 50 MHz RMII timing */
     gpio.Alternate = GPIO_AF11_ETH;
 
-    /* PA1 REF_CLK, PA2 MDIO, PA7 CRS_DV */
-    gpio.Pin = GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_7;
-    HAL_GPIO_Init(GPIOA, &gpio);
+    /* RMII Signals */
+    gpio.Pin = BOARD_ETH_REF_CLK_PIN | BOARD_ETH_MDIO_PIN | BOARD_ETH_CRS_DV_PIN;
+    HAL_GPIO_Init(BOARD_ETH_REF_CLK_PORT, &gpio);
 
-    /* PB13 TXD1 */
-    gpio.Pin = GPIO_PIN_13;
-    HAL_GPIO_Init(GPIOB, &gpio);
+    gpio.Pin = BOARD_ETH_TXD1_PIN;
+    HAL_GPIO_Init(BOARD_ETH_TXD1_PORT, &gpio);
 
-    /* PC1 MDC, PC4 RXD0, PC5 RXD1 */
-    gpio.Pin = GPIO_PIN_1 | GPIO_PIN_4 | GPIO_PIN_5;
-    HAL_GPIO_Init(GPIOC, &gpio);
+    gpio.Pin = BOARD_ETH_MDC_PIN | BOARD_ETH_RXD0_PIN | BOARD_ETH_RXD1_PIN;
+    HAL_GPIO_Init(BOARD_ETH_MDC_PORT, &gpio);
 
-    /* PG11 TX_EN, PG13 TXD0 */
-    gpio.Pin = GPIO_PIN_11 | GPIO_PIN_13;
-    HAL_GPIO_Init(GPIOG, &gpio);
+    gpio.Pin = BOARD_ETH_TX_EN_PIN | BOARD_ETH_TXD0_PIN;
+    HAL_GPIO_Init(BOARD_ETH_TX_EN_PORT, &gpio);
 
     /* Enabling the ETH clocks from CPU1 also allocates the D2 domain clock to
        CPU1, which is what keeps the MAC alive when CPU2 is not running. */
@@ -218,11 +241,6 @@ __weak void ETH_HAL_MspInit_User(ETH_HandleTypeDef *heth)
 
     HAL_NVIC_SetPriority(ETH_IRQn, ETH_DRIVER_IRQ_PRIORITY, 0);
     HAL_NVIC_EnableIRQ(ETH_IRQn);
-}
-
-void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
-{
-    ETH_HAL_MspInit_User(heth);
 }
 
 __weak void ETH_HAL_MspDeInit_User(ETH_HandleTypeDef *heth)
@@ -238,16 +256,28 @@ __weak void ETH_HAL_MspDeInit_User(ETH_HandleTypeDef *heth)
     __HAL_RCC_ETH1TX_CLK_DISABLE();
     __HAL_RCC_ETH1RX_CLK_DISABLE();
 
-    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_7);
-    HAL_GPIO_DeInit(GPIOB, GPIO_PIN_13);
-    HAL_GPIO_DeInit(GPIOC, GPIO_PIN_1 | GPIO_PIN_4 | GPIO_PIN_5);
-    HAL_GPIO_DeInit(GPIOG, GPIO_PIN_11 | GPIO_PIN_13);
+    HAL_GPIO_DeInit(BOARD_ETH_REF_CLK_PORT, BOARD_ETH_REF_CLK_PIN | BOARD_ETH_MDIO_PIN | BOARD_ETH_CRS_DV_PIN);
+    HAL_GPIO_DeInit(BOARD_ETH_TXD1_PORT, BOARD_ETH_TXD1_PIN);
+    HAL_GPIO_DeInit(BOARD_ETH_MDC_PORT, BOARD_ETH_MDC_PIN | BOARD_ETH_RXD0_PIN | BOARD_ETH_RXD1_PIN);
+    HAL_GPIO_DeInit(BOARD_ETH_TX_EN_PORT, BOARD_ETH_TX_EN_PIN | BOARD_ETH_TXD0_PIN);
+}
+
+#ifndef ETH_HAL_CUSTOM_MSP
+/**
+  * @brief  Standard HAL callback dispatching to weak ETH_HAL_MspInit_User().
+  * @note   To supply a full custom HAL_ETH_MspInit(), define ETH_HAL_CUSTOM_MSP
+  *         to suppress this function and implement it in your stm32h7xx_hal_msp.c.
+  */
+void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
+{
+    ETH_HAL_MspInit_User(heth);
 }
 
 void HAL_ETH_MspDeInit(ETH_HandleTypeDef *heth)
 {
     ETH_HAL_MspDeInit_User(heth);
 }
+#endif /* ETH_HAL_CUSTOM_MSP */
 
 /* ==========================================================================
  * ES0445 workarounds.

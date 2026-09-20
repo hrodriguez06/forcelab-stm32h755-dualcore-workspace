@@ -10,14 +10,11 @@
 
 #include "stm32h7xx_hal.h"
 #include "board_def.h"
+#include "shared_memory.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/** HSEM channel used for the CPU1 -> CPU2 boot notification.
- *  Must match CM7/Core/Inc/main.h and HSEM_ID_BOOT_SYNC in shared_memory.h. */
-#define HSEM_ID_BOOT            0U
 
 void Error_Handler(void);
 

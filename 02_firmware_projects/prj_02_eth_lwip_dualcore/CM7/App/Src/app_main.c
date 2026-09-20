@@ -56,11 +56,8 @@ void app_main(void)
             (unsigned long)((DBGMCU->IDCODE & DBGMCU_IDCODE_REV_ID_Msk) >>
                             DBGMCU_IDCODE_REV_ID_Pos));
 
-    /* CPU1 owns the shared block: it is the one that initialises it, and it
-       must do so before CPU2 is released. By the time app_main() runs the
-       handshake in main() has already happened, so CPU2 may already be
-       reading - hence the magic word last, as the publish barrier. */
-    Shared_Init();
+    /* Shared memory was already initialised by CPU1 in main() before CPU2
+       was released from HSEM 0. Verify the magic word before proceeding. */
     APP_LOG("[ipc] shared block at %p, magic=0x%08lX",
             (void *)&g_shared, (unsigned long)g_shared.magic);
     APP_LOG("[ipc] CPU2 boot handshake: %s",

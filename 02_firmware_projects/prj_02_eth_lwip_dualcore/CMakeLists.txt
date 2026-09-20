@@ -17,11 +17,17 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/common_flags.cmake)
 
 # ---- External dependencies -------------------------------------------------
-# The Cube package is a submodule of the workspace, shared by every project
-# rather than checked out once per product: it is 110 MB and identical for all
-# of them. Override CUBE_DIR to point somewhere else.
-set(CUBE_DIR "${CMAKE_CURRENT_LIST_DIR}/../prj_eth_lwip_node/external/STM32CubeH7"
-    CACHE PATH "STM32CubeH7 checkout to build against")
+# The STM32CubeH7 package is shared across projects to avoid duplicating 110 MB.
+# Defaults to the submodule in prj_eth_lwip_node or can be overridden via
+# the STM32CUBEH7_DIR environment variable or -DCUBE_DIR CLI argument.
+if(NOT DEFINED CUBE_DIR)
+    if(DEFINED ENV{STM32CUBEH7_DIR})
+        set(CUBE_DIR "$ENV{STM32CUBEH7_DIR}")
+    else()
+        set(CUBE_DIR "${CMAKE_CURRENT_LIST_DIR}/../prj_eth_lwip_node/external/STM32CubeH7")
+    endif()
+endif()
+set(CUBE_DIR "${CUBE_DIR}" CACHE PATH "STM32CubeH7 checkout to build against")
 
 set(CMSIS_DIR      ${CUBE_DIR}/Drivers/CMSIS)
 set(HAL_DIR        ${CUBE_DIR}/Drivers/STM32H7xx_HAL_Driver)

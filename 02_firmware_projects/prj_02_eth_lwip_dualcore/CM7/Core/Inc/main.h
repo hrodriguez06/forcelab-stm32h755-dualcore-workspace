@@ -15,6 +15,8 @@
 extern "C" {
 #endif
 
+#include "shared_memory.h"
+
 /* Set to 1 once CPU2 firmware exists in Flash bank 2. CPU1 then performs the
  * HSEM handshake that releases CPU2 after the clock tree is up.
  * Set to 0 while only the Cortex-M7 image is being flashed: waiting for
@@ -22,9 +24,6 @@ extern "C" {
 #ifndef CM4_BOOT_ENABLED
 #define CM4_BOOT_ENABLED        1
 #endif
-
-/** HSEM channel used for the CPU1 -> CPU2 boot notification. */
-#define HSEM_ID_BOOT            0U
 
 void Error_Handler(void);
 

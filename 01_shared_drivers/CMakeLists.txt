@@ -14,9 +14,30 @@
 
 cmake_minimum_required(VERSION 3.22)
 
-add_library(stm32h7_shared_drivers INTERFACE)
+add_library(stm32h7_driver_led INTERFACE)
+target_include_directories(stm32h7_driver_led INTERFACE ${CMAKE_CURRENT_LIST_DIR}/01_led)
+target_sources(stm32h7_driver_led INTERFACE ${CMAKE_CURRENT_LIST_DIR}/01_led/led_bm.c)
 
-# Include directories, in bring-up order (see README.md section "Directory Layout")
+add_library(stm32h7_driver_uart INTERFACE)
+target_include_directories(stm32h7_driver_uart INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart)
+target_sources(stm32h7_driver_uart INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart/uart_hal.c)
+
+add_library(stm32h7_driver_eth INTERFACE)
+target_include_directories(stm32h7_driver_eth INTERFACE ${CMAKE_CURRENT_LIST_DIR}/08_eth)
+target_sources(stm32h7_driver_eth INTERFACE
+    ${CMAKE_CURRENT_LIST_DIR}/08_eth/eth_hal.c
+    ${CMAKE_CURRENT_LIST_DIR}/08_eth/lan8742_phy.c
+)
+
+# Umbrella interface library, linking all available shared drivers for backwards compatibility
+add_library(stm32h7_shared_drivers INTERFACE)
+target_link_libraries(stm32h7_shared_drivers INTERFACE
+    stm32h7_driver_led
+    stm32h7_driver_uart
+    stm32h7_driver_eth
+)
+
+# Include directories across all peripheral slots in bring-up order
 target_include_directories(stm32h7_shared_drivers INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/00_gpio     # pin muxing - prerequisite of everything below
     ${CMAKE_CURRENT_LIST_DIR}/01_led      # boot diagnostics, usable before the clock tree
@@ -29,11 +50,4 @@ target_include_directories(stm32h7_shared_drivers INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/08_eth      # depends on 02_dma (descriptors in SRAM3)
     ${CMAKE_CURRENT_LIST_DIR}/09_fdcan
     ${CMAKE_CURRENT_LIST_DIR}/10_hsem     # M7 <-> M4 IPC - needs both cores running
-)
-
-target_sources(stm32h7_shared_drivers INTERFACE
-    ${CMAKE_CURRENT_LIST_DIR}/01_led/led_bm.c
-    ${CMAKE_CURRENT_LIST_DIR}/04_uart/uart_hal.c
-    ${CMAKE_CURRENT_LIST_DIR}/08_eth/eth_hal.c
-    ${CMAKE_CURRENT_LIST_DIR}/08_eth/lan8742_phy.c
 )

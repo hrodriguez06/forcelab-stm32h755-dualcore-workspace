@@ -23,6 +23,7 @@
 #include "mpu_config.h"
 #include "app_main.h"
 #include "led_bm.h"
+#include "shared_memory.h"
 
 static void SystemClock_Config(void);
 static void PeripheralClock_Config(void);
@@ -86,11 +87,16 @@ int main(void)
     PeripheralClock_Config();
     LED_BootStage(LED_BOOT_CLOCKS_DONE);
 
+    /* Initialise shared RAM and publish SHARED_MAGIC before CPU2 can read it.
+       Placed outside the #if: clearing the block is independent of whether
+       CPU2 is enabled to boot; only the ordering relative to HSEM 0 matters. */
+    Shared_Init();
+
 #if CM4_BOOT_ENABLED
-    /* The clock tree is up: release CPU2. */
+    /* The clock tree is up and shared memory is ready: release CPU2. */
     __HAL_RCC_HSEM_CLK_ENABLE();
-    HAL_HSEM_FastTake(HSEM_ID_BOOT);
-    HAL_HSEM_Release(HSEM_ID_BOOT, 0);
+    HAL_HSEM_FastTake(HSEM_ID_BOOT_SYNC);
+    HAL_HSEM_Release(HSEM_ID_BOOT_SYNC, 0);
 
     timeout = 0xFFFF;
     while ((__HAL_RCC_GET_FLAG(RCC_FLAG_D2CKRDY) == RESET) && (timeout-- > 0))

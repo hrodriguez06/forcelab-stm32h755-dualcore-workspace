@@ -88,7 +88,7 @@ static void CPU2_WaitForCPU1(void)
     __HAL_RCC_HSEM_CLK_ENABLE();
 
     /* Subscribe this core to HSEM 0 before sleeping. */
-    HAL_HSEM_ActivateNotification(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT));
+    HAL_HSEM_ActivateNotification(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT_SYNC));
 
     /* SEVONPEND: wake on an interrupt that is merely PENDING, without enabling
        it in the NVIC and without vectoring to a handler.
@@ -118,8 +118,8 @@ static void CPU2_WaitForCPU1(void)
 
     /* Woken by the HSEM notification: unsubscribe, clear it, and put the core
        back to its normal wake-up behaviour. */
-    __HAL_HSEM_CLEAR_FLAG(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT));
-    HAL_HSEM_DeactivateNotification(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT));
+    __HAL_HSEM_CLEAR_FLAG(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT_SYNC));
+    HAL_HSEM_DeactivateNotification(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT_SYNC));
     CLEAR_BIT(SCB->SCR, SCB_SCR_SEVONPEND_Msk);
 }
 

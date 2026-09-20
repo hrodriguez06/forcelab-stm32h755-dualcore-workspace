@@ -108,6 +108,7 @@ stm32h755/                                       # Workspace Root [GIT REPO - se
 │   └── 10_hsem/                                 # M7 <-> M4 IPC - needs both cores alive
 │
 ├── 02_firmware_projects/                        # Active product firmware
+│   ├── prj_02_eth_lwip_dualcore/                # Dual-core Ethernet / lwIP node (shared drivers)
 │   └── prj_eth_lwip_node/                       # Ethernet / lwIP node on CPU1
 │       └── external/STM32CubeH7/                # [SUBMODULE] shared by every project
 │

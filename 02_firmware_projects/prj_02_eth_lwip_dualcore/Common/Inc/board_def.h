@@ -46,6 +46,26 @@ extern "C" {
 #define BOARD_ETH_MAC_ADDR4                    0x00U
 #define BOARD_ETH_MAC_ADDR5                    0x01U
 
+/* ---- Ethernet RMII Pins (Nucleo-144) ----------------------------------- */
+#define BOARD_ETH_REF_CLK_PORT                GPIOA   /* PA1  - REF_CLK */
+#define BOARD_ETH_REF_CLK_PIN             GPIO_PIN_1
+#define BOARD_ETH_MDIO_PORT                   GPIOA   /* PA2  - MDIO    */
+#define BOARD_ETH_MDIO_PIN                GPIO_PIN_2
+#define BOARD_ETH_CRS_DV_PORT                 GPIOA   /* PA7  - CRS_DV  */
+#define BOARD_ETH_CRS_DV_PIN              GPIO_PIN_7
+#define BOARD_ETH_TXD1_PORT                   GPIOB   /* PB13 - TXD1    */
+#define BOARD_ETH_TXD1_PIN               GPIO_PIN_13
+#define BOARD_ETH_MDC_PORT                    GPIOC   /* PC1  - MDC     */
+#define BOARD_ETH_MDC_PIN                 GPIO_PIN_1
+#define BOARD_ETH_RXD0_PORT                   GPIOC   /* PC4  - RXD0    */
+#define BOARD_ETH_RXD0_PIN                GPIO_PIN_4
+#define BOARD_ETH_RXD1_PORT                   GPIOC   /* PC5  - RXD1    */
+#define BOARD_ETH_RXD1_PIN                GPIO_PIN_5
+#define BOARD_ETH_TX_EN_PORT                  GPIOG   /* PG11 - TX_EN   */
+#define BOARD_ETH_TX_EN_PIN              GPIO_PIN_11
+#define BOARD_ETH_TXD0_PORT                   GPIOG   /* PG13 - TXD0    */
+#define BOARD_ETH_TXD0_PIN               GPIO_PIN_13
+
 /* ---- User LEDs (status reporting for the bring-up) --------------------- */
 #define BOARD_LED_GREEN_PORT                  GPIOB   /* LD1 - PB0  */
 #define BOARD_LED_GREEN_PIN               GPIO_PIN_0

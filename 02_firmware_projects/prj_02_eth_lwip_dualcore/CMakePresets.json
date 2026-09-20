@@ -4,7 +4,7 @@
   "configurePresets": [
     {
       "name": "debug",
-      "displayName": "CM7 Debug (Ninja)",
+      "displayName": "Dual-Core Debug (CM7 + CM4)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/debug",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
@@ -12,7 +12,7 @@
     },
     {
       "name": "release",
-      "displayName": "CM7 Release (Ninja)",
+      "displayName": "Dual-Core Release (CM7 + CM4)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/release",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",

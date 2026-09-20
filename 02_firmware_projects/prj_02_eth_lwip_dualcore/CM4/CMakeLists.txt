@@ -90,7 +90,8 @@ target_link_options(${TARGET} PRIVATE
     -Wl,--no-warn-rwx-segments
 )
 
-target_link_libraries(${TARGET} PRIVATE stm32h7_shared_drivers)
+# CPU2 (bare-metal) has zero external driver dependencies.
+# Link specific targets (e.g. stm32h7_driver_led) only when CPU2 actively references them.
 
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}

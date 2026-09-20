@@ -44,11 +44,6 @@ __weak void UART_HAL_MspInit_User(UART_HandleTypeDef *huart)
     }
 }
 
-void HAL_UART_MspInit(UART_HandleTypeDef *huart)
-{
-    UART_HAL_MspInit_User(huart);
-}
-
 __weak void UART_HAL_MspDeInit_User(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART3)
@@ -58,10 +53,22 @@ __weak void UART_HAL_MspDeInit_User(UART_HandleTypeDef *huart)
     }
 }
 
+#ifndef UART_HAL_CUSTOM_MSP
+/**
+  * @brief  Standard HAL callback dispatching to weak UART_HAL_MspInit_User().
+  * @note   To supply a full custom HAL_UART_MspInit() across multiple UARTs,
+  *         define UART_HAL_CUSTOM_MSP to suppress this function.
+  */
+void HAL_UART_MspInit(UART_HandleTypeDef *huart)
+{
+    UART_HAL_MspInit_User(huart);
+}
+
 void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
 {
     UART_HAL_MspDeInit_User(huart);
 }
+#endif /* UART_HAL_CUSTOM_MSP */
 
 HAL_StatusTypeDef UART_HAL_Init(UART_HandleTypeDef *huart, const uart_hal_config_t *config)
 {
