@@ -10,9 +10,13 @@
   *                       board says something even with no console attached.
   *            status     reads g_shared.m4_heartbeat and prints both counters.
   *                       A CPU2 counter that stays at zero is the single most
-  *                       useful symptom this template can give you: it means
+  *                       useful symptom this firmware can give you: it means
   *                       CPU2 never ran, which is an option-byte or a Flash
-  *                       bank 2 problem, not an application one.
+  *                       bank 2 problem, not an application one. The first
+  *                       sample reports "starting" rather than a verdict,
+  *                       because there is no earlier sample to compare it
+  *                       with - from the second one on, "NOT RESPONDING"
+  *                       means it.
   *
   *          Replace both with the real application. Keep the shared-memory
   *          access pattern: every field is volatile and anything wider than a
@@ -27,6 +31,8 @@
 #include "shared_memory.h"
 #include "net_config.h"
 #include "net_task.h"
+
+#include <stdbool.h>
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -110,19 +116,43 @@ static void Status_Task(void *arg)
 {
     TickType_t last = xTaskGetTickCount();
     uint32_t   previous_m4 = 0U;
+    bool       have_previous = false;
 
     (void)arg;
 
     for (;;)
     {
-        uint32_t m4 = g_shared.m4_heartbeat;
+        uint32_t    m4 = g_shared.m4_heartbeat;
+        const char *state;
+
+        /* The verdict compares two samples, so the first pass has nothing to
+           compare against, and reporting a verdict there would be a coin toss:
+           Shared_Init() leaves the block zeroed and CPU1 can reach this task
+           before CPU2 has woken from STOP. This firmware happens to lose that
+           race - the banner, the magic check and lwIP give CPU2 time - but
+           that is timing, not design, and trimming the work before the
+           scheduler is enough to flip it. Kept in step with
+           03_firmware_templates/prj_01_template_dualcore, where it did fire on
+           the opening line of every boot. */
+        if (m4 != previous_m4)
+        {
+            state = "alive";
+        }
+        else if (!have_previous)
+        {
+            state = "starting";
+        }
+        else
+        {
+            state = "NOT RESPONDING";
+        }
 
         APP_LOG("[ipc] m7=%lu m4=%lu  (CPU2 %s)",
                 (unsigned long)g_shared.m7_heartbeat,
-                (unsigned long)m4,
-                (m4 != previous_m4) ? "alive" : "NOT RESPONDING");
+                (unsigned long)m4, state);
 
-        previous_m4 = m4;
+        previous_m4   = m4;
+        have_previous = true;
         vTaskDelayUntil(&last, pdMS_TO_TICKS(STATUS_PERIOD_MS));
     }
 }
