@@ -5,8 +5,20 @@
       "path": "00_docs_stm32h7"
     },
     {
-      "name": "01_Templates: Dual-Core Template",
-      "path": "01_firmware_templates/prj_01_template_dualcore"
+      "name": "01_Shared Drivers",
+      "path": "01_shared_drivers"
+    },
+    {
+      "name": "02_Project: Ethernet / lwIP node",
+      "path": "02_firmware_projects/prj_eth_lwip_node"
+    },
+    {
+      "name": "03_Template: Dual-Core",
+      "path": "03_firmware_templates/prj_01_template_dualcore"
+    },
+    {
+      "name": "Workspace root",
+      "path": "."
     }
   ],
   "settings": {
@@ -18,7 +30,12 @@
     "search.exclude": {
       "**/build/**": true,
       "**/.git/**": true,
+      "**/external/STM32CubeH7/**": true,
       "**/docs/01_drivers_and_hal/STM32CubeH7/Projects/**": true
+    },
+    "files.watcherExclude": {
+      "**/build/**": true,
+      "**/external/**": true
     }
   }
 }

@@ -46,9 +46,19 @@ typedef struct
 
 } SharedMemory_t;
 
-/* One single instance, placed by the linker. Defined in shared_memory.c on
-   the M7 side only; the M4 sees it through the same address.               */
+/* One instance in memory, but shared_memory.c is compiled into BOTH images.
+   Each linker then reserves the same address for it, and because .shared_ram
+   is NOLOAD in both scripts neither image carries any content for it - there
+   is nothing to conflict. Leaving it out of the M4 build instead does not
+   link: an extern with no definition in that image is an undefined symbol,
+   whatever the other core contains.                                        */
 extern SharedMemory_t g_shared __attribute__((section(".shared_ram")));
+
+/* Zeroes the block and publishes SHARED_MAGIC last, so a reader that sees the
+   magic can trust everything else. M7 only, and before the M7 releases HSEM 0:
+   .shared_ram is NOLOAD in both linker scripts, so nothing else initialises
+   it and after a warm reset it still holds the previous run's values.      */
+void Shared_Init(void);
 
 #define SHARED_MAGIC   0x48375353UL   /* "H7SS" */
 

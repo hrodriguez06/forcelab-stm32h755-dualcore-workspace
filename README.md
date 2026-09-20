@@ -107,14 +107,12 @@ stm32h755/                                       # Workspace Root [GIT REPO - se
 │   ├── 09_fdcan/                                # FDCAN1, FDCAN2
 │   └── 10_hsem/                                 # M7 <-> M4 IPC - needs both cores alive
 │
-├── 01_firmware_templates/                       # Golden Base Firmware Templates
-│   └── prj_01_template_dualcore/                # Production Dual-Core CMake Template
+├── 02_firmware_projects/                        # Active product firmware
+│   └── prj_eth_lwip_node/                       # Ethernet / lwIP node on CPU1
+│       └── external/STM32CubeH7/                # [SUBMODULE] shared by every project
 │
-├── 02_firmware_projects/                        # Active Product Repositories (Cloned from Template)
-│   ├── prj_motor_controller/                    # Example: Dedicated motor drive firmware
-│   └── prj_telemetry_node/                      # Example: Industrial sensor gateway firmware
-│
-└── 99_shared_hardware/                          # Hardware CAD, Altium/KiCad, Lab Notes
+└── 03_firmware_templates/                       # Golden base firmware templates
+    └── prj_01_template_dualcore/                # Dual-core CMake template, both cores build
 ```
 
 ---
@@ -409,7 +407,7 @@ flowchart TD
 ```
 
 1. **Stage 1 — Template Instantiation**:
-   - Clone `01_firmware_templates/prj_01_template_dualcore` into `02_firmware_projects/prj_<name>`.
+   - Clone `03_firmware_templates/prj_01_template_dualcore` into `02_firmware_projects/prj_<name>`.
    - Initialize Git submodule: `git submodule update --init --recursive`.
 2. **Stage 2 — Hardware Configuration**:
    - Open `CubeMX/prj_01_template.ioc`, configure pinouts, PLLs, and assign peripherals to CM7 or CM4.

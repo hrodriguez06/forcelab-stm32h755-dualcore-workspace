@@ -189,16 +189,24 @@ inside `HAL_MPU_Enable()` (see the `@warning` at the top of that file).
 Keep the copies byte-identical and verify with `diff` before every release:
 
 ```bash
-# from the workspace root, adjust the project path
+# from the workspace root
 T=00_docs_stm32h7/docs/00_core_and_system/linker_templates
-P=02_firmware_projects/prj_eth_lwip_node
 
-diff -u $T/mpu_config.c       $P/CM7/App/Src/mpu_config.c
-diff -u $T/mpu_config.h       $P/CM7/App/Inc/mpu_config.h
-diff -u $T/stm32h755zi_cm7.ld $P/CM7/linker/stm32h755zi_cm7.ld
+for P in 02_firmware_projects/prj_eth_lwip_node \
+         03_firmware_templates/prj_01_template_dualcore ; do
+    diff -u $T/mpu_config.c       $P/CM7/App/Src/mpu_config.c
+    diff -u $T/mpu_config.h       $P/CM7/App/Inc/mpu_config.h
+    diff -u $T/stm32h755zi_cm7.ld $P/CM7/linker/stm32h755zi_cm7.ld
+done
+
+# Dual-core consumers carry two more:
+D=03_firmware_templates/prj_01_template_dualcore
+diff -u $T/stm32h755zi_cm4.ld $D/CM4/linker/stm32h755zi_cm4.ld
+diff -u $T/shared_memory.h    $D/Common/Inc/shared_memory.h
 ```
 
-Silence from all three means the project is in sync.
+Silence from all of them means every consumer is in sync. Add a line per
+project as products are created - a copy nobody diffs is a copy that drifts.
 
 **Direction of the fix:** an errata workaround or a region change is edited *here
 first*, then propagated to every project. A change made in a project and not
