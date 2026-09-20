@@ -1,0 +1,7 @@
+build/
+*.su
+*.map
+*.elf
+*.bin
+*.hex
+.vscode/ipch/
