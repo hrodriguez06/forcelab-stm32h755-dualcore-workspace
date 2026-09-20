@@ -139,15 +139,29 @@ and UDP echo answered, and `dma_err` zero.
 back all nine RMII pins, runs 60 x 1400 B under load and checks Rx CRC errors -
 so it is the better template for what an Ethernet verification should cover.
 
-> [!NOTE]
-> `prj_eth_lwip_node` is the last tree still carrying private copies of drivers
-> that also live in `01_shared_drivers/`, and they keep drifting: **569 lines**
-> across the eight files, against **410** when the library was centralised in
-> `4204cad`. Everything fixed centrally since - the RMII port decoupling, the
-> MSP override hooks, the `00_gpio` clock helper - has not reached it. The
-> template was pointed at the library and its copies deleted; this project is
-> the harder case, because its `Custom_Drivers/` back a hardware verification
-> that would have to be repeated.
+> [!IMPORTANT]
+> **`prj_eth_lwip_node` keeps its own `Custom_Drivers/` on purpose. Errata do
+> not propagate into it.**
+>
+> It is the only tree that still does. Its copies now sit **569 lines** from
+> `01_shared_drivers/`, against **410** when the library was centralised in
+> `4204cad`, and the gap only grows: the RMII port decoupling, the MSP
+> override hooks and the `00_gpio` clock helper all landed centrally and none
+> of them reached it.
+>
+> That is accepted, not pending. This project carries the most thorough
+> hardware verification in the workspace - it reads back all nine RMII pins,
+> runs 60 x 1400 B under load and checks Rx CRC errors - and it was run
+> against those exact driver sources. Repointing it at the library would
+> invalidate that for no new behaviour, so the copies stay until there is a
+> reason to touch them.
+>
+> The standing rule that follows: **a fix in `01_shared_drivers/` does not
+> reach this project.** When an errata workaround lands centrally, decide
+> explicitly whether to port it here, and re-run the bring-up in
+> `docs/ETHERNET_BRINGUP.md` if you do. Do not assume the monorepo did it for
+> you - that guarantee holds for `prj_02_eth_lwip_dualcore` and the template,
+> which link the library, not for this one.
 
 ---
 
