@@ -165,10 +165,9 @@ static void eth_pools_reset(void)
 /**
   * @brief  Default MSP pinout and clock configuration for Nucleo-144 on-board
   *         Ethernet RMII interface.
-  * @note   Declared as __weak so any project or custom board can override it in
-  *         Core/Src/stm32h7xx_hal_msp.c or BSP without modifying this driver.
+  * @note   Can be overridden by any application defining a strong ETH_HAL_MspInit_User.
   */
-__weak void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
+__weak void ETH_HAL_MspInit_User(ETH_HandleTypeDef *heth)
 {
     GPIO_InitTypeDef gpio = {0};
 
@@ -221,7 +220,12 @@ __weak void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
     HAL_NVIC_EnableIRQ(ETH_IRQn);
 }
 
-__weak void HAL_ETH_MspDeInit(ETH_HandleTypeDef *heth)
+void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
+{
+    ETH_HAL_MspInit_User(heth);
+}
+
+__weak void ETH_HAL_MspDeInit_User(ETH_HandleTypeDef *heth)
 {
     if (heth->Instance != ETH)
     {
@@ -238,6 +242,11 @@ __weak void HAL_ETH_MspDeInit(ETH_HandleTypeDef *heth)
     HAL_GPIO_DeInit(GPIOB, GPIO_PIN_13);
     HAL_GPIO_DeInit(GPIOC, GPIO_PIN_1 | GPIO_PIN_4 | GPIO_PIN_5);
     HAL_GPIO_DeInit(GPIOG, GPIO_PIN_11 | GPIO_PIN_13);
+}
+
+void HAL_ETH_MspDeInit(ETH_HandleTypeDef *heth)
+{
+    ETH_HAL_MspDeInit_User(heth);
 }
 
 /* ==========================================================================

@@ -271,6 +271,8 @@ def follow(port_name: str, baud: int, args: argparse.Namespace) -> int:
                         print(f"Connected to {port_name} at {baud} 8N1. Ctrl-C to stop.\n")
                         connected = True
                     while True:
+                        if args.timeout and (time.monotonic() - started >= args.timeout):
+                            return 0
                         chunk = port.read()
                         if chunk:
                             pending += chunk
@@ -319,6 +321,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--list", action="store_true", help="list serial ports and exit")
     p.add_argument("--no-reconnect", dest="reconnect", action="store_false",
                    help="exit instead of waiting when the port disappears")
+    p.add_argument("--timeout", type=float, default=None, metavar="SECONDS",
+                   help="exit automatically after SECONDS (useful for automated testing)")
     return p
 
 

@@ -24,10 +24,9 @@ static UART_HandleTypeDef g_console;
 /**
   * @brief  Default MSP pinout and clock configuration for Nucleo-144 on-board
   *         ST-LINK VCP (USART3 on PD8/PD9).
-  * @note   Declared as __weak so any project or custom board can override it in
-  *         Core/Src/stm32h7xx_hal_msp.c or BSP without modifying this driver.
+  * @note   Can be overridden by any application defining a strong UART_HAL_MspInit_User.
   */
-__weak void HAL_UART_MspInit(UART_HandleTypeDef *huart)
+__weak void UART_HAL_MspInit_User(UART_HandleTypeDef *huart)
 {
     GPIO_InitTypeDef gpio = {0};
 
@@ -45,13 +44,23 @@ __weak void HAL_UART_MspInit(UART_HandleTypeDef *huart)
     }
 }
 
-__weak void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
+void HAL_UART_MspInit(UART_HandleTypeDef *huart)
+{
+    UART_HAL_MspInit_User(huart);
+}
+
+__weak void UART_HAL_MspDeInit_User(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART3)
     {
         __HAL_RCC_USART3_CLK_DISABLE();
         HAL_GPIO_DeInit(GPIOD, GPIO_PIN_8 | GPIO_PIN_9);
     }
+}
+
+void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
+{
+    UART_HAL_MspDeInit_User(huart);
 }
 
 HAL_StatusTypeDef UART_HAL_Init(UART_HandleTypeDef *huart, const uart_hal_config_t *config)

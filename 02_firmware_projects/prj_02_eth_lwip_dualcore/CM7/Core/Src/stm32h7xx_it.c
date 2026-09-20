@@ -13,6 +13,7 @@
 #include "main.h"
 #include "stm32h7xx_it.h"
 #include "led_bm.h"
+#include "eth_hal.h"
 
 extern TIM_HandleTypeDef htim6;
 
@@ -67,4 +68,11 @@ void TIM6_DAC_IRQHandler(void)
 {
     HAL_TIM_IRQHandler(&htim6);
 }
+
+/** Ethernet global interrupt. */
+void ETH_IRQHandler(void)
+{
+    HAL_ETH_IRQHandler(ETH_Driver_GetHandle());
+}
+
 
