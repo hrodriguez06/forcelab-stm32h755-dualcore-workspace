@@ -30,6 +30,11 @@ add_library(stm32h7_driver_uart INTERFACE)
 target_include_directories(stm32h7_driver_uart INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart)
 target_sources(stm32h7_driver_uart INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart/uart_hal.c)
 
+add_library(stm32h7_driver_adc INTERFACE)
+target_include_directories(stm32h7_driver_adc INTERFACE ${CMAKE_CURRENT_LIST_DIR}/07_adc)
+target_sources(stm32h7_driver_adc INTERFACE ${CMAKE_CURRENT_LIST_DIR}/07_adc/adc_hal.c)
+target_link_libraries(stm32h7_driver_adc INTERFACE stm32h7_driver_gpio)
+
 add_library(stm32h7_driver_eth INTERFACE)
 target_include_directories(stm32h7_driver_eth INTERFACE ${CMAKE_CURRENT_LIST_DIR}/08_eth)
 target_sources(stm32h7_driver_eth INTERFACE
@@ -44,6 +49,7 @@ target_link_libraries(stm32h7_shared_drivers INTERFACE
     stm32h7_driver_gpio
     stm32h7_driver_led
     stm32h7_driver_uart
+    stm32h7_driver_adc
     stm32h7_driver_eth
 )
 
