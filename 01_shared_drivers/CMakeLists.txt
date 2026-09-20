@@ -31,9 +31,9 @@ target_include_directories(stm32h7_shared_drivers INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/10_hsem     # M7 <-> M4 IPC - needs both cores running
 )
 
-# Sources will be appended here as drivers are implemented
-# Example:
-# target_sources(stm32h7_shared_drivers INTERFACE
-#     ${CMAKE_CURRENT_LIST_DIR}/04_uart/uart_hal.c
-#     ${CMAKE_CURRENT_LIST_DIR}/01_led/led_bm.c
-# )
+target_sources(stm32h7_shared_drivers INTERFACE
+    ${CMAKE_CURRENT_LIST_DIR}/01_led/led_bm.c
+    ${CMAKE_CURRENT_LIST_DIR}/04_uart/uart_hal.c
+    ${CMAKE_CURRENT_LIST_DIR}/08_eth/eth_hal.c
+    ${CMAKE_CURRENT_LIST_DIR}/08_eth/lan8742_phy.c
+)
