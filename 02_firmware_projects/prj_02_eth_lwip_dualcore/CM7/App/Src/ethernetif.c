@@ -5,7 +5,10 @@
   *
   *          Layering
   *          --------
-  *            lwIP  <->  this file  <->  Custom_Drivers/08_eth/eth_hal.c  <->  MAC
+  *            lwIP  <->  this file  <->  08_eth/eth_hal.c  <->  MAC
+  *
+  *          The driver is the shared one under 01_shared_drivers/, linked
+  *          through the CMake target stm32h7_driver_eth.
   *
   *          This file is the only place that knows about both lwIP and
   *          FreeRTOS. The driver below it knows about neither: it notifies

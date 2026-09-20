@@ -39,8 +39,8 @@ extern "C" {
 
 /* ---- Checksum strategy ------------------------------------------------- *
  * ETH_USE_HARDWARE_CHECKSUM is NOT defined here. It has to be seen by both
- * lwipopts.h and Custom_Drivers/08_eth/eth_hal.c, so it is set once as a compile
- * definition in CM7/CMakeLists.txt:
+ * lwipopts.h and 01_shared_drivers/08_eth/eth_hal.c, so it is set once as a
+ * compile definition in CM7/CMakeLists.txt:
  *
  *   0 : lwIP computes and verifies every checksum in software. Slower, but it
  *       removes a whole class of silent bring-up failures, and it is what the

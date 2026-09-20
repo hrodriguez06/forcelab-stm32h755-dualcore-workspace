@@ -5,7 +5,7 @@
   *
   *          Only the modules this firmware actually uses are enabled. Adding a
   *          peripheral means enabling its module here as well as writing the
-  *          driver under Custom_Drivers/.
+  *          driver under 01_shared_drivers/.
   ******************************************************************************
   */
 

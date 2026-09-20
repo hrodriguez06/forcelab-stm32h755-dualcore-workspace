@@ -14,7 +14,7 @@ This workspace is engineered for modular, portable, and deterministic dual-core 
 2. **Strict Core Separation**:
    - **Cortex-M7 (CPU1)**: Runs FreeRTOS; handles high-throughput communication, networking, heavy math, and overall system orchestration.
    - **Cortex-M4 (CPU2)**: Pure Bare-Metal (no RTOS); dedicated to deterministic, real-time control loops and DSP pipelines.
-3. **Three-Tier Driver Abstraction (`Custom_Drivers/`)**:
+3. **Three-Tier Driver Abstraction (`01_shared_drivers/`, or a project-local `Custom_Drivers/`)**:
    - `*_hal.[c|h]`: High-level ST HAL API implementations.
    - `*_ll.[c|h]`: Low-Level ST API implementations (performance-oriented register wrappers).
    - `*_bm.[c|h]`: Pure Bare-Metal register manipulation without ST library overhead.
@@ -125,7 +125,9 @@ Every firmware project is a self-contained CMake tree inside the workspace repos
 ```text
 prj_01_template_dualcore/
 ├── .gitignore                          # project-local ignores on top of the workspace one
-├── .gitmodules                         # Tracks external/STM32CubeH7 submodule
+│                                       # No .gitmodules here: the Cube package is
+│                                       # a submodule of the WORKSPACE, shared by
+│                                       # every project. See CUBE_DIR in CMakeLists.
 ├── CMakeLists.txt                      # Top-level dual-core CMake orchestrator
 ├── CMakePresets.json                   # Presets for VS Code / CLI Ninja builds
 │
@@ -196,6 +198,10 @@ prj_01_template_dualcore/
 │           └── dsp_pipeline.c          # Deterministic real-time processing
 │
 ├── Custom_Drivers/                     # 3-Tier Layered Peripheral Drivers
+│   │                                   # Only for drivers a project owns alone.
+│   │                                   # A product linking the central library
+│   │                                   # has no such directory - see
+│   │                                   # prj_02_eth_lwip_dualcore.
 │   │                                   # NN_ prefix = slot in the bring-up sequence,
 │   │                                   # same numbering as 01_shared_drivers/, so
 │   │                                   # promoting a driver is a plain move
@@ -368,14 +374,14 @@ To update the `.ioc` configuration without destroying CMake or custom code:
 | **Boot Race Condition** | CM4 boots before CM7 sets up system clocks and power domains (VOS), causing CM4 to hang or crash on invalid clock ratios. | CM7 boots first from Flash Bank 1. CM7 configures PWR, RCC, and PLLs, then releases CM4 using `HAL_RCCEx_EnableBootCore(RCC_BOOT_C2)` or HSEM notification. |
 | **Flash Bank Cross-Talk** | Sector erase during flashing accidentally deletes code on the companion core. | Sectors on H7 are 128 KB each. Splitting code across Bank 1 (`0x08000000`) and Bank 2 (`0x08100000`) isolates the physical flash arrays. `tools/flash.py` programs each bank independently. |
 | **DTCM to DMA Routing Failure** | DTCM (`0x20000000`) is coupled tightly to the M7 core; DMA1 and DMA2 cannot physically access DTCM via the bus matrix. | Linker script enforces `.dma_buf` into SRAM1 (`0x30000000`). Never pass stack-allocated buffers in DTCM to DMA1/DMA2. |
-| **Silent DMA Lockup (ES0445)** | High-speed USART/LPUART DMA stream hangs indefinitely under specific FIFO conditions. | In `Custom_Drivers/04_uart/*`, set bit 20 of `DMA_SxCR` after calling `HAL_DMA_Init()` and before enabling the stream. |
+| **Silent DMA Lockup (ES0445)** | High-speed USART/LPUART DMA stream hangs indefinitely under specific FIFO conditions. | In `01_shared_drivers/04_uart/*`, set bit 20 of `DMA_SxCR` after calling `HAL_DMA_Init()` and before enabling the stream. |
 | **CM4 FPU Lazy Stacking (ES0445)** | Interrupt entry during floating-point operations corrupts registers if ISR return occurs in $\le 2$ instructions. | In CM4 initialization, clear `FPCCR.LSPEN = 0`, or guarantee that every CM4 ISR has more than 2 instructions prior to return. |
 
 ---
 
 ## 10. Driver Selection Matrix
 
-When implementing or consuming peripheral drivers in `Custom_Drivers/`, adhere to this selection rule:
+When implementing or consuming peripheral drivers - in `01_shared_drivers/`, or in a project-local `Custom_Drivers/` - adhere to this selection rule:
 
 ```text
 Performance / Determinism Requirement:
@@ -398,9 +404,9 @@ When starting a new firmware project (e.g., `prj_motor_controller`):
 
 ```mermaid
 flowchart TD
-    S1["1. Instantiation<br/>Clone prj_01_template_dualcore<br/>Run git submodule init"]
+    S1["1. Instantiation<br/>Clone prj_01_template_dualcore<br/>tools/init_cube_submodule.ps1 once, workspace-wide"]
     S2["2. Hardware Configuration<br/>Open CubeMX/prj_01_template.ioc<br/>Configure Pins, Clocks, Peripherals<br/>Generate to CubeMX/MX_Generated/"]
-    S3["3. Driver Selection<br/>Implement or link in Custom_Drivers/<br/>_bm (fast), _ll (standard), _hal (complex)"]
+    S3["3. Driver Selection<br/>Link targets from 01_shared_drivers/<br/>or write project-only ones in Custom_Drivers/<br/>_bm (fast), _ll (standard), _hal (complex)"]
     S4["4. Core Logic Implementation<br/>M7: Tasks in CM7/App/Src/<br/>M4: DSP Loops in CM4/App/Src/<br/>IPC: Contract in Common/Inc/shared_memory.h"]
     S5["5. Automated Build & Verification<br/>ninja -C build<br/>py tools/flash.py --tool cubeprog"]
 
@@ -409,12 +415,28 @@ flowchart TD
 
 1. **Stage 1 — Template Instantiation**:
    - Clone `03_firmware_templates/prj_01_template_dualcore` into `02_firmware_projects/prj_<name>`.
-   - Initialize Git submodule: `git submodule update --init --recursive`.
+   - The new project has no submodule of its own: it builds against the workspace
+     STM32CubeH7 checkout through `CUBE_DIR`. Restore that checkout once, from the
+     workspace root, if it is not already there:
+
+     ```powershell
+     .\tools\init_cube_submodule.ps1     # -Check reports without changing anything
+     ```
+
+     Do **not** use `git submodule update --init --recursive`: it fails outright on
+     Windows and pulls 48 BSP repositories this product does not have. Section 12
+     explains why, and CMake fails with the same pointer if the checkout is missing.
 2. **Stage 2 — Hardware Configuration**:
    - Open `CubeMX/prj_01_template.ioc`, configure pinouts, PLLs, and assign peripherals to CM7 or CM4.
    - Generate code directly to `CubeMX/MX_Generated/`. Inspect diffs via `git diff CubeMX/`.
-3. **Stage 3 — Driver Implementation**:
-   - Place peripheral drivers into `Custom_Drivers/` using the appropriate `*_bm`, `*_ll`, or `*_hal` layer.
+3. **Stage 3 — Driver Selection**:
+   - Prefer the central library: link the CMake targets of `01_shared_drivers/`
+     (`stm32h7_driver_led`, `stm32h7_driver_uart`, `stm32h7_driver_eth`, or the
+     `stm32h7_shared_drivers` umbrella) per core, so an errata fix reaches every
+     project at once. `prj_02_eth_lwip_dualcore` is the worked example.
+   - Only write a driver into the project-local `Custom_Drivers/` when it is
+     specific to that product. It keeps the same `NN_` prefix, so promoting it
+     into `01_shared_drivers/` later is a plain move.
 4. **Stage 4 — Core Logic & IPC**:
    - CM7: Write FreeRTOS tasks in `CM7/App/Src/rtos_tasks.c`.
    - CM4: Write deterministic loops in `CM4/App/Src/dsp_pipeline.c`.

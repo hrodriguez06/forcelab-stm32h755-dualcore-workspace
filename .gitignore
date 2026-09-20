@@ -23,7 +23,9 @@ compile_commands.json
 # NOT listed here: 02_firmware_projects/*/external/STM32CubeH7. That one is a
 # real submodule (see .gitmodules) - git records the commit, not the files, so
 # the path must stay visible. Restore it after a clone with
-#     git submodule update --init --recursive
+#     .\tools\init_cube_submodule.ps1
+# and NOT with 'git submodule update --init --recursive', which fails on
+# Windows. That script's header, and README.md section 12, say why.
 00_docs_stm32h7/docs/01_drivers_and_hal/FreeRTOS/FreeRTOS-Kernel/
 
 # --- Convenience mirror of the Cube sources --------------------------------

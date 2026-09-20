@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   * @file    ethernetif.h
-  * @brief   lwIP network interface bound to Custom_Drivers/eth.
+  * @brief   lwIP network interface bound to 01_shared_drivers/08_eth.
   ******************************************************************************
   */
 

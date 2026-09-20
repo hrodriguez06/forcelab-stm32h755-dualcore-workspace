@@ -4,10 +4,10 @@
   * @brief   lwIP 2.1.x configuration for STM32H755ZI CPU1 (Cortex-M7).
   *
   *          Memory note: none of the pools declared here has to be reachable
-  *          by the Ethernet DMA. Custom_Drivers/08_eth/eth_hal.c owns dedicated
-  *          Rx and Tx buffers in D2 SRAM3 (.eth_ram) and copies frames in and
-  *          out of pbufs, so the lwIP heap and pbuf pool can live in ordinary
-  *          .bss (DTCM), which is the fastest memory the M7 has.
+  *          by the Ethernet DMA. The shared driver 08_eth/eth_hal.c owns
+  *          dedicated Rx and Tx buffers in D2 SRAM3 (.eth_ram) and copies
+  *          frames in and out of pbufs, so the lwIP heap and pbuf pool can
+  *          live in ordinary .bss (DTCM), the fastest memory the M7 has.
   *
   *          That copy costs roughly 1.5 kB of memcpy per frame. It is the
   *          deliberate trade for a data path where no buffer is ever both
