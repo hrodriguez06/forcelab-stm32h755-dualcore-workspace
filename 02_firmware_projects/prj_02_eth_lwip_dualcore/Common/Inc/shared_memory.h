@@ -21,6 +21,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ---- HSEM identifiers ----------------------------------------------------
    HSEM 0 is reserved by ST for the classic boot handshake (M4 waits in
    HAL_PWREx_ClearPendingEvent/__WFE until M7 releases HSEM 0).             */
@@ -66,5 +70,9 @@ void Shared_Init(void);
    Requires the HSEM clock: __HAL_RCC_HSEM_CLK_ENABLE();                    */
 #define SHARED_LOCK(id)     do { } while (HAL_HSEM_FastTake(id) != HAL_OK)
 #define SHARED_UNLOCK(id)   HAL_HSEM_Release((id), 0U)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SHARED_MEMORY_H */

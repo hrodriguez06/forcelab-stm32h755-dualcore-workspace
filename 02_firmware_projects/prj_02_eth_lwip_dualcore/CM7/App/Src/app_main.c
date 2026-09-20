@@ -60,6 +60,12 @@ void app_main(void)
        was released from HSEM 0. Verify the magic word before proceeding. */
     APP_LOG("[ipc] shared block at %p, magic=0x%08lX",
             (void *)&g_shared, (unsigned long)g_shared.magic);
+    if (g_shared.magic != SHARED_MAGIC)
+    {
+        APP_LOG("[ipc] FATAL: shared block magic mismatch (expected 0x%08lX, got 0x%08lX)",
+                (unsigned long)SHARED_MAGIC, (unsigned long)g_shared.magic);
+        Error_Handler();
+    }
     APP_LOG("[ipc] CPU2 boot handshake: %s",
             CM4_BOOT_ENABLED ? "enabled (HSEM 0)" : "DISABLED - CPU2 not started");
 

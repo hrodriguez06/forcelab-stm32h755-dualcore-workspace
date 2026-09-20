@@ -19,6 +19,7 @@
   */
 
 #include "eth_hal.h"
+#include <stddef.h>
 #include <string.h>
 
 #if defined(HAL_ETH_MODULE_ENABLED)
@@ -31,23 +32,70 @@
 #ifndef BOARD_ETH_REF_CLK_PORT
 #define BOARD_ETH_REF_CLK_PORT    GPIOA
 #define BOARD_ETH_REF_CLK_PIN     GPIO_PIN_1
+#endif
+#ifndef BOARD_ETH_MDIO_PORT
 #define BOARD_ETH_MDIO_PORT       GPIOA
 #define BOARD_ETH_MDIO_PIN        GPIO_PIN_2
+#endif
+#ifndef BOARD_ETH_CRS_DV_PORT
 #define BOARD_ETH_CRS_DV_PORT     GPIOA
 #define BOARD_ETH_CRS_DV_PIN      GPIO_PIN_7
+#endif
+#ifndef BOARD_ETH_TXD1_PORT
 #define BOARD_ETH_TXD1_PORT       GPIOB
 #define BOARD_ETH_TXD1_PIN        GPIO_PIN_13
+#endif
+#ifndef BOARD_ETH_MDC_PORT
 #define BOARD_ETH_MDC_PORT        GPIOC
 #define BOARD_ETH_MDC_PIN         GPIO_PIN_1
+#endif
+#ifndef BOARD_ETH_RXD0_PORT
 #define BOARD_ETH_RXD0_PORT       GPIOC
 #define BOARD_ETH_RXD0_PIN        GPIO_PIN_4
+#endif
+#ifndef BOARD_ETH_RXD1_PORT
 #define BOARD_ETH_RXD1_PORT       GPIOC
 #define BOARD_ETH_RXD1_PIN        GPIO_PIN_5
+#endif
+#ifndef BOARD_ETH_TX_EN_PORT
 #define BOARD_ETH_TX_EN_PORT      GPIOG
 #define BOARD_ETH_TX_EN_PIN       GPIO_PIN_11
+#endif
+#ifndef BOARD_ETH_TXD0_PORT
 #define BOARD_ETH_TXD0_PORT       GPIOG
 #define BOARD_ETH_TXD0_PIN        GPIO_PIN_13
 #endif
+
+typedef struct {
+    GPIO_TypeDef *port;
+    uint32_t      pin;
+} eth_gpio_pin_t;
+
+static const eth_gpio_pin_t s_rmii_pins[] = {
+    { BOARD_ETH_REF_CLK_PORT, BOARD_ETH_REF_CLK_PIN },
+    { BOARD_ETH_MDIO_PORT,    BOARD_ETH_MDIO_PIN },
+    { BOARD_ETH_CRS_DV_PORT,  BOARD_ETH_CRS_DV_PIN },
+    { BOARD_ETH_MDC_PORT,     BOARD_ETH_MDC_PIN },
+    { BOARD_ETH_RXD0_PORT,    BOARD_ETH_RXD0_PIN },
+    { BOARD_ETH_RXD1_PORT,    BOARD_ETH_RXD1_PIN },
+    { BOARD_ETH_TX_EN_PORT,   BOARD_ETH_TX_EN_PIN },
+    { BOARD_ETH_TXD0_PORT,    BOARD_ETH_TXD0_PIN },
+    { BOARD_ETH_TXD1_PORT,    BOARD_ETH_TXD1_PIN },
+};
+
+/**
+  * @brief  Dynamically enables AHB4 clock for any GPIO port (GPIOA..GPIOK).
+  */
+static inline void eth_enable_gpio_clock(GPIO_TypeDef *port)
+{
+    if (port != NULL && (uint32_t)port >= (uint32_t)GPIOA && (uint32_t)port <= (uint32_t)GPIOK)
+    {
+        uint32_t port_idx = ((uint32_t)port - (uint32_t)GPIOA) / 0x400UL;
+        RCC->AHB4ENR |= (1UL << port_idx);
+        volatile uint32_t dummy = RCC->AHB4ENR;
+        (void)dummy;
+    }
+}
 
 /* ---- Interrupt priority ------------------------------------------------ *
  * The ETH ISR signals FreeRTOS objects, so its priority must be numerically
@@ -210,28 +258,21 @@ __weak void ETH_HAL_MspInit_User(ETH_HandleTypeDef *heth)
     __HAL_RCC_SYSCFG_CLK_ENABLE();
     HAL_SYSCFG_ETHInterfaceSelect(SYSCFG_ETH_RMII);
 
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-    __HAL_RCC_GPIOC_CLK_ENABLE();
-    __HAL_RCC_GPIOG_CLK_ENABLE();
-
     gpio.Mode      = GPIO_MODE_AF_PP;
     gpio.Pull      = GPIO_NOPULL;
     gpio.Speed     = GPIO_SPEED_FREQ_VERY_HIGH;   /* 50 MHz RMII timing */
     gpio.Alternate = GPIO_AF11_ETH;
 
-    /* RMII Signals */
-    gpio.Pin = BOARD_ETH_REF_CLK_PIN | BOARD_ETH_MDIO_PIN | BOARD_ETH_CRS_DV_PIN;
-    HAL_GPIO_Init(BOARD_ETH_REF_CLK_PORT, &gpio);
-
-    gpio.Pin = BOARD_ETH_TXD1_PIN;
-    HAL_GPIO_Init(BOARD_ETH_TXD1_PORT, &gpio);
-
-    gpio.Pin = BOARD_ETH_MDC_PIN | BOARD_ETH_RXD0_PIN | BOARD_ETH_RXD1_PIN;
-    HAL_GPIO_Init(BOARD_ETH_MDC_PORT, &gpio);
-
-    gpio.Pin = BOARD_ETH_TX_EN_PIN | BOARD_ETH_TXD0_PIN;
-    HAL_GPIO_Init(BOARD_ETH_TX_EN_PORT, &gpio);
+    /* Initialize each RMII pin independently on its configured GPIO port */
+    for (size_t i = 0; i < sizeof(s_rmii_pins) / sizeof(s_rmii_pins[0]); i++)
+    {
+        if (s_rmii_pins[i].port != NULL)
+        {
+            eth_enable_gpio_clock(s_rmii_pins[i].port);
+            gpio.Pin = s_rmii_pins[i].pin;
+            HAL_GPIO_Init(s_rmii_pins[i].port, &gpio);
+        }
+    }
 
     /* Enabling the ETH clocks from CPU1 also allocates the D2 domain clock to
        CPU1, which is what keeps the MAC alive when CPU2 is not running. */
@@ -256,10 +297,13 @@ __weak void ETH_HAL_MspDeInit_User(ETH_HandleTypeDef *heth)
     __HAL_RCC_ETH1TX_CLK_DISABLE();
     __HAL_RCC_ETH1RX_CLK_DISABLE();
 
-    HAL_GPIO_DeInit(BOARD_ETH_REF_CLK_PORT, BOARD_ETH_REF_CLK_PIN | BOARD_ETH_MDIO_PIN | BOARD_ETH_CRS_DV_PIN);
-    HAL_GPIO_DeInit(BOARD_ETH_TXD1_PORT, BOARD_ETH_TXD1_PIN);
-    HAL_GPIO_DeInit(BOARD_ETH_MDC_PORT, BOARD_ETH_MDC_PIN | BOARD_ETH_RXD0_PIN | BOARD_ETH_RXD1_PIN);
-    HAL_GPIO_DeInit(BOARD_ETH_TX_EN_PORT, BOARD_ETH_TX_EN_PIN | BOARD_ETH_TXD0_PIN);
+    for (size_t i = 0; i < sizeof(s_rmii_pins) / sizeof(s_rmii_pins[0]); i++)
+    {
+        if (s_rmii_pins[i].port != NULL)
+        {
+            HAL_GPIO_DeInit(s_rmii_pins[i].port, s_rmii_pins[i].pin);
+        }
+    }
 }
 
 #ifndef ETH_HAL_CUSTOM_MSP

@@ -10,12 +10,11 @@
 
 #include "stm32h7xx_hal.h"
 #include "board_def.h"
+#include "shared_memory.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "shared_memory.h"
 
 /* Set to 1 once CPU2 firmware exists in Flash bank 2. CPU1 then performs the
  * HSEM handshake that releases CPU2 after the clock tree is up.
