@@ -31,10 +31,15 @@ This workspace is engineered for modular, portable, and deterministic dual-core 
 The workspace root is organized with numbered prefixes to establish clear hierarchy and execution order:
 
 ```text
-stm32h755/                                       # Workspace Root
+stm32h755/                                       # Workspace Root [GIT REPO - see section 12]
 │
 ├── README.md                                    # This Master Guide for Developers & AI
 ├── stm32h755.code-workspace                     # Multi-root VS Code workspace definition
+├── .gitignore                                   # Excludes build output, PDFs and vendored checkouts
+├── .gitattributes                               # Line-ending policy, fixed at the initial commit
+│
+├── tools/                                       # Workspace-level maintenance
+│   └── sync_docs_cube.ps1                       # Rebuilds the greppable Cube mirror in the docs hub
 │
 ├── 00_docs_stm32h7/                             # [IMMUTABLE] Master Hardware & Knowledge Hub
 │   ├── CLAUDE.md                                # Core programming rules, errata, cache & DMA constraints
@@ -102,7 +107,7 @@ stm32h755/                                       # Workspace Root
 │   └── 10_hsem/                                 # M7 <-> M4 IPC - needs both cores alive
 │
 ├── 01_firmware_templates/                       # Golden Base Firmware Templates
-│   └── prj_01_template_dualcore/                # [GIT REPO] Production Dual-Core CMake Template
+│   └── prj_01_template_dualcore/                # Production Dual-Core CMake Template
 │
 ├── 02_firmware_projects/                        # Active Product Repositories (Cloned from Template)
 │   ├── prj_motor_controller/                    # Example: Dedicated motor drive firmware
@@ -115,13 +120,12 @@ stm32h755/                                       # Workspace Root
 
 ## 3. Firmware Project Structure (`prj_01_template_dualcore`)
 
-Every firmware project is an independent Git repository configured for dual-core CMake compilation:
+Every firmware project is a self-contained CMake tree inside the workspace repository (see section 12):
 
 ```text
 prj_01_template_dualcore/
-├── .git/
+├── .gitignore                          # project-local ignores on top of the workspace one
 ├── .gitmodules                         # Tracks external/STM32CubeH7 submodule
-├── .gitignore
 ├── CMakeLists.txt                      # Top-level dual-core CMake orchestrator
 ├── CMakePresets.json                   # Presets for VS Code / CLI Ninja builds
 │
@@ -422,18 +426,64 @@ flowchart TD
 
 ---
 
-## 12. Long-Term Scalability: Shared Driver Submodule Evolution
+## 12. Repository Strategy: One Monorepo, and When to Split
 
-As firmware projects proliferate across your organization, transition `Custom_Drivers/` from a project-local folder into an enterprise-wide shared Git repository:
+The whole workspace is **a single Git repository**, rooted at `stm32h755/`.
 
-```text
-stm32h755/
-├── 00_docs_stm32h7/              # Central Reference Manuals, Linker Contracts & Errata
-├── 01_shared_drivers/            # [GIT REPO] Reusable *_hal, *_ll, *_bm peripheral drivers
-└── 02_firmware_projects/
-    ├── prj_01_template_dualcore/ # Submodules 01_shared_drivers -> Custom_Drivers/
-    ├── prj_motor_controller/     # Submodules 01_shared_drivers -> Custom_Drivers/
-    └── prj_telemetry_node/       # Submodules 01_shared_drivers -> Custom_Drivers/
-```
+### Why one repository
 
-This guarantees that peripheral bug fixes (such as errata workarounds or DMA memory barriers) propagate instantly and reliably across all firmware projects.
+The numbers decide it. Of ~900 MB on disk, the code written here is **42 files,
+about 300 KB** - 0.03 %. Everything else is build output, vendored third-party
+source and published PDFs. At that ratio the interesting question is not how to
+split ownership across repositories, it is what belongs in version control at
+all (see `.gitignore` and `00_docs_stm32h7/docs/MANIFEST.md`).
+
+On top of that:
+
+- **Errata propagation is the stated goal of `01_shared_drivers/`.** A monorepo
+  gives it for free. A submodule does the opposite by design: it pins a commit,
+  so a fix reaches a project only when someone bumps the pointer there.
+- **Cross-cutting changes stay atomic.** Promoting a driver out of
+  `Custom_Drivers/` into `01_shared_drivers/` and updating its consumer is one
+  commit. Across repositories it is three, in an order that must be right.
+- **Submodule discipline has not held here before.** 48 of the 52 submodules in
+  the pruned Cube package are still empty directories, and the `.gitmodules` in
+  `prj_eth_lwip_node` is inert. Stacking more submodules on that is a bet
+  against the evidence.
+
+### What about reproducing an old build?
+
+The real argument for pinning is that a shipped product must rebuild byte for
+byte, and a shared driver must not change under it. That does not need
+submodules: **tag the release** (`prj_eth_lwip_node/v1.2.0`) and check the tag
+out. One SHA restores drivers, linker scripts, errata notes and application
+together - with submodules you need that SHA *plus* every pointer being right.
+
+### Third-party code is still a submodule
+
+The split is by authorship, not by directory:
+
+> **Submodule for code that is not yours and has an upstream. Monorepo for the
+> code that is.**
+
+So `02_firmware_projects/*/external/STM32CubeH7` stays a submodule and is
+excluded from this repository. It is currently *declared* in `.gitmodules` but
+not registered as a gitlink, so `git submodule update --init` cannot restore it
+yet - converting it means fetching the package from GitHub.
+
+### When to split after all
+
+Move to a repository per project with a shared-driver submodule when any of
+these becomes true - none of them is, today:
+
+| Trigger | Why it changes the answer |
+| :--- | :--- |
+| A second person works on one product only | Repository boundaries start doing access control |
+| An external party consumes the drivers | They need a dependency, not your products |
+| Three or more products in production with separate certification cycles | A driver fix forces re-validation per product, so pinning becomes the feature |
+| The tracked text approaches ~1 GB | Clone time finally matters (it is ~28 MB today) |
+
+Splitting later is mechanical: `git subtree split` preserves the history of any
+directory into its own repository. Going the other way also works, but the
+history of the pointer bumps is lost. Starting here is the choice that commits
+to the least.
