@@ -1,0 +1,4 @@
+[submodule "02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7"]
+	path = 02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7
+	url = https://github.com/STMicroelectronics/STM32CubeH7.git
+	shallow = true

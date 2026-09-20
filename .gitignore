@@ -20,9 +20,10 @@ build/
 compile_commands.json
 
 # --- Third-party source with its own upstream ------------------------------
-# Fetched, not vendored. The project CMakeLists fails with a clear message when
-# external/STM32CubeH7 is missing, so an empty checkout tells you what to do.
-02_firmware_projects/*/external/
+# NOT listed here: 02_firmware_projects/*/external/STM32CubeH7. That one is a
+# real submodule (see .gitmodules) - git records the commit, not the files, so
+# the path must stay visible. Restore it after a clone with
+#     git submodule update --init --recursive
 00_docs_stm32h7/docs/01_drivers_and_hal/FreeRTOS/FreeRTOS-Kernel/
 
 # --- Convenience mirror of the Cube sources --------------------------------

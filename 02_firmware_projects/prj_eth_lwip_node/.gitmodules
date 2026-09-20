@@ -1,3 +1,0 @@
-[submodule "external/STM32CubeH7"]
-	path = external/STM32CubeH7
-	url = https://github.com/STMicroelectronics/STM32CubeH7.git

@@ -27,7 +27,19 @@ set(LWIP_DIR       ${CUBE_DIR}/Middlewares/Third_Party/LwIP)
 if(NOT EXISTS ${HAL_DIR}/Src/stm32h7xx_hal_eth.c)
     message(FATAL_ERROR
         "STM32CubeH7 is missing or incomplete at ${CUBE_DIR}.\n"
-        "Run: git submodule update --init --recursive")
+        "Restore it from the WORKSPACE root (the repository root, three levels up):\n"
+        "    git submodule update --init --depth 1 "
+            "02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7\n"
+        "    cd 02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7\n"
+        "    git sparse-checkout init --cone && git sparse-checkout set Drivers Middlewares\n"
+        "    git submodule update --init --depth 1 -- "
+            "Drivers/STM32H7xx_HAL_Driver Drivers/CMSIS/Device/ST/STM32H7xx "
+            "Middlewares/Third_Party/LwIP Middlewares/Third_Party/FreeRTOS\n"
+        "\n"
+        "Do NOT use a plain --recursive: it checks out ST's Projects/ tree, whose "
+        "paths exceed the Windows 260-character limit from here, and pulls 48 BSP "
+        "repositories for boards this product does not use. "
+        "See README.md section 6.")
 endif()
 
 add_subdirectory(Custom_Drivers)

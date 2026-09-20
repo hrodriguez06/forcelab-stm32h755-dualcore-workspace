@@ -126,10 +126,44 @@ path has to be written by hand.
 
 ```powershell
 .\tools\env.ps1                 # PATH for this session (prints the versions it found)
-git submodule update --init --recursive
 cmake --preset debug
 cmake --build --preset debug
 ```
+
+
+#### Restoring STM32CubeH7 after a fresh clone
+
+`external/STM32CubeH7` is a submodule of the workspace repository. Restoring it
+is **not** a plain `--recursive`, for two reasons: ST's `Projects/` tree has
+paths that pass the Windows 260-character limit once nested this deep, and
+`--recursive` would fetch 48 BSP repositories for boards this product does not
+have. Take only the libraries, from the **workspace root**:
+
+```powershell
+git submodule update --init --depth 1 `
+    02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7
+
+cd 02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7
+git sparse-checkout init --cone
+git sparse-checkout set Drivers Middlewares
+git submodule update --init --depth 1 -- `
+    Drivers/STM32H7xx_HAL_Driver Drivers/CMSIS/Device/ST/STM32H7xx `
+    Middlewares/Third_Party/LwIP Middlewares/Third_Party/FreeRTOS
+```
+
+That is ~110 MB instead of ~1 GB, and it is what the "Verified build" table
+below was measured against. `CMakeLists.txt` prints these same commands if the
+package is missing when you configure.
+
+> **The FreeRTOS version changed when this became a real submodule.** The
+> vendored copy that preceded it carried kernel **V11.2.0**, which is *newer*
+> than the **V10.6.2** the Cube package pins - someone had upgraded it in place,
+> and nothing recorded that. Pinning to ST's commit is the point of a submodule,
+> so the package's version is what is used now: it builds clean and runs
+> identically on the board. To go back to V11.2.0, check out `d8c632a` inside
+> `Middlewares/Third_Party/FreeRTOS` - but note that a fresh
+> `git submodule update` restores ST's pin, because the outer repository records
+> only the STM32CubeH7 commit, not overrides inside it.
 
 Add `--fresh` to the configure step after renaming or moving source files: the
 Ninja cache stores the old paths and will otherwise build a stale graph.
@@ -215,12 +249,13 @@ Debug and Release both link clean — no errors, no warnings — against:
 | Component | Version / commit |
 | :--- | :--- |
 | Compiler | `arm-none-eabi-gcc` 14.3.1 (GNU Tools for STM32 14.3.rel1) |
+| STM32CubeH7 package | `8ec3113d` (master) |
 | CMSIS device H7 | `81db1ec` |
 | STM32H7xx HAL driver | `e3c518e` |
-| FreeRTOS kernel | V11.2.0 (`d8c632a`) |
+| FreeRTOS kernel | V10.6.2 (`e41c220`) - the version the Cube package pins |
 | lwIP | 2.2.1 (`07680c8`) |
 
-Footprint (Debug): FLASH 83 840 B (8.00 %), DTCM 101 408 B (77.37 %), **SRAM3 `.eth_ram` 18 624 B (56.84 %)**.
+Footprint (Debug): FLASH 84 520 B (8.06 %), DTCM 101 416 B (77.37 %), **SRAM3 `.eth_ram` 18 624 B (56.84 %)**.
 
 ### Verified on hardware
 

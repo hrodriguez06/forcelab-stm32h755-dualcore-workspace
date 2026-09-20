@@ -466,10 +466,24 @@ The split is by authorship, not by directory:
 > **Submodule for code that is not yours and has an upstream. Monorepo for the
 > code that is.**
 
-So `02_firmware_projects/*/external/STM32CubeH7` stays a submodule and is
-excluded from this repository. It is currently *declared* in `.gitmodules` but
-not registered as a gitlink, so `git submodule update --init` cannot restore it
-yet - converting it means fetching the package from GitHub.
+So `02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7` is a real
+submodule: `.gitmodules` at this root declares it and the index records the
+commit (`8ec3113d`), not the files.
+
+Restoring it is deliberately **not** `--recursive`. Two things break that:
+ST's `Projects/` tree has paths that pass the Windows 260-character limit once
+nested this deep, and `--recursive` pulls 48 BSP repositories for boards this
+product does not have. The submodule is therefore sparse-checked-out to
+`Drivers` and `Middlewares`, with only the four inner submodules the build needs
+initialised - ~110 MB instead of ~1 GB. The exact commands are in
+`02_firmware_projects/prj_eth_lwip_node/README.md` section 6, and
+`CMakeLists.txt` prints them when the package is missing.
+
+One consequence worth knowing: the outer repository records the STM32CubeH7
+commit, **not** the commits of submodules nested inside it. A version override
+made in there does not survive a fresh clone - it restores ST's pin. That is how
+the vendored copy had drifted to FreeRTOS V11.2.0 while the package pins
+V10.6.2, with nothing recording the difference.
 
 ### When to split after all
 
