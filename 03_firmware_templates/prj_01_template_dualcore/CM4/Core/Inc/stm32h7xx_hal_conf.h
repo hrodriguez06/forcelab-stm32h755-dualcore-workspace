@@ -5,7 +5,7 @@
   *
   *          Only the modules this firmware actually uses are enabled. Adding a
   *          peripheral means enabling its module here as well as writing the
-  *          driver under Custom_Drivers/.
+  *          driver under 01_shared_drivers/.
   ******************************************************************************
   */
 
@@ -78,7 +78,7 @@ extern "C" {
  * See CM7/Core/Src/stm32h7xx_hal_timebase_tim.c. */
 
 /* ---- Ethernet ----------------------------------------------------------- *
- * Descriptor counts. Custom_Drivers/08_eth/eth_hal.c places the rings in D2
+ * Descriptor counts. 01_shared_drivers/08_eth/eth_hal.c places the rings in D2
  * SRAM3 and sizes its buffer pools from these values; the static assertions
  * there fail the build if the pools no longer fit.
  */

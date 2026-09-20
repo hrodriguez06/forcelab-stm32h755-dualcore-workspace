@@ -47,12 +47,16 @@ extern "C" {
 #define BOARD_ETH_MAC_ADDR5                    0x01U
 
 /* ---- User LEDs (status reporting for the bring-up) --------------------- */
+/* Bit NUMBERS, not GPIO_PIN_x masks: 01_shared_drivers/01_led/led_bm.c is a
+ * _bm driver and shifts these directly into MODER, BSRR and ODR. It reads
+ * BOARD_LED_<x>_BIT; a mask here would be silently ignored in favour of the
+ * driver's own Nucleo defaults, and moving an LED would change nothing. */
 #define BOARD_LED_GREEN_PORT                  GPIOB   /* LD1 - PB0  */
-#define BOARD_LED_GREEN_PIN               GPIO_PIN_0
+#define BOARD_LED_GREEN_BIT                      0U
 #define BOARD_LED_YELLOW_PORT                 GPIOE   /* LD2 - PE1  */
-#define BOARD_LED_YELLOW_PIN              GPIO_PIN_1
+#define BOARD_LED_YELLOW_BIT                     1U
 #define BOARD_LED_RED_PORT                    GPIOB   /* LD3 - PB14 */
-#define BOARD_LED_RED_PIN                GPIO_PIN_14
+#define BOARD_LED_RED_BIT                       14U
 
 #ifdef __cplusplus
 }

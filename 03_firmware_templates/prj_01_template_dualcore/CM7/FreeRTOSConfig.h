@@ -8,7 +8,7 @@
   *          NVIC_PRIORITYGROUP_4: all four implemented bits are preemption
   *          priority, no subpriority. An ISR may call the ...FromISR API only
   *          if its priority is numerically >= 5. The Ethernet interrupt is at
-  *          6 (Custom_Drivers/08_eth/eth_hal.c), so it qualifies.
+  *          6 (01_shared_drivers/08_eth/eth_hal.c), so it qualifies.
   *
   *          configMAX_PRIORITIES is 56 because ST's lwIP sys_arch is written
   *          against CMSIS-RTOS v2, whose FreeRTOS binding refuses to compile

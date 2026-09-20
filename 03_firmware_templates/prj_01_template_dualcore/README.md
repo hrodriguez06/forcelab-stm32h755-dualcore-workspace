@@ -165,11 +165,14 @@ prj_01_template_dualcore/
 ├── CM4/                         # CPU2: bare metal, D2 domain
 │   ├── linker/stm32h755zi_cm4.ld            [golden copy]
 │   └── Core/                    # main (handshake + super-loop), interrupts
-├── Custom_Drivers/              # staging area, NN_ = bring-up order
-│   ├── 01_led/                  # bare-metal, boot codes
-│   └── 04_uart/                 # HAL, ST-LINK VCP console
 └── tools/                       # env.ps1, flash.py, monitor.py, openocd/
 ```
+
+No `Custom_Drivers/` here: CPU1 links `stm32h7_driver_led` and
+`stm32h7_driver_uart` out of `01_shared_drivers/`, so a project cloned from
+this template inherits every errata fix made there instead of a copy that
+stops receiving them the day it is made. CPU2 links neither - a peripheral has
+exactly one owner, and its liveness shows through `g_shared.m4_heartbeat`.
 
 **`[golden copy]`** means the file must stay byte-identical to
 `00_docs_stm32h7/docs/00_core_and_system/linker_templates/`. Edit it there
@@ -182,9 +185,12 @@ first, then propagate. Section 7 of that README has the `diff` commands.
 2. Delete the core you do not need. Deleting CM4 also means
    `CM4_BOOT_ENABLED 0`.
 3. Replace the two CPU1 tasks and the CPU2 super-loop.
-4. Add drivers under `Custom_Drivers/` using the `NN_` slot that matches
-   `01_shared_drivers/`, so a driver that proves itself can be promoted with a
-   plain move.
+4. Add drivers by linking more targets from `01_shared_drivers/`
+   (`stm32h7_driver_gpio`, `..._led`, `..._uart`, `..._eth`, or the
+   `stm32h7_shared_drivers` umbrella) in the `CMakeLists.txt` of the core that
+   owns the peripheral. Only when a driver is specific to this one product does
+   it belong in a project-local `Custom_Drivers/`, using the same `NN_` slot so
+   promoting it later is a plain move.
 5. Put every DMA-visible buffer in the right section - `.dma_buf`, `.eth_ram`,
    `.d3_ram` - and align it to 32 bytes. The linker script header lists them
    and `mpu_config.c` marks them non-cacheable.

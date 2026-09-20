@@ -122,7 +122,7 @@ stm32h755/                                       # Workspace Root [GIT REPO - se
 | :--- | :--- | :--- | :--- | :--- |
 | `prj_02_eth_lwip_dualcore` | CM7 + CM4 | links `01_shared_drivers` | 0 warnings | 2026-09-20 at `784febb`, its README section 6 |
 | `prj_eth_lwip_node` | CM7 only | own `Custom_Drivers/` | 0 warnings | its README, "Verified on hardware" |
-| `prj_01_template_dualcore` | CM7 + CM4 | own `Custom_Drivers/` | 0 warnings | `d178009` |
+| `prj_01_template_dualcore` | CM7 + CM4 | links `01_shared_drivers` | 0 warnings | `d178009`, which predates the move to the shared drivers |
 
 `prj_02_eth_lwip_dualcore` is the reference consumer of the central library:
 what section 11 stage 3 describes, built out. Its verification covers the boot
@@ -134,13 +134,14 @@ back all nine RMII pins, runs 60 x 1400 B under load and checks Rx CRC errors -
 so it is the better template for what an Ethernet verification should cover.
 
 > [!NOTE]
-> That project and the template still carry private copies of drivers that now
-> also live in `01_shared_drivers/`, and the copies keep drifting: **569 lines**
+> `prj_eth_lwip_node` is the last tree still carrying private copies of drivers
+> that also live in `01_shared_drivers/`, and they keep drifting: **569 lines**
 > across the eight files, against **410** when the library was centralised in
 > `4204cad`. Everything fixed centrally since - the RMII port decoupling, the
-> MSP override hooks, the `00_gpio` clock helper - has not reached them. This is
-> the exact cost section 12 argues a monorepo avoids, so it is worth closing by
-> pointing both trees at the library rather than letting the number grow.
+> MSP override hooks, the `00_gpio` clock helper - has not reached it. The
+> template was pointed at the library and its copies deleted; this project is
+> the harder case, because its `Custom_Drivers/` back a hardware verification
+> that would have to be repeated.
 
 ---
 

@@ -92,7 +92,13 @@ target_link_options(${TARGET} PRIVATE
     -Wl,--no-warn-rwx-segments
 )
 
-target_link_libraries(${TARGET} PRIVATE custom_drivers)
+# CPU1 owns the three user LEDs and the ST-LINK console UART, so it links those
+# two drivers and nothing else. CPU2 links none: a peripheral has exactly one
+# owner, and its liveness shows up through g_shared.m4_heartbeat instead.
+target_link_libraries(${TARGET} PRIVATE
+    stm32h7_driver_led
+    stm32h7_driver_uart
+)
 
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}

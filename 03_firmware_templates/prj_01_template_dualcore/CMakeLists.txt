@@ -44,7 +44,35 @@ endif()
 # ---- Shared sources --------------------------------------------------------
 # Compiled into whichever core consumes them, so each keeps its own flags,
 # its own HAL configuration and its own section placement.
-add_subdirectory(Custom_Drivers)
+# ---- Shared Drivers (01_shared_drivers) ------------------------------------
+# This template consumes the central library rather than vendoring copies, so a
+# project cloned from it inherits every errata fix made there. Write a driver
+# into a project-local Custom_Drivers/ only when it is specific to that product.
+if(NOT DEFINED SHARED_DRIVERS_DIR)
+    if(DEFINED ENV{STM32_SHARED_DRIVERS})
+        set(SHARED_DRIVERS_DIR "$ENV{STM32_SHARED_DRIVERS}")
+    else()
+        set(SHARED_DRIVERS_DIR "${CMAKE_CURRENT_LIST_DIR}/../../01_shared_drivers")
+    endif()
+endif()
+
+if(NOT EXISTS "${SHARED_DRIVERS_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR
+        "
+[ERROR] Shared drivers not found at: ${SHARED_DRIVERS_DIR}
+"
+        "Fix:
+"
+        "  1. Verify workspace relative path: ../../01_shared_drivers
+"
+        "  2. Or provide CLI argument: cmake -DSHARED_DRIVERS_DIR=<path> ..
+"
+        "  3. Or define environment variable STM32_SHARED_DRIVERS
+"
+    )
+endif()
+
+add_subdirectory("${SHARED_DRIVERS_DIR}" "${CMAKE_BINARY_DIR}/shared_drivers")
 
 # ---- The two cores ---------------------------------------------------------
 add_subdirectory(CM7)
