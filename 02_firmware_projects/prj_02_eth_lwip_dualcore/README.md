@@ -29,8 +29,8 @@ This project does not vendor local peripheral drivers in `Custom_Drivers/`. Inst
 
 | Parameter | Default Value | Notes |
 | :--- | :--- | :--- |
-| **DHCP** | Enabled (`NET_USE_DHCP 1`) | Falls back to static IP if no DHCP server answers |
-| **Static Fallback IP** | `192.168.1.50` | Active when DHCP disabled or timeout |
+| **DHCP** | Disabled (`NET_USE_DHCP 0`) | Set to 1 to ask a server and fall back to the static address after `NET_DHCP_TIMEOUT_S` |
+| **Static IP** | `192.168.1.150` | In use, since DHCP is off. Verified on the board in section 6 |
 | **Netmask** | `255.255.255.0` | `/24` subnet |
 | **Gateway** | `192.168.1.1` | Default route |
 | **PHY Address** | `0` | Nucleo-H755ZI-Q on-board LAN8742A address |
@@ -47,6 +47,11 @@ From `00_docs_stm32h7/docs/00_core_and_system/dual_core_boot_ipc.md`:
 4. CPU1 clears the shared block in SRAM4 (`0x38008000`), initializes `Shared_Init()` and publishes `SHARED_MAGIC`.
 5. CPU1 takes and releases HSEM 0 to wake CPU2.
 6. CPU1 starts FreeRTOS scheduler; CPU2 enters its bare-metal loop.
+
+Step 4 happens in `main()`, before step 5, so the block is published before
+CPU2 can touch it. `app_main()` then refuses to create any task unless
+`g_shared.magic == SHARED_MAGIC`, which turns a broken handshake into a stop
+at `Error_Handler()` instead of a system running on uninitialised IPC state.
 
 ---
 
@@ -81,3 +86,85 @@ py tools/flash.py --tool cubeprog
 # Monitor telemetric logs via ST-LINK VCP console
 py tools/monitor.py
 ```
+
+---
+
+## 6. Hardware Verification
+
+Last run: **2026-09-20**, commit `784febb`, on a NUCLEO-H755ZI-Q (silicon
+revision `0x2003` = rev V), ST-LINK V3 under reset, host on the same
+192.168.1.0/24 segment.
+
+Re-run it with the commands in section 5; every number below comes from that
+run and should be refreshed whenever this section is.
+
+### Build
+
+Clean configure and build of both cores: **0 warnings, 0 errors**.
+
+| Region | CPU1 (M7) | CPU2 (M4) |
+| :--- | ---: | ---: |
+| FLASH | 85 540 B / 1 MB (8.16 %) | 2 604 B / 1 MB (0.25 %) |
+| DTCM | 101 440 B / 128 KB (77.39 %) | - |
+| SRAM2 (D2) | - | 12 344 B / 128 KB (9.42 %) |
+| SRAM3 `.eth_ram` | 18 624 B / 32 KB (56.84 %) | - |
+| SRAM4 `.shared_ram` | 160 B / 32 KB | 160 B / 32 KB |
+
+Both images reserve the same 160 B at `0x38008000`, which is the shared block
+agreeing across the two linker scripts.
+
+### Boot
+
+```text
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[ipc] m7=1 m4=1  (CPU2 alive)
+```
+
+`magic` reads back as `SHARED_MAGIC`, so the publish in `main()` landed before
+CPU2 was released and the check in `app_main()` let the tasks start.
+
+### Inter-core IPC
+
+`m4_heartbeat` over 35 s of capture, sampled every 2 s:
+
+```text
+1 -> 16 -> 32 -> 47 -> 62 -> 78 -> 93 -> 109 -> 124 -> 139
+  -> 155 -> 170 -> 185 -> 201 -> 216 -> 232 -> 247 -> 262 -> 278
+```
+
+Strictly monotonic from 1. A counter that climbs and then drops back near zero
+is the signature of `Shared_Init()` running after the HSEM release and wiping
+what CPU2 already wrote; this ordering is what section 4 step 4 exists to
+prevent.
+
+### Ethernet
+
+```text
+[phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[net] link up: 100 Mbps full duplex
+```
+
+Autonegotiation reaches the LAN8742A over MDIO, which is one of the nine RMII
+signals `08_eth/eth_hal.c` brings up pin by pin from `BOARD_ETH_*` - so a clean
+link is also the check that no signal is being configured on the wrong port.
+
+Driven from the host, since the counters stay flat while nothing talks to the
+board:
+
+| Test | Result |
+| :--- | :--- |
+| `ping 192.168.1.150`, 4 packets | 4/4, 0 % loss, 1 ms |
+| UDP echo on port 7, 5 datagrams | 5/5 byte-identical, 1.1-2.0 ms |
+| `rx` / `tx` counters | 0/1 idle after boot -> 7/6 after the tests |
+| `rx_nobuf`, `tx_nobuf`, `dma_err` | 0 throughout |
+
+### Not covered here
+
+The user LEDs (LD1 heartbeat, LD2 link, LD3 fault) are not part of this capture:
+they need someone looking at the board. Check them by eye when the console
+output above is already good.
