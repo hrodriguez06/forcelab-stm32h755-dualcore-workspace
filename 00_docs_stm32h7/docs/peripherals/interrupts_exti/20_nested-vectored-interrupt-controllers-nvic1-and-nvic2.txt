@@ -1,0 +1,486 @@
+RM0399 chapter text dump - generated from 20_nested-vectored-interrupt-controllers-nvic1-and-nvic2.pdf
+Plain-text extraction for grep/search. For figures, tables layout and
+exact register bit diagrams, open the PDF alongside this file.
+==============================================================================
+
+20         Nested vectored interrupt controllers (NVIC1 and
+           NVIC2)
+
+20.1       NVIC features
+           Both CPU1 (Cortex®-M7) and CPU2 (Cortex®-M4) cores have their own nested vector
+           interrupt controller (respectively NVIC1 and NVIC2). The NVIC includes the following
+           features:
+           •    up to 150 maskable interrupt channels for STM32H7xxx (not including the 16 interrupt
+                lines of Cortex®-M7 / Cortex®-M4 with FPU)
+           •    16 programmable priority levels (4 bits of interrupt priority are used)
+           •    low-latency exception and interrupt handling
+           •    power management control
+           •    implementation of system control registers
+           The NVIC and the processor core interface are closely coupled, which enables low latency
+           interrupt processing and efficient processing of late arriving interrupts.
+           All interrupts, including the core exceptions, are managed by the NVIC.
+           For more information on exceptions and NVIC programming, refer to PM0253 and PM0214
+           programming manuals for Cortex®-M7 and for Cortex®-M4, respectively.
+
+20.1.1     SysTick calibration value register
+           The SysTick calibration value (SYST_CALIB) is fixed to 0x3E8. It provides a reference
+           timebase of 1 ms based when the SysTick clock frequency is 1 MHz. To match the 1 ms
+           timebase whatever the application frequency, the SysTick reload value must be
+           programmed as follows in the SYST_RVR register:
+           •    The SysTick clock source is the 100 MHz CPU clock (HCLK):
+                                    reload value = ( F HCLK × SYST_CALIB ) – 1
+
+           •    or the SysTick clock source is an external clock:
+                                  reload value = ( ( F HCLK ⁄ 8 ) × SYST_CALIB ) – 1
+
+                where FHCLK refers to the AHB frequency expressed in MHz.
+           For example, to achieve a timebase of 1 ms when the SysTick clock source is the 100 MHz
+           HCLK:
+                                reload value = ( 100 × SYST_CALIB ) – 1 = 0x1869F
+
+
+20.1.2     Interrupt and exception vectors
+           Each CPU has its own exceptions connected to its Nested vectored interrupt controller
+           (NVIC): reset, NMI, HardFault, MemManage, Bus Fault, UsageFault, SVCall,
+           DebugMonitor, PendSV, SysTick.
+           Each CPU also has its own Floating Point Unit (FPU) interrupt connected to its Nested
+           Vectored Interrupt Controller (NVIC), in position 81.
+
+
+             The Window Watchdog 1 (WWDG1) interrupt is connected to the CPU1 NVIC (NVIC1)
+             position 0, while Window Watchdog 2 (WWDG2) interrupt is connected to the CPU2 NVIC
+             (NVIC2) position 0.
+             The Window Watchdog 1 (WWDG1) reset output signal is connected to the CPU2 NVIC
+             (NVIC2) position 143 via the Extended Interrupt and Event Controller (EXTI). Similarly, the
+             Window Watchdog 2 (WWDG2) reset output signal is connected to the CPU1 NVIC (NVIC1)
+             position 143 via the Extended Interrupt and Event Controller (EXTI).
+             Refer to Section 47: System window watchdog (WWDG) and Section 48: Independent
+             watchdog (IWDG) for the description of watchdog interrupts and reset.
+             Hardware Semaphore (HSEM) interrupt line 0 is connected to the CPU1 NVIC (NVIC1)
+             position 125, while Hardware Semaphore (HSEM) interrupt line 1 is connected to the CPU2
+             NVIC (NVIC2) position 126.
+             The CPU2 hold interrupt is connected to the CPU1 NVIC (NVIC1) position 148. Similarly,
+             the CPU1 hold interrupt is connected to the CPU2 NVIC (NVIC2) position 148. Refer to
+             Power control (PWR) for the description of the CPU hold mechanism.
+             All other interrupt lines coming from peripherals are connected in a symmetrical way on both
+             NVIC1 and NVIC2.
+
+                                  Table 149. NVIC1 (CPU1) and NVIC2 (CPU2)(1)
+                       Priority
+
+
+                                   NVIC1                     NVIC2                                   Address
+     Signal                                    Acronym                          Description
+                                  position                  position                                  offset
+
+         -                -          -            -              -     Reserved                    0x0000 0000
+         -              -3           -          Reset            -     Reset                       0x0000 0004
+                                                                       Non maskable interrupt.
+                                                                       The RCC Clock Security
+         -              -2           -           NMI             -                                 0x0000 0008
+                                                                       System (CSS) is linked to
+                                                                       the NMI vector.
+         -              -1           -        HardFault          -     All classes of fault        0x0000 000C
+         -               0           -       MemManage           -     Memory management           0x0000 0010
+                                                                       Prefetch fault,
+         -               1           -         BusFault          -                                 0x0000 0014
+                                                                       memory access fault
+                                                                       Undefined instruction or
+         -               2           -        UsageFault         -                                 0x0000 0018
+                                                                       illegal state
+                                                                                                   0x0000 001C-
+         -                -          -            -              -     Reserved
+                                                                                                   0x0000 002B
+                                                                       System service call
+         -               3           -          SVCall           -                                 0x0000 002C
+                                                                       via SWI instruction
+         -               4           -       DebugMonitor        -     Debug monitor               0x0000 0030
+         -                -          -            -              -     Reserved                    0x0000 0034
+                                                                       Pendable request for system
+         -               5           -         PendSV            -                                 0x0000 0038
+                                                                       service
+         -               6           -         Systick           -     System tick timer           0x0000 003C
+
+
+                                                                                                                  796
+
+
+                       Table 149. NVIC1 (CPU1) and NVIC2 (CPU2)(1) (continued)
+
+
+                        Priority
+                                    NVIC1                       NVIC2                                Address
+           Signal                                Acronym                           Description
+                                   position                    position                               offset
+
+      wwdg1_it                        0           WWDG1            -
+                          7                                               Window Watchdog interrupt 0x0000 0040
+      wwdg2_it                        -           WWDG2            0
+                                                                          PVD through EXTI line
+  exti_pwr_pvd_wkup       8           1          PVD_PVM           1                               0x0000 0044
+                                                                          detection interrupt
+  exti_tamp_rtc_wkup                          RTC_TAMP_STAMP              RTC tamper, timestamp
+                          9           2                            2                               0x0000 0048
+     lsecss_rcc_it                               _CSS_LSE                 CSS LSE
+                                                                          RTC Wakeup interrupt
+ exti_wkup_rtc_wkup     10            3         RTC_WKUP           3                               0x0000 004C
+                                                                          through the EXTI line
+                                                                          Flash memory
+        flash_it        11            4           FLASH            4                               0x0000 0050
+                                                                          global interrupt
+           rcc_it       12            5            RCC             5      RCC global interrupt     0x0000 0054
+   exti_exti0_wkup      13            6           EXTI0            6      EXTI Line 0 interrupt    0x0000 0058
+   exti_exti1_wkup      14            7           EXTI1            7      EXTI Line 1 interrupt    0x0000 005C
+   exti_exti2_wkup      15            8           EXTI2            8      EXTI Line 2 interrupt    0x0000 0060
+   exti_exti3_wkup      16            9           EXTI3            9      EXTI Line 3interrupt     0x0000 0064
+   exti_exti4_wkup      17           10           EXTI4            10     EXTI Line 4interrupt     0x0000 0068
+                                                                          DMA1 Stream0
+      dma1_it0          18           11         DMA_STR0           11                              0x0000 006C
+                                                                          global interrupt
+                                                                          DMA1 Stream1
+      dma1_it1          19           12         DMA_STR1           12                              0x0000 0070
+                                                                          global interrupt
+                                                                          DMA1 Stream2
+      dma1_it2          20           13         DMA_STR2           13                              0x0000 0074
+                                                                          global interrupt
+                                                                          DMA1 Stream3
+      dma1_it3          21           14         DMA_STR3           14                              0x0000 0078
+                                                                          global interrupt
+                                                                          DMA1 Stream4
+      dma1_it4          22           15         DMA_STR4           15                              0x0000 007C
+                                                                          global interrupt
+                                                                          DMA1 Stream5
+      dma1_it5          23           16         DMA_STR5           16                              0x0000 0080
+                                                                          global interrupt
+                                                                          DMA1 Stream6
+      dma1_it6          24           17         DMA_STR6           17                              0x0000 0084
+                                                                          global interrupt
+        adc1_it                                                           ADC1 and ADC2
+                        25           18           ADC1_2           18                              0x0000 0088
+        adc2_it                                                           global interrupt
+
+    ttfdcan_intr0_it    26           19         FDCAN1_IT0         19     FDCAN1 Interrupt 0       0x0000 008C
+    fdcan_intr0_it      27           20         FDCAN2_IT0         20     FDCAN2 Interrupt 0       0x0000 0090
+    ttfdcan_intr1_it    28           21         FDCAN1_IT1         21     FDCAN1 Interrupt 1       0x0000 0094
+    fdcan_intr1_it      29           22         FDCAN2_IT1         22     FDCAN2 Interrupt 1       0x0000 0098
+
+
+                     Table 149. NVIC1 (CPU1) and NVIC2 (CPU2)(1) (continued)
+
+
+                      Priority
+                                  NVIC1                     NVIC2                                   Address
+       Signal                                 Acronym                         Description
+                                 position                  position                                  offset
+
+  exti_exti5_wkup
+  exti_exti6_wkup
+  exti_exti7_wkup     30           23          EXTI9_5          23    EXTI Line[9:5] interrupts   0x 0000 009C
+  exti_exti8_wkup
+  exti_exti9_wkup
+    tim1_brk_it       31           24         TIM1_BRK          24    TIM1 break interrupt        0x0000 00A0
+    tim1_upd_it       32           25         TIM1_UP           25    TIM1 update interrupt       0x0000 00A4
+                                                                      TIM1 trigger and
+     tim1_trg_it      33           26       TIM1_TRG_COM        26                                0x0000 00A8
+                                                                      commutation interrupts
+                                                                      TIM1 capture / compare
+     tim1_cc_it       34           27          TIM_CC           27                                0x0000 00AC
+                                                                      interrupt
+       tim2_it        35           28           TIM2            28    TIM2 global interrupt       0x0000 00B0
+       tim3_it        36           29           TIM3            29    TIM3 global interrupt       0x0000 00B4
+       tim4_it        37           30           TIM4            30    TIM4 global interrupt       0x0000 00B8
+     i2c1_ev_it
+                      38           31         I2C1_EV           31    I2C1 event interrupt        0x0000 00BC
+ exti_i2c1_ev_wkup
+     i2c1_err_it      39           32         I2C1_ER           32    I2C1 error interrupt        0x0000 00C0
+     i2c2_ev_it
+                      40           33         I2C2_EV           33    I2C2 event interrupt        0x0000 00C4
+ exti_i2c2_ev_wkup
+     i2c2_err_it      41           34         I2C2_ER           34    I2C2 error interrupt        0x0000 00C8
+       spi1_it
+                      42           35           SPI1            35    SPI1 global interrupt       0x0000 00CC
+    exti_spi1_it
+       spi2_it
+                      43           36           SPI2            36    SPI2 global interrupt       0x0000 00D0
+    exti_spi2_it
+    usart1_gbl_it
+                      44           37         USART1            37    USART1 global interrupt     0x0000 00D4
+  exti_usart1_wkup
+    usart2_gbl_it
+                      45           38         USART2            38    USART2 global interrupt     0x0000 00D8
+  exti_usart2_wkup
+    usart3_gbl_it
+                      46           39         USART3            39    USART3 global interrupt     0x0000 00DC
+  exti_usart3_wkup
+
+
+                                                                                                                 796
+
+
+                      Table 149. NVIC1 (CPU1) and NVIC2 (CPU2)(1) (continued)
+
+
+                       Priority
+                                   NVIC1                       NVIC2                                      Address
+           Signal                               Acronym                          Description
+                                  position                    position                                     offset
+
+     exti_exti10_it
+   exti_exti11_wkup
+   exti_exti12_wkup
+                       47           40         EXTI15_10          40     EXTI Line[15:10] interrupts    0x0000 00E0
+   exti_exti13_wkup
+   exti_exti14_wkup
+   exti_exti15_wkup
+                                                                         RTC alarms (A and B)
+      exti_rtc_al      48           41        RTC_ALARM           41                                  0x0000 00E4
+                                                                         through EXTI Line interrupts
+             -         49           42             -              42     -                              0x0000 00E8
+      tim8_brk_it                                                        TIM8 break and
+                       50           43       TIM8_BRK_TIM12       43                                    0x0000 00EC
+     tim12_gbl_it                                                        TIM12 global interrupts
+
+     tim8_upd_it                                                         TIM8 update and
+                       51           44       TIM8_UP_TIM13        44                                    0x0000 00F0
+     tim13_gbl_it                                                        TIM13 global interrupts
+
+      tim8_trg_it                            TIM8_TRG_COM                TIM8 trigger /commutation
+                       52           45                            45                                 0x0000 00F4
+     tim14_gbl_it                                _TIM14                  and TIM14 global interrupts
+
+                                                                         TIM8 capture / compare
+      tim8_cc_it       53           46          TIM8_CC           46                                    0x0000 00F8
+                                                                         interrupts
+                                                                         DMA1 Stream7
+       dma1_it7        54           47         DMA1_STR7          47                                    0x0000 00FC
+                                                                         global interrupt
+      fmc_gbl_it       55           48            FMC             48     FMC global interrupt           0x0000 0100
+      sdmmc1_it        56           49          SDMMC1            49     SDMMC global interrupt         0x0000 0104
+      tim5_gbl_it      57           50            TIM5            50     TIM5 global interrupt          0x0000 0108
+        spi3_it
+                       58           51            SPI3            51     SPI3 global interrupt          0x0000 010C
+    exti_spi3_wkup
+     uart4_gbl_it
+                       59           52           UART4            52     UART4 global interrupt         0x0000 0110
+   exti_uart4_wkup
+     uart5_gbl_it
+                       60           53           UART5            53     UART5 global interrupt         0x0000 0114
+   exti_uart5_wkup
+      tim6_gbl_it                                                        TIM6 global interrupt
+                       61           54         TIM6_DAC           54                                    0x0000 0118
+      dac_unr_it                                                         DAC underrun error interrupt
+      tim7_gbl_it      62           55            TIM7            55     TIM7 global interrupt          0x0000 011C
+       dma2_it0        63           56         DMA2_STR0          56     DMA2 Stream0 interrupt         0x0000 0120
+       dma2_it1        64           57         DMA2_STR1          57     DMA2 Stream1 interrupt         0x0000 0124
+       dma2_it2        65           58         DMA2_STR2          58     DMA2 Stream2 interrupt         0x0000 0128
+
+
+                     Table 149. NVIC1 (CPU1) and NVIC2 (CPU2)(1) (continued)
+
+
+                      Priority
+                                  NVIC1                       NVIC2                                   Address
+       Signal                                  Acronym                          Description
+                                 position                    position                                  offset
+
+     dma2_it3         66           59         DMA2_STR3          59     DMA2 Stream3 interrupt      0x0000 012C
+     dma2_it4         67           60         DMA2_STR4          60     DMA2 Stream4 interrupt      0x0000 0130
+   eth_sbd_intr_it    68           61            ETH             61     Ethernet global interrupt   0x0000 0134
+                                                                        Ethernet wakeup through
+   exti_eth_wkup      69           62         ETH_WKUP           62                                 0x0000 0138
+                                                                        EXTI line interrupt
+    fdcan_cal_it      70           63         FDCAN_CAL          63     FDCAN calibration interrupts 0x0000 013C
+                                                                          Arm® Cortex®-M7 Send
+    cm7_sev_it        71            -             -              64                                 0x0000 0140
+                                                                              even interrupt
+                                                                          Arm® Cortex®-M4 Send
+    cm4_sev_it        72           65             -              -                                  0x0000 0144
+                                                                              even interrupt
+         NC           73           66             -              66                   -             0x0000 0148
+         NC           74           67             -              67                   -             0x0000 014C
+     dma2_it5         75           68         DMA2_STR5          68     DMA2 Stream5 interrupt      0x0000 0150
+     dma2_it6         76           69         DMA2_STR6          69     DMA2 Stream6 interrupt      0x0000 0154
+     dma2_it7         77           70         DMA2_STR7          70     DMA2 Stream7 interrupt      0x0000 0158
+    usart6_gbl_it                                                       USART6 global interrupt
+                      78           71           USART6           71                                 0x0000 015C
+  exti_usart6_wkup                                                      USART6 wakeup interrupt
+     i2c3_ev_it
+                      79           72          I2C3_EV           72     I2C3 event interrupt        0x0000 0160
+ exti_i2c3_ev_wkup
+     i2c3_err_it      80           73          I2C3_ER           73     I2C3 error interrupt        0x0000 0164
+    usb1_out_it       81           74       OTG_HS_EP1_OUT       74     OTG_HS out global interrupt 0x0000 0168
+     usb1_in_it       82           75       OTG_HS_EP1_IN        75     OTG_HS in global interrupt 0x0000 016C
+  exti_usb1_wkup      83           76        OTG_HS_WKUP         76     OTG_HS wakeup interrupt     0x0000 0170
+    usb1_gbl_it       84           77          OTG_HS            77     OTG_HS global interrupt     0x0000 0174
+      dcmi_it         85           78            DCMI            78     DCMI global interrupt       0x0000 0178
+       cryp_it        86           79           CRYP             79     CRYP global interrupt       0x0000 017C
+                                                                        HASH and RNG
+    hash_rng_it       87           80         HASH_RNG           80                                 0x0000 0180
+                                                                        global interrupt
+    cpu1_fpu_it                    81            FPU             -      CPU1 FPU
+                      88                                                                            0x0000 0184
+    cpu2_fpu_it                     -            FPU             81     CPU2 FPU
+    uart7_gbl_it
+                      89           82           UART7            82     UART7 global interrupt      0x0000 0188
+  exti_uart7_wkup
+    uart8_gbl_it
+                      90           83           UART8            83     UART8 global interrupt      0x0000 018C
+  exti_uart8_wkup
+
+
+                                                                                                                   796
+
+
+                      Table 149. NVIC1 (CPU1) and NVIC2 (CPU2)(1) (continued)
+
+
+                       Priority
+                                   NVIC1                       NVIC2                                    Address
+           Signal                               Acronym                          Description
+                                  position                    position                                   offset
+
+        spi4_it
+                       91           84            SPI4            84     SPI4 global interrupt        0x0000 0190
+    exti_spi4_wkup
+        spi5_it
+                       92           85            SPI5            85     SPI5 global interrupt        0x0000 0194
+    exti_spi5_wkup
+        spi6_it
+                       93           86            SPI6            86     SPI6 global interrupt        0x0000 0198
+    exti_spi6_wkup
+      sai1_glb_it      94           87            SAI1            87     SAI1 global interrupt        0x0000 019C
+           ltdc_it     95           88            LTDC            88     LCD-TFT global interrupt     0x0000 01A0
+      ltdc_err_it      96           89          LTDC_ER           89     LCD-TFT error interrupt      0x0000 01A4
+    dma2d_gbl_it       97           90           DMA2D            90     DMA2D global interrupt       0x0000 01A8
+      sai2_gbl_it      98           91            SAI2            91     SAI2 global interrupt        0x0000 01AC
+      quadspi_it       99           92          QUADSPI           92     QuadSPI global interrupt     0x0000 01B0
+       lptim1_it
+                       100          93           LPTIM1           93     LPTIM1 global interrupt      0x0000 01B4
+   exti_lptim_wkup
+           cec_it
+                       101          94            CEC             94     HDMI-CEC global interrupt    0x0000 01B8
+      exti_cec_it
+      i2c4_ev_it
+                       102          95          I2C4_EV           95     I2C4 event interrupt         0x0000 01BC
+    exti_i2c4_ev_it
+      i2c4_err_it      103          96          I2C4_ER           96     I2C4 error interrupt         0x0000 01C0
+      spdifrx_it       104          97           SPDIF            97     SPDIFRX global interrupt     0x0000 01C4
+     usb2_out_it       105          98       OTG_FS_EP1_OUT       98     OTG_FS out global interrupt 0x0000 01C8
+      usb2_in_it       106          99       OTG_FS_EP1_IN        99     OTG_FS in global interrupt   0x0000 01CC
+   exti_usb2_wkup      107         100        OTG_FS_WKUP      100       OTG_FS wakeup                0x0000 01D0
+     usb2_gbl_it       108         101          OTG_FS         101       OTG_FS global interrupt      0x0000 01D4
+   dmamux1_ovr_it      109         102        DMAMUX1_OV       102       DMAMUX1 overrun interrupt 0x0000 01D8
+                                                                         HRTIM1 master timer
+    hrtim1_mst_it      110         103         HRTIM1_MST      103                                    0x0000 01DC
+                                                                         interrupt
+    hrtim1_tima_it     111         104        HRTIM1_TIMA      104       HRTIM1 timer A interrupt     0x0000 01E0
+    hrtim1_timb_it     112         105         HRTIM_TIMB      105       HRTIM1 timer B interrupt     0x0000 01E4
+    hrtim1_timc_it     113         106        HRTIM1_TIMC      106       HRTIM1 timer C interrupt     0x0000 01E8
+    hrtim1_timd_it     114         107        HRTIM1_TIMD      107       HRTIM1 timer D interrupt     0x0000 01EC
+    hrtim1_time_it     115         108         HRTIM_TIME      108       HRTIM1 timer E interrupt     0x0000 01F0
+    hrtim1_fault_it    116         109         HRTIM1_FLT      109       HRTIM1 fault interrupt       0x0000 01F4
+     dfsdm1_it0        117          110       DFSDM1_FLT0       110      DFSDM1 filter 0 interrupt    0x0000 01F8
+
+
+                     Table 149. NVIC1 (CPU1) and NVIC2 (CPU2)(1) (continued)
+
+
+                      Priority
+                                  NVIC1                     NVIC2                                   Address
+       Signal                                 Acronym                         Description
+                                 position                  position                                  offset
+
+    dfsdm1_it1        118          111      DFSDM1_FLT1      111      DFSDM1 filter 1 interrupt   0x0000 01FC
+    dfsdm1_it2        119          112      DFSDM1_FLT2      112      DFSDM1 filter 2 interrupt   0x0000 0200
+    dfsdm1_it3        120          113      DFSDM1_FLT3      113      DFSDM1 filter 3 interrupt   0x0000 0204
+     sai3_gbl_it      121          114          SAI3         114      SAI3 global interrupt       0x0000 0208
+    swpmi_gbl_it                                                      SWPMI global interrupt
+                      122          115        SWPMI1         115                                  0x0000 020C
+  exti_swpmi_wup                                                      SWPMI wakeup
+    tim15_gbl_it      123          116         TIM15         116      TIM15 global interrupt      0x0000 0210
+    tim16_gbl_it      124          117         TIM16         117      TIM16 global interrupt      0x0000 0214
+    tim17_gbl_it      125          118         TIM17         118      TIM17 global interrupt      0x0000 0218
+  exti_mdios_wkup     126          119      MDIOS_WKUP       119      MDIOS wakeup                0x0000 021C
+      mdios_it        127         120          MDIOS         120      MDIOS global interrupt      0x0000 0220
+       jpeg_it        128         121          JPEG          121      JPEG global interrupt       0x0000 0224
+      mdma_it         129         122          MDMA          122      MDMA                        0x0000 0228
+         dsi_it                                 DSI                   DSI Host global interrupt
+                      130         123                        123                                  0x0000 022C
+   exti_dsi_wkup                             DSI_WKUP                 DSI Host wakeup interrupt
+    sdmmc2_it         131         124         SDMMC2         124      SDMMC global interrupt      0x0000 0230
+     hsem1_it         132         125          HSEM0            -     HSEM global interrupt 1     0x0000 0234
+     hsem2_it         133           -          HSEM1         126      HSEM global interrupt 2     0x0000 0238
+      adc3_it         134         127          ADC3          127      ADC3 global interrupt       0x0000 023C
+  dmamux2_ovr_it      135         128       DMAMUX2_OVR      128      DMAMUX2 overrun interrupt 0x0000 0240
+    bdma_ch0_it       136         129        BDMA_CH0        129      BDMA channel 0 interrupt    0x0000 0244
+    bdma_ch1_it       137         130        BDMA_CH1        130      BDMA channel 1 interrupt    0x0000 0248
+    bdma_ch2_it       138         131        BDMA_CH2        131      BDMA channel 2 interrupt    0x0000 024C
+    bdma_ch3_it       139         132        BDMA_CH3        132      BDMA channel 3 interrupt    0x0000 0250
+    bdma_ch4_it       140         133        BDMA_CH4        133      BDMA channel 4 interrupt    0x0000 0254
+    bdma_ch5_it       141         134        BDMA_CH5        134      BDMA channel 5 interrupt    0x0000 0258
+    bdma_ch6_it       142         135        BDMA_CH6        135      BDMA channel 6 interrupt    0x0000 025C
+    bdma_ch7_it       143         136        BDMA_CH7        136      BDMA channel 7 interrupt    0x0000 0260
+    comp_gbl_it
+                                                                      COMP1 and COMP2
+  exti_comp1_wkup     144         137          COMP          137                                  0x0000 0264
+                                                                      global interrupt
+  exti_comp2_wkup
+      lptim2_it
+                      145         138          LPTIM2        138      LPTIM2 timer interrupt      0x0000 0268
+  exti_lptim2_wkup
+
+
+                                                                                                                 796
+
+
+                         Table 149. NVIC1 (CPU1) and NVIC2 (CPU2)(1) (continued)
+
+
+                            Priority
+                                        NVIC1                        NVIC2                                   Address
+           Signal                                   Acronym                                Description
+                                       position                     position                                  offset
+
+        lptim3_it
+                           146          139         LPTIM3             139     LPTIM2 timer interrupt      0x0000 026C
+   exti_lptim3_wkup
+        lptim4_it
+                           147          140         LPTIM4             140     LPTIM2 timer interrupt      0x0000 0270
+   exti_lptim4_wkup
+        lptim5_it
+                           148          141         LPTIM5             141     LPTIM2 timer interrupt      0x0000 0274
+   exti_lptim5_wkup
+      lpuart_gbl_it
+    exti_lpuart_rx_it      149          142         LPUART             142     LPUART global interrupt     0x0000 0278
+    exti_lpuart_tx_it
+  exti_d2_wwdg_wkup                     143       WWDG2_RST             -      Window Watchdog interrupt
+                           150                                                                             0x0000 027C
+  exti_d1_wwdg_wkup                       -       WWDG1_RST            143     Window Watchdog interrupt
+                                                                               Clock Recovery System
+           crs_it          151          144          CRS               144                                 0x0000 0280
+                                                                               global interrupt
+                                                                               ECC diagnostic global
+       ramecc1_it
+                                                                               interrupt for RAM D1
+                                                                               ECC diagnostic global
+       ramecc2_it          152          145          ECC               145                                 0x0000 0284
+                                                                               interrupt for RAM D2
+                                                                               ECC diagnostic global
+       ramecc3_it
+                                                                               interrupt for RAM D3
+       sai4_glb_it         153          146          SAI4              146     SAI4 global interrupt       0x0000 0288
+                                                   HOLD_CORE
+       cpu1hold_it                      148                             -      CPU1 hold
+                                                  (CPU1_HOLD)
+                           155                                                                             0x0000 0290
+                                                   HOLD_CORE
+       cpu2hold_it                        -                            148     CPU2 hold
+                                                  (CPU2_HOLD)
+   exti_wkup1_wkup
+   exti_wkup2_wkup
+   exti_wkup3_wkup
+                           156          149          WKUP              149     WKUP0 to WKUP5 pins         0x0000 0294
+   exti_wkup4_wkup
+   exti_wkup5_wkup
+   exti_wkup6_wkup
+1. When different signals are connected to the same NVIC interrupt line, they are OR-ed.

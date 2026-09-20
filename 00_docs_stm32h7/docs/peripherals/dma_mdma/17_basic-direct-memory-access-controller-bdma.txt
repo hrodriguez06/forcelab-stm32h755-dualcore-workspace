@@ -1,0 +1,1975 @@
+RM0399 chapter text dump - generated from 17_basic-direct-memory-access-controller-bdma.pdf
+Plain-text extraction for grep/search. For figures, tables layout and
+exact register bit diagrams, open the PDF alongside this file.
+==============================================================================
+
+17         Basic direct memory access controller (BDMA)
+
+17.1       Introduction
+           The basic direct memory access (BDMA) controller is a bus master and system peripheral.
+           The BDMA is used to perform programmable data transfers between memory-mapped
+           peripherals and/or memories, upon the control of an off-loaded CPU.
+           The BDMA controller features a single AHB master architecture.
+           There is one instance of BDMA with 8 channels.
+           Each channel is dedicated to managing memory access requests from one or more
+           peripherals. The BDMA includes an arbiter for handling the priority between DMA requests.
+
+
+17.2       BDMA main features
+           •   Single AHB master
+           •   Peripheral-to-memory, memory-to-peripheral, memory-to-memory and peripheral-to-
+               peripheral data transfers
+           •   Access to D3 domain SRAM and AHB/APB peripherals (BDMA)
+           •   All BDMA channels independently configurable:
+               –    Each channel is associated either with a DMA request signal coming from a
+                    peripheral, or with a software trigger in memory-to-memory transfers. This
+                    configuration is done by software.
+               –    Priority between the requests is programmable by software (4 levels per channel:
+                    very high, high, medium, low) and by hardware in case of equality (such as
+                    request to channel 1 has priority over request to channel 2).
+               –    Transfer size of source and destination are independent (byte, half-word, word),
+                    emulating packing and unpacking. Source and destination addresses must be
+                    aligned on the data size.
+               –    Support of transfers from/to peripherals to/from memory with circular buffer
+                    management
+               –    Programmable number of data to be transferred: 0 to 216 - 1
+           •   Generation of an interrupt request per channel. Each interrupt request is caused from
+               any of the three DMA events: transfer complete, half transfer, or transfer error.
+
+
+17.3          BDMA implementation
+
+17.3.1        BDMA
+              BDMA is implemented with the hardware configuration parameters shown in the table
+              below.
+
+                                            Table 120. BDMA implementation
+                                  Feature                                         BDMA
+
+               Number of channels (double-buffer)                                  8
+
+
+17.3.2        BDMA request mapping
+              The BDMA controller is connected to DMA requests from the AHB/APB peripherals through
+              the DMAMUX peripheral.
+              For the mapping of the different requests, refer to the Section 18.3: DMAMUX
+              implementation.
+
+
+17.4          BDMA functional description
+
+17.4.1        BDMA block diagram
+              The BDMA block diagram is shown in the figure below.
+
+                                      Figure 89. BDMA block diagram
+
+
+                                                    BDMA                                 bdma_hclk
+
+
+                                 Ch 0
+                                                                                           32-bit AHB bus
+
+
+                                 Ch 1
+                                                        AHB master port
+                                   ...
+
+
+                                 Ch 7
+
+
+                                                                 DMA_CMAR[0..7]
+         bdma_tcif[0..7]
+                                                           DMA_CPAR[0..7]
+
+          bdma_it[0..7]         Arbiter                DMA_CCR[0..7]
+                                                      DMA_CNDTR[0..7]
+                                                                                           32-bit AHB bus
+
+
+         bdma_req[0..7]
+                                                           AHB slave
+                                                        configuration port
+
+
+                                                                                             MSv39795V1
+
+
+                                                                                                                       730
+
+
+           The BDMA controller performs direct memory transfer by sharing the AHB system bus with
+           other system masters. The bus matrix implements round-robin scheduling. DMA requests
+           may stop the CPU access to the system bus for a number of bus cycles, when CPU and
+           BDMA target the same destination (memory or peripheral).
+           The BDMA controller is connected to DMA requests from the AHB/APB peripherals through
+           the DMAMUX peripheral.
+           According to its configuration through the AHB slave interface, the BDMA controller
+           arbitrates between the DMA channels and their associated received requests. The BDMA
+           controller also schedules the DMA data transfers over the single AHB port master.
+           The BDMA controller generates an interrupt per channel to the interrupt controller.
+
+17.4.2     BDMA pins and internal signals
+
+                                   Table 121. BDMA internal input/output signals
+                     Signal name             Signal type                     Description
+
+                     bdma_req[x]                 Input     BDMA channel x request
+                     bdma_ack[x]                Output     BDMA channel x acknowledge
+                      bdma_it[x]                Output     BDMA channel x interrupt
+
+
+17.4.3     BDMA transfers
+           The software configures the BDMA controller at channel level, in order to perform a block
+           transfer, composed of a sequence of AHB bus transfers.
+           A BDMA block transfer may be requested from a peripheral, or triggered by the software in
+           case of memory-to-memory transfer.
+           After an event, the following steps of a single BDMA transfer occur:
+           1.   The peripheral sends a single DMA request signal to the BDMA controller.
+           2.   The BDMA controller serves the request, depending on the priority of the channel
+                associated to this peripheral request.
+           3.   As soon as the BDMA controller grants the peripheral, an acknowledge is sent to the
+                peripheral by the BDMA controller.
+           4.   The peripheral releases its request as soon as it gets the acknowledge from the BDMA
+                controller.
+           5.   Once the request is deasserted by the peripheral, the BDMA controller releases the
+                acknowledge.
+           The peripheral may order a further single request and initiate another single BDMA transfer.
+           The request/acknowledge protocol is used when a peripheral is either the source or the
+           destination of the transfer. For example, in case of memory-to-peripheral transfer, the
+           peripheral initiates the transfer by driving its single request signal to the BDMA controller.
+           The BDMA controller reads then a single data in the memory and writes this data to the
+           peripheral.
+
+
+         For a given channel x, a BDMA block transfer consists of a repeated sequence of:
+         •    a single BDMA transfer, encapsulating two AHB transfers of a single data, over the
+              BDMA AHB bus master:
+              –    a single data read (byte, half-word or word) from the peripheral data register or a
+                   location in the memory, addressed through an internal current peripheral/memory
+                   address register.
+                   The start address used for the first single transfer is the base address of the
+                   peripheral or memory, and is programmed in the BDMA_CPARx or
+                   BDMA_CM0/1ARx register.
+              –    a single data write (byte, half-word or word) to the peripheral data register or a
+                   location in the memory, addressed through an internal current peripheral/memory
+                   address register.
+                   The start address used for the first transfer is the base address of the peripheral or
+                   memory, and is programmed in the BDMA_CPARx or BDMA_CM0/1ARx register.
+         •    post-decrementing of the programmed BDMA_CNDTRx register
+              This register contains the remaining number of data items to transfer (number of AHB
+              ‘read followed by write’ transfers).
+         This sequence is repeated until BDMA_CNDTRx is null.
+Note:    The AHB master bus source/destination address must be aligned with the programmed size
+         of the transferred single data to the source/destination.
+
+17.4.4   BDMA arbitration
+         The BDMA arbiter manages the priority between the different channels.
+         When an active channel x is granted by the arbiter (hardware requested or software
+         triggered), a single BDMA transfer is issued (such as a AHB ‘read followed by write’ transfer
+         of a single data). Then, the arbiter considers again the set of active channels and selects the
+         one with the highest priority.
+         The priorities are managed in two stages:
+         •    software: priority of each channel is configured in the BDMA_CCRx register, to one of
+              the four different levels:
+              –    very high
+              –    high
+              –    medium
+              –    low
+         •    hardware: if two requests have the same software priority level, the channel with the
+              lowest index gets priority. For example, channel 2 gets priority over channel 4.
+         When a channel x is programmed for a block transfer in memory-to-memory mode,
+         re arbitration is considered between each single BDMA transfer of this channel x. Whenever
+         there is another concurrent active requested channel, the BDMA arbiter automatically
+         alternates and grants the other highest-priority requested channel, which may be of lower
+         priority than the memory-to-memory channel.
+
+17.4.5   BDMA channels
+         Each channel may handle a BDMA transfer between a peripheral register located at a fixed
+         address, and a memory address. The amount of data items to transfer is programmable.
+
+
+                                                                                                            730
+
+
+           The register that contains the amount of data items to transfer is decremented after each
+           transfer.
+           A DMA channel is programmed at block transfer level.
+
+           Programmable data sizes
+           The transfer sizes of a single data (byte, half-word, or word) to the peripheral and memory
+           are programmable through, respectively, the PSIZE[1:0] and MSIZE[1:0] fields of the
+           BDMA_CCRx register.
+
+           Pointer incrementation
+           The peripheral and memory pointers may be automatically incremented after each transfer,
+           depending on the PINC and MINC bits of the BDMA_CCRx register.
+           If the incremented mode is enabled (PINC or MINC set to 1), the address of the next
+           transfer is the address of the previous one incremented by 1, 2 or 4, depending on the data
+           size defined in PSIZE[1:0] or MSIZE[1:0]. The first transfer address is the one programmed
+           in the BDMA_CPARx or BDMA_CM0/1ARx register. During transfers, these registers keep
+           the initially programmed value. The current transfer addresses (in the current internal
+           peripheral/memory address register) are not accessible by software.
+           If the channel x is configured in non-circular mode, no DMA request is served after the last
+           data transfer (once the number of single data to transfer reaches zero). The DMA channel
+           must be disabled in order to reload a new number of data items into the BDMA_CNDTRx
+           register.
+Note:      If the channel x is disabled, the BDMA registers are not reset. The DMA channel registers
+           (BDMA_CCRx, BDMA_CPARx and BDMA_CM0ARx) retain the initial values programmed
+           during the channel configuration phase.
+           In circular mode, after the last data transfer, the BDMA_CNDTRx register is automatically
+           reloaded with the initially programmed value. The current internal address registers are
+           reloaded with the base address values from the BDMA_CPARx and BDMA_CM0/1ARx
+           registers.
+
+
+         Channel configuration procedure
+         The following sequence is needed to configure a DMA channel x:
+         1.   Set the peripheral register address in the BDMA_CPARx register.
+              The data is moved from/to this address to/from the memory after the peripheral event,
+              or after the channel is enabled in memory-to-memory mode.
+         2.   Set the memory address in the BDMA_CM0ARx register.
+              The data is written to/read from the memory after the peripheral event or after the
+              channel is enabled in memory-to-memory mode.
+         3.   Configure the total number of data to transfer in the BDMA_CNDTRx register.
+              After each data transfer, this value is decremented.
+         4.   Configure the parameters listed below in the BDMA_CCRx register:
+              –   the channel priority
+              –   the data transfer direction
+              –   the circular mode
+              –   the double-buffer mode
+              –   the peripheral and memory incremented mode
+              –   the peripheral and memory data size
+              –   the interrupt enable at half and/or full transfer and/or transfer error
+         5.   Activate the channel by setting the EN bit in the BDMA_CCRx register.
+         A channel, as soon as enabled, may serve any BDMA request from the peripheral
+         connected to this channel, or may start a memory-to-memory block transfer.
+Note:    The two last steps of the channel configuration procedure may be merged into a single
+         access to the BDMA_CCRx register, to configure and enable the channel.
+
+         Channel state and disabling a channel
+         A channel x in active state is an enabled channel (read BDMA_CCRx.EN = 1). An active
+         channel x is a channel that must have been enabled by the software (BDMA_CCRx.EN set
+         to 1) and afterwards with no occurred transfer error (BDMA_ISR.TEIFx = 0). In case there is
+         a transfer error, the channel is automatically disabled by hardware (BDMA_CCRx.EN = 0).
+         The three following use cases may happen:
+         •    Suspend and resume a channel
+              This corresponds to the two following actions:
+              –   An active channel is disabled by software (writing BDMA_CCRx.EN = 0 whereas
+                  BDMA_CCRx.EN = 1).
+              –   The software enables the channel again (BDMA_CCRx.EN set to 1) without
+                  reconfiguring the other channel registers (such as BDMA_CNDTRx,
+                  BDMA_CPARx and BDMA_CM0/1ARx).
+              This case is not supported by the BDMA hardware, that does not guarantee that the
+              remaining data transfers are performed correctly.
+         •    Stop and abort a channel
+              If the application does not need any more the channel, this active channel can be
+              disabled by software. The channel is stopped and aborted but the BDMA_CNDTRx
+
+
+                                                                                                        730
+
+
+                register content may not correctly reflect the remaining data transfers versus the
+                aborted source and destination buffer/register.
+           •    Abort and restart a channel
+                This corresponds to the software sequence: disable an active channel, then
+                reconfigure the channel and enable it again.
+                This is supported by the hardware if the following conditions are met:
+                –    The application guarantees that, when the software is disabling the channel, a
+                     DMA data transfer is not occurring at the same time over its master port. For
+                     example, the application can first disable the peripheral in DMA mode, in order to
+                     ensure that there is no pending hardware DMA request from this peripheral.
+                –    The software must operate separated write accesses to the same BDMA_CCRx
+                     register: First disable the channel. Second reconfigure the channel for a next block
+                     transfer including the BDMA_CCRx if a configuration change is needed. There are
+                     read-only BDMA_CCRx register fields when BDMA_CCRx.EN=1. Finally enable
+                     again the channel.
+           When a channel transfer error occurs, the EN bit of the BDMA_CCRx register is cleared by
+           hardware. This EN bit can not be set again by software to re-activate the channel x, until the
+           TEIFx bit of the BDMA_CxISR register is set.
+
+           Circular mode (in memory-to-peripheral/peripheral-to-memory transfers)
+           The circular mode is available to handle circular buffers and continuous data flows (such as
+           ADC scan mode). This feature is enabled using the CIRC bit in the BDMA_CCRx register.
+Note:      The circular mode must not be used in memory-to-memory mode. Before enabling a
+           channel in circular mode (CIRC = 1), the software must clear the MEM2MEM bit of the
+           BDMA_CCRx register. When the circular mode is activated, the amount of data to transfer is
+           automatically reloaded with the initial value programmed during the channel configuration
+           phase, and the DMA requests continue to be served.
+           In order to stop a circular transfer, the software needs to stop the peripheral from generating
+           DMA requests (such as quit the ADC scan mode), before disabling the DMA channel.
+           The software must explicitly program the BDMA_CNDTRx value before starting/enabling a
+           transfer, and after having stopped a circular transfer.
+
+           Memory-to-memory mode
+           The BDMA channels may operate without being triggered by a request from a peripheral.
+           This mode is called memory-to-memory mode, and is initiated by software.
+           If the MEM2MEM bit in the BDMA_CCRx register is set, the channel, if enabled, initiates
+           transfers. The transfer stops once the BDMA_CNDTRx register reaches zero.
+Note:      The memory-to-memory mode must not be used in circular mode. Before enabling a
+           channel in memory-to-memory mode (MEM2MEM = 1), the software must clear the CIRC
+           bit of the BDMA_CCRx register.
+
+           Double-buffer mode (in memory-to-peripheral and peripheral-to memory
+           transfers)
+           The BDMA channels can operate in double-buffer mode.
+           The difference compared to a regular operation is that the BDMA controller toggles between
+           two memory address pointers at the end of each BDMA transfer, thus accessing two
+           memory areas in an alternate way. This allows the software to access one of the two
+
+
+         memory areas while the BDMA controller accesses the other one. The double-buffer mode
+         transfer operates in both directions, so the target memory can be either the source or the
+         destination.
+         The double-buffer mode is configured by setting both the DBM and CIRC bits of the
+         BDMA_CCRx register.
+Note:    The double-buffer mode must not be used in memory-to-memory mode. Before enabling a
+         channel in double-buffer mode (DBM = 1), the software has to configure appropriately the
+         MEM2MEM bit (MEM2MEM = 0).
+         The steps described below allow the configuration of a BDMA channel x in double-buffer
+         mode:
+         •   Set the DBM and CIRC bits and clear the MEM2MEM bit of the BDMA_CCRx register.
+             The circular mode is then activated for the swap mechanism to occur.
+         •   Configure the second memory address register BDMA_CM1ARx.
+         •   Continue with the regular channel configuration procedure, and lastly, activate the
+             channel by setting the EN bit of the BDMA_CCRx register. The first BDMA transfer
+             target memory of the corresponding BDMA channel x, is given by the CT bit of the
+             BDMA_CCRx register.
+Note:    Independently from the value of DBM bit of the BDMA_CCRx register, if CT = 1, the memory
+         address pointer for the BDMA transfer is defined by BDMA_CM1ARx, and not by
+         BDMA_CM0ARx.
+
+         Peripheral-to-peripheral mode
+         Any BDMA channel can operate in peripheral-to-peripheral mode:
+         •   when the hardware request from a peripheral is selected to trigger the BDMA channel
+             This peripheral is the BDMA initiator and paces the data transfer from/to this peripheral
+             to/from a register belonging to another memory-mapped peripheral (this one being not
+             configured in DMA mode).
+         •   when no peripheral request is selected and connected to the BDMA channel
+             The software configures a register-to-register transfer by setting the MEM2MEM bit of
+             the BDMA_CCRx register.
+
+         Programming transfer direction, assigning source/destination
+         The value of the DIR bit of the BDMA_CCRx register sets the direction of the transfer, and
+         consequently, it identifies the source and the destination, regardless the source/destination
+         type (peripheral or memory):
+         •   DIR = 1 defines typically a memory-to-peripheral transfer. More generally, if DIR = 1:
+             –    The source attributes are defined by the BDMA_MARx register, the MSIZE[1:0]
+                  field and MINC bit of the BDMA_CCRx register.
+                  Regardless of their usual naming, these ‘memory’ register, field and bit are used to
+                  define the source peripheral in peripheral-to-peripheral mode.
+             –    The destination attributes are defined by the BDMA_PARx register, the
+                  PSIZE[1:0] field and PINC bit of the BDMA_CCRx register.
+
+
+                                                                                                         730
+
+
+                               Regardless of their usual naming, these ‘peripheral’ register, field and bit are used
+                               to define the destination memory in memory-to-memory mode.
+                   •   DIR = 0 defines typically a peripheral-to-memory transfer. More generally, if DIR = 0:
+                       –   The source attributes are defined by the BDMA_PARx register, the PSIZE[1:0]
+                           field and PINC bit of the BDMA_CCRx register.
+                           Regardless of their usual naming, these ‘peripheral’ register, field and bit are used
+                           to define the source memory in memory-to-memory mode
+                       –       The destination attributes are defined by the BDMA_MARx register, the
+                               MSIZE[1:0] field and MINC bit of the BDMA_CCRx register.
+                               Regardless of their usual naming, these ‘memory’ register, field and bit are used to
+                               define the destination peripheral in peripheral-to-peripheral mode.
+
+17.4.6             BDMA data width, alignment and endianness
+                   When PSIZE[1:0] and MSIZE[1:0] are not equal, the BDMA controller performs some data
+                   alignments as described in the table below.
+
+            Table 122. Programmable data width and endian behavior (when PINC = MINC = 1)
+ Source     Destinat
+   port     ion port                                                                                             Destination
+                     Number      Source content:
+  width       width                                                                                                content:
+                      of data     address / data
+ (MSIZE      (PSIZE                                                                                             address / data
+                     items to   (BDMA_CM0/1ARx                                DMA transfers
+    if          if                                                                                             (BDMA_CPARx if
+                     transfer     if DIR = 1, else
+ DIR = 1,   DIR = 1,                                                                                             DIR = 1, else
+                       (NDT)      BDMA_CPARx)
+   else       else                                                                                            BDMA_CM0/1ARx)
+ PSIZE)      MSIZE)
+
+                                @0x0 / B0            1: read B0[7:0] @0x0 then write B0[7:0] @0x0             @0x0 / B0
+                                @0x1 / B1            2: read B1[7:0] @0x1 then write B1[7:0] @0x1             @0x1 / B1
+    8          8           8
+                                @0x2 / B2            3: read B2[7:0] @0x2 then write B2[7:0] @0x2             @0x2 / B2
+                                @0x3 / B3            4: read B3[7:0] @0x3 then write B3[7:0] @0x3             @0x3 / B3
+
+                                @0x0 / B0            1: read B0[7:0] @0x0 then write 00B0[15:0] @0x0          @0x0 / 00B0
+                                @0x1 / B1            2: read B1[7:0] @0x1 then write 00B1[15:0] @0x2          @0x2 / 00B1
+    8         16           4
+                                @0x2 / B2            3: read B2[7:0] @0x2 then write 00B2[15:0] @0x4          @0x4 / 00B2
+                                @0x3 / B3            4: read B3[7:0] @0x3 then write 00B3[15:0] @0x6          @0x6 / 00B3
+
+                                @0x0 / B0            1: read B0[7:0] @0x0 then write 000000B0[31:0] @0x0      @0x0 / 000000B0
+                                @0x1 / B1            2: read B1[7:0] @0x1 then write 000000B1[31:0] @0x4      @0x4 / 000000B1
+    8         32           4
+                                @0x2 / B2            3: read B2[7:0] @0x2 then write 000000B2[31:0] @0x8      @0x8 / 000000B2
+                                @0x3 / B3            4: read B3[7:0] @0x3 then write 000000B3[31:0] @0xC      @0xC / 000000B3
+
+                                @0x0 / B1B0          1: read B1B0[15:0] @0x0 then write B0[7:0] @0x0          @0x0 / B0
+                                @0x2 / B3B2          2: read B3B2[15:0] @0x2 then write B2[7:0] @0x1          @0x1 / B2
+   16          8           4
+                                @0x4 / B5B4          3: read B5B4[15:0] @0x4 then write B4[7:0] @0x2          @0x2 / B4
+                                @0x6 / B7B6          4: read B7B6[15:0] @0x6 then write B6[7:0] @0x3          @0x3 / B6
+
+                                @0x0 / B1B0          1: read B1B0[15:0] @0x0 then write B1B0[15:0] @0x0       @0x0 / B1B0
+                                @0x2 / B3B2          2: read B3B2[15:0] @0x2 then write B3B2[15:0] @0x2       @0x2 / B3B2
+   16         16           4
+                                @0x4 / B5B4          3: read B5B4[15:0] @0x4 then write B5B4[15:0] @0x4       @0x4 / B5B4
+                                @0x6 / B7B6          4: read B7B6[15:0] @0x6 then write B7B6[15:0] @0x6       @0x6 / B7B6
+
+                                @0x0 / B1B0          1: read B1B0[15:0] @0x0 then write 0000B1B0[31:0] @0x0   @0x0 / 0000B1B0
+                                @0x2 / B3B2          2: read B3B2[15:0] @0x2 then write 0000B3B2[31:0] @0x4   @0x4 / 0000B3B2
+   16         32           4
+                                @0x4 / B5B4          3: read B5B4[15:0] @0x4 then write 0000B5B4[31:0] @0x8   @0x8 / 0000B5B4
+                                @0x6 / B7B6          4: read B7B6[15:0] @0x6 then write 0000B7B6[31:0] @0xC   @0xC / 0000B7B6
+
+                                @0x0 / B3B2B1B0      1: read B3B2B1B0[31:0] @0x0 then write B0[7:0] @0x0      @0x0 / B0
+                                @0x4 / B7B6B5B4      2: read B7B6B5B4[31:0] @0x4 then write B4[7:0] @0x1      @0x1 / B4
+   32          8           4
+                                @0x8 / BBBAB9B8      3: read BBBAB9B8[31:0] @0x8 then write B8[7:0] @0x2      @0x2 / B8
+                                @0xC / BFBEBDBC      4: read BFBEBDBC[31:0] @0xC then write BC[7:0] @0x3      @0x3 / BC
+
+
+ Table 122. Programmable data width and endian behavior (when PINC = MINC = 1) (continued)
+Source     Destinat
+  port     ion port                                                                                                 Destination
+                    Number      Source content:
+ width       width                                                                                                    content:
+                     of data     address / data
+(MSIZE      (PSIZE                                                                                                 address / data
+                    items to   (BDMA_CM0/1ARx                              DMA transfers
+   if          if                                                                                                 (BDMA_CPARx if
+                    transfer     if DIR = 1, else
+DIR = 1,   DIR = 1,                                                                                                 DIR = 1, else
+                      (NDT)      BDMA_CPARx)
+  else       else                                                                                                BDMA_CM0/1ARx)
+PSIZE)      MSIZE)
+
+                               @0x0 / B3B2B1B0      1: read B3B2B1B0[31:0] @0x0 then write B1B0[15:0] @0x0       @0x0 / B1B0
+                               @0x4 / B7B6B5B4      2: read B7B6B5B4[31:0] @0x4 then write B5B4[15:0] @0x2       @0x2 / B5B4
+  32         16         4
+                               @0x8 / BBBAB9B8      3: read BBBAB9B8[31:0] @0x8 then write B9B8[15:0] @0x4       @0x4 / B9B8
+                               @0xC / BFBEBDBC      4: read BFBEBDBC[31:0] @0xC then write BDBC[15:0] @0x6       @0x6 / BDBC
+
+                               @0x0 / B3B2B1B0      1: read B3B2B1B0[31:0] @0x0 then write B3B2B1B0[31:0] @0x0   @0x0 / B3B2B1B0
+                               @0x4 / B7B6B5B4      2: read B7B6B5B4[31:0] @0x4 then write B7B6B5B4[31:0] @0x4   @0x4 / B7B6B5B4
+  32         32         4
+                               @0x8 / BBBAB9B8      3: read BBBAB9B8[31:0] @0x8 then write BBBAB9B8[31:0] @0x8   @0x8 / BBBAB9B8
+                               @0xC / BFBEBDBC      4: read BFBEBDBC[31:0] @0xC then write BFBEBDBC[31:0] @0xC   @0xC / BFBEBDBC
+
+
+                  Addressing AHB peripherals not supporting byte/half-word write transfers
+                  When the BDMA controller initiates an AHB byte or half-word write transfer, the data are
+                  duplicated on the unused lanes of the AHB master 32-bit data bus (HWDATA[31:0]).
+                  When the AHB slave peripheral does not support byte or half-word write transfers and does
+                  not generate any error, the BDMA controller writes the 32 HWDATA bits as shown in the two
+                  examples below:
+                  •    To write the half-word 0xABCD, the BDMA controller sets the HWDATA bus to
+                       0xABCDABCD with a half-word data size (HSIZE = HalfWord in AHB master bus).
+                  •    To write the byte 0xAB, the BDMA controller sets the HWDATA bus to 0xABABABAB
+                       with a byte data size (HSIZE = Byte in the AHB master bus).
+                  Assuming the AHB/APB bridge is an AHB 32-bit slave peripheral that does not take into
+                  account the HSIZE data, any AHB byte or half-word transfer is changed into a 32-bit APB
+                  transfer as described below:
+                  •    An AHB byte write transfer of 0xB0 to one of the 0x0, 0x1, 0x2 or 0x3 addresses, is
+                       converted to an APB word write transfer of 0xB0B0B0B0 to the 0x0 address.
+                  •    An AHB half-word write transfer of 0xB1B0 to the 0x0 or 0x2 addresses, is converted to
+                       an APB word write transfer of 0xB1B0B1B0 to the 0x0 address.
+
+17.4.7            BDMA error management
+                  A BDMA transfer error is generated when reading from or writing to a reserved address
+                  space. When a BDMA transfer error occurs during a BDMA read or write access, the faulty
+                  channel x is automatically disabled through a hardware clear of its EN bit in the
+                  corresponding BDMA_CCRx register.
+                  The TEIFx bit of the BDMA_ISR register is set. An interrupt is then generated if the TEIE bit
+                  of the BDMA_CCRx register is set.
+                  The EN bit of the BDMA_CCRx register can not be set again by software (channel x re-
+                  activated) until the TEIFx bit of the BDMA_ISR register is cleared (by setting the CTEIFx bit
+                  of the BDMA_IFCR register).
+                  When the software is notified with a transfer error over a channel which involves a
+                  peripheral, the software has first to stop this peripheral in DMA mode, in order to disable any
+                  pending or future DMA request. Then software may normally reconfigure both BDMA and
+                  the peripheral in DMA mode for a new transfer.
+
+
+                                                                                                                                    730
+
+
+17.5            BDMA interrupts
+                An interrupt can be generated on a half transfer, transfer complete or transfer error for each
+                DMA channel x. Separate interrupt enable bits are available for flexibility.
+
+                                       Table 123. BDMA interrupt requests
+                                                                                                                  Interrupt
+ Interrupt request                                   Interrupt event                           Event flag
+                                                                                                                 enable bit
+
+                         Half transfer on channel x                                              HTIFx             HTIEx
+                         Transfer complete on channel x                                          TCIFx             TCIEx
+Channel x interrupt
+                         Transfer error on channel x                                             TEIFx             TEIEx
+                         Half transfer or transfer complete or transfer error on channel x           GIFx                -
+
+
+17.6            BDMA registers
+                Refer to Section 1.2 for a list of abbreviations used in register descriptions.
+                The BDMA registers have to be accessed by words (32-bit).
+
+17.6.1          BDMA interrupt status register (BDMA_ISR)
+                Address offset: 0x00
+                Reset value: 0x0000 0000
+                Every status bit is cleared by hardware when the software sets the corresponding clear bit
+                or the corresponding global clear bit CGIFx, in the BDMA_IFCR register.
+
+ 31      30       29     28     27      26      25        24     23      22      21      20     19          18    17          16
+TEIF7   HTIF7   TCIF7   GIF7   TEIF6   HTIF6   TCIF6     GIF6   TEIF5   HTIF5   TCIF5   GIF5   TEIF4    HTIF4    TCIF4       GIF4
+  r        r       r      r      r       r       r         r      r       r       r      r       r          r      r          r
+ 15      14       13     12      11     10       9        8      7        6       5      4      3           2      1          0
+TEIF3   HTIF3   TCIF3   GIF3   TEIF2   HTIF2   TCIF2     GIF2   TEIF1   HTIF1   TCIF1   GIF1   TEIF0    HTIF0    TCIF0       GIF0
+  r        r       r      r      r       r       r         r      r       r       r      r       r          r      r          r
+
+
+                Bit 31 TEIF7: transfer error (TE) flag for channel 7
+                        0: no TE event
+                        1: a TE event occurred
+                Bit 30 HTIF7: half transfer (HT) flag for channel 7
+                        0: no HT event
+                        1: a HT event occurred
+                Bit 29 TCIF7: transfer complete (TC) flag for channel 7
+                        0: no TC event
+                        1: a TC event occurred
+                Bit 28 GIF7: global interrupt flag for channel 7
+                         0: no TE, HT or TC event
+                         1: a TE, HT or TC event occurred
+
+
+         Bit 27 TEIF6: transfer error (TE) flag for channel 6
+                 0: no TE event
+                 1: a TE event occurred
+         Bit 26 HTIF6: half transfer (HT) flag for channel 6
+                 0: no HT event
+                 1: a HT event occurred
+         Bit 25 TCIF6: transfer complete (TC) flag for channel 6
+                 0: no TC event
+                 1: a TC event occurred
+         Bit 24 GIF6: global interrupt flag for channel 6
+                  0: no TE, HT or TC event
+                  1: a TE, HT or TC event occurred
+         Bit 23 TEIF5: transfer error (TE) flag for channel 5
+                 0: no TE event
+                 1: a TE event occurred
+         Bit 22 HTIF5: half transfer (HT) flag for channel 5
+                 0: no HT event
+                 1: a HT event occurred
+         Bit 21 TCIF5: transfer complete (TC) flag for channel 5
+                 0: no TC event
+                 1: a TC event occurred
+         Bit 20 GIF5: global interrupt flag for channel 5
+                  0: no TE, HT or TC event
+                  1: a TE, HT or TC event occurred
+         Bit 19 TEIF4: transfer error (TE) flag for channel 4
+                 0: no TE event
+                 1: a TE event occurred
+         Bit 18 HTIF4: half transfer (HT) flag for channel 4
+                 0: no HT event
+                 1: a HT event occurred
+         Bit 17 TCIF4: transfer complete (TC) flag for channel 4
+                 0: no TC event
+                 1: a TC event occurred
+         Bit 16 GIF4: global interrupt flag for channel 4
+                  0: no TE, HT or TC event
+                  1: a TE, HT or TC event occurred
+         Bit 15 TEIF3: transfer error (TE) flag for channel 3
+                 0: no TE event
+                 1: a TE event occurred
+         Bit 14 HTIF3: half transfer (HT) flag for channel 3
+                 0: no HT event
+                 1: a HT event occurred
+         Bit 13 TCIF3: transfer complete (TC) flag for channel 3
+                 0: no TC event
+                 1: a TC event occurred
+
+
+                                                                                                       730
+
+
+           Bit 12 GIF3: global interrupt flag for channel 3
+                    0: no TE, HT or TC event
+                    1: a TE, HT or TC event occurred
+           Bit 11 TEIF2: transfer error (TE) flag for channel 2
+                   0: no TE event
+                   1: a TE event occurred
+           Bit 10 HTIF2: half transfer (HT) flag for channel 2
+                   0: no HT event
+                   1: a HT event occurred
+            Bit 9 TCIF2: transfer complete (TC) flag for channel 2
+                   0: no TC event
+                   1: a TC event occurred
+            Bit 8 GIF2: global interrupt flag for channel 2
+                    0: no TE, HT or TC event
+                    1: a TE, HT or TC event occurred
+            Bit 7 TEIF1: transfer error (TE) flag for channel 1
+                   0: no TE event
+                   1: a TE event occurred
+            Bit 6 HTIF1: half transfer (HT) flag for channel 1
+                   0: no HT event
+                   1: a HT event occurred
+            Bit 5 TCIF1: transfer complete (TC) flag for channel 1
+                   0: no TC event
+                   1: a TC event occurred
+            Bit 4 GIF1: global interrupt flag for channel 1
+                    0: no TE, HT or TC event
+                    1: a TE, HT or TC event occurred
+            Bit 3 TEIF0: transfer error (TE) flag for channel 0
+                   0: no TE event
+                   1: a TE event occurred
+            Bit 2 HTIF0: half transfer (HT) flag for channel 0
+                   0: no HT event
+                   1: a HT event occurred
+            Bit 1 TCIF0: transfer complete (TC) flag for channel 0
+                   0: no TC event
+                   1: a TC event occurred
+            Bit 0 GIF0: global interrupt flag for channel 0
+                    0: no TE, HT or TC event
+                    1: a TE, HT or TC event occurred
+
+
+17.6.2             BDMA interrupt flag clear register (BDMA_IFCR)
+                   Address offset: 0x04
+                   Reset value: 0x0000 0000
+                   Setting the global clear bit CGIFx of the channel x in this BDMA_IFCR register, causes the
+                   BDMA hardware to clear the corresponding GIFx bit and any individual flag among TEIFx,
+                   HTIFx, TCIFx, in the BDMA_ISR register.
+                   Setting any individual clear bit among CTEIFx, CHTIFx, CTCIFx in this BDMA_IFCR
+                   register, causes the BDMA hardware to clear the corresponding individual flag and the
+                   global flag GIFx in the BDMA_ISR register, provided that none of the two other individual
+                   flags is set.
+                   Writing 0 into any flag clear bit has no effect.
+
+ 31       30         29       28      27       26       25        24      23       22       21       20      19       18       17           16
+          CHTIF7
+
+
+                     CTCIF7
+
+
+                                               CHTIF6
+
+
+                                                        CTCIF6
+
+
+                                                                                   CHTIF5
+
+
+                                                                                            CTCIF5
+
+
+                                                                                                                      CHTIF4
+
+
+                                                                                                                               CTCIF4
+ CTEIF7
+
+
+                                      CTEIF6
+
+
+                                                                          CTEIF5
+
+
+                                                                                                             CTEIF4
+                              CGIF7
+
+
+                                                                  CGIF6
+
+
+                                                                                                     CGIF5
+
+
+                                                                                                                                            CGIF4
+  w        w          w        w       w        w        w         w       w        w        w        w       w        w        w            w
+ 15       14         13       12      11       10        9         8       7        6        5        4       3        2        1            0
+          CHTIF3
+
+
+                     CTCIF3
+
+
+                                               CHTIF2
+
+
+                                                        CTCIF2
+
+
+                                                                                   CHTIF1
+
+
+                                                                                            CTCIF1
+
+
+                                                                                                                      CHTIF0
+
+
+                                                                                                                               CTCIF0
+ CTEIF3
+
+
+                                      CTEIF2
+
+
+                                                                          CTEIF1
+
+
+                                                                                                             CTEIF0
+                              CGIF3
+
+
+                                                                  CGIF2
+
+
+                                                                                                     CGIF1
+
+
+                                                                                                                                            CGIF0
+  w        w          w        w       w        w        w         w       w        w        w        w       w        w        w            w
+
+
+                   Bit 31 CTEIF7: transfer error flag clear for channel 7
+                   Bit 30 CHTIF7: half transfer flag clear for channel 7
+                   Bit 29 CTCIF7: transfer complete flag clear for channel 7
+                   Bit 28 CGIF7: global interrupt flag clear for channel 7
+                   Bit 27 CTEIF6: transfer error flag clear for channel 6
+                   Bit 26 CHTIF6: half transfer flag clear for channel 6
+                   Bit 25 CTCIF6: transfer complete flag clear for channel 6
+                   Bit 24 CGIF6: global interrupt flag clear for channel 6
+                   Bit 23 CTEIF5: transfer error flag clear for channel 5
+                   Bit 22 CHTIF5: half transfer flag clear for channel 5
+                   Bit 21 CTCIF5: transfer complete flag clear for channel 5
+                   Bit 20 CGIF5: global interrupt flag clear for channel 5
+                   Bit 19 CTEIF4: transfer error flag clear for channel 4
+                   Bit 18 CHTIF4: half transfer flag clear for channel 4
+                   Bit 17 CTCIF4: transfer complete flag clear for channel 4
+                   Bit 16 CGIF4: global interrupt flag clear for channel 4
+                   Bit 15 CTEIF3: transfer error flag clear for channel 3
+                   Bit 14 CHTIF3: half transfer flag clear for channel 3
+                   Bit 13 CTCIF3: transfer complete flag clear for channel 3
+
+
+                                                                                                                                                    730
+
+
+                   Bit 12 CGIF3: global interrupt flag clear for channel 3
+                   Bit 11 CTEIF2: transfer error flag clear for channel 2
+                   Bit 10 CHTIF2: half transfer flag clear for channe2
+                    Bit 9 CTCIF2: transfer complete flag clear for channel 2
+                    Bit 8 CGIF2: global interrupt flag clear for channel 2
+                    Bit 7 CTEIF1: transfer error flag clear for channel 1
+                    Bit 6 CHTIF1: half transfer flag clear for channel 1
+                    Bit 5 CTCIF1: transfer complete flag clear for channel 1
+                    Bit 4 CGIF1: global interrupt flag clear for channel 0
+                    Bit 3 CTEIF0: transfer error flag clear for channel 0
+                    Bit 2 CHTIF0: half transfer flag clear for channel 0
+                    Bit 1 CTCIF0: transfer complete flag clear for channel 0
+                    Bit 0 CGIF0: global interrupt flag clear for channel 0
+
+17.6.3             BDMA channel x configuration register (BDMA_CCRx)
+                   Address offset: 0x08 + 0x14 * x, (x = 0 to 7)
+                   Reset value: 0x0000 0000
+                   The register fields/bits CT, DBM, MEM2MEM, PL[1:0], MSIZE[1:0], PSIZE[1:0], MINC,
+                   PINC, and DIR are read-only when EN = 1.
+                   The states of MEM2MEM and CIRC bits must not be both high at the same time.
+
+ 31      30          29      28    27      26     25      24     23         22     21    20     19      18     17      16
+ Res.    Res.       Res.    Res.   Res.   Res.   Res.    Res.   Res.       Res.   Res.   Res.   Res.   Res.   Res.     CT
+                                                                                                                       rw
+ 15      14          13      12    11      10      9      8       7         6      5      4      3      2      1       0
+         MEM2MEM
+
+
+ DBM                   PL[1:0]      MSIZE[1:0]    PSIZE[1:0]    MINC       PINC   CIRC   DIR    TEIE   HTIE   TCIE     EN
+
+
+  rw     rw          rw      rw    rw      rw     rw      rw     rw         rw     rw    rw      rw     rw     rw      rw
+
+
+         Bits 31:17 Reserved, must be kept at reset value.
+             Bit 16 CT: current target memory of DMA transfer in double-buffer mode
+                     This bit is toggled by hardware at the end of each channel transfer in double-buffer mode.
+                     0: memory 0 (addressed by the BDMA_CM0AR pointer)
+                     1: memory 1 (addressed by the BDMA_CM1AR pointer)
+                    Note: this bit is set and cleared by software.
+                           It must not be written when the channel is enabled (EN = 1).
+                           It is read-only when the channel is enabled (EN = 1).
+             Bit 15 DBM: double-buffer mode
+                     This bit must be set only in memory-to-peripheral and peripheral-to-memory transfers
+                     (MEM2MEM=0). The CIRC bit must also be set in double buffer mode.
+                     0: disabled (no memory address switch at the end of the BDMA transfer)
+                     1: enabled (memory address switched at the end of the BDMA transfer)
+                    Note: this bit is set and cleared by software.
+                           It must not be written when the channel is enabled (EN = 1).
+                           It is not read-only when the channel is enabled (EN = 1).
+             Bit 14 MEM2MEM: memory-to-memory mode
+                     0: disabled
+                     1: enabled
+                    Note: this bit is set and cleared by software.
+                           It must not be written when the channel is enabled (EN = 1).
+                           It is read-only when the channel is enabled (EN = 1).
+         Bits 13:12 PL[1:0]: priority level
+                     00: low
+                     01: medium
+                     10: high
+                     11: very high
+                    Note: this field is set and cleared by software.
+                           It must not be written when the channel is enabled (EN = 1).
+                           It is read-only when the channel is enabled (EN = 1).
+         Bits 11:10 MSIZE[1:0]: memory size
+                     Defines the data size of each DMA transfer to the identified memory.
+                     In memory-to-memory mode, this field identifies the memory source if DIR = 1 and the
+                     memory destination if DIR = 0.
+                     In peripheral-to-peripheral mode, this field identifies the peripheral source if DIR = 1 and the
+                     peripheral destination if DIR = 0.
+                     00: 8 bits
+                     01: 16 bits
+                     10: 32 bits
+                     11: reserved
+                    Note: this field is set and cleared by software.
+                           It must not be written when the channel is enabled (EN = 1).
+                           It is read-only when the channel is enabled (EN = 1).
+
+
+                                                                                                                        730
+
+
+           Bits 9:8 PSIZE[1:0]: peripheral size
+                     Defines the data size of each DMA transfer to the identified peripheral.
+                     In memory-to-memory mode, this field identifies the memory destination if DIR = 1 and the
+                     memory source if DIR = 0.
+                     In peripheral-to-peripheral mode, this field identifies the peripheral destination if DIR = 1 and
+                     the peripheral source if DIR = 0.
+                     00: 8 bits
+                     01: 16 bits
+                     10: 32 bits
+                     11: reserved
+                    Note: this field is set and cleared by software.
+                           It must not be written when the channel is enabled (EN = 1).
+                           It is read-only when the channel is enabled (EN = 1).
+              Bit 7 MINC: memory increment mode
+                     Defines the increment mode for each DMA transfer to the identified memory.
+                     In memory-to-memory mode, this field identifies the memory source if DIR = 1 and the
+                     memory destination if DIR = 0.
+                     In peripheral-to-peripheral mode, this field identifies the peripheral source if DIR = 1 and the
+                     peripheral destination if DIR = 0.
+                     0: disabled
+                     1: enabled
+                    Note: this bit is set and cleared by software.
+                           It must not be written when the channel is enabled (EN = 1).
+                           It is read-only when the channel is enabled (EN = 1).
+              Bit 6 PINC: peripheral increment mode
+                      Defines the increment mode for each DMA transfer to the identified peripheral.
+                      n memory-to-memory mode, this field identifies the memory destination if DIR = 1 and the
+                      memory source if DIR = 0.
+                      In peripheral-to-peripheral mode, this field identifies the peripheral destination if DIR = 1 and
+                      the peripheral source if DIR = 0.
+                      0: disabled
+                      1: enabled
+                    Note: this bit is set and cleared by software.
+                            It must not be written when the channel is enabled (EN = 1).
+                            It is read-only when the channel is enabled (EN = 1).
+              Bit 5 CIRC: circular mode
+                      0: disabled
+                      1: enabled
+                    Note: this bit is set and cleared by software.
+                            It must not be written when the channel is enabled (EN = 1).
+                            It is not read-only when the channel is enabled (EN = 1).
+
+
+         Bit 4 DIR: data transfer direction
+                 This bit must be set only in memory-to-peripheral and peripheral-to-memory modes.
+                 0: read from peripheral
+                     –      Source attributes are defined by PSIZE and PINC, plus the BDMA_CPARx register.
+                            This is still valid in a memory-to-memory mode.
+                     –      Destination attributes are defined by MSIZE and MINC, plus the BDMA_CM0/1ARx
+                            register. This is still valid in a peripheral-to-peripheral mode.
+                 1: read from memory
+                     –      Destination attributes are defined by PSIZE and PINC, plus the BDMA_CPARx
+                            register. This is still valid in a memory-to-memory mode.
+                     –      Source attributes are defined by MSIZE and MINC, plus the BDMA_CM0/1ARx
+                            register. This is still valid in a peripheral-to-peripheral mode.
+               Note: this bit is set and cleared by software.
+                       It must not be written when the channel is enabled (EN = 1).
+                       It is read-only when the channel is enabled (EN = 1).
+         Bit 3 TEIE: transfer error interrupt enable
+                0: disabled
+                1: enabled
+               Note: this bit is set and cleared by software.
+                      It must not be written when the channel is enabled (EN = 1).
+                      It is not read-only when the channel is enabled (EN = 1).
+         Bit 2 HTIE: half transfer interrupt enable
+                0: disabled
+                1: enabled
+               Note: this bit is set and cleared by software.
+                      It must not be written when the channel is enabled (EN = 1).
+                      It is not read-only when the channel is enabled (EN = 1).
+         Bit 1 TCIE: transfer complete interrupt enable
+                0: disabled
+                1: enabled
+               Note: this bit is set and cleared by software.
+                      It must not be written when the channel is enabled (EN = 1).
+                      It is not read-only when the channel is enabled (EN = 1).
+         Bit 0 EN: channel enable
+                When a channel transfer error occurs, this bit is cleared by hardware. It can not be set again
+                by software (channel x re-activated) until the TEIFx bit of the BDMA_ISR register is cleared
+                (by setting the CTEIFx bit of the BDMA_IFCR register).
+                0: disabled
+                1: enabled
+               Note: this bit is set and cleared by software.
+
+
+                                                                                                                 730
+
+
+17.6.4          BDMA channel x number of data to transfer register
+                (BDMA_CNDTRx)
+                Address offset: 0x0C + 0x14 * x, (x = 0 to 7)
+                Reset value: 0x0000 0000
+
+ 31      30      29     28      27     26      25      24         23    22     21     20     19      18      17      16
+ Res.    Res.    Res.   Res.   Res.   Res.    Res.    Res.       Res.   Res.   Res.   Res.   Res.   Res.    Res.    Res.
+
+
+ 15      14      13     12      11     10      9       8           7     6      5      4      3      2       1       0
+                                                           NDT[15:0]
+  rw     rw       rw     rw     rw     rw      rw      rw         rw    rw     rw     rw     rw      rw      rw      rw
+
+
+           Bits 31:16 Reserved, must be kept at reset value.
+            Bits 15:0 NDT[15:0]: number of data to transfer (0 to 216 - 1)
+                       This field is updated by hardware when the channel is enabled:
+                            –      It is decremented after each single BDMA ‘read followed by write’ transfer, indicating
+                                   the remaining amount of data items to transfer.
+                            –      It is kept at zero when the programmed amount of data to transfer is reached, if the
+                                   channel is not in circular mode (CIRC = 0 in the BDMA_CCRx register).
+                            –      It is reloaded automatically by the previously programmed value, when the transfer
+                                   is complete, if the channel is in circular mode (CIRC = 1).
+                       If this field is zero, no transfer can be served whatever the channel status (enabled or not).
+                      Note: this field is set and cleared by software.
+                              It must not be written when the channel is enabled (EN = 1).
+                              It is read-only when the channel is enabled (EN = 1).
+
+
+17.6.5          BDMA channel x peripheral address register (BDMA_CPARx)
+                Address offset: 0x10 + 0x14 * x, (x = 0 to 7)
+                Reset value: 0x0000 0000
+
+ 31      30      29     28      27     26      25      24         23    22     21     20     19      18      17      16
+                                                            PA[31:16]
+  rw     rw       rw     rw     rw     rw      rw      rw         rw    rw     rw     rw     rw      rw      rw      rw
+ 15      14      13     12      11     10      9       8           7     6      5      4      3      2       1       0
+                                                            PA[15:0]
+  rw     rw       rw     rw     rw     rw      rw      rw         rw    rw     rw     rw     rw      rw      rw      rw
+
+
+          Bits 31:0 PA[31:0]: peripheral address
+                     It contains the base address of the peripheral data register from/to which the data is
+                     read/written.
+                     When PSIZE[1:0] = 01 (16 bits), bit 0 of PA[31:0] is ignored. Access is automatically aligned
+                     to a half-word address.
+                     When PSIZE = 10 (32 bits), bits 1 and 0 of PA[31:0] are ignored. Access is automatically
+                     aligned to a word address.
+                     In memory-to-memory mode, this register identifies the memory destination address if
+                     DIR = 1 and the memory source address if DIR = 0.
+                     In peripheral-to-peripheral mode, this register identifies the peripheral destination address
+                     DIR = 1 and the peripheral source address if DIR = 0.
+                    Note: this register is set and cleared by software.
+                           It must not be written when the channel is enabled (EN = 1).
+                           It is not read-only when the channel is enabled (EN = 1).
+
+
+17.6.6        BDMA channel x memory 0 address register (BDMA_CM0ARx)
+              Address offset: 0x14 + 0x14 * x, (x = 0 to 7)
+              Reset value: 0x0000 0000
+
+ 31      30    29     28     27     26     25      24        23    22    21     20      19     18      17       16
+                                                       MA[31:16]
+ rw      rw     rw    rw     rw     rw     rw      rw        rw    rw    rw     rw      rw     rw      rw       rw
+ 15      14    13     12     11     10      9      8          7    6      5      4      3       2      1        0
+                                                        MA[15:0]
+ rw      rw     rw    rw     rw     rw     rw      rw        rw    rw    rw     rw      rw     rw      rw       rw
+
+
+          Bits 31:0 MA[31:0]: peripheral address
+                     It contains the base address of the memory from/to which the data is read/written.
+                     When MSIZE[1:0] = 01 (16 bits), bit 0 of MA[31:0] is ignored. Access is automatically aligned
+                     to a half-word address.
+                     When MSIZE = 10 (32 bits), bits 1 and 0 of MA[31:0] are ignored. Access is automatically
+                     aligned to a word address.
+                     In memory-to-memory mode, this register identifies the memory source address if DIR = 1
+                     and the memory destination address if DIR = 0.
+                     In peripheral-to-peripheral mode, this register identifies the peripheral source address
+                     DIR = 1 and the peripheral destination address if DIR = 0.
+                    Note: this register is set and cleared by software.
+                           It must not be written when the channel is enabled (EN = 1).
+                           It is not read-only when the channel is enabled (EN = 1).
+
+
+                                                                                                                       730
+
+
+17.6.7           BDMA channel x memory 1 address register (BDMA_CM1ARx)
+                 Address offset: 0x18 + 0x14 * x, (x = 0 to 7)
+                 Reset value: 0x0000 0000
+
+ 31      30        29       28                 27                  26                      25                   24                    23                     22                     21                        20                       19                         18                     17                    16
+                                                                                                                      MA[31:16]
+  rw     rw        rw       rw                 rw                  rw                      rw                   rw                    rw                         rw                 rw                        rw                       rw                         rw                     rw                    rw
+ 15      14        13       12                 11                  10                      9                     8                      7                        6                    5                       4                          3                         2                        1                   0
+                                                                                                                       MA[15:0]
+  rw     rw        rw       rw                 rw                  rw                      rw                   rw                    rw                         rw                 rw                        rw                       rw                         rw                     rw                    rw
+
+
+            Bits 31:0 MA[31:0]: peripheral address
+                       It contains the base address of the memory from/to which the data is read/written.
+                       When MSIZE[1:0] = 01 (16 bits), bit 0 of MA[31:0] is ignored. Access is automatically aligned
+                       to a half-word address.
+                       When MSIZE = 10 (32 bits), bits 1 and 0 of MA[31:0] are ignored. Access is automatically
+                       aligned to a word address.
+                       In memory-to-memory mode, this register identifies the memory source address if DIR = 1
+                       and the memory destination address if DIR = 0.
+                       In peripheral-to-peripheral mode, this register identifies the peripheral source address
+                       DIR = 1 and the peripheral destination address if DIR = 0.
+                      Note: this register is set and cleared by software.
+                             It must not be written when the channel is enabled (EN = 1).
+                             It is not read-only when the channel is enabled (EN = 1).
+
+
+17.6.8           BDMA register map
+                 The table below gives the BDMA register map and reset values.
+
+                                           Table 124. BDMA register map and reset values
+
+Offset        Register
+                             31
+                             30
+                             29
+                             28
+                             27
+                             26
+                             25
+                             24
+                             23
+                             22
+                             21
+                             20
+                             19
+                             18
+                             17
+                             16
+                             15
+                             14
+                             13
+                             12
+
+                             10
+                             11
+
+                              9
+                              8
+                              7
+                              6
+                              5
+                              4
+                              3
+                              2
+                              1
+                              0
+                                      HTIF7
+                                               TCIF7
+
+
+                                                                         HTIF6
+                                                                                  TCIF6
+
+
+                                                                                                            HTIF5
+                                                                                                                     TCIF5
+
+
+                                                                                                                                               HTIF4
+                                                                                                                                                        TCIF4
+
+
+                                                                                                                                                                                  HTIF3
+                                                                                                                                                                                            TCIF3
+
+
+                                                                                                                                                                                                                          HTIF2
+                                                                                                                                                                                                                                    TCIF2
+
+
+                                                                                                                                                                                                                                                                  HTIF1
+                                                                                                                                                                                                                                                                           TCIF1
+
+
+                                                                                                                                                                                                                                                                                                     HTIF0
+                                                                                                                                                                                                                                                                                                              TCIF0
+                             TEIF7
+
+
+                                                                TEIF6
+
+
+                                                                                                   TEIF5
+
+
+                                                                                                                                      TEIF4
+
+
+                                                                                                                                                                         TEIF3
+
+
+                                                                                                                                                                                                              TEIF2
+
+
+                                                                                                                                                                                                                                                         TEIF1
+
+
+                                                                                                                                                                                                                                                                                            TEIF0
+                                                        GIF7
+
+
+                                                                                           GIF6
+
+
+                                                                                                                              GIF5
+
+
+                                                                                                                                                                 GIF4
+
+
+                                                                                                                                                                                                     GIF3
+
+
+                                                                                                                                                                                                                                               GIF2
+
+
+                                                                                                                                                                                                                                                                                    GIF1
+
+
+                                                                                                                                                                                                                                                                                                                       GIF0
+              BDMA_ISR
+ 0x000
+              Reset value        0     0        0        0       0        0        0        0       0        0        0        0       0        0        0           0    0        0         0            0    0                0    0               0    0        0        0        0          0     0        0        0
+                                      CHTIF7
+                                               CTCIF7
+
+
+                                                                         CHTIF6
+                                                                                  CTCIF6
+
+
+                                                                                                            CHTIF5
+                                                                                                                     CTCIF5
+
+
+                                                                                                                                               CHTIF4
+                                                                                                                                                        CTCIF4
+
+
+                                                                                                                                                                                  CHTIF3
+                                                                                                                                                                                            CTCIF3
+
+
+                                                                                                                                                                                                                          CHTIF2
+                                                                                                                                                                                                                                    CTCIF2
+
+
+                                                                                                                                                                                                                                                                  CHTIF1
+                                                                                                                                                                                                                                                                           CTCIF1
+
+
+                                                                                                                                                                                                                                                                                                     CHTIF0
+                                                                                                                                                                                                                                                                                                              CTCIF0
+                             CTEIF7
+
+
+                                                                CTEIF6
+
+
+                                                                                                   CTEIF5
+
+
+                                                                                                                                      CTEIF4
+
+
+                                                                                                                                                                         CTEIF3
+
+
+                                                                                                                                                                                                              CTEIF2
+
+
+                                                                                                                                                                                                                                                         CTEIF1
+
+
+                                                                                                                                                                                                                                                                                            CTEIF0
+                                                        CGIF7
+
+
+                                                                                           CGIF6
+
+
+                                                                                                                              CGIF5
+
+
+                                                                                                                                                                 CGIF4
+
+
+                                                                                                                                                                                                     CGIF3
+
+
+                                                                                                                                                                                                                                               CGIF2
+
+
+                                                                                                                                                                                                                                                                                    CGIF1
+
+
+                                                                                                                                                                                                                                                                                                                       CGIF0
+
+
+            BDMA_IFCR
+ 0x004
+              Reset value        0     0        0        0       0        0        0        0       0        0        0        0       0        0        0           0    0        0         0            0    0                0    0               0    0        0        0        0          0     0        0        0
+                                                                                                                                                                                  MEM2MEM
+
+
+                                                                                                                                                                                                                   MSIZE[1:0]
+
+
+                                                                                                                                                                                                                                        PSIZE[1:0]
+                                                                                                                                                                                                PL[1:0]
+
+
+                                                                                                                                                                                                                                                         MINC
+
+
+                                                                                                                                                                                                                                                                           CIRC
+                                                                                                                                                                                                                                                                  PINC
+
+
+                                                                                                                                                                                                                                                                                                     HTIE
+                                                                                                                                                                                                                                                                                                              TCIE
+                                                                                                                                                                                                                                                                                            TEIE
+                                                                                                                                                                         DBM
+                             Res.
+                                      Res.
+                                               Res.
+                                                        Res.
+                                                                Res.
+                                                                         Res.
+                                                                                  Res.
+                                                                                           Res.
+                                                                                                   Res.
+                                                                                                            Res.
+                                                                                                                     Res.
+                                                                                                                              Res.
+                                                                                                                                      Res.
+                                                                                                                                               Res.
+                                                                                                                                                        Res.
+
+
+                                                                                                                                                                                                                                                                                    DIR
+
+
+                                                                                                                                                                                                                                                                                                                       EN
+                                                                                                                                                                 CT
+
+
+           BDMA_CCR0
+ 0x008
+
+              Reset value                                                                                                                                            0    0        0         0            0    0                0    0               0    0        0        0        0          0     0        0        0
+                             Res.
+                                      Res.
+                                               Res.
+                                                        Res.
+                                                                Res.
+                                                                         Res.
+                                                                                  Res.
+                                                                                           Res.
+                                                                                                   Res.
+                                                                                                            Res.
+                                                                                                                     Res.
+                                                                                                                              Res.
+                                                                                                                                      Res.
+                                                                                                                                               Res.
+                                                                                                                                                        Res.
+                                                                                                                                                                 Res.
+
+
+           BDMA_CNDTR0                                                                                                                                                                                                               NDTR[15:0]
+ 0x00C
+              Reset value                                                                                                                                                 0        0         0            0    0                0    0               0    0        0        0        0          0     0        0        0
+           BDMA_CPAR0                                                                                                                                        PA[31:0]
+ 0x010
+              Reset value        0     0        0        0       0        0        0        0       0        0        0        0       0        0        0           0    0        0         0            0    0                0    0               0    0        0        0        0          0     0        0        0
+           BDMA_CM0AR0                                                                                                                                       MA[31:0]
+ 0x014
+              Reset value        0     0        0        0       0        0        0        0       0        0        0        0       0        0        0           0    0        0         0            0    0                0    0               0    0        0        0        0          0     0        0        0
+           BDMA_CM1AR0                                                                                                                                       MA[31:0]
+ 0x018
+              Reset value        0     0        0        0       0        0        0        0       0        0        0        0       0        0        0           0    0        0         0            0    0                0    0               0    0        0        0        0          0     0        0        0
+
+
+                        Table 124. BDMA register map and reset values (continued)
+
+Offset     Register
+
+
+                         31
+                         30
+                         29
+                         28
+                         27
+                         26
+                         25
+                         24
+                         23
+                         22
+                         21
+                         20
+                         19
+                         18
+                         17
+                         16
+                         15
+                         14
+                         13
+                         12
+
+                         10
+                         11
+
+                          9
+                          8
+                          7
+                          6
+                          5
+                          4
+                          3
+                          2
+                          1
+                          0
+                                                                                                                                               MEM2MEM
+
+
+                                                                                                                                                                       MSIZE[1:0]
+
+
+                                                                                                                                                                                        PSIZE[1:0]
+                                                                                                                                                         PL[1:0]
+
+
+                                                                                                                                                                                                         MINC
+
+
+                                                                                                                                                                                                                       CIRC
+                                                                                                                                                                                                                PINC
+
+
+                                                                                                                                                                                                                                           HTIE
+                                                                                                                                                                                                                                                  TCIE
+                                                                                                                                         DBM
+
+
+                                                                                                                                                                                                                                    TEIE
+                         Res.
+                                Res.
+                                       Res.
+                                              Res.
+                                                     Res.
+                                                            Res.
+                                                                   Res.
+                                                                          Res.
+                                                                                 Res.
+                                                                                        Res.
+                                                                                               Res.
+                                                                                                      Res.
+                                                                                                             Res.
+                                                                                                                    Res.
+                                                                                                                           Res.
+
+
+                                                                                                                                                                                                                              DIR
+
+
+                                                                                                                                                                                                                                                         EN
+                                                                                                                                  CT
+         BDMA_CCR1
+0x01C
+
+          Reset value                                                                                                              0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+                         Res.
+                                Res.
+                                       Res.
+                                              Res.
+                                                     Res.
+                                                            Res.
+                                                                   Res.
+                                                                          Res.
+                                                                                 Res.
+                                                                                        Res.
+                                                                                               Res.
+                                                                                                      Res.
+                                                                                                             Res.
+                                                                                                                    Res.
+                                                                                                                           Res.
+                                                                                                                                  Res.
+         BDMA_CNDTR1                                                                                                                                                                    NDTR[15:0]
+0x020
+          Reset value                                                                                                                    0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+         BDMA_CPAR1                                                                                                             PA[31:0]
+0x024
+          Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+         BDMA_CM0AR1                                                                                                            MA[31:0]
+0x028
+          Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+         BDMA_CM1AR1                                                                                                            MA[31:0]
+0x02C
+          Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+
+
+                                                                                                                                               MEM2MEM
+
+
+                                                                                                                                                                       MSIZE[1:0]
+
+
+                                                                                                                                                                                        PSIZE[1:0]
+                                                                                                                                                         PL[1:0]
+
+
+                                                                                                                                                                                                         MINC
+
+
+                                                                                                                                                                                                                       CIRC
+                                                                                                                                                                                                                PINC
+
+
+                                                                                                                                                                                                                                           HTIE
+                                                                                                                                                                                                                                                  TCIE
+                                                                                                                                         DBM
+
+
+                                                                                                                                                                                                                                    TEIE
+                         Res.
+                                Res.
+                                       Res.
+                                              Res.
+                                                     Res.
+                                                            Res.
+                                                                   Res.
+                                                                          Res.
+                                                                                 Res.
+                                                                                        Res.
+                                                                                               Res.
+                                                                                                      Res.
+                                                                                                             Res.
+                                                                                                                    Res.
+                                                                                                                           Res.
+
+
+                                                                                                                                                                                                                              DIR
+
+
+                                                                                                                                                                                                                                                         EN
+                                                                                                                                  CT
+         BDMA_CCR2
+0x030
+
+          Reset value                                                                                                              0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+                         Res.
+                                Res.
+                                       Res.
+                                              Res.
+                                                     Res.
+                                                            Res.
+                                                                   Res.
+                                                                          Res.
+                                                                                 Res.
+                                                                                        Res.
+                                                                                               Res.
+                                                                                                      Res.
+                                                                                                             Res.
+                                                                                                                    Res.
+                                                                                                                           Res.
+                                                                                                                                  Res.
+         BDMA_CNDTR2                                                                                                                                                                    NDTR[15:0]
+0x034
+          Reset value                                                                                                                    0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+         BDMA_CPAR2                                                                                                             PA[31:0]
+0x038
+          Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+         BDMA_CM0AR2                                                                                                            MA[31:0]
+0x03C
+          Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+         BDMA_CM1AR2                                                                                                            MA[31:0]
+0x040
+          Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+                                                                                                                                               MEM2MEM
+
+
+                                                                                                                                                                       MSIZE[1:0]
+
+
+                                                                                                                                                                                        PSIZE[1:0]
+                                                                                                                                                         PL[1:0]
+
+
+                                                                                                                                                                                                         MINC
+
+
+                                                                                                                                                                                                                       CIRC
+                                                                                                                                                                                                                PINC
+
+
+                                                                                                                                                                                                                                           HTIE
+                                                                                                                                                                                                                                                  TCIE
+                                                                                                                                         DBM
+
+
+                                                                                                                                                                                                                                    TEIE
+                         Res.
+                                Res.
+                                       Res.
+                                              Res.
+                                                     Res.
+                                                            Res.
+                                                                   Res.
+                                                                          Res.
+                                                                                 Res.
+                                                                                        Res.
+                                                                                               Res.
+                                                                                                      Res.
+                                                                                                             Res.
+                                                                                                                    Res.
+                                                                                                                           Res.
+
+
+                                                                                                                                                                                                                              DIR
+
+
+                                                                                                                                                                                                                                                         EN
+                                                                                                                                  CT
+
+
+         BDMA_CCR3
+0x044
+
+          Reset value                                                                                                              0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+                         Res.
+                                Res.
+                                       Res.
+                                              Res.
+                                                     Res.
+                                                            Res.
+                                                                   Res.
+                                                                          Res.
+                                                                                 Res.
+                                                                                        Res.
+                                                                                               Res.
+                                                                                                      Res.
+                                                                                                             Res.
+                                                                                                                    Res.
+                                                                                                                           Res.
+                                                                                                                                  Res.
+
+
+         BDMA_CNDTR3                                                                                                                                                                    NDTR[15:0]
+0x048
+          Reset value                                                                                                                    0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+         BDMA_CPAR3                                                                                                             PA[31:0]
+0x04C
+          Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+         BDMA_CM0AR3                                                                                                            MA[31:0]
+0x050
+          Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+         BDMA_CM1AR3                                                                                                            MA[31:0]
+0x054
+          Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+                                                                                                                                               MEM2MEM
+
+
+                                                                                                                                                                       MSIZE[1:0]
+
+
+                                                                                                                                                                                        PSIZE[1:0]
+                                                                                                                                                         PL[1:0]
+
+
+                                                                                                                                                                                                         MINC
+
+
+                                                                                                                                                                                                                       CIRC
+                                                                                                                                                                                                                PINC
+
+
+                                                                                                                                                                                                                                           HTIE
+                                                                                                                                                                                                                                                  TCIE
+                                                                                                                                         DBM
+
+
+                                                                                                                                                                                                                                    TEIE
+                         Res.
+                                Res.
+                                       Res.
+                                              Res.
+                                                     Res.
+                                                            Res.
+                                                                   Res.
+                                                                          Res.
+                                                                                 Res.
+                                                                                        Res.
+                                                                                               Res.
+                                                                                                      Res.
+                                                                                                             Res.
+                                                                                                                    Res.
+                                                                                                                           Res.
+
+
+                                                                                                                                                                                                                              DIR
+
+
+                                                                                                                                                                                                                                                         EN
+                                                                                                                                  CT
+
+
+         BDMA_CCR4
+0x058
+
+          Reset value                                                                                                              0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+                         Res.
+                                Res.
+                                       Res.
+                                              Res.
+                                                     Res.
+                                                            Res.
+                                                                   Res.
+                                                                          Res.
+                                                                                 Res.
+                                                                                        Res.
+                                                                                               Res.
+                                                                                                      Res.
+                                                                                                             Res.
+                                                                                                                    Res.
+                                                                                                                           Res.
+                                                                                                                                  Res.
+
+
+         BDMA_CNDTR4                                                                                                                                                                    NDTR[15:0]
+0x05C
+          Reset value                                                                                                                    0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+         BDMA_CPAR4                                                                                                             PA[31:0]
+0x060
+          Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+         BDMA_CM0AR4                                                                                                            MA[31:0]
+0x064
+          Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+         BDMA_CM1AR4                                                                                                            MA[31:0]
+0x068
+          Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+
+
+                                                                                                                                                                                                                                                              730
+
+
+                          Table 124. BDMA register map and reset values (continued)
+
+Offset       Register
+
+
+                           31
+                           30
+                           29
+                           28
+                           27
+                           26
+                           25
+                           24
+                           23
+                           22
+                           21
+                           20
+                           19
+                           18
+                           17
+                           16
+                           15
+                           14
+                           13
+                           12
+
+                           10
+                           11
+
+                            9
+                            8
+                            7
+                            6
+                            5
+                            4
+                            3
+                            2
+                            1
+                            0
+                                                                                                                                                 MEM2MEM
+
+
+                                                                                                                                                                         MSIZE[1:0]
+
+
+                                                                                                                                                                                          PSIZE[1:0]
+                                                                                                                                                           PL[1:0]
+
+
+                                                                                                                                                                                                           MINC
+
+
+                                                                                                                                                                                                                         CIRC
+                                                                                                                                                                                                                  PINC
+
+
+                                                                                                                                                                                                                                             HTIE
+                                                                                                                                                                                                                                                    TCIE
+                                                                                                                                           DBM
+
+
+                                                                                                                                                                                                                                      TEIE
+                           Res.
+                                  Res.
+                                         Res.
+                                                Res.
+                                                       Res.
+                                                              Res.
+                                                                     Res.
+                                                                            Res.
+                                                                                   Res.
+                                                                                          Res.
+                                                                                                 Res.
+                                                                                                        Res.
+                                                                                                               Res.
+                                                                                                                      Res.
+                                                                                                                             Res.
+
+
+                                                                                                                                                                                                                                DIR
+
+
+                                                                                                                                                                                                                                                           EN
+                                                                                                                                    CT
+           BDMA_CCR5
+ 0x06C
+
+            Reset value                                                                                                              0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+                           Res.
+                                  Res.
+                                         Res.
+                                                Res.
+                                                       Res.
+                                                              Res.
+                                                                     Res.
+                                                                            Res.
+                                                                                   Res.
+                                                                                          Res.
+                                                                                                 Res.
+                                                                                                        Res.
+                                                                                                               Res.
+                                                                                                                      Res.
+                                                                                                                             Res.
+                                                                                                                                    Res.
+           BDMA_CNDTR5                                                                                                                                                                    NDTR[15:0]
+ 0x070
+            Reset value                                                                                                                    0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+           BDMA_CPAR5                                                                                                             PA[31:0]
+ 0x074
+            Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+           BDMA_CM0AR5                                                                                                            MA[31:0]
+ 0x078
+            Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+           BDMA_CM1AR5                                                                                                            MA[31:0]
+ 0x07C
+            Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+
+
+                                                                                                                                                 MEM2MEM
+
+
+                                                                                                                                                                         MSIZE[1:0]
+
+
+                                                                                                                                                                                          PSIZE[1:0]
+                                                                                                                                                           PL[1:0]
+
+
+                                                                                                                                                                                                           MINC
+
+
+                                                                                                                                                                                                                         CIRC
+                                                                                                                                                                                                                  PINC
+
+
+                                                                                                                                                                                                                                             HTIE
+                                                                                                                                                                                                                                                    TCIE
+                                                                                                                                           DBM
+
+
+                                                                                                                                                                                                                                      TEIE
+                           Res.
+                                  Res.
+                                         Res.
+                                                Res.
+                                                       Res.
+                                                              Res.
+                                                                     Res.
+                                                                            Res.
+                                                                                   Res.
+                                                                                          Res.
+                                                                                                 Res.
+                                                                                                        Res.
+                                                                                                               Res.
+                                                                                                                      Res.
+                                                                                                                             Res.
+
+
+                                                                                                                                                                                                                                DIR
+
+
+                                                                                                                                                                                                                                                           EN
+                                                                                                                                    CT
+           BDMA_CCR6
+ 0x080
+
+            Reset value                                                                                                              0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+                           Res.
+                                  Res.
+                                         Res.
+                                                Res.
+                                                       Res.
+                                                              Res.
+                                                                     Res.
+                                                                            Res.
+                                                                                   Res.
+                                                                                          Res.
+                                                                                                 Res.
+                                                                                                        Res.
+                                                                                                               Res.
+                                                                                                                      Res.
+                                                                                                                             Res.
+                                                                                                                                    Res.
+           BDMA_CNDTR6                                                                                                                                                                    NDTR[15:0]
+ 0x084
+            Reset value                                                                                                                    0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+           BDMA_CPAR6                                                                                                             PA[31:0]
+ 0x088
+            Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+           BDMA_CM0AR6                                                                                                            MA[31:0]
+ 0x08C
+            Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+           BDMA_CM1AR6                                                                                                            MA[31:0]
+ 0x090
+            Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+                                                                                                                                                 MEM2MEM
+
+
+                                                                                                                                                                         MSIZE[1:0]
+
+
+                                                                                                                                                                                          PSIZE[1:0]
+                                                                                                                                                           PL[1:0]
+
+
+                                                                                                                                                                                                           MINC
+
+
+                                                                                                                                                                                                                         CIRC
+                                                                                                                                                                                                                  PINC
+
+
+                                                                                                                                                                                                                                             HTIE
+                                                                                                                                                                                                                                                    TCIE
+                                                                                                                                           DBM
+
+
+                                                                                                                                                                                                                                      TEIE
+                           Res.
+                                  Res.
+                                         Res.
+                                                Res.
+                                                       Res.
+                                                              Res.
+                                                                     Res.
+                                                                            Res.
+                                                                                   Res.
+                                                                                          Res.
+                                                                                                 Res.
+                                                                                                        Res.
+                                                                                                               Res.
+                                                                                                                      Res.
+                                                                                                                             Res.
+
+
+                                                                                                                                                                                                                                DIR
+
+
+                                                                                                                                                                                                                                                           EN
+                                                                                                                                    CT
+
+
+           BDMA_CCR7
+ 0x094
+
+            Reset value                                                                                                              0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+                           Res.
+                                  Res.
+                                         Res.
+                                                Res.
+                                                       Res.
+                                                              Res.
+                                                                     Res.
+                                                                            Res.
+                                                                                   Res.
+                                                                                          Res.
+                                                                                                 Res.
+                                                                                                        Res.
+                                                                                                               Res.
+                                                                                                                      Res.
+                                                                                                                             Res.
+                                                                                                                                    Res.
+
+
+           BDMA_CNDTR7                                                                                                                                                                    NDTR[15:0]
+ 0x098
+            Reset value                                                                                                                    0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+           BDMA_CPAR7                                                                                                             PA[31:0]
+ 0x09C
+            Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+           BDMA_CM0AR7                                                                                                            MA[31:0]
+ 0x0A0
+            Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+           BDMA_CM1AR7                                                                                                            MA[31:0]
+ 0x0A4
+            Reset value     0      0      0      0      0      0      0      0      0      0      0      0      0      0      0      0     0      0        0         0   0            0   0            0    0      0      0     0      0      0      0     0
+
+
+               Refer to Section 2.3 on page 134 for the register boundary addresses.

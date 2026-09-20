@@ -1,0 +1,1007 @@
+RM0399 chapter text dump - generated from 30_operational-amplifiers-opamp.pdf
+Plain-text extraction for grep/search. For figures, tables layout and
+exact register bit diagrams, open the PDF alongside this file.
+==============================================================================
+
+30       Operational amplifiers (OPAMP)
+
+30.1     Introduction
+         The devices embed two operational amplifiers with two inputs and one output each. The
+         three I/Os can be connected to the external pins, thus enabling any type of external
+         interconnections. The operational amplifiers can be configured internally as a follower, as an
+         amplifier with a non-inverting gain ranging from 2 to 16 or with inverting gain ranging from -1
+         to -15.
+         Refer to Section 30.3.3: Signal routing for detailed information on OPAMP input and output
+         connection to internal peripherals.
+
+
+30.2     OPAMP main features
+         •    Rail-to-rail input voltage range
+         •    Low input bias current (down to 1 nA)
+         •    Low input offset voltage (1.5 mV after calibration, 10 mV with factory calibration)
+         •    7 MHz gain bandwidth
+         •    High-speed mode to achieve a better slew rate
+Note:    Refer to the product datasheet for detailed OPAMP characteristics.
+
+
+30.3     OPAMP functional description
+         The OPAMP has several modes.
+         Each OPAMP can be individually enabled, when disabled the output is high-impedance.
+         When enabled, it can be in calibration mode, all input and output of the OPAMP are then
+         disconnected, or in functional mode.
+         There are two functional modes, the high-speed mode and the normal mode. In functional
+         mode the inputs and output of the OPAMP are connected as described in Section 30.3.3:
+         Signal routing.
+
+30.3.1   OPAMP reset and clocks
+         The operational amplifier clock is necessary for accessing the registers. When the
+         application does not need to have read or write access to those registers, the clock can be
+         switched off using the peripheral clock enable register (see OPAMPEN bit in Section 9.7.45:
+         RCC APB1 clock register (RCC_APB1HENR)).
+         The bit OPAEN enables and disables the OPAMP operation. The OPAMP registers
+         configurations should be changed before enabling the OPAEN bit in order to avoid spurious
+         effects on the output.
+         When the output of the operational amplifier is no more needed the operational amplifier can
+         be disabled to save power. All the configurations previously set (including the calibration)
+         are maintained while OPAMP is disabled.
+
+
+                                                                                                           1150
+
+
+30.3.2      Initial configuration
+            The default configuration of the operational amplifier is a functional mode where the three
+            input/outputs are connected to external pins. In the default mode the operational amplifier
+            uses the factory trimming values for its offset calibration. See electrical characteristics
+            section of the datasheet for factory trimming conditions, usually the temperature is 30 °C
+            and the voltage is 3 V. The trimming values can be adjusted, see Section 30.3.5: Calibration
+            for changing the trimming values. The default configuration uses the normal mode, which
+            provides the standard performance. The bit OPAHSM can be set in order to switch the
+            operational amplifier to high-speed mode for a better slew rate. Both normal and high-speed
+            mode characteristics are defined in Section: Electrical characteristics of the datasheet.
+            As soon as the OPAEN bit in OPAMPx_CSR register is set, the operational amplifier is
+            functional. The two input pins and the output pin are connected as defined in Section 30.3.3:
+            Signal routing and the default connection settings can be changed.
+Note:       The inputs and output pins must be configured in analog mode (default state) in the
+            corresponding GPIOx_MODER register.
+
+30.3.3      Signal routing
+            The routing for the operational amplifier pins is determined by OPAMPx_CSR register.
+            The connections of the two operational amplifiers (OPAMP1 and OPAMP2) are described in
+            the table below.
+
+
+                              Table 247. Operational amplifier possible connections
+                   Signal                   Pin                   Internal                   comment
+
+                                                                ADC1_IN8
+                                        PC5(INM0)               ADC2_IN8          controlled by bits PGA_GAIN
+              OPAMP1_VINM
+                                        PA7(INM1)             OPAMP1_VOUT         and VM_SEL.
+                                                                 or PGA
+                                                                 dac_out1
+                                                                ADC1_IN9
+              OPAMP1_VINP                   PB0                                   controlled by bit VP_SEL.
+                                                                ADC2_IN9
+                                                               COMP1_INP
+                                                                ADC1_IN4          The pin is connected when the
+             OPAMP1_VOUT(1)                 PC4                 ADC2_IN4          OPAMP is enabled. The ADC
+                                                               COMP1_INM7         input is controlled by ADC.
+
+                                        PE8(INM0)             OPAMP2_VOUT         controlled by bits PGA_GAIN
+              OPAMP2_VINM
+                                        PG1(INM1)                or PGA           and VM_SEL.
+
+                                                                dac_out2
+              OPAMP2_VINP                   PE9                                   controlled by bit VP_SEL
+                                                               COMP2_INP
+             OPAMP2_VOUT(1)                 PE7                COMP2_INM7                         -
+            1. Both OPAMP1_VOUT and OPAMP2_VOUT are not available on all packages. In this case, the unused I/O
+               should not be activated since is internally set to a fixed configuration.
+
+
+30.3.4   OPAMP modes
+         The operational amplifier inputs and outputs are all accessible on terminals. The amplifiers
+         can be used in multiple configuration environments:
+         •    Standalone mode (external gain setting mode)
+         •    Follower configuration mode
+         •    PGA modes
+Note:    The amplifier output pin is directly connected to the output pad to minimize the output
+         impedance. When the amplifier is enabled, it cannot be used as a general purpose I/O, even
+         if the amplifier is configured as a PGA and only connected to the internal channel.
+         The impedance of the signal must be maintained below a level which avoids the input
+         leakage to create significant artifacts (due to a resistive drop in the source). Please refer to
+         the electrical characteristics section in the datasheet for further details.
+
+         Standalone mode (external gain setting mode)
+         The procedure to use the OPAMP in standalone mode is presented hereafter.
+         Starting from the default value of OPAMPx_CSR, and the default state of GPIOx_MODER,
+         as soon as the OPAEN bit is set, the two input pins and the output pin are connected to the
+         operational amplifier.
+         This default configuration uses the factory trimming values and operates in normal mode
+         (highest performance). The behavior of the OPAMP can be changed as follows:
+         •    OPAHSM can be set to “operational amplifier high-speed” mode in order to have high
+              slew rate.
+         •    USERTRIM can be set to modify the trimming values for input offsets.
+
+                         Figure 226. Standalone mode: external gain setting mode
+
+
+                                   STM32
+
+                          INP0
+                                                    +
+                                   dac_outx
+                       INM0 or 1
+
+
+                                                     -                                    opamp_out
+
+
+                         VOUT
+
+
+                                                                                                MSv38380V3
+
+
+                                                                                                             1150
+
+
+            Follower configuration mode
+            The procedure to use the OPAMP in follower mode is presented hereafter.
+            •   configure VM_SEL bits as “opamp_out connected to OPAMPx_VINM input”, 11
+            •   configure VP_SEL bits as “GPIO connected to OPAMPx_VINP”, 00
+            •   As soon as the OPAEN bit is set, the voltage on pin OPAMPx_VINP is buffered to pin
+                OPAMPx_VOUT.
+Note:       The pin corresponding to OPAMPx_VINM is free for another usage.
+            The signal on the OPAMP1 output is also seen as an ADC input. As a consequence, the
+            OPAMP configured in follower mode can be used to perform impedance adaptation on input
+            signals before feeding them to the ADC input, assuming the input signal frequency is
+            compatible with the operational amplifier gain bandwidth specification.
+
+                                          Figure 227. Follower configuration
+
+
+                                      STM32
+
+                             VINP
+                                                        +
+                                      dac_outx
+
+
+                         VINM0 or 1
+                                                                                      opamp_out
+                                                        -
+
+
+                Always connected to
+                     OPAMP output
+                            VOUT
+
+
+                                                                                           MSv38381V4
+
+
+         Programmable gain amplifier mode
+         The procedure to use the OPAMP as programmable gain amplifier is presented hereafter.
+         •      configure VM_SEL bits as “Feedback resistor is connected to OPAMPx_VINM input”,
+                10
+         •      configure PGA_GAIN bits as “internal Gain 2, 4, 8 or 16”, 0000 to 0011
+         •      configure VP_SEL bits as “GPIO connected to OPAMPx_VINP”, 00
+                As soon as the OPAEN bit is set, the voltage on pin OPAMPx_VINP is amplified by the
+                selected gain and visible on pin OPAMPx_VOUT.
+Note:    To avoid saturation, the input voltage should stay below VDDA divided by the selected gain.
+
+             Figure 228. PGA mode, internal gain setting (x2/x4/x8/x16), inverting input not used
+
+
+                                      STM32
+
+                              VINP
+                                                      +
+                                       dac_outx
+
+
+                         VINM0 or 1
+                                                      -                                  opamp_out
+
+
+                Always connected to
+                     OPAMP output
+                             VOUT
+
+
+                                                                                            MSv38382V4
+
+
+                                                                                                         1150
+
+
+            Programmable gain amplifier mode with external filtering
+            The procedure to use the OPAMP to amplify the amplitude of an input signal, with an
+            external filtering, is presented hereafter.
+            •      configure VM_SEL bits as “Feedback resistor is connected to OPAMPx_VINM input”,
+                   10
+            •      configure PGA_GAIN bits as “internal Gain 2, 4, 8 or 16 with filtering on INM0”, 0100 to
+                   0111
+            •      configure VP_SEL bits as “GPIO connected to OPAMPx_VINP”.
+                   Any external connection on INM can be used in parallel with the internal PGA, for
+                   example a capacitor can be connected between opamp_out and INM for filtering
+                   purpose (see datasheet for the value of resistors used in the PGA resistor network).
+
+                                 Figure 229. PGA mode, internal gain setting (x2/x4/x8/x16),
+                                              inverting input used for filtering
+
+
+                                             STM32
+
+                                      VINP
+                                                                  +
+                                              dac_outx
+                                                                                               opamp_out
+                                     VINM0
+
+                                                                   -
+
+
+                Allows optional
+                      low-pass
+                     filtering (1)
+                                                         Equivalent to
+
+
+                                     VOUT
+
+
+                                                                                                  MSv38383V3
+
+            1. The gain depends on the cut-off frequency.
+
+
+         Programmable gain amplifier, non-inverting with external bias
+                or inverting mode
+         The procedure to use the OPAMP to amplify the amplitude of an input signal with bias
+         voltage for non-inverting mode or inverting mode.
+         •   configure VM_SEL bits as “Feedback resistor is connected to OPAMPx_VINM input”,
+             10
+         •   configure PGA_GAIN bits as “Inverting gain=-1,-3,-7,-15/ Non-inverting gain =2,4,8,16
+             with INM0”, 1000 to 1011
+         •   configure VP_SEL bits as “GPIO connected to OPAMPx_VINP”.
+
+                     Figure 230. PGA mode, non-inverting gain setting (x2/x4/x8/x16)
+                                or inverting gain setting (x-1/x-3/x-7/x-15)
+
+
+                                   STM32
+
+                           VINP
+                                                              +
+                                       dac_outx
+                                                                                                         opamp_out
+
+                         VINM0
+
+                                                              -
+
+
+             Always connected to
+                  OPAMP output
+                         VOUT
+
+
+                                                                                                                 MSv38384V4
+
+
+                                           Figure 231. Example configuration
+
+                                                                              VINP
+             VINP                  +                VOUT                                                        VOUT
+                                                                   Bias voltage                 +
+
+                                   -
+                                                              or
+                                                                   Input signal                  -
+                                                                             VINM0
+
+
+                         VINM0     VINM1                                                  VINM1
+                    Bias voltage       Gain:x2, x4, x8, x16                          Gain:x-1, x-3, x-7, x-15
+
+
+                                                                                                                 MSv38387V3
+
+
+                                                                                                                              1150
+
+
+            Programmable gain amplifier, non-inverting with external bias
+                   or inverting mode with filtering
+            The procedure to use the OPAMP to amplify the amplitude of an input signal with bias
+            voltage for non-inverting mode or inverting mode with filtering
+            •     configure VM_SEL bits as “Feedback resistor is connected to OPAMPx_VINM input”,
+                  10
+            •     configure PGA_GAIN bits as “Inverting gain=-1,-3,-7,-15/ Non-inverting gain =2,4,8,16
+                  with INM0, INM1 node for filtering”, 1100 to 1111
+            •     configure VP_SEL bits as “GPIO connected to OPAMPx_VINP”.
+                  Any external connection on VM1 can be used in parallel with the internal PGA, for
+                  example a capacitor can be connected between opamp_out and VM1 for filtering
+                  purpose (see datasheet for the value of resistors used in the PGA resistor network).
+
+                Figure 232. PGA mode, non-inverting gain setting (x2/x4/x8/x16) or inverting gain
+                                    setting (x-1/x-3/x-7/x-15) with filtering
+
+
+                                         STM32
+
+                                  VINP
+                                                                    +
+                                             dac_outx
+                                VINM1                                                                          opamp_out
+
+                                VINM0
+                                                                    -
+
+
+                    Allows optional
+                          low-pass
+                         filtering (1)
+                                              Equivalent to
+
+
+                                 VOUT
+
+
+                                                                                                                       MSv38386V4
+
+
+                                                 Figure 233. Example configuration
+
+                                                                                    VINP
+                  VINP                   +                VOUT                                                        VOUT
+                                                                         Bias voltage                 +
+
+                                         -
+                                                                    or
+                                                                         Input signal                  -
+                                                                                   VINM0
+
+
+                               VINM0     VINM1                                                  VINM1
+                         Bias voltage        Gain:x2, x4, x8, x16                          Gain:x-1, x-3, x-7, x-15
+
+
+                                                                                                                       MSv38387V3
+
+
+30.3.5   Calibration
+         The OPAMP interface continuously sends trimmed offset values to the operational
+         amplifiers. At startup, the trimming values are initialized with the preset ‘factory’ trimming
+         value.
+         Each operational amplifier can be trimmed by the user. Specific registers allow to have
+         different trimming values for normal mode and for high-speed mode.
+         The aim of the calibration is to cancel as much as possible the OPAMP inputs offset voltage.
+         The calibration circuitry allows to reduce the input offset voltage to less than +/-1.5 mV
+         within stable voltage and temperature conditions.
+         For each operational amplifier and each mode two trimming value needs to be trimmed, one
+         for N differential pair and one for P differential pair.
+         There are two registers for trimming the offsets for each operational amplifiers, one for
+         normal mode (OPAMPx_OTR) and one high-speed mode (OPAMPx_HSOTR). Each
+         register is composed of five bits for P differential pair trimming and five bits for N differential
+         pair trimming. These are the ‘user’ values.
+         The user is able to switch from ‘factory’ values to ‘user’ trimmed values using the
+         USERTRIM bit in the OPAMPx_CSR register. This bit is reset at startup and so the ‘factory’
+         value are applied by default to the OPAMP option registers.
+         User is liable to change the trimming values in calibration or in functional mode.
+         The offset trimming registers are typically configured after the calibration operation is
+         initialized by setting bit CALON to 1. When CALON = 1 the inputs of the operational
+         amplifier are disconnected from the functional environment.
+         •    Setting CALSEL to 01 initializes the offset calibration for the P differential pair (low
+              voltage reference used).
+         •    Resetting CALSEL to 11 initializes the offset calibration for the N differential pair (high
+              voltage reference used).
+         When CALON = 1, the bit CALOUT will reflect the influence of the trimming value selected
+         by CALSEL and OPAHSM. The software should increment the TRIMOFFSETN bits in the
+         OPAMP control register from 0x00 to the first value that causes the CALOUT bit to change
+         from 1 to 0 in the OPAMP register. If the CALOUT bit is reset, the offset is calibrated
+         correctly and the corresponding trimming value must be stored. The CALOUT flag needs up
+         to 1 ms after the trimming value is changed to become steady (see tOFFTRIMmax delay
+         specification in the electrical characteristics section of the datasheet).
+Note:    The closer the trimming value is to the optimum trimming value, the longer it takes to
+         stabilize (with a maximum stabilization time remaining below 1 ms in any case).
+
+                                 Table 248. Operating modes and calibration
+                                                    Control bits                               Output
+                Mode
+                                                                                                  CALOUT
+                                OPAEN       OPAHSM         CALON          CALSEL         VOUT
+                                                                                                    flag
+
+         Normal operating
+                                   1            0             0              X          analog          0
+         mode
+         High-speed mode           1            1             0              X          analog          0
+         Power down                0            X             X              X             Z            0
+
+
+                                                                                                               1150
+
+
+                             Table 248. Operating modes and calibration (continued)
+                                                      Control bits                            Output
+                     Mode
+                                                                                                   CALOUT
+                                   OPAEN      OPAHSM         CALON          CALSEL       VOUT
+                                                                                                     flag
+
+            Offset calibration N
+            difference for             1          0             1             11        analog         X
+            normal mode
+            Offset calibration P
+            difference for             1          0             1             01        analog         X
+            normal mode
+            Offset calibration N
+            difference for high-       1          1             1             11        analog         X
+            speed mode
+            Offset calibration P
+            difference for high-       1          1             1             01        analog         X
+            speed mode
+
+
+            Calibration procedure
+            Here are the steps to perform a full calibration of either one of the operational amplifiers:
+            1.   Set the OPAEN bit in OPAMPx_CSR to 1 to enable the operational amplifier.
+            2.   Set the USERTRIM bit in the OPAMPx_CSR register to 1.
+            3.   Choose a calibration mode (refer to Table 248: Operating modes and calibration). The
+                 steps 3 to 4 will have to be repeated 4 times. For the first iteration select
+                 –     Normal mode and N differential pair
+                 The above calibration mode correspond to OPAHSM=0 and CALSEL=11 in the
+                 OPAMPx_CSR register.
+            4.   Increment TRIMOFFSETN[4:0] in OPAMPx_OTR starting from 00000b until CALOUT
+                 changes to 0 in OPAMPx_CSR.
+Note:       Between the write to the OPAMPx_OTR register and the read of the CALOUT value, make
+            sure to wait for the tOFFTRIMmax delay specified in the electrical characteristics section of
+            the datasheet, to get the correct CALOUT value.
+            The commutation means that the is correctly compensated and that the corresponding trim
+            code must be saved in the OPAMPx_OTR register.
+            Repeat steps 3 to 4 for:
+            •    Normal_mode and P differential pair, CALSEL=01
+            •    High-speed mode and N differential pair
+            •    High-speed mode and P differential pair
+            If a mode is not used, it is not necessary to perform the corresponding calibration.
+            All operational amplifier can be calibrated at the same time.
+Note:       During the whole calibration phase the external connection of the operational amplifier
+            output must not pull up or down currents higher than 500 µA.
+
+
+30.4           OPAMP low-power modes
+                                   Table 249. Effect of low-power modes on the OPAMP
+                       Mode                                                  Description
+
+               Sleep                    No effect.
+               D2 Stop                  No effect, OPAMP registers content is kept.
+                                        The OPAMP registers are powered down and must be re-initialized after
+               Standby
+                                        exiting Standby.
+
+
+30.5           OPAMP PGA gain
+               When OPAMP is configured as PGA mode, it can select the gain of x2,x4,x8,x16 for non-
+               inverting mode and x-1, x-3, x-7, x-15 for inverting mode.
+               When OPAMP is configured as non-inverting mode, the Gain error can be refer to the
+               product datasheet. When it is configured as inverting mode, Gain factor is defined not only
+               the on chip feedback resistor but also the signal source output impedance. If signal source
+               output impedance is not negligible compare to the input feedback resistance of PGA, it will
+               create the gain error. Please refer to the PGA resistance value in the product datasheet.
+
+
+30.6           OPAMP registers
+               The registers of this peripheral can only be accessed by-word (32-bit).
+
+30.6.1         OPAMP1 control/status register (OPAMP1_CSR)
+               Address: 0x00
+               Reset value: 0x0000 0000
+
+  31     30       29     28      27       26     25        24    23     22       21        20   19      18     17    16
+         CAL     TST                                                                                   USER
+ Res.                    Res.    Res.    Res.   Res.      Res.   Res.   Res.    Res.     Res.   Res.           PGA_GAIN
+         OUT     REF                                                                                   TRIM
+          r       rw                                                                                    rw     rw    rw
+  15     14       13     12      11       10         9     8      7      6        5        4     3      2       1     0
+                                                          OPA                                                 FORCE
+  PGA_GAIN         CALSEL       CALON    Res.   Res.             Res.     VM_SEL         Res.     VP_SEL            OPAEN
+                                                          HSM                                                  _VP
+  rw     rw       rw     rw      rw                        rw           rw       rw             rw      rw     rw    rw
+
+
+               Bit 31 Reserved, must be kept at reset value.
+               Bit 30 CALOUT: Operational amplifier calibration output
+                      OPAMP output status flag. During the calibration mode, OPAMP is used as comparator.
+                       0: Non-inverting < inverting
+                       1: Non-inverting > inverting
+               Bit 29 TSTREF: OPAMP calibration reference voltage output control (reserved for test)
+                       0: INTVREF of OPAMP is not output
+                       1: INTVREF of OPAMP is output
+
+
+                                                                                                                            1150
+
+
+        Bits 28:19 Reserved, must be kept at reset value.
+              Bit 18 USERTRIM: User trimming enable
+                     This bit allows to switch from ‘factory’ AOP offset trimmed values to ‘user’ AOP offset trimmed
+                     values
+                     This bit is active for both mode normal and high-power.
+                       0: ‘factory’ trim code used
+                       1: ‘user’ trim code used
+        Bits 17:14 PGA_GAIN: Operational amplifier Programmable amplifier gain value
+                    0000: Non-inverting internal Gain 2, VREF- referenced
+                    0001: Non-inverting internal Gain 4, VREF- referenced
+                    0010: Non-inverting internal Gain 8, VREF- referenced
+                    0011: Non-inverting internal Gain 16, VREF- referenced
+                    0100: Non-inverting internal Gain 2 with filtering on INM0, VREF- referenced
+                    0101: Non-inverting internal Gain 4 with filtering on INM0, VREF- referenced
+                    0110: Non-inverting internal Gain 8 with filtering on INM0, VREF- referenced
+                    0111: Non-inverting internal Gain 16 with filtering on INM0, VREF- referenced
+                    1000: Inverting gain=-1/ Non-inverting gain =2 with INM0 node for input or bias
+                    1001: Inverting gain=-3/ Non-inverting gain =4 with INM0 node for input or bias
+                    1010: Inverting gain=-7/ Non-inverting gain =8 with INM0 node for input or bias
+                    1011: Inverting gain=-15/ Non-inverting gain =16 with INM0 node for input or bias
+                    1100: Inverting gain=-1/ Non-inverting gain =2 with INM0 node for input or bias, INM1 node
+                    for filtering
+                    1101: Inverting gain=-3/ Non-inverting gain =4 with INM0 node for input or bias, INM1 node
+                    for filtering
+                    1110: Inverting gain=-7/ Non-inverting gain =8 with INM0 node for input or bias, INM1 node
+                    for filtering
+                    1111: Inverting gain=-15/ Non-inverting gain =16 with INM0 node for input or bias, INM1 node
+                    for filtering
+        Bits 13:12 CALSEL: Calibration selection
+                   It is used to select the offset calibration bus used to generate the internal reference voltage
+                   when CALON = 1 or FORCE_VP= 1.
+                       00: 0.033*VDDA applied on OPAMP inputs
+                       01: 0.1*VDDA applied on OPAMP inputs (for PMOS calibration)
+                       10: 0.5*VDDA applied on OPAMP inputs
+                       11: 0.9*VDDA applied on OPAMP inputs (for NMOS calibration)
+               Bit 11 CALON: Calibration mode enabled
+                       0: Normal mode
+                       1: Calibration mode (all switches opened by HW)
+            Bits 10:9 Reserved, must be kept at reset value.
+                Bit 8 OPAHSM: Operational amplifier high-speed mode
+                      The operational amplifier must be disable to change this configuration.
+                        0: operational amplifier in normal mode
+                        1: operational amplifier in high-speed mode
+                Bit 7 Reserved, must be kept at reset value.
+
+
+           Bits 6:5 VM_SEL: Inverting input selection
+                     00: INM0 connected to OPAMP INM input
+                     01: INM1 connected to OPAMP NM input
+                     10: Feedback resistor is connected to OPAMP INM input (PGA mode), Inverting input
+                         selection is depends on the PGA_GAIN setting
+                     11: opamp_out connected to OPAMP INM input (Follower mode)
+                 Bit 4 Reserved, must be kept at reset value.
+           Bits 3:2 VP_SEL: Non inverted input selection
+                     00: GPIO connected to OPAMPx_VINP
+                     01: dac_outx connected to OPAMPx_VINP
+                     10: Reserved
+                     11: Reserved
+                 Bit 1 FORCE_VP: Force internal reference on VP (reserved for test)
+                        0: Normal operating mode. Non-inverting input connected to inputs.
+                        1: Calibration verification mode: Non-inverting input connected to calibration reference
+                        voltage.
+                 Bit 0 OPAEN: Operational amplifier Enable
+                        0: operational amplifier disabled
+                        1: operational amplifier enabled
+                       Note: If OPAMP1 is unconnected in a specific package, it must remain disabled (keep
+                             OPAMP1_CSR register default value).
+
+
+30.6.2          OPAMP1 trimming register in normal mode (OPAMP1_OTR)
+                Address: 0x04
+                Reset value: 0x0000 XXXX (factory trimmed values)
+
+  31     30         29     28     27       26        25     24    23     22     21      20     19       18    17        16
+ Res.    Res.      Res.   Res.   Res.     Res.   Res.      Res.   Res.   Res.   Res.    Res.   Res.    Res.   Res.     Res.
+
+
+  15     14         13     12     11       10        9      8      7      6      5       4      3        2        1     0
+ Res.    Res.      Res.                TRIMOFFSETP                Res.   Res.   Res.                TRIMOFFSETN
+                           rw     rw       rw        rw     rw                          rw     rw       rw        rw    rw
+
+
+          Bits 31:13 Reserved, must be kept at reset value.
+           Bits 12:8 TRIMOFFSETP[4:0]: Trim for PMOS differential pairs
+                Bits 7:5 Reserved, must be kept at reset value.
+                Bits 4:0 TRIMOFFSETN[4:0]: Trim for NMOS differential pairs
+
+
+                                                                                                                               1150
+
+
+30.6.3            OPAMP1 trimming register in high-speed mode (OPAMP1_HSOTR)
+                  Address: 0x08
+                  Reset value: 0x0000 XXXX (factory trimmed values)
+
+  31     30          29     28     27     26     25       24    23     22     21     20     19      18     17      16
+ Res.    Res.       Res.   Res.    Res.   Res.   Res.    Res.   Res.   Res.   Res.   Res.   Res.   Res.    Res.   Res.
+
+
+  15     14          13     12     11     10      9       8        7    6      5      4      3      2       1      0
+ Res.    Res.       Res.            TRIMHSOFFSETP               Res.   Res.   Res.           TRIMHSOFFSETN
+                            rw     rw     rw     rw       rw                         rw     rw      rw     rw      rw
+
+
+            Bits 31:13 Reserved, must be kept at reset value.
+                Bits 12:8 TRIMHSOFFSETP[4:0]: High-speed mode trim for PMOS differential pairs
+                 Bits 7:5 Reserved, must be kept at reset value.
+                 Bits 4:0 TRIMHSOFFSETN[4:0]: High-speed mode trim for NMOS differential pairs
+
+30.6.4            OPAMP option register (OPAMP_OR)
+                  Address: 0x0C
+                  Reset value: 0x0000 0000
+
+  31     30          29     28     27     26     25       24    23     22     21     20     19      18     17      16
+ Res.    Res.       Res.   Res.    Res.   Res.   Res.    Res.   Res.   Res.   Res.   Res.   Res.   Res.    Res.   Res.
+
+
+  15     14          13     12     11     10      9       8        7    6      5      4      3      2       1      0
+ Res.    Res.       Res.   Res.    Res.   Res.   Res.    Res.   Res.   Res.   Res.   Res.   Res.   Res.    Res.   Res.
+
+
+                Bits 31:0 Reserved, must be kept at reset value.
+
+
+30.6.5            OPAMP2 control/status register (OPAMP2_CSR)
+                  Address: 0x10
+                  Reset value: 0x0000 0000
+
+  31     30          29     28     27     26     25       24    23     22     21     20     19      18     17      16
+         CAL        TST                                                                            USER
+ Res.                      Res.    Res.   Res.   Res.    Res.   Res.   Res.   Res.   Res.   Res.            PGA_GAIN
+         OUT        REF                                                                            TRIM
+            r        rw                                                                             rw     rw      rw
+  15     14          13     12     11     10      9       8        7    6      5      4      3      2       1      0
+                                                         OPA                                              FORCE
+  PGA_GAIN            CALSEL      CALON   Res.   Res.           Res.     VM_SEL      Res.     VP_SEL            OPAEN
+                                                         HSM                                               _VP
+  rw     rw          rw     rw     rw                     rw           rw     rw            rw      rw     rw      rw
+
+
+             Bit 31 Reserved, must be kept at reset value.
+             Bit 30 CALOUT: Operational amplifier calibration output
+                    OPAMP output status flag. During the calibration mode, OPAMP is used as comparator.
+                     0: Non-inverting < inverting
+                     1: Non-inverting > inverting
+             Bit 29 TSTREF: OPAMP calibration reference voltage output control (reserved for test)
+                      0: INTVREF of OPAMP is not output
+                      1: INTVREF of OPAMP is output
+         Bits 28:19 Reserved, must be kept at reset value.
+             Bit 18 USERTRIM: User trimming enable
+                    This bit allows to switch from ‘factory’ AOP offset trimmed values to ‘user’ AOP offset trimmed
+                    values
+                    This bit is active for both mode normal and high-power.
+                      0: ‘factory’ trim code used
+                      1: ‘user’ trim code used
+         Bits 17:14 PGA_GAIN: Operational amplifier Programmable amplifier gain value
+                     0000: Non-inverting internal Gain 2, VREF- referenced
+                     0001: Non-inverting internal Gain 4, VREF- referenced
+                     0010: Non-inverting internal Gain 8, VREF- referenced
+                     0011: Non-inverting internal Gain 16, VREF- referenced
+                     0100: Non-inverting internal Gain 2 with filtering on INM0, VREF- referenced
+                     0101: Non-inverting internal Gain 4 with filtering on INM0, VREF- referenced
+                     0110: Non-inverting internal Gain 8 with filtering on INMINM0, VREF- referenced
+                     0111: Non-inverting internal Gain 16 with filtering on INM0, VREF- referenced
+                     1000: Inverting gain=-1/ Non-inverting gain =2 with INM0 node for input or bias
+                     1001: Inverting gain=-3/ Non-inverting gain =4 with INM0 node for input or bias
+                     1010: Inverting gain=-7/ Non-inverting gain =8 with INM0 node for input or bias
+                     1011: Inverting gain=-15/ Non-inverting gain =16 with INM0 node for input or bias
+                     1100: Inverting gain=-1/ Non-inverting gain =2 with INM0 node for input or bias, INM1 node
+                     for filtering
+                     1101: Inverting gain=-3/ Non-inverting gain =4 with INM0 node for input or bias, INM1 node
+                     for filtering
+                     1110: Inverting gain=-7/ Non-inverting gain =8 with INM0 node for input or bias, INM1 node
+                     for filtering
+                     1111: Inverting gain=-15/ Non-inverting gain =16 with INM0 node for input or bias, INM1
+                     node for filtering
+         Bits 13:12 CALSEL: Calibration selection
+                    It is used to select the offset calibration bus used to generate the internal reference voltage
+                    when CALON = 1 or FORCE_VP= 1.
+                        00: 0.033*VDDA applied on OPAMP inputs
+                        01: 0.1*VDDA applied on OPAMP inputs (for PMOS calibration)
+                        10: 0.5*VDDA applied on OPAMP inputs
+                        11: 0.9*VDDA applied on OPAMP inputs (for NMOS calibration)
+             Bit 11 CALON: Calibration mode enabled
+                     0: Normal mode
+                     1: Calibration mode (all switches opened by HW)
+          Bits 10:9 Reserved, must be kept at reset value.
+
+
+                                                                                                                       1150
+
+
+                  Bit 8 OPAHSM: Operational amplifier high-speed mode
+                        The operational amplifier must be disable to change this configuration.
+                          0: operational amplifier in normal mode
+                          1: operational amplifier in high-speed mode
+                  Bit 7 Reserved, must be kept at reset value.
+                Bits 6:5 VM_SEL: Inverting input selection
+                          00: INM0 connected to OPAMP INM input
+                          01: INM1 connected to OPAMP INM input
+                          10: Feedback resistor is connected to OPAMP INM input (PGA mode), Inverting input
+                              selection is depends on the PGA_GAIN setting
+                          11: opamp_out connected to OPAMP INM input (Follower mode)
+                  Bit 4 Reserved, must be kept at reset value.
+                Bits 3:2 VP_SEL: Non inverted input selection
+                          00: GPIO connected to OPAMPx_VINP
+                          01: DAC connected to OPAMPx_VINP
+                          10: Reserved
+                          11: Reserved
+                  Bit 1 FORCE_VP: Force internal reference on VP (reserved for test)
+                         0: Normal operating mode. Non-inverting input connected to inputs.
+                         1: Calibration verification mode: Non-inverting input connected to calibration reference
+                         voltage.
+                  Bit 0 OPAEN: Operational amplifier Enable
+                         0: operational amplifier disabled
+                         1: operational amplifier enabled
+                        Note: If OPAMP2 is unconnected in a specific package, it must remain disabled (keep
+                              OPAMP2_CSR register default value).
+
+
+30.6.6          OPAMP2 trimming register in normal mode (OPAMP2_OTR)
+                Address: 0x14
+                Reset value: 0x0000 XXXX (factory trimmed values)
+
+  31     30         29     28     27       26        25     24    23     22     21     20     19       18    17          16
+ Res.    Res.      Res.   Res.   Res.     Res.   Res.      Res.   Res.   Res.   Res.   Res.   Res.    Res.   Res.       Res.
+
+
+  15     14         13     12     11       10        9      8      7      6      5      4      3        2        1       0
+ Res.    Res.      Res.                TRIMOFFSETP                Res.   Res.   Res.               TRIMOFFSETN
+                           rw     rw       rw        rw     rw                         rw     rw       rw        rw      rw
+
+
+            Bits 31:13 Reserved, must be kept at reset value.
+             Bits 12:8 TRIMOFFSETP[4:0]: Trim for PMOS differential pairs
+                Bits 7:5 Reserved, must be kept at reset value.
+                Bits 4:0 TRIMOFFSETN[4:0]: Trim for NMOS differential pairs
+
+
+30.6.7          OPAMP2 trimming register in high-speed mode (OPAMP2_HSOTR)
+                Address: 0x18
+                Reset value: 0x0000 XXXX (factory trimmed values)
+
+  31     30         29     28     27     26     25      24    23      22     21      20     19     18     17      16
+ Res.    Res.      Res.   Res.   Res.   Res.   Res.    Res.   Res.    Res.   Res.    Res.   Res.   Res.   Res.   Res.
+
+
+  15     14         13     12     11     10      9      8         7    6      5       4      3      2      1      0
+ Res.    Res.      Res.            TRIMHSOFFSETP              Res.    Res.   Res.            TRIMHSOFFSETN
+                           rw     rw     rw     rw      rw                           rw     rw     rw     rw      rw
+
+
+          Bits 31:13 Reserved, must be kept at reset value.
+           Bits 12:8 TRIMHSOFFSETP[4:0]: High-speed mode trim for PMOS differential pairs
+                Bits 7:5 Reserved, must be kept at reset value.
+                Bits 4:0 TRIMHSOFFSETN[4:0]: High-speed mode trim for NMOS differential pairs
+
+
+                                                                                                                         1150
+                                                                                                                                  0x18
+                                                                                                                                                                0x14
+                                                                                                                                                                                                 0x10
+                                                                                                                                                                                                                                                         0x08
+                                                                                                                                                                                                                                                                                       0x04
+                                                                                                                                                                                                                                                                                                                        0x00
+
+
+                                                                                                                                                                                                                              0x0C
+                                                                                                                                                                                                                                                                                                                                         Offset
+                                                                                                                                                                                                                                                                                                                                                                                                   30.6.8
+
+
+                                                                                                                                                                                                                                                                                                                                        name
+
+
+                                                                                                                                    HSOTR
+                                                                                                                                                                                                                                                           HSOTR
+
+
+                                                                                                                                   OPAMP2_
+                                                                                                                                                                                                                                                          OPAMP1_
+                                                                                                                                                                                                                                                                                                                                       Register
+
+
+                                                                                                                    Reset value
+                                                                                                                                                  Reset value
+                                                                                                                                                                                                                Reset value
+                                                                                                                                                                                                                                           Reset value
+                                                                                                                                                                                                                                                                         Reset value
+
+
+                                                                                                                                                                                 Reset value
+                                                                                                                                                                                                                                                                                                        Reset value
+
+
+                                                                                                                                                                                                                                OPAMP_OR
+
+
+                                                                                                                                                                    OPAMP2_OTR
+                                                                                                                                                                                                   OPAMP2_CSR
+                                                                                                                                                                                                                                                                                           OPAMP1_OTR
+                                                                                                                                                                                                                                                                                                                          OPAMP1_CSR
+                                                                                                                                   Res.                          Res.                             Res.                         Res.                       Res.                          Res.                             Res.           31
+
+
+                                                                                       1. Factory trimmed values.
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+                                                                                                                                   Res.                          Res.                          CALOUT                          Res.                       Res.                          Res.                          CALOUT            30
+
+
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+                                                                                                                                   Res.                          Res.                           TSTREF                         Res.                       Res.                          Res.                           TSTREF           29
+                                                                                                                                   Res.                          Res.                             Res.                         Res.                       Res.                          Res.                             Res.           28
+                                                                                                                                   Res.                          Res.                             Res.                         Res.                       Res.                          Res.                             Res.           27
+                                                                                                                                                                                                                                                                                                                                                                                                                        Operational amplifiers (OPAMP)
+
+
+                                                                                                                                   Res.                          Res.                             Res.                         Res.                       Res.                          Res.                             Res.           26
+                                                                                                                                   Res.                          Res.                             Res.                         Res.                       Res.                          Res.                             Res.           25
+                                                                                                                                                                                                                                                                                                                                                                                                   OPAMP register map
+
+
+                                                                                                                                   Res.                          Res.                             Res.                         Res.                       Res.                          Res.                             Res.           24
+                                                                                                                                   Res.                          Res.                             Res.                         Res.                       Res.                          Res.                             Res.           23
+                                                                                                                                   Res.                          Res.                             Res.                         Res.                       Res.                          Res.                             Res.           22
+                                                                                                                                   Res.                          Res.                             Res.                         Res.                       Res.                          Res.                             Res.           21
+                                                                                                                                   Res.                          Res.                             Res.                         Res.                       Res.                          Res.                             Res.           20
+                                                                                                                                   Res.                          Res.                             Res.                         Res.                       Res.                          Res.                             Res.           19
+
+
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                   Res.                          Res.                          USERTRIM                        Res.                       Res.                          Res.                          USERTRIM          18
+
+
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                   Res.                          Res.                                                          Res.                       Res.                          Res.
+
+
+RM0399 Rev 4
+                                                                                                                                                                                                                                                                                                                                        17
+
+
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                   Res.                          Res.                                                          Res.                       Res.                          Res.                                            16
+                                                                                                                                                                                               PGA_GAIN                                                                                                               PGA_GAIN
+
+
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                   Res.                          Res.                                                          Res.                       Res.                          Res.                                            15
+
+
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                   Res.                          Res.                                                          Res.                       Res.                          Res.                                            14
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                   Res.                          Res.                                                          Res.                       Res.                          Res.                                            13
+                                                                                                                                                                                 0              CALSEL                                                                                                                 CALSEL
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                                                                                                               Res.                                                                                                     12
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                                                                                CALON                          Res.                                                                                    CALON            11
+
+
+                                                                                                                       (1)
+                                                                                                                                                     (1)
+                                                                                                                                                                                                                                              (1)
+                                                                                                                                                                                                                                                                            (1)
+
+
+                                                                                                                                                                                                  Res.                         Res.                                                                                      Res.
+                                                                                                                                                                                                                                                                                                                                                  Table 250. OPAMP register map and reset values
+
+
+                                                                                                                                                                                                                                                                                                                                        10
+                                                                                                                                                                    TRIM
+                                                                                                                                                                                                                                                                                           TRIM
+
+
+                                                                                                                                     TRIMHS
+                                                                                                                                                                                                                                                            TRIMHS
+
+
+                                                                                                                                                                                                  Res.                         Res.                                                                                      Res.            9
+                                                                                                                                   OFFSETP[4:0]
+                                                                                                                                                                 OFFSETP[4:0]
+                                                                                                                                                                                                                                                          OFFSETP[4:0]
+                                                                                                                                                                                                                                                                                        OFFSETP[4:0]
+
+
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                                                                               OPAHSM                          Res.                                                                                   OPAHSM
+
+
+               Refer to Section 2.3 on page 134 for the register boundary addresses.
+                                                                                                                                                                                                                                                                                                                                         8
+                                                                                                                                   Res.                          Res.                             Res.                         Res.                       Res.                          Res.                             Res.            7
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                   Res.                          Res.                                                          Res.                       Res.                          Res.                                             6
+                                                                                                                                                                                                VM_SEL                                                                                                                 VM_SEL
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                   Res.                          Res.                                                          Res.                       Res.                          Res.                                             5
+                                                                                                                                                                                                  Res.                         Res.                                                                                      Res.            4
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                                                                                                               Res.                                                                                                      3
+                                                                                                                                                                                                VP_SEL                                                                                                                 VP_SEL
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                       (1)
+                                                                                                                                                     (1)
+                                                                                                                                                                                                                                              (1)
+                                                                                                                                                                                                                                                                            (1)
+
+
+                                                                                                                                                                                                                               Res.                                                                                                      2
+                                                                                                                                                                    TRIM
+                                                                                                                                                                                                                                                                                           TRIM
+
+
+                                                                                                                                     TRIMHS
+                                                                                                                                                                                                                                                            TRIMHS
+
+
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                                                                               FORCE_VP                        Res.                                                                                   FORCE_VP           1
+                                                                                                                                   OFFSETN[4:0]
+                                                                                                                                                                 OFFSETN[4:0]
+                                                                                                                                                                                                                                                          OFFSETN[4:0]
+                                                                                                                                                                                                                                                                                        OFFSETN[4:0]
+
+
+                                                                                                                                                                                 0
+                                                                                                                                                                                                                                                                                                        0
+
+
+                                                                                                                                                                                                OPAEN                          Res.                                                                                    OPAEN
+
+
+                                                                                                                                                                                                                                                                                                                                         0

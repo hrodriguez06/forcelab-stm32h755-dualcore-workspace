@@ -1,0 +1,24 @@
+# Normalise line endings once, here, at the initial commit. Doing it later
+# rewrites every file in the index and buries a real change in the noise.
+* text=auto
+
+# Shell scripts must be LF whatever the host: CRLF makes a POSIX shell fail
+# with "bad interpreter".
+*.sh        text eol=lf
+*.py        text eol=lf
+
+# PowerShell is happiest with CRLF on Windows, which is the only place these run.
+*.ps1       text eol=crlf
+
+# Linker scripts, startup assembly and CMake are plain text everywhere.
+*.ld        text
+*.s         text
+*.cmake     text
+
+# Never normalise these, even though most are gitignored - a stray one must not
+# be corrupted by EOL translation.
+*.pdf       binary
+*.bin       binary
+*.hex       binary
+*.elf       binary
+*.ioc       text eol=lf

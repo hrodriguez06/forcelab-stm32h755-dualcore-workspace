@@ -1,0 +1,24 @@
+{
+  "folders": [
+    {
+      "name": "00_Docs: STM32H755 Master Reference Hub",
+      "path": "00_docs_stm32h7"
+    },
+    {
+      "name": "01_Templates: Dual-Core Template",
+      "path": "01_firmware_templates/prj_01_template_dualcore"
+    }
+  ],
+  "settings": {
+    "files.associations": {
+      "*.ld": "c",
+      "*.cfg": "tcl",
+      "*.s": "arm"
+    },
+    "search.exclude": {
+      "**/build/**": true,
+      "**/.git/**": true,
+      "**/docs/01_drivers_and_hal/STM32CubeH7/Projects/**": true
+    }
+  }
+}
