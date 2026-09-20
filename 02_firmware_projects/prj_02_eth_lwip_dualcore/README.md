@@ -199,11 +199,19 @@ That covers the data path in both directions, across the whole size range and
 under buffer pressure: descriptors in non-cacheable SRAM3, the nine RMII
 signals, and the recycling of both pools.
 
-> [!NOTE]
-> The size sweep and the burst were driven by a throwaway script, not by
-> anything in this repository. `ping` and a few `nc`-style datagrams
-> reproduce the first two rows; reproducing the burst means writing the loop
-> again.
+All of it is one command, and it reads the address out of `net_config.h`:
+
+```powershell
+py tools/net_check.py                    # ping, size sweep, burst of 100
+py tools/net_check.py --burst 500        # lean harder on buffer recycling
+py tools/net_check.py --host 10.0.0.42   # when the board took a DHCP lease
+```
+
+It exits non-zero when a check fails, so it works in a script. It only drives
+the host side, though: pair it with `py tools/monitor.py --timeout 15` and
+confirm `rx_nobuf`, `tx_nobuf` and `dma_err` are still `0` there. Both ends
+agreeing is what rules out the host having talked to something else on the
+segment.
 
 ### Not covered here
 

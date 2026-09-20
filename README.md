@@ -42,6 +42,7 @@ stm32h755/                                       # Workspace Root [GIT REPO - se
 │   ├── env.ps1                                  # Resolves the CubeIDE/CubeCLT toolchain onto $env:PATH
 │   ├── flash.py                                 # Dual-core flasher (STM32CubeProgrammer / OpenOCD)
 │   ├── monitor.py                               # Follows the console on the ST-LINK VCP, no dependencies
+│   ├── net_check.py                             # Drives ICMP + UDP echo at a running board, exits non-zero on failure
 │   ├── openocd/stm32h755_dualcore.cfg           # Board config; ST ships none for this Nucleo
 │   ├── init_cube_submodule.ps1                  # Restores the STM32CubeH7 submodule (partial + sparse)
 │   └── sync_docs_cube.ps1                       # Rebuilds the greppable Cube mirror in the docs hub

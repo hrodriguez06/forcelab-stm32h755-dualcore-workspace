@@ -175,7 +175,8 @@ prj_01_template_dualcore/
 └── tools/                       # shims onto <workspace>/tools/
     ├── env.ps1                  # toolchain onto PATH
     ├── flash.py                 # flashes CPU1/CPU2, reads option bytes
-    └── monitor.py               # follows the console on the ST-LINK VCP
+    ├── monitor.py               # follows the console on the ST-LINK VCP
+    └── net_check.py              # ICMP + UDP echo against a running board
 ```
 
 No `Custom_Drivers/` here: CPU1 links `stm32h7_driver_led` and
