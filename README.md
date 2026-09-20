@@ -38,7 +38,7 @@ stm32h755/                                       # Workspace Root [GIT REPO - se
 ├── .gitignore                                   # Excludes build output, PDFs and vendored checkouts
 ├── .gitattributes                               # Line-ending policy, fixed at the initial commit
 │
-├── tools/                                       # Every executable in the workspace, one copy each
+├── tools/                                       # PRODUCT-INDEPENDENT executables only, one copy each
 │   ├── env.ps1                                  # Resolves the CubeIDE/CubeCLT toolchain onto $env:PATH
 │   ├── flash.py                                 # Dual-core flasher (STM32CubeProgrammer / OpenOCD)
 │   ├── monitor.py                               # Follows the console on the ST-LINK VCP, no dependencies
@@ -46,8 +46,10 @@ stm32h755/                                       # Workspace Root [GIT REPO - se
 │   ├── openocd/stm32h755_dualcore.cfg           # Board config; ST ships none for this Nucleo
 │   ├── init_cube_submodule.ps1                  # Restores the STM32CubeH7 submodule (partial + sparse)
 │   └── sync_docs_cube.ps1                       # Rebuilds the greppable Cube mirror in the docs hub
-│                                                # Projects reach the first three through tools/ shims,
-│                                                # so `py tools/flash.py` still works from a project
+│                                                # Projects reach the first four through tools/ shims,
+│                                                # so `py tools/flash.py` still works from a project.
+│                                                # A script that knows ONE project's protocol does NOT
+│                                                # belong here - see "Where a script belongs" below
 │
 ├── 00_docs_stm32h7/                             # [IMMUTABLE] Master Hardware & Knowledge Hub
 │   ├── CLAUDE.md                                # Core programming rules, errata, cache & DMA constraints
@@ -116,6 +118,8 @@ stm32h755/                                       # Workspace Root [GIT REPO - se
 │
 ├── 02_firmware_projects/                        # Active product firmware
 │   ├── prj_02_eth_lwip_dualcore/                # Dual-core Ethernet / lwIP node (shared drivers)
+│   ├── prj_03_adc_dma_eth/                      # ADC1+DMA1 on CM4, UDP telemetry + DSO on CM7
+│   │   └── tools/                               # 4 shims + 2 PROJECT-OWNED scripts, see below
 │   └── prj_eth_lwip_node/                       # Ethernet / lwIP node on CPU1
 │       └── external/STM32CubeH7/                # [SUBMODULE] shared by every project
 │
@@ -123,11 +127,75 @@ stm32h755/                                       # Workspace Root [GIT REPO - se
     └── prj_01_template_dualcore/                # Dual-core CMake template, both cores build
 ```
 
+### Where a script belongs
+
+`<workspace>/tools/` is **not** "every executable in the workspace". It is the
+place for executables that are **product-independent**, and the rule is a single
+question:
+
+> Does this script need to know what a particular firmware does, beyond "it is an
+> H755 on this Nucleo"?
+
+**No** → `<workspace>/tools/`, one copy, reached from each project through a
+three-line shim. `flash.py` programs two flash banks, `monitor.py` follows the
+ST-LINK VCP, `net_check.py` pings and bounces a UDP echo, `env.ps1` puts the
+toolchain on `$PATH`. None of them care which product is running. Centralising
+these is what commit `32a08d5` was for: their copies had drifted for weeks.
+
+**Yes** → `<project>/tools/`, the real implementation, **no shim**. The moment a
+script parses a project's telemetry format, unpacks one of its structs, or sends
+its commands, it is part of that product and it belongs beside it.
+
+The worked example is `prj_03_adc_dma_eth`. Its `tools/adc_dashboard.py` carries a
+`struct.unpack()` string that has to match `WaveformHeader_t` in
+`CM7/App/Src/adc_server.c` field for field, and `tools/query_adc.py` decodes that
+firmware's JSON keys. Hoisting those two into `<workspace>/tools/` looks tidy and
+is the wrong move twice over: it puts both ends of a byte-level contract in
+different trees where no reviewer sees them together, and it hands the next
+project a "shared" tool that only speaks one product's protocol. Centralisation
+fixes drift **between copies of the same thing**. Two files that must change
+together are not copies, and separating them manufactures exactly the drift the
+rule was written to prevent.
+
+Same test, same answer as `01_shared_drivers/` versus a project's
+`Custom_Drivers/` in section 11 stage 3: generic goes to the centre, specific
+stays with the product.
+
+#### Reading a project file does not make a script project-specific
+
+`flash.py` and `net_check.py` both read files out of a project - `net_config.h`
+for the board address, the project root to find `build/` - and they still belong
+in `<workspace>/tools/`. The line is not *whether* a script touches the project,
+it is **what kind of thing it depends on**:
+
+| | Depends on | Changing project… | Lives in |
+| :--- | :--- | :--- | :--- |
+| **Convention** | A shape the workspace guarantees for every project: a `net_config.h` with those macro names, the same `build/` layout, two flash banks | …does not change the script | `<workspace>/tools/` |
+| **Protocol** | A byte-level contract one firmware defines: JSON key sets, the 48-byte `WaveformHeader_t`, UDP command words | …breaks the script, silently | `<project>/tools/` |
+
+A convention is a promise the workspace makes to the script. A protocol is a
+promise one firmware makes, and only that firmware keeps it.
+
+> [!IMPORTANT]
+> **Do not add project-specific tools to `<workspace>/tools/`. Ever.**
+>
+> Not "temporarily", not "for now until a second project needs it", and not
+> because the folder is where scripts usually go. If it speaks one product's
+> protocol, it goes in that product's `tools/` the first time it is written -
+> moving it later means moving a contract that has already drifted.
+>
+> A script arriving in `<workspace>/tools/` must answer the question at the top
+> of this section with **no**. If the answer is *"yes, but it is the only
+> project that does this so far"*, the answer is still yes, and the file still
+> belongs in the project. Genericity is demonstrated by a second consumer, not
+> predicted by the first.
+
 ### Status of each tree
 
 | Tree | Cores | Drivers | Build | Hardware |
 | :--- | :--- | :--- | :--- | :--- |
 | `prj_02_eth_lwip_dualcore` | CM7 + CM4 | links `01_shared_drivers` | 0 warnings | 2026-09-20 at `784febb`, its README section 6 |
+| `prj_03_adc_dma_eth` | CM7 + CM4 | links `01_shared_drivers` (incl. `07_adc`) | 0 warnings, `-Werror` on | **not yet** - see its `docs/ADC_BRINGUP.md` |
 | `prj_eth_lwip_node` | CM7 only | own `Custom_Drivers/` | 0 warnings | its README, "Verified on hardware" |
 | `prj_01_template_dualcore` | CM7 + CM4 | links `01_shared_drivers` | 0 warnings | `d178009`, which predates the move to the shared drivers |
 
@@ -267,7 +335,10 @@ prj_01_template_dualcore/
 │       ├── spi_ll.h   / spi_ll.c
 │       └── spi_bm.h   / spi_bm.c
 │
-└── tools/                              # Shims onto <workspace>/tools/, three lines each
+└── tools/                              # Shims for the generic scripts, three lines
+    │                                   # each; a product's OWN scripts live here
+    │                                   # in full, with no shim. See "Where a
+    │                                   # script belongs" in section 2
     ├── env.ps1                         # Toolchain onto $env:PATH
     ├── flash.py                        # Dual-core flasher (STM32CubeProg / OpenOCD)
     └── monitor.py                      # Follows the USART3 log on the ST-LINK VCP
