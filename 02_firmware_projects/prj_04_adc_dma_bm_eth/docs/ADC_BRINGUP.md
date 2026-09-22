@@ -197,15 +197,29 @@ This programs:
 ```powershell
 py tools/monitor.py
 ```
-Expected output:
+Expected output, captured verbatim from a board booting this firmware:
 ```
-[BOOT] Cortex-M7 boot sequence started...
-[RCC] System clock: 400 MHz, HCLK: 200 MHz, PLL2P (ADC): 25 MHz
-[IPC] Shared memory initialized at 0x38008000. Releasing CM4...
-[NET] Ethernet link up (100 Mbps Full Duplex)
-[NET] IP assigned: 192.168.1.150
-[ADC] UDP telemetry server listening on port 5001
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[net] starting TCP/IP stack
+[net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[net] mac=02:00:00:00:00:01 phy_addr=0
+[phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[net] udp echo listening on port 7
+[adc_srv] listening on UDP port 5001
+[ipc] m7=1 m4=1  (CPU2 alive)
+[phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[net] link up: 100 Mbps full duplex
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
 ```
+The PHY is logged twice on purpose: the first line is the link before
+auto-negotiation has finished, with an empty `partner advertised`, and the second is
+the same registers once it has. A board that never prints the second pair has a cable
+or a PHY problem, not a firmware one.
 
 ### Step 5: Validate UDP Queries
 ```powershell
@@ -234,6 +248,92 @@ Open `http://127.0.0.1:8080` to observe the live real-time waveform and telemetr
 
 ## 6. Security Note: UDP Services & Amplification Vector
 
-The diagnostic UDP services (Echo on port 7, ADC Telemetry and Waveform on port 5001) respond to incoming datagrams without source IP filtering or authentication:
-- **Amplification Risk**: Sending a 4-byte ASCII command (`WAVE`) triggers an immediate 1072-byte binary response containing the complete 512-sample waveform buffer (~268x bandwidth amplification).
-- **Deployment Recommendation**: On untrusted or public networks, restrict access using upstream firewall rules, VLAN isolation, or implement source IP allowlisting / HMAC token verification in `adc_server.c`.
+Both diagnostic services - echo on port 7, telemetry and waveform on port 5001 - answer
+without authentication, and the waveform reply is large: a 4-byte `WAVE` command returns
+1080 bytes, roughly 270x amplification. Left open, the board is a usable reflector, and
+the echo service is one by definition.
+
+The services therefore answer only sources on the interface's own subnet.
+`NET_ACL_MODE` in `CM7/App/Inc/net_config.h` selects the policy:
+
+| Value | Behaviour |
+| :--- | :--- |
+| `NET_ACL_ANY` | Answer any source. The original behaviour, for a debugging session. |
+| `NET_ACL_SAME_SUBNET` | Answer only sources on this interface's subnet. **Default.** |
+
+The subnet is read from the live netif rather than restated in the header, so it follows
+DHCP and the static fallback with nothing to keep in step. An interface that has no
+address yet has a zero netmask, which would otherwise match every source; that case
+refuses instead.
+
+**This is not a security boundary.** A source address is trivially spoofed, and anything
+on the subnet is still answered. What it removes is the board's value as an off-link
+amplifier, without a list of hosts to maintain. On an untrusted network keep using
+upstream firewall rules or VLAN isolation, and add a token check in `adc_server.c` if the
+telemetry itself is worth protecting.
+
+**If queries stop working after a network change, suspect this first.** The first refusal
+logs the address it came from, and every refusal is counted as `acl_drop` in the periodic
+`[net]` status line. ICMP is untouched, so `ping` remains the first reachability check.
+
+---
+
+## 7. Hardware Validation Record
+
+Run against a NUCLEO-H755ZI-Q flashed from this tree with `py tools/flash.py --core both`.
+The banner reports silicon revision `0x2003`, Rev V - the branch `ADC_BM_BOOST_AUTO`
+resolves to the `ker_ck / 2` boost table. The Rev Y path stays unexercised for want of
+the silicon.
+
+### A. Acquisition, telemetry and the WAVE header
+
+| Check | Result |
+| :--- | :--- |
+| Text reply | `ADC1_CH5 [PB1 [A3]]: ... err=0, ovr=0, adc_ovr=0, m4_hb=453` |
+| JSON reply | `{"ch":5,...,"err":0,"ovr":0,"adc_ovr":0,"m4_hb":502}` |
+| WAVE packet | 1080 B, `version=1`, `header_len=56`, `num_samples=512`, `vref=3300` |
+| Dashboard `/api/samples` | `adc_ovr` present with a value, 512 waveform samples served |
+| Sustained rate | `samples` 5,208,064 -> 5,463,552 in 0.5 s, about 511 kSPS |
+| Error counters | `err`, `ovr` and `adc_ovr` all 0 across ~5 M samples |
+
+A `ch` field reading nonsense - `351272992` was seen once - is the signature of CPU1 and
+CPU2 disagreeing about `SharedAdcData_t`, which means one core was reflashed and the
+other was not. `shared_memory.h` warns about it in its own header; this is what it looks
+like from the outside. Flash both.
+
+An old firmware answering a current tool is rejected rather than misread:
+
+```
+ERROR: firmware speaks WAVE v41248, this tool speaks v1 - reflash or update the tool
+```
+
+`41248` is `0xA120`, the low half of 500000: the parser read `version` at offset 4 and
+found `sampling_rate_hz`, because that board was still emitting the 48-byte header. The
+predecessor of this tool drew those bytes as signal instead.
+
+### B. Source filter, both halves
+
+The accept path is easy: query from a host on the board's subnet, get an answer, watch
+`acl_drop` stay at 0. The refuse path deserves a procedure, because a timeout on its own
+proves nothing - routing, a host firewall and the filter are indistinguishable from
+outside. The console counter is what separates them.
+
+With no second subnet to hand, invert the problem and make *every* source off-subnet:
+
+1. Set `NET_STATIC_NETMASK3` to `255` in `CM7/App/Inc/net_config.h` (a /32 netmask).
+2. Rebuild and flash **CM7 only** - that header does not reach the CM4 image.
+3. Attach `py tools/monitor.py` and query from anywhere.
+
+| Netmask | Query | `rx` / `tx` | `acl_drop` |
+| :--- | :--- | :--- | :--- |
+| `255.255.255.0` | answered | 1612 / 1603, tracking 1:1 | 0, flat over nine status lines |
+| `255.255.255.255` | times out | 37 / 1, tx frozen | 6 -> 16 -> 26 -> 36, tracking `rx` |
+
+And exactly once, on the first refusal:
+
+```
+[net] source filter: dropped a UDP request from 192.168.1.114, which is not on 192.168.1.150's subnet - see NET_ACL_MODE in net_config.h
+```
+
+Then revert the netmask, rebuild, and flash CM7 again. Do not commit the /32: it is a
+test fixture, not a configuration.
