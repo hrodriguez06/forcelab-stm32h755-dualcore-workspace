@@ -10,7 +10,7 @@ Features:
   - Interactive Trigger Controls: AUTO / NORMAL modes, Rising / Falling slope, Auto 50% or manual level slider.
   - Visual Trigger Markers: Horizontal trigger level line (T ▶) and vertical trigger point pointer (▼ T).
   - Real-Time Digital Measurements: Vpp, Vmax, Vmin, Frequency (kHz), Duty Cycle (%), Timebase.
-  - Background UDP poller querying board via binary WAVE protocol (1076 bytes).
+  - Background UDP poller querying board via binary WAVE protocol (1080 bytes).
   - Rolling 60-second voltage trend, DMA health, overrun counter, and dual-core heartbeat.
 
 This script lives inside the project, NOT in <workspace>/tools/, and it has no
@@ -42,13 +42,20 @@ WAVE_VERSION = 1
 # change together; that is why this file lives in the project and not in
 # <workspace>/tools/ (see "Where a script belongs" in the workspace README).
 #
-# Contract: `version` covers the layout of the fields below. Appending new
+# Contract: `version` covers the layout of the core fields below. Appending new
 # fields only grows `header_len` and leaves `version` alone, so a parser that
 # locates the samples at `header_len` - as this one does - keeps working against
 # newer firmware. Changing or reordering an existing field bumps `version`.
-WAVE_HEADER_FMT = "<IHHIHHIHHHHIIIIII"
-WAVE_HEADER_LEN = 52
-assert struct.calcsize(WAVE_HEADER_FMT) == WAVE_HEADER_LEN
+#
+# Conversely, only the core is required: a field appended later is read when
+# `header_len` reaches it and reported as absent when it does not, so this tool
+# still works against firmware older than itself.
+WAVE_CORE_FMT = "<IHHIHHIHHHHIIIIII"   # fields present since version 1
+WAVE_CORE_LEN = 52
+assert struct.calcsize(WAVE_CORE_FMT) == WAVE_CORE_LEN
+
+WAVE_OFF_ADC_OVR = 52                  # uint32 adc_overrun_count, appended after v1
+WAVE_LEN_WITH_ADC_OVR = 56
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="es">
@@ -795,7 +802,8 @@ HTML_PAGE = """<!DOCTYPE html>
 
         document.getElementById("valSamples").textContent = Number(lat.samples || 0).toLocaleString();
         document.getElementById("valDmaCounters").textContent =
-          "DMA TC: " + (lat.tc || 0) + " | Err: " + (lat.err || 0) + " | Overrun: " + (lat.ovr || 0);
+          "DMA TC: " + (lat.tc || 0) + " | Err: " + (lat.err || 0) + " | Overrun: " + (lat.ovr || 0) +
+          " | ADC OVR: " + (lat.adc_ovr === null || lat.adc_ovr === undefined ? "n/a" : lat.adc_ovr);
 
         document.getElementById("valM4Hb").textContent = (lat.m4_hb || 0);
         if (lat.ch === 5) {
@@ -875,7 +883,7 @@ class TelemetryCollector:
                 data, _ = sock.recvfrom(2048)
                 now = time.time()
 
-                if len(data) >= WAVE_HEADER_LEN:
+                if len(data) >= WAVE_CORE_LEN:
                     (
                         magic,
                         version,
@@ -894,14 +902,21 @@ class TelemetryCollector:
                         ovr,
                         m4_hb,
                         ts,
-                    ) = struct.unpack(WAVE_HEADER_FMT, data[:WAVE_HEADER_LEN])
+                    ) = struct.unpack(WAVE_CORE_FMT, data[:WAVE_CORE_LEN])
 
-                    # header_len, not a hardcoded 48: that is what lets firmware
-                    # append a field without this poller reading the sample block
-                    # from the wrong offset.
+                    # header_len, not a hardcoded length: that is what lets
+                    # firmware append a field without this poller reading the
+                    # sample block from the wrong offset.
                     end = header_len + num_samples * 2
+
+                    # Optional, because it was appended after version 1. Absent
+                    # against older firmware, which is reported rather than
+                    # silently shown as zero.
+                    adc_ovr = None
+                    if header_len >= WAVE_LEN_WITH_ADC_OVR and len(data) >= WAVE_LEN_WITH_ADC_OVR:
+                        (adc_ovr,) = struct.unpack_from("<I", data, WAVE_OFF_ADC_OVR)
                     if (magic == WAVE_MAGIC and version == WAVE_VERSION
-                            and header_len >= WAVE_HEADER_LEN and len(data) >= end):
+                            and header_len >= WAVE_CORE_LEN and len(data) >= end):
                         raw_samples = struct.unpack(f"<{num_samples}H", data[header_len:end])
                         # Convert to millivolts in natural chronological order
                         samples_mv = [(s * vref_mv) / 65535.0 for s in raw_samples]
@@ -944,6 +959,7 @@ class TelemetryCollector:
                                 "samples": samples,
                                 "tc": tc,
                                 "ovr": ovr,
+                                "adc_ovr": adc_ovr,
                                 "m4_hb": m4_hb,
                             }
                             # Send continuous samples in natural chronological order to browser

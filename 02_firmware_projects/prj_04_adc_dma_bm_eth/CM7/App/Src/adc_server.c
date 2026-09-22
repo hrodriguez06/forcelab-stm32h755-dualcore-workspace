@@ -52,14 +52,18 @@ typedef struct __attribute__((packed))
     uint32_t half_overrun_count;
     uint32_t m4_heartbeat;
     uint32_t timestamp_ms;
+    /* Appended after the first release. `version` deliberately stays 1: a
+       reader that takes the samples from header_len is unaffected, and one that
+       wants this field tests header_len >= 56 for itself. */
+    uint32_t adc_overrun_count;  /* ADC hardware overrun (OVR flag)      */
 } WaveformHeader_t;
 
 /* The host tools unpack these exact bytes. Asserting the size here is what
    stops a field being added on this side alone: the build fails instead of the
    dashboard silently reading the sample block at the wrong offset. */
-_Static_assert(sizeof(WaveformHeader_t) == 52U,
+_Static_assert(sizeof(WaveformHeader_t) == 56U,
                "WAVE header is a wire format shared with tools/adc_dashboard.py "
-               "and tools/query_adc.py - update WAVE_HEADER_FMT/LEN in both");
+               "and tools/query_adc.py - update the WAVE_* constants in both");
 
 static struct udp_pcb *s_adc_pcb = NULL;
 
@@ -99,7 +103,7 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
     if (is_wave)
     {
-        /* Binary waveform response: 52-byte header + 512 uint16_t samples = 1076 bytes */
+        /* Binary waveform response: 56-byte header + 512 uint16_t samples = 1080 bytes */
         const u16_t total_wave_len = (u16_t)(sizeof(WaveformHeader_t) +
                                             sizeof(uint16_t) * SHARED_ADC_WAVEFORM_SAMPLES);
         struct pbuf *wp = pbuf_alloc(PBUF_TRANSPORT, total_wave_len, PBUF_RAM);
@@ -126,6 +130,7 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
                 hdr->sample_count       = g_shared.adc.sample_count;
                 hdr->dma_tc_count       = g_shared.adc.dma_tc_count;
                 hdr->half_overrun_count = g_shared.adc.half_overrun_count;
+                hdr->adc_overrun_count  = g_shared.adc.adc_overrun_count;
                 hdr->timestamp_ms       = g_shared.adc.timestamp_ms;
                 memcpy(sample_dest, (const void *)g_shared.adc.waveform,
                        sizeof(uint16_t) * SHARED_ADC_WAVEFORM_SAMPLES);

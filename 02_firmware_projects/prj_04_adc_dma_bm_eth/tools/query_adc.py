@@ -35,13 +35,20 @@ WAVE_VERSION = 1
 # change together; that is why this file lives in the project and not in
 # <workspace>/tools/ (see "Where a script belongs" in the workspace README).
 #
-# Contract: `version` covers the layout of the fields below. Appending new
+# Contract: `version` covers the layout of the core fields below. Appending new
 # fields only grows `header_len` and leaves `version` alone, so a parser that
 # locates the samples at `header_len` - as this one does - keeps working against
 # newer firmware. Changing or reordering an existing field bumps `version`.
-WAVE_HEADER_FMT = "<IHHIHHIHHHHIIIIII"
-WAVE_HEADER_LEN = 52
-assert struct.calcsize(WAVE_HEADER_FMT) == WAVE_HEADER_LEN
+#
+# Conversely, only the core is required: a field appended later is read when
+# `header_len` reaches it and reported as absent when it does not, so this tool
+# still works against firmware older than itself.
+WAVE_CORE_FMT = "<IHHIHHIHHHHIIIIII"   # fields present since version 1
+WAVE_CORE_LEN = 52
+assert struct.calcsize(WAVE_CORE_FMT) == WAVE_CORE_LEN
+
+WAVE_OFF_ADC_OVR = 52                  # uint32 adc_overrun_count, appended after v1
+WAVE_LEN_WITH_ADC_OVR = 56
 
 
 def print_ascii_oscillogram(samples_mv: list[float], rate_hz: int, seq: int) -> None:
@@ -149,10 +156,10 @@ def query_adc(host: str, port: int, count: int, mode: str, interval: float) -> i
 
             if mode == "wave":
                 err = None
-                if len(data) < WAVE_HEADER_LEN:
+                if len(data) < WAVE_CORE_LEN:
                     err = f"short WAVE packet ({len(data)} B)"
                 else:
-                    fields = struct.unpack(WAVE_HEADER_FMT, data[:WAVE_HEADER_LEN])
+                    fields = struct.unpack(WAVE_CORE_FMT, data[:WAVE_CORE_LEN])
                     magic, version, header_len, rate_hz, num_samples, vref_mv, seq = fields[:7]
                     end = header_len + num_samples * 2
                     if magic != WAVE_MAGIC:
@@ -160,8 +167,8 @@ def query_adc(host: str, port: int, count: int, mode: str, interval: float) -> i
                     elif version != WAVE_VERSION:
                         err = (f"firmware speaks WAVE v{version}, this tool speaks "
                                f"v{WAVE_VERSION} - reflash or update the tool")
-                    elif header_len < WAVE_HEADER_LEN:
-                        err = f"header_len {header_len} below the known {WAVE_HEADER_LEN}"
+                    elif header_len < WAVE_CORE_LEN:
+                        err = f"header_len {header_len} below the known {WAVE_CORE_LEN}"
                     elif len(data) < end:
                         err = f"truncated: need {end} B for {num_samples} samples, got {len(data)}"
                     else:
