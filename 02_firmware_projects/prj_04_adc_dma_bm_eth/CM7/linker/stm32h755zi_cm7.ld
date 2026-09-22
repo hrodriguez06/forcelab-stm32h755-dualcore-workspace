@@ -210,15 +210,20 @@ SECTIONS
      In a filename(sections) spec the filename is matched against the *input
      file*, and for a library that input file is the archive member
      (_udivmoddi4.o), never the archive holding it. A bare libgcc.a therefore
-     matches nothing. Discarding by archive takes the archive:member form.
-     Measured on this project: present, absent, and strengthened to a wildcard
-     and moved above .text, the .bin and the entire ELF came out byte-identical.
+     matches nothing, and a leading wildcard does not help: the name being
+     tested was never the archive's. Discarding by archive takes the
+     archive:member form.
+
+     Measured across the projects in this workspace: present, absent, and
+     strengthened to a wildcard and hoisted above .text, the .bin and the whole
+     ELF came out byte-identical every time.
 
      Writing it the way it clearly meant to be written is the worse outcome.
-     *libgcc.a:*(*) does match, and the link then fails - these images call
-     __aeabi_uldivmod. Keeping parts of the C library out of an image is a
-     link-line decision (-nostdlib, --specs=), not something a linker script
-     should enforce behind the build system's back. */
+     *libgcc.a:*(*) does match, and the link then fails the moment the image
+     needs a compiler helper - one 64-bit division pulls in __aeabi_uldivmod.
+     Keeping parts of the C library out of an image is a link-line decision
+     (-nostdlib, --specs=), not something a linker script should try to enforce
+     behind the build system's back. */
 
   .ARM.attributes 0 : { *(.ARM.attributes) }
 }
