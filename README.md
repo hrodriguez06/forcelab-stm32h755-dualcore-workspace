@@ -118,8 +118,10 @@ stm32h755/                                       # Workspace Root [GIT REPO - se
 │
 ├── 02_firmware_projects/                        # Active product firmware
 │   ├── prj_02_eth_lwip_dualcore/                # Dual-core Ethernet / lwIP node (shared drivers)
-│   ├── prj_03_adc_dma_eth/                      # ADC1+DMA1 on CM4, UDP telemetry + DSO on CM7
+│   ├── prj_03_adc_dma_eth/                      # ADC1+DMA1 (HAL) on CM4, UDP telemetry + DSO on CM7
 │   │   └── tools/                               # 4 shims + 2 PROJECT-OWNED scripts, see below
+│   ├── prj_04_adc_dma_bm_eth/                   # Pure bare-metal ADC1+DMA1 on CM4, UDP telemetry on CM7
+│   │   └── tools/                               # 4 shims + 2 PROJECT-OWNED scripts (query_adc, adc_dashboard)
 │   └── prj_eth_lwip_node/                       # Ethernet / lwIP node on CPU1
 │       └── external/STM32CubeH7/                # [SUBMODULE] shared by every project
 │
