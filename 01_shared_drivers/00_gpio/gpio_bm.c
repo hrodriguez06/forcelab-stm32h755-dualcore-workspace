@@ -37,6 +37,15 @@ bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port)
 
     port_idx = (address - (uint32_t)GPIOA) / GPIO_BM_PORT_STRIDE;
 
+    /* Reads like a cross-core race and is not one. RCC_AHB4ENR is at offset
+       0xE0, inside the bank RM0399 9.7.1 calls "registers mapped at the same
+       address": the hardware routes the access by core_id, so CPU1 lands in the
+       CPU1 bank and CPU2 in the CPU2 bank. Different storage, and a peripheral
+       is clocked when either bank has its bit set - which is why ST's own
+       __HAL_RCC_*_CLK_ENABLE() macros carry no CORE_CM4 variant.
+       Only the registers below 0xD0 (RCC_CR, the PLLs, the RSTRs) are shared by
+       both cores. Those are CPU1's by the boot contract, and anything both
+       cores must write needs an HSEM - CLAUDE.md rule D. */
     RCC->AHB4ENR |= (1UL << port_idx);
 
     /* Read back: the RCC enable takes a couple of cycles to land, and a write

@@ -82,7 +82,9 @@ bool DMA_BM_InitStream(const DmaBm_Config_t *config)
         return false;
     }
 
-    /* 1. Ensure DMA and DMAMUX clocks are enabled */
+    /* 1. Ensure DMA and DMAMUX clocks are enabled.
+       AHB1ENR is per-core banked, not shared state: see the note in
+       00_gpio/gpio_bm.c before reading this as a dual-core race. */
     if (dma == DMA1)
     {
         RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;

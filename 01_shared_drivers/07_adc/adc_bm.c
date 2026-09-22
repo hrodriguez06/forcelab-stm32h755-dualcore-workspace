@@ -76,7 +76,14 @@ bool ADC_BM_Init(AdcBm_Handle_t *handle, const AdcBm_Config_t *config)
 
     ADC_TypeDef *adc = config->adc_instance;
 
-    /* 1. Enable peripheral clock and ensure asynchronous kernel clock */
+    /* 1. Enable peripheral clock and ensure asynchronous kernel clock.
+       AHB1ENR/AHB4ENR are per-core banked, not shared state: see the note in
+       00_gpio/gpio_bm.c before reading this as a dual-core race.
+       ADC12_COMMON->CCR below is a different matter - it is shared by ADC1 and
+       ADC2, so this write reaches both. And it is also why Init clears the
+       registers by hand instead of pulsing ADC12RST: RCC_AHB1RSTR is at 0x080,
+       in the bank both cores really do share, and the reset would take the
+       other ADC down with it. */
     if ((adc == ADC1) || (adc == ADC2))
     {
         RCC->AHB1ENR |= RCC_AHB1ENR_ADC12EN;
