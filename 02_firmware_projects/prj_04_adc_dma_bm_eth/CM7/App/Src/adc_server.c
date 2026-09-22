@@ -26,9 +26,18 @@
 
 #define WAVE_MAGIC              0x57415645U /* 'WAVE' */
 
+/* Wire-format revision of the WAVE response. `version` describes the layout of
+   the fields below; appending a new field at the end only grows `header_len`,
+   so a reader that takes the sample block to start at `header_len` - which both
+   host tools now do - keeps working. Bump this only when an existing field
+   moves, changes width or changes meaning. */
+#define WAVE_VERSION            1U
+
 typedef struct __attribute__((packed))
 {
     uint32_t magic;              /* 0x57415645 = 'WAVE' */
+    uint16_t version;            /* WAVE_VERSION                        */
+    uint16_t header_len;         /* Offset of the sample block          */
     uint32_t sampling_rate_hz;   /* Nominal rate, e.g. 500,000 Hz */
     uint16_t num_samples;        /* e.g. 512 samples */
     uint16_t vref_mv;            /* e.g. 3300 mV */
@@ -44,6 +53,13 @@ typedef struct __attribute__((packed))
     uint32_t m4_heartbeat;
     uint32_t timestamp_ms;
 } WaveformHeader_t;
+
+/* The host tools unpack these exact bytes. Asserting the size here is what
+   stops a field being added on this side alone: the build fails instead of the
+   dashboard silently reading the sample block at the wrong offset. */
+_Static_assert(sizeof(WaveformHeader_t) == 52U,
+               "WAVE header is a wire format shared with tools/adc_dashboard.py "
+               "and tools/query_adc.py - update WAVE_HEADER_FMT/LEN in both");
 
 static struct udp_pcb *s_adc_pcb = NULL;
 
@@ -83,7 +99,7 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
     if (is_wave)
     {
-        /* Binary waveform response: 48-byte header + 512 uint16_t samples = 1072 bytes */
+        /* Binary waveform response: 52-byte header + 512 uint16_t samples = 1076 bytes */
         const u16_t total_wave_len = (u16_t)(sizeof(WaveformHeader_t) +
                                             sizeof(uint16_t) * SHARED_ADC_WAVEFORM_SAMPLES);
         struct pbuf *wp = pbuf_alloc(PBUF_TRANSPORT, total_wave_len, PBUF_RAM);
@@ -96,6 +112,8 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
             if (Shared_TryLock(HSEM_ID_ADC_DATA, 1000U))
             {
                 hdr->magic              = WAVE_MAGIC;
+                hdr->version            = WAVE_VERSION;
+                hdr->header_len         = (uint16_t)sizeof(WaveformHeader_t);
                 hdr->sampling_rate_hz   = g_shared.adc.sampling_rate_hz;
                 hdr->num_samples        = (uint16_t)g_shared.adc.waveform_len;
                 hdr->vref_mv            = (uint16_t)BOARD_ADC_VREF_MV;

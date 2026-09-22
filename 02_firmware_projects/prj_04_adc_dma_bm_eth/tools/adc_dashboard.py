@@ -10,7 +10,7 @@ Features:
   - Interactive Trigger Controls: AUTO / NORMAL modes, Rising / Falling slope, Auto 50% or manual level slider.
   - Visual Trigger Markers: Horizontal trigger level line (T ▶) and vertical trigger point pointer (▼ T).
   - Real-Time Digital Measurements: Vpp, Vmax, Vmin, Frequency (kHz), Duty Cycle (%), Timebase.
-  - Background UDP poller querying board via binary WAVE protocol (1072 bytes).
+  - Background UDP poller querying board via binary WAVE protocol (1076 bytes).
   - Rolling 60-second voltage trend, DMA health, overrun counter, and dual-core heartbeat.
 
 This script lives inside the project, NOT in <workspace>/tools/, and it has no
@@ -36,6 +36,19 @@ import threading
 import time
 
 WAVE_MAGIC = 0x57415645  # 'WAVE'
+WAVE_VERSION = 1
+
+# Byte-identical with WaveformHeader_t in CM7/App/Src/adc_server.c. The two must
+# change together; that is why this file lives in the project and not in
+# <workspace>/tools/ (see "Where a script belongs" in the workspace README).
+#
+# Contract: `version` covers the layout of the fields below. Appending new
+# fields only grows `header_len` and leaves `version` alone, so a parser that
+# locates the samples at `header_len` - as this one does - keeps working against
+# newer firmware. Changing or reordering an existing field bumps `version`.
+WAVE_HEADER_FMT = "<IHHIHHIHHHHIIIIII"
+WAVE_HEADER_LEN = 52
+assert struct.calcsize(WAVE_HEADER_FMT) == WAVE_HEADER_LEN
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="es">
@@ -862,9 +875,11 @@ class TelemetryCollector:
                 data, _ = sock.recvfrom(2048)
                 now = time.time()
 
-                if len(data) >= 48:
+                if len(data) >= WAVE_HEADER_LEN:
                     (
                         magic,
+                        version,
+                        header_len,
                         rate_hz,
                         num_samples,
                         vref_mv,
@@ -879,10 +894,15 @@ class TelemetryCollector:
                         ovr,
                         m4_hb,
                         ts,
-                    ) = struct.unpack("<IIHHIHHHHIIIIII", data[:48])
+                    ) = struct.unpack(WAVE_HEADER_FMT, data[:WAVE_HEADER_LEN])
 
-                    if magic == WAVE_MAGIC and len(data) >= 48 + num_samples * 2:
-                        raw_samples = struct.unpack(f"<{num_samples}H", data[48:48 + num_samples * 2])
+                    # header_len, not a hardcoded 48: that is what lets firmware
+                    # append a field without this poller reading the sample block
+                    # from the wrong offset.
+                    end = header_len + num_samples * 2
+                    if (magic == WAVE_MAGIC and version == WAVE_VERSION
+                            and header_len >= WAVE_HEADER_LEN and len(data) >= end):
+                        raw_samples = struct.unpack(f"<{num_samples}H", data[header_len:end])
                         # Convert to millivolts in natural chronological order
                         samples_mv = [(s * vref_mv) / 65535.0 for s in raw_samples]
 

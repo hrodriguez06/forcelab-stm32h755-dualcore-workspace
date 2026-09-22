@@ -7,7 +7,7 @@ or JSON responses containing ADC1+DMA1 readings collected by Cortex-M4.
 
 This script lives inside the project, NOT in <workspace>/tools/, and it has no
 shim. It is not a workspace tool: it decodes this firmware's application
-protocol - the JSON key set and the 48-byte binary WAVE header - both of which
+protocol - the JSON key set and the versioned binary WAVE header - both of which
 are defined in CM7/App/Src/adc_server.c a few directories away. Move it up to
 the workspace and that contract spans two trees, where nothing keeps the two
 ends in step. See "Where a script belongs" in the workspace README.
@@ -29,6 +29,19 @@ DEFAULT_HOST = "192.168.1.150"
 DEFAULT_PORT = 5001
 DEFAULT_TIMEOUT_S = 2.0
 WAVE_MAGIC = 0x57415645  # 'WAVE'
+WAVE_VERSION = 1
+
+# Byte-identical with WaveformHeader_t in CM7/App/Src/adc_server.c. The two must
+# change together; that is why this file lives in the project and not in
+# <workspace>/tools/ (see "Where a script belongs" in the workspace README).
+#
+# Contract: `version` covers the layout of the fields below. Appending new
+# fields only grows `header_len` and leaves `version` alone, so a parser that
+# locates the samples at `header_len` - as this one does - keeps working against
+# newer firmware. Changing or reordering an existing field bumps `version`.
+WAVE_HEADER_FMT = "<IHHIHHIHHHHIIIIII"
+WAVE_HEADER_LEN = 52
+assert struct.calcsize(WAVE_HEADER_FMT) == WAVE_HEADER_LEN
 
 
 def print_ascii_oscillogram(samples_mv: list[float], rate_hz: int, seq: int) -> None:
@@ -135,16 +148,28 @@ def query_adc(host: str, port: int, count: int, mode: str, interval: float) -> i
             success_count += 1
 
             if mode == "wave":
-                if len(data) >= 16:
-                    magic, rate_hz, num_samples, vref_mv, seq = struct.unpack("<IIHHI", data[:16])
-                    if magic == WAVE_MAGIC and len(data) >= 16 + num_samples * 2:
-                        raw_samples = struct.unpack(f"<{num_samples}H", data[16:16 + num_samples * 2])
+                err = None
+                if len(data) < WAVE_HEADER_LEN:
+                    err = f"short WAVE packet ({len(data)} B)"
+                else:
+                    fields = struct.unpack(WAVE_HEADER_FMT, data[:WAVE_HEADER_LEN])
+                    magic, version, header_len, rate_hz, num_samples, vref_mv, seq = fields[:7]
+                    end = header_len + num_samples * 2
+                    if magic != WAVE_MAGIC:
+                        err = f"not a WAVE packet (magic 0x{magic:08X})"
+                    elif version != WAVE_VERSION:
+                        err = (f"firmware speaks WAVE v{version}, this tool speaks "
+                               f"v{WAVE_VERSION} - reflash or update the tool")
+                    elif header_len < WAVE_HEADER_LEN:
+                        err = f"header_len {header_len} below the known {WAVE_HEADER_LEN}"
+                    elif len(data) < end:
+                        err = f"truncated: need {end} B for {num_samples} samples, got {len(data)}"
+                    else:
+                        raw_samples = struct.unpack(f"<{num_samples}H", data[header_len:end])
                         samples_mv = [(s * vref_mv) / 65535.0 for s in raw_samples]
                         print_ascii_oscillogram(samples_mv, rate_hz, seq)
-                    else:
-                        print(f"[{i:04d}] ERROR: Invalid WAVE payload (size: {len(data)})", file=sys.stderr)
-                else:
-                    print(f"[{i:04d}] ERROR: Short WAVE packet ({len(data)} B)", file=sys.stderr)
+                if err is not None:
+                    print(f"[{i:04d}] ERROR: {err}", file=sys.stderr)
 
             elif mode == "json":
                 text = data.decode("utf-8", errors="replace").strip()
