@@ -77,6 +77,31 @@ extern "C" {
 /* UDP telemetry query service for ADC1+DMA1 readings collected by CM4. */
 #define NET_ADC_PORT                    5001U
 
+/* ---- Source filtering --------------------------------------------------- *
+ * Both UDP services used to answer whoever asked, and the WAVE reply is about
+ * 270x the request that triggers it: 4 bytes in, 1080 out. On an isolated
+ * bench that is harmless. Reachable from a wider network it is a reflector
+ * with useful gain, and the echo service on port 7 is one by definition.
+ *
+ *   NET_ACL_ANY          answer any source (what this firmware used to do)
+ *   NET_ACL_SAME_SUBNET  answer only sources on this interface's own subnet
+ *
+ * The subnet is read from the live netif rather than restated here, so it
+ * follows DHCP and the static fallback with nothing to keep in step.
+ *
+ * This filter is not a security boundary: a source address is trivially
+ * spoofed. What it removes is the board's value as an off-link amplifier, and
+ * it does so without a list to maintain.
+ *
+ * If queries stop working after a network change, that is the first thing to
+ * suspect: the drops are counted as acl_drop in the periodic status line, and
+ * the first one logs the address it came from.
+ */
+#define NET_ACL_ANY                        0
+#define NET_ACL_SAME_SUBNET                1
+
+#define NET_ACL_MODE                       NET_ACL_SAME_SUBNET
+
 /* Maximum time low_level_output() waits for the Tx DMA to release a
  * descriptor before dropping the frame.
  *

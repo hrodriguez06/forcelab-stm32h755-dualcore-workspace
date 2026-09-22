@@ -25,6 +25,16 @@ void Net_TaskEntry(void *argument);
 /** @brief  The default network interface, for diagnostics. */
 struct netif *Net_GetNetif(void);
 
+/**
+  * @brief  Whether a UDP service should answer this source address.
+  * @note   Policy lives in NET_ACL_MODE (net_config.h). Call it before doing
+  *         any work for the request, and free the pbuf on a refusal.
+  * @note   Must be called from the tcpip thread: it keeps an unguarded counter.
+  * @param  addr Source address as lwIP hands it to a udp_recv callback.
+  * @return 1 when the request may be answered, 0 when it must be dropped.
+  */
+int Net_SourceIsAllowed(const ip_addr_t *addr);
+
 #ifdef __cplusplus
 }
 #endif

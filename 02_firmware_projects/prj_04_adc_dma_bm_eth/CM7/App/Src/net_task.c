@@ -47,6 +47,10 @@ static struct udp_pcb *s_echo_pcb;
 /* Latched once a driver counter goes non-zero; only a reset clears it. */
 static uint8_t         s_error_latched;
 
+/* Requests refused by the source filter. Written only from the tcpip thread,
+   which is where both udp_recv callbacks run, so it needs no guard. */
+static uint32_t        s_acl_drops;
+
 #if LWIP_DHCP
 /* Tick at which the current DHCP attempt gives up and the static address is
  * applied instead. 0 means no attempt is in flight. Written by the tcpip
@@ -109,6 +113,55 @@ static void net_status_callback(struct netif *netif)
 }
 
 /* ==========================================================================
+ * Source filtering. Shared by both UDP services; see NET_ACL_MODE.
+ * ========================================================================== */
+
+int Net_SourceIsAllowed(const ip_addr_t *addr)
+{
+#if (NET_ACL_MODE == NET_ACL_ANY)
+    LWIP_UNUSED_ARG(addr);
+    return 1;
+#else
+    const ip4_addr_t *mask = netif_ip4_netmask(&s_netif);
+    int allowed;
+
+    /* An interface with no address yet has a zero netmask, and comparing
+       against that matches every source. Refuse instead: there is nothing this
+       board can legitimately serve before it has an address of its own. */
+    if ((addr == NULL) || !IP_IS_V4(addr) || ip4_addr_isany_val(*mask))
+    {
+        allowed = 0;
+    }
+    else
+    {
+        allowed = ip4_addr_netcmp(ip_2_ip4(addr), netif_ip4_addr(&s_netif), mask) ? 1 : 0;
+    }
+
+    if (allowed == 0)
+    {
+        s_acl_drops++;
+
+        /* Once, on the first refusal. A board that has quietly stopped
+           answering should say why without being asked, and a counter alone
+           does not name the address. Further drops are in the status line. */
+        if (s_acl_drops == 1U)
+        {
+            char src[IP4ADDR_STRLEN_MAX];
+            char own[IP4ADDR_STRLEN_MAX];
+
+            APP_LOG("[net] source filter: dropped a UDP request from %s, which is "
+                    "not on %s's subnet - see NET_ACL_MODE in net_config.h",
+                    ((addr != NULL) && IP_IS_V4(addr))
+                        ? ip4addr_ntoa_r(ip_2_ip4(addr), src, sizeof(src)) : "?",
+                    ip4addr_ntoa_r(netif_ip4_addr(&s_netif), own, sizeof(own)));
+        }
+    }
+
+    return allowed;
+#endif
+}
+
+/* ==========================================================================
  * UDP echo service on NET_ECHO_PORT.
  * ========================================================================== */
 
@@ -119,6 +172,12 @@ static void net_echo_received(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
     if (p == NULL)
     {
+        return;
+    }
+
+    if (Net_SourceIsAllowed(addr) == 0)
+    {
+        pbuf_free(p);
         return;
     }
 
@@ -232,14 +291,15 @@ static void net_report_status(void)
 {
     const eth_driver_stats_t *stats = ETH_Driver_GetStats();
 
-    APP_LOG("[net] link=%s ip=%s rx=%lu tx=%lu rx_nobuf=%lu tx_nobuf=%lu dma_err=%lu",
+    APP_LOG("[net] link=%s ip=%s rx=%lu tx=%lu rx_nobuf=%lu tx_nobuf=%lu dma_err=%lu acl_drop=%lu",
             ethernetif_link_state_string(),
             ip4addr_ntoa(netif_ip4_addr(&s_netif)),
             (unsigned long)stats->rx_frames,
             (unsigned long)stats->tx_frames,
             (unsigned long)stats->rx_alloc_failures,
             (unsigned long)stats->tx_alloc_failures,
-            (unsigned long)stats->dma_errors);
+            (unsigned long)stats->dma_errors,
+            (unsigned long)s_acl_drops);
 }
 
 void Net_TaskEntry(void *argument)

@@ -17,6 +17,7 @@
 #include "stm32h7xx_hal.h"
 #include "shared_memory.h"
 #include "app_log.h"
+#include "net_task.h"   /* Net_SourceIsAllowed() */
 
 #include "lwip/udp.h"
 #include "lwip/pbuf.h"
@@ -77,6 +78,16 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
     if (p == NULL)
     {
+        return;
+    }
+
+    /* Before any work: a request this board will not answer should cost it a
+       pbuf_free and nothing else. Doing this ahead of the command parse also
+       keeps the ~270x WAVE amplification out of reach of an off-subnet
+       source. */
+    if (Net_SourceIsAllowed(addr) == 0)
+    {
+        pbuf_free(p);
         return;
     }
 
