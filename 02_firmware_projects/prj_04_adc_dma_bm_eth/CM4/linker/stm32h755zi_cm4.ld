@@ -127,7 +127,22 @@ SECTIONS
     _e_shared_ram = .;
   } >RAM_SHARED
 
-  /DISCARD/ : { libc.a(*) libm.a(*) libgcc.a(*) }
+  /* No /DISCARD/ rule here, on purpose. The one that used to sit at this spot
+     - libc.a(*) libm.a(*) libgcc.a(*) - never removed a single byte, and the
+     next person to notice its absence should not put it back.
+
+     In a filename(sections) spec the filename is matched against the *input
+     file*, and for a library that input file is the archive member
+     (_udivmoddi4.o), never the archive holding it. A bare libgcc.a therefore
+     matches nothing. Discarding by archive takes the archive:member form.
+     Measured on this project: present, absent, and strengthened to a wildcard
+     and moved above .text, the .bin and the entire ELF came out byte-identical.
+
+     Writing it the way it clearly meant to be written is the worse outcome.
+     *libgcc.a:*(*) does match, and the link then fails - these images call
+     __aeabi_uldivmod. Keeping parts of the C library out of an image is a
+     link-line decision (-nostdlib, --specs=), not something a linker script
+     should enforce behind the build system's back. */
 
   .ARM.attributes 0 : { *(.ARM.attributes) }
 }
