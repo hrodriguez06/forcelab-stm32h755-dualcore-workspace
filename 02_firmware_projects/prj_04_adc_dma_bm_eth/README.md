@@ -23,11 +23,16 @@ By migrating from ST's HAL ADC & DMA to our centralized Bare-Metal drivers (`adc
 
 | Metric | `prj_03_adc_dma_eth` (HAL) | `prj_04_adc_dma_bm_eth` (Bare-Metal) | Improvement |
 | :--- | :---: | :---: | :---: |
-| **CM4 FLASH (Debug)** | 18,344 Bytes (1.75%) | **6,204 Bytes (0.59%)** | **-66.2% (-12.1 KB)** |
-| **CM4 FLASH (Release)** | 16,820 Bytes (1.60%) | **5,620 Bytes (0.54%)** | **-66.6% (-11.2 KB)** |
-| **Code (.text Debug)** | 18,320 Bytes | **6,180 Bytes** | **Zero HAL bloat** |
-| **Code (.text Release)** | 16,796 Bytes | **5,596 Bytes** | **Zero HAL bloat** |
+| **CM4 FLASH (Debug)** | 18,344 Bytes (1.75%) | **5,792 Bytes (0.55%)** | **-68.4% (-12,552 B)** |
+| **CM4 FLASH (Release)** | 16,252 Bytes (1.55%) | **5,144 Bytes (0.49%)** | **-68.3% (-11,108 B)** |
+| **Code (.text Debug)** | 18,320 Bytes | **5,768 Bytes** | **Zero HAL bloat** |
+| **Code (.text Release)** | 16,228 Bytes | **5,120 Bytes** | **Zero HAL bloat** |
+| **Compiler libcalls** | several `__aeabi_*` | **none** | No 64-bit software helpers |
 | **Latency / Overhead** | State-machine callbacks | Direct register writes & atomic bitmask tests | Sub-microsecond determinism |
+
+Read off `arm-none-eabi-size` (FLASH = `text` + `data`), not estimated. Regenerate with
+`arm-none-eabi-size build/<preset>/CM4/cm4_firmware.elf` after any change that touches
+the CM4 image, and update the table rather than leaving it to drift.
 
 ---
 
@@ -50,14 +55,21 @@ By migrating from ST's HAL ADC & DMA to our centralized Bare-Metal drivers (`adc
 - **Stream Configuration**: Direct manipulation of `PAR`, `M0AR`, `NDTR`, `FCR` (direct mode) and `CR`.
 - **Interrupts & Overruns**: Atomic checking and clearing of status flags (`TC`, `HT`, `TE`, `DME`, `FE`) in `LISR`/`HISR` and `LIFCR`/`HIFCR`.
 - **Bus Alignment**: Explicit 32-byte alignment attributes (`DMA_BM_ALIGN_32`) for deterministic bus bursts.
+- **FIFO & Memory-to-Memory**: Optional FIFO with a selectable threshold. RM0399 forbids both direct mode and circular mode in memory-to-memory transfers, so `DMA_BM_InitStream()` forces `DMDIS` for that direction and refuses a circular request outright, instead of leaving the caller to find out from the hardware.
+- **Reported Failures**: `DMA_BM_Stop()` returns whether the stream actually went idle, and `InitStream` aborts on a false. Writes to `PAR`, `M0AR` and `NDTR` are ignored while `EN` is set, so a swallowed timeout would have produced a stream silently running its previous configuration.
+- **Errata Hook**: `enable_trbuff` exposes `DMA_SxCR` bit 20, mandatory for USART/LPUART with DMA (ES0445 2.20.3).
+- **Teardown**: `DMA_BM_DeinitStream()` stops the stream and resets its registers and DMAMUX channel.
 
 ### B. ADC Bare-Metal Driver (`07_adc/adc_bm.[ch]`)
 - **Regulator & Deep Power-Down**: Clears `CR.DEEPPWD`, activates `CR.ADVREGEN`, and enforces `tADCVREG_STUP` stabilization.
-- **Clock & Boost Mode**: Applies `BOOST[1:0]` for 25 MHz kernel clock while conversions are stopped.
+- **Clock & Boost Mode**: Applies `BOOST[1:0]` while conversions are stopped. `ADC_BM_BOOST_AUTO` reads `DBGMCU->IDCODE` and picks the range for the silicon: Rev V indexes the table with `ker_ck / 2` (as ST's own `ADC_ConfigureBoostMode` does), Rev Y is a single bit at 20 MHz. A hardcoded constant is wrong on one of the two.
 - **Errata ES0445 Compliance**: Enforces `ADC_CFGR_JQDIS` to disable the injected context queue.
 - **Self-Calibration**: Automates offset and linearity calibration (`ADCALLIN`, `ADCAL`) while disabled (`ADEN = 0`).
 - **Channel Preselection**: Direct setup of `PCSEL` (mandatory for STM32H7).
-- **Fast Integer Statistics**: Zero floating-point in hot path (`min`, `max`, `average`, `millivolts`).
+- **Fast Integer Statistics**: Zero floating-point in the hot path (`min`, `max`, `average`, `millivolts`), and 32-bit arithmetic throughout - `65535 * 3300` fits, so the CM4 image links no `__aeabi_*` helper at all.
+- **Hardware Overrun Detection**: Enables `ADC_IER_OVRIE` and counts `OVR` separately from DMA transfer errors. A counter that can never increment does not read as "no overruns", it reads as a clean run.
+- **Input Validation & Clean Start**: Rejects an out-of-range channel (the sampling-time write shifts by `(channel - 10) * 3`, which is undefined behaviour past 19), and clears `CFGR`, `CFGR2`, `PCSEL`, `SQR1..4`, `SMPR1..2`, `DIFSEL`, `IER` and `ISR` on init - enabling the peripheral clock does not reset the ADC, so a warm reset otherwise inherits the previous configuration.
+- **Teardown**: `ADC_BM_Deinit()` stops conversions, disables the ADC and returns it to Deep-Power-Down.
 
 ---
 
@@ -102,6 +114,21 @@ py tools/adc_dashboard.py --host 192.168.1.150 --bind 127.0.0.1:8080
 ```
 Open `http://127.0.0.1:8080` in your web browser for live chart visualization and telemetry metrics.
 
+### Two things that will bite you
+
+**Queries must originate on the board's own subnet.** The UDP services answer nobody
+else (section 8). A query that times out from a different subnet is the filter doing its
+job, not a fault: the board logs the first refusal with the source address and counts
+the rest as `acl_drop` in its `[net]` status line.
+
+**The binary WAVE reply is versioned.** Its header carries `version` and `header_len`,
+and both host tools locate the sample block at `header_len` rather than a fixed offset.
+That is what lets a field be appended without an older tool quietly drawing header bytes
+as signal - which is exactly what the predecessor of `query_adc.py` did. A tool meeting
+a firmware whose `version` it does not know refuses the packet and says so. Keep
+`WaveformHeader_t` in `CM7/App/Src/adc_server.c` and the `WAVE_*` constants in both
+tools in step; the firmware asserts its own header size at compile time.
+
 ---
 
 ## 7. Hardware Validation & Silicon Bring-Up Lessons (NUCLEO-H755ZI-Q)
@@ -118,20 +145,54 @@ During the hardware bring-up of `prj_04_adc_dma_bm_eth` on STM32H755ZI Rev V, th
 3. **STM32H7 ADC1 External Trigger Mapping (`EXTSEL`)**:
    - In STM32H7, `TIM3_TRGO` is mapped to `EXTSEL = 4` (`ADC_CFGR_EXTSEL_2`), defined in `adc_bm.h` as `ADC_BM_TRIG_TIM3_TRGO (0x00000004UL)`. Older families and channels used index 9; using 4 activates continuous conversions at 500 kSPS.
 4. **ADC Calibration Duration & Read/Set (`RS`) Bit Safety**:
-   - Linear calibration takes 16,384 ADC clock cycles (~0.65 ms at 25 MHz). The bare-metal calibration wait loop was dimensioned accordingly (`10,000,000` cycles).
+   - Linear calibration takes 16,384 ADC clock cycles (~0.65 ms at 25 MHz). The wait budgets are named constants in `adc_bm.c` (`ADC_BM_CALIBRATION_TIMEOUT_LOOPS`, `ADC_BM_VREG_STUP_LOOPS`, and the enable/disable/stop pair) rather than bare numbers, but they are still loop counts with no relation to the core clock - re-check them if this driver is ever used at a different frequency or optimisation level.
    - Bit modification on `ADC_CR` masks out all Read-to-Set bits (`ADC_CR_BITS_PROPERTY_RS`: `ADCAL`, `ADSTART`, `ADSTP`, `ADDIS`, `ADEN`) to prevent accidental re-triggers and ensure clean `ADEN=1` assertion.
 
 ### Measured Performance
-- **Acquisition Rate**: 500,000 SPS (500 kSPS) continuous.
-- **Buffers Processed**: >108,000 transfers (>110 million samples).
-- **Overruns & Errors**: Zero (`dma_err=0, ovr=0, adc_ovr=0`).
-- **Inter-Core Heartbeat**: Actively advancing across both cores (`[ipc] m7=... m4=... (CPU2 alive)`).
+
+Observed on the board, not estimated. The full record - including how each result was
+obtained - is in [`docs/ADC_BRINGUP.md`](docs/ADC_BRINGUP.md) section 7.
+
+- **Silicon**: revision `0x2003` (Rev V), from the boot banner. This is the revision
+  `ADC_BM_BOOST_AUTO` resolves to the `ker_ck / 2` boost table; the Rev Y branch is
+  still unexercised for want of the part.
+- **Acquisition Rate**: `samples` climbed 5,208,064 -> 5,463,552 in 0.5 s, about
+  511 kSPS, against a nominal 500 kSPS.
+- **Overruns & Errors**: `err`, `ovr` and `adc_ovr` all zero across ~5 M samples. The
+  third of those now means something: `ADC_IER_OVRIE` is enabled, so a hardware overrun
+  would be counted. Before that it could not increment, and reading zero proved nothing.
+- **Binary Protocol**: WAVE replies at 1080 bytes with `version=1` and `header_len=56`,
+  and `adc_overrun_count` arriving through the dashboard's own `/api/samples`.
+- **Source Filter**: verified in both directions - answered on-subnet with `acl_drop`
+  flat at zero, refused off-subnet with `tx` frozen while `acl_drop` tracked `rx`.
+- **Inter-Core Heartbeat**: advancing on both cores (`[ipc] m7=... m4=... (CPU2 alive)`).
+
+A `ch` field reading nonsense is worth recognising on sight: it means CPU1 and CPU2
+disagree about `SharedAdcData_t`, i.e. one core was reflashed and the other was not.
+Flash both - `py tools/flash.py --core both`.
 
 ---
 
 ## 8. Security Considerations (UDP Amplification Risk)
 
-The diagnostic UDP services (Echo on port 7, ADC Telemetry and Waveform on port 5001) respond to incoming datagrams without source IP filtering or authentication:
-- **Amplification Risk**: Sending a 4-byte ASCII command (`WAVE`) triggers an immediate 1072-byte binary response containing the complete 512-sample waveform buffer (~268x bandwidth amplification).
-- **Deployment Recommendation**: On untrusted or public networks, restrict access using upstream firewall rules, VLAN isolation, or implement source IP allowlisting / HMAC token verification in `adc_server.c`.
+Both diagnostic services - echo on port 7, telemetry and waveform on port 5001 - answer
+without authentication, and a 4-byte `WAVE` command returns 1080 bytes: roughly 270x
+amplification. Left open, the board is a usable reflector, and the echo service is one
+by definition.
+
+They therefore answer only sources on the interface's own subnet, taken from the live
+netif so it follows DHCP and the static fallback. `NET_ACL_MODE` in
+`CM7/App/Inc/net_config.h` selects the policy; `NET_ACL_ANY` restores the old behaviour
+for a debugging session.
+
+**This is not a security boundary.** A source address is trivially spoofed and anything
+on the subnet is still answered. What it removes is the board's value as an off-link
+amplifier, without a list of hosts to maintain. On an untrusted network keep upstream
+firewall rules or VLAN isolation, and add a token check in `adc_server.c` if the
+telemetry itself is worth protecting. ICMP is untouched, so `ping` stays the first
+reachability check.
+
+See [`docs/ADC_BRINGUP.md`](docs/ADC_BRINGUP.md) section 6 for the configuration detail
+and section 7B for how the refuse path was actually proved, which needs more than a
+timeout to be convincing.
 
