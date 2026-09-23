@@ -55,3 +55,37 @@ bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port)
 
     return true;
 }
+
+bool GPIO_BM_ConfigAlternate(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af, uint32_t pull, uint32_t speed)
+{
+    if ((port == NULL) || (pin_idx > 15U) || (af > 15U))
+    {
+        return false;
+    }
+
+    if (!GPIO_BM_EnablePortClock(port))
+    {
+        return false;
+    }
+
+    /* 1. Alternate Function selection: AFR[0] for pins 0..7, AFR[1] for pins 8..15 */
+    uint32_t afr_idx   = pin_idx >> 3U;
+    uint32_t afr_shift = (pin_idx & 7U) * 4U;
+    port->AFR[afr_idx] = (port->AFR[afr_idx] & ~(0xFU << afr_shift)) | ((af & 0xFU) << afr_shift);
+
+    /* 2. Output type: Push-Pull (0) */
+    port->OTYPER &= ~(1UL << pin_idx);
+
+    /* 3. Output speed: 2 bits per pin */
+    uint32_t pos2 = pin_idx * 2U;
+    port->OSPEEDR = (port->OSPEEDR & ~(0x3UL << pos2)) | ((speed & 0x3UL) << pos2);
+
+    /* 4. Pull-up / Pull-down: 2 bits per pin */
+    port->PUPDR = (port->PUPDR & ~(0x3UL << pos2)) | ((pull & 0x3UL) << pos2);
+
+    /* 5. Mode: Alternate Function (0b10 = 2) */
+    port->MODER = (port->MODER & ~(0x3UL << pos2)) | (0x2UL << pos2);
+
+    return true;
+}
+

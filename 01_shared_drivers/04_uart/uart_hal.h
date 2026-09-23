@@ -9,6 +9,7 @@
 #define UART_HAL_H
 
 #include "stm32h7xx_hal.h"
+#include <stdbool.h>
 
 #if defined(HAL_UART_MODULE_ENABLED)
 
@@ -43,9 +44,65 @@ HAL_StatusTypeDef UART_HAL_Init(UART_HandleTypeDef *huart, const uart_hal_config
   */
 void UART_HAL_Write(UART_HandleTypeDef *huart, const uint8_t *data, uint16_t length);
 
+/* ---- Extended HAL API (Additive) --------------------------------------- */
+
+/**
+  * @brief  Pin specification for HAL-tier pin injection.
+  */
+typedef struct
+{
+    GPIO_TypeDef *port;     /*!< GPIO port (GPIOA..GPIOK) */
+    uint32_t      pin_idx;  /*!< GPIO pin index (0..15) */
+    uint8_t       af;       /*!< Alternate function (e.g. GPIO_AF7_USART3) */
+} uart_hal_pin_t;
+
+/**
+  * @brief  Extended configuration structure for advanced UART initialization.
+  */
+typedef struct
+{
+    USART_TypeDef         *instance;          /*!< Instance, e.g. USART1, USART3, LPUART1 */
+    uint32_t               baudrate;          /*!< Baudrate, e.g. 115200, 921600          */
+    uint32_t               word_length;       /*!< e.g. UART_WORDLENGTH_8B, 7B, 9B        */
+    uint32_t               stop_bits;         /*!< e.g. UART_STOPBITS_1, 2                */
+    uint32_t               parity;            /*!< e.g. UART_PARITY_NONE, EVEN, ODD       */
+    uint32_t               hw_flow_ctl;       /*!< e.g. UART_HWCONTROL_NONE, RTS, CTS     */
+    uint32_t               oversampling;      /*!< e.g. UART_OVERSAMPLING_16, 8           */
+    bool                   enable_clock;      /*!< Automatically enable APB clock in RCC  */
+    const uart_hal_pin_t  *tx_pin;            /*!< Optional TX pin configuration          */
+    const uart_hal_pin_t  *rx_pin;            /*!< Optional RX pin configuration          */
+} uart_hal_config_ex_t;
+
+/**
+  * @brief  Initializes UART with injected extended configuration, pins, and clock.
+  * @param  huart  Pointer to HAL UART handle.
+  * @param  config Injected extended hardware configuration.
+  * @return HAL status.
+  */
+HAL_StatusTypeDef UART_HAL_InitEx(UART_HandleTypeDef *huart, const uart_hal_config_ex_t *config);
+
+/**
+  * @brief  Blocking write with configurable timeout and status return.
+  * @param  huart      Pointer to HAL UART handle.
+  * @param  data       Pointer to bytes to transmit.
+  * @param  length     Number of bytes to transmit.
+  * @param  timeout_ms Timeout in milliseconds.
+  * @return HAL status.
+  */
+HAL_StatusTypeDef UART_HAL_WriteEx(UART_HandleTypeDef *huart, const uint8_t *data, uint16_t length, uint32_t timeout_ms);
+
+/**
+  * @brief  Validates and applies the ES0445 Errata 2.20.3 & 2.21.1 workaround (bit 20).
+  *         Checks if the DMA stream CR has bit 20 (DMA_SxCR_TRBUFF) set, setting it if missing.
+  * @param  hdma Pointer to HAL DMA handle attached to UART stream.
+  * @return HAL status.
+  */
+HAL_StatusTypeDef UART_HAL_CheckDmaErrata(DMA_HandleTypeDef *hdma);
+
+
 /* ---- Backward-compatible Console API ----------------------------------- */
 
-/** @brief  Configures default console UART (instance from board_def.h / Nucleo fallback). */
+/** @brief  Configures default console UART (instance from board_def.h). */
 HAL_StatusTypeDef UART_Console_Init(uint32_t baudrate);
 
 /** @brief  Blocking write to the default console UART. */

@@ -46,6 +46,32 @@ extern "C" {
   */
 bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port);
 
+/* ---- GPIO Pull & Speed Constants (Bare-Metal) --------------------------- */
+#define GPIO_BM_PULL_NONE         0x00000000UL
+#define GPIO_BM_PULL_UP           0x00000001UL
+#define GPIO_BM_PULL_DOWN         0x00000002UL
+
+#define GPIO_BM_SPEED_LOW         0x00000000UL
+#define GPIO_BM_SPEED_MEDIUM      0x00000001UL
+#define GPIO_BM_SPEED_HIGH        0x00000002UL
+#define GPIO_BM_SPEED_VERY_HIGH   0x00000003UL
+
+/**
+  * @brief  Configures a single GPIO pin for alternate function (AF) mode in Push-Pull.
+  *
+  *         Enables the port clock automatically via GPIO_BM_EnablePortClock(port),
+  *         programs AFR[0] or AFR[1], sets MODER to alternate function (0b10),
+  *         OTYPER to push-pull (0), and applies the requested pull and speed.
+  *
+  * @param  port     GPIO port pointer (GPIOA..GPIOK).
+  * @param  pin_idx  Pin index (0..15).
+  * @param  af       Alternate function index (0..15, e.g. 7 for USART1..3).
+  * @param  pull     Pull configuration (GPIO_BM_PULL_*).
+  * @param  speed    Speed configuration (GPIO_BM_SPEED_*).
+  * @retval true on success, false on invalid parameters (NULL port or pin/AF > 15).
+  */
+bool GPIO_BM_ConfigAlternate(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af, uint32_t pull, uint32_t speed);
+
 #ifdef __cplusplus
 }
 #endif

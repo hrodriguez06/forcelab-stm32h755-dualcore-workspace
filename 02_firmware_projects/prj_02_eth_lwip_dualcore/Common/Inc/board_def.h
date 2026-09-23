@@ -74,6 +74,15 @@ extern "C" {
 #define BOARD_LED_RED_PORT                    GPIOB   /* LD3 - PB14 */
 #define BOARD_LED_RED_PIN                GPIO_PIN_14
 
+/* ---- Console UART (Nucleo-144 ST-LINK VCP) ------------------------------ */
+#define BOARD_CONSOLE_UART_INSTANCE           USART3
+#define BOARD_CONSOLE_TX_PORT                 GPIOD   /* PD8  - USART3_TX */
+#define BOARD_CONSOLE_TX_PIN                  GPIO_PIN_8
+#define BOARD_CONSOLE_TX_AF                   GPIO_AF7_USART3
+#define BOARD_CONSOLE_RX_PORT                 GPIOD   /* PD9  - USART3_RX */
+#define BOARD_CONSOLE_RX_PIN                  GPIO_PIN_9
+#define BOARD_CONSOLE_RX_AF                   GPIO_AF7_USART3
+
 #ifdef __cplusplus
 }
 #endif
