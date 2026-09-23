@@ -17,10 +17,22 @@
       "binaryDir": "${sourceDir}/build/release",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "selftest",
+      "displayName": "Dual-Core Debug with ADC Selftest (CM7 + CM4)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/selftest",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ADC_DRIVER_SELFTEST": "ON"
+      }
     }
   ],
   "buildPresets": [
-    { "name": "debug",   "configurePreset": "debug"   },
-    { "name": "release", "configurePreset": "release" }
+    { "name": "debug",    "configurePreset": "debug"    },
+    { "name": "release",  "configurePreset": "release"  },
+    { "name": "selftest", "configurePreset": "selftest" }
   ]
 }

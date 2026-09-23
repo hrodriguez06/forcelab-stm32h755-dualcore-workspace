@@ -56,19 +56,19 @@ The hardware `BOOST[1:0]` bitfield in `ADC_CR` must be programmed according to $
 
 When `boost_mode = ADC_*_BOOST_AUTO`, the driver automatically inspects $f_{\text{ker\_ck}}$ and selects the optimal `BOOST` mode.
 
-### 2.3 Channel Types, Impedances & Sampling Times (DS12923 & RM0399)
+### 2.3 Channel Types & Sampling Times (DS12923 & RM0399)
 
-The STM32H755 pins are partitioned into **fast** and **slow** analog channels:
+The STM32H755 analog pins are partitioned into **fast** and **slow** channels:
 
-| Channel Group | ADC Channels | Internal Switch Resistance $R_{ADC}$ | Minimum Sampling Considerations |
-| :--- | :--- | :--- | :--- |
-| **Fast Channels** | ADC1/ADC2: CH0 .. CH5 | $\sim 160\,\Omega - 260\,\Omega$ (DS12923 Table 86/87) | Direct pin routing. Supports $1.5$ to $2.5$ cycle sampling at low source impedance $R_{AIN}$. |
-| **Slow Channels** | ADC1/ADC2: CH6 .. CH19 | $\sim 680\,\Omega - 1500\,\Omega$ (DS12923 Table 86/87) | Routed through internal analog mux switches. Requires higher sample cycles ($32.5+$ cycles) depending on $R_{AIN}$. |
-| **Internal VREFINT** | ADC3: CH19 | Internal bandgap reference | **$t_S \ge 4.3\,\mu\text{s}$ mandatory** (DS12923 Table 88 / Table 93). Validated at driver init. |
-| **Internal Temperature**| ADC3: CH18 | Internal temp sensor diode | **$t_S \ge 9.0\,\mu\text{s}$ mandatory** (DS12923 Table 90 / Table 94). Validated at driver init. |
-| **Internal VBAT** | ADC3: CH17 | Built-in $1/4$ resistor bridge | **$t_S \ge 9.0\,\mu\text{s}$ mandatory** (DS12923 Table 91 / Table 95). Validated at driver init. |
+| Channel Group | ADC Channels | Routing & Sampling Considerations |
+| :--- | :--- | :--- |
+| **Fast Channels** | ADC1/ADC2: CH0 .. CH5 | Direct analog pad connection. Supports short sampling times ($1.5$ to $2.5$ cycles) when source impedance $R_{AIN}$ is low. |
+| **Slow Channels** | ADC1/ADC2: CH6 .. CH19 | Routed through internal analog multiplexer switches. Requires longer sampling times ($8.5$ to $32.5+$ cycles) depending on external source impedance $R_{AIN}$. |
+| **Internal VREFINT** | ADC3: CH19 | Internal bandgap reference. **$t_S \ge 4.3\,\mu\text{s}$ mandatory** (DS12923 Table 20). Validated at driver initialization. |
+| **Internal Temperature**| ADC3: CH18 | Internal temperature sensor diode. **$t_S \ge 9.0\,\mu\text{s}$ mandatory** (DS12923 Table 92). Validated at driver initialization. |
+| **Internal VBAT** | ADC3: CH17 | Built-in $1/4$ resistor bridge. **$t_S \ge 9.0\,\mu\text{s}$ mandatory** (DS12923 Table 94). Validated at driver initialization. |
 
-The minimum sampling time equation is:
+The minimum sampling time equation (RM0399 §26.4.15) is:
 $$t_S \ge (R_{AIN} + R_{ADC}) \cdot C_{ADC} \cdot \ln(2^{N+2})$$
 
 ### 2.4 Handle Lifecycle & Zero-Initialization Rule
@@ -87,9 +87,11 @@ The following hardware features are explicitly deferred from the v1.x driver bas
 >
 > The bridge does **NOT** decode the System Memory address range (`0x1FF00000 - 0x1FFFFFFF`) residing in the D1 domain. Any direct memory read to the factory calibration registers (`VREFINT_CAL_ADDR = 0x1FF1E860`, `TS_CAL1 = 0x1FF1E820`, `TS_CAL2 = 0x1FF1E840`) from Cortex-M4 causes a bus matrix decode error resulting in an immediate **BusFault / HardFault**.
 >
-> To resolve this deterministically and safely:
-> 1. Cortex-M7 reads the real factory calibration words at boot during `Shared_Init()` and publishes them in SRAM4 (`g_shared.vrefint_cal`, `g_shared.ts_cal1`, `g_shared.ts_cal2`, `g_shared.cal_valid`).
-> 2. Cortex-M4 receives them via explicit dependency injection using `ADC_*_InjectCalibration(&cal)`.
+> On Cortex-M7, reading System Memory (`0x1FF00000 - 0x1FF1FFFF`) requires an explicit MPU region (e.g., Region 9 configured as `MPU_REGION_PRIV_RO_URO` / Non-cacheable) if the default MPU background map denies unmapped access.
+>
+> To resolve calibration deterministically and safely across cores:
+> 1. Cortex-M7 (or any master with access to System Memory) reads the factory calibration words (`VREFINT_CAL`, `TS_CAL1`, `TS_CAL2`) and provides them to Cortex-M4 via an application inter-core transport (e.g., shared SRAM, IPC, mailbox).
+> 2. Cortex-M4 injects them into the driver via `ADC_*_InjectCalibration(&cal)`.
 > 3. If uncalibrated on Cortex-M4, `ADC_*_CalculateVDDA` returns `0U` and `ADC_*_CalculateTemperature` returns `ADC_*_TEMPERATURE_ERROR` (`-999L`). The driver **never** invents hardcoded constants.
 
 ---
@@ -177,7 +179,7 @@ void Read_Sensors(void)
             uint16_t temp_raw = 0;
             if (ADC_LL_ReadSingle(ADC3, ADC_LL_CHANNEL_TEMPSENSOR, ADC_LL_SAMPLETIME_810CYCLES_5, &temp_raw, 100000U))
             {
-                float temp_c = ADC_LL_CalculateTemperature(temp_raw, vdda_mv, 16U);
+                int32_t temp_c = ADC_LL_CalculateTemperature(temp_raw, vdda_mv, 16U);
                 (void)temp_c;
             }
         }

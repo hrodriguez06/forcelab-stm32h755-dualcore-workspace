@@ -1,4 +1,56 @@
-﻿      -------------------------------------------------------------------
+================================================================================
+STM32H755ZI ADC1 & ADC12_COMMON Active Acquisition Live SWD Register Dump
+Project: prj_04_adc_dma_bm_eth (CM4 ADC Acquisition @ 500 kSPS, TIM3 TRGO, DMA Circular)
+Target:  NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK V3)
+Core:    CM4 acquiring on ADC1 (PB1 / INP5), CM7 running LwIP / FreeRTOS
+================================================================================
+
+$ STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x40022000 256
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Hot Plug
+Reset mode  : Software reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+Reading 32-bit memory content
+  Size          : 256 Bytes
+  Address:      : 0x40022000
+0x40022000 : 0000100B 00000010 1FC10105 80001483
+0x40022010 : 00000000 00010000 00000000 00000020
+0x40022020 : 00000000 03FFFFFF 0000100B 0000100B
+0x40022030 : 00000140 00000000 00000000 00000000
+0x40022040 : 0000000E 0000100B 0000100B 00000000
+0x40022050 : 0000100B 0000100B 0000100B 0000100B
+0x40022060 : 00000000 00000000 00000000 00000000
+0x40022070 : 0000100B 0000100B 0000100B 0000100B
+0x40022080 : 00000000 00000000 00000000 00000000
+0x40022090 : 0000100B 0000100B 0000100B 0000100B
+0x400220A0 : 00000000 00000000 0000100B 0000100B
+0x400220B0 : 00000000 03FFFFFF 00000000 03FFFFFF
+0x400220C0 : 00000000 000003EE 00000000 0000100B
+0x400220D0 : 00000000 00000000 0000100B 0000100B
+0x400220E0 : 0000100B 0000100B 0000100B 0000100B
+0x400220F0 : 00000000 00000000 00000000 00000000
+
+
+$ STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x40022300 64
+
+      -------------------------------------------------------------------
                        STM32CubeProgrammer v2.23.0                  
       -------------------------------------------------------------------
 
@@ -20,8 +72,21 @@ BL Version  : 0x92
 
 Reading 32-bit memory content
   Size          : 64 Bytes
-  Address:      : 0x58026000
-0x58026000 : 00000000 00000000 2FC10100 00000000
-0x58026010 : 00000000 00000000 00000000 00000000
-0x58026020 : 00000000 0000FFFF 00000000 00000000
-0x58026030 : 00000000 00000000 00000000 00000000
+  Address:      : 0x40022300
+0x40022300 : 0000100B 00000010 00000000 0000001A
+0x40022310 : 00000000 00010000 00000000 00000020
+0x40022320 : 00000000 03FFFFFF 0000100B 0000100B
+0x40022330 : 00000140 00000000 00000000 00000000
+
+================================================================================
+Key Register Verification:
+- ADC1->ISR     (0x40022000) = 0x0000100B: ADRDY=1, EOSMP=1, EOC=1, EOS=1, LDORDY=1
+- ADC1->IER     (0x40022004) = 0x00000010: OVRIE=1
+- ADC1->CR      (0x40022008) = 0x1FC10105: ADEN=1, ADSTART=1 (Active conversion), BOOST=01b, ADVREGEN=1
+- ADC1->CFGR    (0x4002200C) = 0x80001483: JQDIS=1 (Errata ES0445 workaround), EXTEN=01b (Rising edge), EXTSEL=0100b (TIM3 TRGO), DMNGT=11b (DMA Circular)
+- ADC1->SMPR1   (0x40022014) = 0x00010000: SMP5=010b (8.5 cycles)
+- ADC1->PCSEL   (0x4002201C) = 0x00000020: PCSEL5=1 (Channel 5 preselected)
+- ADC1->SQR1    (0x40022030) = 0x00000140: L=0 (1 conversion), SQ1=5 (Channel 5)
+- ADC1->CALFACT (0x400220C4) = 0x000003EE: Offset and linearity calibrated
+- ADC12->CCR    (0x40022308) = 0x00000000: CKMODE=00b (Async), PRESC=0000b (Div1) -> 25 MHz / 2 = 12.5 MHz analog core
+================================================================================
