@@ -72,6 +72,18 @@ bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port);
   */
 bool GPIO_BM_ConfigAlternate(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af, uint32_t pull, uint32_t speed);
 
+/**
+  * @brief  Configures a single GPIO pin for analog mode (no pull-up/down).
+  *
+  *         Enables the port clock automatically via GPIO_BM_EnablePortClock(port),
+  *         sets MODER to analog (0b11) and PUPDR to no-pull (0b00).
+  *
+  * @param  port     GPIO port pointer (GPIOA..GPIOK).
+  * @param  pin_idx  Pin index (0..15).
+  * @retval true on success, false on invalid parameters (NULL port or pin > 15).
+  */
+bool GPIO_BM_ConfigAnalog(GPIO_TypeDef *port, uint32_t pin_idx);
+
 #ifdef __cplusplus
 }
 #endif

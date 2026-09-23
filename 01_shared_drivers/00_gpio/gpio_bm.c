@@ -89,3 +89,26 @@ bool GPIO_BM_ConfigAlternate(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af, 
     return true;
 }
 
+bool GPIO_BM_ConfigAnalog(GPIO_TypeDef *port, uint32_t pin_idx)
+{
+    if ((port == NULL) || (pin_idx > 15U))
+    {
+        return false;
+    }
+
+    if (!GPIO_BM_EnablePortClock(port))
+    {
+        return false;
+    }
+
+    uint32_t pos2 = pin_idx * 2U;
+
+    /* 1. Mode: Analog (0b11) */
+    port->MODER |= (0x3UL << pos2);
+
+    /* 2. Pull-up / Pull-down: None (0b00) */
+    port->PUPDR &= ~(0x3UL << pos2);
+
+    return true;
+}
+
