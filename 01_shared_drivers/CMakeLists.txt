@@ -56,6 +56,11 @@ target_include_directories(stm32h7_driver_adc_bm INTERFACE ${CMAKE_CURRENT_LIST_
 target_sources(stm32h7_driver_adc_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/07_adc/adc_bm.c)
 target_link_libraries(stm32h7_driver_adc_bm INTERFACE stm32h7_driver_gpio stm32h7_driver_dma)
 
+add_library(stm32h7_driver_adc_ll INTERFACE)
+target_include_directories(stm32h7_driver_adc_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/07_adc)
+target_sources(stm32h7_driver_adc_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/07_adc/adc_ll.c)
+target_link_libraries(stm32h7_driver_adc_ll INTERFACE stm32h7_driver_gpio stm32h7_driver_dma)
+
 add_library(stm32h7_driver_eth INTERFACE)
 target_include_directories(stm32h7_driver_eth INTERFACE ${CMAKE_CURRENT_LIST_DIR}/08_eth)
 target_sources(stm32h7_driver_eth INTERFACE
