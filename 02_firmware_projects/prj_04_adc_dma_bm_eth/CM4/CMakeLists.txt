@@ -108,6 +108,10 @@ endif()
 
 if(ADC_DRIVER_SELFTEST)
     target_compile_definitions(${TARGET} PRIVATE ADC_DRIVER_SELFTEST=1)
+    target_sources(${TARGET} PRIVATE
+        # T2, T3, T4, T6 on hardware: see App/Inc/adc_selftest_hw.h
+        ${CMAKE_CURRENT_LIST_DIR}/App/Src/adc_selftest_hw.c
+    )
     target_link_libraries(${TARGET} PRIVATE
         stm32h7_driver_adc_ll
     )

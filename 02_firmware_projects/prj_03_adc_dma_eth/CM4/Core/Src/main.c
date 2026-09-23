@@ -30,6 +30,7 @@
 
 #if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
 #include "adc_hal.h"
+#include "adc_selftest_hw.h"
 #include <stdio.h>
 #include <string.h>
 static void CM4_Test_Adc_Hal(void);
@@ -71,6 +72,10 @@ int main(void)
 
 #if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
     CM4_Test_Adc_Hal();
+
+    /* Hardware tests T2, T3, T4, T6 (adc_selftest_hw.h). Must run before
+       ADC_Acquisition_Init(): they borrow ADC1/2/3, DMA1_Stream0/1 and TIM3. */
+    ADC_SelfTestHw_Run();
 #endif
 
     /* Initialize ADC1 + DMA1 with TIM3 hardware trigger */
@@ -95,6 +100,11 @@ int main(void)
 
         /* Process completed ADC DMA half-buffer if ready */
         ADC_Acquisition_Process();
+
+#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
+        /* One result line per mailbox slot CPU1 has freed. */
+        ADC_SelfTestHw_Poll();
+#endif
     }
 }
 
