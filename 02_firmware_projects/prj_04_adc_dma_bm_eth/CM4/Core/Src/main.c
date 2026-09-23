@@ -137,8 +137,16 @@ static void CPU2_WaitForCPU1(void)
      * function. Nothing faults. */
     SET_BIT(SCB->SCR, SCB_SCR_SEVONPEND_Msk);
 
-    /* Enter STOP on D2 until CPU1 finishes initialization and publishes SHARED_MAGIC */
-    while (g_shared.magic != SHARED_MAGIC)
+    /* Enter STOP on D2 until CPU1 has published SHARED_MAGIC *and* released
+       HSEM 0. The magic alone is not enough: .shared_ram is NOLOAD and SRAM4
+       keeps its contents across a warm reset, so right after one this core
+       can read the previous run's magic before CPU1 has reached the line that
+       clears it. Leaving here that early runs HAL_Init() on HSI - SysTick
+       ends up 3x fast (SystemCoreClock = 64 MHz on a 200 MHz core) and CPU1's
+       Shared_Init() later wipes whatever this core has already published.
+       The HSEM status flag is reset with the system, so it cannot be stale. */
+    while ((g_shared.magic != SHARED_MAGIC) ||
+           (__HAL_HSEM_GET_FLAG(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT_SYNC)) == 0U))
     {
         HAL_PWREx_ClearPendingEvent();
         HAL_PWREx_EnterSTOPMode(PWR_MAINREGULATOR_ON, PWR_STOPENTRY_WFE, PWR_D2_DOMAIN);
