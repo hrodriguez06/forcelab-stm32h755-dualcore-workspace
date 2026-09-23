@@ -124,6 +124,29 @@ static AdcHal_Handle_t *ADC_HAL_GetHandle(ADC_TypeDef *instance)
     return NULL;
 }
 
+static uint32_t ADC_HAL_GetPrescalerDiv(uint32_t clock_prescaler)
+{
+    switch (clock_prescaler)
+    {
+        case ADC_CLOCK_ASYNC_DIV1:          return 1U;
+        case ADC_CLOCK_ASYNC_DIV2:          return 2U;
+        case ADC_CLOCK_ASYNC_DIV4:          return 4U;
+        case ADC_CLOCK_ASYNC_DIV6:          return 6U;
+        case ADC_CLOCK_ASYNC_DIV8:          return 8U;
+        case ADC_CLOCK_ASYNC_DIV10:         return 10U;
+        case ADC_CLOCK_ASYNC_DIV12:         return 12U;
+        case ADC_CLOCK_ASYNC_DIV16:         return 16U;
+        case ADC_CLOCK_ASYNC_DIV32:         return 32U;
+        case ADC_CLOCK_ASYNC_DIV64:         return 64U;
+        case ADC_CLOCK_ASYNC_DIV128:        return 128U;
+        case ADC_CLOCK_ASYNC_DIV256:        return 256U;
+        case ADC_CLOCK_SYNC_PCLK_DIV1:      return 1U;
+        case ADC_CLOCK_SYNC_PCLK_DIV2:      return 2U;
+        case ADC_CLOCK_SYNC_PCLK_DIV4:      return 4U;
+        default:                            return 1U;
+    }
+}
+
 bool ADC_HAL_InitEx(AdcHal_Handle_t *handle, const AdcHal_ConfigEx_t *config)
 {
     if ((handle == NULL) || (config == NULL))
@@ -174,11 +197,39 @@ bool ADC_HAL_InitEx(AdcHal_Handle_t *handle, const AdcHal_ConfigEx_t *config)
     }
 #endif
 
+    /* Check CCR prescaler conflict if ADC or partner is already enabled (V1) */
+    ADC_Common_TypeDef *common = ADC12_COMMON;
+#if defined(ADC3)
+    if (config->adc_instance == ADC3)
+    {
+        common = ADC3_COMMON;
+    }
+#endif
+    bool any_enabled = ((config->adc_instance->CR & ADC_CR_ADEN) != 0U);
+    if (common == ADC12_COMMON)
+    {
+        ADC_TypeDef *other = (config->adc_instance == ADC1) ? ADC2 : ADC1;
+        if ((other->CR & ADC_CR_ADEN) != 0U)
+        {
+            any_enabled = true;
+        }
+    }
+    uint32_t desired_presc = (config->clock_prescaler != 0U) ? config->clock_prescaler : ADC_CLOCK_ASYNC_DIV1;
+    if (any_enabled)
+    {
+        if ((common->CCR & (ADC_CCR_CKMODE | ADC_CCR_PRESC)) != desired_presc)
+        {
+            return false;
+        }
+    }
+
     /* 2. Check ADC3 internal channels and validate DS12923 minimum sampling time */
     bool has_vref = false;
     bool has_temp = false;
     bool has_vbat = false;
     uint32_t eff_freq = (config->kernel_clock_hz > 0U) ? config->kernel_clock_hz : 25000000UL;
+    uint32_t presc_div = ADC_HAL_GetPrescalerDiv(config->clock_prescaler);
+    eff_freq /= presc_div;
     /* Fixed divide-by-2 before the SAR analog core (RM0399 §26.4.3, R14) */
     uint32_t f_analog = eff_freq / 2U;
     if (f_analog == 0U)
@@ -826,11 +877,11 @@ int32_t ADC_HAL_CalculateTemperature(uint16_t temp_raw, uint32_t vdda_mv, uint8_
         return ADC_HAL_TEMPERATURE_ERROR;
     }
 
-    /* Scale raw reading if VDDA differs from nominal 3300 mV */
+    /* Scale raw reading if VDDA differs from nominal 3300 mV (fits safely in uint32_t: 65535 * 3600 = 235,926,000 < 2^32-1) */
     uint32_t raw_norm = raw_16b;
     if (vdda_mv > 0U)
     {
-        raw_norm = (uint32_t)(((uint64_t)raw_16b * vdda_mv) / 3300UL);
+        raw_norm = ((uint32_t)raw_16b * (uint32_t)vdda_mv) / 3300U;
     }
 
     /* STM32H755: TS_CAL1 @ 30 deg C, TS_CAL2 @ 130 deg C (range = 100 deg C) */

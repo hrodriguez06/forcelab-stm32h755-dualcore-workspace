@@ -1171,11 +1171,11 @@ int32_t ADC_BM_CalculateTemperature(uint16_t temp_raw, uint32_t vdda_mv, uint8_t
         return ADC_BM_TEMPERATURE_ERROR;
     }
 
-    /* Scale raw reading if VDDA differs from nominal 3300 mV */
+    /* Scale raw reading if VDDA differs from nominal 3300 mV (fits safely in uint32_t: 65535 * 3600 = 235,926,000 < 2^32-1) */
     uint32_t raw_norm = raw_16b;
     if (vdda_mv > 0U)
     {
-        raw_norm = (uint32_t)(((uint64_t)raw_16b * vdda_mv) / 3300UL);
+        raw_norm = ((uint32_t)raw_16b * (uint32_t)vdda_mv) / 3300U;
     }
 
     /* STM32H755: TS_CAL1 @ 30 deg C, TS_CAL2 @ 130 deg C (range = 100 deg C) */
