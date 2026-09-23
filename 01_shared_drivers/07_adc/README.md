@@ -81,6 +81,17 @@ The following hardware features are explicitly deferred from the v1.x driver bas
 - Dual-ADC simultaneous and interleaved modes (`ADC12_COMMON->CCR.DUAL != 0`).
 - Differential input conversions (`DIFSEL` bits; v1 supports single-ended mode).
 
+### 2.6 Dual-Core Domain Isolation & System Memory Calibration (Cortex-M4)
+> [!WARNING]
+> According to **RM0399 Section 2.1 / Figure 1 Note 2**, the D2-to-D1 AHB bus bridge connects Cortex-M4 (D2 domain) to Flash Banks 1 & 2 (`0x08000000-0x081FFFFF`), AXI SRAM (`0x24000000-0x2407FFFF`), and AHB3/APB3 peripherals (`0x50000000-0x57FFFFFF`).
+>
+> The bridge does **NOT** decode the System Memory address range (`0x1FF00000 - 0x1FFFFFFF`) residing in the D1 domain. Any direct memory read to the factory calibration registers (`VREFINT_CAL_ADDR = 0x1FF1E860`, `TS_CAL1 = 0x1FF1E820`, `TS_CAL2 = 0x1FF1E840`) from Cortex-M4 causes a bus matrix decode error resulting in an immediate **BusFault / HardFault**.
+>
+> To resolve this transparently:
+> 1. All tiers (`adc_bm`, `adc_ll`, `adc_hal`) implement safe calibration getters (`ADC_*_GetVrefintCal()`, `ADC_*_GetTsCal1()`, `ADC_*_GetTsCal2()`).
+> 2. When compiled on `CORE_CM4`, if the address macro points to default System Memory (`0x1FF00000 .. 0x1FFFFFFF`), the driver safely falls back to typical factory nominal constants (1.212V @ 3.3V 16-bit: `24200`, 30 °C: `12365`, 130 °C: `16276`) without generating any bus fault.
+> 3. An application running on Cortex-M4 may also pass a RAM pointer (populated by Cortex-M7 via shared memory) to `VREFINT_CAL_ADDR` / `TEMPSENSOR_CALx_ADDR` for full calibration precision.
+
 ---
 
 ## 3. Usage Examples

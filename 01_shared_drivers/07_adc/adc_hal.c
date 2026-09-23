@@ -20,6 +20,46 @@
 #define TEMPSENSOR_CAL2_ADDR ((const uint16_t *)(0x1FF1E840UL))
 #endif
 
+static inline uint16_t ADC_HAL_GetVrefintCal(void)
+{
+#if defined(CORE_CM4)
+    /* RM0399 Section 2.1 / Figure 1 Note 2: System Memory (0x1FF00000 - 0x1FFFFFFF) is in D1
+     * and NOT decoded by the D2-to-D1 AHB bridge. Access from Cortex-M4 generates
+     * a HardFault. If pointing to default 0x1FF1xxxx address, return nominal factory
+     * calibration (1.212V @ 3.3V 16-bit: (1.212/3.3)*65535 = 24068 -> 24200). */
+    if (((uint32_t)VREFINT_CAL_ADDR >= 0x1FF00000UL) &&
+        ((uint32_t)VREFINT_CAL_ADDR <= 0x1FFFFFFFUL))
+    {
+        return 24200U;
+    }
+#endif
+    return *VREFINT_CAL_ADDR;
+}
+
+static inline uint16_t ADC_HAL_GetTsCal1(void)
+{
+#if defined(CORE_CM4)
+    if (((uint32_t)TEMPSENSOR_CAL1_ADDR >= 0x1FF00000UL) &&
+        ((uint32_t)TEMPSENSOR_CAL1_ADDR <= 0x1FFFFFFFUL))
+    {
+        return 12365U; /* Nominal 30 deg C @ 3.3V, 16-bit */
+    }
+#endif
+    return *TEMPSENSOR_CAL1_ADDR;
+}
+
+static inline uint16_t ADC_HAL_GetTsCal2(void)
+{
+#if defined(CORE_CM4)
+    if (((uint32_t)TEMPSENSOR_CAL2_ADDR >= 0x1FF00000UL) &&
+        ((uint32_t)TEMPSENSOR_CAL2_ADDR <= 0x1FFFFFFFUL))
+    {
+        return 16276U; /* Nominal 130 deg C @ 3.3V, 16-bit */
+    }
+#endif
+    return *TEMPSENSOR_CAL2_ADDR;
+}
+
 static const uint32_t s_hal_ranks[16] = {
     ADC_REGULAR_RANK_1,  ADC_REGULAR_RANK_2,  ADC_REGULAR_RANK_3,  ADC_REGULAR_RANK_4,
     ADC_REGULAR_RANK_5,  ADC_REGULAR_RANK_6,  ADC_REGULAR_RANK_7,  ADC_REGULAR_RANK_8,
@@ -743,7 +783,7 @@ uint32_t ADC_HAL_CalculateVDDA(uint16_t vrefint_raw, uint8_t resolution_bits)
     {
         return 0U;
     }
-    uint32_t cal = (uint32_t)(*VREFINT_CAL_ADDR);
+    uint32_t cal = (uint32_t)ADC_HAL_GetVrefintCal();
     /* VREFINT_CAL is measured at VDDA = 3300 mV at 16-bit resolution */
     return (uint32_t)((3300UL * cal) / raw_16b);
 }
@@ -755,8 +795,8 @@ float ADC_HAL_CalculateTemperature(uint16_t temp_raw, uint32_t vdda_mv, uint8_t 
     {
         raw_16b <<= (16U - resolution_bits);
     }
-    float cal1 = (float)(*TEMPSENSOR_CAL1_ADDR);
-    float cal2 = (float)(*TEMPSENSOR_CAL2_ADDR);
+    float cal1 = (float)ADC_HAL_GetTsCal1();
+    float cal2 = (float)ADC_HAL_GetTsCal2();
 
     if (cal2 <= cal1)
     {

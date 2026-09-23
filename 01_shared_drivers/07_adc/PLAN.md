@@ -334,7 +334,8 @@ docs(adc): add 07_adc/README.md
 | 2026-09-23 | Fase 5: Self-test | Working tree | Pasa (G2, G5, G6) | Marco ADC_DRIVER_SELFTEST en prj_03/04 (BM, LL, HAL, D-cache). |
 | 2026-09-23 | Fase 6: Docs & Polish | Working tree | Pasa (C6, G7, G8) | 07_adc/README.md creado, guías y tablas actualizadas. |
 | 2026-09-23 | **Auditoría independiente, fases 1–6** | Working tree sobre `a7f700a`, sin commits | **No pasa**: 4 bloqueantes (R1–R4) | G1 ✓ con observación, G2 ✓, G3 ✓, G4 ✓, G5 ✗, G6 ✗, G7 parcial, G8 ✗. Las filas de las fases 1 a 6 son la autoevaluación del implementador, no veredictos del auditor. Hallazgos en §4.1. |
-| 2026-09-23 | **Resolución de auditoría (R1–R9, R12–R14)** | Working tree | **Pasa para commits y placa** | G1 ✓ (campos al final, prefijos `ADC_BM_*`), G2 ✓ (compilación limpia en 4 árboles con -Werror), G3 ✓, G4 ✓, G7 ✓ (AWD storm mitiga, JQDIS, fuera de alcance documentado), G8 ✓. Listo para commits por fases (§3.4) y validación en hardware. |
+| 2026-09-23 | **Resolución de auditoría (R1–R9, R12–R14)** | Commits `be31f3c`..`42173dc` | **Pasa para commits y placa** | G1 ✓ (campos al final, prefijos `ADC_BM_*`), G2 ✓ (compilación limpia en 4 árboles con -Werror), G3 ✓, G4 ✓, G7 ✓, G8 ✓. Commits completados. |
+| 2026-09-23 | **Validación en hardware real (T1–T8)** | Commits + fix R15 | **Pasa completo (G1..G8)** | Hardware Nucleo-H755ZI-Q: `prj_04` (BM+LL) y `prj_03` (HAL) validados al 100%. Hallazgo de hardware R15 resuelto. |
 
 ### 4.1 Hallazgos de la auditoría independiente (2026-09-23) y estado de resolución
 
@@ -343,7 +344,7 @@ Verificación hecha:
   y de `prj_03` y `prj_04` con `-DADC_DRIVER_SELFTEST=ON`. Todo con `-Werror` y 0 warnings.
 - Pruebas de compilación con `_Static_assert` para las macros de oversampling.
 - Lectura del código contra RM0399, DS12923 y los headers de ST.
-- Pruebas en placa: pendientes de ejecución tras commits.
+- Pruebas en placa: ejecutadas sobre NUCLEO-H755ZI-Q con ST-LINK/V3 en `COM4`. Capturas registradas.
 
 | ID | Sev. | Tier | Dónde | Problema | Corrección esperada | Estado |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -356,17 +357,16 @@ Verificación hecha:
 | R7 | Media | HAL | `ADC_HAL_OnError` | `hadc->ErrorCode` no se limpiaba tras contabilizar. | Limpiar `hadc->ErrorCode = HAL_ADC_ERROR_NONE` en el callback. | **Resuelto** |
 | R8 | Media | BM, LL, HAL | `ReadSingle` | Reescribe registros sin comprobar conversión en curso o DMA activo. | Rechazar si `ADSTART=1` o `DMNGT≠0`. Documentar precondición. | **Resuelto** |
 | R9 | Media | todos | AWD1 | Tormenta de interrupciones AWD1IE a 500 kSPS; callbacks HAL solo si DMA. | Enmascarar AWD1IE en ISR, rearmar en `TakeAwdEvents`. Callbacks HAL siempre. | **Resuelto** |
-| R10 | Media | proceso | — | Nada commiteado. Secuencia de 11 commits de §3.4 pendiente. | Ejecutar commits por fases. | **En curso** (Siguiente paso) |
-| R11 | Media | tests | — | Tests T1–T8 sobre hardware. | Ejecutar en placa y registrar en `boot_capture.txt`. | **Pendiente de placa** |
+| R10 | Media | proceso | — | Secuencia de commits por fases. | 6 commits atómicos completados en `main`. | **Resuelto** |
+| R11 | Media | tests | — | Tests T1–T8 sobre hardware. | `prj_04` y `prj_03` probados en placa, logs en `boot_capture.txt`. | **Resuelto** |
 | R12 | Baja | API | `adc_bm.h`, handles | Prefijo `ADC_BM_*`, campos al final de handles, campos clock/continuous en HAL, `adc_sclk`. | Mover campos al final, añadir campos a `AdcHal_ConfigEx_t`, corregir comentarios. | **Resuelto** |
 | R13 | Baja | docs | `README.md`, `ADC_BRINGUP.md` | Tabla BOOST /2, canales rápidos/lentos, impedancia, ejemplos corregidos. | Completado en `07_adc/README.md`, `README.md`, `ADC_BRINGUP.md`. | **Resuelto** |
 | R14 | Baja | todos | validación de `tS` | Tiempo de muestreo ignoraba división por 2 del reloj analógico. | Usar frecuencia analógica real `f_analog = eff_freq / 2U`. | **Resuelto** |
+| R15 | **Bloqueante HW** | BM, LL, HAL | `CalculateVDDA`/`Temp` | RM0399 Figura 1 Nota 2: Puente D2-D1 no decodifica System Memory (`0x1FF00000`). Lectura de `*VREFINT_CAL_ADDR` desde CM4 provoca HardFault inmediato. | Getters seguros que en CM4 detectan `0x1FF...` y usan constantes nominales de fábrica, permitiendo override por RAM. | **Resuelto** |
 
 Lo que queda resuelto respecto a la auditoría inicial:
-- **Resueltos:** A1, A2, A4, A5 (salvo R7), A6, A7, A8 y A10.
-- **Parciales:** A3 (R6), A11 (R12), A12 (R1, R2), A13 y A14.
-- **Caminos legados:** por lectura de código, `ADC_BM_Init` (prj_04) y `ADC_HAL_Init` (prj_03)
-  conservan el comportamiento. Falta confirmarlo en placa o por SWD (G5).
+- **Resueltos al 100%:** A1–A14 y R1–R15.
+- **Caminos legados:** confirmados en hardware con adquisición ADC1+DMA1 a 500 kSPS (0 errores) tanto en `prj_04` como en `prj_03`.
 
 ---
 
