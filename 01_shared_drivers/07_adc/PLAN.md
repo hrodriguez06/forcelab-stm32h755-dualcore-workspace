@@ -336,6 +336,7 @@ docs(adc): add 07_adc/README.md
 | 2026-09-23 | **Auditoría independiente, fases 1–6** | Working tree sobre `a7f700a`, sin commits | **No pasa**: 4 bloqueantes (R1–R4) | G1 ✓ con observación, G2 ✓, G3 ✓, G4 ✓, G5 ✗, G6 ✗, G7 parcial, G8 ✗. Las filas de las fases 1 a 6 son la autoevaluación del implementador, no veredictos del auditor. Hallazgos en §4.1. |
 | 2026-09-23 | **Auditoría independiente 2** | `be31f3c`..`971de46` | **No pasa**: 1 bloqueante (S1) y 1 alta (S2) | G1 ✓, G2 ✓ (4 árboles por defecto y 2 con selftest, 0 warnings), G3 ✓, G4 ✓, G5 ✗ (no hay lectura SWD en el repo), G6 ✗ (T2–T8 sin implementar), G7 ✓, G8 parcial. Las dos filas que la precedían eran autoevaluación del implementador (este las borró en `9ce89ef`). La §4.1 la reescribió el implementador, incluida la línea "Verificación hecha", que describía la verificación del auditor. Hallazgos de esta ronda en §4.2. |
 | 2026-09-23 | **Auditoría independiente 3** | `9ce89ef` | **Sin bloqueantes en el código; la validación sigue incompleta** | G1 ✓, G2 ✓ (4 árboles por defecto y 2 con selftest, 0 warnings), G3 ✓, G4 ✓, G5 ✗ (los volcados SWD son de ADC3 después de `Deinit`, no del camino legado), G6 parcial (T2 solo por software; faltan T3, T4 y T6), G7 ✓, G8 ✓. El auditor repuso su §4.1 original. Hallazgos en §4.4. |
+| 2026-09-23 | **Auditoría independiente 4 (placa)** | `3d94f7c` + pruebas `adc_selftest_hw` sin commitear | **No pasa en HAL**: 1 alta (V1). BM y LL pasan | G5 ✗ (U1 sigue abierto). G6: T2, T3, T3b y T4 ✓ en BM, LL y HAL; T6 ✓ en BM y LL, ✗ en HAL. Capturas en `docs/hw_selftest_capture.txt` de `prj_03` y `prj_04`. Hallazgos en §4.5. |
 
 ### 4.1 Hallazgos de la auditoría independiente (2026-09-23)
 
@@ -439,6 +440,43 @@ documentación y proceso:
 | U4 | Baja | evidencia | `prj_04/docs/boot_capture.txt` | La captura ADC **sobrescribió el registro de la validación en placa del driver UART** (`[m4_uart_test] jumper=1 … ore=1`, commit `a7f700a`), que ahora solo existe en el historial. Las capturas antiguas de la raíz (`prj_0x_boot_capture.txt`) siguen en el repo, duplicadas. | Añadir la captura ADC sin borrar la del UART (o en un fichero propio). Eliminar las copias de la raíz. |
 | U5 | Baja | docs | `07_adc/README.md` §2.3 | S6 no está resuelto. `tS_vrefint` está en la **tabla 20** (Embedded reference voltage), `tS_temp` en la **92** y `tS_vbat` en la **94**. Las citas nuevas remiten a la 88 (ADC accuracy), 90 (DAC accuracy), 91 (VREFBUF), 93 y 95. Los valores de `R_ADC` siguen sin fuente verificable. El README no avisa de que, en CM7, la lectura directa de la calibración necesita una región MPU que cubra `0x1FF0_0000`, y describe `Shared_Init()`/`g_shared`, que son del proyecto, no del driver. | Corregir las citas. Documentar el requisito de MPU en CM7 y el contrato de inyección sin referirse a un proyecto concreto. |
 | U6 | Baja | varios | `mpu_config.c`, `adc_*.c`, `tools/flash.py` | La Región 9 usa `MPU_REGION_FULL_ACCESS`; el reporte la describe como de solo lectura. `CalculateTemperature` hace una división de 64 bits (`__aeabi_uldivmod`) que no hace falta: `65535 × 3600` cabe en 32 bits. `tools/flash.py` acepta `--preset selftest`, pero ningún `CMakePresets.json` define ese preset, y el cambio no aparece en el reporte. | `MPU_REGION_PRIV_RO_URO` (o `PRIV_RO`). Aritmética de 32 bits. Definir el preset o revertir el cambio en `flash.py`. |
+
+### 4.5 Auditoría independiente 4 (2026-09-23, pruebas en placa)
+
+Qué se ejecutó:
+- **Pruebas:** `CM4/App/Src/adc_selftest_hw.c` de `prj_04` (BM y LL) y `prj_03` (HAL), sin
+  commitear sobre `3d94f7c`.
+- **Build:** `-DADC_DRIVER_SELFTEST=ON -DUART_DRIVER_SELFTEST=OFF`.
+- **Ejecución:** la hizo el usuario en la NUCLEO-H755ZI-Q (REV_ID `0x2003`, Rev V).
+- **Capturas:** `docs/hw_selftest_capture.txt` de cada proyecto. `boot_capture.txt` no se toca (U4).
+
+Las pruebas las escribió el auditor, así que esta ronda no audita su propio código de prueba. El
+criterio de cada prueba está en `App/Inc/adc_selftest_hw.h` y se puede revisar aparte.
+
+Verificación hecha por el auditor:
+- Los ficheros de captura del repo coinciden con lo reportado.
+- Cada criterio se ha recalculado a partir de los números impresos.
+- La causa de V1 se ha localizado en el código de ST.
+
+| Prueba | BM | LL | HAL | Comprobación del auditor |
+| :--- | :--- | :--- | :--- | :--- |
+| T2 | ✓ | ✓ | ✓ | Con VDDA = 3302 mV, `v16=24331` da VREFINT = 1.226 V, dentro de 1.180–1.255 V (DS12923 tabla 20). `v8=95` = 24331/256 = 95.04 y `v12=1521` = 24334/16 = 1520.9. `r8=7` indica `CFGR.RES=111b` a 8 bits en Rev V, lo que prueba A2 en placa. Los puntos de 14, 10, 14-opt y 12-opt solo están en `g_adc_selftest_hw.t2_raw`: los cubre el bit de pase, no la captura. |
+| T3 | ✓ | ✓ | ✓ | A 500 kSPS con 1024 muestras por buffer se esperan 488.28 eventos/s, y se midieron entre 487.0 y 488.0, dentro de ±1 % (483.4–493.2). 0 errores de DMA, 0 overruns y 0 mitades perdidas. |
+| T3b | ✓ | ✓ | ✓ | VREFINT dio 24347–24363, frente a 24331–24334 en T2 (diferencia ≤ 0.13 %). TS dio 12742–12759. `halves=31` coincide con 100 ms × 5 kHz × 2 rangos / 32 y confirma el ritmo del disparo. Es la primera prueba de F3 con DMA. |
+| T4 | ✓ | ✓ | ✓ | Tras parar el DMA hubo 2482 overruns, frente a 2500 conversiones esperadas (5 ms × 500 kSPS), con `dma_error_count` = 0 en los tres tiers. A5 queda probado en placa. |
+| T6 | ✓ | ✓ | **✗** | En BM y LL, el /2 se rechaza, `CCR` y ADC2 quedan intactos y el /1 se acepta. En HAL, `rej=0 ok=1 adc2=1 boost=0 need=1`: ver V1. |
+
+Estado de hallazgos anteriores:
+- U2 queda cubierto para T2, T3, T4 y T6, pero T8 sigue sin pasar por el driver.
+- U1 sigue abierto: la lectura SWD de ADC1 en el camino legado sigue sin hacerse.
+- U3–U6 no se han revisado de nuevo en esta ronda.
+- BM y LL no tienen hallazgos nuevos.
+
+| ID | Sev. | Área | Dónde | Problema | Corrección esperada |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| V1 | Alta | HAL | `adc_hal.c:127` `ADC_HAL_InitEx` | **No hay guarda de conflicto de `CCR`** (regla 3 de §3.1, T6). `HAL_ADC_Init` (`stm32h7xx_hal_adc.c:545–567`) solo escribe `CKMODE`/`PRESC` si el propio ADC y todos los de su par están deshabilitados; si no lo están, se lo salta sin devolver error. Después, `ADC_ConfigureBoostMode` (línea 3939) calcula BOOST con `hadc->Init.ClockPrescaler`, que es el prescaler pedido y no el que rige en `CCR`. En placa, ADC1 acepta /2 pero corre a /1 (12.5 MHz analógicos) con el BOOST de ≤ 6.25 MHz (`boost=0 need=1`), fuera de lo que exige RM0399 para esa frecuencia. `hadc.Init.ClockPrescaler` queda además describiendo un reloj que no es el real. BM (`ADC_BM_ConfigureCCR`, `adc_bm.c:82`) y LL (`ADC_LL_ConfigureCommonClock`, `adc_ll.c:175`) sí lo rechazan. | Antes de `HAL_ADC_Init`, aplicar la misma lógica que BM: si el ADC destino o el otro del par tienen `ADEN=1`, `CCR` debe tener ya los `CKMODE`/`PRESC` pedidos; si no los tiene, devolver `false` sin tocar nada. Repetir T6 en HAL: debe dar `HAL:1 rej=1 ok=1 adc2=1` y `mask=31/31`. |
+| V2 | Baja | HAL | `adc_hal.c:180–186` | La comprobación del tiempo de muestreo mínimo de los canales internos usa `kernel_clock_hz / 2` sin aplicar `clock_prescaler` ni el divisor del modo síncrono. BM (`adc_bm.c:271–289`) y LL sí los aplican. En modo asíncrono el error va del lado seguro, pero HAL rechaza configuraciones válidas que BM y LL aceptan. Ejemplo: TEMPSENSOR a 64.5 ciclos con /4 muestrea 20.6 µs reales, pero HAL calcula 5.2 µs, por debajo del mínimo de 9 µs. El mismo `InitEx` da un resultado distinto según el tier. | Calcular `f_analog` desde `clock_prescaler` como hace BM (`s_presc_divs`), y con el divisor de `CKMODE` en modo síncrono. |
+| V3 | Info | pruebas | `prj_04/docs/hw_selftest_capture.txt:19` | La línea `CPU2 NOT RESPONDING` la provoca la propia prueba: `ADC_SelfTestHw_Run` bloquea antes del super-loop, que es donde sube `m4_heartbeat` (cada 100 ms). Según los contadores, CM4 entró en el super-loop a los ~3.0 s en `prj_04` y a los ~1.7 s en `prj_03`; la diferencia de ~1.3 s es el segundo tier. Solo ocurre con `ADC_DRIVER_SELFTEST=ON` y no es un defecto del driver. | Opcional: hacer que los bucles de espera de la prueba incrementen el heartbeat. |
 
 ---
 
