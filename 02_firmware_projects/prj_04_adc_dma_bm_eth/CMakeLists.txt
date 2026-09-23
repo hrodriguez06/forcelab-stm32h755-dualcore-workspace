@@ -20,6 +20,9 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/common_flags.cmake)
 # Optional selftest: exercises shared UART driver on USART2 (PD5/PD6)
 option(UART_DRIVER_SELFTEST "Enable shared UART driver self-test on USART2 (PD5/PD6)" OFF)
 
+# Optional selftest: exercises shared ADC driver (BM & LL on CM4, D-cache on CM7)
+option(ADC_DRIVER_SELFTEST "Enable shared ADC driver self-test" OFF)
+
 # ---- External dependencies -------------------------------------------------
 # The STM32CubeH7 package is shared across projects to avoid duplicating 110 MB.
 # Defaults to the submodule in prj_eth_lwip_node or can be overridden via

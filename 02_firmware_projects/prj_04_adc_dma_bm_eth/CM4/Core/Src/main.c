@@ -31,6 +31,12 @@
 #include "uart_bm.h"
 #include "uart_ll.h"
 #endif
+#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
+#include "adc_bm.h"
+#include "adc_ll.h"
+#include <stdio.h>
+#include <string.h>
+#endif
 
 #define HEARTBEAT_DELAY_LOOPS   2000000UL
 
@@ -45,6 +51,9 @@ volatile uint32_t cpu2_loops = 0UL;
 static void CPU2_WaitForCPU1(void);
 #if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
 static void CM4_Test_Uart_Drivers(void);
+#endif
+#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
+static void CM4_Test_Adc_Drivers(void);
 #endif
 
 int main(void)
@@ -72,6 +81,11 @@ int main(void)
 #if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
     /* Run shared UART driver verification on USART2 (PD5/PD6) */
     CM4_Test_Uart_Drivers();
+#endif
+
+#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
+    /* Run shared ADC driver verification (BM & LL register match, internal channels, oversampling, AWD) */
+    CM4_Test_Adc_Drivers();
 #endif
 
     /* Initialize ADC1 + DMA1 with TIM3 hardware trigger */
@@ -411,4 +425,277 @@ static void CM4_Test_Uart_Drivers(void)
 }
 
 #endif /* UART_DRIVER_SELFTEST */
+
+#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
+
+static void CM4_Test_Adc_Drivers(void)
+{
+    /* Enable ADC3 peripheral clock in AHB4 */
+    RCC->AHB4ENR |= RCC_AHB4ENR_ADC3EN;
+    volatile uint32_t dummy = RCC->AHB4ENR;
+    (void)dummy;
+
+    bool bm_init_ok = false;
+    bool ll_init_ok = false;
+    bool reg_compare_ok = true;
+    bool bm_read_vref_ok = false;
+    bool bm_read_temp_ok = false;
+    bool ll_read_vref_ok = false;
+    bool ll_read_temp_ok = false;
+    bool ovs_trunc_rejected = false;
+    bool ovs_valid_accepted = false;
+    bool awd_bm_ok = false;
+    uint32_t vdda_bm = 0;
+    int32_t temp_bm = 0;
+    uint32_t vdda_ll = 0;
+    int32_t temp_ll = 0;
+
+    /* 1. Register Parity Test between BM and LL on ADC3 */
+    AdcBm_ChannelConfig_t bm_chs[3] = {
+        { .channel = ADC_BM_CHANNEL_VREFINT,    .sampling_time = ADC_BM_SAMPLETIME_810CYCLES_5 },
+        { .channel = ADC_BM_CHANNEL_TEMPSENSOR, .sampling_time = ADC_BM_SAMPLETIME_810CYCLES_5 },
+        { .channel = ADC_BM_CHANNEL_VBAT,       .sampling_time = ADC_BM_SAMPLETIME_810CYCLES_5 }
+    };
+
+    AdcBm_ConfigEx_t bm_ex = {
+        .adc_instance        = ADC3,
+        .channels            = bm_chs,
+        .num_channels        = 3U,
+        .resolution          = ADC_BM_RESOLUTION_16B,
+        .trigger_source      = 0U,
+        .trigger_edge        = ADC_BM_TRIGGER_DISABLED,
+        .boost_mode          = ADC_BM_BOOST_AUTO,
+        .dma_mode            = ADC_BM_DMA_DISABLED,
+        .dma_circular        = false,
+        .buffer              = NULL,
+        .buffer_length       = 0U,
+        .kernel_clock_hz     = 25000000UL,
+        .clock_mode          = ADC_BM_CLOCK_ASYNC,
+        .prescaler           = ADC_BM_PRESC_DIV1,
+        .analog_pin_port     = NULL,
+        .analog_pin_idx      = 0U,
+        .oversampling_enable = false,
+        .oversampling_ratio  = 0U,
+        .oversampling_shift  = 0U,
+        .awd_enable          = false,
+        .awd_all_channels    = false,
+        .awd_channel         = 0U,
+        .awd_high_threshold  = 0U,
+        .awd_low_threshold   = 0U
+    };
+
+    static AdcBm_Handle_t h_bm;
+    memset(&h_bm, 0, sizeof(h_bm));
+    bm_init_ok = ADC_BM_InitEx(&h_bm, &bm_ex);
+
+    /* Snapshot registers left by BM */
+    uint32_t bm_cr    = ADC3->CR;
+    uint32_t bm_cfgr  = ADC3->CFGR;
+    uint32_t bm_cfgr2 = ADC3->CFGR2;
+    uint32_t bm_pcsel = ADC3->PCSEL;
+    uint32_t bm_sqr1  = ADC3->SQR1;
+    uint32_t bm_smpr1 = ADC3->SMPR1;
+    uint32_t bm_smpr2 = ADC3->SMPR2;
+
+    ADC_BM_Deinit(&h_bm);
+
+    /* Now init LL with the exact same configuration */
+    AdcLl_ChannelConfig_t ll_chs[3] = {
+        { .channel = ADC_LL_CHANNEL_VREFINT,    .sampling_time = ADC_LL_SAMPLETIME_810CYCLES_5 },
+        { .channel = ADC_LL_CHANNEL_TEMPSENSOR, .sampling_time = ADC_LL_SAMPLETIME_810CYCLES_5 },
+        { .channel = ADC_LL_CHANNEL_VBAT,       .sampling_time = ADC_LL_SAMPLETIME_810CYCLES_5 }
+    };
+
+    AdcLl_ConfigEx_t ll_ex = {
+        .adc_instance        = ADC3,
+        .channels            = ll_chs,
+        .num_channels        = 3U,
+        .resolution          = ADC_LL_RESOLUTION_16B,
+        .trigger_source      = 0U,
+        .trigger_edge        = ADC_LL_TRIGGER_DISABLED,
+        .boost_mode          = ADC_LL_BOOST_AUTO,
+        .dma_mode            = ADC_LL_DMA_DISABLED,
+        .dma_circular        = false,
+        .buffer              = NULL,
+        .buffer_length       = 0U,
+        .kernel_clock_hz     = 25000000UL,
+        .clock_mode          = ADC_LL_CLOCK_ASYNC,
+        .prescaler           = ADC_LL_PRESC_DIV1,
+        .analog_pin_port     = NULL,
+        .analog_pin_idx      = 0U,
+        .oversampling_enable = false,
+        .oversampling_ratio  = 0U,
+        .oversampling_shift  = 0U,
+        .awd_enable          = false,
+        .awd_all_channels    = false,
+        .awd_channel         = 0U,
+        .awd_high_threshold  = 0U,
+        .awd_low_threshold   = 0U
+    };
+
+    static AdcLl_Handle_t h_ll;
+    memset(&h_ll, 0, sizeof(h_ll));
+    ll_init_ok = ADC_LL_InitEx(&h_ll, &ll_ex);
+
+    uint32_t ll_cr    = ADC3->CR;
+    uint32_t ll_cfgr  = ADC3->CFGR;
+    uint32_t ll_cfgr2 = ADC3->CFGR2;
+    uint32_t ll_pcsel = ADC3->PCSEL;
+    uint32_t ll_sqr1  = ADC3->SQR1;
+    uint32_t ll_smpr1 = ADC3->SMPR1;
+    uint32_t ll_smpr2 = ADC3->SMPR2;
+
+    if ((bm_cr != ll_cr) ||
+        (bm_cfgr != ll_cfgr) ||
+        (bm_cfgr2 != ll_cfgr2) ||
+        (bm_pcsel != ll_pcsel) ||
+        (bm_sqr1 != ll_sqr1) ||
+        (bm_smpr1 != ll_smpr1) ||
+        (bm_smpr2 != ll_smpr2))
+    {
+        reg_compare_ok = false;
+    }
+    ADC_LL_Deinit(&h_ll);
+
+    /* 2. ReadSingle on Internal Channels with BM */
+    memset(&h_bm, 0, sizeof(h_bm));
+    ADC_BM_InitEx(&h_bm, &bm_ex);
+    (void)ADC_BM_Calibrate(ADC3);
+    (void)ADC_BM_Enable(ADC3);
+
+    uint16_t vref_raw_bm = 0;
+    if (ADC_BM_ReadSingle(ADC3, ADC_BM_CHANNEL_VREFINT, ADC_BM_SAMPLETIME_810CYCLES_5, &vref_raw_bm, 100000U))
+    {
+        vdda_bm = ADC_BM_CalculateVDDA(vref_raw_bm, 16U);
+        if ((vdda_bm >= 2800U) && (vdda_bm <= 3600U))
+        {
+            bm_read_vref_ok = true;
+        }
+    }
+
+    uint16_t temp_raw_bm = 0;
+    if (ADC_BM_ReadSingle(ADC3, ADC_BM_CHANNEL_TEMPSENSOR, ADC_BM_SAMPLETIME_810CYCLES_5, &temp_raw_bm, 100000U))
+    {
+        temp_bm = (int32_t)ADC_BM_CalculateTemperature(temp_raw_bm, vdda_bm, 16U);
+        if ((temp_bm >= 0) && (temp_bm <= 100))
+        {
+            bm_read_temp_ok = true;
+        }
+    }
+    ADC_BM_Deinit(&h_bm);
+
+    /* 3. ReadSingle on Internal Channels with LL */
+    memset(&h_ll, 0, sizeof(h_ll));
+    ADC_LL_InitEx(&h_ll, &ll_ex);
+    (void)ADC_LL_Calibrate(ADC3);
+    (void)ADC_LL_Enable(ADC3);
+
+    uint16_t vref_raw_ll = 0;
+    if (ADC_LL_ReadSingle(ADC3, ADC_LL_CHANNEL_VREFINT, ADC_LL_SAMPLETIME_810CYCLES_5, &vref_raw_ll, 100000U))
+    {
+        vdda_ll = ADC_LL_CalculateVDDA(vref_raw_ll, 16U);
+        if ((vdda_ll >= 2800U) && (vdda_ll <= 3600U))
+        {
+            ll_read_vref_ok = true;
+        }
+    }
+
+    uint16_t temp_raw_ll = 0;
+    if (ADC_LL_ReadSingle(ADC3, ADC_LL_CHANNEL_TEMPSENSOR, ADC_LL_SAMPLETIME_810CYCLES_5, &temp_raw_ll, 100000U))
+    {
+        temp_ll = (int32_t)ADC_LL_CalculateTemperature(temp_raw_ll, vdda_ll, 16U);
+        if ((temp_ll >= 0) && (temp_ll <= 100))
+        {
+            ll_read_temp_ok = true;
+        }
+    }
+    ADC_LL_Deinit(&h_ll);
+
+    /* 4. Oversampling Truncation Validation */
+    /* 16-bit + 256x (8 add bits) with shift 0 = 24 bits > 16 bits: must be rejected */
+    memset(&h_bm, 0, sizeof(h_bm));
+    AdcBm_ConfigEx_t ovs_bad = bm_ex;
+    ovs_bad.oversampling_enable = true;
+    ovs_bad.oversampling_ratio  = ADC_BM_OVERSAMPLING_256X;
+    ovs_bad.oversampling_shift  = ADC_BM_OVERSAMPLING_SHIFT_NONE;
+    if (!ADC_BM_InitEx(&h_bm, &ovs_bad))
+    {
+        ovs_trunc_rejected = true;
+    }
+
+    /* With shift 8 bits (24 - 8 = 16 bits): must be accepted */
+    memset(&h_bm, 0, sizeof(h_bm));
+    AdcBm_ConfigEx_t ovs_good = bm_ex;
+    ovs_good.oversampling_enable = true;
+    ovs_good.oversampling_ratio  = ADC_BM_OVERSAMPLING_256X;
+    ovs_good.oversampling_shift  = ADC_BM_OVERSAMPLING_SHIFT_8B;
+    if (ADC_BM_InitEx(&h_bm, &ovs_good))
+    {
+        ovs_valid_accepted = true;
+        ADC_BM_Deinit(&h_bm);
+    }
+
+    /* 5. Analog Watchdog (AWD1) Test */
+    memset(&h_bm, 0, sizeof(h_bm));
+    AdcBm_ConfigEx_t awd_cfg = bm_ex;
+    awd_cfg.awd_enable          = true;
+    awd_cfg.awd_all_channels    = true;
+    awd_cfg.awd_high_threshold  = 100U; /* Very low high threshold: forces trip! */
+    awd_cfg.awd_low_threshold   = 0U;
+    if (ADC_BM_InitEx(&h_bm, &awd_cfg))
+    {
+        (void)ADC_BM_Enable(ADC3);
+        uint16_t dummy_raw = 0;
+        (void)ADC_BM_ReadSingle(ADC3, ADC_BM_CHANNEL_VREFINT, ADC_BM_SAMPLETIME_810CYCLES_5, &dummy_raw, 100000U);
+        /* Check if AWD1 flag was raised */
+        if ((ADC3->ISR & ADC_ISR_AWD1) != 0U)
+        {
+            ADC_BM_IRQHandler_ADC(&h_bm);
+            if (ADC_BM_TakeAwdEvents(&h_bm) > 0U)
+            {
+                awd_bm_ok = true;
+            }
+        }
+        ADC_BM_Deinit(&h_bm);
+    }
+
+    /* Format report into g_shared.m4_to_m7 */
+    SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);
+    char *p = (char *)g_shared.m4_to_m7;
+    int pos = 0;
+
+    const char *prefix = "ADC:BM=";
+    while (*prefix != '\0') { p[pos++] = *prefix++; }
+    p[pos++] = bm_init_ok ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'L'; p[pos++] = 'L'; p[pos++] = '=';
+    p[pos++] = ll_init_ok ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'R'; p[pos++] = 'e'; p[pos++] = 'g'; p[pos++] = '=';
+    p[pos++] = reg_compare_ok ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'V'; p[pos++] = '=';
+    p[pos++] = (bm_read_vref_ok && ll_read_vref_ok) ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'T'; p[pos++] = '=';
+    p[pos++] = (bm_read_temp_ok && ll_read_temp_ok) ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'O'; p[pos++] = 'V'; p[pos++] = 'S'; p[pos++] = '=';
+    p[pos++] = (ovs_trunc_rejected && ovs_valid_accepted) ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'A'; p[pos++] = 'W'; p[pos++] = 'D'; p[pos++] = '=';
+    p[pos++] = awd_bm_ok ? '1' : '0';
+
+    (void)vdda_bm;
+    (void)temp_bm;
+    (void)vdda_ll;
+    (void)temp_ll;
+
+    p[pos] = '\0';
+    __DMB();
+    g_shared.m4_to_m7_len = (uint16_t)pos;
+    SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
+}
+
+#endif /* ADC_DRIVER_SELFTEST */
 

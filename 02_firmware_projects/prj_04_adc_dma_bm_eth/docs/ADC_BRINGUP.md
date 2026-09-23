@@ -12,7 +12,7 @@ This project validates high-speed 16-bit ADC acquisition with circular DMA on th
            |    TIM3 (TRGO @ 500 kHz, APB1 200 MHz)                      |
            |      |                                                      |
            |      v (Hardware Trigger)                                   |
-PB1 (A3) ----> ADC1 (16-bit, BOOST=10, 25 MHz kernel clock)              |
+PB1 (A3) ----> ADC1 (16-bit, BOOST=01 (Rev V) / 10 (Rev Y), 25 MHz kernel clock)              |
            |      |                                                      |
            |      v (DMA1 Stream 0, Request 9)                           |
            |    SRAM2 (0x30020000, 1024 samples circular buffer)         |
@@ -51,9 +51,10 @@ PB1 (A3) ----> ADC1 (16-bit, BOOST=10, 25 MHz kernel clock)              |
 `PB1` is one of the nine **fast channels** the datasheet names explicitly (DS12923
 Table 87, note 4: `PF3, PF5, PF7, PF9, PA6, PC4, PB1, PF11, PF13`). Everything else
 is a slow channel, and at 500 kSPS the difference is the whole point: with
-`ADC_SAMPLETIME_8CYCLES_5` at a 25 MHz kernel clock the sampling window is 340 ns,
-against the 114 ns minimum that Table 87 gives for 16 bits on a fast channel. About
-3x of margin.
+`ADC_SAMPLETIME_8CYCLES_5` at a 25 MHz kernel clock (`adc_ker_ck`), the internal
+clock is divided by 2 before the analog core (RM §26.4.3, `f_ADC = 12.5 MHz`), so
+the actual sampling window is 8.5 / 12.5 MHz = 680 ns, well above the 114 ns
+minimum that Table 87 gives for 16 bits on a fast channel. About 6x of margin.
 
 `PA3` (`ADC12_INP15`, CN9 pin 1 / A0) remains available as a
 compile-time alternative - set `BOARD_ADC_USE_FAST_CHANNEL_PB1` to `0` in
@@ -84,8 +85,8 @@ resolution is 3.3 kilohm, at 10 bits. So:
    - Frequency check: `Fadc_hclk (200 MHz) >= Fadc_ker_ck / 4 (6.25 MHz)` is satisfied.
 
 2. **BOOST Mode Configuration (RM0399 / adc.txt:4597)**:
-   - For `12.5 MHz < Fadc_ker_ck <= 25 MHz`, `BOOST[1:0] = 10` (`ADC_CR_BOOST_1`).
-   - Configured in `ADC_HAL_Init()` while `ADSTART = 0` and `JADSTART = 0`.
+   - For `Fadc_ker_ck = 25 MHz`, the internal SAR analog core clock is `f_analog = Fadc_ker_ck / 2 = 12.5 MHz` (RM0399 §26.4.3). This corresponds to `BOOST[1:0] = 01b` (`6.25 MHz < f_analog <= 12.5 MHz`).
+   - Handled automatically by `ADC_BM_InitEx()` / `ADC_LL_InitEx()` / `ADC_HAL_InitEx()` while `ADSTART = 0` and `JADSTART = 0`.
 
 3. **Injected Queue Disabling (ES0445 2.10.x)**:
    - `ADC_CFGR_JQDIS` set to disable the queue of context for injected conversions and prevent queue corruption.

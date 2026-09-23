@@ -122,6 +122,10 @@ if(UART_DRIVER_SELFTEST)
     target_link_libraries(${TARGET} PRIVATE stm32h7_driver_uart_bm)
 endif()
 
+if(ADC_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE ADC_DRIVER_SELFTEST=1)
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"
