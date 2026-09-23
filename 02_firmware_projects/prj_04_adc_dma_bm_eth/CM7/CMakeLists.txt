@@ -124,6 +124,7 @@ endif()
 
 if(ADC_DRIVER_SELFTEST)
     target_compile_definitions(${TARGET} PRIVATE ADC_DRIVER_SELFTEST=1)
+    target_link_libraries(${TARGET} PRIVATE stm32h7_driver_adc_bm)
 endif()
 
 set_target_properties(${TARGET} PROPERTIES

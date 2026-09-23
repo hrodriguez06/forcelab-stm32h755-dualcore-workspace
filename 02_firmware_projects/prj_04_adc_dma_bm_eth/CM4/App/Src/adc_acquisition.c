@@ -138,6 +138,7 @@ bool ADC_Acquisition_Init(void)
     adc_cfg.dma_circular   = true;
     adc_cfg.buffer         = s_adc_dma_buffer;
     adc_cfg.buffer_length  = ADC_BUFFER_SIZE;
+    adc_cfg.kernel_clock_hz = 25000000UL;
 
     if (!ADC_BM_Init(&s_adc_handle, &adc_cfg))
     {

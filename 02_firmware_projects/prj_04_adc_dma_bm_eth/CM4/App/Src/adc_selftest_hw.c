@@ -194,6 +194,7 @@ static bool T2_Bm_Point(uint32_t res, uint16_t *avg, uint8_t *code)
     {
         for (uint32_t i = 0U; i < STHW_READS_PER_POINT; i++)
         {
+            g_shared.m4_heartbeat++;
             uint16_t raw = 0U;
             if (ADC_BM_ReadSingle(ADC3, ADC_BM_CHANNEL_VREFINT, ADC_BM_SAMPLETIME_810CYCLES_5, &raw, STHW_SPIN))
             {
@@ -239,6 +240,7 @@ static bool T2_Ll_Point(uint32_t res, uint16_t *avg, uint8_t *code)
     {
         for (uint32_t i = 0U; i < STHW_READS_PER_POINT; i++)
         {
+            g_shared.m4_heartbeat++;
             uint16_t raw = 0U;
             if (ADC_LL_ReadSingle(ADC3, ADC_LL_CHANNEL_VREFINT, ADC_LL_SAMPLETIME_810CYCLES_5, &raw, STHW_SPIN))
             {
@@ -376,6 +378,7 @@ static void Bm_Flow(const Sthw_FlowCfg_t *fc, const AdcBm_ChannelConfig_t *chs, 
         uint32_t t0 = HAL_GetTick();
         for (;;)
         {
+            g_shared.m4_heartbeat++;
             uint32_t now = HAL_GetTick() - t0;
             if (now >= fc->window_ms)
             {
@@ -463,6 +466,7 @@ static void Ll_Flow(const Sthw_FlowCfg_t *fc, const AdcLl_ChannelConfig_t *chs, 
         uint32_t t0 = HAL_GetTick();
         for (;;)
         {
+            g_shared.m4_heartbeat++;
             uint32_t now = HAL_GetTick() - t0;
             if (now >= fc->window_ms)
             {

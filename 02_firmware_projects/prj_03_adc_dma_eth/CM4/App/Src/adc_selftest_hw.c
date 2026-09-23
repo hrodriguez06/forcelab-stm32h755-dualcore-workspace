@@ -186,6 +186,7 @@ static bool T2_Point(uint32_t res, uint16_t *avg, uint8_t *code)
     {
         for (uint32_t i = 0U; i < STHW_READS_PER_POINT; i++)
         {
+            g_shared.m4_heartbeat++;
             uint16_t raw = 0U;
             if (ADC_HAL_ReadSingle(&s_hal, ADC_CHANNEL_VREFINT, ADC_SAMPLETIME_810CYCLES_5, &raw, STHW_READ_TIMEOUT_MS))
             {
@@ -307,6 +308,7 @@ static void Hal_Flow(const Sthw_FlowCfg_t *fc, const AdcHal_ChannelConfig_t *chs
         uint32_t t0 = HAL_GetTick();
         for (;;)
         {
+            g_shared.m4_heartbeat++;
             uint32_t now = HAL_GetTick() - t0;
             if (now >= fc->window_ms)
             {

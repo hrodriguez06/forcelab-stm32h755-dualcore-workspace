@@ -31,6 +31,7 @@
 #include "shared_memory.h"
 #include "net_config.h"
 #include "net_task.h"
+#include "adc_bm.h"
 
 #include <stdbool.h>
 
@@ -152,33 +153,75 @@ static void Status_Task(void *arg)
         if (!s_dcache_tested)
         {
             s_dcache_tested = true;
-            /* Test T8: D-cache coherency test on AXI SRAM buffer */
-            __attribute__((section(".axi_ram"), aligned(32))) static volatile uint32_t s_dcache_test_buf[8];
+            /* Test T8: D-cache coherency test on AXI SRAM buffer using DMA2 M2M and ComputeStats */
+            __attribute__((section(".axi_ram"), aligned(32))) static uint16_t s_dcache_buf[64];
+            __attribute__((section(".dma_buf"), aligned(32))) static uint16_t s_dma_src[64];
 
-            /* 1. Write baseline value to buffer and flush to physical RAM */
-            s_dcache_test_buf[0] = 0x11223344UL;
-            SCB_CleanDCache_by_Addr((uint32_t *)s_dcache_test_buf, 32);
+            for (uint32_t i = 0U; i < 64U; i++)
+            {
+                s_dma_src[i] = 2048U;
+            }
+
+            /* 1. Allocate lines in L1 D-cache and flush clean to physical RAM */
+            for (uint32_t i = 0U; i < 64U; i++)
+            {
+                s_dcache_buf[i] = 0x1111U;
+            }
+            SCB_CleanDCache_by_Addr((uint32_t *)s_dcache_buf, sizeof(s_dcache_buf));
             __DSB();
 
-            /* 2. Overwrite in cache (dirty line in L1 D-cache) */
-            s_dcache_test_buf[0] = 0xDEADBEEFUL;
+            /* 2. Overwrite in cache (dirty lines in L1 D-cache with 0x9999 = 39321) */
+            for (uint32_t i = 0U; i < 64U; i++)
+            {
+                s_dcache_buf[i] = 0x9999U;
+            }
             __DMB();
 
-            /* 3. Invalidate line WITHOUT clean - discards dirty data from L1 D-cache */
-            SCB_InvalidateDCache_by_Addr((uint32_t *)s_dcache_test_buf, 32);
-            __DSB();
-            __ISB();
+            /* 2. Configure DMA2 Stream 0 in Memory-to-Memory mode to transfer s_dma_src into s_dcache_buf */
+            RCC->AHB1ENR |= RCC_AHB1ENR_DMA2EN;
+            volatile uint32_t dummy = RCC->AHB1ENR;
+            (void)dummy;
 
-            /* 4. Read back: must hit RAM and return original baseline 0x11223344UL */
-            uint32_t readback = s_dcache_test_buf[0];
-            bool dcache_invalidate_real = (readback == 0x11223344UL);
-            bool align_ok = (((uint32_t)s_dcache_test_buf & 0x1FUL) == 0U);
+            DMA2_Stream0->CR &= ~DMA_SxCR_EN;
+            while ((DMA2_Stream0->CR & DMA_SxCR_EN) != 0U) {}
 
-            APP_LOG("[cm7_dcache_test] %s: 32B alignment=%d, discard_dirty_verified=%d (readback=0x%08lX)",
-                    (dcache_invalidate_real && align_ok) ? "PASS" : "FAIL",
+            DMA2->LIFCR = (DMA_LIFCR_CTCIF0 | DMA_LIFCR_CHTIF0 | DMA_LIFCR_CTEIF0 | DMA_LIFCR_CDMEIF0 | DMA_LIFCR_CFEIF0);
+            DMA2_Stream0->PAR  = (uint32_t)s_dma_src;
+            DMA2_Stream0->M0AR = (uint32_t)s_dcache_buf;
+            DMA2_Stream0->NDTR = 64U;
+            DMA2_Stream0->FCR  = 0U; /* Direct mode */
+            DMA2_Stream0->CR   = DMA_SxCR_DIR_1 | DMA_SxCR_MINC | DMA_SxCR_PINC | DMA_SxCR_MSIZE_0 | DMA_SxCR_PSIZE_0 | DMA_SxCR_PL;
+            DMA2_Stream0->CR  |= DMA_SxCR_EN;
+
+            /* Wait for DMA transfer complete */
+            while ((DMA2->LISR & DMA_LISR_TCIF0) == 0U) {}
+            DMA2->LIFCR = (DMA_LIFCR_CTCIF0 | DMA_LIFCR_CHTIF0 | DMA_LIFCR_CTEIF0 | DMA_LIFCR_CDMEIF0 | DMA_LIFCR_CFEIF0);
+
+            /* 3. Direct CPU read before invalidation: hits dirty cache line (0x9999 = 39321) */
+            uint16_t raw_direct_before = s_dcache_buf[0];
+
+            /* 4. ComputeStats internally invalidates D-cache and computes stats from physical RAM */
+            AdcBm_Handle_t test_bm = {0};
+            test_bm.config_ex.buffer = s_dcache_buf;
+            test_bm.config_ex.buffer_length = 64U;
+            test_bm.config_ex.num_channels = 1U;
+            test_bm.config_ex.resolution = ADC_BM_RESOLUTION_16B;
+
+            ADC_BM_ComputeStats(&test_bm, 0U, 3300U);
+            uint16_t stats_avg = test_bm.stats.average_raw;
+
+            /* 5. Direct CPU read after ComputeStats: now returns 2048 from refreshed cache line */
+            uint16_t raw_direct_after = s_dcache_buf[0];
+
+            bool align_ok = (((uint32_t)s_dcache_buf & 0x1FUL) == 0U);
+            bool dcache_verified = (raw_direct_before == 0x9999U) && (stats_avg == 2048U) && (raw_direct_after == 2048U);
+
+            APP_LOG("[cm7_dcache_test] %s: 32B alignment=%d, dma_dcache_verified=%d (dirty_cpu=%u, stats_dma=%u)",
+                    (dcache_verified && align_ok) ? "PASS" : "FAIL",
                     align_ok ? 1 : 0,
-                    dcache_invalidate_real ? 1 : 0,
-                    (unsigned long)readback);
+                    dcache_verified ? 1 : 0,
+                    (unsigned int)raw_direct_before,
+                    (unsigned int)stats_avg);
         }
 
         SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);
