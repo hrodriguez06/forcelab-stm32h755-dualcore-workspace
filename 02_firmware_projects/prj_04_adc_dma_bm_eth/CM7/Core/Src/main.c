@@ -24,7 +24,11 @@
 #include "app_main.h"
 #include "led_bm.h"
 #include "shared_memory.h"
+#if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
+#include "uart_bm.h"
 
+static void EarlyBoot_UartBm(void);
+#endif
 static void SystemClock_Config(void);
 static void PeripheralClock_Config(void);
 static void ITCM_Init(void);
@@ -85,6 +89,11 @@ int main(void)
        interrupt priorities the drivers choose depend on it. */
     HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
 
+#if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
+    /* Call EarlyBoot_UartBm before clock tree configuration (using reset HSI 64MHz) */
+    EarlyBoot_UartBm();
+#endif
+
     SystemClock_Config();
     PeripheralClock_Config();
     LED_BootStage(LED_BOOT_CLOCKS_DONE);
@@ -101,6 +110,10 @@ int main(void)
     __HAL_RCC_ADC12_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_TIM3_CLK_ENABLE();
+#if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
+    __HAL_RCC_USART2_CLK_ENABLE();
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+#endif
 
     /* Release CPU2 (Cortex-M4) boot if it was gated in RCC_GCR (BCM4=0). */
     HAL_RCCEx_EnableBootCore(RCC_BOOT_C2);
@@ -286,3 +299,34 @@ void assert_failed(uint8_t *file, uint32_t line)
     Error_Handler();
 }
 #endif
+
+#if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
+static void EarlyBoot_UartBm(void)
+{
+    /* HSI is 64 MHz at reset, USART234578SEL=000 -> 64 MHz kernel clock */
+    UartBm_Pin_t tx = { .port = GPIOD, .pin_idx = 8, .af = 7 };
+    UartBm_Pin_t rx = { .port = GPIOD, .pin_idx = 9, .af = 7 };
+    UartBm_Config_t cfg = {
+        .instance        = USART3,
+        .kernel_clock_hz = 64000000UL,
+        .baudrate        = 115200UL,
+        .data_bits       = UART_BM_DATA_BITS_8,
+        .stop_bits       = UART_BM_STOP_BITS_1,
+        .parity          = UART_BM_PARITY_NONE,
+        .oversampling_8  = false,
+        .fifo_enable     = false,
+        .hw_flow         = UART_BM_HW_FLOW_NONE,
+        .enable_clock    = true,
+        .tx_pin          = &tx,
+        .rx_pin          = &rx
+    };
+    UartBm_Handle_t h_bm;
+    if (UART_BM_Init(&h_bm, &cfg))
+    {
+        const char msg[] = "\r\n[boot_bm] CPU1 alive before clock tree (HSI 64MHz, USART3 115200)\r\n";
+        (void)UART_BM_Write(&h_bm, (const uint8_t *)msg, sizeof(msg) - 1, 100000U);
+        (void)UART_BM_Flush(&h_bm, 100000U);
+    }
+}
+#endif
+

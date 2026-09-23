@@ -147,9 +147,18 @@ static void Status_Task(void *arg)
             state = "NOT RESPONDING";
         }
 
+#if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
+        SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);
+        if (g_shared.m4_to_m7_len > 0U)
+        {
+            APP_LOG("[m4_uart_test] %s", (char *)g_shared.m4_to_m7);
+            g_shared.m4_to_m7_len = 0U;
+        }
+        SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
+#endif
+
         APP_LOG("[ipc] m7=%lu m4=%lu  (CPU2 %s)",
-                (unsigned long)g_shared.m7_heartbeat,
-                (unsigned long)m4, state);
+                g_shared.m7_heartbeat, m4, state);
 
         previous_m4   = m4;
         have_previous = true;

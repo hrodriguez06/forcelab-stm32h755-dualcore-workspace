@@ -98,6 +98,14 @@ target_link_libraries(${TARGET} PRIVATE
     stm32h7_driver_gpio
 )
 
+if(UART_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE UART_DRIVER_SELFTEST=1)
+    target_link_libraries(${TARGET} PRIVATE
+        stm32h7_driver_uart_bm
+        stm32h7_driver_uart_ll
+    )
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"
