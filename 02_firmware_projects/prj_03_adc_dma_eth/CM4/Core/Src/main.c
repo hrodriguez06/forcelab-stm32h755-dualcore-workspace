@@ -167,15 +167,48 @@ void assert_failed(uint8_t *file, uint32_t line)
 #if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
 static void CM4_Test_Adc_Hal(void)
 {
+    bool uncal_check_ok = false;
+    bool cal_injected_ok = false;
     bool hal_init_ok = false;
     bool hal_cal_ok  = false;
     bool read_vref_ok = false;
     bool read_temp_ok = false;
+    bool res_sweep_ok = true;
     bool ovs_trunc_rejected = false;
     bool ovs_valid_accepted = false;
-    bool awd_hal_ok = false;
+    bool ovs_hw_verified = false;
+    bool awd_trip_ok = false;
+    bool awd_notrip_ok = false;
     uint32_t vdda_hal = 0;
     int32_t temp_hal = 0;
+    uint16_t ovs_raw = 0;
+
+    /* 0. Verify uncalibrated failure behavior on CM4 (S2 requirement: never invent constants) */
+    if ((ADC_HAL_CalculateVDDA(24200U, 16U) == 0U) &&
+        (ADC_HAL_CalculateTemperature(12000U, 3300U, 16U) == ADC_HAL_TEMPERATURE_ERROR))
+    {
+        uncal_check_ok = true;
+    }
+
+    /* Wait for M7 to publish valid calibration words */
+    uint32_t wait_spins = 1000000U;
+    while ((g_shared.cal_valid == 0U) && (wait_spins > 0U))
+    {
+        wait_spins--;
+    }
+
+    if (g_shared.cal_valid != 0U)
+    {
+        AdcHal_CalibrationData_t hal_cal = {
+            .vrefint_cal = g_shared.vrefint_cal,
+            .ts_cal1     = g_shared.ts_cal1,
+            .ts_cal2     = g_shared.ts_cal2
+        };
+        if (ADC_HAL_InjectCalibration(&hal_cal))
+        {
+            cal_injected_ok = true;
+        }
+    }
 
     AdcHal_ChannelConfig_t hal_chs[2] = {
         { .channel = ADC_CHANNEL_VREFINT,    .sampling_time = ADC_SAMPLETIME_810CYCLES_5 },
@@ -214,16 +247,16 @@ static void CM4_Test_Adc_Hal(void)
     memset(&h_hal, 0, sizeof(h_hal));
     hal_init_ok = ADC_HAL_InitEx(&h_hal, &ex);
 
+    uint16_t vref_raw = 0;
     if (hal_init_ok)
     {
         hal_cal_ok = ADC_HAL_Calibrate(&h_hal);
 
         /* 1. ReadSingle on VREFINT */
-        uint16_t vref_raw = 0;
         if (ADC_HAL_ReadSingle(&h_hal, ADC_CHANNEL_VREFINT, ADC_SAMPLETIME_810CYCLES_5, &vref_raw, 100U))
         {
             vdda_hal = ADC_HAL_CalculateVDDA(vref_raw, 16U);
-            if ((vdda_hal >= 2800U) && (vdda_hal <= 3600U))
+            if ((vdda_hal >= 3100U) && (vdda_hal <= 3500U))
             {
                 read_vref_ok = true;
             }
@@ -233,8 +266,8 @@ static void CM4_Test_Adc_Hal(void)
         uint16_t temp_raw = 0;
         if (ADC_HAL_ReadSingle(&h_hal, ADC_CHANNEL_TEMPSENSOR, ADC_SAMPLETIME_810CYCLES_5, &temp_raw, 100U))
         {
-            temp_hal = (int32_t)ADC_HAL_CalculateTemperature(temp_raw, vdda_hal, 16U);
-            if ((temp_hal >= 0) && (temp_hal <= 100))
+            temp_hal = ADC_HAL_CalculateTemperature(temp_raw, vdda_hal, 16U);
+            if ((temp_hal >= 10) && (temp_hal <= 90))
             {
                 read_temp_ok = true;
             }
@@ -243,7 +276,31 @@ static void CM4_Test_Adc_Hal(void)
         (void)ADC_HAL_Deinit(&h_hal);
     }
 
-    /* 3. Oversampling Truncation Validation */
+    /* 3. T2 Resolution Sweep (16, 14, 12, 10, 8 bits) checking 2^(16-N) scaling */
+    if (vref_raw > 0U)
+    {
+        uint32_t v_16 = ADC_HAL_CalculateVDDA(vref_raw, 16U);
+        uint32_t v_14 = ADC_HAL_CalculateVDDA((uint16_t)(vref_raw >> 2U), 14U);
+        uint32_t v_12 = ADC_HAL_CalculateVDDA((uint16_t)(vref_raw >> 4U), 12U);
+        uint32_t v_10 = ADC_HAL_CalculateVDDA((uint16_t)(vref_raw >> 6U), 10U);
+        uint32_t v_8  = ADC_HAL_CalculateVDDA((uint16_t)(vref_raw >> 8U), 8U);
+
+        int32_t d14 = (int32_t)v_16 - (int32_t)v_14; if (d14 < 0) d14 = -d14;
+        int32_t d12 = (int32_t)v_16 - (int32_t)v_12; if (d12 < 0) d12 = -d12;
+        int32_t d10 = (int32_t)v_16 - (int32_t)v_10; if (d10 < 0) d10 = -d10;
+        int32_t d8  = (int32_t)v_16 - (int32_t)v_8;  if (d8 < 0)  d8 = -d8;
+
+        if ((d14 > 10) || (d12 > 10) || (d10 > 15) || (d8 > 35))
+        {
+            res_sweep_ok = false;
+        }
+    }
+    else
+    {
+        res_sweep_ok = false;
+    }
+
+    /* 4. Oversampling Truncation Validation */
     /* 16-bit + 256x with 0 shift = 24 bits > 16 bits: must be rejected */
     memset(&h_hal, 0, sizeof(h_hal));
     AdcHal_ConfigEx_t ovs_bad = ex;
@@ -267,12 +324,40 @@ static void CM4_Test_Adc_Hal(void)
         (void)ADC_HAL_Deinit(&h_hal);
     }
 
-    /* 4. Analog Watchdog 1 Test */
+    /* 5. T7 Oversampling x16 shift 4: CFGR2 Register Readback & Hardware Conversion */
+    memset(&h_hal, 0, sizeof(h_hal));
+    AdcHal_ConfigEx_t ovs_t7 = ex;
+    ovs_t7.oversampling_enable = true;
+    ovs_t7.oversampling_ratio  = ADC_HAL_OVERSAMPLING_16X;
+    ovs_t7.oversampling_shift  = ADC_HAL_OVERSAMPLING_SHIFT_4B;
+    if (ADC_HAL_InitEx(&h_hal, &ovs_t7))
+    {
+        uint32_t cfgr2_val = ADC3->CFGR2;
+        bool rovse_ok = ((cfgr2_val & ADC_CFGR2_ROVSE) != 0U);
+        bool ovsr_ok  = (((cfgr2_val & ADC_CFGR2_OVSR_Msk) >> ADC_CFGR2_OVSR_Pos) == 15U);
+        bool ovss_ok  = (((cfgr2_val & ADC_CFGR2_OVSS_Msk) >> ADC_CFGR2_OVSS_Pos) == 4U);
+
+        if (rovse_ok && ovsr_ok && ovss_ok)
+        {
+            (void)ADC_HAL_Calibrate(&h_hal);
+            if (ADC_HAL_ReadSingle(&h_hal, ADC_CHANNEL_VREFINT, ADC_SAMPLETIME_810CYCLES_5, &ovs_raw, 100U))
+            {
+                if ((ovs_raw >= 20000U) && (ovs_raw <= 30000U))
+                {
+                    ovs_hw_verified = true;
+                }
+            }
+        }
+        (void)ADC_HAL_Deinit(&h_hal);
+    }
+
+    /* 6. T5 Analog Watchdog 1: Trip and No-trip tests */
+    /* Trip test: high_threshold = 100 */
     memset(&h_hal, 0, sizeof(h_hal));
     AdcHal_ConfigEx_t awd_cfg = ex;
     awd_cfg.awd_enable          = true;
     awd_cfg.awd_all_channels    = true;
-    awd_cfg.awd_high_threshold  = 100U; /* Very low threshold forces trip on VREFINT */
+    awd_cfg.awd_high_threshold  = 100U;
     awd_cfg.awd_low_threshold   = 0U;
     if (ADC_HAL_InitEx(&h_hal, &awd_cfg))
     {
@@ -283,8 +368,26 @@ static void CM4_Test_Adc_Hal(void)
             ADC_HAL_IRQHandler_ADC(&h_hal);
             if (ADC_HAL_TakeAwdEvents(&h_hal) > 0U)
             {
-                awd_hal_ok = true;
+                awd_trip_ok = true;
             }
+        }
+        (void)ADC_HAL_Deinit(&h_hal);
+    }
+
+    /* No-trip test: high_threshold = 65535 */
+    memset(&h_hal, 0, sizeof(h_hal));
+    AdcHal_ConfigEx_t awd_notrip = ex;
+    awd_notrip.awd_enable          = true;
+    awd_notrip.awd_all_channels    = true;
+    awd_notrip.awd_high_threshold  = 65535U;
+    awd_notrip.awd_low_threshold   = 0U;
+    if (ADC_HAL_InitEx(&h_hal, &awd_notrip))
+    {
+        uint16_t dummy_raw = 0;
+        (void)ADC_HAL_ReadSingle(&h_hal, ADC_CHANNEL_VREFINT, ADC_SAMPLETIME_810CYCLES_5, &dummy_raw, 100U);
+        if ((h_hal.hadc.Instance->ISR & ADC_ISR_AWD1) == 0U)
+        {
+            awd_notrip_ok = true;
         }
         (void)ADC_HAL_Deinit(&h_hal);
     }
@@ -294,12 +397,18 @@ static void CM4_Test_Adc_Hal(void)
     char *p = (char *)g_shared.m4_to_m7;
     int pos = 0;
 
-    const char *prefix = "ADC_HAL:Init=";
+    const char *prefix = "HAL:I=";
     while (*prefix != '\0') { p[pos++] = *prefix++; }
     p[pos++] = hal_init_ok ? '1' : '0';
 
-    p[pos++] = ' '; p[pos++] = 'C'; p[pos++] = 'a'; p[pos++] = 'l'; p[pos++] = '=';
+    p[pos++] = ' '; p[pos++] = 'C'; p[pos++] = '=';
     p[pos++] = hal_cal_ok ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'U'; p[pos++] = '=';
+    p[pos++] = uncal_check_ok ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'J'; p[pos++] = '=';
+    p[pos++] = cal_injected_ok ? '1' : '0';
 
     p[pos++] = ' '; p[pos++] = 'V'; p[pos++] = '=';
     p[pos++] = read_vref_ok ? '1' : '0';
@@ -307,18 +416,26 @@ static void CM4_Test_Adc_Hal(void)
     p[pos++] = ' '; p[pos++] = 'T'; p[pos++] = '=';
     p[pos++] = read_temp_ok ? '1' : '0';
 
-    p[pos++] = ' '; p[pos++] = 'O'; p[pos++] = 'V'; p[pos++] = 'S'; p[pos++] = '=';
-    p[pos++] = (ovs_trunc_rejected && ovs_valid_accepted) ? '1' : '0';
+    p[pos++] = ' '; p[pos++] = 'R'; p[pos++] = '=';
+    p[pos++] = res_sweep_ok ? '1' : '0';
 
-    p[pos++] = ' '; p[pos++] = 'A'; p[pos++] = 'W'; p[pos++] = 'D'; p[pos++] = '=';
-    p[pos++] = awd_hal_ok ? '1' : '0';
+    p[pos++] = ' '; p[pos++] = 'O'; p[pos++] = '=';
+    p[pos++] = (ovs_trunc_rejected && ovs_valid_accepted && ovs_hw_verified) ? '1' : '0';
 
-    (void)vdda_hal;
-    (void)temp_hal;
+    p[pos++] = ' '; p[pos++] = 'A'; p[pos++] = '=';
+    p[pos++] = (awd_trip_ok && awd_notrip_ok) ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'V'; p[pos++] = 'd'; p[pos++] = '=';
+    char tmp[10]; int ti = 0; uint32_t v = vdda_hal;
+    if (v == 0) { p[pos++] = '0'; }
+    else {
+        while (v > 0) { tmp[ti++] = '0' + (v % 10); v /= 10; }
+        while (ti > 0) { p[pos++] = tmp[--ti]; }
+    }
 
     p[pos] = '\0';
     __DMB();
-    g_shared.m4_to_m7_len = (uint16_t)pos;
+    g_shared.m4_to_m7_len = (uint32_t)pos;
     SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
 }
 #endif /* ADC_DRIVER_SELFTEST */

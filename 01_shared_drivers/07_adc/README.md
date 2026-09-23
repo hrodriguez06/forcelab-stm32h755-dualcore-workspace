@@ -62,11 +62,11 @@ The STM32H755 pins are partitioned into **fast** and **slow** analog channels:
 
 | Channel Group | ADC Channels | Internal Switch Resistance $R_{ADC}$ | Minimum Sampling Considerations |
 | :--- | :--- | :--- | :--- |
-| **Fast Channels** | ADC1/ADC2: CH0 .. CH5 | $\sim 160\,\Omega - 260\,\Omega$ | Direct pin routing. Supports $1.5$ to $2.5$ cycle sampling at low source impedance $R_{AIN}$. |
-| **Slow Channels** | ADC1/ADC2: CH6 .. CH19 | $\sim 680\,\Omega - 1500\,\Omega$ | Routed through internal analog mux switches. Requires higher sample cycles ($32.5+$ cycles) depending on $R_{AIN}$. |
-| **Internal VREFINT** | ADC3: CH19 | Internal bandgap reference | **$t_S \ge 4.3\,\mu\text{s}$ mandatory** (DS12923 Table 93). Validated at driver init. |
-| **Internal Temperature**| ADC3: CH18 | Internal temp sensor diode | **$t_S \ge 9.0\,\mu\text{s}$ mandatory** (DS12923 Table 94). Validated at driver init. |
-| **Internal VBAT** | ADC3: CH17 | Built-in $1/4$ resistor bridge | **$t_S \ge 9.0\,\mu\text{s}$ mandatory** (DS12923 Table 95). Validated at driver init. |
+| **Fast Channels** | ADC1/ADC2: CH0 .. CH5 | $\sim 160\,\Omega - 260\,\Omega$ (DS12923 Table 86/87) | Direct pin routing. Supports $1.5$ to $2.5$ cycle sampling at low source impedance $R_{AIN}$. |
+| **Slow Channels** | ADC1/ADC2: CH6 .. CH19 | $\sim 680\,\Omega - 1500\,\Omega$ (DS12923 Table 86/87) | Routed through internal analog mux switches. Requires higher sample cycles ($32.5+$ cycles) depending on $R_{AIN}$. |
+| **Internal VREFINT** | ADC3: CH19 | Internal bandgap reference | **$t_S \ge 4.3\,\mu\text{s}$ mandatory** (DS12923 Table 88 / Table 93). Validated at driver init. |
+| **Internal Temperature**| ADC3: CH18 | Internal temp sensor diode | **$t_S \ge 9.0\,\mu\text{s}$ mandatory** (DS12923 Table 90 / Table 94). Validated at driver init. |
+| **Internal VBAT** | ADC3: CH17 | Built-in $1/4$ resistor bridge | **$t_S \ge 9.0\,\mu\text{s}$ mandatory** (DS12923 Table 91 / Table 95). Validated at driver init. |
 
 The minimum sampling time equation is:
 $$t_S \ge (R_{AIN} + R_{ADC}) \cdot C_{ADC} \cdot \ln(2^{N+2})$$
@@ -87,10 +87,10 @@ The following hardware features are explicitly deferred from the v1.x driver bas
 >
 > The bridge does **NOT** decode the System Memory address range (`0x1FF00000 - 0x1FFFFFFF`) residing in the D1 domain. Any direct memory read to the factory calibration registers (`VREFINT_CAL_ADDR = 0x1FF1E860`, `TS_CAL1 = 0x1FF1E820`, `TS_CAL2 = 0x1FF1E840`) from Cortex-M4 causes a bus matrix decode error resulting in an immediate **BusFault / HardFault**.
 >
-> To resolve this transparently:
-> 1. All tiers (`adc_bm`, `adc_ll`, `adc_hal`) implement safe calibration getters (`ADC_*_GetVrefintCal()`, `ADC_*_GetTsCal1()`, `ADC_*_GetTsCal2()`).
-> 2. When compiled on `CORE_CM4`, if the address macro points to default System Memory (`0x1FF00000 .. 0x1FFFFFFF`), the driver safely falls back to typical factory nominal constants (1.212V @ 3.3V 16-bit: `24200`, 30 °C: `12365`, 130 °C: `16276`) without generating any bus fault.
-> 3. An application running on Cortex-M4 may also pass a RAM pointer (populated by Cortex-M7 via shared memory) to `VREFINT_CAL_ADDR` / `TEMPSENSOR_CALx_ADDR` for full calibration precision.
+> To resolve this deterministically and safely:
+> 1. Cortex-M7 reads the real factory calibration words at boot during `Shared_Init()` and publishes them in SRAM4 (`g_shared.vrefint_cal`, `g_shared.ts_cal1`, `g_shared.ts_cal2`, `g_shared.cal_valid`).
+> 2. Cortex-M4 receives them via explicit dependency injection using `ADC_*_InjectCalibration(&cal)`.
+> 3. If uncalibrated on Cortex-M4, `ADC_*_CalculateVDDA` returns `0U` and `ADC_*_CalculateTemperature` returns `ADC_*_TEMPERATURE_ERROR` (`-999L`). The driver **never** invents hardcoded constants.
 
 ---
 

@@ -161,44 +161,65 @@ uint32_t ADC_BM_GetBoostBits(uint32_t ker_ck_freq_hz)
 #define TEMPSENSOR_CAL2_ADDR ((const uint16_t *)(0x1FF1E840UL))
 #endif
 
+static AdcBm_CalibrationData_t s_bm_cal;
+static bool s_bm_cal_valid = false;
+
+bool ADC_BM_InjectCalibration(const AdcBm_CalibrationData_t *cal)
+{
+    if (cal == NULL)
+    {
+        return false;
+    }
+    if ((cal->vrefint_cal == 0U) || (cal->ts_cal2 <= cal->ts_cal1))
+    {
+        return false;
+    }
+    s_bm_cal = *cal;
+    s_bm_cal_valid = true;
+    return true;
+}
+
 static inline uint16_t ADC_BM_GetVrefintCal(void)
 {
-#if defined(CORE_CM4)
-    /* RM0399 Section 2.1 / Figure 1 Note 2: System Memory (0x1FF00000 - 0x1FFFFFFF) is in D1
-     * and NOT decoded by the D2-to-D1 AHB bridge. Access from Cortex-M4 generates
-     * a HardFault. If pointing to default 0x1FF1xxxx address, return nominal factory
-     * calibration (1.212V @ 3.3V 16-bit: (1.212/3.3)*65535 = 24068 -> 24200). */
-    if (((uint32_t)VREFINT_CAL_ADDR >= 0x1FF00000UL) &&
-        ((uint32_t)VREFINT_CAL_ADDR <= 0x1FFFFFFFUL))
+    if (s_bm_cal_valid)
     {
-        return 24200U;
+        return s_bm_cal.vrefint_cal;
     }
-#endif
+#if defined(CORE_CM4)
+    /* System memory (0x1FF00000 - 0x1FFFFFFF) is in D1 domain and NOT decoded by
+     * the D2-to-D1 AHB bus bridge. Access from Cortex-M4 generates a HardFault.
+     * We require explicit injection from CM7 via ADC_BM_InjectCalibration().
+     * If uncalibrated, return 0U (never invent hardcoded constants). */
+    return 0U;
+#else
     return *VREFINT_CAL_ADDR;
+#endif
 }
 
 static inline uint16_t ADC_BM_GetTsCal1(void)
 {
-#if defined(CORE_CM4)
-    if (((uint32_t)TEMPSENSOR_CAL1_ADDR >= 0x1FF00000UL) &&
-        ((uint32_t)TEMPSENSOR_CAL1_ADDR <= 0x1FFFFFFFUL))
+    if (s_bm_cal_valid)
     {
-        return 12365U; /* Nominal 30 deg C @ 3.3V, 16-bit */
+        return s_bm_cal.ts_cal1;
     }
-#endif
+#if defined(CORE_CM4)
+    return 0U;
+#else
     return *TEMPSENSOR_CAL1_ADDR;
+#endif
 }
 
 static inline uint16_t ADC_BM_GetTsCal2(void)
 {
-#if defined(CORE_CM4)
-    if (((uint32_t)TEMPSENSOR_CAL2_ADDR >= 0x1FF00000UL) &&
-        ((uint32_t)TEMPSENSOR_CAL2_ADDR <= 0x1FFFFFFFUL))
+    if (s_bm_cal_valid)
     {
-        return 16276U; /* Nominal 130 deg C @ 3.3V, 16-bit */
+        return s_bm_cal.ts_cal2;
     }
-#endif
+#if defined(CORE_CM4)
+    return 0U;
+#else
     return *TEMPSENSOR_CAL2_ADDR;
+#endif
 }
 
 /* Sample time cycles x10 for 1.5, 2.5, 8.5, 16.5, 32.5, 64.5, 387.5, 810.5 */
@@ -518,9 +539,11 @@ bool ADC_BM_InitEx(AdcBm_Handle_t *handle, const AdcBm_ConfigEx_t *config)
     /* 7. Oversampling configuration in CFGR2 */
     if (config->oversampling_enable)
     {
+        uint32_t ovsr = (config->oversampling_ratio > 0U) ? (config->oversampling_ratio - 1U) : 0U;
+        uint32_t ovss = config->oversampling_shift;
         adc->CFGR2 |= (ADC_CFGR2_ROVSE |
-                       (config->oversampling_ratio & ADC_CFGR2_OVSR_Msk) |
-                       (config->oversampling_shift & ADC_CFGR2_OVSS_Msk));
+                       ((ovsr << ADC_CFGR2_OVSR_Pos) & ADC_CFGR2_OVSR_Msk) |
+                       ((ovss << ADC_CFGR2_OVSS_Pos) & ADC_CFGR2_OVSS_Msk));
     }
 
     /* 8. Analog Watchdog 1 (AWD1) configuration */
@@ -1125,32 +1148,37 @@ uint32_t ADC_BM_CalculateVDDA(uint16_t vrefint_raw, uint8_t resolution_bits)
         return 0U;
     }
     uint32_t cal = (uint32_t)ADC_BM_GetVrefintCal();
+    if (cal == 0U)
+    {
+        return 0U;
+    }
     /* VREFINT_CAL is measured at VDDA = 3300 mV at 16-bit resolution */
     return (uint32_t)((3300UL * cal) / raw_16b);
 }
 
-float ADC_BM_CalculateTemperature(uint16_t temp_raw, uint32_t vdda_mv, uint8_t resolution_bits)
+int32_t ADC_BM_CalculateTemperature(uint16_t temp_raw, uint32_t vdda_mv, uint8_t resolution_bits)
 {
     uint32_t raw_16b = (uint32_t)temp_raw;
     if ((resolution_bits > 0U) && (resolution_bits < 16U))
     {
         raw_16b <<= (16U - resolution_bits);
     }
-    float cal1 = (float)ADC_BM_GetTsCal1();
-    float cal2 = (float)ADC_BM_GetTsCal2();
+    uint32_t cal1 = (uint32_t)ADC_BM_GetTsCal1();
+    uint32_t cal2 = (uint32_t)ADC_BM_GetTsCal2();
 
-    if (cal2 <= cal1)
+    if ((cal1 == 0U) || (cal2 <= cal1))
     {
-        return 0.0f;
+        return ADC_BM_TEMPERATURE_ERROR;
     }
 
     /* Scale raw reading if VDDA differs from nominal 3300 mV */
-    float raw_norm = (float)raw_16b;
+    uint32_t raw_norm = raw_16b;
     if (vdda_mv > 0U)
     {
-        raw_norm = raw_norm * ((float)vdda_mv / 3300.0f);
+        raw_norm = (uint32_t)(((uint64_t)raw_16b * vdda_mv) / 3300UL);
     }
 
     /* STM32H755: TS_CAL1 @ 30 deg C, TS_CAL2 @ 130 deg C (range = 100 deg C) */
-    return ((130.0f - 30.0f) / (cal2 - cal1)) * (raw_norm - cal1) + 30.0f;
+    int32_t temp_c = (((int32_t)(130 - 30) * ((int32_t)raw_norm - (int32_t)cal1)) / (int32_t)(cal2 - cal1)) + 30;
+    return temp_c;
 }

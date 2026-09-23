@@ -65,7 +65,11 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t m4_heartbeat;   /* incremented by M4                   */
     volatile uint32_t state;          /* application state, HSEM 1 guarded   */
 
-    uint8_t           _pad[16];       /* Align SharedAdcData_t to 32 bytes   */
+    volatile uint16_t vrefint_cal;    /* Factory VREFINT calibration word (read by M7) */
+    volatile uint16_t ts_cal1;        /* Factory TS_CAL1 calibration word (read by M7) */
+    volatile uint16_t ts_cal2;        /* Factory TS_CAL2 calibration word (read by M7) */
+    volatile uint16_t cal_valid;      /* 1 if calibration data populated by M7         */
+    uint8_t           _pad[8];        /* Retains 32-byte alignment of SharedAdcData_t  */
     SharedAdcData_t   adc;            /* Protected by HSEM_ID_ADC_DATA (4U)  */
 
     volatile uint32_t m7_to_m4_len;

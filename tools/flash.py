@@ -378,7 +378,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Run with --dry-run to see the exact command without touching the board.",
     )
-    p.add_argument("--preset", default="debug", choices=("debug", "release"),
+    p.add_argument("--preset", default="debug", choices=("debug", "release", "selftest"),
                    help="CMake preset whose build/ output to flash (default: debug)")
     p.add_argument("--core", default="auto", choices=("auto", "cm7", "cm4", "both"),
                    help="which core to program; 'auto' takes whatever is built (default)")

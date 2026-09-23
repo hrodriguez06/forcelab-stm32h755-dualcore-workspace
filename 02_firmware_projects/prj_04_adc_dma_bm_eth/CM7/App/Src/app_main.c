@@ -162,22 +162,33 @@ static void Status_Task(void *arg)
         if (!s_dcache_tested)
         {
             s_dcache_tested = true;
-            /* Test D-cache coherency invalidation rule */
-            __attribute__((aligned(32))) static uint16_t s_dcache_buf[64];
-            for (uint32_t i = 0; i < 64; i++)
-            {
-                s_dcache_buf[i] = (uint16_t)(0xA000U + i);
-            }
-            SCB_CleanDCache_by_Addr((uint32_t *)s_dcache_buf, (int32_t)sizeof(s_dcache_buf));
+            /* Test T8: D-cache coherency test on AXI SRAM buffer */
+            __attribute__((section(".axi_ram"), aligned(32))) static volatile uint32_t s_dcache_test_buf[8];
+
+            /* 1. Write baseline value to buffer and flush to physical RAM */
+            s_dcache_test_buf[0] = 0x11223344UL;
+            SCB_CleanDCache_by_Addr((uint32_t *)s_dcache_test_buf, 32);
             __DSB();
-            SCB_InvalidateDCache_by_Addr((uint32_t *)s_dcache_buf, (int32_t)sizeof(s_dcache_buf));
+
+            /* 2. Overwrite in cache (dirty line in L1 D-cache) */
+            s_dcache_test_buf[0] = 0xDEADBEEFUL;
             __DMB();
 
-            bool align_ok = (((uint32_t)s_dcache_buf & 0x1FUL) == 0U);
-            bool len_ok   = (((sizeof(s_dcache_buf) / 2U) & 0x1FUL) == 0U);
+            /* 3. Invalidate line WITHOUT clean - discards dirty data from L1 D-cache */
+            SCB_InvalidateDCache_by_Addr((uint32_t *)s_dcache_test_buf, 32);
+            __DSB();
+            __ISB();
 
-            APP_LOG("[cm7_dcache_test] PASS: 32B alignment=%d, half_len_32B=%d, cache invalidation verified",
-                    align_ok ? 1 : 0, len_ok ? 1 : 0);
+            /* 4. Read back: must hit RAM and return original baseline 0x11223344UL */
+            uint32_t readback = s_dcache_test_buf[0];
+            bool dcache_invalidate_real = (readback == 0x11223344UL);
+            bool align_ok = (((uint32_t)s_dcache_test_buf & 0x1FUL) == 0U);
+
+            APP_LOG("[cm7_dcache_test] %s: 32B alignment=%d, discard_dirty_verified=%d (readback=0x%08lX)",
+                    (dcache_invalidate_real && align_ok) ? "PASS" : "FAIL",
+                    align_ok ? 1 : 0,
+                    dcache_invalidate_real ? 1 : 0,
+                    (unsigned long)readback);
         }
 
         SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);

@@ -1,5 +1,3 @@
-[boot_bm] CPU1 alive before clock tree (HSI 64MHz, USART3 115200)
- 
 === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
@@ -12,7 +10,8 @@
 [phy] partner advertised:
 [net] udp echo listening on port 7
 [adc_srv] listening on UDP port 5001
-[m4_uart_test] jumper=1 bm_init=1,1,1 bm_loop=1,1,1 ll=1,1 ore=1
+[cm7_dcache_test] PASS: 32B alignment=1, discard_dirty_verified=1 (readback=0x11223344)
+[m4_adc_test] ADC:B=1 L=1 Rg=1 U=1 C=1 V=1 T=1 Rs=1 O=1 A=1 Vd=3302
 [ipc] m7=1 m4=0  (CPU2 starting)
 [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
 [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
@@ -24,13 +23,3 @@
 [ipc] m7=16 m4=80  (CPU2 alive)
 [ipc] m7=20 m4=100  (CPU2 alive)
 [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
-[ipc] m7=24 m4=120  (CPU2 alive)
-[ipc] m7=28 m4=140  (CPU2 alive)
-[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
-[ipc] m7=32 m4=160  (CPU2 alive)
-[ipc] m7=36 m4=180  (CPU2 alive)
-[ipc] m7=40 m4=200  (CPU2 alive)
-[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
-[ipc] m7=44 m4=220  (CPU2 alive)
-[ipc] m7=48 m4=240  (CPU2 alive)
-[net] link=100 Mbps full duplex ip=192.168.1.150 rx=2 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0

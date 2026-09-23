@@ -370,10 +370,29 @@ void ADC_LL_ComputeStats(AdcLl_Handle_t *handle, uint8_t half, uint32_t vref_mv)
 void ADC_LL_ComputeStatsChannel(AdcLl_Handle_t *handle, uint8_t half, uint32_t channel_seq_idx, uint32_t vref_mv);
 
 /**
+  * @brief ADC factory calibration data container.
+  */
+typedef struct
+{
+    uint16_t vrefint_cal;    /*!< Raw VREFINT calibration word (3.3V, 30°C) */
+    uint16_t ts_cal1;        /*!< Raw TS_CAL1 calibration word (3.3V, 30°C) */
+    uint16_t ts_cal2;        /*!< Raw TS_CAL2 calibration word (3.3V, 130°C) */
+} AdcLl_CalibrationData_t;
+
+#define ADC_LL_TEMPERATURE_ERROR   (-999L)
+
+/**
+  * @brief  Injects factory calibration data (especially needed on Cortex-M4 where ROM is unreachable).
+  * @param  cal Pointer to calibration data structure.
+  * @return true if calibration data is plausible, false otherwise.
+  */
+bool ADC_LL_InjectCalibration(const AdcLl_CalibrationData_t *cal);
+
+/**
   * @brief  Calculates VDDA in millivolts from a raw VREFINT reading using factory calibration.
   * @param  vrefint_raw     Raw conversion code from channel 19 (VREFINT).
   * @param  resolution_bits ADC resolution bits (16, 14, 12, 10, 8; 0 defaults to 16).
-  * @return VDDA in millivolts (nominal ~3300).
+  * @return VDDA in millivolts (nominal ~3300), or 0U if uncalibrated/error.
   */
 uint32_t ADC_LL_CalculateVDDA(uint16_t vrefint_raw, uint8_t resolution_bits);
 
@@ -382,12 +401,11 @@ uint32_t ADC_LL_CalculateVDDA(uint16_t vrefint_raw, uint8_t resolution_bits);
   * @param  temp_raw        Raw conversion code from channel 18 (TEMPSENSOR).
   * @param  vdda_mv         Actual VDDA supply voltage in mV.
   * @param  resolution_bits ADC resolution bits (16, 14, 12, 10, 8; 0 defaults to 16).
-  * @return Temperature in degrees Celsius.
+  * @return Temperature in degrees Celsius, or ADC_LL_TEMPERATURE_ERROR if uncalibrated/error.
   */
-float ADC_LL_CalculateTemperature(uint16_t temp_raw, uint32_t vdda_mv, uint8_t resolution_bits);
+int32_t ADC_LL_CalculateTemperature(uint16_t temp_raw, uint32_t vdda_mv, uint8_t resolution_bits);
 
-/* Backward compatibility aliases */
-#define ADC_LL_CalculateVDDA_16B(raw)       ADC_LL_CalculateVDDA((raw), 16U)
+#define ADC_LL_CalculateVDDA_16B(raw)         ADC_LL_CalculateVDDA((raw), 16U)
 #define ADC_LL_CalculateTemperature_16B(r, v) ADC_LL_CalculateTemperature((r), (v), 16U)
 
 #ifdef __cplusplus

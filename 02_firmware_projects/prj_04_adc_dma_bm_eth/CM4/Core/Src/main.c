@@ -435,6 +435,8 @@ static void CM4_Test_Adc_Drivers(void)
     volatile uint32_t dummy = RCC->AHB4ENR;
     (void)dummy;
 
+    bool uncal_check_ok = false;
+    bool cal_injected_ok = false;
     bool bm_init_ok = false;
     bool ll_init_ok = false;
     bool reg_compare_ok = true;
@@ -442,13 +444,51 @@ static void CM4_Test_Adc_Drivers(void)
     bool bm_read_temp_ok = false;
     bool ll_read_vref_ok = false;
     bool ll_read_temp_ok = false;
+    bool res_sweep_ok = true;
     bool ovs_trunc_rejected = false;
     bool ovs_valid_accepted = false;
-    bool awd_bm_ok = false;
+    bool ovs_hw_verified = false;
+    bool awd_trip_ok = false;
+    bool awd_notrip_ok = false;
     uint32_t vdda_bm = 0;
     int32_t temp_bm = 0;
     uint32_t vdda_ll = 0;
     int32_t temp_ll = 0;
+    uint16_t ovs_raw = 0;
+
+    /* 0. Verify uncalibrated failure behavior on CM4 (S2 requirement: never invent constants) */
+    if ((ADC_BM_CalculateVDDA(24200U, 16U) == 0U) &&
+        (ADC_BM_CalculateTemperature(12000U, 3300U, 16U) == ADC_BM_TEMPERATURE_ERROR) &&
+        (ADC_LL_CalculateVDDA(24200U, 16U) == 0U) &&
+        (ADC_LL_CalculateTemperature(12000U, 3300U, 16U) == ADC_LL_TEMPERATURE_ERROR))
+    {
+        uncal_check_ok = true;
+    }
+
+    /* Wait for M7 to publish valid calibration words */
+    uint32_t wait_spins = 1000000U;
+    while ((g_shared.cal_valid == 0U) && (wait_spins > 0U))
+    {
+        wait_spins--;
+    }
+
+    if (g_shared.cal_valid != 0U)
+    {
+        AdcBm_CalibrationData_t bm_cal = {
+            .vrefint_cal = g_shared.vrefint_cal,
+            .ts_cal1     = g_shared.ts_cal1,
+            .ts_cal2     = g_shared.ts_cal2
+        };
+        AdcLl_CalibrationData_t ll_cal = {
+            .vrefint_cal = g_shared.vrefint_cal,
+            .ts_cal1     = g_shared.ts_cal1,
+            .ts_cal2     = g_shared.ts_cal2
+        };
+        if (ADC_BM_InjectCalibration(&bm_cal) && ADC_LL_InjectCalibration(&ll_cal))
+        {
+            cal_injected_ok = true;
+        }
+    }
 
     /* 1. Register Parity Test between BM and LL on ADC3 */
     AdcBm_ChannelConfig_t bm_chs[3] = {
@@ -567,7 +607,7 @@ static void CM4_Test_Adc_Drivers(void)
     if (ADC_BM_ReadSingle(ADC3, ADC_BM_CHANNEL_VREFINT, ADC_BM_SAMPLETIME_810CYCLES_5, &vref_raw_bm, 100000U))
     {
         vdda_bm = ADC_BM_CalculateVDDA(vref_raw_bm, 16U);
-        if ((vdda_bm >= 2800U) && (vdda_bm <= 3600U))
+        if ((vdda_bm >= 3100U) && (vdda_bm <= 3500U))
         {
             bm_read_vref_ok = true;
         }
@@ -576,8 +616,8 @@ static void CM4_Test_Adc_Drivers(void)
     uint16_t temp_raw_bm = 0;
     if (ADC_BM_ReadSingle(ADC3, ADC_BM_CHANNEL_TEMPSENSOR, ADC_BM_SAMPLETIME_810CYCLES_5, &temp_raw_bm, 100000U))
     {
-        temp_bm = (int32_t)ADC_BM_CalculateTemperature(temp_raw_bm, vdda_bm, 16U);
-        if ((temp_bm >= 0) && (temp_bm <= 100))
+        temp_bm = ADC_BM_CalculateTemperature(temp_raw_bm, vdda_bm, 16U);
+        if ((temp_bm >= 10) && (temp_bm <= 90))
         {
             bm_read_temp_ok = true;
         }
@@ -594,7 +634,7 @@ static void CM4_Test_Adc_Drivers(void)
     if (ADC_LL_ReadSingle(ADC3, ADC_LL_CHANNEL_VREFINT, ADC_LL_SAMPLETIME_810CYCLES_5, &vref_raw_ll, 100000U))
     {
         vdda_ll = ADC_LL_CalculateVDDA(vref_raw_ll, 16U);
-        if ((vdda_ll >= 2800U) && (vdda_ll <= 3600U))
+        if ((vdda_ll >= 3100U) && (vdda_ll <= 3500U))
         {
             ll_read_vref_ok = true;
         }
@@ -603,15 +643,39 @@ static void CM4_Test_Adc_Drivers(void)
     uint16_t temp_raw_ll = 0;
     if (ADC_LL_ReadSingle(ADC3, ADC_LL_CHANNEL_TEMPSENSOR, ADC_LL_SAMPLETIME_810CYCLES_5, &temp_raw_ll, 100000U))
     {
-        temp_ll = (int32_t)ADC_LL_CalculateTemperature(temp_raw_ll, vdda_ll, 16U);
-        if ((temp_ll >= 0) && (temp_ll <= 100))
+        temp_ll = ADC_LL_CalculateTemperature(temp_raw_ll, vdda_ll, 16U);
+        if ((temp_ll >= 10) && (temp_ll <= 90))
         {
             ll_read_temp_ok = true;
         }
     }
     ADC_LL_Deinit(&h_ll);
 
-    /* 4. Oversampling Truncation Validation */
+    /* 4. T2 Resolution Sweep (16, 14, 12, 10, 8 bits) checking 2^(16-N) scaling */
+    if (vref_raw_bm > 0U)
+    {
+        uint32_t v_16 = ADC_BM_CalculateVDDA(vref_raw_bm, 16U);
+        uint32_t v_14 = ADC_BM_CalculateVDDA((uint16_t)(vref_raw_bm >> 2U), 14U);
+        uint32_t v_12 = ADC_BM_CalculateVDDA((uint16_t)(vref_raw_bm >> 4U), 12U);
+        uint32_t v_10 = ADC_BM_CalculateVDDA((uint16_t)(vref_raw_bm >> 6U), 10U);
+        uint32_t v_8  = ADC_BM_CalculateVDDA((uint16_t)(vref_raw_bm >> 8U), 8U);
+
+        int32_t d14 = (int32_t)v_16 - (int32_t)v_14; if (d14 < 0) d14 = -d14;
+        int32_t d12 = (int32_t)v_16 - (int32_t)v_12; if (d12 < 0) d12 = -d12;
+        int32_t d10 = (int32_t)v_16 - (int32_t)v_10; if (d10 < 0) d10 = -d10;
+        int32_t d8  = (int32_t)v_16 - (int32_t)v_8;  if (d8 < 0)  d8 = -d8;
+
+        if ((d14 > 10) || (d12 > 10) || (d10 > 15) || (d8 > 35))
+        {
+            res_sweep_ok = false;
+        }
+    }
+    else
+    {
+        res_sweep_ok = false;
+    }
+
+    /* 5. Oversampling Truncation Validation */
     /* 16-bit + 256x (8 add bits) with shift 0 = 24 bits > 16 bits: must be rejected */
     memset(&h_bm, 0, sizeof(h_bm));
     AdcBm_ConfigEx_t ovs_bad = bm_ex;
@@ -635,26 +699,73 @@ static void CM4_Test_Adc_Drivers(void)
         ADC_BM_Deinit(&h_bm);
     }
 
-    /* 5. Analog Watchdog (AWD1) Test */
+    /* 6. T7 Oversampling x16 shift 4: CFGR2 Register Readback & Hardware Conversion */
+    memset(&h_bm, 0, sizeof(h_bm));
+    AdcBm_ConfigEx_t ovs_t7 = bm_ex;
+    ovs_t7.oversampling_enable = true;
+    ovs_t7.oversampling_ratio  = ADC_BM_OVERSAMPLING_16X;   /* ratio = 16 -> OVSR = 15 */
+    ovs_t7.oversampling_shift  = ADC_BM_OVERSAMPLING_SHIFT_4B; /* shift = 4 -> OVSS = 4 */
+    if (ADC_BM_InitEx(&h_bm, &ovs_t7))
+    {
+        uint32_t cfgr2_val = ADC3->CFGR2;
+        bool rovse_ok = ((cfgr2_val & ADC_CFGR2_ROVSE) != 0U);
+        bool ovsr_ok  = (((cfgr2_val & ADC_CFGR2_OVSR_Msk) >> ADC_CFGR2_OVSR_Pos) == 15U);
+        bool ovss_ok  = (((cfgr2_val & ADC_CFGR2_OVSS_Msk) >> ADC_CFGR2_OVSS_Pos) == 4U);
+
+        if (rovse_ok && ovsr_ok && ovss_ok)
+        {
+            (void)ADC_BM_Calibrate(ADC3);
+            (void)ADC_BM_Enable(ADC3);
+            if (ADC_BM_ReadSingle(ADC3, ADC_BM_CHANNEL_VREFINT, ADC_BM_SAMPLETIME_810CYCLES_5, &ovs_raw, 100000U))
+            {
+                if ((ovs_raw >= 20000U) && (ovs_raw <= 30000U))
+                {
+                    ovs_hw_verified = true;
+                }
+            }
+        }
+        ADC_BM_Deinit(&h_bm);
+    }
+
+    /* 7. T5 Analog Watchdog (AWD1): Trip test and No-trip test */
+    /* Trip test: window [0, 100] -> VREFINT ~24000 trips AWD1 */
     memset(&h_bm, 0, sizeof(h_bm));
     AdcBm_ConfigEx_t awd_cfg = bm_ex;
     awd_cfg.awd_enable          = true;
     awd_cfg.awd_all_channels    = true;
-    awd_cfg.awd_high_threshold  = 100U; /* Very low high threshold: forces trip! */
+    awd_cfg.awd_high_threshold  = 100U;
     awd_cfg.awd_low_threshold   = 0U;
     if (ADC_BM_InitEx(&h_bm, &awd_cfg))
     {
         (void)ADC_BM_Enable(ADC3);
         uint16_t dummy_raw = 0;
         (void)ADC_BM_ReadSingle(ADC3, ADC_BM_CHANNEL_VREFINT, ADC_BM_SAMPLETIME_810CYCLES_5, &dummy_raw, 100000U);
-        /* Check if AWD1 flag was raised */
         if ((ADC3->ISR & ADC_ISR_AWD1) != 0U)
         {
             ADC_BM_IRQHandler_ADC(&h_bm);
             if (ADC_BM_TakeAwdEvents(&h_bm) > 0U)
             {
-                awd_bm_ok = true;
+                awd_trip_ok = true;
             }
+        }
+        ADC_BM_Deinit(&h_bm);
+    }
+
+    /* No-trip test: window [0, 65535] -> VREFINT does NOT trip AWD1 */
+    memset(&h_bm, 0, sizeof(h_bm));
+    AdcBm_ConfigEx_t awd_notrip = bm_ex;
+    awd_notrip.awd_enable          = true;
+    awd_notrip.awd_all_channels    = true;
+    awd_notrip.awd_high_threshold  = 65535U;
+    awd_notrip.awd_low_threshold   = 0U;
+    if (ADC_BM_InitEx(&h_bm, &awd_notrip))
+    {
+        (void)ADC_BM_Enable(ADC3);
+        uint16_t dummy_raw = 0;
+        (void)ADC_BM_ReadSingle(ADC3, ADC_BM_CHANNEL_VREFINT, ADC_BM_SAMPLETIME_810CYCLES_5, &dummy_raw, 100000U);
+        if ((ADC3->ISR & ADC_ISR_AWD1) == 0U)
+        {
+            awd_notrip_ok = true;
         }
         ADC_BM_Deinit(&h_bm);
     }
@@ -664,15 +775,21 @@ static void CM4_Test_Adc_Drivers(void)
     char *p = (char *)g_shared.m4_to_m7;
     int pos = 0;
 
-    const char *prefix = "ADC:BM=";
+    const char *prefix = "ADC:B=";
     while (*prefix != '\0') { p[pos++] = *prefix++; }
     p[pos++] = bm_init_ok ? '1' : '0';
 
-    p[pos++] = ' '; p[pos++] = 'L'; p[pos++] = 'L'; p[pos++] = '=';
+    p[pos++] = ' '; p[pos++] = 'L'; p[pos++] = '=';
     p[pos++] = ll_init_ok ? '1' : '0';
 
-    p[pos++] = ' '; p[pos++] = 'R'; p[pos++] = 'e'; p[pos++] = 'g'; p[pos++] = '=';
+    p[pos++] = ' '; p[pos++] = 'R'; p[pos++] = 'g'; p[pos++] = '=';
     p[pos++] = reg_compare_ok ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'U'; p[pos++] = '=';
+    p[pos++] = uncal_check_ok ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'C'; p[pos++] = '=';
+    p[pos++] = cal_injected_ok ? '1' : '0';
 
     p[pos++] = ' '; p[pos++] = 'V'; p[pos++] = '=';
     p[pos++] = (bm_read_vref_ok && ll_read_vref_ok) ? '1' : '0';
@@ -680,20 +797,27 @@ static void CM4_Test_Adc_Drivers(void)
     p[pos++] = ' '; p[pos++] = 'T'; p[pos++] = '=';
     p[pos++] = (bm_read_temp_ok && ll_read_temp_ok) ? '1' : '0';
 
-    p[pos++] = ' '; p[pos++] = 'O'; p[pos++] = 'V'; p[pos++] = 'S'; p[pos++] = '=';
-    p[pos++] = (ovs_trunc_rejected && ovs_valid_accepted) ? '1' : '0';
+    p[pos++] = ' '; p[pos++] = 'R'; p[pos++] = 's'; p[pos++] = '=';
+    p[pos++] = res_sweep_ok ? '1' : '0';
 
-    p[pos++] = ' '; p[pos++] = 'A'; p[pos++] = 'W'; p[pos++] = 'D'; p[pos++] = '=';
-    p[pos++] = awd_bm_ok ? '1' : '0';
+    p[pos++] = ' '; p[pos++] = 'O'; p[pos++] = '=';
+    p[pos++] = (ovs_trunc_rejected && ovs_valid_accepted && ovs_hw_verified) ? '1' : '0';
 
-    (void)vdda_bm;
-    (void)temp_bm;
-    (void)vdda_ll;
-    (void)temp_ll;
+    p[pos++] = ' '; p[pos++] = 'A'; p[pos++] = '=';
+    p[pos++] = (awd_trip_ok && awd_notrip_ok) ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'V'; p[pos++] = 'd'; p[pos++] = '=';
+    char tmp[10]; int ti = 0; uint32_t v = vdda_bm;
+    if (v == 0) { p[pos++] = '0'; }
+    else {
+        while (v > 0) { tmp[ti++] = '0' + (v % 10); v /= 10; }
+        while (ti > 0) { p[pos++] = tmp[--ti]; }
+    }
 
     p[pos] = '\0';
+
     __DMB();
-    g_shared.m4_to_m7_len = (uint16_t)pos;
+    g_shared.m4_to_m7_len = (uint32_t)pos;
     SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
 }
 

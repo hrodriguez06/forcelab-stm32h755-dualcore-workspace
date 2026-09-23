@@ -36,6 +36,21 @@ void Shared_Init(void)
 {
     memset((void *)&g_shared, 0, sizeof(g_shared));
 
+#ifndef VREFINT_CAL_ADDR
+#define VREFINT_CAL_ADDR     ((const uint16_t *)(0x1FF1E860UL))
+#endif
+#ifndef TEMPSENSOR_CAL1_ADDR
+#define TEMPSENSOR_CAL1_ADDR ((const uint16_t *)(0x1FF1E820UL))
+#endif
+#ifndef TEMPSENSOR_CAL2_ADDR
+#define TEMPSENSOR_CAL2_ADDR ((const uint16_t *)(0x1FF1E840UL))
+#endif
+
+    g_shared.vrefint_cal = *VREFINT_CAL_ADDR;
+    g_shared.ts_cal1     = *TEMPSENSOR_CAL1_ADDR;
+    g_shared.ts_cal2     = *TEMPSENSOR_CAL2_ADDR;
+    g_shared.cal_valid   = 1U;
+
     /* Publish last. The barrier matters: without it the compiler or the store
        buffer may make the magic visible to CPU2 before the zeroing is, and
        CPU2 would accept a block that is still holding the previous run's
