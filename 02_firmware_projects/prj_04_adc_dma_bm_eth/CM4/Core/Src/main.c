@@ -137,9 +137,8 @@ static void CPU2_WaitForCPU1(void)
      * function. Nothing faults. */
     SET_BIT(SCB->SCR, SCB_SCR_SEVONPEND_Msk);
 
-    /* Enter STOP on D2 until CPU1 finishes initialization and releases HSEM 0 */
-    while ((g_shared.magic != SHARED_MAGIC) ||
-           (__HAL_HSEM_GET_FLAG(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT_SYNC)) == 0U))
+    /* Enter STOP on D2 until CPU1 finishes initialization and publishes SHARED_MAGIC */
+    while (g_shared.magic != SHARED_MAGIC)
     {
         HAL_PWREx_ClearPendingEvent();
         HAL_PWREx_EnterSTOPMode(PWR_MAINREGULATOR_ON, PWR_STOPENTRY_WFE, PWR_D2_DOMAIN);

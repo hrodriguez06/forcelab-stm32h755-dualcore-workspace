@@ -158,7 +158,8 @@ static void Status_Task(void *arg)
 #endif
 
         APP_LOG("[ipc] m7=%lu m4=%lu  (CPU2 %s)",
-                g_shared.m7_heartbeat, m4, state);
+                (unsigned long)g_shared.m7_heartbeat,
+                (unsigned long)m4, state);
 
         previous_m4   = m4;
         have_previous = true;
