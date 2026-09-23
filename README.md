@@ -198,6 +198,7 @@ promise one firmware makes, and only that firmware keeps it.
 | :--- | :--- | :--- | :--- | :--- |
 | `prj_02_eth_lwip_dualcore` | CM7 + CM4 | links `01_shared_drivers` | 0 warnings | 2026-09-20 at `784febb`, its README section 6 |
 | `prj_03_adc_dma_eth` | CM7 + CM4 | links `01_shared_drivers` (incl. `07_adc`) | 0 warnings, `-Werror` on | **not yet** - see its `docs/ADC_BRINGUP.md` |
+| `prj_04_adc_dma_bm_eth` | CM7 + CM4 | links `01_shared_drivers` (incl. `07_adc`) | 0 warnings, `-Werror` on | **pending hardware run** - audit fixes applied |
 | `prj_eth_lwip_node` | CM7 only | own `Custom_Drivers/` | 0 warnings | its README, "Verified on hardware" |
 | `prj_01_template_dualcore` | CM7 + CM4 | links `01_shared_drivers` | 0 warnings | `d178009`, which predates the move to the shared drivers |
 

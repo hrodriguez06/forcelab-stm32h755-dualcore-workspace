@@ -75,9 +75,10 @@ The architecture supports two deployment locations:
 │   └── spi_bm.h   / spi_bm.c
 │
 ├── 07_adc/                             # Analog-to-Digital Converter
-│   ├── .gitkeep
-│   ├── adc_ll.h   / adc_ll.c
-│   └── adc_bm.h   / adc_bm.c
+│   ├── README.md                       # Architecture, BOOST table, errata, examples
+│   ├── adc_hal.h  / adc_hal.c          # ST HAL tier (for M7 / multi-instance handles)
+│   ├── adc_ll.h   / adc_ll.c           # ST LL tier (zero HAL dependencies, LL inlines)
+│   └── adc_bm.h   / adc_bm.c           # Pure Bare-Metal direct register access
 │
 ├── 08_eth/                             # 10/100 Ethernet MAC & PHY - depends on 02_dma
 │   ├── eth_hal.h  / eth_hal.c          # HAL MAC driver + ES0445 errata workarounds
