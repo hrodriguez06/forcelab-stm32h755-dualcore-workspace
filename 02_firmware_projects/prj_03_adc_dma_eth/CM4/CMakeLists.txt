@@ -94,6 +94,10 @@ target_link_options(${TARGET} PRIVATE
 # CPU2 links the ADC driver (which pulls in GPIO and adc_hal)
 target_link_libraries(${TARGET} PRIVATE stm32h7_driver_adc)
 
+if(ADC_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE ADC_DRIVER_SELFTEST=1)
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"

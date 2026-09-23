@@ -112,6 +112,10 @@ target_link_options(${TARGET} PRIVATE
 
 target_link_libraries(${TARGET} PRIVATE stm32h7_shared_drivers)
 
+if(ADC_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE ADC_DRIVER_SELFTEST=1)
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"

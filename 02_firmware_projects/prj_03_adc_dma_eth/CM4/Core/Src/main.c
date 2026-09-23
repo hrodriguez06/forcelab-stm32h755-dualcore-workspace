@@ -28,6 +28,13 @@
 #include "shared_memory.h"
 #include "adc_acquisition.h"
 
+#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
+#include "adc_hal.h"
+#include <stdio.h>
+#include <string.h>
+static void CM4_Test_Adc_Hal(void);
+#endif
+
 #define HEARTBEAT_DELAY_LOOPS   2000000UL
 
 /* Liveness markers in CPU2's OWN SRAM2, deliberately not in the shared block.
@@ -61,6 +68,10 @@ int main(void)
     /* Deliberately not calling Shared_Init(): the block belongs to CPU1 and is
        already initialised by the time this core is released. Zeroing it here
        would wipe whatever CPU1 has published. */
+
+#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
+    CM4_Test_Adc_Hal();
+#endif
 
     /* Initialize ADC1 + DMA1 with TIM3 hardware trigger */
     if (!ADC_Acquisition_Init())
@@ -152,3 +163,162 @@ void assert_failed(uint8_t *file, uint32_t line)
     Error_Handler();
 }
 #endif
+
+#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
+static void CM4_Test_Adc_Hal(void)
+{
+    bool hal_init_ok = false;
+    bool hal_cal_ok  = false;
+    bool read_vref_ok = false;
+    bool read_temp_ok = false;
+    bool ovs_trunc_rejected = false;
+    bool ovs_valid_accepted = false;
+    bool awd_hal_ok = false;
+    uint32_t vdda_hal = 0;
+    int32_t temp_hal = 0;
+
+    AdcHal_ChannelConfig_t hal_chs[2] = {
+        { .channel = ADC_CHANNEL_VREFINT,    .sampling_time = ADC_SAMPLETIME_810CYCLES_5 },
+        { .channel = ADC_CHANNEL_TEMPSENSOR, .sampling_time = ADC_SAMPLETIME_810CYCLES_5 }
+    };
+
+    AdcHal_ConfigEx_t ex = {
+        .adc_instance        = ADC3,
+        .channels            = hal_chs,
+        .num_channels        = 2U,
+        .resolution          = ADC_RESOLUTION_16B,
+        .trigger_source      = ADC_SOFTWARE_START,
+        .trigger_edge        = ADC_EXTERNALTRIGCONVEDGE_NONE,
+        .boost_mode          = ADC_HAL_BOOST_AUTO,
+        .dma_stream          = NULL,
+        .dma_request         = 0U,
+        .buffer              = NULL,
+        .buffer_length       = 0U,
+        .kernel_clock_hz     = 25000000UL,
+        .analog_pin_port     = NULL,
+        .analog_pin_idx      = 0U,
+        .oversampling_enable = false,
+        .oversampling_ratio  = 0U,
+        .oversampling_shift  = 0U,
+        .awd_enable          = false,
+        .awd_all_channels    = false,
+        .awd_channel         = 0U,
+        .awd_high_threshold  = 0U,
+        .awd_low_threshold   = 0U,
+        .clock_prescaler     = 0U,
+        .clock_mode          = 0U,
+        .continuous_mode     = false
+    };
+
+    static AdcHal_Handle_t h_hal;
+    memset(&h_hal, 0, sizeof(h_hal));
+    hal_init_ok = ADC_HAL_InitEx(&h_hal, &ex);
+
+    if (hal_init_ok)
+    {
+        hal_cal_ok = ADC_HAL_Calibrate(&h_hal);
+
+        /* 1. ReadSingle on VREFINT */
+        uint16_t vref_raw = 0;
+        if (ADC_HAL_ReadSingle(&h_hal, ADC_CHANNEL_VREFINT, ADC_SAMPLETIME_810CYCLES_5, &vref_raw, 100U))
+        {
+            vdda_hal = ADC_HAL_CalculateVDDA(vref_raw, 16U);
+            if ((vdda_hal >= 2800U) && (vdda_hal <= 3600U))
+            {
+                read_vref_ok = true;
+            }
+        }
+
+        /* 2. ReadSingle on TEMPSENSOR */
+        uint16_t temp_raw = 0;
+        if (ADC_HAL_ReadSingle(&h_hal, ADC_CHANNEL_TEMPSENSOR, ADC_SAMPLETIME_810CYCLES_5, &temp_raw, 100U))
+        {
+            temp_hal = (int32_t)ADC_HAL_CalculateTemperature(temp_raw, vdda_hal, 16U);
+            if ((temp_hal >= 0) && (temp_hal <= 100))
+            {
+                read_temp_ok = true;
+            }
+        }
+
+        (void)ADC_HAL_Deinit(&h_hal);
+    }
+
+    /* 3. Oversampling Truncation Validation */
+    /* 16-bit + 256x with 0 shift = 24 bits > 16 bits: must be rejected */
+    memset(&h_hal, 0, sizeof(h_hal));
+    AdcHal_ConfigEx_t ovs_bad = ex;
+    ovs_bad.oversampling_enable = true;
+    ovs_bad.oversampling_ratio  = ADC_HAL_OVERSAMPLING_256X;
+    ovs_bad.oversampling_shift  = ADC_HAL_OVERSAMPLING_SHIFT_NONE;
+    if (!ADC_HAL_InitEx(&h_hal, &ovs_bad))
+    {
+        ovs_trunc_rejected = true;
+    }
+
+    /* With shift 8 bits: must be accepted */
+    memset(&h_hal, 0, sizeof(h_hal));
+    AdcHal_ConfigEx_t ovs_good = ex;
+    ovs_good.oversampling_enable = true;
+    ovs_good.oversampling_ratio  = ADC_HAL_OVERSAMPLING_256X;
+    ovs_good.oversampling_shift  = ADC_HAL_OVERSAMPLING_SHIFT_8B;
+    if (ADC_HAL_InitEx(&h_hal, &ovs_good))
+    {
+        ovs_valid_accepted = true;
+        (void)ADC_HAL_Deinit(&h_hal);
+    }
+
+    /* 4. Analog Watchdog 1 Test */
+    memset(&h_hal, 0, sizeof(h_hal));
+    AdcHal_ConfigEx_t awd_cfg = ex;
+    awd_cfg.awd_enable          = true;
+    awd_cfg.awd_all_channels    = true;
+    awd_cfg.awd_high_threshold  = 100U; /* Very low threshold forces trip on VREFINT */
+    awd_cfg.awd_low_threshold   = 0U;
+    if (ADC_HAL_InitEx(&h_hal, &awd_cfg))
+    {
+        uint16_t dummy_raw = 0;
+        (void)ADC_HAL_ReadSingle(&h_hal, ADC_CHANNEL_VREFINT, ADC_SAMPLETIME_810CYCLES_5, &dummy_raw, 100U);
+        if ((h_hal.hadc.Instance->ISR & ADC_ISR_AWD1) != 0U)
+        {
+            ADC_HAL_IRQHandler_ADC(&h_hal);
+            if (ADC_HAL_TakeAwdEvents(&h_hal) > 0U)
+            {
+                awd_hal_ok = true;
+            }
+        }
+        (void)ADC_HAL_Deinit(&h_hal);
+    }
+
+    /* Format report into g_shared.m4_to_m7 */
+    SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);
+    char *p = (char *)g_shared.m4_to_m7;
+    int pos = 0;
+
+    const char *prefix = "ADC_HAL:Init=";
+    while (*prefix != '\0') { p[pos++] = *prefix++; }
+    p[pos++] = hal_init_ok ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'C'; p[pos++] = 'a'; p[pos++] = 'l'; p[pos++] = '=';
+    p[pos++] = hal_cal_ok ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'V'; p[pos++] = '=';
+    p[pos++] = read_vref_ok ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'T'; p[pos++] = '=';
+    p[pos++] = read_temp_ok ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'O'; p[pos++] = 'V'; p[pos++] = 'S'; p[pos++] = '=';
+    p[pos++] = (ovs_trunc_rejected && ovs_valid_accepted) ? '1' : '0';
+
+    p[pos++] = ' '; p[pos++] = 'A'; p[pos++] = 'W'; p[pos++] = 'D'; p[pos++] = '=';
+    p[pos++] = awd_hal_ok ? '1' : '0';
+
+    (void)vdda_hal;
+    (void)temp_hal;
+
+    p[pos] = '\0';
+    __DMB();
+    g_shared.m4_to_m7_len = (uint16_t)pos;
+    SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
+}
+#endif /* ADC_DRIVER_SELFTEST */

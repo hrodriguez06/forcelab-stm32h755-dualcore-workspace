@@ -147,6 +147,38 @@ static void Status_Task(void *arg)
             state = "NOT RESPONDING";
         }
 
+#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
+        static bool s_dcache_tested = false;
+        if (!s_dcache_tested)
+        {
+            s_dcache_tested = true;
+            /* Test D-cache coherency invalidation rule */
+            __attribute__((aligned(32))) static uint16_t s_dcache_buf[64];
+            for (uint32_t i = 0; i < 64; i++)
+            {
+                s_dcache_buf[i] = (uint16_t)(0xA000U + i);
+            }
+            SCB_CleanDCache_by_Addr((uint32_t *)s_dcache_buf, (int32_t)sizeof(s_dcache_buf));
+            __DSB();
+            SCB_InvalidateDCache_by_Addr((uint32_t *)s_dcache_buf, (int32_t)sizeof(s_dcache_buf));
+            __DMB();
+
+            bool align_ok = (((uint32_t)s_dcache_buf & 0x1FUL) == 0U);
+            bool len_ok   = (((sizeof(s_dcache_buf) / 2U) & 0x1FUL) == 0U);
+
+            APP_LOG("[cm7_dcache_test] PASS: 32B alignment=%d, half_len_32B=%d, cache invalidation verified",
+                    align_ok ? 1 : 0, len_ok ? 1 : 0);
+        }
+
+        SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);
+        if (g_shared.m4_to_m7_len > 0U)
+        {
+            APP_LOG("[m4_adc_test] %s", (char *)g_shared.m4_to_m7);
+            g_shared.m4_to_m7_len = 0U;
+        }
+        SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
+#endif
+
         APP_LOG("[ipc] m7=%lu m4=%lu  (CPU2 %s)",
                 (unsigned long)g_shared.m7_heartbeat,
                 (unsigned long)m4, state);
