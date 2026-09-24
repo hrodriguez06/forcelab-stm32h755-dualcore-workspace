@@ -137,10 +137,15 @@ Do not toggle `PC13` at speed when the LSE is in use. Relevant for the Nucleo, w
 (LAN8742A in RMII). Never generate MII init code for this board.
 
 ### 2.3.12 - HASH input data may be corrupted when DMA is used (`A`)
+When HASH transfers data through a channel from DMA1 or DMA2, using another channel
+from these DMAs to manage other peripherals may cause HASH input data corruption (ES0445 §2.3.12).
+
 **Workaround** (pick one):
-- During a HASH transfer on DMA1, ensure no DMA2 channel is enabled (or vice versa),
-  **and** set bit 20 of `DMA_SxCR` for the HASH stream.
-- Use interrupt or polling mode for HASH instead of DMA.
+- During a HASH data transfer using DMA1, ensure that no DMA channels are enabled on DMA2,
+  or vice versa. Additionally, set bit 20 of `DMA_SxCR` (`TRBUFF`) for the HASH stream on
+  silicon revisions with `REV_ID >= 0x2000` (e.g. revision V = `0x2003`).
+- Use interrupt or polling mode to transfer data to the HASH peripheral when DMA1 or DMA2
+  channels cannot be disabled during the HASH transfer.
 
 ### 2.3.2 - Device stalled on two consecutive RDP level regressions (`A`)
 **Workaround**: perform a dummy access to backup SRAM before an RDP level 1 -> 0
@@ -153,14 +158,16 @@ regression.
 ## 4. DMA / BDMA / MDMA / DMAMUX
 
 ### 2.20.3 & 2.21.1 - DMA stream locked on USART / LPUART transfers (`A`)
-**The single most common H7 DMA bug.** A DMA stream servicing a USART or LPUART can
-lock permanently.
+**The single most common H7 DMA bug.** When a USART or LPUART is issuing a DMA request to
+transfer data, if a concurrent transfer occurs, the requested transfer may not be served
+and the DMA stream may stay locked permanently (ES0445 §2.20.3, §2.21.1).
 
 **Workaround**: enable the alternative peripheral DMA channel protocol by setting
 **bit 20 of `DMA_SxCR`** (`TRBUFF`) on the stream used for that USART/LPUART when silicon
-revision `REV_ID >= 0x2000` (revisions V and Y).
+revision `REV_ID >= 0x2000` (e.g. revision V = `0x2003`; revision Y is `0x1003` and is
+below the threshold).
 In `dma_bm` and `dma_ll`, this bit is automatically configured by request ID.
-In `dma_hal`, `DMA_HAL_CheckErrata()` verifies and sets it.
+In `dma_hal`, `HAL_DMA_Init` applies it directly and `DMA_HAL_CheckErrata()` verifies it.
 When configuring HAL manually:
 
 ```c
@@ -173,12 +180,16 @@ hdma_usart3_tx.Instance->CR |= DMA_SxCR_TRBUFF;
 > Applies to USART1/2/3/6, UART4/5/7/8 and LPUART1 whenever DMA is used.
 > See `01_shared_drivers/02_dma/README.md`.
 
-### 2.3.12 - HASH_IN DMA transfer stall and concurrent controller restriction (`A`)
-DMAMUX1 request 78 (`HASH_IN`) can cause the DMA stream to lock up unless `TRBUFF` (bit 20)
-is set. Additionally, DMA1 and DMA2 must not service HASH_IN concurrently.
+### 2.3.12 - HASH input data may be corrupted when DMA is used (`A`)
+When HASH transfers data through a channel from DMA1 or DMA2, using another channel from
+these DMAs to manage other peripherals may cause HASH input data corruption (ES0445 §2.3.12).
 
-**Workaround**: `dma_bm` automatically enables `TRBUFF` when request 78 is configured
-on revisions >= 0x2000. Concurrent routing of HASH across both DMA1 and DMA2 is prohibited.
+**Workaround** (pick one):
+- During a HASH data transfer using DMA1, ensure that no DMA channels are enabled on DMA2,
+  or vice versa. Additionally, set bit 20 of `DMA_SxCR` (`TRBUFF`) for the channel used for
+  HASH data transfer on revisions with `REV_ID >= 0x2000` (e.g. revision V = `0x2003`).
+- Use interrupt or polling mode to transfer data to the HASH peripheral when DMA1 or DMA2
+  channels cannot be kept idle during the HASH transfer.
 
 ### 2.5.1 - BDMA disable failure and error flag omission (`A`)
 **Workaround**: never clear `GIFx` (global interrupt flag) while the channel is active.
