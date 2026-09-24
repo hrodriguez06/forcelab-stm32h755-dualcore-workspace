@@ -177,6 +177,57 @@ static bool Test_T9(void)
     }
     DMA_HAL_DeInit(&hdma_m2m);
 
+    /* 1b. DMA_HAL_MemCopy with PSIZE != MSIZE (WORD -> BYTE) (X1) */
+    memset(&hdma_m2m, 0, sizeof(hdma_m2m));
+    DmaHal_Config_t cfg_m2m_w2b = {
+        .instance       = DMA2_Stream0,
+        .request        = DMA_REQUEST_MEM2MEM,
+        .direction      = DMA_MEMORY_TO_MEMORY,
+        .periph_inc     = DMA_PINC_ENABLE,
+        .mem_inc        = DMA_MINC_ENABLE,
+        .periph_align   = DMA_PDATAALIGN_WORD,
+        .mem_align      = DMA_MDATAALIGN_BYTE,
+        .mode           = DMA_NORMAL,
+        .priority       = DMA_PRIORITY_HIGH,
+        .fifo_mode      = DMA_FIFOMODE_ENABLE,
+        .fifo_threshold = DMA_FIFO_THRESHOLD_FULL,
+        .mem_burst      = DMA_MBURST_SINGLE,
+        .periph_burst   = DMA_PBURST_SINGLE,
+        .enable_clock   = true,
+        .irq_priority   = -1
+    };
+
+    if (DMA_HAL_Init(&hdma_m2m, &cfg_m2m_w2b) != HAL_OK)
+    {
+        return false;
+    }
+
+    for (uint32_t i = 0; i < 16; i++)
+    {
+        s_tx_buf[i] = 0xA1B2C3D4UL + i;
+    }
+    memset(s_rx_buf, 0, sizeof(s_rx_buf));
+    /* Place canary at word index 16 (offset 64 bytes) */
+    s_rx_buf[16] = 0x55AA55AAUL;
+
+    if (DMA_HAL_MemCopy(&hdma_m2m, s_rx_buf, s_tx_buf, 64U, 1000U) != HAL_OK)
+    {
+        DMA_HAL_DeInit(&hdma_m2m);
+        return false;
+    }
+
+    if (memcmp(s_tx_buf, s_rx_buf, 64) != 0)
+    {
+        DMA_HAL_DeInit(&hdma_m2m);
+        return false;
+    }
+    if (s_rx_buf[16] != 0x55AA55AAUL) /* Canary intact: no overflow */
+    {
+        DMA_HAL_DeInit(&hdma_m2m);
+        return false;
+    }
+    DMA_HAL_DeInit(&hdma_m2m);
+
     /* 2. HAL_DMA_Start_IT with IRQ callback dispatch on DMA2_Stream1 */
     for (uint32_t i = 0; i < 64; i++)
     {

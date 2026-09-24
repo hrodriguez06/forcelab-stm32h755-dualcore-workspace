@@ -263,22 +263,33 @@ HAL_StatusTypeDef DMA_HAL_MemCopy(DMA_HandleTypeDef *hdma, void *dst, const void
         return HAL_ERROR;
     }
 
-    /* Calculate data items based on memory data alignment */
-    uint32_t elem_size = 1U;
+    /* X1: NDTR counts in PSIZE units (RM0399 §16.3.12).
+     * items = bytes / psize_bytes.  Also validate memory alignment. */
+    uint32_t psize_bytes = 1U;
+    if (hdma->Init.PeriphDataAlignment == DMA_PDATAALIGN_WORD)
+    {
+        psize_bytes = 4U;
+    }
+    else if (hdma->Init.PeriphDataAlignment == DMA_PDATAALIGN_HALFWORD)
+    {
+        psize_bytes = 2U;
+    }
+
+    uint32_t msize_bytes = 1U;
     if (hdma->Init.MemDataAlignment == DMA_MDATAALIGN_WORD)
     {
-        elem_size = 4U;
+        msize_bytes = 4U;
     }
     else if (hdma->Init.MemDataAlignment == DMA_MDATAALIGN_HALFWORD)
     {
-        elem_size = 2U;
+        msize_bytes = 2U;
     }
 
-    if ((bytes % elem_size) != 0U)
+    if (((bytes % psize_bytes) != 0U) || ((bytes % msize_bytes) != 0U))
     {
         return HAL_ERROR;
     }
-    uint32_t items = bytes / elem_size;
+    uint32_t items = bytes / psize_bytes;
 
     /* D-Cache maintenance (no-op on CM4 or when D-Cache is disabled) */
     DMA_MEM_BM_CleanForTx(src, bytes);

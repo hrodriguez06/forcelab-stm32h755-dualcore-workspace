@@ -220,6 +220,57 @@ static bool Test_T1(void)
     }
     DMA_LL_Deinit(&h_t1, 10000U);
 
+    /* LL tier verification: M2M with PSIZE != MSIZE (WORD -> BYTE) (X1) */
+    DmaLL_Config_t cfg_ll_w2b = {
+        .stream         = DMA1_Stream1,
+        .request        = 0U,
+        .direction      = LL_DMA_DIRECTION_MEMORY_TO_MEMORY,
+        .mode           = LL_DMA_MODE_NORMAL,
+        .periph_inc     = LL_DMA_PERIPH_INCREMENT,
+        .mem_inc        = LL_DMA_MEMORY_INCREMENT,
+        .periph_size    = LL_DMA_PDATAALIGN_WORD,
+        .mem_size       = LL_DMA_MDATAALIGN_BYTE,
+        .priority       = LL_DMA_PRIORITY_HIGH,
+        .fifo_enable    = true,
+        .fifo_threshold = LL_DMA_FIFOTHRESHOLD_FULL,
+        .mem_burst      = LL_DMA_MBURST_SINGLE,
+        .periph_burst   = LL_DMA_PBURST_SINGLE,
+        .double_buffer  = false,
+        .enable_clock   = true,
+        .fail_if_busy   = true
+    };
+    if (!DMA_LL_Init(&h_t1, &cfg_ll_w2b))
+    {
+        s_diag_t1 = 54U;
+        return false;
+    }
+    for (uint32_t i = 0; i < 16; i++)
+    {
+        s_m2m_src[i] = 0x11223344UL + i;
+    }
+    memset(s_m2m_dst, 0, sizeof(s_m2m_dst));
+    /* Place canary at offset 64 bytes (s_m2m_dst[16]) */
+    s_m2m_dst[16] = 0xCAFEBABEUL;
+
+    /* 16 items of WORD = 64 bytes total */
+    if (!DMA_LL_MemCopy(&h_t1, s_m2m_dst, s_m2m_src, 16U, 100000U))
+    {
+        s_diag_t1 = 55U;
+        s_diag_t1_flags = h_t1.error_flags;
+        return false;
+    }
+    if (memcmp(s_m2m_src, s_m2m_dst, 64) != 0)
+    {
+        s_diag_t1 = 56U;
+        return false;
+    }
+    if (s_m2m_dst[16] != 0xCAFEBABEUL) /* Canary untouched (no buffer overflow) */
+    {
+        s_diag_t1 = 57U;
+        return false;
+    }
+    DMA_LL_Deinit(&h_t1, 10000U);
+
     return true;
 }
 

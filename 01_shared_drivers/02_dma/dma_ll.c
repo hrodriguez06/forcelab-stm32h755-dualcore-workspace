@@ -316,8 +316,9 @@ bool DMA_LL_Start(DmaLL_Handle_t *h, uint32_t periph_addr, uint32_t mem_addr, ui
         return false;
     }
 
-    /* A5: Reachability validation */
-    if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, mem_addr, length * m_elem))
+    /* A5: Reachability validation.
+     * NDTR counts in PSIZE units (RM0399 §16.3.12), so byte span = NDT × PSIZE. */
+    if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, mem_addr, length * p_elem))
     {
         return false;
     }
@@ -393,8 +394,9 @@ bool DMA_LL_StartDoubleBuffer(DmaLL_Handle_t *h, uint32_t periph_addr,
         return false;
     }
 
-    if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, mem0, length * m_elem) ||
-        !DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, mem1, length * m_elem))
+    /* NDTR counts in PSIZE units (RM0399 §16.3.12) */
+    if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, mem0, length * p_elem) ||
+        !DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, mem1, length * p_elem))
     {
         return false;
     }
@@ -550,8 +552,8 @@ bool DMA_LL_MemCopy(DmaLL_Handle_t *h, void *dst, const void *src, uint32_t leng
         return false;
     }
 
-    uint32_t msize = (h->stream->CR & DMA_SxCR_MSIZE) >> DMA_SxCR_MSIZE_Pos;
-    uint32_t bytes = length * (1U << msize);
+    uint32_t psize = (h->stream->CR & DMA_SxCR_PSIZE) >> DMA_SxCR_PSIZE_Pos;
+    uint32_t bytes = length * (1U << psize);
 
     DMA_MEM_BM_CleanForTx(src, bytes);
     if (!DMA_MEM_BM_PrepareRx(dst, bytes))

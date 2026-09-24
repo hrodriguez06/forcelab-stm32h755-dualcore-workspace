@@ -318,14 +318,16 @@ bool DMA_BM_InitStreamEx(const DmaBm_ConfigEx_t *cfg)
         }
     }
 
-    /* A5: Reachability validation */
-    if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, c->mem_addr, c->buffer_length * mem_elem_size))
+    /* A5: Reachability validation.
+     * NDTR counts in PSIZE units (RM0399 §16.3.12), so total bytes = NDT × PSIZE
+     * for both peripheral and memory sides (the FIFO handles width conversion). */
+    if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, c->mem_addr, c->buffer_length * periph_elem_size))
     {
         return false;
     }
     if (cfg->mem1_addr != 0U)
     {
-        if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, cfg->mem1_addr, c->buffer_length * mem_elem_size))
+        if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, cfg->mem1_addr, c->buffer_length * periph_elem_size))
         {
             return false;
         }
@@ -531,7 +533,7 @@ bool DMA_BM_SetTransfer(DMA_Stream_TypeDef *s, uint32_t periph_addr,
         return false;
     }
 
-    if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, mem_addr, length * mem_elem_size))
+    if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, mem_addr, length * periph_elem_size))
     {
         return false;
     }
@@ -778,6 +780,8 @@ bool DMA_BM_SetIdleMemory(DMA_Stream_TypeDef *s, uint32_t addr)
         return false; /* Not in double buffer mode */
     }
 
+    uint32_t psize = (s->CR & DMA_SxCR_PSIZE_Msk) >> DMA_SxCR_PSIZE_Pos;
+    uint32_t periph_elem_size = (1U << psize);
     uint32_t msize = (s->CR & DMA_SxCR_MSIZE_Msk) >> DMA_SxCR_MSIZE_Pos;
     uint32_t mem_elem_size = (1U << msize);
     uint32_t mburst = (s->CR & DMA_SxCR_MBURST_Msk) >> DMA_SxCR_MBURST_Pos;
@@ -793,7 +797,8 @@ bool DMA_BM_SetIdleMemory(DMA_Stream_TypeDef *s, uint32_t addr)
     {
         length = 1U;
     }
-    if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, addr, length * mem_elem_size))
+    /* NDTR counts in PSIZE units (RM0399 §16.3.12) */
+    if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, addr, length * periph_elem_size))
     {
         return false;
     }
