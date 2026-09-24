@@ -157,18 +157,28 @@ regression.
 lock permanently.
 
 **Workaround**: enable the alternative peripheral DMA channel protocol by setting
-**bit 20 of `DMA_SxCR`** on the stream used for that USART/LPUART. The bit is marked
-reserved in RM0399 and must be set **only** on USART/LPUART streams.
+**bit 20 of `DMA_SxCR`** (`TRBUFF`) on the stream used for that USART/LPUART when silicon
+revision `REV_ID >= 0x2000` (revisions V and Y).
+In `dma_bm` and `dma_ll`, this bit is automatically configured by request ID.
+In `dma_hal`, `DMA_HAL_CheckErrata()` verifies and sets it.
+When configuring HAL manually:
 
 ```c
 /* ES0445 2.20.3 / 2.21.1 - apply AFTER HAL_DMA_Init(), BEFORE enabling the stream */
-#define DMA_SxCR_ALT_PROTOCOL   (1UL << 20)
-hdma_usart3_rx.Instance->CR |= DMA_SxCR_ALT_PROTOCOL;
-hdma_usart3_tx.Instance->CR |= DMA_SxCR_ALT_PROTOCOL;
+#define DMA_SxCR_TRBUFF   (1UL << 20)
+hdma_usart3_rx.Instance->CR |= DMA_SxCR_TRBUFF;
+hdma_usart3_tx.Instance->CR |= DMA_SxCR_TRBUFF;
 ```
 
 > Applies to USART1/2/3/6, UART4/5/7/8 and LPUART1 whenever DMA is used.
-> See `docs/peripherals/usart_uart/README.md` and `docs/peripherals/dma_mdma/README.md`.
+> See `01_shared_drivers/02_dma/README.md`.
+
+### 2.3.12 - HASH_IN DMA transfer stall and concurrent controller restriction (`A`)
+DMAMUX1 request 78 (`HASH_IN`) can cause the DMA stream to lock up unless `TRBUFF` (bit 20)
+is set. Additionally, DMA1 and DMA2 must not service HASH_IN concurrently.
+
+**Workaround**: `dma_bm` automatically enables `TRBUFF` when request 78 is configured
+on revisions >= 0x2000. Concurrent routing of HASH across both DMA1 and DMA2 is prohibited.
 
 ### 2.5.1 - BDMA disable failure and error flag omission (`A`)
 **Workaround**: never clear `GIFx` (global interrupt flag) while the channel is active.

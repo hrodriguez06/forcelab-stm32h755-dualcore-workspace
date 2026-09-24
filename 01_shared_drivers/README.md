@@ -23,7 +23,7 @@ because it needs both cores already running.
 ├── README.md                   # This document
 ├── 00_gpio/                    # gpio_bm: port clock gating. Everything that drives a pin links it
 ├── 01_led/                     # Board status and 3-bit boot diagnosis - works before the clock tree
-├── 02_dma/                     # DMA1, DMA2, BDMA, MDMA alignment and cache helpers
+├── 02_dma/                     # DMA1, DMA2, BDMA (D3), reachability, cache helpers (dma_bm, dma_ll, dma_hal)
 ├── 03_tim/                     # General, Advanced, Basic & Low-Power Timers - time base
 ├── 04_uart/                    # USART1 - USART8, LPUART1 - console / log, first thing you want talking
 ├── 05_i2c/                     # I2C1 - I2C4 sensor interfaces

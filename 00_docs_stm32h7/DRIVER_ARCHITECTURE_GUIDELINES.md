@@ -46,10 +46,12 @@ The architecture supports two deployment locations:
 ├── 01_led/                             # Board status & Diagnostic LEDs
 │   └── led_bm.h   / led_bm.c           # Zero-overhead diagnostics, works before the clock tree
 │
-├── 02_dma/                             # DMA1, DMA2, BDMA, MDMA helpers
-│   ├── .gitkeep
-│   ├── dma_bm.h   / dma_bm.c
-│   └── dma_ll.h   / dma_ll.c
+├── 02_dma/                             # DMA1, DMA2, BDMA (D3), reachability, cache helpers
+│   ├── README.md                       # Architecture, capability matrix, errata, examples
+│   ├── dma_mem_bm.h                    # 32B cache alignment, D-Cache clean/invalidate, reachability
+│   ├── dma_hal.h  / dma_hal.c          # ST HAL tier (DMA1/DMA2/BDMA, M2M FIFO, TRBUFF, IRQ registry)
+│   ├── dma_ll.h   / dma_ll.c           # ST LL tier (zero HAL dependencies, LL inlines)
+│   └── dma_bm.h   / dma_bm.c           # Pure Bare-Metal direct register access
 │
 ├── 03_tim/                             # General, Advanced & Basic Timers - time base
 │   ├── .gitkeep
