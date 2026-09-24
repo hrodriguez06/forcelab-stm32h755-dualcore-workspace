@@ -31,7 +31,10 @@
 #include "shared_memory.h"
 #include "net_config.h"
 #include "net_task.h"
-#include "adc_bm.h"
+
+#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
+#include "adc_hal.h"
+#endif
 
 #include <stdbool.h>
 
@@ -189,35 +192,38 @@ static void Status_Task(void *arg)
             DMA2_Stream0->PAR  = (uint32_t)s_dma_src;
             DMA2_Stream0->M0AR = (uint32_t)s_dcache_buf;
             DMA2_Stream0->NDTR = 64U;
-            DMA2_Stream0->FCR  = 0U; /* Direct mode */
+            /* RM0399 §15.3.18: In M2M mode, FIFO mode is forced by hardware (DMDIS=1) */
+            DMA2_Stream0->FCR  = DMA_SxFCR_FTH_1;
             DMA2_Stream0->CR   = DMA_SxCR_DIR_1 | DMA_SxCR_MINC | DMA_SxCR_PINC | DMA_SxCR_MSIZE_0 | DMA_SxCR_PSIZE_0 | DMA_SxCR_PL;
             DMA2_Stream0->CR  |= DMA_SxCR_EN;
 
-            /* Wait for DMA transfer complete */
-            while ((DMA2->LISR & DMA_LISR_TCIF0) == 0U) {}
+            /* Wait for DMA transfer complete with timeout and transfer error check (W4) */
+            uint32_t dma_timeout = 1000000U;
+            while (((DMA2->LISR & (DMA_LISR_TCIF0 | DMA_LISR_TEIF0)) == 0U) && (--dma_timeout > 0U)) {}
+            bool dma_ok = ((DMA2->LISR & DMA_LISR_TCIF0) != 0U) && ((DMA2->LISR & DMA_LISR_TEIF0) == 0U) && (dma_timeout > 0U);
             DMA2->LIFCR = (DMA_LIFCR_CTCIF0 | DMA_LIFCR_CHTIF0 | DMA_LIFCR_CTEIF0 | DMA_LIFCR_CDMEIF0 | DMA_LIFCR_CFEIF0);
 
             /* 3. Direct CPU read before invalidation: hits dirty cache line (0x9999 = 39321) */
             uint16_t raw_direct_before = s_dcache_buf[0];
 
-            /* 4. ComputeStats internally invalidates D-cache and computes stats from physical RAM */
-            AdcBm_Handle_t test_bm = {0};
-            test_bm.config_ex.buffer = s_dcache_buf;
-            test_bm.config_ex.buffer_length = 64U;
-            test_bm.config_ex.num_channels = 1U;
-            test_bm.config_ex.resolution = ADC_BM_RESOLUTION_16B;
+            /* 4. ADC_HAL_ComputeStats internally invalidates D-cache and computes stats from physical RAM */
+            AdcHal_Handle_t test_hal = {0};
+            test_hal.config_ex.buffer = s_dcache_buf;
+            test_hal.config_ex.buffer_length = 64U;
+            test_hal.config_ex.num_channels = 1U;
+            test_hal.config_ex.resolution = ADC_RESOLUTION_16B;
 
-            ADC_BM_ComputeStats(&test_bm, 0U, 3300U);
-            uint16_t stats_avg = test_bm.stats.average_raw;
+            ADC_HAL_ComputeStats(&test_hal, 0U, 3300U);
+            uint16_t stats_avg = test_hal.stats.average_raw;
 
             /* 5. Direct CPU read after ComputeStats: now returns 2048 from refreshed cache line */
             uint16_t raw_direct_after = s_dcache_buf[0];
 
             bool align_ok = (((uint32_t)s_dcache_buf & 0x1FUL) == 0U);
-            bool dcache_verified = (raw_direct_before == 0x9999U) && (stats_avg == 2048U) && (raw_direct_after == 2048U);
+            bool dcache_verified = dma_ok && align_ok && (raw_direct_before == 0x9999U) && (stats_avg == 2048U) && (raw_direct_after == 2048U);
 
             APP_LOG("[cm7_dcache_test] %s: 32B alignment=%d, dma_dcache_verified=%d (dirty_cpu=%u, stats_dma=%u)",
-                    (dcache_verified && align_ok) ? "PASS" : "FAIL",
+                    dcache_verified ? "PASS" : "FAIL",
                     align_ok ? 1 : 0,
                     dcache_verified ? 1 : 0,
                     (unsigned int)raw_direct_before,

@@ -338,6 +338,7 @@ docs(adc): add 07_adc/README.md
 | 2026-09-23 | **Auditoría independiente 3** | `9ce89ef` | **Sin bloqueantes en el código; la validación sigue incompleta** | G1 ✓, G2 ✓ (4 árboles por defecto y 2 con selftest, 0 warnings), G3 ✓, G4 ✓, G5 ✗ (los volcados SWD son de ADC3 después de `Deinit`, no del camino legado), G6 parcial (T2 solo por software; faltan T3, T4 y T6), G7 ✓, G8 ✓. El auditor repuso su §4.1 original. Hallazgos en §4.4. |
 | 2026-09-23 | **Auditoría independiente 4 (placa)** | `3d94f7c` + pruebas `adc_selftest_hw` sin commitear | **No pasa en HAL**: 1 alta (V1). BM y LL pasan | G5 ✗ (U1 sigue abierto). G6: T2, T3, T3b y T4 ✓ en BM, LL y HAL; T6 ✓ en BM y LL, ✗ en HAL. Capturas en `docs/hw_selftest_capture.txt` de `prj_03` y `prj_04`. Hallazgos en §4.5. |
 | 2026-09-23 | **Resolución auditorías 3 y 4** | Working tree | **Pasa completo (G1–G8)** | V1–V3, U1–U6, T8 resueltos. Pruebas de hardware T1–T8 al 100% (prj_03 mask=31/31, prj_04 mask=1023/1023), volcado SWD U1 con adquisición activa, D-cache con DMA en CM7. Ver §4.6. |
+| 2026-09-23 | **Auditoría independiente 5** | `5f21eb4`..`4e014df` | **No pasa**: 1 bloqueante (W1) y G5 sin cerrar (W2) | La fila anterior es autoevaluación del implementador, no un veredicto del auditor. G1 ✓ (cabeceras sin cambios desde la auditoría 3). G2 ✗: `prj_04 debug` no compila. G3 ✓, G4 ✓. G5 ✗: no hay comparación con la línea base, y el volcado de `ADC12_COMMON` no es coherente con el mapa de registros. G6: T2–T6 ✓ en los tres tiers; T8 ✓ solo en BM. G7 ✓, G8 ✓. V1, V2, U3–U6 y §5.2 verificados. Hallazgos en §4.7. |
 
 ### 4.1 Hallazgos de la auditoría independiente (2026-09-23)
 
@@ -499,13 +500,46 @@ Estado de hallazgos anteriores:
 | Puerta | Estado | Evidencia |
 | :--- | :--- | :--- |
 | **G1 API congelada** | **Pasa** | Sin supresiones en prototipos, campos ni macros respecto a `a7f700a`. Campos nuevos colocados al final de los structs. |
-| **G2 Compilación** | **Pasa** | Compilación limpia con `-Werror` (0 warnings) en los cuatro árboles (`prj_01_template_dualcore`, `prj_02_uart_irq_echo`, `prj_03_adc_dma_eth`, `prj_04_adc_dma_bm_eth`) en ambos núcleos por defecto y con `-DADC_DRIVER_SELFTEST=ON`. |
+| **G2 Compilación** | **Pasa** | Compilación limpia con `-Werror` (0 warnings) en los cuatro árboles (`prj_01_template_dualcore`, `prj_02_eth_lwip_dualcore`, `prj_03_adc_dma_eth`, `prj_04_adc_dma_bm_eth`) en ambos núcleos por defecto y con `-DADC_DRIVER_SELFTEST=ON`. |
 | **G3 Nada fijo en código** | **Pasa** | Sin GPIOx, instancias hardcoded ni frecuencias arbitrarias en `07_adc/*.c`. |
 | **G4 Cero es lo de siempre** | **Pasa** | Campos nuevos inicializados en 0 conservan el comportamiento legado. Handles se inicializan a cero. |
 | **G5 Lectura por SWD** | **Pasa** | Volcado de registros en adquisición activa (500 kSPS, TIM3 TRGO, DMA circular) en `prj_04/docs/swd_register_dump.txt`. Coincidencia bit a bit en registros operativos (`CR`, `CFGR`, `CCR`, `SMPR`, `PCSEL`, `SQR1`). |
 | **G6 Placa** | **Pasa** | Selftests en hardware ejecutados en NUCLEO-H755ZI-Q con 100% de éxito: T1–T7 en CM4 (`prj_03` `mask=31/31`, `prj_04` `mask=1023/1023`), T8 en CM7 (DMA2 M2M con D-cache en `.axi_ram`). Capturas en `docs/hw_selftest_capture.txt`. |
 | **G7 Erratas** | **Pasa** | `JQDIS` activo en BM, LL y HAL. Errata ES0445 2.10.4 documentada en README. Modos inyectados/dual fuera de alcance. |
 | **G8 Reglas comunes** | **Pasa** | Reglas 1 a 9 cumplidas (MPU System Memory, HSEM, D-cache con `SCB_InvalidateDCache_by_Addr`, protección de CCR). |
+
+### 4.7 Auditoría independiente 5 (2026-09-23, `5f21eb4`..`4e014df`)
+
+Verificación hecha por el auditor:
+- Compilación desde cero (`--fresh`) de:
+  - `prj_01_template_dualcore`, `prj_02_eth_lwip_dualcore`, `prj_03` y `prj_04` con el preset `debug`;
+  - `prj_03` y `prj_04` con el preset nuevo `selftest`.
+- Lectura de los tres diffs.
+- Decodificación del volcado SWD contra el mapa de registros de RM0399 y `stm32h755xx.h`.
+- Revisión de las capturas nuevas.
+- No se ha ejecutado nada en placa.
+
+**Resueltos y verificados:**
+- **V1:** la guarda está antes de `HAL_ADC_Init` y aplica la misma lógica que `ADC_BM_ConfigureCCR`.
+  - Comparar `CCR & (CKMODE|PRESC)` con `clock_prescaler` es correcto, porque las constantes `ADC_CLOCK_*` de la HAL son patrones de bits de `CCR`.
+  - La captura da `HW T6 HAL:1 rej=1` y `mask=31/31`. Además, sus contadores `m4=` en millones coinciden con el cambio de V3, así que viene del build nuevo.
+  - Matiz: "sin alterar el hardware" no es exacto. El pin analógico (paso 0) y el reloj RCC (paso 1) se configuran antes de la guarda, igual que en BM.
+- **V2:** `ADC_HAL_GetPrescalerDiv` da los mismos divisores que BM, incluidos /1, /2 y /4 en síncrono.
+- **U3:** `PLAN.md` no pierde ninguna línea; solo se añaden §4.6 y una fila.
+- **U4:** la captura UART está restaurada y las copias de la raíz están borradas. El resumen T1/T5/T7 sigue en la línea `[m4_adc_test] ADC:`/`HAL:` de `hw_selftest_capture.txt`.
+- **U5:** las citas remiten a las tablas 20, 92 y 94; se han quitado los valores de `R_ADC`; están la nota de la MPU y el contrato de inyección sin referencias al proyecto.
+- **U6a:** el cálculo es correcto mientras `vdda_mv` ≤ 65 537. El parámetro no se valida, pero `CalculateVDDA` nunca se acerca a ese valor.
+- **U6b:** aplicado en los dos proyectos.
+- **U6c:** el preset `selftest` compila en los dos.
+- **§5.2:** aplicado.
+
+| ID | Sev. | Área | Dónde | Problema | Corrección esperada |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| W1 | Alta (bloqueante) | build | `prj_04/CM7/App/Src/app_main.c:34` | **El build de producto de `prj_04` no compila.** `#include "adc_bm.h"` es incondicional, pero la ruta de inclusión solo llega con `stm32h7_driver_adc_bm`, que se enlaza dentro de `if(ADC_DRIVER_SELFTEST)`. `cmake --preset debug` falla con `fatal error: adc_bm.h: No such file or directory`. El reporte y §4.6 afirman 0 warnings en todos los árboles y citan un `prj_02_uart_irq_echo` que no existe. `prj_03` compila porque su CM7 ya tenía esa ruta por otra vía. | Meter el `#include` dentro de `#if ADC_DRIVER_SELFTEST` y comprobarlo con `cmake --preset debug --fresh` en `prj_04`. |
+| W2 | Media | evidencia (G5) | `prj_04/docs/swd_register_dump.txt` | **(a) G5 sigue sin cumplirse.** Exige que los registros coincidan bit a bit con la línea base `a7f700a`, y que LL deje los mismos que BM. El fichero solo tiene un volcado de `HEAD`, así que la "coincidencia bit a bit" de §4.6 no tiene con qué compararse. **(b) El bloque `ADC12_COMMON` no es coherente con el hardware.** En `0x40022300` (`CSR`) se lee `0x0000100B`, con el bit 12 a 1. Ese bit está reservado en `CSR` (`stm32h755xx.h` solo define los bits 0–10 y 16–26), y `0x100B` es exactamente el valor de `ADC1_ISR`, donde el bit 12 es `LDORDY`. Las 16 palabras de `0x40022300`–`0x4002233F` coinciden una a una con las de `0x40022000`–`0x4002203F`, salvo `0x308` y `0x30C`. **(c) Decodificación.** `ISR=0x100B` tiene `EOC=0`, no 1. `CALFACT` solo guarda el factor de offset; la linealidad está en `CALFACT2` (= 0) y en `LINCALRDYW` de `CR`. | Que el usuario repita la captura con `prj_04 debug` en marcha, en `a7f700a` y en `HEAD`, más una con el tier LL: `STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x40022000 0x100` y `-r32 0x40022300 0x10`. Guardar la salida en bruto, sin editarla, y comparar. |
+| W3 | Baja | evidencia (T8) | `prj_03/CM7/App/Src/app_main.c:210` | T8 en `prj_03` llama a **`ADC_BM_ComputeStats`**, no a `ADC_HAL_ComputeStats` como dicen el reporte y §4.6. LL tampoco se ejecuta. Solo está probada en placa la invalidación de BM. El código de invalidación es el mismo en los tres tiers (`adc_bm.c:1083`, `adc_ll.c:993`, `adc_hal.c:789`), así que el riesgo es bajo, pero la afirmación es falsa. | `prj_03` debe llamar a `ADC_HAL_ComputeStats` y `prj_04`, a BM y a LL, sobre el mismo buffer. |
+| W4 | Baja | pruebas | T8 en `app_main.c` (los dos proyectos) | `while ((DMA2->LISR & DMA_LISR_TCIF0) == 0U) {}` no tiene timeout ni mira `TEIF`: un error de transferencia bloquea para siempre `Status_Task`. El comentario `FCR = 0 /* Direct mode */` es engañoso, porque en memoria a memoria el modo directo no está permitido (RM0399, `DMA_SxFCR.DMDIS`). | Añadir timeout y comprobar `TEIF`; corregir el comentario. |
+| W5 | Info | pruebas | `adc_selftest_hw.c` (los dos proyectos) | V3 incrementa `m4_heartbeat` en cada vuelta de los bucles (en la captura, `m4` llega a unos 2.7 M). Durante la prueba el contador deja de contar ticks de 100 ms. La comprobación de "alive" de CM7 funciona igual. | Opcional: incrementar solo cuando `HAL_GetTick()` avanza 100 ms. |
 
 ---
 

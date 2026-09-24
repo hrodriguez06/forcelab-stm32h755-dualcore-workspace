@@ -18,6 +18,8 @@ extern "C" {
 
 /* ---- Enabled modules --------------------------------------------------- */
 #define HAL_MODULE_ENABLED
+#define HAL_ADC_MODULE_ENABLED
+#define USE_HAL_ADC_REGISTER_CALLBACKS     0U
 #define HAL_CORTEX_MODULE_ENABLED
 #define HAL_DMA_MODULE_ENABLED
 #define HAL_ETH_MODULE_ENABLED
@@ -110,6 +112,9 @@ void assert_failed(uint8_t *file, uint32_t line);
 #endif
 #ifdef HAL_DMA_MODULE_ENABLED
 #include "stm32h7xx_hal_dma.h"
+#endif
+#ifdef HAL_ADC_MODULE_ENABLED
+#include "stm32h7xx_hal_adc.h"
 #endif
 #ifdef HAL_MDMA_MODULE_ENABLED
 #include "stm32h7xx_hal_mdma.h"

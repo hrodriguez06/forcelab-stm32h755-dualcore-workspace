@@ -31,7 +31,11 @@
 #include "shared_memory.h"
 #include "net_config.h"
 #include "net_task.h"
+
+#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
 #include "adc_bm.h"
+#include "adc_ll.h"
+#endif
 
 #include <stdbool.h>
 
@@ -163,7 +167,7 @@ static void Status_Task(void *arg)
         if (!s_dcache_tested)
         {
             s_dcache_tested = true;
-            /* Test T8: D-cache coherency test on AXI SRAM buffer using DMA2 M2M and ComputeStats */
+            /* Test T8: D-cache coherency test on AXI SRAM buffer using DMA2 M2M and ComputeStats (BM & LL) */
             __attribute__((section(".axi_ram"), aligned(32))) static uint16_t s_dcache_buf[64];
             __attribute__((section(".dma_buf"), aligned(32))) static uint16_t s_dma_src[64];
 
@@ -180,14 +184,18 @@ static void Status_Task(void *arg)
             SCB_CleanDCache_by_Addr((uint32_t *)s_dcache_buf, sizeof(s_dcache_buf));
             __DSB();
 
-            /* 2. Overwrite in cache (dirty lines in L1 D-cache with 0x9999 = 39321) */
-            for (uint32_t i = 0U; i < 64U; i++)
+            /* 2. Overwrite in cache (dirty lines in L1 D-cache: first half 0x9999, second half 0x8888) */
+            for (uint32_t i = 0U; i < 32U; i++)
             {
                 s_dcache_buf[i] = 0x9999U;
             }
+            for (uint32_t i = 32U; i < 64U; i++)
+            {
+                s_dcache_buf[i] = 0x8888U;
+            }
             __DMB();
 
-            /* 2. Configure DMA2 Stream 0 in Memory-to-Memory mode to transfer s_dma_src into s_dcache_buf */
+            /* 3. Configure DMA2 Stream 0 in Memory-to-Memory mode to transfer s_dma_src into s_dcache_buf */
             RCC->AHB1ENR |= RCC_AHB1ENR_DMA2EN;
             volatile uint32_t dummy = RCC->AHB1ENR;
             (void)dummy;
@@ -199,18 +207,22 @@ static void Status_Task(void *arg)
             DMA2_Stream0->PAR  = (uint32_t)s_dma_src;
             DMA2_Stream0->M0AR = (uint32_t)s_dcache_buf;
             DMA2_Stream0->NDTR = 64U;
-            DMA2_Stream0->FCR  = 0U; /* Direct mode */
+            /* RM0399 §15.3.18: In M2M mode, FIFO mode is forced by hardware (DMDIS=1) */
+            DMA2_Stream0->FCR  = DMA_SxFCR_FTH_1;
             DMA2_Stream0->CR   = DMA_SxCR_DIR_1 | DMA_SxCR_MINC | DMA_SxCR_PINC | DMA_SxCR_MSIZE_0 | DMA_SxCR_PSIZE_0 | DMA_SxCR_PL;
             DMA2_Stream0->CR  |= DMA_SxCR_EN;
 
-            /* Wait for DMA transfer complete */
-            while ((DMA2->LISR & DMA_LISR_TCIF0) == 0U) {}
+            /* Wait for DMA transfer complete with timeout and transfer error check (W4) */
+            uint32_t dma_timeout = 1000000U;
+            while (((DMA2->LISR & (DMA_LISR_TCIF0 | DMA_LISR_TEIF0)) == 0U) && (--dma_timeout > 0U)) {}
+            bool dma_ok = ((DMA2->LISR & DMA_LISR_TCIF0) != 0U) && ((DMA2->LISR & DMA_LISR_TEIF0) == 0U) && (dma_timeout > 0U);
             DMA2->LIFCR = (DMA_LIFCR_CTCIF0 | DMA_LIFCR_CHTIF0 | DMA_LIFCR_CTEIF0 | DMA_LIFCR_CDMEIF0 | DMA_LIFCR_CFEIF0);
 
-            /* 3. Direct CPU read before invalidation: hits dirty cache line (0x9999 = 39321) */
-            uint16_t raw_direct_before = s_dcache_buf[0];
+            /* 4. Direct CPU read before invalidation: hits dirty cache line (0x9999 = 39321) */
+            uint16_t raw_bm_before = s_dcache_buf[0];
+            uint16_t raw_ll_before = s_dcache_buf[32];
 
-            /* 4. ComputeStats internally invalidates D-cache and computes stats from physical RAM */
+            /* 5. ComputeStats on first half using BM (internally calls SCB_InvalidateDCache_by_Addr) */
             AdcBm_Handle_t test_bm = {0};
             test_bm.config_ex.buffer = s_dcache_buf;
             test_bm.config_ex.buffer_length = 64U;
@@ -218,20 +230,33 @@ static void Status_Task(void *arg)
             test_bm.config_ex.resolution = ADC_BM_RESOLUTION_16B;
 
             ADC_BM_ComputeStats(&test_bm, 0U, 3300U);
-            uint16_t stats_avg = test_bm.stats.average_raw;
+            uint16_t bm_stats_avg = test_bm.stats.average_raw;
+            uint16_t raw_bm_after = s_dcache_buf[0];
 
-            /* 5. Direct CPU read after ComputeStats: now returns 2048 from refreshed cache line */
-            uint16_t raw_direct_after = s_dcache_buf[0];
+            /* 6. ComputeStats on second half using LL (internally calls SCB_InvalidateDCache_by_Addr) */
+            AdcLl_Handle_t test_ll = {0};
+            test_ll.config_ex.buffer = s_dcache_buf;
+            test_ll.config_ex.buffer_length = 64U;
+            test_ll.config_ex.num_channels = 1U;
+            test_ll.config_ex.resolution = ADC_LL_RESOLUTION_16B;
+
+            ADC_LL_ComputeStats(&test_ll, 1U, 3300U);
+            uint16_t ll_stats_avg = test_ll.stats.average_raw;
+            uint16_t raw_ll_after = s_dcache_buf[32];
 
             bool align_ok = (((uint32_t)s_dcache_buf & 0x1FUL) == 0U);
-            bool dcache_verified = (raw_direct_before == 0x9999U) && (stats_avg == 2048U) && (raw_direct_after == 2048U);
+            bool bm_verified = (raw_bm_before == 0x9999U) && (bm_stats_avg == 2048U) && (raw_bm_after == 2048U);
+            bool ll_verified = (raw_ll_before == 0x8888U) && (ll_stats_avg == 2048U) && (raw_ll_after == 2048U);
+            bool dcache_verified = dma_ok && align_ok && bm_verified && ll_verified;
 
-            APP_LOG("[cm7_dcache_test] %s: 32B alignment=%d, dma_dcache_verified=%d (dirty_cpu=%u, stats_dma=%u)",
-                    (dcache_verified && align_ok) ? "PASS" : "FAIL",
+            APP_LOG("[cm7_dcache_test] %s: 32B alignment=%d, dma_dcache_verified=%d (BM: dirty=%u->%u, LL: dirty=%u->%u)",
+                    dcache_verified ? "PASS" : "FAIL",
                     align_ok ? 1 : 0,
                     dcache_verified ? 1 : 0,
-                    (unsigned int)raw_direct_before,
-                    (unsigned int)stats_avg);
+                    (unsigned int)raw_bm_before,
+                    (unsigned int)bm_stats_avg,
+                    (unsigned int)raw_ll_before,
+                    (unsigned int)ll_stats_avg);
         }
 
         SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);
