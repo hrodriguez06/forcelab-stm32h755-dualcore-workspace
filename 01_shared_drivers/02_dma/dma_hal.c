@@ -96,11 +96,18 @@ HAL_StatusTypeDef DMA_HAL_CheckErrata(const DMA_HandleTypeDef *hdma)
     /* ES0445 2.20.3 / 2.3.12: TRBUFF bit 20 applies to DMA1/DMA2 streams */
     if (IS_DMA_STREAM_INSTANCE(hdma->Instance) != 0U)
     {
+        DMA_Stream_TypeDef *s = (DMA_Stream_TypeDef *)hdma->Instance;
+
+        /* X4: Stream must be disabled before modifying or checking CR */
+        if ((s->CR & DMA_SxCR_EN) != 0U)
+        {
+            return HAL_BUSY;
+        }
+
         if (DMA_BM_IsUartRequest(hdma->Init.Request))
         {
             if ((DBGMCU->IDCODE & 0xFFFF0000U) >= 0x20000000U)
             {
-                DMA_Stream_TypeDef *s = (DMA_Stream_TypeDef *)hdma->Instance;
                 if ((s->CR & DMA_BM_CR_TRBUFF) == 0U)
                 {
                     s->CR |= DMA_BM_CR_TRBUFF;
@@ -197,8 +204,12 @@ HAL_StatusTypeDef DMA_HAL_Init(DMA_HandleTypeDef *hdma, const DmaHal_Config_t *c
         return status;
     }
 
-    /* Ensure TRBUFF errata fix was applied */
-    (void)DMA_HAL_CheckErrata(hdma);
+    /* Ensure TRBUFF errata fix was applied and propagate status (X4) */
+    status = DMA_HAL_CheckErrata(hdma);
+    if (status != HAL_OK)
+    {
+        return status;
+    }
 
     /* NVIC configuration if requested */
     if (cfg->irq_priority >= 0)

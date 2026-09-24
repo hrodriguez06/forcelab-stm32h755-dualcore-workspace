@@ -335,15 +335,39 @@ static bool Test_T10(void)
         .irq_priority   = -1
     };
 
-    if (DMA_HAL_Init(&hdma_usart, &cfg_usart) != HAL_OK)
+    hdma_usart.Instance                 = cfg_usart.instance;
+    hdma_usart.Init.Request             = cfg_usart.request;
+    hdma_usart.Init.Direction           = cfg_usart.direction;
+    hdma_usart.Init.PeriphInc           = cfg_usart.periph_inc;
+    hdma_usart.Init.MemInc              = cfg_usart.mem_inc;
+    hdma_usart.Init.PeriphDataAlignment = cfg_usart.periph_align;
+    hdma_usart.Init.MemDataAlignment    = cfg_usart.mem_align;
+    hdma_usart.Init.Mode                = cfg_usart.mode;
+    hdma_usart.Init.Priority            = cfg_usart.priority;
+    hdma_usart.Init.FIFOMode            = cfg_usart.fifo_mode;
+    hdma_usart.Init.FIFOThreshold       = cfg_usart.fifo_threshold;
+    hdma_usart.Init.MemBurst            = cfg_usart.mem_burst;
+    hdma_usart.Init.PeriphBurst         = cfg_usart.periph_burst;
+
+    __HAL_RCC_DMA2_CLK_ENABLE();
+    if (HAL_DMA_Init(&hdma_usart) != HAL_OK)
     {
         return false;
     }
 
-    /* Verify TRBUFF errata check */
+    /* GATE F3 / X4: Read CR immediately after HAL_DMA_Init() and BEFORE any CheckErrata
+     * to verify that HAL_DMA_Init applied the TRBUFF workaround (bit 20). */
+    DMA_Stream_TypeDef *s = (DMA_Stream_TypeDef *)hdma_usart.Instance;
+    if ((s->CR & DMA_BM_CR_TRBUFF) == 0U)
+    {
+        (void)HAL_DMA_DeInit(&hdma_usart);
+        return false;
+    }
+
+    /* Verify DMA_HAL_CheckErrata returns HAL_OK on idle stream */
     if (DMA_HAL_CheckErrata(&hdma_usart) != HAL_OK)
     {
-        DMA_HAL_DeInit(&hdma_usart);
+        (void)HAL_DMA_DeInit(&hdma_usart);
         return false;
     }
 
