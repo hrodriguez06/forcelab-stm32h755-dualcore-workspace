@@ -13,27 +13,24 @@
 [adc_srv] listening on UDP port 5001
 [cm7_dcache_test] PASS: 32B alignment=1, dma_dcache_verified=1 (dirty_cpu=39321, stats_dma=2048)
 [m4_adc_test] HAL:I=1 C=1 U=1 J=1 V=1 T=1 R=1 O=1 A=1 Vd=3300
-[ipc] m7=1 m4=16  (CPU2 alive)
+[ipc] m7=1 m4=0  (CPU2 starting)
 [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
 [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
 [net] link up: 100 Mbps full duplex
-[m4_adc_test] HW T2 HAL:1 r8=7 v16=24335 v12=1521 v8=95
-[ipc] m7=5 m4=1228799  (CPU2 alive)
+[m4_adc_test] HW T2 HAL:1 r8=7 v16=24327 v12=1521 v8=95
+[ipc] m7=5 m4=20  (CPU2 alive)
 [m4_adc_test] HW T3 HAL:1 ht=488.0 tc=487.0 err=0 ovr=0 hovr=0
-[ipc] m7=9 m4=1228819  (CPU2 alive)
+[ipc] m7=9 m4=40  (CPU2 alive)
 [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
-[m4_adc_test] HW T3b HAL:1 vref=24349 ts=12735 halves=31
-[ipc] m7=13 m4=1228839  (CPU2 alive)
-[m4_adc_test] HW T4 HAL:1 ovr=2481 dma=0
-[ipc] m7=17 m4=1228859  (CPU2 alive)
+[m4_adc_test] HW T3b HAL:1 vref=24345 ts=12666 halves=31
+[ipc] m7=13 m4=60  (CPU2 alive)
+[m4_adc_test] HW T4 HAL:1 ovr=2480 dma=0
+[ipc] m7=17 m4=80  (CPU2 alive)
 [m4_adc_test] HW T6 HAL:1 rej=1 ok=1 adc2=1 boost=1 need=1
-[ipc] m7=21 m4=1228879  (CPU2 alive)
-[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=21 m4=100  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
 [m4_adc_test] HW RESULT PASS mask=31/31
-[ipc] m7=25 m4=1228899  (CPU2 alive)
-[ipc] m7=28 m4=1228919  (CPU2 alive)
-[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
-[ipc] m7=32 m4=1228939  (CPU2 alive)
-[ipc] m7=36 m4=1228959  (CPU2 alive)
-[ipc] m7=40 m4=1228979  (CPU2 alive)
-[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=25 m4=120  (CPU2 alive)
+[ipc] m7=28 m4=140  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=32 m4=160  (CPU2 alive)

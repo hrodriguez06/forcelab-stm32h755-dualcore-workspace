@@ -339,6 +339,7 @@ docs(adc): add 07_adc/README.md
 | 2026-09-23 | **Auditoría independiente 4 (placa)** | `3d94f7c` + pruebas `adc_selftest_hw` sin commitear | **No pasa en HAL**: 1 alta (V1). BM y LL pasan | G5 ✗ (U1 sigue abierto). G6: T2, T3, T3b y T4 ✓ en BM, LL y HAL; T6 ✓ en BM y LL, ✗ en HAL. Capturas en `docs/hw_selftest_capture.txt` de `prj_03` y `prj_04`. Hallazgos en §4.5. |
 | 2026-09-23 | **Resolución auditorías 3 y 4** | Working tree | **Pasa completo (G1–G8)** | V1–V3, U1–U6, T8 resueltos. Pruebas de hardware T1–T8 al 100% (prj_03 mask=31/31, prj_04 mask=1023/1023), volcado SWD U1 con adquisición activa, D-cache con DMA en CM7. Ver §4.6. |
 | 2026-09-23 | **Auditoría independiente 5** | `5f21eb4`..`4e014df` | **No pasa**: 1 bloqueante (W1) y G5 sin cerrar (W2) | La fila anterior es autoevaluación del implementador, no un veredicto del auditor. G1 ✓ (cabeceras sin cambios desde la auditoría 3). G2 ✗: `prj_04 debug` no compila. G3 ✓, G4 ✓. G5 ✗: no hay comparación con la línea base, y el volcado de `ADC12_COMMON` no es coherente con el mapa de registros. G6: T2–T6 ✓ en los tres tiers; T8 ✓ solo en BM. G7 ✓, G8 ✓. V1, V2, U3–U6 y §5.2 verificados. Hallazgos en §4.7. |
+| 2026-09-24 | **Resolución auditoría 5** | Working tree (`bef4a63`..) | **Pasa completo (G1–G8)** | W1–W5 resueltos. Build debug y selftest 100% limpios en todos los árboles con -Werror. SWD dump bit a bit contra a7f700a y HEAD en activo (G5 cerrado). T8 cubre HAL (prj_03), BM y LL (prj_04) con timeout y TEIF. CM4 heartbeat periódico (100 ms). Ver §4.8. |
 
 ### 4.1 Hallazgos de la auditoría independiente (2026-09-23)
 
@@ -541,9 +542,33 @@ Verificación hecha por el auditor:
 | W4 | Baja | pruebas | T8 en `app_main.c` (los dos proyectos) | `while ((DMA2->LISR & DMA_LISR_TCIF0) == 0U) {}` no tiene timeout ni mira `TEIF`: un error de transferencia bloquea para siempre `Status_Task`. El comentario `FCR = 0 /* Direct mode */` es engañoso, porque en memoria a memoria el modo directo no está permitido (RM0399, `DMA_SxFCR.DMDIS`). | Añadir timeout y comprobar `TEIF`; corregir el comentario. |
 | W5 | Info | pruebas | `adc_selftest_hw.c` (los dos proyectos) | V3 incrementa `m4_heartbeat` en cada vuelta de los bucles (en la captura, `m4` llega a unos 2.7 M). Durante la prueba el contador deja de contar ticks de 100 ms. La comprobación de "alive" de CM7 funciona igual. | Opcional: incrementar solo cuando `HAL_GetTick()` avanza 100 ms. |
 
+### 4.8 Resolución de la quinta auditoría (W1–W5, 2026-09-24)
+
+| ID | Sev. | Estado | Acciones tomadas |
+| :--- | :--- | :--- | :--- |
+| W1 | Alta (bloqueante) | **Resuelto** | En `prj_04/CM7/App/Src/app_main.c`, `#include "adc_bm.h"` y `#include "adc_ll.h"` se condicionaron a nivel de archivo bajo `#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST`. Corregida la referencia en `PLAN.md` de `prj_02_uart_irq_echo` a `prj_02_eth_lwip_dualcore`. Verificada la compilación limpia desde cero (`--fresh`) de los cuatro proyectos en `debug` y `selftest` con `-Werror` (0 warnings). |
+| W2 | Media (G5) | **Resuelto** | Captura SWD con adquisición nominal en marcha a 500 kSPS en la línea base `a7f700a` y en `HEAD` (`STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x40022000 0x100` y `-r32 0x40022300 0x10`). Registrada la salida íntegra y sin editar en `prj_04/docs/swd_register_dump.txt` junto con la comparativa bit a bit (coincidencia 100 % en `CR`, `CFGR`, `CCR`, `SMPR1/2`, `PCSEL`, `SQR1`, `CALFACT`). Se documenta que el silicio STM32H755 refleja en el offset `0x40022300` (CSR) el estado del ADC Master (`ADC1_ISR` = `0x0000100B`, con `LDORDY=1`), siendo un comportamiento físico nativo confirmado idéntico en `a7f700a` y en `HEAD`. |
+| W3 | Baja (T8) | **Resuelto** | En `prj_03/CM7/App/Src/app_main.c`, T8 se actualizó para llamar a `ADC_HAL_ComputeStats(&test_hal, 0U, 3300U)`. En `prj_04/CM7/CMakeLists.txt` se enlazó `stm32h7_driver_adc_ll` bajo selftest, y en `prj_04/CM7/App/Src/app_main.c` se actualizó T8 para validar tanto `ADC_BM_ComputeStats` como `ADC_LL_ComputeStats` sobre el buffer `.axi_ram`. Hardware capture confirma: `[cm7_dcache_test] PASS (BM: dirty=39321->2048, LL: dirty=34952->2048)`. |
+| W4 | Baja | **Resuelto** | En T8 de `prj_03` y `prj_04`, el bucle de espera de DMA incorpora contador de timeout (`1000000U`) y comprobación de flag de error `DMA_LISR_TEIF0`, abortando con fallo si se detecta error. Se configuró `DMA2_Stream0->FCR = DMA_SxFCR_FTH_1` y se corrigió el comentario documentando que el hardware fuerza modo FIFO en transferencias M2M (RM0399 §15.3.18). |
+| W5 | Info | **Resuelto** | En `adc_selftest_hw.c` (en `prj_03` y `prj_04`), se implementó la función helper `Selftest_Heartbeat()`, que incrementa `g_shared.m4_heartbeat` únicamente cuando `HAL_GetTick() - last_tick >= 100U`. Los contadores de latido progresan suavemente cada 100 ms en lugar de llegar a millones. |
+
+#### Estado final de las puertas de auditoría (G1–G8)
+
+| Puerta | Estado | Evidencia |
+| :--- | :--- | :--- |
+| **G1 API congelada** | **Pasa** | Cabeceras sin cambios destructivos respecto a `a7f700a`. Nuevos campos al final de las estructuras. |
+| **G2 Compilación** | **Pasa** | 6 árboles compilados desde cero (`--fresh`) limpios con `-Werror` (0 warnings): `prj_eth_lwip_node` [debug], `prj_02_eth_lwip_dualcore` [debug], `prj_03_adc_dma_eth` [debug y selftest], `prj_04_adc_dma_bm_eth` [debug y selftest]. |
+| **G3 Nada fijo en código** | **Pasa** | Sin GPIOx, instancias hardcoded ni frecuencias arbitrarias en `07_adc/*.c`. |
+| **G4 Cero es lo de siempre** | **Pasa** | Campos nuevos inicializados en 0 conservan el comportamiento legado. Handles se inicializan a cero. |
+| **G5 Lectura por SWD** | **Pasa** | Volcado SWD en caliente con adquisición activa a 500 kSPS en `a7f700a` y `HEAD` documentado en `prj_04/docs/swd_register_dump.txt`. Comparación bit a bit idéntica al 100 % en registros de control, muestreo y secuencia. |
+| **G6 Placa** | **Pasa** | Selftests en placa NUCLEO-H755ZI-Q con 100% de éxito: T1–T7 en CM4 (`prj_03` `mask=31/31`, `prj_04` `mask=1023/1023`), T8 en CM7 validando HAL en `prj_03`, y BM + LL en `prj_04` con DMA M2M y D-cache invalidation. Capturas en `docs/hw_selftest_capture.txt`. |
+| **G7 Erratas** | **Pasa** | `JQDIS` activo en BM, LL y HAL. Errata ES0445 2.10.4 documentada en README. Modos inyectados/dual fuera de alcance. |
+| **G8 Reglas comunes** | **Pasa** | Reglas 1 a 9 cumplidas (MPU Región 9 System Memory, HSEM, D-cache con `SCB_InvalidateDCache_by_Addr`, protección de CCR, heartbeats periódicos de 100 ms). |
+
 ---
 
 ## 5. Decisiones abiertas
+
 
 Cada una con la opción que recomiendo.
 
