@@ -246,7 +246,7 @@ bool DMA_BM_IsUartRequest(uint32_t request_id);
   * @param  data_size Peripheral or memory data size (DMA_BM_DATA_SIZE_*).
   * @param  threshold FIFO threshold (DMA_BM_FIFO_TH_*).
   * @param  burst     Burst beat configuration (DMA_BM_BURST_*).
-  * @return true if configuration is compatible per RM0399 Table 115.
+  * @return true if configuration is compatible per RM0399 FIFO threshold vs burst configurations.
   */
 bool DMA_BM_CheckFifoBurst(uint32_t data_size, uint32_t threshold, uint32_t burst);
 

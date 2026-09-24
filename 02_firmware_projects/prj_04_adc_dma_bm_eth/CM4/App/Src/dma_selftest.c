@@ -390,6 +390,21 @@ static bool Test_T2(void)
     DMA_BM_Stop(s);
     DMA_BM_DeinitStream(s);
 
+    /* 17. Table 115: PSIZE < MSIZE with NDT not a multiple of (MSIZE / PSIZE) */
+    cfg.base.direction = DMA_BM_DIR_MEM_TO_MEM;
+    cfg.base.periph_data_size = DMA_BM_DATA_SIZE_BYTE; /* PSIZE = 1 */
+    cfg.base.mem_data_size = DMA_BM_DATA_SIZE_WORD;     /* MSIZE = 4 -> ratio = 4 */
+    cfg.base.buffer_length = 5U;                       /* 5 is not divisible by 4 */
+    cfg.base.enable_fifo = true;
+    cfg.base.fifo_threshold = DMA_BM_FIFO_TH_FULL;
+    cfg.fail_if_busy = false;
+    if (DMA_BM_InitStreamEx(&cfg) || (s->CR != 0U)) return false;
+    /* Also test SetTransfer Table 115 rejection */
+    cfg.base.buffer_length = 4U; /* Legal length to init */
+    if (!DMA_BM_InitStreamEx(&cfg)) return false;
+    if (DMA_BM_SetTransfer(s, (uint32_t)s_m2m_src, (uint32_t)s_m2m_dst, 7U)) return false; /* 7 % 4 != 0 */
+    DMA_BM_DeinitStream(s);
+
     /* LL tier rejections */
     DmaLL_Handle_t h_rej;
     DmaLL_Config_t cfg_rej = {
@@ -446,6 +461,14 @@ static bool Test_T2(void)
     if (DMA_LL_Start(&h_rej, (uint32_t)s_m2m_src, (uint32_t)s_m2m_dst, 70000U)) return false;
     /* Misaligned address */
     if (DMA_LL_Start(&h_rej, ((uint32_t)s_m2m_src) + 1U, (uint32_t)s_m2m_dst, 16U)) return false;
+    DMA_LL_Deinit(&h_rej, 10000U);
+
+    /* LL7: Table 115: PSIZE < MSIZE with length not a multiple of (MSIZE / PSIZE) */
+    cfg_rej.periph_size = LL_DMA_PDATAALIGN_BYTE;
+    cfg_rej.mem_size    = LL_DMA_MDATAALIGN_WORD;
+    cfg_rej.fifo_enable = true;
+    if (!DMA_LL_Init(&h_rej, &cfg_rej)) return false;
+    if (DMA_LL_Start(&h_rej, (uint32_t)s_m2m_src, (uint32_t)s_m2m_dst, 5U)) return false; /* 5 % 4 != 0 */
     DMA_LL_Deinit(&h_rej, 10000U);
 
     return true;

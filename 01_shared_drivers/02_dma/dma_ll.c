@@ -289,6 +289,16 @@ bool DMA_LL_Start(DmaLL_Handle_t *h, uint32_t periph_addr, uint32_t mem_addr, ui
     uint32_t mburst = (h->stream->CR & DMA_SxCR_MBURST) >> DMA_SxCR_MBURST_Pos;
     uint32_t dir = h->stream->CR & DMA_SxCR_DIR;
 
+    /* RM0399 Table 115 (A4 / X3): If PSIZE < MSIZE, length must be a multiple of (MSIZE / PSIZE) */
+    if (psize < msize)
+    {
+        uint32_t ratio = (1U << msize) / (1U << psize);
+        if ((length % ratio) != 0U)
+        {
+            return false;
+        }
+    }
+
     uint32_t p_elem = 1U << psize;
     uint32_t m_elem = 1U << msize;
     uint32_t pburst_beats = s_burst_beats[pburst];
@@ -372,6 +382,16 @@ bool DMA_LL_StartDoubleBuffer(DmaLL_Handle_t *h, uint32_t periph_addr,
     uint32_t msize = (h->stream->CR & DMA_SxCR_MSIZE) >> DMA_SxCR_MSIZE_Pos;
     uint32_t pburst = (h->stream->CR & DMA_SxCR_PBURST) >> DMA_SxCR_PBURST_Pos;
     uint32_t mburst = (h->stream->CR & DMA_SxCR_MBURST) >> DMA_SxCR_MBURST_Pos;
+
+    /* RM0399 Table 115 (A4 / X3): If PSIZE < MSIZE, length must be a multiple of (MSIZE / PSIZE) */
+    if (psize < msize)
+    {
+        uint32_t ratio = (1U << msize) / (1U << psize);
+        if ((length % ratio) != 0U)
+        {
+            return false;
+        }
+    }
 
     uint32_t p_elem = 1U << psize;
     uint32_t m_elem = 1U << msize;

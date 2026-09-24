@@ -240,6 +240,16 @@ bool DMA_BM_InitStreamEx(const DmaBm_ConfigEx_t *cfg)
         return false;
     }
 
+    /* RM0399 Table 115 (A4 / X3): If PSIZE < MSIZE, NDT must be a multiple of (MSIZE / PSIZE) */
+    if (c->periph_data_size < c->mem_data_size)
+    {
+        uint32_t ratio = (1U << c->mem_data_size) / (1U << c->periph_data_size);
+        if ((c->buffer_length % ratio) != 0U)
+        {
+            return false;
+        }
+    }
+
     /* DBM validation (forbidden with M2M) */
     if (cfg->mem1_addr != 0U)
     {
@@ -506,6 +516,16 @@ bool DMA_BM_SetTransfer(DMA_Stream_TypeDef *s, uint32_t periph_addr,
     uint32_t pburst = (cr & DMA_SxCR_PBURST_Msk) >> DMA_SxCR_PBURST_Pos;
     uint32_t mburst = (cr & DMA_SxCR_MBURST_Msk) >> DMA_SxCR_MBURST_Pos;
     uint32_t dir = (cr & DMA_SxCR_DIR_Msk);
+
+    /* RM0399 Table 115 (A4 / X3): If PSIZE < MSIZE, length must be a multiple of (MSIZE / PSIZE) */
+    if (psize < msize)
+    {
+        uint32_t ratio = (1U << msize) / (1U << psize);
+        if ((length % ratio) != 0U)
+        {
+            return false;
+        }
+    }
 
     uint32_t periph_elem_size = (1U << psize);
     uint32_t mem_elem_size = (1U << msize);
