@@ -291,6 +291,12 @@ HAL_StatusTypeDef DMA_HAL_MemCopy(DMA_HandleTypeDef *hdma, void *dst, const void
     }
     uint32_t items = bytes / psize_bytes;
 
+    /* A4 / X2: NDTR is a 16-bit register (1..65535 items) */
+    if ((items == 0U) || (items > 65535U))
+    {
+        return HAL_ERROR;
+    }
+
     /* D-Cache maintenance (no-op on CM4 or when D-Cache is disabled) */
     DMA_MEM_BM_CleanForTx(src, bytes);
     if (!DMA_MEM_BM_PrepareRx(dst, bytes))

@@ -228,6 +228,23 @@ static bool Test_T9(void)
     }
     DMA_HAL_DeInit(&hdma_m2m);
 
+    /* 1c. Rejection: items > 65535 in DMA_HAL_MemCopy (X2) */
+    memset(&hdma_m2m, 0, sizeof(hdma_m2m));
+    DmaHal_Config_t cfg_m2m_b = cfg_m2m;
+    cfg_m2m_b.periph_align = DMA_PDATAALIGN_BYTE;
+    cfg_m2m_b.mem_align    = DMA_MDATAALIGN_BYTE;
+    if (DMA_HAL_Init(&hdma_m2m, &cfg_m2m_b) != HAL_OK)
+    {
+        return false;
+    }
+    /* 65536 bytes with byte alignment -> 65536 items > 65535 */
+    if (DMA_HAL_MemCopy(&hdma_m2m, s_rx_buf, s_tx_buf, 65536U, 1000U) != HAL_ERROR)
+    {
+        DMA_HAL_DeInit(&hdma_m2m);
+        return false;
+    }
+    DMA_HAL_DeInit(&hdma_m2m);
+
     /* 2. HAL_DMA_Start_IT with IRQ callback dispatch on DMA2_Stream1 */
     for (uint32_t i = 0; i < 64; i++)
     {
