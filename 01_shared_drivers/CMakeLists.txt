@@ -42,6 +42,11 @@ target_include_directories(stm32h7_driver_dma_ll INTERFACE ${CMAKE_CURRENT_LIST_
 target_sources(stm32h7_driver_dma_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/02_dma/dma_ll.c)
 target_link_libraries(stm32h7_driver_dma_ll INTERFACE stm32h7_driver_dma_bm)
 
+add_library(stm32h7_driver_dma_hal INTERFACE)
+target_include_directories(stm32h7_driver_dma_hal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/02_dma)
+target_sources(stm32h7_driver_dma_hal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/02_dma/dma_hal.c)
+target_link_libraries(stm32h7_driver_dma_hal INTERFACE stm32h7_driver_dma_bm)
+
 add_library(stm32h7_driver_uart INTERFACE)
 target_include_directories(stm32h7_driver_uart INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart)
 target_sources(stm32h7_driver_uart INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart/uart_hal.c)

@@ -27,7 +27,16 @@ Peripheral-First (Plan A), multi-tier shared DMA driver for the STM32H755ZI dual
 | **Automatic Errata TRBUFF** | Yes (ES0445 2.20.3 / 2.3.12) | Applied automatically for UART/HASH when `REV_ID >= 0x2000` |
 | **Memory Domain Validation** | Yes (`DMA_MEM_BM_IsReachable`) | Rejects ITCM (`0x00000000`) and DTCM (`0x20000000`) |
 | **Stream Collision Protection** | Yes (`fail_if_busy`) | Refuses Init if stream is active instead of aborting |
-| **Atomicity & Flag Clearing** | Yes (`DMA_BM_TakeFlags`) | Reads and clears active flags in one call |
+### Capability Matrix (HAL Tier `_hal` & BDMA)
+
+| Feature | Support in `dma_hal` | Notes |
+| :--- | :---: | :--- |
+| **Controllers** | DMA1, DMA2 (16 streams) + BDMA (8 channels) | Supports both standard DMA streams and D3 BDMA channels |
+| **M2M FIFO Enforcement** | Yes | Reconciles HAL defect by forcing `DMA_FIFOMODE_ENABLE` for M2M |
+| **Domain Checking** | Yes (`DMA_MEM_BM_IsReachable`) | Enforces DMA1/DMA2 cannot reach TCM; BDMA strictly restricted to D3 SRAM4 |
+| **Automatic Errata TRBUFF** | Yes (`DMA_HAL_CheckErrata`) | Verified and applied for UART/HASH requests on revision >= 0x2000 |
+| **IRQ Registry & Dispatch** | Yes (`DMA_HAL_IRQDispatch`) | Per-core 24-entry table; no vector symbol definitions in driver |
+| **Cache-Coherent MemCopy** | Yes (`DMA_HAL_MemCopy`) | Handles clean, prepare, transfer, wait, and complete invalidate |
 
 ---
 
@@ -184,6 +193,44 @@ void StartDmaLL(void)
 void DMA1_Stream1_IRQHandler(void)
 {
     DMA_LL_IrqService(&s_dma_h, MyDmaCallback, NULL);
+}
+```
+
+### D. HAL DMA & BDMA on Cortex-M7 (`dma_hal`)
+
+```c
+#include "dma_hal.h"
+
+static DMA_HandleTypeDef s_hdma_tx;
+
+void InitUartDma(void)
+{
+    DmaHal_Config_t cfg = {
+        .instance         = DMA2_Stream0,
+        .request          = DMA_REQUEST_USART3_TX,
+        .direction        = DMA_MEMORY_TO_PERIPH,
+        .periph_inc       = DMA_PINC_DISABLE,
+        .mem_inc          = DMA_MINC_ENABLE,
+        .periph_align     = DMA_PDATAALIGN_BYTE,
+        .mem_align        = DMA_MDATAALIGN_BYTE,
+        .mode             = DMA_NORMAL,
+        .priority         = DMA_PRIORITY_LOW,
+        .fifo_mode        = DMA_FIFOMODE_ENABLE,
+        .fifo_threshold   = DMA_FIFO_THRESHOLD_FULL,
+        .mem_burst        = DMA_MBURST_SINGLE,
+        .periph_burst     = DMA_PBURST_SINGLE,
+        .enable_clock     = true,
+        .irq_priority     = 5  /* Configures NVIC priority and enables IRQ */
+    };
+
+    /* Inits HAL handle and auto-verifies TRBUFF workaround */
+    DMA_HAL_Init(&s_hdma_tx, &cfg);
+}
+
+/* User application or project isr file delegates to registry dispatch */
+void DMA2_Stream0_IRQHandler(void)
+{
+    DMA_HAL_IRQDispatch(DMA2_Stream0);
 }
 ```
 
