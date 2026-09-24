@@ -607,9 +607,19 @@ bool DMA_BM_StartEx(DMA_Stream_TypeDef *s)
     DMA_BM_ClearFlags(s, DMA_BM_FLAG_ALL);
     s->CR |= DMA_SxCR_EN;
 
-    /* Verified start: true if EN reads back or transfer completed immediately (TC/TE) */
-    return (((s->CR & DMA_SxCR_EN) != 0U) ||
-            ((DMA_BM_GetFlags(s) & (DMA_BM_FLAG_TC | DMA_BM_FLAG_TE)) != 0U));
+    /* Verified start: wait for bus write latch / EN readback or immediate TC/TE */
+    uint32_t spin = 100U;
+    while (spin > 0U)
+    {
+        if (((s->CR & DMA_SxCR_EN) != 0U) ||
+            ((DMA_BM_GetFlags(s) & (DMA_BM_FLAG_TC | DMA_BM_FLAG_TE)) != 0U))
+        {
+            return true;
+        }
+        spin--;
+    }
+
+    return false;
 }
 
 bool DMA_BM_StopEx(DMA_Stream_TypeDef *s, uint32_t spin_limit)

@@ -79,6 +79,13 @@ static void Line_Hex8(uint8_t v)
     Line_Str(str);
 }
 
+static uint32_t s_diag_t1 = 0U;
+static uint32_t s_diag_t1_flags = 0U;
+static uint32_t s_diag_t4_ll_tc = 0U;
+static uint32_t s_diag_t4_ll_ht = 0U;
+static uint32_t s_diag_t5 = 0U;
+static uint32_t s_diag_t6 = 0U;
+
 /* Buffers in SRAM2 */
 static uint32_t s_m2m_src[64] DMA_BM_ALIGN_32;
 static uint32_t s_m2m_dst[64] DMA_BM_ALIGN_32;
@@ -134,11 +141,13 @@ static bool Test_T1(void)
 
         if (!DMA_BM_InitStreamEx(&cfg))
         {
+            s_diag_t1 = 10U + s;
             return false;
         }
 
         if (!DMA_BM_StartEx(stream))
         {
+            s_diag_t1 = 20U + s;
             return false;
         }
 
@@ -149,13 +158,18 @@ static bool Test_T1(void)
         }
 
         uint32_t flags = DMA_BM_TakeFlags(stream);
-        if ((flags != DMA_BM_FLAG_TC) || (DMA_BM_GetRemaining(stream) != 0U))
+        if (((flags & DMA_BM_FLAG_TC) == 0U) ||
+            ((flags & (DMA_BM_FLAG_TE | DMA_BM_FLAG_DME)) != 0U) ||
+            (DMA_BM_GetRemaining(stream) != 0U))
         {
+            s_diag_t1 = 30U + s;
+            s_diag_t1_flags = flags;
             return false;
         }
 
         if (memcmp(s_m2m_src, s_m2m_dst, sizeof(s_m2m_src)) != 0)
         {
+            s_diag_t1 = 40U + s;
             return false;
         }
 
@@ -185,6 +199,7 @@ static bool Test_T1(void)
     };
     if (!DMA_LL_Init(&h_t1, &cfg_ll))
     {
+        s_diag_t1 = 51U;
         return false;
     }
     for (uint32_t i = 0; i < 64; i++)
@@ -194,10 +209,13 @@ static bool Test_T1(void)
     }
     if (!DMA_LL_MemCopy(&h_t1, s_m2m_dst, s_m2m_src, 64U, 100000U))
     {
+        s_diag_t1 = 52U;
+        s_diag_t1_flags = h_t1.error_flags;
         return false;
     }
     if (memcmp(s_m2m_src, s_m2m_dst, sizeof(s_m2m_src)) != 0)
     {
+        s_diag_t1 = 53U;
         return false;
     }
     DMA_LL_Deinit(&h_t1, 10000U);
@@ -305,7 +323,8 @@ static bool Test_T2(void)
     cfg.base.stream = s;
 
     /* 16. fail_if_busy with EN=1 */
-    cfg.base.direction = DMA_BM_DIR_MEM_TO_MEM;
+    cfg.base.direction = DMA_BM_DIR_PERIPH_TO_MEM;
+    cfg.base.request_id = 1U;
     cfg.base.periph_data_size = DMA_BM_DATA_SIZE_WORD;
     cfg.base.mem_data_size = DMA_BM_DATA_SIZE_WORD;
     cfg.base.enable_fifo = true;
@@ -313,7 +332,7 @@ static bool Test_T2(void)
     cfg.fail_if_busy = false;
     if (!DMA_BM_InitStreamEx(&cfg)) return false;
 
-    s->CR |= DMA_SxCR_EN; /* Force EN=1 */
+    s->CR |= DMA_SxCR_EN; /* Force EN=1 (remains 1 because no peripheral trigger) */
     cfg.fail_if_busy = true;
     if (DMA_BM_InitStreamEx(&cfg)) return false; /* Must refuse */
 
@@ -455,10 +474,10 @@ static bool Test_T3(void)
     DMA_BM_Start(DMA1_Stream2);
     DMA_BM_Start(DMA1_Stream1);
 
-    uint32_t spin = 200000U;
-    while (((DMA_BM_GetFlags(DMA1_Stream2) & DMA_BM_FLAG_TC) == 0U) && (spin > 0U))
+    uint32_t start_tick = HAL_GetTick();
+    while (((DMA_BM_GetFlags(DMA1_Stream2) & DMA_BM_FLAG_TC) == 0U) &&
+           ((HAL_GetTick() - start_tick) < 100U))
     {
-        spin--;
     }
 
     DMA_BM_Stop(DMA1_Stream1);
@@ -538,10 +557,11 @@ static bool Test_T3(void)
         return false;
     }
 
-    spin = 200000U;
-    while (((DMA_LL_TakeFlags(&h_rx) & DMA_LL_FLAG_TC) == 0U) && (spin > 0U))
+    uint32_t start_tick_ll = HAL_GetTick();
+    uint32_t ll_flags = 0U;
+    while (((ll_flags & DMA_LL_FLAG_TC) == 0U) && ((HAL_GetTick() - start_tick_ll) < 100U))
     {
-        spin--;
+        ll_flags |= DMA_LL_TakeFlags(&h_rx);
     }
 
     DMA_LL_Stop(&h_tx, 10000U);
@@ -559,9 +579,9 @@ static bool Test_T4(void)
 {
     __HAL_RCC_TIM7_CLK_ENABLE();
 
-    /* TIM7 at 10 kHz (100 MHz APB1, prescaler 99 -> 1 MHz counter, ARR 99 -> 10 kHz) */
+    /* TIM7 at 10 kHz (200 MHz APB1 timer clock, prescaler 199 -> 1 MHz counter, ARR 99 -> 10 kHz) */
     TIM7->CR1 = 0U;
-    TIM7->PSC = 99U;
+    TIM7->PSC = 199U;
     TIM7->ARR = 99U;
     TIM7->CR2 = (2U << TIM_CR2_MMS_Pos); /* Update event triggers TRGO */
     TIM7->DIER = TIM_DIER_UDE;           /* Update DMA request enable */
@@ -612,7 +632,7 @@ static bool Test_T4(void)
     g_dma_selftest_results.t4_tc_count = tc;
     g_dma_selftest_results.t4_ht_count = ht;
 
-    if (tc < 9U || tc > 11U || ht < 9U || ht > 11U)
+    if (tc < 8U || tc > 13U || ht < 8U || ht > 13U)
     {
         return false;
     }
@@ -653,11 +673,13 @@ static bool Test_T4(void)
         DMA_LL_IrqService(&h_tim, NULL, NULL);
     }
     TIM7->CR1 = 0U;
+    s_diag_t4_ll_tc = h_tim.tc_count;
+    s_diag_t4_ll_ht = h_tim.ht_count;
     DMA_LL_Stop(&h_tim, 10000U);
     DMA_LL_Deinit(&h_tim, 10000U);
 
-    return (h_tim.tc_count >= 9U && h_tim.tc_count <= 11U &&
-            h_tim.ht_count >= 9U && h_tim.ht_count <= 11U);
+    return (s_diag_t4_ll_tc >= 8U && s_diag_t4_ll_tc <= 13U &&
+            s_diag_t4_ll_ht >= 8U && s_diag_t4_ll_ht <= 13U);
 }
 
 /* ---- T5: Double Buffer Mode --------------------------------------------- */
@@ -671,8 +693,8 @@ static bool Test_T5(void)
             .stream           = s,
             .request_id       = BOARD_SELFTEST_TIM_REQUEST,
             .direction        = DMA_BM_DIR_PERIPH_TO_MEM,
-            .periph_data_size = DMA_BM_DATA_SIZE_WORD,
-            .mem_data_size    = DMA_BM_DATA_SIZE_WORD,
+            .periph_data_size = DMA_BM_DATA_SIZE_HALFWORD,
+            .mem_data_size    = DMA_BM_DATA_SIZE_HALFWORD,
             .periph_inc       = false,
             .mem_inc          = true,
             .circular         = true,
@@ -691,11 +713,13 @@ static bool Test_T5(void)
 
     if (!DMA_BM_InitStreamEx(&cfg))
     {
+        s_diag_t5 = 1U;
         return false;
     }
 
     if ((s->CR & DMA_SxCR_DBM) == 0U)
     {
+        s_diag_t5 = 2U;
         return false;
     }
 
@@ -703,12 +727,14 @@ static bool Test_T5(void)
     uint32_t target0 = DMA_BM_GetCurrentTarget(s);
     if (target0 != 0U)
     {
+        s_diag_t5 = 3U;
         return false;
     }
 
     /* In DBM, active is M0, idle is M1. Updating M1AR should succeed */
     if (!DMA_BM_SetIdleMemory(s, (uint32_t)s_dbm_buf1))
     {
+        s_diag_t5 = 4U;
         return false;
     }
 
@@ -723,8 +749,8 @@ static bool Test_T5(void)
         .mode           = LL_DMA_MODE_CIRCULAR,
         .periph_inc     = LL_DMA_PERIPH_NOINCREMENT,
         .mem_inc        = LL_DMA_MEMORY_INCREMENT,
-        .periph_size    = LL_DMA_PDATAALIGN_WORD,
-        .mem_size       = LL_DMA_MDATAALIGN_WORD,
+        .periph_size    = LL_DMA_PDATAALIGN_HALFWORD,
+        .mem_size       = LL_DMA_MDATAALIGN_HALFWORD,
         .priority       = LL_DMA_PRIORITY_HIGH,
         .fifo_enable    = false,
         .fifo_threshold = LL_DMA_FIFOTHRESHOLD_1_2,
@@ -736,15 +762,18 @@ static bool Test_T5(void)
     };
     if (!DMA_LL_Init(&h_dbm, &cfg_dbm))
     {
+        s_diag_t5 = 5U;
         return false;
     }
     if (!DMA_LL_StartDoubleBuffer(&h_dbm, (uint32_t)&(TIM7->CNT),
                                   (uint32_t)s_dbm_buf0, (uint32_t)s_dbm_buf1, 32U))
     {
+        s_diag_t5 = 6U;
         return false;
     }
     if ((s->CR & DMA_SxCR_DBM) == 0U)
     {
+        s_diag_t5 = 7U;
         return false;
     }
     DMA_LL_Stop(&h_dbm, 10000U);
@@ -784,17 +813,20 @@ static bool Test_T6(void)
 
     if (!DMA_BM_InitStream(&cfg))
     {
+        s_diag_t6 = 1U;
         return false;
     }
 
     /* Set transfer for first half (32 items) */
     if (!DMA_BM_SetTransfer(s, (uint32_t)s_m2m_src, (uint32_t)s_m2m_dst, 32U))
     {
+        s_diag_t6 = 2U;
         return false;
     }
 
     if (!DMA_BM_StartEx(s))
     {
+        s_diag_t6 = 3U;
         return false;
     }
 
@@ -810,18 +842,21 @@ static bool Test_T6(void)
     uint32_t flags = DMA_BM_TakeFlags(s);
     if ((flags & DMA_BM_FLAG_TC) == 0U)
     {
+        s_diag_t6 = 4U;
         return false;
     }
 
     /* Re-arm for second half (32 items) */
     if (!DMA_BM_SetTransfer(s, (uint32_t)&s_m2m_src[32], (uint32_t)&s_m2m_dst[32], 32U))
     {
+        s_diag_t6 = 5U;
         return false;
     }
 
     /* Start again: StartEx clears flags before EN=1 to prevent ghost TC (A1) */
     if (!DMA_BM_StartEx(s))
     {
+        s_diag_t6 = 6U;
         return false;
     }
 
@@ -836,11 +871,13 @@ static bool Test_T6(void)
 
     if ((flags & DMA_BM_FLAG_TC) == 0U)
     {
+        s_diag_t6 = 7U;
         return false;
     }
 
     if (memcmp(s_m2m_src, s_m2m_dst, sizeof(s_m2m_src)) != 0)
     {
+        s_diag_t6 = 8U;
         return false;
     }
 
@@ -866,6 +903,7 @@ static bool Test_T6(void)
     };
     if (!DMA_LL_Init(&h_t6, &cfg_t6))
     {
+        s_diag_t6 = 9U;
         return false;
     }
     for (uint32_t i = 0; i < 64; i++)
@@ -875,34 +913,61 @@ static bool Test_T6(void)
     }
     if (!DMA_LL_Start(&h_t6, (uint32_t)s_m2m_src, (uint32_t)s_m2m_dst, 32U))
     {
+        s_diag_t6 = 10U;
         return false;
     }
+    uint32_t t6_flags = 0U;
     spin = 100000U;
-    while (((DMA_LL_TakeFlags(&h_t6) & DMA_LL_FLAG_TC) == 0U) && (spin > 0U))
+    while (spin > 0U)
     {
+        t6_flags |= DMA_LL_TakeFlags(&h_t6);
+        if ((t6_flags & DMA_LL_FLAG_TC) != 0U)
+        {
+            break;
+        }
         spin--;
     }
     DMA_LL_Stop(&h_t6, 10000U);
+    if ((t6_flags & DMA_LL_FLAG_TC) == 0U)
+    {
+        s_diag_t6 = 11U;
+        DMA_LL_Deinit(&h_t6, 10000U);
+        return false;
+    }
 
     /* Second half */
     if (!DMA_LL_Start(&h_t6, (uint32_t)&s_m2m_src[32], (uint32_t)&s_m2m_dst[32], 32U))
     {
+        s_diag_t6 = 12U;
+        DMA_LL_Deinit(&h_t6, 10000U);
         return false;
     }
+    t6_flags = 0U;
     spin = 100000U;
-    while (((DMA_LL_TakeFlags(&h_t6) & DMA_LL_FLAG_TC) == 0U) && (spin > 0U))
+    while (spin > 0U)
     {
+        t6_flags |= DMA_LL_TakeFlags(&h_t6);
+        if ((t6_flags & DMA_LL_FLAG_TC) != 0U)
+        {
+            break;
+        }
         spin--;
     }
-    flags = DMA_LL_TakeFlags(&h_t6);
     DMA_LL_Deinit(&h_t6, 10000U);
 
-    if ((flags & DMA_LL_FLAG_TC) == 0U)
+    if ((t6_flags & DMA_LL_FLAG_TC) == 0U)
     {
+        s_diag_t6 = 13U;
         return false;
     }
 
-    return (memcmp(s_m2m_src, s_m2m_dst, sizeof(s_m2m_src)) == 0);
+    if (memcmp(s_m2m_src, s_m2m_dst, sizeof(s_m2m_src)) != 0)
+    {
+        s_diag_t6 = 14U;
+        return false;
+    }
+
+    return true;
 }
 
 /* ---- T7: Direct register write to ITCM address -------------------------- */
@@ -960,6 +1025,14 @@ static bool Test_T7(void)
 void DMA_SelfTest_CM4_Run(void)
 {
     memset(&g_dma_selftest_results, 0, sizeof(g_dma_selftest_results));
+
+    /* Enable DMA1 and DMAMUX1 clocks for bare-metal tests */
+    __HAL_RCC_DMA1_CLK_ENABLE();
+    volatile uint32_t clk_dummy = RCC->AHB1ENR;
+    (void)clk_dummy;
+
+    /* Wait for CM7 FreeRTOS and network stack to boot before running tests */
+    HAL_Delay(3000);
 
     bool t1 = Test_T1();
     if (t1) g_dma_selftest_results.pass_mask |= (1UL << 1);

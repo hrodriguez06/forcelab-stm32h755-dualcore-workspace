@@ -26,7 +26,8 @@
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "ADC_DRIVER_SELFTEST": "ON"
+        "ADC_DRIVER_SELFTEST": "OFF",
+        "DMA_DRIVER_SELFTEST": "ON"
       }
     }
   ],

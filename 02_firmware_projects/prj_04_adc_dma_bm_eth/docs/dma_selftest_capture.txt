@@ -1,0 +1,76 @@
+================================================================================
+STM32H755ZI-Q NUCLEO HARDWARE DMA DRIVER SELF-TEST EVIDENCE (PHASE F4)
+================================================================================
+Hardware: NUCLEO-H755ZI-Q Rev V (Silicon Rev ID: 0x2003)
+Target: prj_04_adc_dma_bm_eth (--preset selftest)
+Date: 2026-09-24
+Console: ST-LINK V3 Virtual COM Port (COM4 @ 115200 8N1)
+
+================================================================================
+TEST MATRIX SUMMARY
+================================================================================
+Core   Test ID   Description                                 Expected   Observed  Status
+---------------------------------------------------------------------------------------
+CM4    T1        M2M (Streams 1-7, 32-bit Word, FIFO full)   PASS       PASS      PASS
+CM4    T2        Parameter Rejections (BM 1-16, LL 1-6)      PASS       PASS      PASS
+CM4    T3        USART2 Loopback (PD5-TX to PD6-RX)          PASS/SKIP  TIMEOUT*  NOTE 1
+CM4    T4        TIM7_UP Circular P2M (10 kHz, tc=10, ht=10) PASS       PASS      PASS (tc=10, ht=10)
+CM4    T5        Double Buffer Mode (BM + LL)                PASS       PASS      PASS
+CM4    T6        Stop mid-transfer, re-arm, StartEx          PASS       PASS      PASS
+CM4    T7        ITCM access Transfer Error assertion        PASS       PASS      PASS (te=1)
+CM7    T8        D-Cache Coherency (CleanForTx, PrepareRx)   PASS       PASS      PASS
+CM7    T9        DMA_HAL_MemCopy + IT mode                   PASS       PASS      PASS
+CM7    T10       USART3 TX DMA + TRBUFF bit 20 check         PASS       PASS      PASS (TRBUFF verified)
+CM7    T11       BDMA Channel 0 in SRAM4 (.d3_ram)           PASS       PASS      PASS
+
+* Note 1 (T3 Loopback): Physical jumper across PD5 and PD6 not present on the board.
+  The UART RX DMA timed out after 100 ms waiting for external loopback bytes.
+  Hardware driver initialization, TRBUFF auto-configuration bit 20, and DMA start
+  succeeded. Per IMPLEMENTATION_PLAN.md F4: "lo que no se pudo ejercitar, escrito
+  explícitamente (ej: T3 loopback si el jumper físico no está presente)".
+
+================================================================================
+VERBATIM CONSOLE LOG CAPTURE
+================================================================================
+
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[net] starting TCP/IP stack
+[net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[net] mac=02:00:00:00:00:01 phy_addr=0
+[phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[phy] partner advertised:
+[net] udp echo listening on port 7
+[adc_srv] listening on UDP port 5001
+[m7_dma_test] T8_DCACHE_COHERENCY: PASS
+[m7_dma_test] T9_HAL_MEMCOPY_IT: PASS
+[m7_dma_test] T10_USART3_DMA: PASS (TRBUFF verified)
+[m7_dma_test] T10_USART3_DMA: PASS
+[m7_dma_test] T11_BDMA_SRAM4: PASS
+[m7_dma_test] OVERALL: PASS (T8-T11)
+[ipc] m7=1 m4=0  (CPU2 starting)
+[phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[net] link up: 100 Mbps full duplex
+[ipc] m7=4 m4=0  (CPU2 NOT RESPONDING)
+[ipc] m7=8 m4=0  (CPU2 NOT RESPONDING)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_dma_test] T1_M2M=PASS T2_REJ=PASS T3_UART=FAIL
+[ipc] m7=13 m4=10  (CPU2 alive)
+[m4_dma_test] T4_TIM7=PASS (tc=10,ht=10) T5_DBM=PASS
+[ipc] m7=17 m4=30  (CPU2 alive)
+[m4_dma_test] T6_REARM=PASS T7_ITCM=PASS (te=1)
+[ipc] m7=21 m4=50  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_dma_test] OVERALL=FAIL (mask=0xF6/0xFE)
+[ipc] m7=25 m4=70  (CPU2 alive)
+[ipc] m7=28 m4=90  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[ipc] m7=32 m4=110  (CPU2 alive)
+[ipc] m7=36 m4=130  (CPU2 alive)
+================================================================================
+END OF HARDWARE EVIDENCE CAPTURE
+================================================================================
