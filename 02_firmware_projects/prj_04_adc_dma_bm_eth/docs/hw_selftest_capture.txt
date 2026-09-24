@@ -11,27 +11,29 @@
 [net] udp echo listening on port 7
 [adc_srv] listening on UDP port 5001
 [cm7_dcache_test] PASS: 32B alignment=1, dma_dcache_verified=1 (BM: dirty=39321->2048, LL: dirty=34952->2048)
-[m4_adc_test] ADC:B=1 L=1 Rg=1 U=1 C=1 V=1 T=1 Rs=1 O=1 A=1 Vd=3302
+[m4_adc_test] ADC:B=1 L=1 Rg=1 U=1 C=1 V=1 T=1 Rs=1 O=1 A=1 Vd=3299
 [ipc] m7=1 m4=0  (CPU2 starting)
 [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
 [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
 [net] link up: 100 Mbps full duplex
 [ipc] m7=4 m4=20  (CPU2 alive)
-[m4_adc_test] HW T2 BM:1 LL:1 r8=7/7 v16=24335 v8=95/95
+[m4_adc_test] HW T2 BM:1 LL:1 r8=7/7 v16=24334 v8=95/95
 [ipc] m7=9 m4=40  (CPU2 alive)
-[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
 [m4_adc_test] HW T3 BM:1 ht=488.0 tc=487.0 err=0 ovr=0 hovr=0
 [ipc] m7=13 m4=60  (CPU2 alive)
 [m4_adc_test] HW T3 LL:1 ht=488.0 tc=488.0 err=0 ovr=0 hovr=0
 [ipc] m7=17 m4=80  (CPU2 alive)
-[m4_adc_test] HW T3b BM:1 LL:1 vref=24352/24365 ts=12742/12755
+[m4_adc_test] HW T3b BM:1 LL:1 vref=24344/24362 ts=12737/12749
 [ipc] m7=21 m4=100  (CPU2 alive)
-[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
 [m4_adc_test] HW T4 BM:1 LL:1 ovr=2483/2482 dma=0/0
 [ipc] m7=25 m4=120  (CPU2 alive)
 [m4_adc_test] HW T6 BM:1 LL:1 rej=1/1 ok=1/1 adc2=1/1
 [ipc] m7=29 m4=140  (CPU2 alive)
-[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
-[m4_adc_test] HW RESULT PASS mask=1023/1023
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_adc_test] HW G5 BM_LL:1 match=1 diff=0
 [ipc] m7=33 m4=160  (CPU2 alive)
-[ipc] m7=36 m4=180  (CPU2 alive)
+[m4_adc_test] HW RESULT PASS mask=2047/2047
+[ipc] m7=37 m4=180  (CPU2 alive)
+[ipc] m7=40 m4=200  (CPU2 alive)

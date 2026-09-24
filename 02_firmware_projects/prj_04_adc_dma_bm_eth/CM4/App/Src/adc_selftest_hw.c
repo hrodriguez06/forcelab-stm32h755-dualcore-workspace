@@ -739,10 +739,193 @@ static void T6_Run(void)
 }
 
 /* ============================================================================
+ * G5 - Register parity between BM and LL tiers
+ * ========================================================================== */
+
+typedef struct
+{
+    uint32_t cr;
+    uint32_t cfgr;
+    uint32_t cfgr2;
+    uint32_t smpr1;
+    uint32_t smpr2;
+    uint32_t pcsel;
+    uint32_t sqr1;
+    uint32_t sqr2;
+    uint32_t sqr3;
+    uint32_t sqr4;
+    uint32_t ier;
+    uint32_t ccr;
+} Sthw_Regs_t;
+
+static void Sthw_CaptureRegs(ADC_TypeDef *adc, Sthw_Regs_t *r)
+{
+    /* Dynamic runtime bits in CR (ADSTART, ADCAL, ADSTP, JADSTART, JADSTP) */
+    r->cr    = adc->CR & ~(ADC_CR_ADSTART | ADC_CR_ADCAL | ADC_CR_ADSTP | ADC_CR_JADSTART | ADC_CR_JADSTP);
+    r->cfgr  = adc->CFGR;
+    r->cfgr2 = adc->CFGR2;
+    r->smpr1 = adc->SMPR1;
+    r->smpr2 = adc->SMPR2;
+    r->pcsel = adc->PCSEL;
+    r->sqr1  = adc->SQR1;
+    r->sqr2  = adc->SQR2;
+    r->sqr3  = adc->SQR3;
+    r->sqr4  = adc->SQR4;
+    r->ier   = adc->IER;
+    r->ccr   = (adc == ADC3) ? ADC3_COMMON->CCR : ADC12_COMMON->CCR;
+}
+
+static uint32_t Sthw_DiffRegs(const Sthw_Regs_t *a, const Sthw_Regs_t *b)
+{
+    uint32_t diff = 0U;
+    if (a->cr    != b->cr)    { diff |= (1UL << 0); }
+    if (a->cfgr  != b->cfgr)  { diff |= (1UL << 1); }
+    if (a->cfgr2 != b->cfgr2) { diff |= (1UL << 2); }
+    if (a->smpr1 != b->smpr1) { diff |= (1UL << 3); }
+    if (a->smpr2 != b->smpr2) { diff |= (1UL << 4); }
+    if (a->pcsel != b->pcsel) { diff |= (1UL << 5); }
+    if (a->sqr1  != b->sqr1)  { diff |= (1UL << 6); }
+    if (a->sqr2  != b->sqr2)  { diff |= (1UL << 7); }
+    if (a->sqr3  != b->sqr3)  { diff |= (1UL << 8); }
+    if (a->sqr4  != b->sqr4)  { diff |= (1UL << 9); }
+    if (a->ier   != b->ier)   { diff |= (1UL << 10); }
+    if (a->ccr   != b->ccr)   { diff |= (1UL << 11); }
+    return diff;
+}
+
+static void G5_Run(void)
+{
+    Sthw_Regs_t bm1 = {0}, ll1 = {0};
+    Sthw_Regs_t bm3 = {0}, ll3 = {0};
+
+    /* 1. ADC1: Nominal application configuration (500 kSPS, TIM3 TRGO, DMA Circular) */
+    AdcBm_ChannelConfig_t ch_bm1 = {
+        .channel       = STHW_ADC1_CHANNEL,
+        .sampling_time = ADC_BM_SAMPLETIME_8CYCLES_5
+    };
+    AdcBm_ConfigEx_t cfg_bm1 = {
+        .adc_instance    = ADC1,
+        .channels        = &ch_bm1,
+        .num_channels    = 1U,
+        .resolution      = ADC_BM_RESOLUTION_16B,
+        .trigger_source  = ADC_BM_TRIG_TIM3_TRGO,
+        .trigger_edge    = ADC_BM_TRIGGER_RISING,
+        .boost_mode      = ADC_BM_BOOST_AUTO,
+        .dma_mode        = ADC_BM_DMA_CIRCULAR,
+        .buffer          = s_t3_buf,
+        .buffer_length   = STHW_T3_BUF_LEN,
+        .kernel_clock_hz = STHW_KER_CK_HZ,
+        .clock_mode      = ADC_BM_CLOCK_ASYNC,
+        .prescaler       = ADC_BM_PRESC_DIV1,
+        .analog_pin_port = BOARD_ADC_PORT,
+        .analog_pin_idx  = STHW_ADC1_PIN_IDX,
+    };
+
+    AdcLl_ChannelConfig_t ch_ll1 = {
+        .channel       = STHW_ADC1_CHANNEL,
+        .sampling_time = ADC_LL_SAMPLETIME_8CYCLES_5
+    };
+    AdcLl_ConfigEx_t cfg_ll1 = {
+        .adc_instance    = ADC1,
+        .channels        = &ch_ll1,
+        .num_channels    = 1U,
+        .resolution      = ADC_LL_RESOLUTION_16B,
+        .trigger_source  = ADC_LL_TRIG_TIM3_TRGO,
+        .trigger_edge    = ADC_LL_TRIGGER_RISING,
+        .boost_mode      = ADC_LL_BOOST_AUTO,
+        .dma_mode        = ADC_LL_DMA_CIRCULAR,
+        .buffer          = s_t3_buf,
+        .buffer_length   = STHW_T3_BUF_LEN,
+        .kernel_clock_hz = STHW_KER_CK_HZ,
+        .clock_mode      = ADC_LL_CLOCK_ASYNC,
+        .prescaler       = ADC_LL_PRESC_DIV1,
+        .analog_pin_port = BOARD_ADC_PORT,
+        .analog_pin_idx  = STHW_ADC1_PIN_IDX,
+    };
+
+    memset(&s_bm, 0, sizeof(s_bm));
+    if (ADC_BM_InitEx(&s_bm, &cfg_bm1) && ADC_BM_Enable(ADC1))
+    {
+        Sthw_CaptureRegs(ADC1, &bm1);
+        (void)ADC_BM_Deinit(&s_bm);
+    }
+
+    memset(&s_ll, 0, sizeof(s_ll));
+    if (ADC_LL_InitEx(&s_ll, &cfg_ll1) && ADC_LL_Enable(ADC1))
+    {
+        Sthw_CaptureRegs(ADC1, &ll1);
+        (void)ADC_LL_Deinit(&s_ll);
+    }
+
+    /* 2. ADC3: Multi-channel sequence (VREFINT, TEMPSENSOR) with oversampling */
+    AdcBm_ChannelConfig_t ch_bm3[2] = {
+        { .channel = ADC_BM_CHANNEL_VREFINT,    .sampling_time = ADC_BM_SAMPLETIME_810CYCLES_5 },
+        { .channel = ADC_BM_CHANNEL_TEMPSENSOR, .sampling_time = ADC_BM_SAMPLETIME_810CYCLES_5 }
+    };
+    AdcBm_ConfigEx_t cfg_bm3 = {
+        .adc_instance        = ADC3,
+        .channels            = ch_bm3,
+        .num_channels        = 2U,
+        .resolution          = ADC_BM_RESOLUTION_16B,
+        .trigger_edge        = ADC_BM_TRIGGER_DISABLED,
+        .boost_mode          = ADC_BM_BOOST_AUTO,
+        .dma_mode            = ADC_BM_DMA_DISABLED,
+        .kernel_clock_hz     = STHW_KER_CK_HZ,
+        .oversampling_enable = true,
+        .oversampling_ratio  = ADC_BM_OVERSAMPLING_16X,
+        .oversampling_shift  = ADC_BM_OVERSAMPLING_SHIFT_4B,
+    };
+
+    AdcLl_ChannelConfig_t ch_ll3[2] = {
+        { .channel = ADC_LL_CHANNEL_VREFINT,    .sampling_time = ADC_LL_SAMPLETIME_810CYCLES_5 },
+        { .channel = ADC_LL_CHANNEL_TEMPSENSOR, .sampling_time = ADC_LL_SAMPLETIME_810CYCLES_5 }
+    };
+    AdcLl_ConfigEx_t cfg_ll3 = {
+        .adc_instance        = ADC3,
+        .channels            = ch_ll3,
+        .num_channels        = 2U,
+        .resolution          = ADC_LL_RESOLUTION_16B,
+        .trigger_edge        = ADC_LL_TRIGGER_DISABLED,
+        .boost_mode          = ADC_LL_BOOST_AUTO,
+        .dma_mode            = ADC_LL_DMA_DISABLED,
+        .kernel_clock_hz     = STHW_KER_CK_HZ,
+        .oversampling_enable = true,
+        .oversampling_ratio  = ADC_LL_OVERSAMPLING_16X,
+        .oversampling_shift  = ADC_LL_OVERSAMPLING_SHIFT_4B,
+    };
+
+    memset(&s_bm, 0, sizeof(s_bm));
+    if (ADC_BM_InitEx(&s_bm, &cfg_bm3) && ADC_BM_Enable(ADC3))
+    {
+        Sthw_CaptureRegs(ADC3, &bm3);
+        (void)ADC_BM_Deinit(&s_bm);
+    }
+
+    memset(&s_ll, 0, sizeof(s_ll));
+    if (ADC_LL_InitEx(&s_ll, &cfg_ll3) && ADC_LL_Enable(ADC3))
+    {
+        Sthw_CaptureRegs(ADC3, &ll3);
+        (void)ADC_LL_Deinit(&s_ll);
+    }
+
+    uint32_t diff1 = Sthw_DiffRegs(&bm1, &ll1);
+    uint32_t diff3 = Sthw_DiffRegs(&bm3, &ll3);
+    uint32_t total_diff = diff1 | (diff3 << 16U);
+
+    g_adc_selftest_hw.g5_diff_mask = total_diff;
+    g_adc_selftest_hw.g5_match     = (total_diff == 0U) && (bm1.cr != 0U) && (bm3.cr != 0U);
+
+    if (g_adc_selftest_hw.g5_match)
+    {
+        g_adc_selftest_hw.pass |= ADC_STHW_PASS_G5;
+    }
+}
+
+/* ============================================================================
  * Console lines (at most SHARED_MBOX_SIZE - 1 characters each)
  * ========================================================================== */
 
-#define STHW_MAX_LINES  8U
+#define STHW_MAX_LINES  10U
 
 static char     s_lines[STHW_MAX_LINES][SHARED_MBOX_SIZE];
 static uint32_t s_line_count;
@@ -894,6 +1077,14 @@ static void Sthw_BuildLines(void)
     Line_End();
 
     Line_Begin();
+    Line_Pass("HW G5 BM_LL:", ADC_STHW_PASS_G5);
+    Line_Str(" match=");
+    Line_U32(g_adc_selftest_hw.g5_match ? 1U : 0U);
+    Line_Str(" diff=");
+    Line_U32(g_adc_selftest_hw.g5_diff_mask);
+    Line_End();
+
+    Line_Begin();
     Line_Str("HW RESULT ");
     Line_Str((g_adc_selftest_hw.pass == ADC_STHW_PASS_ALL) ? "PASS" : "FAIL");
     Line_Str(" mask=");
@@ -916,6 +1107,7 @@ void ADC_SelfTestHw_Run(void)
     T2_Run(rev_v);
     T3_T4_Run();
     T6_Run();
+    G5_Run();
 
     /* Every stream and ADC above raised its IRQ lines with the NVIC lines still
        disabled. Drop the pending bits so the application does not take a stale

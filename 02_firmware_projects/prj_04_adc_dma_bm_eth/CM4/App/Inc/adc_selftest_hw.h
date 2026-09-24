@@ -56,7 +56,8 @@ extern "C" {
 #define ADC_STHW_PASS_T3B(tier) (1UL << (4U + (tier)))
 #define ADC_STHW_PASS_T4(tier)  (1UL << (6U + (tier)))
 #define ADC_STHW_PASS_T6(tier)  (1UL << (8U + (tier)))
-#define ADC_STHW_PASS_ALL       0x3FFUL
+#define ADC_STHW_PASS_G5        (1UL << 10U)
+#define ADC_STHW_PASS_ALL       0x7FFUL
 
 typedef struct
 {
@@ -92,6 +93,10 @@ typedef struct
     bool     t6_adc2_still_on[ADC_STHW_TIERS];
     uint32_t t6_ccr_before[ADC_STHW_TIERS];
     uint32_t t6_ccr_after[ADC_STHW_TIERS];
+
+    /* G5: register comparison between BM and LL */
+    bool     g5_match;
+    uint32_t g5_diff_mask;
 } AdcSelfTestHw_Results_t;
 
 extern volatile AdcSelfTestHw_Results_t g_adc_selftest_hw;
