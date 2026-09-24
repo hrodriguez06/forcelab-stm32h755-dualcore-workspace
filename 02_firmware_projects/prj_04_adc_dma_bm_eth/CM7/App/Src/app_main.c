@@ -37,6 +37,10 @@
 #include "adc_ll.h"
 #endif
 
+#if defined(DMA_DRIVER_SELFTEST) && DMA_DRIVER_SELFTEST
+#include "dma_selftest.h"
+#endif
+
 #include <stdbool.h>
 
 #include "FreeRTOS.h"
@@ -160,6 +164,23 @@ static void Status_Task(void *arg)
             g_shared.m4_to_m7_len = 0U;
         }
         SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
+#endif
+
+#if defined(DMA_DRIVER_SELFTEST) && DMA_DRIVER_SELFTEST
+        SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);
+        if (g_shared.m4_to_m7_len > 0U)
+        {
+            APP_LOG("[m4_dma_test] %s", (char *)g_shared.m4_to_m7);
+            g_shared.m4_to_m7_len = 0U;
+        }
+        SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
+
+        static bool s_m7_dma_tested = false;
+        if (!s_m7_dma_tested)
+        {
+            s_m7_dma_tested = true;
+            DMA_SelfTest_CM7_Run();
+        }
 #endif
 
 #if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST

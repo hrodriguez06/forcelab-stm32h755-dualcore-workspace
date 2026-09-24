@@ -127,6 +127,14 @@ if(ADC_DRIVER_SELFTEST)
     target_link_libraries(${TARGET} PRIVATE stm32h7_driver_adc_bm stm32h7_driver_adc_ll)
 endif()
 
+if(DMA_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE DMA_DRIVER_SELFTEST=1)
+    target_sources(${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/App/Src/dma_selftest.c
+    )
+    target_link_libraries(${TARGET} PRIVATE stm32h7_driver_dma_bm)
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"

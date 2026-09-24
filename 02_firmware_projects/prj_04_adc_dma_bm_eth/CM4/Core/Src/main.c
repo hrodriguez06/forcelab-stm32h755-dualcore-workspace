@@ -38,6 +38,9 @@
 #include <stdio.h>
 #include <string.h>
 #endif
+#if defined(DMA_DRIVER_SELFTEST) && DMA_DRIVER_SELFTEST
+#include "dma_selftest.h"
+#endif
 
 #define HEARTBEAT_DELAY_LOOPS   2000000UL
 
@@ -93,6 +96,11 @@ int main(void)
     ADC_SelfTestHw_Run();
 #endif
 
+#if defined(DMA_DRIVER_SELFTEST) && DMA_DRIVER_SELFTEST
+    /* Run shared DMA driver verification (T1-T7) on CM4 */
+    DMA_SelfTest_CM4_Run();
+#endif
+
     /* Initialize ADC1 + DMA1 with TIM3 hardware trigger */
     if (!ADC_Acquisition_Init())
     {
@@ -119,6 +127,11 @@ int main(void)
 #if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
         /* One result line per mailbox slot CPU1 has freed. */
         ADC_SelfTestHw_Poll();
+#endif
+
+#if defined(DMA_DRIVER_SELFTEST) && DMA_DRIVER_SELFTEST
+        /* One result line per mailbox slot CPU1 has freed. */
+        DMA_SelfTest_CM4_Poll();
 #endif
     }
 }
