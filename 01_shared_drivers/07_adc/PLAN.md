@@ -339,6 +339,8 @@ docs(adc): add 07_adc/README.md
 | 2026-09-23 | **Auditoría independiente 4 (placa)** | `3d94f7c` + pruebas `adc_selftest_hw` sin commitear | **No pasa en HAL**: 1 alta (V1). BM y LL pasan | G5 ✗ (U1 sigue abierto). G6: T2, T3, T3b y T4 ✓ en BM, LL y HAL; T6 ✓ en BM y LL, ✗ en HAL. Capturas en `docs/hw_selftest_capture.txt` de `prj_03` y `prj_04`. Hallazgos en §4.5. |
 | 2026-09-23 | **Resolución auditorías 3 y 4** | Working tree | **Pasa completo (G1–G8)** | V1–V3, U1–U6, T8 resueltos. Pruebas de hardware T1–T8 al 100% (prj_03 mask=31/31, prj_04 mask=1023/1023), volcado SWD U1 con adquisición activa, D-cache con DMA en CM7. Ver §4.6. |
 | 2026-09-23 | **Auditoría independiente 5** | `5f21eb4`..`4e014df` | **No pasa**: 1 bloqueante (W1) y G5 sin cerrar (W2) | La fila anterior es autoevaluación del implementador, no un veredicto del auditor. G1 ✓ (cabeceras sin cambios desde la auditoría 3). G2 ✗: `prj_04 debug` no compila. G3 ✓, G4 ✓. G5 ✗: no hay comparación con la línea base, y el volcado de `ADC12_COMMON` no es coherente con el mapa de registros. G6: T2–T6 ✓ en los tres tiers; T8 ✓ solo en BM. G7 ✓, G8 ✓. V1, V2, U3–U6 y §5.2 verificados. Hallazgos en §4.7. |
+| 2026-09-24 | **Auditoría independiente 6** | `bef4a63`..`af81f64` | **Sin bloqueantes en el código; G5 sin corroborar (X1)** | G1 ✓, G2 ✓ (6 árboles desde cero, 0 warnings, verificado por el auditor), G3 ✓, G4 ✓, G5 pendiente: volcado reportado, pero la placa no ejecutaba el firmware declarado cuando el auditor la leyó por SWD. G6 ✓: T2–T6 en los tres tiers; T8 en BM, LL y HAL según las capturas. G7 ✓, G8 ✓. W1, W3, W4 y W5 verificados. El auditor retira W2(b). Hallazgos en §4.9. **Seguimiento:** X1 corroborado en `HEAD` y en `a7f700a` (flash de CM4 idéntica al build de la línea base), así que la primera mitad de G5 está cumplida; la segunda (LL = BM) sigue sin evidencia. X2 resuelto en `1266a80`. |
+| 2026-09-24 | **Cierre del auditor** | `3c1ecb7` | **Pasa: G1–G8** | G5 completa: `HEAD` igual a `a7f700a` por SWD (corroborado por el auditor) y paridad BM = LL automatizada (`diff=0`). Sin hallazgos abiertos de severidad media o superior. Queda la mejora de alcance de G5 anotada en el seguimiento de §4.9. |
 | 2026-09-24 | **Resolución auditoría 5** | Working tree (`bef4a63`..) | **Pasa completo (G1–G8)** | W1–W5 resueltos. Build debug y selftest 100% limpios en todos los árboles con -Werror. SWD dump bit a bit contra a7f700a y HEAD en activo (G5 cerrado). T8 cubre HAL (prj_03), BM y LL (prj_04) con timeout y TEIF. CM4 heartbeat periódico (100 ms). Ver §4.8. |
 
 ### 4.1 Hallazgos de la auditoría independiente (2026-09-23)
@@ -564,6 +566,60 @@ Verificación hecha por el auditor:
 | **G6 Placa** | **Pasa** | Selftests en placa NUCLEO-H755ZI-Q con 100% de éxito: T1–T7 en CM4 (`prj_03` `mask=31/31`, `prj_04` `mask=1023/1023`), T8 en CM7 validando HAL en `prj_03`, y BM + LL en `prj_04` con DMA M2M y D-cache invalidation. Capturas en `docs/hw_selftest_capture.txt`. |
 | **G7 Erratas** | **Pasa** | `JQDIS` activo en BM, LL y HAL. Errata ES0445 2.10.4 documentada en README. Modos inyectados/dual fuera de alcance. |
 | **G8 Reglas comunes** | **Pasa** | Reglas 1 a 9 cumplidas (MPU Región 9 System Memory, HSEM, D-cache con `SCB_InvalidateDCache_by_Addr`, protección de CCR, heartbeats periódicos de 100 ms). |
+
+### 4.9 Auditoría independiente 6 (2026-09-24, `bef4a63`..`af81f64`)
+
+Verificación hecha por el auditor:
+- **Compilación desde cero (`--fresh`):**
+  - `prj_01_template_dualcore`, `prj_02_eth_lwip_dualcore`, `prj_03` y `prj_04` con `debug`.
+  - `prj_03` y `prj_04` con `selftest`.
+  - Resultado: 0 warnings y 0 errores con `-Werror`.
+- **Lectura** de los dos diffs y de las capturas nuevas.
+- **Lectura SWD propia en caliente**, solo lectura (`mode=HOTPLUG`, sin reset ni escritura), de:
+  - ADC1 (`0x40022000`, 256 B);
+  - ADC2 (`0x40022100`, 256 B);
+  - `ADC12_COMMON` (`0x40022300`, 32 B).
+
+**Resueltos y verificados:**
+- **W1:** los `#include` de CM7 van dentro de `#if ADC_DRIVER_SELFTEST`. `prj_04 debug` compila.
+- **W3:** T8 llama a `ADC_HAL_ComputeStats` en `prj_03` y, en `prj_04`, a `ADC_BM_ComputeStats` (mitad 0) y a `ADC_LL_ComputeStats` (mitad 1).
+  - Cada mitad usa un patrón sucio distinto (`0x9999`/`0x8888`), y BM solo invalida su propia mitad, así que la prueba de LL es independiente.
+  - Las capturas coinciden con el código (`LL: dirty=34952`).
+- **W4:** hay timeout y comprobación de `TEIF0`, y `dma_ok` forma parte del veredicto.
+- **W5:** `Selftest_Heartbeat()` incrementa el contador cada 100 ms. En la captura, `m4` sube 20 por línea de `[ipc]`.
+
+**Corrección del auditor, W2(b) retirado.** La lectura propia muestra el mismo patrón que el volcado del implementador:
+- `0x40022300` lee `0x0000100A`, que es el valor de `ADC1_ISR` en ese momento, bit 12 incluido.
+- `0x304`, `0x318` y `0x31C` reflejan `IER`, `SMPR2` y `PCSEL` de ADC1.
+
+El silicio refleja los registros de ADC1 en las posiciones del bloque común que no son `CCR`/`CDR`/`CDR2`. El valor del volcado era, por tanto, compatible con el hardware. La sección de RM0399 que cita el implementador (§26.7.13) para describirlo no se ha verificado.
+
+| ID | Sev. | Área | Dónde | Problema | Corrección esperada |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| X1 | Media | evidencia (G5) | placa / `prj_04/docs/swd_register_dump.txt` | El reporte dice que la placa quedó con `prj_04 debug` adquiriendo a 500 kSPS, pero la lectura del auditor no corresponde a `prj_04` en ningún commit. **Lo que leyó el auditor:** ADC1 convierte el canal 15 (`SQR1=0x3C0`, `PCSEL=0x8000`, `SMP15` en `SMPR2`); `CCR=0x00080000` (PRESC /4); `CR=0x1FC10205` (BOOST=10b); `CFGR=0x00000483` (`JQDIS=0`, `OVRMOD=0`); `IER=0`. **Lo que configura `prj_04`**, tanto en `a7f700a` como en `HEAD`: canal 5, /1, BOOST=01b, `JQDIS=1`, `OVRMOD=1` y `OVRIE=1`. Ningún proyecto del repo configura ADC1 a /4 ni sin `JQDIS`. O alguien volvió a grabar la placa después de la captura, o la afirmación no es cierta. En cualquier caso, el auditor no puede corroborar los volcados de a7f700a y HEAD. | El usuario graba `prj_04 debug` (primero `HEAD` y después `a7f700a`) y confirma que está adquiriendo, y el auditor hace la lectura SWD en caliente. Si coincide con `swd_register_dump.txt`, G5 queda cerrada. |
+| X2 | Baja | build | `prj_03/CM7/Core/Inc/stm32h7xx_hal_conf.h` | `HAL_ADC_MODULE_ENABLED` se activa sin condición para una necesidad que solo tiene el selftest, así que el build de producto de CM7 compila también el módulo ADC de la HAL. | Condicionarlo a `ADC_DRIVER_SELFTEST`, o justificarlo. |
+| X3 | Info | proceso | `bef4a63` | El texto del auditor de §4.7, que estaba sin commitear, entró en el commit del implementador. El contenido está intacto. | El registro del auditor lo commitea el auditor. |
+
+**Seguimiento (2026-09-24):**
+- **X1, mitad `HEAD`: corroborada.** Con `prj_04 debug` grabado de nuevo en `HEAD`, el auditor ha leído la placa por SWD en caliente. Estos registros coinciden palabra por palabra con la parte 2 de `swd_register_dump.txt`: `ISR`, `IER`, `CR=0x1FC10105`, `CFGR=0x80001483`, `CFGR2`, `SMPR1=0x00010000`, `SMPR2`, `PCSEL=0x20`, `LTR1`/`HTR1`, `SQR1=0x140`, `SQR2`–`SQR4`, los registros de `AWD2`/`AWD3` y `CCR=0`. Solo cambian:
+  - `DR` y `CDR`, que son datos;
+  - `CALFACT`, `0x3EE` frente a `0x3ED`, porque se recalibra en cada arranque;
+  - las posiciones reservadas, que reflejan el `ISR` del momento.
+- **X1, mitad `a7f700a`: corroborada.**
+  - **Qué hay grabado en la placa:** el auditor ha leído la flash por SWD en caliente (`-u`, solo lectura) y la ha comparado con un build propio de `prj_04 debug` en un worktree de `a7f700a`.
+    - La imagen de CM4 (`0x08100000`, 5828 B) es **idéntica bit a bit** a ese build (SHA-256 `4FFBB37F…`) y distinta de la de `HEAD` (7204 B).
+    - La de CM7 solo difiere en las rutas absolutas `__FILE__` incrustadas (build en otra ruta) y en los desplazamientos de dirección que eso provoca. No hay ninguna otra cadena distinta.
+  - **Registros:** la lectura SWD con esa imagen da los mismos valores de configuración que la lectura de `HEAD`: `CR`, `CFGR`, `CFGR2`, `SMPR1`/`SMPR2`, `PCSEL`, `SQR1`–`SQR4`, `LTR`/`HTR` y `CCR`. `CALFACT` sale `0x3ED`.
+  - **G5, primera mitad (la inicialización actual deja los mismos registros que la línea base): cumplida.**
+- **G5, segunda mitad (LL deja los mismos registros que BM): cumplida** en `3c1ecb7` con `G5_Run()` de `prj_04/CM4/App/Src/adc_selftest_hw.c`.
+  - **Qué hace:** inicializa y habilita ADC1 y ADC3 dos veces con la misma configuración, una con BM y otra con LL, y compara 12 registros: `CR` sin los bits de arranque y parada, `CFGR`, `CFGR2`, `SMPR1`/`SMPR2`, `PCSEL`, `SQR1`–`SQR4`, `IER` y `CCR`.
+    - En ADC1 usa la configuración de la aplicación.
+    - En ADC3 usa la secuencia {VREFINT, TEMPSENSOR} con oversampling ×16 y desplazamiento de 4.
+  - **Validez:** el auditor ha comprobado que `ADC_BM_Deinit` pone a cero todos los registros comparados menos `CR.BOOST` y `CCR.CKMODE/PRESC`, y `ADC_LL_InitEx` escribe esos dos de forma explícita. LL no puede heredar la configuración de BM, así que una coincidencia es real.
+  - **Resultado en placa:** `HW G5 BM_LL:1 match=1 diff=0` y `mask=2047/2047`.
+  - **Alcance:** la prueba no cubre el watchdog analógico (`LTR`/`HTR`, `AWDxCR`), `DIFSEL` ni `OFRx`. Es una mejora posible, no un requisito de G5.
+- **Estado de la placa:** tras la prueba, la flash de CM4 es idéntica bit a bit al build `debug` de `HEAD` que ha hecho el auditor. `prj_04` compila sin warnings con `debug` y con `selftest`.
+- **X2: resuelto** en `1266a80`. `prj_03` compila sin warnings con `debug` y con `selftest`.
 
 ---
 
