@@ -18,8 +18,10 @@ extern "C" {
 
 /* ---- Enabled modules --------------------------------------------------- */
 #define HAL_MODULE_ENABLED
+#if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
 #define HAL_ADC_MODULE_ENABLED
 #define USE_HAL_ADC_REGISTER_CALLBACKS     0U
+#endif
 #define HAL_CORTEX_MODULE_ENABLED
 #define HAL_DMA_MODULE_ENABLED
 #define HAL_ETH_MODULE_ENABLED
