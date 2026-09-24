@@ -100,8 +100,8 @@ bool ADC_Acquisition_Init(void)
     NVIC_EnableIRQ(ADC_IRQn);
 
     /* 4. Configure bare-metal DMA1 Stream 0 */
-    dma_cfg.stream           = DMA1_Stream0;
-    dma_cfg.request_id       = 9U; /* DMAMUX1 request ID for ADC1 */
+    dma_cfg.stream           = BOARD_ADC_DMA_STREAM;
+    dma_cfg.request_id       = BOARD_ADC_DMA_REQUEST;
     dma_cfg.direction        = DMA_BM_DIR_PERIPH_TO_MEM;
     dma_cfg.periph_data_size = DMA_BM_DATA_SIZE_HALFWORD;
     dma_cfg.mem_data_size    = DMA_BM_DATA_SIZE_HALFWORD;

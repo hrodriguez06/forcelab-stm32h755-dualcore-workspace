@@ -120,6 +120,11 @@ extern "C" {
 #define BOARD_ADC_SAMPLING_RATE_HZ            500000UL /* 500 kSPS (50 samples/cycle @ 10 kHz) */
 #define BOARD_ADC_VREF_MV                     3300UL
 
+/* ---- DMA Stream Allocation (Contract C1/C7) ----------------------------- */
+#define BOARD_ADC_DMA_STREAM                  DMA1_Stream0   /* CM4 ADC1 */
+#define BOARD_ADC_DMA_REQUEST                 9U             /* DMAMUX1: adc1_dma */
+#define BOARD_SELFTEST_TIM_REQUEST            70U            /* DMAMUX1: tim7_up */
+
 #ifdef __cplusplus
 }
 #endif
