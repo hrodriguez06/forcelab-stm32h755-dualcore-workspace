@@ -26,9 +26,21 @@ target_include_directories(stm32h7_driver_led INTERFACE ${CMAKE_CURRENT_LIST_DIR
 target_sources(stm32h7_driver_led INTERFACE ${CMAKE_CURRENT_LIST_DIR}/01_led/led_bm.c)
 target_link_libraries(stm32h7_driver_led INTERFACE stm32h7_driver_gpio)
 
+add_library(stm32h7_driver_dma_bm INTERFACE)
+target_include_directories(stm32h7_driver_dma_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/02_dma)
+target_sources(stm32h7_driver_dma_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/02_dma/dma_bm.c)
+
+# Compatibility: this name predates the tiers and always meant the _bm tier
+# (prj_04 CM4, stm32h7_driver_adc_bm). Unlike uart/adc, the unsuffixed DMA
+# target is therefore BM, not HAL. It carries no sources of its own, so a
+# project reaching dma_bm.c through both names compiles it once.
 add_library(stm32h7_driver_dma INTERFACE)
-target_include_directories(stm32h7_driver_dma INTERFACE ${CMAKE_CURRENT_LIST_DIR}/02_dma)
-target_sources(stm32h7_driver_dma INTERFACE ${CMAKE_CURRENT_LIST_DIR}/02_dma/dma_bm.c)
+target_link_libraries(stm32h7_driver_dma INTERFACE stm32h7_driver_dma_bm)
+
+add_library(stm32h7_driver_dma_ll INTERFACE)
+target_include_directories(stm32h7_driver_dma_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/02_dma)
+target_sources(stm32h7_driver_dma_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/02_dma/dma_ll.c)
+target_link_libraries(stm32h7_driver_dma_ll INTERFACE stm32h7_driver_dma_bm)
 
 add_library(stm32h7_driver_uart INTERFACE)
 target_include_directories(stm32h7_driver_uart INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart)
