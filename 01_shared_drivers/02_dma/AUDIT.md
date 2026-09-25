@@ -5,7 +5,7 @@
 | **Fecha** | 2026-09-24 |
 | **Rama / commit auditado** | `driver/dma-tiers-and-gpio-plan` @ `40105eb` |
 | **Base del plan** | `a7f700a` ([IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)) |
-| **Veredicto** | 1.ª auditoría (`40105eb`): no se aprueba el merge, hay que corregir X1-X5. Reauditoría (`b224b24`): X1-X5 cerrados; falta Y1 (§6). **Cierre (`f3ab055`): Y1 cerrado; se aprueba el merge (§7), confirmado en hardware por el auditor (§8).** Iteración 2 (`c11e30c`): no se aprueba el merge; falta Z1 (§9). |
+| **Veredicto** | 1.ª auditoría (`40105eb`): no se aprueba el merge, hay que corregir X1-X5. Reauditoría (`b224b24`): X1-X5 cerrados; falta Y1 (§6). **Cierre (`f3ab055`): Y1 cerrado; se aprueba el merge (§7), confirmado en hardware por el auditor (§8).** Iteración 2 (`c11e30c`): no se aprueba el merge; falta Z1 (§9). **Cierre iteración 2 (`6d13177`): Z1 cerrado; se aprueba el merge (§10).** |
 
 La auditoría se hizo sobre el código y sobre la placa, no sobre el informe de ejecución.
 Todo lo que figura como "verificado" aquí se comprobó directamente.
@@ -208,3 +208,33 @@ El auditor compiló, flasheó y capturó todo esto por su cuenta, sin usar ning�
 | Z3 | El informe no incluye la sección de "lo que no se pudo ejercitar", que el encargo pedía explícitamente. Ahí van X8 y la propagación de `CheckErrata` desde `DMA_HAL_Init` (Y5), que solo se cubren por revisión. |
 | Z4 | R2 queda cumplida solo en parte. Los controles de Y4, Y5, X10a y X10b llevan `rev=53bd261-dirty`, pero sus tests se commitearon más tarde (`0ca9844`, `64c4736`, `9018c76` y `4418037`). Ese hash no identifica el código que corrió. Cada control tiene que ejecutarse sobre el commit que añade su test, más la mutación. |
 | Z5 | El informe dice "exactamente 13 commits", pero la rama tiene 14. Además, "100 % verificado en hardware" no se sostiene mientras Z1 siga abierto. |
+
+---
+
+## 10. Cierre de la iteración 2 (2026-09-25, `driver/dma-iteration-2` @ `6d13177`)
+
+**Veredicto: Z1 está cerrado y se aprueba el merge de `driver/dma-iteration-2`.** Lo que queda abierto son erratas en la documentación y ninguna bloquea. El merge a `main` lo decide quien sea dueño de la rama.
+
+### 10.1 Verificado por el auditor
+
+| Punto | Resultado | Evidencia |
+| :--- | :--- | :--- |
+| Z1: oráculo | Cerrado | `df46b94`: `s_rm0399_burst_valid[3][4][4]` es una tabla fija de 48 entradas. Comparada celda a celda con RM0399 Tabla 116 (`16_…dma.txt:722-740`) y con la regla del lado periférico (líneas 743 y 754-758), coincide en todas. No llama al driver. Da 23 válidas y 25 inválidas, igual que el recuento independiente del auditor. |
+| Z1: bucle y salida | Cerrado | Ya no aborta a mitad: las discrepancias se cuentan en `s_t1_combos_mismatch`. `valid`, `ok`, `invalid`, `rej` y `mismatch` se calculan; ya no hay denominadores escritos a mano. PASS solo si `mismatch == 0` y todos los recuentos cuadran. |
+| Z1: control negativo (R1 y R2) | Cerrado | Mutación: Byte + 1/2 + INCR8 rechazado. Resultado: `valid=23 ok=22 invalid=25 rej=25 mismatch=1` sobre `rev=df46b94-dirty`, que es el commit que añade la prueba más la mutación. La celda mutada no la usa el resto de T1, así que el FAIL viene de la matriz. |
+| Captura limpia | Conforme | `rev=df46b94` con `mismatch=0`. Entre `1bfc763` y `6d13177` no cambia ninguna línea de los drivers (`01_shared_drivers/02_dma/*.c` y `*.h`); solo cambian el test y los documentos. |
+| Build | Conforme | Build limpia del preset `selftest` de `prj_04` sin warnings (CM7 104 164 B, CM4 18 332 B). La matriz de 8 builds verificada en la §9 sigue valiendo, porque el código de los drivers no ha cambiado. |
+| Z3 y Z4 | Cerrados | `ITERATION_2.md` §7.4 lista lo no ejercitable en HW (X8 y la propagación de Y5). En la línea 86 se aclara que los controles antiguos se ejecutaron sobre `53bd261-dirty`. |
+| Tamaño | Conforme | 1 596 B (`.text + .rodata`) y 1 588 B (`.text`), ahora desglosado en el informe. |
+| T12 | Conforme (en vivo) | `query_adc.py --rate 2`: 1 276 928 muestras en 2,5 s (unos 511 kSPS); `err`, `ovr` y `adc_ovr` a 0. |
+
+### 10.2 Erratas que quedan (no bloquean)
+
+| ID | Hallazgo |
+| :--- | :--- |
+| Z2′ | X7a sigue descrito como `_Static_assert(DMA_BM_MAX_BURST_BYTES <= 1024U)`, en `ITERATION_2.md:29` y en `RESUMEN_Z1_ITERACION_2.md:19`. El código real es `(1024U % (16U * 4U)) == 0U`. |
+| Z6 | `ITERATION_2.md:146` dice que `HAL_DMA_Init` activa TRBUFF "para periféricos UART/HASH". La HAL de ST solo lo hace para requests UART (`IS_DMA_UART_USART_REQUEST` excluye la 78). En HASH lo pone `DMA_HAL_CheckErrata`. Además, T10 solo ejercita USART3. |
+| Z7 | `RESUMEN_Z1_ITERACION_2.md:7` se declara "COMPLETADO Y CERRADO — 100 %". El cierre lo decide esta auditoría, y el propio informe reconoce dos caminos no ejercitables en HW. |
+| Z8 | Límite de cobertura, no un defecto. Con tamaños iguales en los dos lados, la tabla del lado memoria ya rechaza todo lo que prohíbe la regla del periférico, así que la matriz no discrimina mutaciones de `DMA_BM_CheckPeriphBurst`. Esa función queda cubierta por los casos de T2 de X7b, que tienen su control negativo en `52a73e0-dirty`. |
+
+Z2′, Z6 y Z7 se pueden corregir en cualquier commit de documentación posterior. Z8 no requiere acción.
