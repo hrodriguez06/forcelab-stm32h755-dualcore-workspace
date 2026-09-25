@@ -483,6 +483,50 @@ static bool Test_T10(void)
     }
 
     DMA_HAL_DeInit(&hdma_usart);
+
+    /* T10b (Y5): Configure DMA2_Stream4 in P2M with request 1 (DMA_REQUEST_GENERATOR0)
+     * and force EN=1. Check that DMA_HAL_CheckErrata returns HAL_BUSY and CR is untouched. */
+    DMA_HandleTypeDef hdma_busy;
+    memset(&hdma_busy, 0, sizeof(hdma_busy));
+
+    DmaHal_Config_t cfg_busy = {
+        .instance       = DMA2_Stream4,
+        .request        = DMA_REQUEST_GENERATOR0,
+        .direction      = DMA_PERIPH_TO_MEMORY,
+        .periph_inc     = DMA_PINC_DISABLE,
+        .mem_inc        = DMA_MINC_ENABLE,
+        .periph_align   = DMA_PDATAALIGN_WORD,
+        .mem_align      = DMA_MDATAALIGN_WORD,
+        .mode           = DMA_NORMAL,
+        .priority       = DMA_PRIORITY_LOW,
+        .fifo_mode      = DMA_FIFOMODE_ENABLE,
+        .fifo_threshold = DMA_FIFO_THRESHOLD_FULL,
+        .mem_burst      = DMA_MBURST_SINGLE,
+        .periph_burst   = DMA_PBURST_SINGLE,
+        .enable_clock   = true,
+        .irq_priority   = -1
+    };
+
+    if (DMA_HAL_Init(&hdma_busy, &cfg_busy) != HAL_OK)
+    {
+        return false;
+    }
+
+    DMA_Stream_TypeDef *s_busy = (DMA_Stream_TypeDef *)hdma_busy.Instance;
+    s_busy->CR |= DMA_SxCR_EN;
+    uint32_t cr_before = s_busy->CR;
+
+    HAL_StatusTypeDef busy_res = DMA_HAL_CheckErrata(&hdma_busy);
+    uint32_t cr_after = s_busy->CR;
+
+    (void)HAL_DMA_Abort(&hdma_busy);
+    DMA_HAL_DeInit(&hdma_busy);
+
+    if ((busy_res != HAL_BUSY) || (cr_before != cr_after))
+    {
+        return false;
+    }
+
     return true;
 }
 
