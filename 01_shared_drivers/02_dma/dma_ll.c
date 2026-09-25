@@ -59,15 +59,6 @@ bool DMA_LL_Init(DmaLL_Handle_t *h, const DmaLL_Config_t *cfg)
         }
     }
 
-    /* PFCTRL restrictions */
-    if (cfg->mode == LL_DMA_MODE_PFCTRL)
-    {
-        if (cfg->mode == LL_DMA_MODE_CIRCULAR)
-        {
-            return false;
-        }
-    }
-
     /* Double buffer restrictions */
     if (cfg->double_buffer)
     {
@@ -237,7 +228,10 @@ bool DMA_LL_Deinit(DmaLL_Handle_t *h, uint32_t spin_limit)
         return false;
     }
 
-    DMA_LL_Stop(h, spin_limit);
+    if (!DMA_LL_Stop(h, spin_limit))
+    {
+        return false;
+    }
     DMA_LL_DisableIrq(h);
     DMA_BM_TakeFlags(h->stream);
 
