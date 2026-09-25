@@ -238,7 +238,10 @@ static bool Test_T9(void)
     }
     DMA_HAL_DeInit(&hdma_m2m);
 
-    /* 1c. Rejection: items > 65535 in DMA_HAL_MemCopy (X2) */
+    /* 1c. Rejection: items > 65535 in DMA_HAL_MemCopy (X2 / Y3)
+     * Using bytes = 65552 (65536 + 16): on a regression (missing > 65535 check),
+     * NDTR truncates to 16, copying only 16 B into the 256 B buffer and returning
+     * HAL_OK. This fails the test cleanly without corrupting memory (R4). */
     memset(&hdma_m2m, 0, sizeof(hdma_m2m));
     DmaHal_Config_t cfg_m2m_b = cfg_m2m;
     cfg_m2m_b.periph_align = DMA_PDATAALIGN_BYTE;
@@ -247,13 +250,21 @@ static bool Test_T9(void)
     {
         return false;
     }
-    /* 65536 bytes with byte alignment -> 65536 items > 65535 */
-    if (DMA_HAL_MemCopy(&hdma_m2m, s_rx_buf, s_tx_buf, 65536U, 1000U) != HAL_ERROR)
+    s_rx_buf[16] = 0x55AA55AAUL; /* Canary at byte offset 64 */
+    DMA_MEM_BM_PrepareRx(s_rx_buf, sizeof(s_rx_buf));
+
+    if (DMA_HAL_MemCopy(&hdma_m2m, s_rx_buf, s_tx_buf, 65568U, 1000U) != HAL_ERROR)
     {
         DMA_HAL_DeInit(&hdma_m2m);
         return false;
     }
     DMA_HAL_DeInit(&hdma_m2m);
+
+    DMA_MEM_BM_CompleteRx(s_rx_buf, sizeof(s_rx_buf));
+    if (s_rx_buf[16] != 0x55AA55AAUL)
+    {
+        return false; /* Canary corrupted */
+    }
 
     /* 2. HAL_DMA_Start_IT with IRQ callback dispatch on DMA2_Stream1 */
     for (uint32_t i = 0; i < 64; i++)
