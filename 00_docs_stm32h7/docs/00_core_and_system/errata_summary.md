@@ -136,16 +136,6 @@ Do not toggle `PC13` at speed when the LSE is in use. Relevant for the Nucleo, w
 **Workaround**: use **RMII**. This is already the Nucleo-H755ZI-Q configuration
 (LAN8742A in RMII). Never generate MII init code for this board.
 
-### 2.3.12 - HASH input data may be corrupted when DMA is used (`A`)
-When HASH transfers data through a channel from DMA1 or DMA2, using another channel
-from these DMAs to manage other peripherals may cause HASH input data corruption (ES0445 §2.3.12).
-
-**Workaround** (pick one):
-- During a HASH data transfer using DMA1, ensure that no DMA channels are enabled on DMA2,
-  or vice versa. Additionally, set bit 20 of `DMA_SxCR` (`TRBUFF`) for the HASH stream on
-  silicon revisions with `REV_ID >= 0x2000` (e.g. revision V = `0x2003`).
-- Use interrupt or polling mode to transfer data to the HASH peripheral when DMA1 or DMA2
-  channels cannot be disabled during the HASH transfer.
 
 ### 2.3.2 - Device stalled on two consecutive RDP level regressions (`A`)
 **Workaround**: perform a dummy access to backup SRAM before an RDP level 1 -> 0
