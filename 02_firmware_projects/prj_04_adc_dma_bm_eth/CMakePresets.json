@@ -41,12 +41,26 @@
         "ADC_DRIVER_SELFTEST": "ON",
         "DMA_DRIVER_SELFTEST": "OFF"
       }
+    },
+    {
+      "name": "selftest-uart",
+      "displayName": "Dual-Core Debug with UART Selftest (CM7 + CM4, PD5-PD6 wire)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/selftest-uart",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "UART_DRIVER_SELFTEST": "ON",
+        "ADC_DRIVER_SELFTEST": "OFF",
+        "DMA_DRIVER_SELFTEST": "OFF"
+      }
     }
   ],
   "buildPresets": [
-    { "name": "debug",        "configurePreset": "debug"        },
-    { "name": "release",      "configurePreset": "release"      },
-    { "name": "selftest",     "configurePreset": "selftest"     },
-    { "name": "selftest-adc", "configurePreset": "selftest-adc" }
+    { "name": "debug",         "configurePreset": "debug"         },
+    { "name": "release",       "configurePreset": "release"       },
+    { "name": "selftest",      "configurePreset": "selftest"      },
+    { "name": "selftest-adc",  "configurePreset": "selftest-adc"  },
+    { "name": "selftest-uart", "configurePreset": "selftest-uart" }
   ]
 }
