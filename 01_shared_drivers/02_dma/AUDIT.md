@@ -5,7 +5,7 @@
 | **Fecha** | 2026-09-24 |
 | **Rama / commit auditado** | `driver/dma-tiers-and-gpio-plan` @ `40105eb` |
 | **Base del plan** | `a7f700a` ([IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)) |
-| **Veredicto** | 1.ª auditoría (`40105eb`): no se aprueba el merge, hay que corregir X1-X5. **Reauditoría (`b224b24`): X1-X5 cerrados; falta Y1 (§6).** |
+| **Veredicto** | 1.ª auditoría (`40105eb`): no se aprueba el merge, hay que corregir X1-X5. Reauditoría (`b224b24`): X1-X5 cerrados; falta Y1 (§6). **Cierre (`f3ab055`): Y1 cerrado; se aprueba el merge (§7), confirmado en hardware por el auditor (§8).** |
 
 La auditoría se hizo sobre el código y sobre la placa, no sobre el informe de ejecución.
 Todo lo que figura como "verificado" aquí se comprobó directamente.
@@ -107,3 +107,65 @@ Todo lo que figura como "verificado" aquí se comprobó directamente.
 | Y4 | Pruebas | La parte de X1 que afecta al rango de caché en `DMA_LL_MemCopy` solo se ejercita en el CM4, que no tiene caché. No hay prueba de LL en el CM7. |
 | Y5 | Pruebas | El camino `HAL_BUSY` de `DMA_HAL_CheckErrata` no tiene prueba. Por otro lado, T10 ya no pasa por `DMA_HAL_Init`, así que la propagación del error de `CheckErrata` desde `Init` tampoco se ejercita. |
 | X6-X11 | — | Siguen abiertos tal como se describen en la §3. Nada de lo que cambió los resuelve. |
+
+---
+
+## 7. Cierre (2026-09-25, commit `f3ab055`)
+
+**Veredicto: se aprueba el merge de `driver/dma-tiers-and-gpio-plan`.** No queda ningún hallazgo bloqueante. Hacer el merge a `main` le corresponde a quien sea dueño de la rama.
+
+| ID | Resultado | Evidencia |
+| :--- | :--- | :--- |
+| Y1 | Cerrado | `26864ae`: después de escribir el canario se llama a `DMA_MEM_BM_PrepareRx(s_rx_buf, 256)`, que hace clean + invalidate y así lleva el canario a la RAM. Después del DMA, `DMA_MEM_BM_CompleteRx(s_rx_buf, 256)` fuerza que la CPU relea desde la RAM. El buffer está alineado a 32 y su tamaño es múltiplo de 32, así que ninguna llamada devuelve `false` sin avisar. La prueba ahora discrimina: con el defecto X1, el DMA habría escrito 256 B y pisado `s_rx_buf[16]`. |
+| Y2 | Cerrado | `d51e02c`: `errata_summary.md` tiene una sola sección 2.3.12 (línea 173). |
+| Build | Conforme | El preset `selftest` de `prj_04` compila sin warnings. La ELF de CM7 (00:57:48) se compiló después de editar la prueba (00:57:08) y antes del commit (01:01:37). |
+
+**Límite de la evidencia en hardware.** En `dma_selftest_capture.txt`, lo que cambia respecto a la captura anterior es la fecha, el título y un contador de red. T9 solo imprime `PASS`, así que el log no permite distinguir una ejecución posterior a Y1 de una anterior. Se acepta porque la corrección se verifica por revisión y el orden de las marcas de tiempo es coherente. A partir de ahora, conviene que el selftest imprima el hash de commit de la imagen (por ejemplo, `git describe` inyectado por CMake) para que cada captura sea trazable.
+
+**Pendientes no bloqueantes** (para una siguiente iteración de `02_dma`):
+
+- Y3: la prueba de X2 es destructiva si hay una regresión.
+- Y4: no hay prueba de LL con caché en el CM7.
+- Y5: no hay prueba de `CheckErrata` → `HAL_BUSY`, ni de la propagación desde `DMA_HAL_Init`.
+- X6: `GetIRQn` devuelve `-1`, que es el valor de `SysTick_IRQn`.
+- X7: la comprobación del límite de 1 KB es código que nunca se ejecuta, y el burst periférico se valida con la tabla del lado memoria.
+- X8: `DMA_LL_Deinit` no propaga el fallo de `Stop`.
+- X9: los comentarios de `CMakeLists.txt:104,110` y `dma_bm.h:24` siguen desactualizados.
+- X10: la cobertura de T1 y la inclusión de la backup SRAM en el BDMA siguen sin verificar.
+- X11: `SetIdleMemory` comprueba el alcance con el NDTR restante.
+- Tamaño: `dma_bm` usa +932 B de los 1 024 del presupuesto del CM4. Cualquier ampliación futura del tier BM tiene que venir acompañada de una medición del `.map`.
+
+---
+
+## 8. Verificación independiente en hardware (2026-09-25)
+
+El auditor compiló, flasheó y capturó todo esto por su cuenta, sin usar ningún artefacto del implementador.
+
+**Imagen.** Commit `f3ab055`, con build limpia del preset `selftest` (se borró `build/selftest` antes de compilar). Tamaños: CM7 101 424 B, CM4 16 704 B. Sin warnings con `-Werror`. Se flasheó con `tools/flash.py --preset selftest --core both`, con verificación de lectura. Captura con `tools/monitor.py --timestamps` por COM4. Placa: NUCLEO-H755ZI-Q, `REV_ID=0x2003`, con el puente PD5-PD6 puesto.
+
+```text
+[   7.107] [m7_dma_test] T8_DCACHE_COHERENCY: PASS
+[   7.110] [m7_dma_test] T9_HAL_MEMCOPY_IT: PASS
+[   7.115] [m7_dma_test] T10_USART3_DMA: PASS (TRBUFF verified)
+[   7.118] [m7_dma_test] T10_USART3_DMA: PASS
+[   7.121] [m7_dma_test] T11_BDMA_SRAM4: PASS
+[   7.124] [m7_dma_test] OVERALL: PASS (T8-T11)
+[  13.027] [m4_dma_test] T1_M2M=PASS T2_REJ=PASS T3_UART=PASS
+[  15.000] [m4_dma_test] T4_TIM7=PASS (tc=10,ht=10) T5_DBM=PASS
+[  16.971] [m4_dma_test] T6_REARM=PASS T7_ITCM=PASS (te=1)
+[  18.943] [m4_dma_test] OVERALL=PASS (mask=0xFE/0xFE)
+```
+
+**Control negativo de X1 y Y1.** En `dma_hal.c:303` se volvió a poner el cálculo defectuoso (`items = bytes / msize_bytes`), se recompiló y se flasheó solo el CM7. Resultado: T9 falla y T8, T10 y T11 siguen pasando. Esto demuestra que T9 detecta el defecto X1, y por tanto que la corrección de Y1 hace que el canario funcione. Después, el archivo se restauró con `git checkout` y se borró `build/selftest` para que no quedara ninguna imagen con el defecto.
+
+```text
+[  72.635] [m7_dma_test] T8_DCACHE_COHERENCY: PASS
+[  72.639] [m7_dma_test] T9_HAL_MEMCOPY_IT: FAIL
+[  72.643] [m7_dma_test] T10_USART3_DMA: PASS (TRBUFF verified)
+[  72.649] [m7_dma_test] T11_BDMA_SRAM4: PASS
+[  72.653] [m7_dma_test] OVERALL: FAIL (T8-T11)
+```
+
+**Restauración.** Build limpia del release a partir de `f3ab055` (CM7 84 060 B, CM4 7 912 B), flasheada en los dos núcleos con verificación. T12 medido en vivo con `query_adc.py --rate 2`: 1 271 808 muestras en 2,5 s (unos 509 kSPS); `err`, `ovr` y `adc_ovr` a 0; `m4_hb` avanzando. La placa queda con el firmware de producción.
+
+**Veredicto final:** se confirma la aprobación de la §7. La evidencia del implementador (§6 y §7) coincide con lo observado por el auditor.
