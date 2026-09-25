@@ -545,19 +545,15 @@ From the project directory, in one PowerShell session:
 
 ```powershell
 . .\tools\env.ps1
-# prj_03: the selftest preset already enables the ADC selftest
-cmake --preset selftest
-# prj_04: the selftest preset builds the DMA selftest, so override it
-cmake --preset selftest -DADC_DRIVER_SELFTEST=ON -DDMA_DRIVER_SELFTEST=OFF
-cmake --build --preset selftest
-py tools/flash.py --preset selftest --core both
+cmake --preset selftest-adc                 # prj_03: --preset selftest
+cmake --build --preset selftest-adc         # prj_03: --preset selftest
+py tools/flash.py --preset selftest-adc --core both
 py tools/monitor.py --log docs/hw_selftest_capture.txt --timeout 40   # then press RESET
 ```
 
-In `prj_04`, the `-D` values on the command line override the preset. They stay
-in `build/selftest/CMakeCache.txt` until the next `cmake --preset selftest`
-without them. When done, flash `--preset release` again to put the production
-image back.
+The preset is **`selftest-adc` in `prj_04`**, whose `selftest` preset builds the
+DMA driver selftest, and **`selftest` in `prj_03`**. When done, flash
+`--preset release` again to put the production image back.
 
 | Test | What it proves | Pass criterion |
 | :--- | :--- | :--- |
@@ -682,7 +678,8 @@ Before changing it:
    `ADC_HAL_CUSTOM_CALLBACKS`).
 8. **Before merging:**
    - `.\tools\build_all.ps1 -Clean`, 8/8 with `-Werror`;
-   - both selftest builds (`prj_03`, and `prj_04` with the override of §9.1);
+   - both selftest builds (`prj_03` preset `selftest`, `prj_04` preset
+     `selftest-adc`);
    - the hardware run;
    - if an init path changed, a new SWD read compared against
      `docs/swd_register_dump.txt`.

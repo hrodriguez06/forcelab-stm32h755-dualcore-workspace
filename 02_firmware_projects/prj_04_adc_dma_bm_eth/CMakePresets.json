@@ -20,7 +20,7 @@
     },
     {
       "name": "selftest",
-      "displayName": "Dual-Core Debug with ADC Selftest (CM7 + CM4)",
+      "displayName": "Dual-Core Debug with DMA Selftest (CM7 + CM4)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/selftest",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
@@ -29,11 +29,24 @@
         "ADC_DRIVER_SELFTEST": "OFF",
         "DMA_DRIVER_SELFTEST": "ON"
       }
+    },
+    {
+      "name": "selftest-adc",
+      "displayName": "Dual-Core Debug with ADC Selftest (CM7 + CM4)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/selftest-adc",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ADC_DRIVER_SELFTEST": "ON",
+        "DMA_DRIVER_SELFTEST": "OFF"
+      }
     }
   ],
   "buildPresets": [
-    { "name": "debug",    "configurePreset": "debug"    },
-    { "name": "release",  "configurePreset": "release"  },
-    { "name": "selftest", "configurePreset": "selftest" }
+    { "name": "debug",        "configurePreset": "debug"        },
+    { "name": "release",      "configurePreset": "release"      },
+    { "name": "selftest",     "configurePreset": "selftest"     },
+    { "name": "selftest-adc", "configurePreset": "selftest-adc" }
   ]
 }

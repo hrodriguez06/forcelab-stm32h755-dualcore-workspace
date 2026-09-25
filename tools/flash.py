@@ -20,6 +20,7 @@ Microsoft Store alias stub and does not run.
 
     py tools/flash.py                    # CPU1 (+ CPU2 if built), debug preset
     py tools/flash.py --preset release
+    py tools/flash.py --preset selftest  # any preset of the project's CMakePresets.json
     py tools/flash.py --core cm7         # only CPU1, even if CPU2 is built
     py tools/flash.py --tool openocd
     py tools/flash.py --dry-run          # print the commands, run nothing
@@ -54,6 +55,7 @@ docs/ETHERNET_BRINGUP.md              bring-up and verification order
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -88,6 +90,28 @@ def _project_root() -> Path:
 
 PROJECT_ROOT = _project_root()
 SCRIPT_NAME = f"{Path(__file__).parent.name}/{Path(__file__).name}"
+
+# Used when the project's CMakePresets.json cannot be read.
+DEFAULT_PRESETS = ("debug", "release", "selftest")
+
+
+def _project_presets() -> tuple[str, ...]:
+    """The configure presets of this project that --preset may name.
+
+    Read from the project's own CMakePresets.json, so a project can add a preset
+    without this shared script learning its name. Only presets whose binaryDir
+    is ${sourceDir}/build/<name> qualify: artifact() looks for the images there,
+    and a preset built anywhere else would be offered and then not found.
+    """
+    try:
+        data = json.loads((PROJECT_ROOT / "CMakePresets.json").read_text(encoding="utf-8"))
+        names = tuple(
+            p["name"] for p in data.get("configurePresets", [])
+            if not p.get("hidden") and p.get("binaryDir") == f"${{sourceDir}}/build/{p['name']}"
+        )
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        names = ()
+    return names or DEFAULT_PRESETS
 
 # Flash bank layout, mirroring CM7/linker/stm32h755zi_cm7.ld and the CM4 script
 # in 00_docs_stm32h7/docs/00_core_and_system/linker_templates/.
@@ -378,8 +402,9 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Run with --dry-run to see the exact command without touching the board.",
     )
-    p.add_argument("--preset", default="debug", choices=("debug", "release", "selftest"),
-                   help="CMake preset whose build/ output to flash (default: debug)")
+    p.add_argument("--preset", default="debug", choices=_project_presets(),
+                   help="CMake preset whose build/ output to flash, one of this project's "
+                        "CMakePresets.json (default: debug)")
     p.add_argument("--core", default="auto", choices=("auto", "cm7", "cm4", "both"),
                    help="which core to program; 'auto' takes whatever is built (default)")
     p.add_argument("--tool", default="cubeprog", choices=("cubeprog", "openocd"),
