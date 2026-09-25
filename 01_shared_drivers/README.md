@@ -14,7 +14,7 @@ All drivers in this directory follow **Plan A (Peripheral-First Architecture)** 
 The numeric prefix encodes **bring-up order, not the alphabet**. Read the list top
 to bottom and you have the initialisation sequence of a board: pins before
 anything that uses them, a blinking LED before there is a console, DMA before the
-peripherals whose descriptors live in it, and the inter-core semaphore last
+peripherals that stream through it (UART, ADC), and the inter-core semaphore last
 because it needs both cores already running.
 
 ```text
