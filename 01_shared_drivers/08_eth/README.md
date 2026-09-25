@@ -378,10 +378,6 @@ E7), not on this driver.
 | E7 | **`prj_eth_lwip_node` has a private copy** in `Custom_Drivers/08_eth/`, deliberately kept (its verification ran on those sources). | **A fix here does not reach it.** Porting an errata workaround there is an explicit decision followed by a re-run of its bring-up. |
 | E8 | **Cross-core GPIO race** on ports A, B, C, G ([section 8](#8-dual-core-rules)). | Not observed; not ruled out by the driver. |
 
-Two comments in `eth_hal.c` are out of date: the SRAM3 MPU region is **6** in
-every project, not 2; and the checksum default is set in the project's CM7
-`CMakeLists.txt` (with the fallback in `eth_hal.h`), not in `net_config.h`.
-
 ---
 
 ## 11. Changing this driver

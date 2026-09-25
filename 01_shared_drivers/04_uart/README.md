@@ -532,9 +532,10 @@ Flash the normal build afterwards; the selftest is not meant to stay on a board.
 
 ## 11. Changing this driver
 
-This driver is in a shared catalogue. `prj_02`, `prj_03`, `prj_04` and the
-dual-core template build the HAL console through the umbrella target, and `prj_04`
-builds BM and LL for its selftest. Before changing the driver:
+This driver is in a shared catalogue. `prj_02` and `prj_03` build the HAL
+console through the umbrella target, `prj_04` and the dual-core template link
+`stm32h7_driver_uart` by name, and `prj_04` also builds BM and LL for its
+selftest. Before changing the driver:
 
 1. **The seven original HAL prototypes and every existing BM/LL signature are
    frozen** (`01_shared_drivers/README.md` rule 2). New behaviour is added as `…Ex`

@@ -114,7 +114,7 @@ static const eth_gpio_pin_t s_rmii_pins[] = {
 /* ==========================================================================
  * DMA-visible memory. Everything below lands in D2 SRAM3 (0x30040000, 32 KB)
  * through the .eth_ram output section of CM7/linker/stm32h755zi_cm7.ld, and
- * the MPU marks that region Normal non-cacheable (mpu_config.c, region 2).
+ * the MPU marks that region Normal non-cacheable (mpu_config.c, region 6).
  * DTCM and AXI SRAM are both wrong here: DTCM is unreachable by the ETH DMA,
  * AXI SRAM is cacheable and would need manual maintenance on every frame.
  * ========================================================================== */
@@ -404,9 +404,10 @@ eth_driver_status_t ETH_Driver_Init(const uint8_t *mac_addr, uint32_t phy_addres
     eth_disable_arp_offload();                    /* 2.25.11 */
     ETH_Driver_SetRxWatchdog(0U, 0U);             /* 2.25.8, watchdog off  */
 
-    /* Checksum offload follows the application policy. Software checksums are
-       the default (net_config.h): they keep the MAC checksum engine out of
-       the picture while the link is being brought up. */
+    /* Checksum offload follows the application policy, ETH_USE_HARDWARE_CHECKSUM,
+       set in the project's CM7/CMakeLists.txt (fallback 0 in eth_hal.h).
+       Software checksums are the default: they keep the MAC checksum engine
+       out of the picture while the link is being brought up. */
     if (HAL_ETH_GetMACConfig(&g_heth, &mac) != HAL_OK)
     {
         return ETH_DRIVER_ERROR;
