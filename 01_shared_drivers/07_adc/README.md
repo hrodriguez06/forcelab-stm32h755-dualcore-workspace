@@ -5,9 +5,10 @@ microcontroller (ADC1, ADC2, ADC3). The three tiers expose the same feature set
 behind the same function names (`ADC_BM_*`, `ADC_LL_*`, `ADC_HAL_*`), so a
 project picks a tier by its constraints and not by the features it needs.
 
-Status: v1.1, validated on a NUCLEO-H755ZI-Q (silicon Rev V) - see
-[section 9](#9-validation). The design, audit trail and gate results are in
-[`PLAN.md`](PLAN.md).
+Status: v1.1. All three tiers were validated on a NUCLEO-H755ZI-Q (silicon Rev V,
+`REV_ID = 0x2003`) on 2026-09-23/24, and the result closed by six independent
+audits. What that covers, and what it does not, is in
+[section 9](#9-validation).
 
 ---
 
@@ -29,6 +30,12 @@ target_link_libraries(cm4_firmware PRIVATE stm32h7_driver_adc_bm)   # or _ll, or
 
 The HAL tier needs `HAL_ADC_MODULE_ENABLED` and `HAL_DMA_MODULE_ENABLED` in the
 project's `stm32h7xx_hal_conf.h`; without the first, `adc_hal.h` compiles to nothing.
+
+- `stm32h7_driver_adc` (HAL) is part of the `stm32h7_shared_drivers` umbrella
+  target. `_bm` and `_ll` are not, and have to be linked by name.
+- BM and LL link `stm32h7_driver_dma`, which is the DMA **bare-metal** tier
+  (`dma_bm`), and they read the DMA flags through it. They need nothing from the
+  HAL. LL needs no LL `.c` file and no `USE_FULL_LL_DRIVER`.
 
 ### 1.1 Feature matrix
 
@@ -288,8 +295,8 @@ passed as the integer.
 
 With DMA on Cortex-M7, the buffer must be 32-byte aligned and each half must be a
 multiple of 32 bytes; `InitEx` enforces it. `ComputeStats`/`ComputeStatsChannel`
-invalidate exactly the half they read (`SCB_InvalidateDCache_by_Addr`) before
-reading it. **If the application reads the buffer directly** (e.g. copies a
+invalidate exactly the half they read (`SCB_InvalidateDCache_by_Addr`, followed
+by `__DMB()` as ES0445 2.1.5 requires) before reading it. **If the application reads the buffer directly** (e.g. copies a
 waveform), it must invalidate that range itself or place the buffer in a
 non-cacheable MPU region. The buffer must be in memory the DMA controller
 reaches (not DTCM). On Cortex-M4 there is no D-cache and the check is compiled
@@ -328,6 +335,7 @@ logical values that the driver translates for the running revision; do not write
 | :--- | :--- |
 | 2.10.x — injected context queue | `CFGR.JQDIS = 1` in all tiers; injected conversions are out of scope. |
 | 2.10.4 — `ADC_AWDy_OUT` is reset by conversions of unmonitored channels | When the watchdog output gates or triggers a timer, set `awd_all_channels = true`. |
+| 2.1.5 — store after cache maintenance without a barrier | `__DMB()` after the invalidate in `ComputeStats` / `ComputeStatsChannel` (Cortex-M7). |
 
 AWD1 interrupt storm: at hundreds of kSPS a signal outside the window would raise
 AWD1 on every conversion. The ADC IRQ handler counts the event and masks
@@ -537,11 +545,19 @@ From the project directory, in one PowerShell session:
 
 ```powershell
 . .\tools\env.ps1
+# prj_03: the selftest preset already enables the ADC selftest
 cmake --preset selftest
+# prj_04: the selftest preset builds the DMA selftest, so override it
+cmake --preset selftest -DADC_DRIVER_SELFTEST=ON -DDMA_DRIVER_SELFTEST=OFF
 cmake --build --preset selftest
 py tools/flash.py --preset selftest --core both
 py tools/monitor.py --log docs/hw_selftest_capture.txt --timeout 40   # then press RESET
 ```
+
+In `prj_04`, the `-D` values on the command line override the preset. They stay
+in `build/selftest/CMakeCache.txt` until the next `cmake --preset selftest`
+without them. When done, flash `--preset release` again to put the production
+image back.
 
 | Test | What it proves | Pass criterion |
 | :--- | :--- | :--- |
@@ -563,11 +579,51 @@ project's `docs/hw_selftest_capture.txt`; the code is in
 `CM4/App/Src/adc_selftest_hw.c` (criteria in its header) and in
 `CM7/App/Src/app_main.c` for T8.
 
+Results recorded on the reference board (`docs/hw_selftest_capture.txt` of each
+project):
+
+| Test | `prj_04` BM / LL | `prj_03` HAL | Expected |
+| :--- | :--- | :--- | :--- |
+| T2 | `v16=24334`, `v8=95`, `r8=7` (`RES = 111b`) | `v16=24327`, `v12=1521`, `v8=95`, `r8=7` | VREFINT 1.180-1.255 V (DS12923 table 20). The code scales as `v16 / 2^(16-N)`. 8 bits = `111b` on Rev V |
+| T3 | `ht=488.0 tc=487.0` / `ht=488.0 tc=488.0`, every error counter 0 | `ht=488.0 tc=487.0`, every error counter 0 | 488.28 per second ±1 % (500 kSPS / 1024 samples) |
+| T3b | VREFINT 24344 / 24362, TS 12737 / 12749 | VREFINT 24345, TS 12666, `halves=31` | VREFINT within 3 % of T2 |
+| T4 | `ovr=2483 / 2482`, `dma=0` | `ovr=2480`, `dma=0` | About 2500 conversions in 5 ms, counted as overruns and not as DMA errors |
+| T6 | Refused, `CCR` and ADC2 intact, /1 accepted | Same, and `boost=1 need=1` | `InitEx` refuses a conflicting prescaler |
+| T8 | BM `dirty=39321→2048`, LL `dirty=34952→2048` | `dirty_cpu=39321`, `stats_dma=2048` | The DMA data wins over the dirty cache lines |
+| G5 | `diff=0` on 12 registers | - | BM and LL leave the same registers |
+
 ### 9.2 Register compatibility
 
-`prj_04` in its default configuration was read by SWD while acquiring
-(`docs/swd_register_dump.txt`): ADC1 and `ADC12_COMMON` are bit-for-bit identical
-to the pre-refactor baseline `a7f700a` in every configuration register.
+- **Against the baseline.** `prj_04` in its default configuration was read by SWD
+  while acquiring (`docs/swd_register_dump.txt`, raw output). ADC1 and
+  `ADC12_COMMON` are bit-for-bit identical to the pre-refactor baseline `a7f700a`
+  in every configuration register. The auditor corroborated both halves on the
+  board:
+  - it read the flash back and found the CM4 image of `a7f700a` identical bit for
+    bit to its own build;
+  - it repeated the hot SWD read on `HEAD`. Only the data registers and `CALFACT`
+    changed, and `CALFACT` is recalibrated at every boot.
+- **BM against LL.** `G5_Run()` in `prj_04/CM4/App/Src/adc_selftest_hw.c`
+  initialises ADC1 (application configuration) and ADC3 ({VREFINT, TEMPSENSOR},
+  ×16 oversampling, shift 4) once with BM and once with LL. It then compares 12
+  registers: `CR` without the start/stop bits, `CFGR`, `CFGR2`, `SMPR1/2`,
+  `PCSEL`, `SQR1-4`, `IER` and `CCR`. LL cannot inherit BM's values, so a match
+  is real: `ADC_BM_Deinit` clears every compared register except `CR.BOOST` and
+  `CCR.CKMODE/PRESC`, and `ADC_LL_InitEx` writes those two explicitly.
+- **What G5 does not cover.** It does not compare the analog watchdog registers
+  (`LTR`/`HTR`, `AWDxCR`), `DIFSEL` or `OFRx`.
+
+### 9.3 Not exercised in hardware
+
+- **Silicon Rev Y** (`REV_ID < 0x2000`): the single-bit `BOOST` branch and the Rev Y
+  `RES` encoding are covered by code review only.
+- **HAL callback modes other than the default:** `USE_HAL_ADC_REGISTER_CALLBACKS
+  = 1` and `ADC_HAL_CUSTOM_CALLBACKS`. `prj_03` builds with the default, `= 0`.
+- **Other modes:** synchronous clock (`CKMODE ≠ 0`), one-shot DMA
+  (`ADC_*_DMA_ONESHOT`) and HAL continuous mode.
+- **An external signal on a real pin.** The optional T9 (PB1 strapped to 3V3 and
+  to GND) was never implemented. T5 (AWD1) and T7 (oversampling) run on internal
+  references and report only a pass flag (`A=1`, `O=1`).
 
 ---
 
@@ -575,10 +631,14 @@ to the pre-refactor baseline `a7f700a` in every configuration register.
 
 Out of scope for v1.x:
 
-- injected conversions (`JSQR`; the queue is disabled for errata 2.10.x);
-- dual-ADC simultaneous / interleaved modes (`CCR.DUAL ≠ 0`);
+- injected conversions (`JSQR`; the queue is disabled). ES0445 2.10.1-2.10.3,
+  2.10.5, 2.10.7 and 2.10.8 all concern injected conversions and the context
+  queue;
+- dual-ADC simultaneous / interleaved modes (`CCR.DUAL ≠ 0`). ES0445 2.10.6: slave
+  data may be shifted in dual regular simultaneous mode;
 - differential inputs (`DIFSEL`; all channels are single-ended);
-- analog watchdogs 2 and 3, and offset correction (`OFRx`).
+- analog watchdogs 2 and 3, and offset correction (`OFRx`);
+- DFSDM and the low-power modes (auto-off, auto-wait).
 
 Behaviour worth knowing:
 
@@ -590,3 +650,58 @@ Behaviour worth knowing:
   depend on it.
 - In the reserved offsets of the ADC and `ADC12_COMMON` blocks the silicon mirrors
   ADC1 registers; a raw SWD dump shows the `ISR` value there. It is not a fault.
+
+---
+
+## 11. Changing this driver
+
+This driver is in a shared catalogue. `prj_03` and `prj_04` build it unchanged,
+and `prj_02` and the template build the HAL tier through the umbrella target.
+Before changing it:
+
+1. **Only add, never change.** Existing prototypes, fields and macro values are
+   frozen (`01_shared_drivers/README.md` rule 2). New fields go at the **end** of a
+   struct, and the value 0 of every new field must reproduce the previous
+   behaviour, because handles and configs are zero-initialised by contract (§2.2).
+   New functionality gets an `Ex` suffix and the old function calls it, so there
+   is only one code path.
+2. **All hardware comes from the configuration:** instance, channels,
+   `kernel_clock_hz`, clock mode and prescaler, trigger, and the optional analog
+   pin. `adc_*.c` contains no `GPIOx`, no frequency other than the 25 MHz
+   fallback, and no `ADC1/2/3` outside the instance tables.
+3. **The shared `CCR` is written only while both ADCs of the pair are disabled,
+   the target included** (§6.2). Never pulse `ADC12RST`: `RCC_AHB1RSTR` is in the
+   register bank both cores share, and pulsing it resets the other ADC too.
+4. **The driver resolves the silicon revision itself.** Resolution and `BOOST` are
+   translated from `REV_ID`, and the public constants stay logical.
+5. **ISRs only set flags and count.** No HSEM and no waiting. All three tiers keep
+   the same counters, with the same meaning.
+6. **BM and LL stay 1:1**, function by function, and G5 must keep reporting
+   `diff=0`.
+7. **Never define an ST global symbol without a way to turn it off** (see
+   `ADC_HAL_CUSTOM_CALLBACKS`).
+8. **Before merging:**
+   - `.\tools\build_all.ps1 -Clean`, 8/8 with `-Werror`;
+   - both selftest builds (`prj_03`, and `prj_04` with the override of §9.1);
+   - the hardware run;
+   - if an init path changed, a new SWD read compared against
+     `docs/swd_register_dump.txt`.
+
+---
+
+## 12. History
+
+| Milestone | Commits |
+| :--- | :--- |
+| First HAL `adc` and BM `adc_bm` (one channel, circular DMA) | `18d7f05`, `4d888b3` |
+| `GPIO_BM_ConfigAnalog`, `adc_ll` tier, `InitEx` with F2-F6 | `be31f3c`, `d9962b5`, `baa8e08` |
+| Six independent audits and their fixes (oversampling encoding, factory calibration on CM4, `CCR` guard in HAL, T2-T8 on hardware, SWD parity) | `42173dc` … `8568e5a` |
+| Automated BM = LL register parity (G5) | `3c1ecb7` |
+| README v1.1 | `bf9f4d0` |
+
+The design plan and the full audit record (`PLAN.md`) were removed from this folder
+once their content was folded into this README. They remain in git history:
+
+```bash
+git show c284211:01_shared_drivers/07_adc/PLAN.md
+```

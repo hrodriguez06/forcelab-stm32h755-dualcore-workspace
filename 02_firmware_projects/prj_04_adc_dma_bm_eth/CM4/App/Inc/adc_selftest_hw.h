@@ -5,7 +5,7 @@
   *          LL tiers, run on CPU2. Built only with -DADC_DRIVER_SELFTEST=ON.
   *
   *          What each test proves, and its pass criterion, is in
-  *          01_shared_drivers/07_adc/PLAN.md section 3.3 (phase 5):
+  *          01_shared_drivers/07_adc/README.md section 9.1:
   *
   *            T2   ADC3 converts VREFINT at 16, 14, 12, 10 and 8 bits, plus the
   *                 two optimised modes on Rev V. The code must scale as
