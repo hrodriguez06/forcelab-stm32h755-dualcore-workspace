@@ -5,7 +5,7 @@
 | **Fecha** | 2026-09-24 |
 | **Rama / commit auditado** | `driver/dma-tiers-and-gpio-plan` @ `40105eb` |
 | **Base del plan** | `a7f700a` ([IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)) |
-| **Veredicto** | 1.ª auditoría (`40105eb`): no se aprueba el merge, hay que corregir X1-X5. Reauditoría (`b224b24`): X1-X5 cerrados; falta Y1 (§6). **Cierre (`f3ab055`): Y1 cerrado; se aprueba el merge (§7), confirmado en hardware por el auditor (§8).** |
+| **Veredicto** | 1.ª auditoría (`40105eb`): no se aprueba el merge, hay que corregir X1-X5. Reauditoría (`b224b24`): X1-X5 cerrados; falta Y1 (§6). **Cierre (`f3ab055`): Y1 cerrado; se aprueba el merge (§7), confirmado en hardware por el auditor (§8).** Iteración 2 (`c11e30c`): no se aprueba el merge; falta Z1 (§9). |
 
 La auditoría se hizo sobre el código y sobre la placa, no sobre el informe de ejecución.
 Todo lo que figura como "verificado" aquí se comprobó directamente.
@@ -169,3 +169,42 @@ El auditor compiló, flasheó y capturó todo esto por su cuenta, sin usar ning�
 **Restauración.** Build limpia del release a partir de `f3ab055` (CM7 84 060 B, CM4 7 912 B), flasheada en los dos núcleos con verificación. T12 medido en vivo con `query_adc.py --rate 2`: 1 271 808 muestras en 2,5 s (unos 509 kSPS); `err`, `ovr` y `adc_ovr` a 0; `m4_hb` avanzando. La placa queda con el firmware de producción.
 
 **Veredicto final:** se confirma la aprobación de la §7. La evidencia del implementador (§6 y §7) coincide con lo observado por el auditor.
+
+---
+
+## 9. Auditoría de la iteración 2 (2026-09-25, rama `driver/dma-iteration-2` @ `c11e30c`)
+
+**Veredicto: no se aprueba el merge todavía.** El código de los drivers es correcto y ninguna firma pública cambió. Lo que bloquea es una prueba de X10a que no verifica lo que dice verificar, y la regla R1 (control negativo) queda sin cumplir para ese punto. Base: [IMPLEMENTATION_PLAN_2.md](IMPLEMENTATION_PLAN_2.md). Informe del implementador: [ITERATION_2.md](ITERATION_2.md).
+
+### 9.1 Verificado por el auditor
+
+| Punto | Resultado | Evidencia |
+| :--- | :--- | :--- |
+| C2 | Conforme | `git diff main..HEAD -- '02_dma/*.h'` solo borra tres líneas, y las tres son comentarios. |
+| Builds | Conforme | `build_all.ps1 -Clean` pasa las 8 con `-Werror`. Build limpia del preset `selftest` sin warnings: CM7 104 164 B, CM4 17 996 B. |
+| Captura | Conforme | Entre `4418037` (el `rev=` de la captura) y `HEAD` solo cambian documentos. |
+| X6 | Cerrado | `DMA_BM_IRQN_INVALID`, `DMA_BM_GetIRQnEx` y `DMA_HAL_GetIRQnEx`. Los usos internos ya pasan por `…Ex`. |
+| X7a | Cerrado | Los seis chequeos inalcanzables se borraron. El `_Static_assert((1024U % (16U * 4U)) == 0U)` es correcto. |
+| X7b | Cerrado | `DMA_BM_CheckPeriphBurst` se usa en el lado periférico de BM y LL. Con `PINC=0` solo se exige alinear a PSIZE. La regla `bytes > 16` es **literal** en RM0399: *"the burst size multiplied by the data size must not exceed the FIFO size"* (`16_…dma.txt:743`). |
+| X8 | Cerrado (por revisión) | `DMA_LL_Deinit` devuelve `false` sin tocar nada si `Stop` falla. El chequeo muerto de PFCTRL + circular se borró. No tiene prueba en HW, como preveía el plan. |
+| X9 | Cerrado | Ver `CMakeLists.txt:104,110` y `dma_bm.h:24-26`. |
+| X11 | Cerrado | `SetIdleMemoryEx` recibe la longitud explícita y comprueba TE después de escribir. `DMA_LL_SetIdleMemory` usa `dbm_length`, que se añadió al final del handle. |
+| X10b | Cerrado: la backup SRAM se queda | RM0399 §2, literal: *"It can access the internal SRAM4, backup RAM, and AHB4 and APB4 peripherals"* (`rm0399_system/02_memory-and-bus-architecture.txt:328-329`). T11b discrimina: en 3a el patrón solo puede haber llegado a la backup SRAM por el BDMA, porque la CPU solo escribió ceros; en 3b, lo mismo en sentido contrario. La coherencia de caché la resuelven los helpers de `MemCopy`. |
+| Y3, Y4, Y5 | Cerrados | Cada uno tiene su control negativo con FAIL en la línea correcta. En Y3, el truncado a 32 B no puede desbordar (R4). |
+| Tamaño | Conforme | `dma_bm.c.obj` enlazado en el CM4 release: **1 596 B** de `.text + .rodata` (1 588 B solo de `.text`), dentro del límite de 1 676 B. El plan esperaba que bajara; en `.text` queda prácticamente igual que antes (1 584 B). |
+| T12 | Conforme (en vivo) | `query_adc.py --rate 2`: 1 271 808 muestras en 2,5 s (unos 509 kSPS); `err`, `ovr` y `adc_ovr` a 0. |
+
+### 9.2 Bloqueante
+
+| ID | Sev. | Dónde | Hallazgo | Corrección |
+| :--- | :---: | :--- | :--- | :--- |
+| **Z1** | Media | CM4 `dma_selftest.c:381-431`, `:1424-1428`; `dma_negative_controls.txt` §6 | **La matriz de X10a es tautológica.** `expect_valid` sale de `DMA_BM_CheckFifoBurst` y `DMA_BM_CheckPeriphBurst`, que son justo lo que se quiere probar. La rama de rechazo solo comprueba que `InitStreamEx`, que llama a esas mismas funciones, también rechaza. Una celda equivocada en la tabla nunca produciría un FAIL. **El control negativo registrado no demuestra nada:** la mutación de Word, umbral lleno e INCR4 rompe la primera parte de T1 (streams 1-7, `dma_selftest.c` al principio de `Test_T1`). T1 aborta antes de la matriz, y por eso los contadores salen `0/0` en lugar de `25/26`. Además, los denominadores `/26` y `/25` están escritos a mano. Las 26 combinaciones válidas **sí** se ejecutan en HW (con `memcmp` y canario), y esa parte de la cobertura es real. | Poner un oráculo independiente en la prueba: una tabla fija de 48 entradas transcrita de RM0399 §16.3.14 (tabla de umbral de FIFO) y de la nota del lado periférico, **no** derivada del driver. Contar las discrepancias con el driver e imprimir `mismatch=N` junto a totales calculados. Repetir el control negativo mutando una celda que no use el resto de T1 (por ejemplo, Byte, 1/2, INCR8) y registrar `mismatch=1` con su hash. |
+
+### 9.3 No bloqueante (corregir en el informe o en el proceso)
+
+| ID | Hallazgo |
+| :--- | :--- |
+| Z2 | Hay tres descripciones de `ITERATION_2.md` que no coinciden con el código. X8 habla de una "rama `cfg->periph_flow_ctrl` en P2M", cuando lo que se borró fue PFCTRL + circular. X7a cita `DMA_BM_MAX_BURST_BYTES <= 1024U`, pero el código dice `1024 % 64 == 0`. En el control de Y3 pone "NDTR truncado a 16", pero la prueba usa 65 568 B, que se trunca a 32. |
+| Z3 | El informe no incluye la sección de "lo que no se pudo ejercitar", que el encargo pedía explícitamente. Ahí van X8 y la propagación de `CheckErrata` desde `DMA_HAL_Init` (Y5), que solo se cubren por revisión. |
+| Z4 | R2 queda cumplida solo en parte. Los controles de Y4, Y5, X10a y X10b llevan `rev=53bd261-dirty`, pero sus tests se commitearon más tarde (`0ca9844`, `64c4736`, `9018c76` y `4418037`). Ese hash no identifica el código que corrió. Cada control tiene que ejecutarse sobre el commit que añade su test, más la mutación. |
+| Z5 | El informe dice "exactamente 13 commits", pero la rama tiene 14. Además, "100 % verificado en hardware" no se sostiene mientras Z1 siga abierto. |
