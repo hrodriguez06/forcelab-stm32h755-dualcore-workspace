@@ -210,11 +210,21 @@ static bool Test_T9(void)
     /* Place canary at word index 16 (offset 64 bytes) */
     s_rx_buf[16] = 0x55AA55AAUL;
 
+    /* Y1: Flush the entire buffer (including the canary at offset 64) from
+     * D-Cache to RAM so the DMA sees the canary in physical memory. Without
+     * this, the canary stays dirty in the cache and the post-DMA read would
+     * hit the cached (unchanged) value, defeating the overflow check. */
+    DMA_MEM_BM_PrepareRx(s_rx_buf, sizeof(s_rx_buf));
+
     if (DMA_HAL_MemCopy(&hdma_m2m, s_rx_buf, s_tx_buf, 64U, 1000U) != HAL_OK)
     {
         DMA_HAL_DeInit(&hdma_m2m);
         return false;
     }
+
+    /* Y1: Invalidate the entire buffer so the CPU re-reads from RAM,
+     * picking up whatever the DMA actually wrote (or didn't write). */
+    DMA_MEM_BM_CompleteRx(s_rx_buf, sizeof(s_rx_buf));
 
     if (memcmp(s_tx_buf, s_rx_buf, 64) != 0)
     {

@@ -3,7 +3,7 @@ STM32H755ZI-Q NUCLEO HARDWARE DMA DRIVER SELF-TEST EVIDENCE (PHASE F4 / AUDIT RE
 ================================================================================
 Hardware: NUCLEO-H755ZI-Q Rev V (Silicon Rev ID: 0x2003)
 Target: prj_04_adc_dma_bm_eth (--preset selftest)
-Date: 2026-09-24
+Date: 2026-09-25 (Y1 cache-coherent canary fix applied)
 Console: ST-LINK V3 Virtual COM Port (COM4 @ 115200 8N1)
 Wiring: Physical jumper connected across PD5 (USART2_TX) and PD6 (USART2_RX)
 
@@ -30,7 +30,7 @@ CM7 RESULT: OVERALL: PASS (T8-T11)
 T12 RESULT: PASS (rate=500 kSPS, err=0, ovr=0, adc_ovr=0, samples > 200M)
 
 ================================================================================
-VERBATIM CONSOLE LOG CAPTURE (BOOT & SELFTESTS)
+VERBATIM CONSOLE LOG CAPTURE (BOOT & SELFTESTS) — Post-Y1 fix
 ================================================================================
 
 Connected to COM4 at 115200 8N1. Ctrl-C to stop.
@@ -66,7 +66,7 @@ Connected to COM4 at 115200 8N1. Ctrl-C to stop.
 [ipc] m7=17 m4=30  (CPU2 alive)
 [m4_dma_test] T6_REARM=PASS T7_ITCM=PASS (te=1)
 [ipc] m7=21 m4=50  (CPU2 alive)
-[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
 [m4_dma_test] OVERALL=PASS (mask=0xFE/0xFE)
 [ipc] m7=25 m4=70  (CPU2 alive)
 [ipc] m7=28 m4=90  (CPU2 alive)
