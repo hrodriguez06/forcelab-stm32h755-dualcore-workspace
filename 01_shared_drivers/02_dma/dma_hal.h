@@ -73,10 +73,21 @@ HAL_StatusTypeDef DMA_HAL_CheckErrata(const DMA_HandleTypeDef *hdma);
 
 /**
   * @brief  Resolves NVIC IRQn for DMA1/DMA2 stream or BDMA channel instance.
+  * @warning Returns DMA_BM_IRQN_INVALID ((IRQn_Type)(-1)) on failure, which aliases
+  *          SysTick_IRQn. Never pass unchecked return values to NVIC_* functions.
+  *          Use DMA_HAL_GetIRQnEx() instead for safe resolution.
   * @param  instance Pointer to stream (DMA1_Stream0..) or channel (BDMA_Channel0..).
-  * @return IRQn_Type or (IRQn_Type)(-1) if invalid.
+  * @return IRQn_Type or DMA_BM_IRQN_INVALID ((IRQn_Type)(-1)) if invalid.
   */
 IRQn_Type DMA_HAL_GetIRQn(const void *instance);
+
+/**
+  * @brief  Resolves NVIC IRQn for DMA1/DMA2 stream or BDMA channel instance (safe variant).
+  * @param  instance Pointer to stream (DMA1_Stream0..) or channel (BDMA_Channel0..).
+  * @param  out      Pointer to store resolved IRQn_Type (untouched on failure).
+  * @return true if instance is valid, false otherwise (*out untouched).
+  */
+bool DMA_HAL_GetIRQnEx(const void *instance, IRQn_Type *out);
 
 /**
   * @brief  Dispatches HAL_DMA_IRQHandler for the registered handle associated with instance.

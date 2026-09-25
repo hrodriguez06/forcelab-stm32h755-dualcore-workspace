@@ -88,38 +88,55 @@ bool DMA_BM_IsUartRequest(uint32_t request_id)
             (request_id >= 79U && request_id <= 82U));
 }
 
-IRQn_Type DMA_BM_GetIRQn(const DMA_Stream_TypeDef *s)
+bool DMA_BM_GetIRQnEx(const DMA_Stream_TypeDef *s, IRQn_Type *out)
 {
+    if ((s == NULL) || (out == NULL))
+    {
+        return false;
+    }
+
     DMA_TypeDef *dma = DMA_BM_GetController(s);
     uint32_t idx = DMA_BM_GetStreamIndex(s);
 
     if ((dma == NULL) || (idx > 7U))
     {
-        return (IRQn_Type)(-1);
+        return false;
     }
 
     if (dma == DMA1)
     {
         if (idx < 7U)
         {
-            return (IRQn_Type)(DMA1_Stream0_IRQn + idx); /* 11..17 */
+            *out = (IRQn_Type)(DMA1_Stream0_IRQn + idx); /* 11..17 */
         }
         else
         {
-            return DMA1_Stream7_IRQn; /* 47 */
+            *out = DMA1_Stream7_IRQn; /* 47 */
         }
     }
     else /* DMA2 */
     {
         if (idx < 5U)
         {
-            return (IRQn_Type)(DMA2_Stream0_IRQn + idx); /* 56..60 */
+            *out = (IRQn_Type)(DMA2_Stream0_IRQn + idx); /* 56..60 */
         }
         else
         {
-            return (IRQn_Type)(DMA2_Stream5_IRQn + (idx - 5U)); /* 68..70 */
+            *out = (IRQn_Type)(DMA2_Stream5_IRQn + (idx - 5U)); /* 68..70 */
         }
     }
+
+    return true;
+}
+
+IRQn_Type DMA_BM_GetIRQn(const DMA_Stream_TypeDef *s)
+{
+    IRQn_Type irqn = DMA_BM_IRQN_INVALID;
+    if (DMA_BM_GetIRQnEx(s, &irqn))
+    {
+        return irqn;
+    }
+    return DMA_BM_IRQN_INVALID;
 }
 
 bool DMA_BM_CheckFifoBurst(uint32_t data_size, uint32_t threshold, uint32_t burst)

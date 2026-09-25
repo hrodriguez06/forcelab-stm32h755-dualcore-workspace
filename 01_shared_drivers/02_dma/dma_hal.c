@@ -51,17 +51,17 @@ static int32_t DMA_HAL_GetInstanceIndex(const void *instance)
     return -1;
 }
 
-IRQn_Type DMA_HAL_GetIRQn(const void *instance)
+bool DMA_HAL_GetIRQnEx(const void *instance, IRQn_Type *out)
 {
-    if (instance == NULL)
+    if ((instance == NULL) || (out == NULL))
     {
-        return (IRQn_Type)(-1);
+        return false;
     }
 
     DMA_TypeDef *dma = DMA_BM_GetController((const DMA_Stream_TypeDef *)instance);
     if (dma != NULL)
     {
-        return DMA_BM_GetIRQn((const DMA_Stream_TypeDef *)instance);
+        return DMA_BM_GetIRQnEx((const DMA_Stream_TypeDef *)instance, out);
     }
 
     uint32_t addr = (uint32_t)instance;
@@ -70,11 +70,22 @@ IRQn_Type DMA_HAL_GetIRQn(const void *instance)
         uint32_t offset = addr - (uint32_t)BDMA_Channel0;
         if ((offset % sizeof(BDMA_Channel_TypeDef)) == 0U)
         {
-            return (IRQn_Type)(BDMA_Channel0_IRQn + (offset / sizeof(BDMA_Channel_TypeDef)));
+            *out = (IRQn_Type)(BDMA_Channel0_IRQn + (offset / sizeof(BDMA_Channel_TypeDef)));
+            return true;
         }
     }
 
-    return (IRQn_Type)(-1);
+    return false;
+}
+
+IRQn_Type DMA_HAL_GetIRQn(const void *instance)
+{
+    IRQn_Type irqn = DMA_BM_IRQN_INVALID;
+    if (DMA_HAL_GetIRQnEx(instance, &irqn))
+    {
+        return irqn;
+    }
+    return DMA_BM_IRQN_INVALID;
 }
 
 void DMA_HAL_IRQDispatch(const void *instance)
@@ -214,8 +225,8 @@ HAL_StatusTypeDef DMA_HAL_Init(DMA_HandleTypeDef *hdma, const DmaHal_Config_t *c
     /* NVIC configuration if requested */
     if (cfg->irq_priority >= 0)
     {
-        IRQn_Type irqn = DMA_HAL_GetIRQn(cfg->instance);
-        if ((int32_t)irqn >= 0)
+        IRQn_Type irqn = DMA_BM_IRQN_INVALID;
+        if (DMA_HAL_GetIRQnEx(cfg->instance, &irqn))
         {
             HAL_NVIC_SetPriority(irqn, (uint32_t)cfg->irq_priority, 0U);
             HAL_NVIC_EnableIRQ(irqn);
@@ -238,8 +249,8 @@ HAL_StatusTypeDef DMA_HAL_DeInit(DMA_HandleTypeDef *hdma)
     int32_t inst_idx = DMA_HAL_GetInstanceIndex(hdma->Instance);
     if (inst_idx >= 0)
     {
-        IRQn_Type irqn = DMA_HAL_GetIRQn(hdma->Instance);
-        if ((int32_t)irqn >= 0)
+        IRQn_Type irqn = DMA_BM_IRQN_INVALID;
+        if (DMA_HAL_GetIRQnEx(hdma->Instance, &irqn))
         {
             HAL_NVIC_DisableIRQ(irqn);
         }

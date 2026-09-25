@@ -461,8 +461,8 @@ bool DMA_LL_EnableIrq(DmaLL_Handle_t *h, uint32_t it_mask, uint32_t priority)
         return false;
     }
 
-    IRQn_Type irqn = DMA_BM_GetIRQn(h->stream);
-    if ((int32_t)irqn < 0)
+    IRQn_Type irqn = DMA_BM_IRQN_INVALID;
+    if (!DMA_BM_GetIRQnEx(h->stream, &irqn))
     {
         return false;
     }
@@ -495,8 +495,8 @@ void DMA_LL_DisableIrq(DmaLL_Handle_t *h)
     h->stream->CR &= ~(DMA_SxCR_TCIE | DMA_SxCR_HTIE | DMA_SxCR_TEIE | DMA_SxCR_DMEIE);
     h->stream->FCR &= ~DMA_SxFCR_FEIE;
 
-    IRQn_Type irqn = DMA_BM_GetIRQn(h->stream);
-    if ((int32_t)irqn >= 0)
+    IRQn_Type irqn = DMA_BM_IRQN_INVALID;
+    if (DMA_BM_GetIRQnEx(h->stream, &irqn))
     {
         NVIC_DisableIRQ(irqn);
     }

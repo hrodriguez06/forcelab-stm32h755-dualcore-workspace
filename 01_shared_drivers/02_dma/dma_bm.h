@@ -228,12 +228,25 @@ bool DMA_BM_SetIdleMemory(DMA_Stream_TypeDef *s, uint32_t addr);
   */
 uint32_t DMA_BM_GetCurrentTarget(const DMA_Stream_TypeDef *s);
 
+#define DMA_BM_IRQN_INVALID   ((IRQn_Type)(-1))   /* == SysTick_IRQn: never pass it to NVIC_* */
+
 /**
   * @brief  Resolves NVIC IRQn for the specified DMA stream instance.
+  * @warning Returns DMA_BM_IRQN_INVALID ((IRQn_Type)(-1)) on failure, which aliases
+  *          SysTick_IRQn. Never pass unchecked return values to NVIC_* functions.
+  *          Use DMA_BM_GetIRQnEx() instead for safe resolution.
   * @param  s Pointer to DMA stream instance.
-  * @return IRQn_Type for stream, or (IRQn_Type)(-1) if invalid.
+  * @return IRQn_Type for stream, or DMA_BM_IRQN_INVALID if invalid.
   */
 IRQn_Type DMA_BM_GetIRQn(const DMA_Stream_TypeDef *s);
+
+/**
+  * @brief  Resolves NVIC IRQn for the specified DMA stream instance (safe variant).
+  * @param  s   Pointer to DMA stream instance.
+  * @param  out Pointer to store resolved IRQn_Type (untouched on failure).
+  * @return true if stream is valid, false otherwise (*out untouched).
+  */
+bool DMA_BM_GetIRQnEx(const DMA_Stream_TypeDef *s, IRQn_Type *out);
 
 /**
   * @brief  Silicon fact lookup: returns true if request_id requires TRBUFF workaround (ES0445).
