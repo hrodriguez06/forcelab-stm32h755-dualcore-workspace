@@ -136,7 +136,7 @@ bool DMA_LL_Init(DmaLL_Handle_t *h, const DmaLL_Config_t *cfg)
         {
             return false;
         }
-        if (!DMA_BM_CheckFifoBurst(psize_shift, cfg->fifo_threshold, pburst_shift))
+        if (!DMA_BM_CheckPeriphBurst(psize_shift, cfg->fifo_threshold, pburst_shift))
         {
             return false;
         }
@@ -299,7 +299,9 @@ bool DMA_LL_Start(DmaLL_Handle_t *h, uint32_t periph_addr, uint32_t mem_addr, ui
     uint32_t m_elem = 1U << msize;
     uint32_t pburst_beats = s_burst_beats[pburst];
     uint32_t mburst_beats = s_burst_beats[mburst];
-    uint32_t p_align = pburst_beats * p_elem;
+    /* When PINC=0, peripheral address is fixed; only alignment to PSIZE is required (RM0399 §16.3.13) */
+    bool p_inc = (h->stream->CR & DMA_SxCR_PINC) != 0U;
+    uint32_t p_align = p_inc ? (pburst_beats * p_elem) : p_elem;
     uint32_t m_align = mburst_beats * m_elem;
 
     /* A4/A9: Alignment checks */
@@ -383,7 +385,9 @@ bool DMA_LL_StartDoubleBuffer(DmaLL_Handle_t *h, uint32_t periph_addr,
     uint32_t m_elem = 1U << msize;
     uint32_t pburst_beats = s_burst_beats[pburst];
     uint32_t mburst_beats = s_burst_beats[mburst];
-    uint32_t p_align = pburst_beats * p_elem;
+    /* When PINC=0, peripheral address is fixed; only alignment to PSIZE is required (RM0399 §16.3.13) */
+    bool p_inc = (h->stream->CR & DMA_SxCR_PINC) != 0U;
+    uint32_t p_align = p_inc ? (pburst_beats * p_elem) : p_elem;
     uint32_t m_align = mburst_beats * m_elem;
 
     if (((periph_addr & (p_align - 1U)) != 0U) ||

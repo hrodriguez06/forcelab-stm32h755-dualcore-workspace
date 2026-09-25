@@ -495,6 +495,64 @@ static bool Test_T2(void)
     }
     DMA_BM_DeinitStream(s);
 
+    /* 19. X7b: peripheral burst word x INCR4 with threshold 3/4 forbidden (RM0399 §16.3.14) */
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.base.stream = s;
+    cfg.base.direction = DMA_BM_DIR_PERIPH_TO_MEM;
+    cfg.base.request_id = 1U;
+    cfg.base.periph_addr = (uint32_t)&(TIM7->CNT);
+    cfg.base.mem_addr = (uint32_t)s_m2m_dst;
+    cfg.base.buffer_length = 16U;
+    cfg.base.periph_data_size = DMA_BM_DATA_SIZE_WORD;
+    cfg.base.mem_data_size = DMA_BM_DATA_SIZE_WORD;
+    cfg.base.enable_fifo = true;
+    cfg.base.fifo_threshold = DMA_BM_FIFO_TH_3_4;
+    cfg.mem_burst = DMA_BM_BURST_SINGLE;
+    cfg.periph_burst = DMA_BM_BURST_INCR4;
+    if (DMA_BM_InitStreamEx(&cfg) || (s->CR != 0U)) return false;
+
+    /* 20. X7b: byte x INCR16 with PINC=0 on &USART2->TDR accepted (Init only, no start) */
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.base.stream = s;
+    cfg.base.direction = DMA_BM_DIR_MEM_TO_PERIPH;
+    cfg.base.request_id = 44U; /* USART2_TX */
+    cfg.base.periph_addr = (uint32_t)&(USART2->TDR);
+    cfg.base.mem_addr = (uint32_t)s_m2m_src;
+    cfg.base.buffer_length = 16U;
+    cfg.base.periph_data_size = DMA_BM_DATA_SIZE_BYTE;
+    cfg.base.mem_data_size = DMA_BM_DATA_SIZE_BYTE;
+    cfg.base.periph_inc = false;
+    cfg.base.mem_inc = true;
+    cfg.base.enable_fifo = true;
+    cfg.base.fifo_threshold = DMA_BM_FIFO_TH_FULL;
+    cfg.mem_burst = DMA_BM_BURST_SINGLE;
+    cfg.periph_burst = DMA_BM_BURST_INCR16;
+    if (!DMA_BM_InitStreamEx(&cfg)) return false;
+    DMA_BM_DeinitStream(s);
+
+    /* 21. X7b: peripheral burst halfword x INCR4 with threshold 1/4 accepted
+     * (RM0399 §16.3.14 allows it since beats x size = 8 B <= 16 B; CheckFifoBurst rejected it).
+     * Also verifies halfword x INCR4 with threshold 1/2. */
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.base.stream = s;
+    cfg.base.direction = DMA_BM_DIR_PERIPH_TO_MEM;
+    cfg.base.request_id = 1U;
+    cfg.base.periph_addr = (uint32_t)&(TIM7->CNT);
+    cfg.base.mem_addr = (uint32_t)s_m2m_dst;
+    cfg.base.buffer_length = 16U;
+    cfg.base.periph_data_size = DMA_BM_DATA_SIZE_HALFWORD;
+    cfg.base.mem_data_size = DMA_BM_DATA_SIZE_HALFWORD;
+    cfg.base.enable_fifo = true;
+    cfg.base.fifo_threshold = DMA_BM_FIFO_TH_1_4;
+    cfg.mem_burst = DMA_BM_BURST_SINGLE;
+    cfg.periph_burst = DMA_BM_BURST_INCR4;
+    if (!DMA_BM_InitStreamEx(&cfg)) return false;
+    DMA_BM_DeinitStream(s);
+
+    cfg.base.fifo_threshold = DMA_BM_FIFO_TH_1_2;
+    if (!DMA_BM_InitStreamEx(&cfg)) return false;
+    DMA_BM_DeinitStream(s);
+
     return true;
 }
 

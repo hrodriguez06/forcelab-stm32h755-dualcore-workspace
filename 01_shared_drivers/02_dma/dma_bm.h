@@ -277,6 +277,18 @@ bool DMA_BM_IsUartRequest(uint32_t request_id);
   */
 bool DMA_BM_CheckFifoBurst(uint32_t data_size, uint32_t threshold, uint32_t burst);
 
+/**
+  * @brief  Validates peripheral burst compatibility with FIFO per RM0399 §16.3.14.
+  * @note   RM0399 §16.3.14: "In all cases, the burst size multiplied by the data size
+  *         must not exceed the FIFO size (4 words = 16 bytes)".
+  *         "If (PBURST x PSIZE) = FIFO_SIZE (4 words), FIFO_Threshold = 3/4 is forbidden".
+  * @param  psize     Peripheral data size (DMA_BM_DATA_SIZE_*).
+  * @param  threshold FIFO threshold (DMA_BM_FIFO_TH_*).
+  * @param  pburst    Peripheral burst beat configuration (DMA_BM_BURST_*).
+  * @return true if configuration is valid per RM0399 peripheral burst rule.
+  */
+bool DMA_BM_CheckPeriphBurst(uint32_t psize, uint32_t threshold, uint32_t pburst);
+
 #ifdef __cplusplus
 }
 #endif

@@ -192,6 +192,37 @@ bool DMA_BM_CheckFifoBurst(uint32_t data_size, uint32_t threshold, uint32_t burs
     }
 }
 
+bool DMA_BM_CheckPeriphBurst(uint32_t psize, uint32_t threshold, uint32_t pburst)
+{
+    if ((psize > DMA_BM_DATA_SIZE_WORD) || (pburst > DMA_BM_BURST_INCR16) ||
+        (threshold > DMA_BM_FIFO_TH_FULL))
+    {
+        return false;
+    }
+
+    if (pburst == DMA_BM_BURST_SINGLE)
+    {
+        return true;
+    }
+
+    uint32_t beats = s_burst_beats[pburst];
+    uint32_t bytes = beats << psize;
+
+    /* RM0399 §16.3.14: burst size multiplied by data size must not exceed FIFO size (16 B) */
+    if (bytes > 16U)
+    {
+        return false;
+    }
+
+    /* RM0399 §16.3.14: If (PBURST x PSIZE) = FIFO_SIZE (4 words / 16 bytes), FIFO_Threshold = 3/4 is forbidden */
+    if ((bytes == 16U) && (threshold == DMA_BM_FIFO_TH_3_4))
+    {
+        return false;
+    }
+
+    return true;
+}
+
 bool DMA_BM_InitStreamEx(const DmaBm_ConfigEx_t *cfg)
 {
     if ((cfg == NULL) || (cfg->base.stream == NULL))
@@ -304,7 +335,7 @@ bool DMA_BM_InitStreamEx(const DmaBm_ConfigEx_t *cfg)
         {
             return false;
         }
-        if (!DMA_BM_CheckFifoBurst(c->periph_data_size, c->fifo_threshold, cfg->periph_burst))
+        if (!DMA_BM_CheckPeriphBurst(c->periph_data_size, c->fifo_threshold, cfg->periph_burst))
         {
             return false;
         }
@@ -315,7 +346,8 @@ bool DMA_BM_InitStreamEx(const DmaBm_ConfigEx_t *cfg)
 
     uint32_t pburst_beats = s_burst_beats[cfg->periph_burst];
     uint32_t mburst_beats = s_burst_beats[cfg->mem_burst];
-    uint32_t periph_align = pburst_beats * periph_elem_size;
+    /* When PINC=0, peripheral address is fixed; only alignment to PSIZE is required (RM0399 §16.3.13) */
+    uint32_t periph_align = c->periph_inc ? (pburst_beats * periph_elem_size) : periph_elem_size;
     uint32_t mem_align = mburst_beats * mem_elem_size;
 
     /* A4/A9: Alignment checks */
@@ -536,7 +568,9 @@ bool DMA_BM_SetTransfer(DMA_Stream_TypeDef *s, uint32_t periph_addr,
 
     uint32_t pburst_beats = s_burst_beats[pburst];
     uint32_t mburst_beats = s_burst_beats[mburst];
-    uint32_t periph_align = pburst_beats * periph_elem_size;
+    /* When PINC=0, peripheral address is fixed; only alignment to PSIZE is required (RM0399 §16.3.13) */
+    bool periph_inc = (cr & DMA_SxCR_PINC) != 0U;
+    uint32_t periph_align = periph_inc ? (pburst_beats * periph_elem_size) : periph_elem_size;
     uint32_t mem_align = mburst_beats * mem_elem_size;
 
     if ((periph_addr & (periph_align - 1U)) != 0U)
