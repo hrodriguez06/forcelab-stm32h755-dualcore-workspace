@@ -85,8 +85,11 @@ static uint32_t s_diag_t4_ll_tc = 0U;
 static uint32_t s_diag_t4_ll_ht = 0U;
 static uint32_t s_diag_t5 = 0U;
 static uint32_t s_diag_t6 = 0U;
+static uint32_t s_t1_combos_valid = 0U;
 static uint32_t s_t1_combos_ok = 0U;
+static uint32_t s_t1_combos_invalid = 0U;
 static uint32_t s_t1_combos_rej = 0U;
+static uint32_t s_t1_combos_mismatch = 0U;
 
 /* Buffers in SRAM2 */
 static uint32_t s_m2m_src[64] DMA_BM_ALIGN_32;
@@ -343,7 +346,33 @@ static bool Test_T1(void)
     }
     DMA_LL_Deinit(&h_t1, 10000U);
 
-    /* ---- Exhaustive combinatorial matrix of FIFO bursts (X10a) ---- */
+    /* ---- Exhaustive combinatorial matrix of FIFO bursts (X10a, Z1) ---- */
+    /* Independent oracle for M2M FIFO burst validity (RM0399 Table 116 & §16.3.14).
+     * Index: [size: BYTE=0, HALFWORD=1, WORD=2]
+     *        [threshold: 1/4=0, 1/2=1, 3/4=2, FULL=3]
+     *        [burst: SINGLE=0, INCR4=1, INCR8=2, INCR16=3]
+     * Exactly 23 valid combinations, 25 invalid combinations (total 48). */
+    static const bool s_rm0399_burst_valid[3][4][4] = {
+        [DMA_BM_DATA_SIZE_BYTE] = {
+            [DMA_BM_FIFO_TH_1_4]  = { true,  true,  false, false },
+            [DMA_BM_FIFO_TH_1_2]  = { true,  true,  true,  false },
+            [DMA_BM_FIFO_TH_3_4]  = { true,  true,  false, false },
+            [DMA_BM_FIFO_TH_FULL] = { true,  true,  true,  true  }
+        },
+        [DMA_BM_DATA_SIZE_HALFWORD] = {
+            [DMA_BM_FIFO_TH_1_4]  = { true,  false, false, false },
+            [DMA_BM_FIFO_TH_1_2]  = { true,  true,  false, false },
+            [DMA_BM_FIFO_TH_3_4]  = { true,  false, false, false },
+            [DMA_BM_FIFO_TH_FULL] = { true,  true,  true,  false }
+        },
+        [DMA_BM_DATA_SIZE_WORD] = {
+            [DMA_BM_FIFO_TH_1_4]  = { true,  false, false, false },
+            [DMA_BM_FIFO_TH_1_2]  = { true,  false, false, false },
+            [DMA_BM_FIFO_TH_3_4]  = { true,  false, false, false },
+            [DMA_BM_FIFO_TH_FULL] = { true,  true,  false, false }
+        }
+    };
+
     static const uint32_t sizes[3] = {
         DMA_BM_DATA_SIZE_BYTE,
         DMA_BM_DATA_SIZE_HALFWORD,
@@ -362,8 +391,11 @@ static bool Test_T1(void)
         DMA_BM_BURST_INCR16
     };
 
+    s_t1_combos_valid = 0U;
     s_t1_combos_ok = 0U;
+    s_t1_combos_invalid = 0U;
     s_t1_combos_rej = 0U;
+    s_t1_combos_mismatch = 0U;
 
     for (uint32_t s_idx = 0; s_idx < 3; s_idx++)
     {
@@ -378,17 +410,34 @@ static bool Test_T1(void)
             {
                 uint32_t b = bursts[b_idx];
 
-                bool expect_valid = DMA_BM_CheckFifoBurst(sz, th, b) &&
+                bool oracle_valid = s_rm0399_burst_valid[s_idx][t_idx][b_idx];
+                bool driver_valid = DMA_BM_CheckFifoBurst(sz, th, b) &&
                                     DMA_BM_CheckPeriphBurst(sz, th, b);
 
-                if (expect_valid)
+                if (oracle_valid)
                 {
-                    if (!Run_M2M_Combo(DMA1_Stream1, sz, sz, th, b, b, ndtr))
+                    s_t1_combos_valid++;
+                }
+                else
+                {
+                    s_t1_combos_invalid++;
+                }
+
+                if (driver_valid != oracle_valid)
+                {
+                    s_t1_combos_mismatch++;
+                }
+
+                if (oracle_valid)
+                {
+                    if (Run_M2M_Combo(DMA1_Stream1, sz, sz, th, b, b, ndtr))
+                    {
+                        s_t1_combos_ok++;
+                    }
+                    else if (s_diag_t1 == 0U)
                     {
                         s_diag_t1 = 100U + (s_idx * 16U) + (t_idx * 4U) + b_idx;
-                        return false;
                     }
-                    s_t1_combos_ok++;
                 }
                 else
                 {
@@ -417,50 +466,77 @@ static bool Test_T1(void)
                         .stop_spin_limit = 10000U
                     };
                     DMA_BM_DeinitStream(DMA1_Stream1);
-                    if (DMA_BM_InitStreamEx(&cfg_rej))
+                    bool init_res = DMA_BM_InitStreamEx(&cfg_rej);
+                    uint32_t cr_val = DMA1_Stream1->CR;
+                    if (init_res)
                     {
                         DMA_BM_DeinitStream(DMA1_Stream1);
-                        s_diag_t1 = 200U + (s_idx * 16U) + (t_idx * 4U) + b_idx;
-                        return false;
+                        if (s_diag_t1 == 0U)
+                        {
+                            s_diag_t1 = 200U + (s_idx * 16U) + (t_idx * 4U) + b_idx;
+                        }
                     }
-                    if (DMA1_Stream1->CR != 0U)
+                    else if (cr_val != 0U)
                     {
-                        s_diag_t1 = 300U + (s_idx * 16U) + (t_idx * 4U) + b_idx;
-                        return false;
+                        if (s_diag_t1 == 0U)
+                        {
+                            s_diag_t1 = 300U + (s_idx * 16U) + (t_idx * 4U) + b_idx;
+                        }
                     }
-                    s_t1_combos_rej++;
+                    else
+                    {
+                        s_t1_combos_rej++;
+                    }
                 }
             }
         }
     }
 
     /* 3 combinations with PSIZE != MSIZE */
+    uint32_t diff_sizes_ok = 0U;
+
     /* 1. BYTE -> WORD (TH=FULL, PBURST=INCR16, MBURST=INCR4, NDTR=64) */
-    if (!Run_M2M_Combo(DMA1_Stream1, DMA_BM_DATA_SIZE_BYTE, DMA_BM_DATA_SIZE_WORD,
+    if (Run_M2M_Combo(DMA1_Stream1, DMA_BM_DATA_SIZE_BYTE, DMA_BM_DATA_SIZE_WORD,
                        DMA_BM_FIFO_TH_FULL, DMA_BM_BURST_INCR16, DMA_BM_BURST_INCR4, 64U))
     {
-        s_diag_t1 = 401U;
-        return false;
+        diff_sizes_ok++;
     }
-    s_t1_combos_ok++;
+    else if (s_diag_t1 == 0U)
+    {
+        s_diag_t1 = 401U;
+    }
 
     /* 2. HALFWORD -> WORD (TH=FULL, PBURST=INCR8, MBURST=INCR4, NDTR=32) */
-    if (!Run_M2M_Combo(DMA1_Stream1, DMA_BM_DATA_SIZE_HALFWORD, DMA_BM_DATA_SIZE_WORD,
+    if (Run_M2M_Combo(DMA1_Stream1, DMA_BM_DATA_SIZE_HALFWORD, DMA_BM_DATA_SIZE_WORD,
                        DMA_BM_FIFO_TH_FULL, DMA_BM_BURST_INCR8, DMA_BM_BURST_INCR4, 32U))
     {
-        s_diag_t1 = 402U;
-        return false;
+        diff_sizes_ok++;
     }
-    s_t1_combos_ok++;
+    else if (s_diag_t1 == 0U)
+    {
+        s_diag_t1 = 402U;
+    }
 
     /* 3. WORD -> BYTE (TH=FULL, PBURST=INCR4, MBURST=INCR16, NDTR=16) */
-    if (!Run_M2M_Combo(DMA1_Stream1, DMA_BM_DATA_SIZE_WORD, DMA_BM_DATA_SIZE_BYTE,
+    if (Run_M2M_Combo(DMA1_Stream1, DMA_BM_DATA_SIZE_WORD, DMA_BM_DATA_SIZE_BYTE,
                        DMA_BM_FIFO_TH_FULL, DMA_BM_BURST_INCR4, DMA_BM_BURST_INCR16, 16U))
     {
+        diff_sizes_ok++;
+    }
+    else if (s_diag_t1 == 0U)
+    {
         s_diag_t1 = 403U;
+    }
+
+    if ((s_t1_combos_mismatch != 0U) ||
+        (s_t1_combos_valid != 23U) ||
+        (s_t1_combos_ok != 23U) ||
+        (s_t1_combos_invalid != 25U) ||
+        (s_t1_combos_rej != 25U) ||
+        (diff_sizes_ok != 3U))
+    {
         return false;
     }
-    s_t1_combos_ok++;
 
     return true;
 }
@@ -1421,11 +1497,16 @@ void DMA_SelfTest_CM4_Run(void)
     Line_End();
 
     Line_Begin();
-    Line_Str("T1 combos ok=");
+    Line_Str("T1 combos valid=");
+    Line_U32(s_t1_combos_valid);
+    Line_Str(" ok=");
     Line_U32(s_t1_combos_ok);
-    Line_Str("/26 rej=");
+    Line_Str(" invalid=");
+    Line_U32(s_t1_combos_invalid);
+    Line_Str(" rej=");
     Line_U32(s_t1_combos_rej);
-    Line_Str("/25");
+    Line_Str(" mismatch=");
+    Line_U32(s_t1_combos_mismatch);
     Line_End();
 
     Line_Begin();
