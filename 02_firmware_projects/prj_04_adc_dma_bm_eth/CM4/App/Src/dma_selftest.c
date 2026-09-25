@@ -471,6 +471,30 @@ static bool Test_T2(void)
     if (DMA_LL_Start(&h_rej, (uint32_t)s_m2m_src, (uint32_t)s_m2m_dst, 5U)) return false; /* 5 % 4 != 0 */
     DMA_LL_Deinit(&h_rej, 10000U);
 
+    /* 18. SetIdleMemoryEx: rejection when explicit length exceeds reachable memory.
+     * At 0x1FFFF000, remaining NDTR (32 items = 64 B) would stay within 0x1FFFF040 < 0x20000000,
+     * so legacy SetIdleMemory passes in error. Explicit length 3000 (6000 B) crosses into DTCM
+     * (0x20000770 > 0x20000000) and must be rejected by DMA_MEM_BM_IsReachable. */
+    cfg.base.direction = DMA_BM_DIR_PERIPH_TO_MEM;
+    cfg.base.periph_data_size = DMA_BM_DATA_SIZE_HALFWORD;
+    cfg.base.mem_data_size = DMA_BM_DATA_SIZE_HALFWORD;
+    cfg.base.periph_addr = (uint32_t)&(TIM7->CNT);
+    cfg.base.mem_addr = (uint32_t)s_dbm_buf0;
+    cfg.base.buffer_length = 32U;
+    cfg.base.circular = true;
+    cfg.mem1_addr = (uint32_t)s_dbm_buf1;
+    cfg.mem_burst = DMA_BM_BURST_SINGLE;
+    cfg.periph_burst = DMA_BM_BURST_SINGLE;
+    cfg.fail_if_busy = false;
+    if (!DMA_BM_InitStreamEx(&cfg)) return false;
+
+    if (DMA_BM_SetIdleMemoryEx(s, 0x1FFFF000U, 3000U))
+    {
+        DMA_BM_DeinitStream(s);
+        return false; /* Must refuse */
+    }
+    DMA_BM_DeinitStream(s);
+
     return true;
 }
 
@@ -806,7 +830,7 @@ static bool Test_T5(void)
     }
 
     /* In DBM, active is M0, idle is M1. Updating M1AR should succeed */
-    if (!DMA_BM_SetIdleMemory(s, (uint32_t)s_dbm_buf1))
+    if (!DMA_BM_SetIdleMemoryEx(s, (uint32_t)s_dbm_buf1, 32U))
     {
         s_diag_t5 = 4U;
         return false;
@@ -848,6 +872,12 @@ static bool Test_T5(void)
     if ((s->CR & DMA_SxCR_DBM) == 0U)
     {
         s_diag_t5 = 7U;
+        return false;
+    }
+    /* Update idle memory via DMA_LL_SetIdleMemory */
+    if (!DMA_LL_SetIdleMemory(&h_dbm, (uint32_t)s_dbm_buf1))
+    {
+        s_diag_t5 = 8U;
         return false;
     }
     DMA_LL_Stop(&h_dbm, 10000U);

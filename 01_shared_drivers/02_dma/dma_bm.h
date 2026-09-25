@@ -215,11 +215,24 @@ uint32_t DMA_BM_TakeFlags(DMA_Stream_TypeDef *s);
 /**
   * @brief  Updates idle memory buffer address in double-buffer mode (DBM).
   *         Writes M1AR if CT=0 (active is M0), or M0AR if CT=1 (active is M1).
+  * @note   Uses remaining NDTR of the active buffer for reachability validation,
+  *         which may under-estimate the full buffer span mid-transfer. Prefer
+  *         DMA_BM_SetIdleMemoryEx() with the explicit buffer length.
   * @param  s    Pointer to DMA stream instance.
   * @param  addr New buffer address for idle memory target.
   * @return true on success, false if not in DBM or address invalid/unreachable.
   */
 bool DMA_BM_SetIdleMemory(DMA_Stream_TypeDef *s, uint32_t addr);
+
+/**
+  * @brief  Updates idle memory buffer address in double-buffer mode (DBM) with explicit length.
+  * @param  s      Pointer to DMA stream instance.
+  * @param  addr   New buffer address for idle memory target.
+  * @param  length Buffer length in items (PSIZE units).
+  * @return true on success, false if not in DBM, parameters invalid, unreachable,
+  *         or if TEIF was set (e.g. race condition where CT flipped between read and write).
+  */
+bool DMA_BM_SetIdleMemoryEx(DMA_Stream_TypeDef *s, uint32_t addr, uint32_t length);
 
 /**
   * @brief  Gets current memory target in double-buffer mode (0 = M0AR, 1 = M1AR).

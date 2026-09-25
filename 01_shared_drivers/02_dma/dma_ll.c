@@ -217,6 +217,7 @@ bool DMA_LL_Init(DmaLL_Handle_t *h, const DmaLL_Config_t *cfg)
     h->error_flags = 0U;
     h->tc_count = 0U;
     h->ht_count = 0U;
+    h->dbm_length = 0U;
 
     return true;
 }
@@ -254,6 +255,7 @@ bool DMA_LL_Deinit(DmaLL_Handle_t *h, uint32_t spin_limit)
     h->error_flags = 0U;
     h->tc_count = 0U;
     h->ht_count = 0U;
+    h->dbm_length = 0U;
 
     return true;
 }
@@ -402,10 +404,21 @@ bool DMA_LL_StartDoubleBuffer(DmaLL_Handle_t *h, uint32_t periph_addr,
     h->stream->M0AR = mem0;
     h->stream->M1AR = mem1;
     h->stream->NDTR = length;
+    h->dbm_length = length;
 
     DMA_BM_TakeFlags(h->stream);
 
     return DMA_BM_StartEx(h->stream);
+}
+
+bool DMA_LL_SetIdleMemory(DmaLL_Handle_t *h, uint32_t addr)
+{
+    if ((h == NULL) || (h->stream == NULL))
+    {
+        return false;
+    }
+
+    return DMA_BM_SetIdleMemoryEx(h->stream, addr, h->dbm_length);
 }
 
 bool DMA_LL_Stop(DmaLL_Handle_t *h, uint32_t spin_limit)

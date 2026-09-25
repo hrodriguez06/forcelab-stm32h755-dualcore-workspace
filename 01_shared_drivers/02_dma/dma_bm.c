@@ -784,9 +784,9 @@ uint32_t DMA_BM_GetCurrentTarget(const DMA_Stream_TypeDef *s)
     return ((s->CR & DMA_SxCR_CT) != 0U) ? 1U : 0U;
 }
 
-bool DMA_BM_SetIdleMemory(DMA_Stream_TypeDef *s, uint32_t addr)
+bool DMA_BM_SetIdleMemoryEx(DMA_Stream_TypeDef *s, uint32_t addr, uint32_t length)
 {
-    if (s == NULL)
+    if ((s == NULL) || (addr == 0U) || (length == 0U) || (length > 65535U))
     {
         return false;
     }
@@ -807,11 +807,6 @@ bool DMA_BM_SetIdleMemory(DMA_Stream_TypeDef *s, uint32_t addr)
         return false;
     }
 
-    uint32_t length = s->NDTR;
-    if (length == 0U)
-    {
-        length = 1U;
-    }
     /* NDTR counts in PSIZE units (RM0399 §16.3.12) */
     if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, addr, length * periph_elem_size))
     {
@@ -829,5 +824,25 @@ bool DMA_BM_SetIdleMemory(DMA_Stream_TypeDef *s, uint32_t addr)
         s->M0AR = addr;
     }
 
+    /* Check if TEIF was set (e.g. race condition where CT flipped between read and write) */
+    if ((DMA_BM_GetFlags(s) & DMA_BM_FLAG_TE) != 0U)
+    {
+        return false;
+    }
+
     return true;
+}
+
+bool DMA_BM_SetIdleMemory(DMA_Stream_TypeDef *s, uint32_t addr)
+{
+    if (s == NULL)
+    {
+        return false;
+    }
+    uint32_t length = s->NDTR;
+    if (length == 0U)
+    {
+        length = 1U;
+    }
+    return DMA_BM_SetIdleMemoryEx(s, addr, length);
 }

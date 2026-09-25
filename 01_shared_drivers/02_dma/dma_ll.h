@@ -82,6 +82,7 @@ struct DmaLL_Handle
     volatile uint32_t   error_flags;   /*!< Accumulated TE/DME/FE (retrieved by TakeErrors) */
     volatile uint32_t   tc_count;      /*!< Transfer Complete event count              */
     volatile uint32_t   ht_count;      /*!< Half Transfer event count                  */
+    uint32_t            dbm_length;    /*!< Buffer length in items recorded in StartDoubleBuffer */
 };
 
 /**
@@ -121,6 +122,14 @@ bool DMA_LL_Start(DmaLL_Handle_t *h, uint32_t periph_addr, uint32_t mem_addr, ui
   */
 bool DMA_LL_StartDoubleBuffer(DmaLL_Handle_t *h, uint32_t periph_addr,
                               uint32_t mem0, uint32_t mem1, uint32_t length);
+
+/**
+  * @brief  Updates the idle memory buffer address in double-buffer mode using recorded dbm_length.
+  * @param  h    Pointer to driver handle.
+  * @param  addr New buffer physical address (must be aligned to MBURST x MSIZE).
+  * @return true on success, false if not in DBM or address invalid/unreachable.
+  */
+bool DMA_LL_SetIdleMemory(DmaLL_Handle_t *h, uint32_t addr);
 
 /**
   * @brief  Stops DMA stream transfer and polls until EN bit is cleared.
