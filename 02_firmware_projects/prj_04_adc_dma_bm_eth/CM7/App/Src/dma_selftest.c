@@ -470,6 +470,9 @@ static bool Test_T11(void)
 /* ---- Public Runner ------------------------------------------------------ */
 void DMA_SelfTest_CM7_Run(void)
 {
+#ifdef FW_GIT_REV
+    APP_LOG("[m7_dma_test] rev=%s", FW_GIT_REV);
+#endif
     bool t8 = Test_T8();
     APP_LOG("[m7_dma_test] T8_DCACHE_COHERENCY: %s", t8 ? "PASS" : "FAIL");
 

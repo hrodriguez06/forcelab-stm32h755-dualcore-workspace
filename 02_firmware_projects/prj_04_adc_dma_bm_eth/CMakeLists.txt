@@ -17,6 +17,30 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/common_flags.cmake)
 
+# ---- Git revision injection for selftest traceability (R2) ----------------
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+    OUTPUT_VARIABLE GIT_REV
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT GIT_REV)
+    set(GIT_REV "unknown")
+else()
+    execute_process(
+        COMMAND git status --porcelain -uno
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+        OUTPUT_VARIABLE GIT_STATUS_OUT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(GIT_STATUS_OUT)
+        set(GIT_REV "${GIT_REV}-dirty")
+    endif()
+endif()
+add_compile_definitions(FW_GIT_REV="${GIT_REV}")
+
 # Optional selftest: exercises shared UART driver on USART2 (PD5/PD6)
 option(UART_DRIVER_SELFTEST "Enable shared UART driver self-test on USART2 (PD5/PD6)" OFF)
 

@@ -1217,6 +1217,12 @@ void DMA_SelfTest_CM4_Run(void)
     bool t7 = Test_T7();
     if (t7) g_dma_selftest_results.pass_mask |= (1UL << 7);
 
+#ifdef FW_GIT_REV
+    Line_Begin();
+    Line_Str("rev="); Line_Str(FW_GIT_REV);
+    Line_End();
+#endif
+
     Line_Begin();
     Line_Str("T1_M2M="); Line_Str(t1 ? "PASS" : "FAIL");
     Line_Str(" T2_REJ="); Line_Str(t2 ? "PASS" : "FAIL");
