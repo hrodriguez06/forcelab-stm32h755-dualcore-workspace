@@ -85,10 +85,82 @@ static uint32_t s_diag_t4_ll_tc = 0U;
 static uint32_t s_diag_t4_ll_ht = 0U;
 static uint32_t s_diag_t5 = 0U;
 static uint32_t s_diag_t6 = 0U;
+static uint32_t s_t1_combos_ok = 0U;
+static uint32_t s_t1_combos_rej = 0U;
 
 /* Buffers in SRAM2 */
 static uint32_t s_m2m_src[64] DMA_BM_ALIGN_32;
 static uint32_t s_m2m_dst[64] DMA_BM_ALIGN_32;
+
+static bool Run_M2M_Combo(DMA_Stream_TypeDef *stream,
+                          uint32_t psize, uint32_t msize,
+                          uint32_t threshold,
+                          uint32_t pburst, uint32_t mburst,
+                          uint32_t ndtr_items)
+{
+    uint8_t *src_b = (uint8_t *)s_m2m_src;
+    uint8_t *dst_b = (uint8_t *)s_m2m_dst;
+    for (uint32_t i = 0; i < 64; i++)
+    {
+        src_b[i] = (uint8_t)(0x30U + i);
+        dst_b[i] = 0x5AU;
+    }
+
+    DmaBm_ConfigEx_t cfg = {
+        .base = {
+            .stream           = stream,
+            .request_id       = 0U,
+            .direction        = DMA_BM_DIR_MEM_TO_MEM,
+            .periph_data_size = psize,
+            .mem_data_size    = msize,
+            .periph_inc       = true,
+            .mem_inc          = true,
+            .circular         = false,
+            .priority         = DMA_BM_PRIORITY_HIGH,
+            .enable_fifo      = true,
+            .fifo_threshold   = threshold,
+            .periph_addr      = (uint32_t)s_m2m_src,
+            .mem_addr         = (uint32_t)s_m2m_dst,
+            .buffer_length    = ndtr_items
+        },
+        .mem1_addr       = 0U,
+        .mem_burst       = mburst,
+        .periph_burst    = pburst,
+        .periph_flow_ctrl= false,
+        .fail_if_busy    = true,
+        .stop_spin_limit = 10000U
+    };
+
+    DMA_BM_DeinitStream(stream);
+
+    if (!DMA_BM_InitStreamEx(&cfg))
+    {
+        return false;
+    }
+
+    if (!DMA_BM_StartEx(stream))
+    {
+        DMA_BM_DeinitStream(stream);
+        return false;
+    }
+
+    uint32_t spin = 100000U;
+    while (((DMA_BM_GetFlags(stream) & (DMA_BM_FLAG_TC | DMA_BM_FLAG_TE)) == 0U) && (spin > 0U))
+    {
+        spin--;
+    }
+
+    uint32_t flags = DMA_BM_TakeFlags(stream);
+    DMA_BM_DeinitStream(stream);
+
+    if (((flags & DMA_BM_FLAG_TC) == 0U) ||
+        ((flags & (DMA_BM_FLAG_TE | DMA_BM_FLAG_DME)) != 0U))
+    {
+        return false;
+    }
+
+    return (memcmp(src_b, dst_b, 64) == 0);
+}
 static uint8_t  s_uart_tx_buf[256] DMA_BM_ALIGN_32;
 static uint8_t  s_uart_rx_buf[256] DMA_BM_ALIGN_32;
 static uint16_t s_tim_rx_buf[1000] DMA_BM_ALIGN_32;
@@ -270,6 +342,125 @@ static bool Test_T1(void)
         return false;
     }
     DMA_LL_Deinit(&h_t1, 10000U);
+
+    /* ---- Exhaustive combinatorial matrix of FIFO bursts (X10a) ---- */
+    static const uint32_t sizes[3] = {
+        DMA_BM_DATA_SIZE_BYTE,
+        DMA_BM_DATA_SIZE_HALFWORD,
+        DMA_BM_DATA_SIZE_WORD
+    };
+    static const uint32_t ths[4] = {
+        DMA_BM_FIFO_TH_1_4,
+        DMA_BM_FIFO_TH_1_2,
+        DMA_BM_FIFO_TH_3_4,
+        DMA_BM_FIFO_TH_FULL
+    };
+    static const uint32_t bursts[4] = {
+        DMA_BM_BURST_SINGLE,
+        DMA_BM_BURST_INCR4,
+        DMA_BM_BURST_INCR8,
+        DMA_BM_BURST_INCR16
+    };
+
+    s_t1_combos_ok = 0U;
+    s_t1_combos_rej = 0U;
+
+    for (uint32_t s_idx = 0; s_idx < 3; s_idx++)
+    {
+        uint32_t sz = sizes[s_idx];
+        uint32_t ndtr = 64U >> sz;
+
+        for (uint32_t t_idx = 0; t_idx < 4; t_idx++)
+        {
+            uint32_t th = ths[t_idx];
+
+            for (uint32_t b_idx = 0; b_idx < 4; b_idx++)
+            {
+                uint32_t b = bursts[b_idx];
+
+                bool expect_valid = DMA_BM_CheckFifoBurst(sz, th, b) &&
+                                    DMA_BM_CheckPeriphBurst(sz, th, b);
+
+                if (expect_valid)
+                {
+                    if (!Run_M2M_Combo(DMA1_Stream1, sz, sz, th, b, b, ndtr))
+                    {
+                        s_diag_t1 = 100U + (s_idx * 16U) + (t_idx * 4U) + b_idx;
+                        return false;
+                    }
+                    s_t1_combos_ok++;
+                }
+                else
+                {
+                    DmaBm_ConfigEx_t cfg_rej = {
+                        .base = {
+                            .stream           = DMA1_Stream1,
+                            .request_id       = 0U,
+                            .direction        = DMA_BM_DIR_MEM_TO_MEM,
+                            .periph_data_size = sz,
+                            .mem_data_size    = sz,
+                            .periph_inc       = true,
+                            .mem_inc          = true,
+                            .circular         = false,
+                            .priority         = DMA_BM_PRIORITY_HIGH,
+                            .enable_fifo      = true,
+                            .fifo_threshold   = th,
+                            .periph_addr      = (uint32_t)s_m2m_src,
+                            .mem_addr         = (uint32_t)s_m2m_dst,
+                            .buffer_length    = ndtr
+                        },
+                        .mem1_addr       = 0U,
+                        .mem_burst       = b,
+                        .periph_burst    = b,
+                        .periph_flow_ctrl= false,
+                        .fail_if_busy    = true,
+                        .stop_spin_limit = 10000U
+                    };
+                    DMA_BM_DeinitStream(DMA1_Stream1);
+                    if (DMA_BM_InitStreamEx(&cfg_rej))
+                    {
+                        DMA_BM_DeinitStream(DMA1_Stream1);
+                        s_diag_t1 = 200U + (s_idx * 16U) + (t_idx * 4U) + b_idx;
+                        return false;
+                    }
+                    if (DMA1_Stream1->CR != 0U)
+                    {
+                        s_diag_t1 = 300U + (s_idx * 16U) + (t_idx * 4U) + b_idx;
+                        return false;
+                    }
+                    s_t1_combos_rej++;
+                }
+            }
+        }
+    }
+
+    /* 3 combinations with PSIZE != MSIZE */
+    /* 1. BYTE -> WORD (TH=FULL, PBURST=INCR16, MBURST=INCR4, NDTR=64) */
+    if (!Run_M2M_Combo(DMA1_Stream1, DMA_BM_DATA_SIZE_BYTE, DMA_BM_DATA_SIZE_WORD,
+                       DMA_BM_FIFO_TH_FULL, DMA_BM_BURST_INCR16, DMA_BM_BURST_INCR4, 64U))
+    {
+        s_diag_t1 = 401U;
+        return false;
+    }
+    s_t1_combos_ok++;
+
+    /* 2. HALFWORD -> WORD (TH=FULL, PBURST=INCR8, MBURST=INCR4, NDTR=32) */
+    if (!Run_M2M_Combo(DMA1_Stream1, DMA_BM_DATA_SIZE_HALFWORD, DMA_BM_DATA_SIZE_WORD,
+                       DMA_BM_FIFO_TH_FULL, DMA_BM_BURST_INCR8, DMA_BM_BURST_INCR4, 32U))
+    {
+        s_diag_t1 = 402U;
+        return false;
+    }
+    s_t1_combos_ok++;
+
+    /* 3. WORD -> BYTE (TH=FULL, PBURST=INCR4, MBURST=INCR16, NDTR=16) */
+    if (!Run_M2M_Combo(DMA1_Stream1, DMA_BM_DATA_SIZE_WORD, DMA_BM_DATA_SIZE_BYTE,
+                       DMA_BM_FIFO_TH_FULL, DMA_BM_BURST_INCR4, DMA_BM_BURST_INCR16, 16U))
+    {
+        s_diag_t1 = 403U;
+        return false;
+    }
+    s_t1_combos_ok++;
 
     return true;
 }
@@ -1227,6 +1418,14 @@ void DMA_SelfTest_CM4_Run(void)
     Line_Str("T1_M2M="); Line_Str(t1 ? "PASS" : "FAIL");
     Line_Str(" T2_REJ="); Line_Str(t2 ? "PASS" : "FAIL");
     Line_Str(" T3_UART="); Line_Str(t3 ? "PASS" : "FAIL");
+    Line_End();
+
+    Line_Begin();
+    Line_Str("T1 combos ok=");
+    Line_U32(s_t1_combos_ok);
+    Line_Str("/26 rej=");
+    Line_U32(s_t1_combos_rej);
+    Line_Str("/25");
     Line_End();
 
     Line_Begin();
