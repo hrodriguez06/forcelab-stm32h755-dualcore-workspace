@@ -36,13 +36,14 @@ extern "C" {
   *
   * @note   Includes the read-back that RCC needs before the peripheral answers,
   *         the same one ST's __HAL_RCC_GPIOx_CLK_ENABLE() performs.
-  * @note   Dual-core: the write is a read-modify-write on RCC_AHB4ENR, which
-  *         both CPUs share, so two cores clocking different ports at the same
-  *         instant can lose one of the two updates. ST's own macro has the
-  *         identical exposure. This driver does not take an HSEM around it on
-  *         purpose - it has to run before the HSEM clock exists. Bring your
-  *         ports up from CPU1 during boot, or guard the call yourself with
-  *         HSEM if CPU2 has to do it while CPU1 is running.
+  * @note   Dual-core: safe from either CPU at any time. RCC_AHB4ENR (offset
+  *         0xE0) is banked per core (RM0399 9.7.1), so each CPU writes its own
+  *         copy and a port stays clocked while either core has its bit set.
+  *         What the two cores DO share are the port's configuration registers
+  *         (MODER, OTYPER, OSPEEDR, PUPDR, AFR): GPIO_BM_ConfigAlternate() and
+  *         GPIO_BM_ConfigAnalog() read-modify-write them without a lock, so two
+  *         cores must not configure pins of the same port at the same time.
+  *         See 00_gpio/README.md section 4.
   */
 bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port);
 

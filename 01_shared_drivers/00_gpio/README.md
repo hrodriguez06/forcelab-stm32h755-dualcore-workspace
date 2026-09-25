@@ -108,11 +108,6 @@ cores.
   those configurations never overlap in time. The planned fix is a critical
   section with an injectable cross-core lock (`IMPLEMENTATION_PLAN.md`, finding
   G1).
-- **The comment in `gpio_bm.h` on `GPIO_BM_EnablePortClock` is wrong on this
-  point.** It says the `RCC_AHB4ENR` write can lose an update between cores and
-  recommends an HSEM. `gpio_bm.c`, commit `91622db` and RM0399 §9.7.1 say the
-  opposite, and the table above is correct. The real shared state is the GPIO
-  configuration registers, which that comment does not mention.
 - **Pin levels (`BSRR`) are atomic** (RM0399 §12.3.5), so writing output levels
   from two cores is safe even without a lock. There is just no API for it here yet.
 
@@ -158,8 +153,9 @@ hardware indirectly, by their consumers on a NUCLEO-H755ZI-Q (Rev V):
 
 These come from the audit in `IMPLEMENTATION_PLAN.md` (IDs in brackets).
 
-- **Cross-core race on shared GPIO registers** (G1): see §4.
-- **Wrong dual-core comment in `gpio_bm.h`** (G2): see §4.
+- **Cross-core race on shared GPIO registers** (G1): see §4. (G2, a comment in
+  `gpio_bm.h` that called the `RCC_AHB4ENR` write a race and said nothing about
+  the shared GPIO registers, has been corrected.)
 - **`pull` and `speed` are masked, not validated** (G3). `pull = 3` programs
   `PUPDR = 11`, which is reserved, and `speed = 4` silently becomes `LOW`.
   `ConfigAlternate` returns `true` in both cases. No current consumer passes
@@ -207,7 +203,7 @@ catalogue driver in phases F0-F6:
 
 - **F0:** `_gpio_bm` target and compatibility alias.
 - **F1:** the BM core. Output, input, open-drain, lock, de-init and read-back, a
-  cross-core lock hook, and fixes G1-G4.
+  cross-core lock hook, and fixes G1, G3 and G4 (G2 is already done).
 - **F2:** EXTI lines 0-15 and the compensation cell.
 - **F3 and F4:** the LL and HAL tiers.
 - **F5:** dual pads (conditional).
