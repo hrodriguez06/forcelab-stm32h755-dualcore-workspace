@@ -1,0 +1,119 @@
+================================================================================
+DMA DRIVER ITERATION 2: NEGATIVE CONTROLS EVIDENCE LOG
+================================================================================
+Per Rule R1 (IMPLEMENTATION_PLAN_2.md §0), every test added or modified in
+iteration 2 was subjected to a hardware negative control: the driver or test code
+was mutated to reintroduce the defect, the firmware was rebuilt and flashed to the
+board, and UART telemetry was captured showing the exact failure line with a
+-dirty git revision. The mutation was subsequently reverted via git checkout, the
+build tree was cleaned, and clean PASS was re-verified.
+
+SUMMARY TABLE
+-------------
+Item  Description                          Mutation Applied                           Failing Output Line               Observed Rev
+----  -----------------------------------  -----------------------------------------  --------------------------------  ----------------
+X11   SetIdleMemory length validation      NDTR-based length in SetIdleMemoryEx       T2_REJ=FAIL                       d45877e-dirty
+X7b   Peripheral burst RM0399 validation   CheckFifoBurst used on periph side         T2_REJ=FAIL                       52a73e0-dirty
+Y3    Non-destructive X2 test              Removed items > 65535 check in dma_hal.c   T9_HAL_MEMCOPY_IT: FAIL           6252ca4-dirty
+Y4    CM7 D-Cache coherency DMA_LL_MemCopy Computed bytes from MSIZE instead of PSIZE T8_DCACHE_COHERENCY: FAIL         53bd261-dirty
+Y5    CheckErrata busy on EN=1 stream      Bypassed EN check in DMA_HAL_CheckErrata   T10_USART3_DMA: FAIL              53bd261-dirty
+X10a  Combinatorial FIFO burst matrix      Rejected Word INCR4 burst in CheckFifo     T1_M2M=FAIL (combos ok=0/26)      53bd261-dirty
+X10b  BDMA Backup SRAM hardware test       Disallowed 0x38800000 in dma_mem_bm.h      T11_BDMA_SRAM4: FAIL              53bd261-dirty
+
+
+1. CONTROL X11 (SetIdleMemory length validation / rejection)
+------------------------------------------------------------
+Mutation: Replaced explicit length check in SetIdleMemoryEx with legacy NDTR-based
+reachability span (which tests case 18 of T2).
+UART Capture:
+[   7.251] [m4_dma_test] rev=d45877e-dirty
+[   9.224] [m4_dma_test] T1_M2M=PASS T2_REJ=FAIL T3_UART=PASS
+[  11.196] [m4_dma_test] T4_TIM7=PASS (tc=10,ht=10) T5_DBM=PASS
+[  13.170] [m4_dma_test] T6_REARM=PASS T7_ITCM=PASS (te=1)
+[  15.147] [m4_dma_test] OVERALL=FAIL (mask=0xFA/0xFE)
+
+
+2. CONTROL X7b (Peripheral burst validation RM0399 §16.3.14)
+------------------------------------------------------------
+Mutation: Replaced DMA_BM_CheckPeriphBurst with DMA_BM_CheckFifoBurst on the
+peripheral side, reintroducing incorrect threshold requirements for peripheral bursts.
+UART Capture:
+[   7.542] [m4_dma_test] rev=52a73e0-dirty
+[   9.515] [m4_dma_test] T1_M2M=PASS T2_REJ=FAIL T3_UART=PASS
+[  11.488] [m4_dma_test] T4_TIM7=PASS (tc=10,ht=10) T5_DBM=PASS
+[  13.460] [m4_dma_test] T6_REARM=PASS T7_ITCM=PASS (te=1)
+[  15.438] [m4_dma_test] OVERALL=FAIL (mask=0xFA/0xFE)
+
+
+3. CONTROL Y3 (Non-destructive X2 test on CM7)
+----------------------------------------------
+Mutation: In dma_hal.c (DMA_HAL_MemCopy), removed the check '|| (items > 65535U)'.
+NDTR truncated to 16, copying only 16 bytes into the 256-byte buffer and returning HAL_OK.
+Canary at offset 64 remained intact (0x55AA55AA), verifying non-destructiveness (R4).
+UART Capture:
+[   1.585] [m7_dma_test] rev=6252ca4-dirty
+[   1.588] [m7_dma_test] T8_DCACHE_COHERENCY: PASS
+[   1.592] [m7_dma_test] T9_HAL_MEMCOPY_IT: FAIL
+[   1.596] [m7_dma_test] T10_USART3_DMA: PASS (TRBUFF verified)
+[   1.599] [m7_dma_test] T10_USART3_DMA: PASS
+[   1.603] [m7_dma_test] T11_BDMA_SRAM4: PASS
+[   1.606] [m7_dma_test] OVERALL: FAIL (T8-T11)
+
+
+4. CONTROL Y4 (CM7 D-Cache coherency for DMA_LL_MemCopy)
+--------------------------------------------------------
+Mutation: In dma_ll.c (DMA_LL_MemCopy), computed cache flush byte count from MSIZE
+instead of PSIZE. With PSIZE=WORD (4 B) and MSIZE=BYTE (1 B), only 16 bytes were
+cleaned instead of 64, causing data corruption in uncached physical RAM.
+UART Capture:
+[   1.623] [m7_dma_test] rev=53bd261-dirty
+[   1.626] [m7_dma_test] T8_DCACHE_COHERENCY: FAIL
+[   1.630] [m7_dma_test] T9_HAL_MEMCOPY_IT: PASS
+[   1.634] [m7_dma_test] T10_USART3_DMA: PASS (TRBUFF verified)
+[   1.638] [m7_dma_test] T10_USART3_DMA: PASS
+[   1.641] [m7_dma_test] T11_BDMA_SRAM4: PASS
+[   1.644] [m7_dma_test] OVERALL: FAIL (T8-T11)
+
+
+5. CONTROL Y5 (CheckErrata busy test on active stream)
+------------------------------------------------------
+Mutation: In dma_hal.c (DMA_HAL_CheckErrata), commented out the stream EN check:
+'if ((s->CR & DMA_SxCR_EN) != 0U) return HAL_BUSY;'.
+UART Capture:
+[   2.875] [m7_dma_test] rev=53bd261-dirty
+[   2.879] [m7_dma_test] T8_DCACHE_COHERENCY: PASS
+[   2.882] [m7_dma_test] T9_HAL_MEMCOPY_IT: PASS
+[   2.887] [m7_dma_test] T10_USART3_DMA: PASS (TRBUFF verified)
+[   2.890] [m7_dma_test] T10_USART3_DMA: FAIL
+[   2.893] [m7_dma_test] T11_BDMA_SRAM4: PASS
+[   2.896] [m7_dma_test] OVERALL: FAIL (T8-T11)
+
+
+6. CONTROL X10a (Combinatorial matrix of FIFO bursts in T1)
+----------------------------------------------------------
+Mutation: In dma_bm.c (DMA_BM_CheckFifoBurst), mutated case DMA_BM_FIFO_TH_FULL under
+WORD to return false, rejecting valid Word INCR4 burst under Full threshold.
+UART Capture:
+[   8.506] [m4_dma_test] rev=53bd261-dirty
+[   8.509] [ipc] m7=13 m4=10  (CPU2 alive)
+[  10.483] [m4_dma_test] T1_M2M=FAIL T2_REJ=PASS T3_UART=PASS
+[  10.485] [ipc] m7=17 m4=30  (CPU2 alive)
+[  12.457] [m4_dma_test] T1 combos ok=0/26 rej=0/25
+[  14.434] [m4_dma_test] T4_TIM7=PASS (tc=9,ht=10) T5_DBM=PASS
+[  16.409] [m4_dma_test] T6_REARM=PASS T7_ITCM=PASS (te=1)
+[  18.384] [m4_dma_test] OVERALL=FAIL (mask=0xFC/0xFE)
+
+
+7. CONTROL X10b (BDMA Backup SRAM hardware test)
+------------------------------------------------
+Mutation: In dma_mem_bm.h, disabled the Backup SRAM address range [0x38800000, 0x38801000)
+for DMA_MEM_BM_MASTER_BDMA, causing reachability rejection in DMA_HAL_MemCopy.
+UART Capture:
+[   2.945] [m7_dma_test] rev=53bd261-dirty
+[   2.949] [m7_dma_test] T8_DCACHE_COHERENCY: PASS
+[   2.952] [m7_dma_test] T9_HAL_MEMCOPY_IT: PASS
+[   2.957] [m7_dma_test] T10_USART3_DMA: PASS (TRBUFF verified)
+[   2.960] [m7_dma_test] T10_USART3_DMA: PASS
+[   2.963] [m7_dma_test] T11_BDMA_SRAM4: FAIL
+[   2.966] [m7_dma_test] OVERALL: FAIL (T8-T11)
+================================================================================

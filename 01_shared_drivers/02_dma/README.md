@@ -20,23 +20,26 @@ Peripheral-First (Plan A), multi-tier shared DMA driver for the STM32H755ZI dual
 | **Controllers** | DMA1, DMA2 + DMAMUX1 | Stride 0x18 validated; indexed 0..7 |
 | **Directions** | P2M, M2P, M2M | M2M forces FIFO mode and rejects circular |
 | **Direct Mode** | Yes | Hardware mandates `PSIZE == MSIZE`; validated at Init |
-| **FIFO Mode & Thresholds** | Yes (1/4, 1/2, 3/4, Full) | Threshold compatibility with burst beats verified |
-| **Burst Transfers** | Yes (INCR4, INCR8, INCR16) | FIFO required; 1 KB AHB boundary checked |
-| **Double-Buffer Mode (DBM)** | Yes (`mem1_addr != 0`) | `DMA_BM_SetIdleMemory`, `DMA_BM_GetCurrentTarget` |
+| **FIFO Mode & Thresholds** | Yes (1/4, 1/2, 3/4, Full) | Validated with `DMA_BM_CheckFifoBurst` (RM0399 §16.3.11) |
+| **Burst Transfers** | Yes (INCR4, INCR8, INCR16) | Memory burst via `CheckFifoBurst`; peripheral burst via `CheckPeriphBurst` (RM0399 §16.3.14). Static assert for 1 KB AHB limit. |
+| **Double-Buffer Mode (DBM)** | Yes (`mem1_addr != 0`) | `DMA_BM_SetIdleMemory`, `DMA_BM_SetIdleMemoryEx` (with explicit length), `DMA_BM_GetCurrentTarget` |
 | **Peripheral Flow Control** | Yes (`PFCTRL`) | Forbidden with M2M and circular |
-| **Automatic Errata TRBUFF** | Yes (ES0445 2.20.3 / 2.3.12) | Applied automatically for UART/HASH when `REV_ID >= 0x2000` |
-| **Memory Domain Validation** | Yes (`DMA_MEM_BM_IsReachable`) | Rejects ITCM (`0x00000000`) and DTCM (`0x20000000`) |
+| **Automatic Errata TRBUFF** | Yes (ES0445 2.20.3 / 2.3.12) | Applied automatically for UART/HASH when `REV_ID >= 0x2000` (silicon verified) |
+| **Memory Domain Validation** | Yes (`DMA_MEM_BM_IsReachable`) | Rejects ITCM (`0x00000000`) and DTCM (`0x20000000`); NDTR evaluated in PSIZE units |
+| **Safe IRQn Resolution** | Yes (`DMA_BM_GetIRQnEx`) | Returns `bool` + `out` pointer; `DMA_BM_IRQN_INVALID` sentinel defined |
 | **Stream Collision Protection** | Yes (`fail_if_busy`) | Refuses Init if stream is active instead of aborting |
+
 ### Capability Matrix (HAL Tier `_hal` & BDMA)
 
 | Feature | Support in `dma_hal` | Notes |
 | :--- | :---: | :--- |
 | **Controllers** | DMA1, DMA2 (16 streams) + BDMA (8 channels) | Supports both standard DMA streams and D3 BDMA channels |
 | **M2M FIFO Enforcement** | Yes | Reconciles HAL defect by forcing `DMA_FIFOMODE_ENABLE` for M2M |
-| **Domain Checking** | Yes (`DMA_MEM_BM_IsReachable`) | Enforces DMA1/DMA2 cannot reach TCM; BDMA strictly restricted to D3 SRAM4 |
-| **Automatic Errata TRBUFF** | Yes (`DMA_HAL_CheckErrata`) | Verified and applied for UART/HASH requests on revision >= 0x2000 |
+| **Domain Checking** | Yes (`DMA_MEM_BM_IsReachable`) | Enforces DMA1/DMA2 cannot reach TCM; BDMA validated for SRAM4 and Backup SRAM |
+| **Automatic Errata TRBUFF** | Yes (`DMA_HAL_CheckErrata`) | Verified on hardware; returns `HAL_BUSY` if stream EN=1 |
+| **Safe IRQn Resolution** | Yes (`DMA_HAL_GetIRQnEx`) | Returns `bool` + `out` pointer to avoid SysTick_IRQn aliasing |
 | **IRQ Registry & Dispatch** | Yes (`DMA_HAL_IRQDispatch`) | Per-core 24-entry table; no vector symbol definitions in driver |
-| **Cache-Coherent MemCopy** | Yes (`DMA_HAL_MemCopy`) | Handles clean, prepare, transfer, wait, and complete invalidate |
+| **Cache-Coherent MemCopy** | Yes (`DMA_HAL_MemCopy`) | Handles clean, prepare, transfer, wait, and complete invalidate (NDTR in PSIZE, items <= 65535) |
 
 ---
 
@@ -243,4 +246,29 @@ In both `dma_bm` and `dma_ll`:
 - **Direct Mode Error (DMEIF / `DMA_LL_FLAG_DME`)**: Occurs when a new transfer request arrives in direct mode before the previous one finished. Hardware automatically clears `CR.EN` and disables the stream. Accumulated in `h->error_flags` and passed to callback.
 - **FIFO Error (FEIF / `DMA_LL_FLAG_FE`)**: Occurs on FIFO overrun/underrun. Hardware does NOT automatically disable the stream; it sets FEIF and continues once FIFO levels are restored (identical to ST HAL policy which omits FEIE in `HAL_DMA_Start_IT`). Tracked in `h->error_flags` but considered non-fatal.
 - **Error Retrieval**: In `dma_ll`, `DMA_LL_TakeErrors()` retrieves and clears accumulated errors inside a `PRIMASK` critical section, preventing race conditions with ISR execution.
+
+---
+
+## 6. Hardware Verification & Silicon Findings (Iteration 2)
+
+All driver tiers underwent exhaustive verification on physical STM32H755ZI-Q silicon (device ID 0x450, silicon revision ID 0x2003, Rev V) in project `prj_04_adc_dma_bm_eth`:
+
+1. **TRBUFF Workaround Verification (ES0445 2.20.3 / 2.3.12)**:
+   - Hardware readback of `DMA_SxCR` immediately after `HAL_DMA_Init` on USART3 TX stream confirms that bit 20 (`TRBUFF`) is actively set by the driver on revision >= 0x2000.
+   - `DMA_HAL_CheckErrata()` returns `HAL_BUSY` when called on an active stream (`EN=1`) and leaves `CR` unmodified. Note: `HAL_DMA_Init()` clears `EN` before calling errata verification, so propagation of `HAL_BUSY` cannot be tested through `DMA_HAL_Init()`.
+
+2. **BDMA Access to Backup SRAM (RM0399 Rev 4 Fig. 1, Table 2, §2.1.2)**:
+   - Silicon test T11b confirmed bidirectional 32-byte M2M transfers between SRAM4 (`0x38000000`) and Backup SRAM (`0x38800000`) via `BDMA_Channel0`.
+   - Backup SRAM is confirmed fully accessible to BDMA through the D3 32-bit AHB bus matrix when `PWR->CR1 |= PWR_CR1_DBP` and `RCC->AHB4ENR |= RCC_AHB4ENR_BKPRAMEN` are active. The entry in `dma_mem_bm.h` is retained as valid silicon capability.
+
+3. **Peripheral Burst Rule (RM0399 §16.3.14)**:
+   - The peripheral side of the DMA FIFO operates under dedicated hardware rules distinct from memory FIFO bursts: $(PBURST \times PSIZE) \le 16\text{ bytes}$, and if $(PBURST \times PSIZE) = 16\text{ bytes}$, threshold 3/4 is forbidden.
+   - When `PINC=0` (fixed peripheral address), alignment is only required to `PSIZE`, not to the burst beat span.
+
+4. **Combinatorial FIFO Burst Matrix**:
+   - Tested all 48 combinations of PSIZE = MSIZE across data sizes {BYTE, HALFWORD, WORD}, thresholds {1/4, 1/2, 3/4, FULL}, and bursts {SINGLE, INCR4, INCR8, INCR16}.
+   - All 23 valid combinations execute 64-byte M2M transfers verified with `memcmp`.
+   - All 25 invalid combinations are rejected by `DMA_BM_InitStreamEx` with `CR == 0`.
+   - Tested 3 valid cross-size combinations (BYTE -> WORD, HALFWORD -> WORD, WORD -> BYTE) with byte-for-byte correctness confirmed.
+
 
