@@ -3,20 +3,20 @@
 - **Repositorio:** `stm32h755`
 - **Rama:** `driver/dma-iteration-2` (base `b067fec`)
 - **Fecha:** 25 de septiembre de 2026
-- **Estado:** COMPLETADO — Todos los gates superados, 100% verificado en hardware.
+- **Estado:** COMPLETADO — Todos los gates superados, verificado en hardware (salvo dos condiciones de fallo de hardware/HAL no inducibles en ejecución normal, detalladas en §7.4).
 
 ---
 
 ## 1. Resumen Ejecutivo
 
-La **Iteración 2** del driver compartido DMA para STM32H755ZI (`01_shared_drivers/02_dma`) implementó y verificó las acciones correctivas y ampliaciones técnicas derivadas de la auditoría (`AUDIT.md` §3, §6, §7).
+La **Iteración 2** del driver compartido DMA para STM32H755ZI (`01_shared_drivers/02_dma`) implementó y verificó las acciones correctivas y ampliaciones técnicas derivadas de la auditoría (`AUDIT.md` §3, §6, §7 y §9).
 
-Se completaron todas las fases planificadas en [`IMPLEMENTATION_PLAN_2.md`](./IMPLEMENTATION_PLAN_2.md):
-- **G1 (Higiene y mantenimiento):** Actualización de comentarios obsoletos (X9), eliminación de dead-code y propagación de errores en `DMA_LL_Deinit` (X8), aserción estática de límites de ráfaga (X7a).
+Se completaron todas las fases planificadas en [`IMPLEMENTATION_PLAN_2.md`](./IMPLEMENTATION_PLAN_2.md) y la subsanación del hallazgo bloqueante Z1:
+- **G1 (Higiene y mantenimiento):** Actualización de comentarios obsoletos (X9), eliminación de comprobación muerta PFCTRL+circular y propagación de errores en `DMA_LL_Deinit` (X8), aserción estática de límites de ráfaga (X7a).
 - **G2 (Robustez y tipado de APIs):** Resolución segura de interrupciones `GetIRQnEx` con centinela `DMA_BM_IRQN_INVALID` (X6), actualización de memoria inactiva en DBM con longitud explícita `SetIdleMemoryEx` y `DMA_LL_SetIdleMemory` (X11).
 - **G3 (Alineación con RM0399 y corrección funcional):** Validación de ráfagas periféricas vía `DMA_BM_CheckPeriphBurst` según RM0399 §16.3.14 y relajación de alineación para `PINC=0` (X7b).
-- **G4 (Verificación empírica en hardware y trazabilidad):** Trazabilidad de revisión `FW_GIT_REV` en banners de selftest (G4.1), test de desbordamiento no destructivo en regresión (Y3), test de coherencia D-Cache para `DMA_LL_MemCopy` en CM7 (Y4), test de stream ocupado en `CheckErrata` (Y5), matriz combinatoria exhaustiva de 51 configuraciones de ráfaga FIFO en CM4 (X10a), y confirmación de acceso de BDMA a Backup SRAM en hardware (X10b).
-- **G5 (Evidencia, documentación y cierre):** Captura limpia de hardware con hash exacto, registro exhaustivo de 7 controles negativos mutados en silicio (R1), verificación de presupuesto de memoria flash en CM4 release (1.596 B $\le$ 1.676 B), actualización de [`README.md`](./README.md) y validación en vivo de telemetría de producción a 500 kSPS sin errores.
+- **G4 (Verificación empírica en hardware y trazabilidad):** Trazabilidad de revisión `FW_GIT_REV` en banners de selftest (G4.1), test de desbordamiento no destructivo en regresión (Y3), test de coherencia D-Cache para `DMA_LL_MemCopy` en CM7 (Y4), test de stream ocupado en `CheckErrata` (Y5), matriz combinatoria exhaustiva de ráfagas FIFO en CM4 con oráculo independiente (X10a, Z1), y confirmación de acceso de BDMA a Backup SRAM en hardware (X10b).
+- **G5 (Evidencia, documentación y cierre):** Captura limpia de hardware con hash exacto `rev=df46b94`, registro exhaustivo de 7 controles negativos mutados en silicio (R1), verificación de presupuesto de memoria flash en CM4 release (1.596 B $\le$ 1.676 B total `.text + .rodata`, 1.588 B `.text`), actualización de [`README.md`](./README.md) y validación en vivo de telemetría de producción a 500 kSPS sin errores.
 
 ---
 
@@ -25,7 +25,7 @@ Se completaron todas las fases planificadas en [`IMPLEMENTATION_PLAN_2.md`](./IM
 | Punto | Categoría / Defecto | Acción Correctiva Implementada | Estado | Commit |
 | :--- | :--- | :--- | :---: | :--- |
 | **X9** | Comentarios obsoletos | Actualizados comentarios en `dma_bm.h`, `dma_bm.c` y `dma_ll.c` reflejando líneas de D-Cache de 32 B, bits TRBUFF y regla de unidades PSIZE de NDTR (RM0399 §16.3.12). | **CERRADO** | `4922386` |
-| **X8** | Dead code PFCTRL y retorno en `DMA_LL_Deinit` | Eliminada rama muerta `cfg->periph_flow_ctrl` en P2M en `dma_ll.c`. Propagado el fallo de parada de stream como valor de retorno de `DMA_LL_Deinit()`. | **CERRADO** | `9dd4baa` |
+| **X8** | Dead code PFCTRL y retorno en `DMA_LL_Deinit` | Eliminado check redundante `mode == CIRCULAR` dentro del bloque `mode == PFCTRL` en `dma_ll.c` (modos escalares mutuamente excluyentes; circular + PFCTRL no soportado en HW). Propagado fallo de parada de stream en `DMA_LL_Deinit()`. | **CERRADO** | `9dd4baa` |
 | **X7a** | Comprobación ráfagas > 1 KB en runtime | Reemplazadas comprobaciones inalcanzables en runtime por un `_Static_assert` en `dma_bm.c`: `DMA_BM_MAX_BURST_BYTES <= 1024U`. | **CERRADO** | `4ab5c42` |
 | **X6** | Sentinel `GetIRQn` colisionaba con `SysTick_IRQn` | Añadidas variantes seguras `DMA_BM_GetIRQnEx` y `DMA_HAL_GetIRQnEx` con retorno `bool` y puntero de salida `out`. Definido macro `DMA_BM_IRQN_INVALID` con advertencia `@warning`. | **CERRADO** | `d45877e` |
 | **X11** | `SetIdleMemory` span basado en NDTR decreciente | Creado `DMA_BM_SetIdleMemoryEx()` con parámetro de longitud explícita y `DMA_LL_SetIdleMemory()` registrando `dbm_length` al arrancar. Comprobación de TEIF contra carreras de hardware al conmutar CT. | **CERRADO** | `52a73e0` |
@@ -34,17 +34,21 @@ Se completaron todas las fases planificadas en [`IMPLEMENTATION_PLAN_2.md`](./IM
 | **Y3** | Test X2 destructivo en regresión | Modificado T9 caso 1c en CM7 con `bytes = 65568U` (múltiplo de 32 B). En regresión, el truncamiento de NDTR copia solo 32 B, dejando el canary en offset 64 intacto sin corromper memoria adyacente (R4). | **CERRADO** | `53bd261` |
 | **Y4** | Coherencia D-Cache para `DMA_LL_MemCopy` en CM7 | Incorporado test T8b en CM7 ejecutando `DMA_LL_MemCopy` sobre `DMA2_Stream3` con PSIZE=WORD y MSIZE=BYTE (16 items = 64 bytes) verificando limpieza y lectura coherente en RAM física. | **CERRADO** | `0ca9844` |
 | **Y5** | Test de stream ocupado en `CheckErrata` | Añadido caso T10b en CM7 forzando `EN=1` y verificando que `DMA_HAL_CheckErrata()` retorna `HAL_BUSY` sin modificar `CR`. | **CERRADO** | `64c4736` |
-| **X10a** | Matriz combinatoria exhaustiva de bursts FIFO | Implementada matriz de 48 combinaciones PSIZE=MSIZE ($3 \times 4 \times 4$) + 3 combinaciones PSIZE $\ne$ MSIZE en CM4 T1. Verificadas en hardware: `26/26 ok` y `25/25 rej`. | **CERRADO** | `9018c76` |
+| **X10a** | Matriz combinatoria de bursts FIFO | Implementada matriz de 48 combinaciones PSIZE=MSIZE + 3 heterogéneas en CM4 T1. | **CERRADO** | `9018c76` |
 | **X10b** | Acceso de BDMA a Backup SRAM en hardware | Caso T11b en CM7 verificó transferencias M2M bidireccionales vía BDMA entre SRAM4 (`0x38000000`) y Backup SRAM (`0x38800000`). Confirmada la conexión en la matriz AHB D3 (RM0399). | **CERRADO** | `4418037` |
-| **G5** | Documentación, capturas y verificación final | Generados `dma_selftest_capture.txt`, `dma_negative_controls.txt`, actualizado `README.md`, verificado tamaño release en CM4 (1.596 B) y comprobada telemetría de producción a 500 kSPS. | **CERRADO** | `b829467` |
+| **Z1** | Oráculo independiente para matriz de bursts FIFO | Sustituido el oráculo tautológico por tabla `s_rm0399_burst_valid[3][4][4]` (RM0399 Tabla 116 y §16.3.14). Bucle sin aborto temprano; reporte completo `valid=23 ok=23 invalid=25 rej=25 mismatch=0`. | **CERRADO** | `df46b94` |
+| **G5** | Documentación, capturas y verificación final | Generados `dma_selftest_capture.txt`, `dma_negative_controls.txt`, actualizado `README.md`, verificado tamaño release en CM4 (1.596 B total, 1.588 B `.text`) y comprobada telemetría de producción a 500 kSPS. | **CERRADO** | (HEAD) |
 
 ---
 
 ## 3. Registro Histórico de Commits
 
-La rama contiene exactamente 13 commits atómicos, convencionales y trazables:
+La rama `driver/dma-iteration-2` contiene los siguientes commits atómicos, convencionales y trazables sobre `main` (`b067fec`):
 
 ```
+df46b94 test(prj_04): add independent oracle for FIFO burst matrix in T1
+1bfc763 docs(dma): record the iteration-2 audit, blocked on Z1
+c11e30c docs(dma): add iteration 2 closure report
 b829467 docs(dma): update README for iteration 2 features and findings
 4418037 test(dma): verify BDMA access to Backup SRAM on hardware
 9018c76 test(dma): add exhaustive combinatorial matrix for FIFO bursts in T1
@@ -72,24 +76,27 @@ El registro completo con los bloques de terminal se encuentra en:
 ### Resumen de Controles Negativos
 1. **X11 (`SetIdleMemoryEx`):** Mutación usando NDTR decreciente para validar alcance $\to$ Fallo capturado: `T2_REJ=FAIL` (`rev=d45877e-dirty`).
 2. **X7b (`CheckPeriphBurst`):** Mutación usando `CheckFifoBurst` en el lado periférico $\to$ Fallo capturado: `T2_REJ=FAIL` (`rev=52a73e0-dirty`).
-3. **Y3 (Test X2 no destructivo):** Mutación eliminando comprobación `items > 65535` en `DMA_HAL_MemCopy` $\to$ Fallo capturado: `T9_HAL_MEMCOPY_IT: FAIL` (`rev=6252ca4-dirty`), canary en offset 64 intacto.
+3. **Y3 (Test X2 no destructivo):** Mutación eliminando comprobación `items > 65535` en `DMA_HAL_MemCopy` $\to$ Fallo capturado: `T9_HAL_MEMCOPY_IT: FAIL` (`rev=6252ca4-dirty`), truncamiento a 32 B con canary en offset 64 intacto.
 4. **Y4 (D-Cache en `DMA_LL_MemCopy`):** Mutación calculando bytes desde MSIZE en vez de PSIZE $\to$ Fallo capturado: `T8_DCACHE_COHERENCY: FAIL` (`rev=53bd261-dirty`).
 5. **Y5 (`CheckErrata` con stream activo):** Mutación omitiendo comprobación de `EN` $\to$ Fallo capturado: `T10_USART3_DMA: FAIL` (`rev=53bd261-dirty`).
-6. **X10a (Matriz combinatoria de bursts):** Mutación rechazando ráfaga legal Word INCR4 $\to$ Fallo capturado: `T1_M2M=FAIL (combos ok=0/26)` (`rev=53bd261-dirty`).
+6. **X10a / Z1 (Matriz combinatoria de bursts con oráculo independiente):** Mutación en `DMA_BM_CheckFifoBurst` bajo BYTE + TH_1_2 haciendo que INCR8 retorne `false`. Oráculo detecta `mismatch=1`, bucle evalúa las 48 combinaciones completas $\to$ Fallo capturado: `T1 combos valid=23 ok=22 invalid=25 rej=25 mismatch=1`, `T1_M2M=FAIL`, `OVERALL=FAIL (mask=0xFC/0xFE)` (`rev=df46b94-dirty`).
 7. **X10b (Acceso BDMA a Backup SRAM):** Mutación inhabilitando `0x38800000` en `dma_mem_bm.h` $\to$ Fallo capturado: `T11_BDMA_SRAM4: FAIL` (`rev=53bd261-dirty`).
+
+#### Nota de trazabilidad sobre la regla R2
+Los controles negativos Y4, Y5 y X10b fueron ejecutados y verificados en hardware sobre la revisión `53bd261-dirty` antes de realizar los commits de cada caso específico en el repositorio, debido a que se agruparon durante la sesión de trabajo interactiva. En contraste, el control negativo de Z1 fue ejecutado con trazabilidad estricta R2 sobre `df46b94-dirty` inmediatamente tras commitear Z1.
 
 ---
 
 ## 5. Captura de Selftest en Hardware y Trazabilidad
 
 - **Archivo de captura:** `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/dma_selftest_capture.txt`
-- **Revisión en silicio:** `rev=4418037` (limpio, sin `-dirty`)
+- **Revisión en silicio:** `rev=df46b94` (limpio, sin `-dirty`)
 
 ```
 === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
-[m7_dma_test] rev=4418037
+[m7_dma_test] rev=df46b94
 [m7_dma_test] T8_DCACHE_COHERENCY: PASS
 [m7_dma_test] T9_HAL_MEMCOPY_IT: PASS
 [m7_dma_test] T10_USART3_DMA: PASS (TRBUFF verified)
@@ -97,9 +104,9 @@ El registro completo con los bloques de terminal se encuentra en:
 [m7_dma_test] T11_BDMA_SRAM4: PASS
 [m7_dma_test] OVERALL: PASS (T8-T11)
 ...
-[m4_dma_test] rev=4418037
+[m4_dma_test] rev=df46b94
 [m4_dma_test] T1_M2M=PASS T2_REJ=PASS T3_UART=PASS
-[m4_dma_test] T1 combos ok=26/26 rej=25/25
+[m4_dma_test] T1 combos valid=23 ok=23 invalid=25 rej=25 mismatch=0
 [m4_dma_test] T4_TIM7=PASS (tc=9,ht=10) T5_DBM=PASS
 [m4_dma_test] T6_REARM=PASS T7_ITCM=PASS (te=1)
 [m4_dma_test] OVERALL=PASS (mask=0xFE/0xFE)
@@ -124,9 +131,12 @@ Medición en `build/release/cm4_firmware.map` (excluyendo secciones descartadas 
 | `.text.DMA_BM_Start` | `0x08101d14` | 24 B |
 | `.rodata.s_burst_beats` | `0x08101ecc` | 4 B |
 | `.rodata.s_stream_bit_shifts` | `0x08101ed0` | 4 B |
-| **Total enlazado `dma_bm.c.obj`** | | **1 596 B** |
+| **Total enlazado `dma_bm.c.obj` (`.text + .rodata`)** | | **1 596 B** |
+| **Total código ejecutable (`.text` únicamente)** | | **1 588 B** |
 | **Límite presupuestario (R3)** | | **$\le 1 676\text{ B}$** |
 | **Margen disponible** | | **80 B libres** |
+
+El total enlazado de `dma_bm.c.obj` es de 1 596 B (`.text + .rodata`). El código ejecutable (`.text`) mide estrictamente 1 588 B, complementado por 8 B de tablas constantes en `.rodata` (`s_burst_beats` de 4 B y `s_stream_bit_shifts` de 4 B).
 
 ---
 
@@ -145,6 +155,10 @@ Medición en `build/release/cm4_firmware.map` (excluyendo secciones descartadas 
 3. **Comportamiento de Ráfagas Periféricas en FIFO (RM0399 §16.3.14):**
    - Las ráfagas del puerto periférico en modo FIFO están restringidas por el límite de 16 B de la FIFO y no por las reglas de umbral de memoria.
    - Cuando el incremento periférico está desactivado (`PINC=0`), la alineación de la dirección periférica solo requiere ser múltiplo de `PSIZE`, permitiendo apuntar a registros periféricos de ancho fijo independientemente del número de beats de la ráfaga.
+
+4. **Casos no ejercitables en hardware:**
+   - **Fallo de parada en `DMA_LL_Deinit` (X8):** La propagación del fallo requiere que `DMA_LL_Stop()` no logre apagar el stream (`EN=1`) tras expirar el timeout, lo cual requeriría silicio físicamente dañado o un bloqueo catastrófico de bus.
+   - **Propagación de `CheckErrata` retornando fallo desde `DMA_HAL_Init` (Y5):** `HAL_DMA_Init()` de STM32Cube HAL desactiva explícitamente el bit `EN` antes de invocar la comprobación de erratas, haciendo que el camino donde `DMA_HAL_CheckErrata()` retorna `HAL_BUSY` en inicialización normal sea inalcanzable en hardware no alterado.
 
 ---
 

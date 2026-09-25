@@ -89,19 +89,26 @@ UART Capture:
 [   2.896] [m7_dma_test] OVERALL: FAIL (T8-T11)
 
 
-6. CONTROL X10a (Combinatorial matrix of FIFO bursts in T1)
-----------------------------------------------------------
-Mutation: In dma_bm.c (DMA_BM_CheckFifoBurst), mutated case DMA_BM_FIFO_TH_FULL under
-WORD to return false, rejecting valid Word INCR4 burst under Full threshold.
+6. CONTROL X10a / Z1 (Combinatorial matrix of FIFO bursts in T1 with independent oracle)
+--------------------------------------------------------------------------------------
+Mutation: In dma_bm.c (DMA_BM_CheckFifoBurst), mutated case DMA_BM_FIFO_TH_1_2 under
+BYTE to only return (burst == DMA_BM_BURST_INCR4), rejecting valid INCR8 burst under 1/2 threshold.
+This isolates the test failure to the combinatorial burst matrix in T1 without affecting earlier cases.
+Independent oracle detects the mismatch, loop runs to completion across all 48 combinations, and T1 fails.
 UART Capture:
-[   8.506] [m4_dma_test] rev=53bd261-dirty
-[   8.509] [ipc] m7=13 m4=10  (CPU2 alive)
-[  10.483] [m4_dma_test] T1_M2M=FAIL T2_REJ=PASS T3_UART=PASS
-[  10.485] [ipc] m7=17 m4=30  (CPU2 alive)
-[  12.457] [m4_dma_test] T1 combos ok=0/26 rej=0/25
-[  14.434] [m4_dma_test] T4_TIM7=PASS (tc=9,ht=10) T5_DBM=PASS
-[  16.409] [m4_dma_test] T6_REARM=PASS T7_ITCM=PASS (te=1)
-[  18.384] [m4_dma_test] OVERALL=FAIL (mask=0xFC/0xFE)
+[  11.008] [m4_dma_test] rev=df46b94-dirty
+[  11.011] [ipc] m7=13 m4=10  (CPU2 alive)
+[  12.982] [m4_dma_test] T1_M2M=FAIL T2_REJ=PASS T3_UART=PASS
+[  12.985] [ipc] m7=17 m4=30  (CPU2 alive)
+[  14.957] [m4_dma_test] T1 combos valid=23 ok=22 invalid=25 rej=25 mismatch=1
+[  14.959] [ipc] m7=21 m4=50  (CPU2 alive)
+[  14.976] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  16.928] [m4_dma_test] T4_TIM7=PASS (tc=9,ht=10) T5_DBM=PASS
+[  16.931] [ipc] m7=25 m4=70  (CPU2 alive)
+[  18.901] [m4_dma_test] T6_REARM=PASS T7_ITCM=PASS (te=1)
+[  18.904] [ipc] m7=29 m4=90  (CPU2 alive)
+[  19.916] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  20.873] [m4_dma_test] OVERALL=FAIL (mask=0xFC/0xFE)
 
 
 7. CONTROL X10b (BDMA Backup SRAM hardware test)
