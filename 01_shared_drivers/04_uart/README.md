@@ -75,7 +75,7 @@ function and kernel clock frequency all come from the caller.
 | `PRESC`, `BRR`, `CR1..CR3`, `UE`, wait for `TEACK` / `REACK` | driver | HAL (`HAL_UART_Init`) |
 | NVIC priority and enable | driver (`UART_LL_EnableRxIrq`) | **application** |
 | IRQ vector (`USARTx_IRQHandler`) | **application**, forwarding to `UART_LL_IrqService` | **application**, forwarding to `HAL_UART_IRQHandler` |
-| DMA stream configuration | not provided | **application** (`HAL_DMA_Init`), then `UART_HAL_CheckDmaErrata` |
+| DMA stream configuration | **application**, with `02_dma` (`dma_bm` / `dma_ll`, which set TRBUFF themselves). The UART driver has no DMA hook: the application sets `CR3.DMAT` / `DMAR` | **application** (`HAL_DMA_Init`, or `DMA_HAL_Init` from `02_dma`), then `UART_HAL_CheckDmaErrata` |
 | Completion callbacks (`HAL_UART_TxCpltCallback`, `HAL_UARTEx_RxEventCallback`, ...) | - | **application**. The driver defines none. |
 
 ### 2.1 The kernel clock: what to pass in `kernel_clock_hz`
@@ -436,7 +436,7 @@ rate at a high kernel clock therefore needs BM or LL.
 
 | Erratum | Issue | What the driver does |
 | :--- | :--- | :--- |
-| 2.20.3 | DMA stream locked on USART transfers | `UART_HAL_CheckDmaErrata()` sets bit 20 of `DMA_SxCR` and reads it back. It returns `HAL_ERROR` if the handle is not a DMA1/DMA2 stream or its request is not a USART/UART request, and `HAL_BUSY` if the stream is enabled (`CR` is write-protected then). ST's `HAL_DMA_Init()` already sets the bit for UART requests on Rev V; the check makes it explicit and verifiable. |
+| 2.20.3 | DMA stream locked on USART transfers | `UART_HAL_CheckDmaErrata()` sets bit 20 of `DMA_SxCR` and reads it back. It returns `HAL_ERROR` if the handle is not a DMA1/DMA2 stream or its request is not a USART/UART request, and `HAL_BUSY` if the stream is enabled (`CR` is write-protected then). ST's `HAL_DMA_Init()` already sets the bit for UART requests on Rev V; the check makes it explicit and verifiable. The shared DMA driver applies the same workaround on its own (`02_dma/README.md` §6): `dma_bm` and `dma_ll` by request ID, `dma_hal` through `DMA_HAL_CheckErrata`. |
 | 2.21.1 | DMA stream locked on LPUART transfers | Nothing to do on this device: LPUART1 is served only by BDMA through DMAMUX2 (RM0399 table 130), and BDMA channels have no bit 20. `CheckDmaErrata` rejects BDMA handles. |
 | 2.21.2 | LPUART transmitter jitter when `f_ker / baud` is non-integer in [3, 4) | BM and LL skip any prescaler that produces a non-integer ratio in [3, 5). |
 | 2.20.5 | NE set while `ONEBIT` is set | The driver never sets `ONEBIT`, so NE keeps its meaning. |
@@ -460,11 +460,27 @@ Board: NUCLEO-H755ZI-Q, silicon Rev V (`0x2003`), CPU1 at 400 MHz, CPU2 at
 | Strict build (`-Wall -Wextra -Wshadow -Wdouble-promotion -Wundef -Werror`) of `uart_bm.c` and `uart_ll.c` for CM4 and CM7 | BM, LL | clean |
 | prj_02, prj_03, prj_04 (selftest OFF and ON) and the dual-core template | all | build with 0 warnings |
 
-**Not validated on hardware yet:** LPUART1, RTS/CTS flow control, parity and
-7-bit framing on the wire, the RX FIFO path (`fifo_enable = true`),
-`UART_HAL_InitEx` on an instance other than the console, and
-`UART_HAL_CheckDmaErrata` on a live DMA transfer. The baud-rate code for all of
-them is covered by the table in [section 6](#6-baud-rate-computation-bm-and-ll).
+**USART with DMA** was exercised later by the shared DMA driver's selftest
+(2026-09-25, `02_dma/README.md` §9, capture in
+`prj_04 docs/dma_selftest_capture.txt`). That run did not go through
+`UART_HAL_CheckDmaErrata`:
+
+| Test | Tier / core | Result |
+| :--- | :--- | :--- |
+| USART2 TX → RX by DMA over the PD5 → PD6 wire, 115 200 baud; TRBUFF read back as 1 on both streams without being requested | `dma_bm` and `dma_ll`, CPU2 | `T3_UART=PASS` |
+| USART3 (console) TX by DMA2; `CR` read right after `HAL_DMA_Init()` shows TRBUFF = 1 | `dma_hal`, CPU1 | `T10_USART3_DMA: PASS` |
+
+**Not validated on hardware yet:**
+
+- LPUART1;
+- RTS/CTS flow control;
+- parity and 7-bit framing on the wire;
+- the RX FIFO path (`fifo_enable = true`);
+- `UART_HAL_InitEx` on an instance other than the console;
+- `UART_HAL_CheckDmaErrata` itself on a live DMA transfer.
+
+The baud-rate code for all of them is covered by the table in
+[section 6](#6-baud-rate-computation-bm-and-ll).
 
 ### 9.1 Reproducing the selftest
 
@@ -475,15 +491,19 @@ wired to something else.
 1. Fit a wire between PD5 (USART2_TX) and PD6 (USART2_RX). Their connector
    positions on the Nucleo-144 are in UM2408
    (`00_docs_stm32h7/docs/02_board_hardware/`).
-2. Build with the option on, in its own build directory:
-   ```bash
-   cmake -S 02_firmware_projects/prj_04_adc_dma_bm_eth -B 02_firmware_projects/prj_04_adc_dma_bm_eth/build/uart_selftest -G Ninja -DCMAKE_TOOLCHAIN_FILE=02_firmware_projects/prj_04_adc_dma_bm_eth/cmake/arm-none-eabi.cmake -DCMAKE_BUILD_TYPE=Debug -DUART_DRIVER_SELFTEST=ON
+2. From `02_firmware_projects/prj_04_adc_dma_bm_eth`, build the `selftest-uart`
+   preset (`UART_DRIVER_SELFTEST=ON`, the ADC and DMA selftests off, in its own
+   `build/selftest-uart` tree):
+   ```powershell
+   . .\tools\env.ps1
+   cmake --preset selftest-uart
+   cmake --build --preset selftest-uart
    ```
-   ```bash
-   cmake --build 02_firmware_projects/prj_04_adc_dma_bm_eth/build/uart_selftest
+3. Flash both cores and watch the console:
+   ```powershell
+   py tools/flash.py --preset selftest-uart --core both
+   py tools/monitor.py
    ```
-3. Flash both cores with `tools/flash.py --elf <absolute path>` (CM4 image,
-   then CM7 image), then watch the console with `tools/monitor.py`.
 4. Expected line:
    ```text
    [m4_uart_test] jumper=1 bm_init=1,1,1 bm_loop=1,1,1 ll=1,1 ore=1
@@ -497,11 +517,55 @@ Flash the normal build afterwards; the selftest is not meant to stay on a board.
 
 ## 10. Limitations
 
-- No DMA helpers in BM and LL. With `02_dma/dma_bm`, set
-  `DmaBm_Config_t.enable_trbuff = true` on USART streams (ES0445 2.20.3).
+- No DMA helpers in BM and LL. Use `02_dma` for the stream and set
+  `CR3.DMAT` / `DMAR` in the application. `dma_bm` and `dma_ll` set TRBUFF
+  (ES0445 2.20.3) on their own for USART/UART requests, so
+  `enable_trbuff = true` is no longer needed.
 - No TX interrupt path in LL; TX is polling only.
 - `ReadByte` returns 8 bits, so 9-bit data loses bit 8.
 - The HAL tier keeps `PRESC` at /1 and does not expose the FIFO.
 - `Deinit` does not gate the bus clock or release the pins.
 - Synchronous, smartcard, IrDA, LIN, RS-485 driver-enable and multiprocessor
   modes are not supported.
+
+---
+
+## 11. Changing this driver
+
+This driver is in a shared catalogue. `prj_02`, `prj_03`, `prj_04` and the
+dual-core template build the HAL console through the umbrella target, and `prj_04`
+builds BM and LL for its selftest. Before changing the driver:
+
+1. **The seven original HAL prototypes and every existing BM/LL signature are
+   frozen** (`01_shared_drivers/README.md` rule 2). New behaviour is added as `…Ex`
+   functions or as fields at the end of a struct, never by changing what already
+   exists.
+2. **All hardware comes from the caller:** instance, pins, alternate function and
+   `kernel_clock_hz` (BM/LL), or `board_def.h` (HAL console). The driver never
+   touches the kernel clock mux: it sits in the RCC bank both cores share (§2.1).
+3. **Validate before touching the USART registers.** A refused `Init` must leave a
+   running UART as it was (§4.1).
+4. **BM and LL keep the same function names and semantics**, so that moving a
+   module between them only changes the prefix and the constants (§1.1). The one
+   documented difference is how word length is counted (§4.2).
+5. **No ST global symbol without a way to turn it off.** `HAL_UART_MspInit` is
+   suppressed by `UART_HAL_CUSTOM_MSP` (§3.1). Keep it that way for any new
+   callback or MSP.
+6. **A missing `board_def.h` macro stays a compile-time `#error`**, never a silent
+   default.
+7. **Before merging:**
+   - `.\tools\build_all.ps1 -Clean`, 8/8 with `-Werror`;
+   - the `prj_04` `selftest-uart` build, run on the board with the PD5-PD6 wire;
+   - the expected line of §9.1 recorded in `prj_04 docs/boot_capture.txt`.
+
+---
+
+## 12. History
+
+| Milestone | Commits |
+| :--- | :--- |
+| HAL console centralised in `01_shared_drivers` | `4204cad`, `129c96c`, `ecf01a2` |
+| Unified 3-tier driver (BM, LL, HAL) | `dcd9230` |
+| Selftest on USART2 behind `UART_DRIVER_SELFTEST`, and its hardware record with the PD5-PD6 wire | `c0ca222`, `a7f700a` |
+| README rewritten around what was validated | `b23b99b` |
+| USART + DMA exercised by the `02_dma` selftest (T3, T10) | `02_dma/README.md` §13 |
