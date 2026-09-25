@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file    dma_selftest.h
   * @brief   Bare-metal and LL DMA driver self-test for Cortex-M4 (prj_04).
-  *          Tests T1-T7 from 01_shared_drivers/02_dma/IMPLEMENTATION_PLAN.md.
+  *          Tests T1-T7 described in 01_shared_drivers/02_dma/README.md section 9.
   ******************************************************************************
   */
 

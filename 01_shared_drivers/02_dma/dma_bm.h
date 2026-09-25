@@ -64,7 +64,7 @@ extern "C" {
                                        DMA_BM_FLAG_FE)
 
 /* ---- Errata Workarounds -------------------------------------------------- */
-#define DMA_BM_CR_TRBUFF              (1UL << 20) /*!< ES0445: Workaround for USART/LPUART DMA lock */
+#define DMA_BM_CR_TRBUFF              (1UL << 20) /*!< ES0445 2.20.3 / 2.3.12: set for USART/UART and HASH_IN streams on DMA1/DMA2 */
 
 /**
   * @brief DMA Stream hardware configuration structure (Dependency Injection).

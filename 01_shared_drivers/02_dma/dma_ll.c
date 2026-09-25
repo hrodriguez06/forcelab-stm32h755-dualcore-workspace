@@ -541,7 +541,8 @@ void DMA_LL_IrqService(DmaLL_Handle_t *h, DmaLL_Callback_t cb, void *ctx)
         h->ht_count++;
     }
 
-    /* RM0399 §16.3.20: TE and DME are fatal transfer errors that automatically disable stream */
+    /* RM0399 §16.3.20: TE disables the stream in hardware; DME and an overrun/underrun FE do not.
+       All three are recorded and passed to the callback; stopping the stream is the caller's call. */
     uint32_t errs = flags & (DMA_LL_FLAG_TE | DMA_LL_FLAG_DME | DMA_LL_FLAG_FE);
     if (errs != 0U)
     {

@@ -1,7 +1,7 @@
 ================================================================================
 DMA DRIVER ITERATION 2: NEGATIVE CONTROLS EVIDENCE LOG
 ================================================================================
-Per Rule R1 (IMPLEMENTATION_PLAN_2.md §0), every test added or modified in
+Per rule 3 of 01_shared_drivers/02_dma/README.md section 12, every test added or modified in
 iteration 2 was subjected to a hardware negative control: the driver or test code
 was mutated to reintroduce the defect, the firmware was rebuilt and flashed to the
 board, and UART telemetry was captured showing the exact failure line with a
