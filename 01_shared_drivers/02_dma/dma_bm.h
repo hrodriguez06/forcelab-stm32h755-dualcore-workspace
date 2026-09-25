@@ -21,7 +21,8 @@
 extern "C" {
 #endif
 
-/* 32-byte alignment macro for AXI/AHB bus burst performance and cache safety */
+/* 32-byte alignment. Cache safety also needs the SIZE rounded up to 32:
+   use DMA_MEM_BM_ALIGN + DMA_MEM_BM_SIZE() from dma_mem_bm.h. */
 #define DMA_BM_ALIGN_32   __attribute__((aligned(32)))
 
 /* ---- Transfer Direction -------------------------------------------------- */

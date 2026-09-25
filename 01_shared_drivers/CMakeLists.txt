@@ -101,13 +101,13 @@ target_link_libraries(stm32h7_shared_drivers INTERFACE
 target_include_directories(stm32h7_shared_drivers INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/00_gpio     # pin muxing - prerequisite of everything below
     ${CMAKE_CURRENT_LIST_DIR}/01_led      # boot diagnostics, usable before the clock tree
-    ${CMAKE_CURRENT_LIST_DIR}/02_dma      # alignment + cache helpers, needed by 04..09
+    ${CMAKE_CURRENT_LIST_DIR}/02_dma      # DMA1/DMA2/BDMA tiers + dma_mem_bm.h (alignment, cache, reachability)
     ${CMAKE_CURRENT_LIST_DIR}/03_tim      # time base
     ${CMAKE_CURRENT_LIST_DIR}/04_uart     # console / log - first thing you want talking
     ${CMAKE_CURRENT_LIST_DIR}/05_i2c
     ${CMAKE_CURRENT_LIST_DIR}/06_spi
     ${CMAKE_CURRENT_LIST_DIR}/07_adc
-    ${CMAKE_CURRENT_LIST_DIR}/08_eth      # depends on 02_dma (descriptors in SRAM3)
+    ${CMAKE_CURRENT_LIST_DIR}/08_eth      # own ETH DMA; descriptors in SRAM3 - does not link 02_dma
     ${CMAKE_CURRENT_LIST_DIR}/09_fdcan
     ${CMAKE_CURRENT_LIST_DIR}/10_hsem     # M7 <-> M4 IPC - needs both cores running
 )
