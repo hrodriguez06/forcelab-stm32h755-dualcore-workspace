@@ -29,7 +29,7 @@ because it needs both cores already running.
 ├── 05_i2c/                     # I2C1 - I2C4 sensor interfaces
 ├── 06_spi/                     # SPI1 - SPI6 high-speed serial
 ├── 07_adc/                     # ADC1, ADC2, ADC3 (ADC sampling, analog watchdogs)
-├── 08_eth/                     # Ethernet MAC + LAN8742 PHY - depends on 02_dma (descriptors in SRAM3)
+├── 08_eth/                     # Ethernet MAC + LAN8742 PHY - its own ETH DMA, descriptors in SRAM3; does not link 02_dma
 ├── 09_fdcan/                   # FDCAN1, FDCAN2 industrial communications
 └── 10_hsem/                    # Hardware Semaphore for M7 <-> M4 IPC - needs both cores alive
 ```
