@@ -7,6 +7,7 @@
 
 #include "dma_selftest.h"
 #include "dma_bm.h"
+#include "dma_ll.h"
 #include "dma_hal.h"
 #include "dma_mem_bm.h"
 #include "app_main.h"
@@ -125,7 +126,69 @@ static bool Test_T8(void)
         return false;
     }
 
-    return (memcmp(s_tx_buf, s_rx_buf, sizeof(s_tx_buf)) == 0);
+    if (memcmp(s_tx_buf, s_rx_buf, sizeof(s_tx_buf)) != 0)
+    {
+        return false;
+    }
+
+    /* 3. T8b (Y4): DMA_LL_MemCopy on DMA2_Stream3 with PSIZE=WORD, MSIZE=BYTE (16 items = 64 B).
+     * Verifies D-Cache coherency in LL tier. Canary placed at offset 64 (s_rx_buf[16]). */
+    for (uint32_t i = 0; i < 16; i++)
+    {
+        s_tx_buf[i] = 0x8899AABBUL + i;
+    }
+    memset(s_rx_buf, 0, sizeof(s_rx_buf));
+    s_rx_buf[16] = 0xCAFEBABEUL; /* Canary at byte offset 64 */
+
+    /* Flush canary to physical RAM so DMA sees it */
+    DMA_MEM_BM_PrepareRx(s_rx_buf, sizeof(s_rx_buf));
+
+    DmaLL_Handle_t h_t8b;
+    DmaLL_Config_t cfg_t8b = {
+        .stream         = DMA2_Stream3,
+        .request        = 0U,
+        .direction      = LL_DMA_DIRECTION_MEMORY_TO_MEMORY,
+        .mode           = LL_DMA_MODE_NORMAL,
+        .periph_inc     = LL_DMA_PERIPH_INCREMENT,
+        .mem_inc        = LL_DMA_MEMORY_INCREMENT,
+        .periph_size    = LL_DMA_PDATAALIGN_WORD,
+        .mem_size       = LL_DMA_MDATAALIGN_BYTE,
+        .priority       = LL_DMA_PRIORITY_HIGH,
+        .fifo_enable    = true,
+        .fifo_threshold = LL_DMA_FIFOTHRESHOLD_FULL,
+        .mem_burst      = LL_DMA_MBURST_SINGLE,
+        .periph_burst   = LL_DMA_PBURST_SINGLE,
+        .double_buffer  = false,
+        .enable_clock   = true,
+        .fail_if_busy   = true
+    };
+
+    if (!DMA_LL_Init(&h_t8b, &cfg_t8b))
+    {
+        return false;
+    }
+
+    /* 16 items of PSIZE(WORD) = 64 bytes */
+    if (!DMA_LL_MemCopy(&h_t8b, s_rx_buf, s_tx_buf, 16U, 100000U))
+    {
+        DMA_LL_Deinit(&h_t8b, 10000U);
+        return false;
+    }
+    DMA_LL_Deinit(&h_t8b, 10000U);
+
+    if (memcmp(s_tx_buf, s_rx_buf, 64) != 0)
+    {
+        return false;
+    }
+
+    /* Invalidate canary line and verify canary was not overwritten */
+    DMA_MEM_BM_CompleteRx(s_rx_buf, sizeof(s_rx_buf));
+    if (s_rx_buf[16] != 0xCAFEBABEUL)
+    {
+        return false;
+    }
+
+    return true;
 }
 
 /* ---- T9: DMA_HAL_MemCopy & HAL_DMA_Start_IT with Callbacks -------------- */

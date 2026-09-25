@@ -132,7 +132,7 @@ if(DMA_DRIVER_SELFTEST)
     target_sources(${TARGET} PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/App/Src/dma_selftest.c
     )
-    target_link_libraries(${TARGET} PRIVATE stm32h7_driver_dma_bm stm32h7_driver_dma_hal)
+    target_link_libraries(${TARGET} PRIVATE stm32h7_driver_dma_bm stm32h7_driver_dma_hal stm32h7_driver_dma_ll)
 endif()
 
 set_target_properties(${TARGET} PROPERTIES
