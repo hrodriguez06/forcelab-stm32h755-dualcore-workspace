@@ -26,7 +26,7 @@ Se completaron todas las fases planificadas en [`IMPLEMENTATION_PLAN_2.md`](./IM
 | :--- | :--- | :--- | :---: | :--- |
 | **X9** | Comentarios obsoletos | Actualizados comentarios en `dma_bm.h`, `dma_bm.c` y `dma_ll.c` reflejando líneas de D-Cache de 32 B, bits TRBUFF y regla de unidades PSIZE de NDTR (RM0399 §16.3.12). | **CERRADO** | `4922386` |
 | **X8** | Dead code PFCTRL y retorno en `DMA_LL_Deinit` | Eliminado check redundante `mode == CIRCULAR` dentro del bloque `mode == PFCTRL` en `dma_ll.c` (modos escalares mutuamente excluyentes; circular + PFCTRL no soportado en HW). Propagado fallo de parada de stream en `DMA_LL_Deinit()`. | **CERRADO** | `9dd4baa` |
-| **X7a** | Comprobación ráfagas > 1 KB en runtime | Reemplazadas comprobaciones inalcanzables en runtime por un `_Static_assert` en `dma_bm.c`: `DMA_BM_MAX_BURST_BYTES <= 1024U`. | **CERRADO** | `4ab5c42` |
+| **X7a** | Comprobación ráfagas > 1 KB en runtime | Reemplazadas comprobaciones inalcanzables en runtime por un `_Static_assert` en `dma_bm.c`: `(1024U % (16U * 4U)) == 0U`. Como toda dirección de burst está alineada a beats × tamaño, y el bloque más grande (64 B) divide a 1 KB, ningún burst puede cruzar ese límite. | **CERRADO** | `4ab5c42` |
 | **X6** | Sentinel `GetIRQn` colisionaba con `SysTick_IRQn` | Añadidas variantes seguras `DMA_BM_GetIRQnEx` y `DMA_HAL_GetIRQnEx` con retorno `bool` y puntero de salida `out`. Definido macro `DMA_BM_IRQN_INVALID` con advertencia `@warning`. | **CERRADO** | `d45877e` |
 | **X11** | `SetIdleMemory` span basado en NDTR decreciente | Creado `DMA_BM_SetIdleMemoryEx()` con parámetro de longitud explícita y `DMA_LL_SetIdleMemory()` registrando `dbm_length` al arrancar. Comprobación de TEIF contra carreras de hardware al conmutar CT. | **CERRADO** | `52a73e0` |
 | **X7b** | Regla de ráfaga periférica aplicada incorrectamente | Implementado `DMA_BM_CheckPeriphBurst()` aplicando RM0399 §16.3.14 ($PBURST \times PSIZE \le 16\text{ B}$, prohibido 3/4 si tamaño = 16 B). Relajada alineación para `PINC=0` a PSIZE. | **CERRADO** | `efce94e` |
@@ -143,7 +143,7 @@ El total enlazado de `dma_bm.c.obj` es de 1 596 B (`.text + .rodata`). El códig
 ## 7. Hallazgos en Silicio STM32H755ZI Rev V (Device 0x450, Rev ID 0x2003)
 
 1. **Workaround TRBUFF (ES0445 2.20.3 / 2.3.12):**
-   - Lectura directa de registro en hardware confirma que bit 20 (`TRBUFF`) es activado en `DMA_SxCR` tras `HAL_DMA_Init` para periféricos UART/HASH en revisión $\ge$ 0x2000.
+   - Lectura directa de registro en hardware confirma que `HAL_DMA_Init` activa el bit 20 (`TRBUFF`) de `DMA_SxCR` para requests **UART/USART** cuando la revisión es $\ge$ 0x2000. Lo verificó T10, pero solo con USART3. Para **HASH_IN** (request 78) la HAL de ST no lo activa, porque `IS_DMA_UART_USART_REQUEST` excluye esa request; lo pone `DMA_HAL_CheckErrata()`, y ese camino no tiene prueba en HW.
    - `DMA_HAL_CheckErrata()` protege la configuración retornando `HAL_BUSY` si `CR.EN == 1`.
    - `HAL_DMA_Init()` deshabilita explícitamente el stream antes de llamar a la verificación, garantizando que el stream siempre esté inactivo al iniciar.
 

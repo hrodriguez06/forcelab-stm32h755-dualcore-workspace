@@ -4,7 +4,7 @@
 - **Rama:** `driver/dma-iteration-2` (base `b067fec`)
 - **Microcontrolador:** STM32H755ZI (Nucleo-H755ZI-Q, Device ID 0x450, Rev V, Rev ID 0x2003)
 - **Fecha:** 25 de septiembre de 2026
-- **Estado:** **COMPLETADO Y CERRADO** — 100% de gates superados y verificado en silicio.
+- **Estado:** implementación completa y aprobada por la auditoría (`AUDIT.md` §10). Verificado en silicio salvo dos caminos que no se pueden inducir en HW y se cubren por revisión: el fallo de `Stop` en `DMA_LL_Deinit` (X8) y la propagación de `CheckErrata` desde `DMA_HAL_Init` (Y5). Ver `ITERATION_2.md` §7.4.
 
 ---
 
@@ -16,7 +16,7 @@ La Iteración 2 consolidó las correcciones de auditoría (**X6–X11**, **Y3–
 | :--- | :--- | :--- | :---: | :--- |
 | **Z1** | Bloqueante | Oráculo independiente RM0399 Tabla 116 / §16.3.14 (48 combinaciones, 23 válidas, 25 inválidas). Bucle sin corte temprano, reporte exhaustivo `valid=23 ok=23 invalid=25 rej=25 mismatch=0`. | **CERRADO** | `df46b94` |
 | **X8** | Higiene | Eliminado check redundante `mode == CIRCULAR` en bloque `PFCTRL` de `dma_ll.c` (modos escalares excluyentes). Propagado fallo de parada en `DMA_LL_Deinit()`. | **CERRADO** | `9dd4baa` |
-| **X7a** | Higiene | Reemplazada validación en runtime por `_Static_assert(DMA_BM_MAX_BURST_BYTES <= 1024U)`. | **CERRADO** | `4ab5c42` |
+| **X7a** | Higiene | Reemplazada validación en runtime por `_Static_assert((1024U % (16U * 4U)) == 0U)`: el bloque de burst más grande divide a 1 KB. | **CERRADO** | `4ab5c42` |
 | **X6** | Robustez | Creados `DMA_BM_GetIRQnEx` y `DMA_HAL_GetIRQnEx` con centinela `DMA_BM_IRQN_INVALID` (evita colisión con `SysTick_IRQn`). | **CERRADO** | `d45877e` |
 | **X11** | Robustez | `DMA_BM_SetIdleMemoryEx` con longitud explícita y `DMA_LL_SetIdleMemory`. Chequeo de TEIF contra colisiones de conmutación CT. | **CERRADO** | `52a73e0` |
 | **X7b** | Alineación RM0399 | `DMA_BM_CheckPeriphBurst` según RM0399 §16.3.14. Alineación relajada para `PINC=0` a `PSIZE`. | **CERRADO** | `efce94e` |

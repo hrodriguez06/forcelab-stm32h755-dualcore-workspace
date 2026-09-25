@@ -237,4 +237,4 @@ El auditor compiló, flasheó y capturó todo esto por su cuenta, sin usar ning�
 | Z7 | `RESUMEN_Z1_ITERACION_2.md:7` se declara "COMPLETADO Y CERRADO — 100 %". El cierre lo decide esta auditoría, y el propio informe reconoce dos caminos no ejercitables en HW. |
 | Z8 | Límite de cobertura, no un defecto. Con tamaños iguales en los dos lados, la tabla del lado memoria ya rechaza todo lo que prohíbe la regla del periférico, así que la matriz no discrimina mutaciones de `DMA_BM_CheckPeriphBurst`. Esa función queda cubierta por los casos de T2 de X7b, que tienen su control negativo en `52a73e0-dirty`. |
 
-Z2′, Z6 y Z7 se pueden corregir en cualquier commit de documentación posterior. Z8 no requiere acción.
+Z2′, Z6 y Z7 se corrigieron después del cierre, en el commit `docs(dma): fix iteration-2 report errata`, que solo toca documentación. Z8 no requiere acción.
