@@ -580,9 +580,68 @@ static bool Test_T11(void)
 
     /* 2. Rejection test: Buffer in SRAM1 (.dma_buf) is unreachable by BDMA */
     HAL_StatusTypeDef rej = DMA_HAL_MemCopy(&hdma_bdma, s_bdma_dst, s_sram1_buf, sizeof(s_sram1_buf), 1000U);
+    if (rej != HAL_ERROR)
+    {
+        DMA_HAL_DeInit(&hdma_bdma);
+        return false;
+    }
+
+    /* 3. T11b (X10b): BDMA access to Backup SRAM (0x38800000, 4 KB in D3) */
+    uint32_t pwr_cr1_backup = PWR->CR1;
+    PWR->CR1 |= PWR_CR1_DBP;
+    RCC->AHB4ENR |= RCC_AHB4ENR_BKPRAMEN;
+    volatile uint32_t tmpreg = RCC->AHB4ENR & RCC_AHB4ENR_BKPRAMEN;
+    (void)tmpreg;
+
+    volatile uint32_t *bkp_ram = (volatile uint32_t *)0x38800000UL;
+
+    /* 3a. Valid M2M: SRAM4 -> Backup SRAM (32 bytes = 8 words) */
+    for (uint32_t i = 0; i < 8; i++)
+    {
+        s_bdma_src[i] = 0xBEEF0000UL + i;
+        bkp_ram[i] = 0U;
+    }
+
+    if (DMA_HAL_MemCopy(&hdma_bdma, (void *)bkp_ram, s_bdma_src, 32U, 1000U) != HAL_OK)
+    {
+        PWR->CR1 = pwr_cr1_backup;
+        DMA_HAL_DeInit(&hdma_bdma);
+        return false;
+    }
+
+    if (memcmp(s_bdma_src, (const void *)bkp_ram, 32) != 0)
+    {
+        PWR->CR1 = pwr_cr1_backup;
+        DMA_HAL_DeInit(&hdma_bdma);
+        return false;
+    }
+
+    /* 3b. Valid M2M: Backup SRAM -> SRAM4 (32 bytes = 8 words) */
+    for (uint32_t i = 0; i < 8; i++)
+    {
+        bkp_ram[i] = 0x55AA1234UL + i;
+        s_bdma_dst[i] = 0U;
+    }
+
+    if (DMA_HAL_MemCopy(&hdma_bdma, s_bdma_dst, (const void *)bkp_ram, 32U, 1000U) != HAL_OK)
+    {
+        PWR->CR1 = pwr_cr1_backup;
+        DMA_HAL_DeInit(&hdma_bdma);
+        return false;
+    }
+
+    if (memcmp((const void *)bkp_ram, s_bdma_dst, 32) != 0)
+    {
+        PWR->CR1 = pwr_cr1_backup;
+        DMA_HAL_DeInit(&hdma_bdma);
+        return false;
+    }
+
+    /* Restore backup domain write protection */
+    PWR->CR1 = pwr_cr1_backup;
     DMA_HAL_DeInit(&hdma_bdma);
 
-    return (rej == HAL_ERROR);
+    return true;
 }
 
 /* ---- Public Runner ------------------------------------------------------ */
