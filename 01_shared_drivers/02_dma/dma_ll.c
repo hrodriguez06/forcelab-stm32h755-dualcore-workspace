@@ -310,16 +310,6 @@ bool DMA_LL_Start(DmaLL_Handle_t *h, uint32_t periph_addr, uint32_t mem_addr, ui
         return false;
     }
 
-    /* 1 KB boundary checks */
-    if (((periph_addr & 0x3FFU) + p_align) > 0x400U)
-    {
-        return false;
-    }
-    if (((mem_addr & 0x3FFU) + m_align) > 0x400U)
-    {
-        return false;
-    }
-
     /* A5: Reachability validation.
      * NDTR counts in PSIZE units (RM0399 §16.3.12), so byte span = NDT × PSIZE. */
     if (!DMA_MEM_BM_IsReachable(DMA_MEM_BM_MASTER_DMA, mem_addr, length * p_elem))
@@ -397,13 +387,6 @@ bool DMA_LL_StartDoubleBuffer(DmaLL_Handle_t *h, uint32_t periph_addr,
     if (((periph_addr & (p_align - 1U)) != 0U) ||
         ((mem0 & (m_align - 1U)) != 0U) ||
         ((mem1 & (m_align - 1U)) != 0U))
-    {
-        return false;
-    }
-
-    if ((((periph_addr & 0x3FFU) + p_align) > 0x400U) ||
-        (((mem0 & 0x3FFU) + m_align) > 0x400U) ||
-        (((mem1 & 0x3FFU) + m_align) > 0x400U))
     {
         return false;
     }

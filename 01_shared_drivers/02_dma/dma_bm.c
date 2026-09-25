@@ -17,6 +17,10 @@ _Static_assert(sizeof(DMA_Stream_TypeDef) == DMA_STREAM_STRIDE,
 static const uint8_t s_stream_bit_shifts[4] = {0U, 6U, 16U, 22U};
 static const uint8_t s_burst_beats[4] = {1U, 4U, 8U, 16U};
 
+/* A burst block never crosses a 1 KB boundary (RM0399 §16.3.13) because every
+   burst address is aligned to beats x size, and the largest block divides 1 KB. */
+_Static_assert((1024U % (16U * 4U)) == 0U, "largest burst block must divide 1 KB");
+
 DMA_TypeDef *DMA_BM_GetController(const DMA_Stream_TypeDef *stream)
 {
     uint32_t addr = (uint32_t)stream;
@@ -311,23 +315,6 @@ bool DMA_BM_InitStreamEx(const DmaBm_ConfigEx_t *cfg)
         return false;
     }
 
-    /* 1 KB boundary check for burst */
-    if (((c->periph_addr & 0x3FFU) + periph_align) > 0x400U)
-    {
-        return false;
-    }
-    if (((c->mem_addr & 0x3FFU) + mem_align) > 0x400U)
-    {
-        return false;
-    }
-    if (cfg->mem1_addr != 0U)
-    {
-        if (((cfg->mem1_addr & 0x3FFU) + mem_align) > 0x400U)
-        {
-            return false;
-        }
-    }
-
     /* A5: Reachability validation.
      * NDTR counts in PSIZE units (RM0399 §16.3.12), so total bytes = NDT × PSIZE
      * for both peripheral and memory sides (the FIFO handles width conversion). */
@@ -540,15 +527,6 @@ bool DMA_BM_SetTransfer(DMA_Stream_TypeDef *s, uint32_t periph_addr,
         return false;
     }
     if ((mem_addr & (mem_align - 1U)) != 0U)
-    {
-        return false;
-    }
-
-    if (((periph_addr & 0x3FFU) + periph_align) > 0x400U)
-    {
-        return false;
-    }
-    if (((mem_addr & 0x3FFU) + mem_align) > 0x400U)
     {
         return false;
     }
