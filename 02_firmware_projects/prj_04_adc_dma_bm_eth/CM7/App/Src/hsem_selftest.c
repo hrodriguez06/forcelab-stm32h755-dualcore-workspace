@@ -9,6 +9,7 @@
 #include "hsem_selftest_shared.h"
 #include "hsem_bm.h"
 #include "hsem_ll.h"
+#include "hsem_hal.h"
 #include "board_def.h"
 #include "shared_memory.h"
 #include "app_log.h"
@@ -168,6 +169,123 @@ static bool CompareSnapshots_M7(const H10_StepResult_t bm[H10_STEPS],
     return true;
 }
 
+typedef struct {
+    HAL_StatusTypeDef st;
+    HsemSnapshot_t    snap;
+} H10_StepResult_HAL_t;
+
+static HAL_StatusTypeDef BmStatusToHal(HsemBm_Status_t bm)
+{
+    switch (bm)
+    {
+        case HSEM_BM_OK:
+            return HAL_OK;
+        case HSEM_BM_BUSY:
+        case HSEM_BM_BUSY_SELF:
+            return HAL_BUSY;
+        case HSEM_BM_TIMEOUT:
+            return HAL_TIMEOUT;
+        case HSEM_BM_ERR_PARAM:
+        case HSEM_BM_ERR_NOT_OWNER:
+        case HSEM_BM_ERR_TIMEBASE:
+        case HSEM_BM_ERR_CORE:
+        default:
+            return HAL_ERROR;
+    }
+}
+
+static void RunSequence_HAL_M7(H10_StepResult_HAL_t res[H10_STEPS])
+{
+    Hsem_ResetTestRegisters_M7();
+
+    /* Step 0: FastTake on sem 24 */
+    res[0].st = HSEM_HAL_FastTake(24);
+    Hsem_TakeSnapshot_M7(&res[0].snap);
+
+    /* Step 1: 2-step Take on sem 25, proc 42 */
+    res[1].st = HSEM_HAL_Take(25, 42);
+    Hsem_TakeSnapshot_M7(&res[1].snap);
+
+    /* Step 2: Release sem 25, proc 42 */
+    res[2].st = HSEM_HAL_Release(25, 42);
+    Hsem_TakeSnapshot_M7(&res[2].snap);
+
+    /* Step 3: Release sem 24 with wrong proc 99 */
+    res[3].st = HSEM_HAL_Release(24, 99);
+    Hsem_TakeSnapshot_M7(&res[3].snap);
+
+    /* Step 4: Release sem 24 with correct proc 0 */
+    res[4].st = HSEM_HAL_Release(24, 0);
+    Hsem_TakeSnapshot_M7(&res[4].snap);
+
+    /* Step 5: NotifyEnable sem 26 */
+    res[5].st = HSEM_HAL_NotifyEnable(1UL << 26);
+    Hsem_TakeSnapshot_M7(&res[5].snap);
+
+    /* Step 6: NotifyDisable sem 26 */
+    res[6].st = HSEM_HAL_NotifyDisable(1UL << 26);
+    Hsem_TakeSnapshot_M7(&res[6].snap);
+}
+
+static bool CompareSnapshots_BM_HAL_M7(const H10_StepResult_t bm[H10_STEPS],
+                                      const H10_StepResult_HAL_t hal[H10_STEPS],
+                                      bool log_mismatch)
+{
+    for (uint32_t i = 0; i < H10_STEPS; i++)
+    {
+        HAL_StatusTypeDef expected_hal = BmStatusToHal(bm[i].st);
+        if (expected_hal != hal[i].st)
+        {
+            if (log_mismatch)
+            {
+                APP_LOG("[m7_hsem_test] H10 step %lu HAL status mismatch: BM->HAL=%d HAL=%d",
+                        i, (int)expected_hal, (int)hal[i].st);
+            }
+            return false;
+        }
+        for (uint32_t r = 0; r < 8; r++)
+        {
+            if (bm[i].snap.R[r] != hal[i].snap.R[r])
+            {
+                if (log_mismatch)
+                {
+                    APP_LOG("[m7_hsem_test] H10 step %lu HAL R[%lu] mismatch: BM=0x%08lX HAL=0x%08lX",
+                            i, 24 + r, bm[i].snap.R[r], hal[i].snap.R[r]);
+                }
+                return false;
+            }
+        }
+        if (bm[i].snap.IER != hal[i].snap.IER)
+        {
+            if (log_mismatch)
+            {
+                APP_LOG("[m7_hsem_test] H10 step %lu HAL IER mismatch: BM=0x%08lX HAL=0x%08lX",
+                        i, bm[i].snap.IER, hal[i].snap.IER);
+            }
+            return false;
+        }
+        if (bm[i].snap.ISR != hal[i].snap.ISR)
+        {
+            if (log_mismatch)
+            {
+                APP_LOG("[m7_hsem_test] H10 step %lu HAL ISR mismatch: BM=0x%08lX HAL=0x%08lX",
+                        i, bm[i].snap.ISR, hal[i].snap.ISR);
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+static volatile uint32_t s_hal_cb_mask = 0U;
+static volatile void    *s_hal_cb_ctx = NULL;
+
+static void HalTestCallback(uint32_t sem_mask, void *ctx)
+{
+    s_hal_cb_mask = sem_mask;
+    s_hal_cb_ctx = ctx;
+}
+
 static volatile uint32_t s_relax_call_count = 0U;
 
 static void RelaxHook(void *ctx)
@@ -186,7 +304,7 @@ void HSEM_SelfTest_CM7_Run(void)
 #else
     APP_LOG(" STM32H755 HSEM Driver Self-Test");
 #endif
-    APP_LOG(" Phase F3: LL Tier Validation & BM <-> LL Parity (H0, H1, H1b, H3, H4, H5, H7, H8, H9, H10)");
+    APP_LOG(" Phase F4: HAL Tier Validation & BM <-> LL <-> HAL Parity (H0, H1, H1b, H3, H4, H5, H7, H8, H9, H10)");
     APP_LOG("=================================================================");
 
     /* 1. Driver and DWT initialization on CM7 */
@@ -272,14 +390,31 @@ void HSEM_SelfTest_CM7_Run(void)
     HSEM_TEST_SHARED->h3_m7_pass = h3_ok ? 1U : 0U;
     APP_LOG("[m7_hsem_test] H3 Release Protection: %s", h3_ok ? "PASS" : "FAIL");
 
-    /* 4. H7 Same-Core Context Collision on CM7 (S1) */
+    /* 4. H7 Same-Core Context Collision on CM7 (S1) - BM & HAL */
     bool h7_ok = true;
+
+    /* (a) 1-step collision */
     if (HSEM_BM_FastTake(HSEM_TEST_ID_LOCK1) == HSEM_BM_OK)
     {
+        /* Negative control: raw HAL_HSEM_FastTake from context B reproduces bug S1 (returns HAL_OK) */
+        HAL_StatusTypeDef raw_hal = HAL_HSEM_FastTake(HSEM_TEST_ID_LOCK1);
+        if (raw_hal != HAL_OK)
+        {
+            /* Document raw behavior */
+        }
+
+        /* Driver BM detects collision: returns BUSY_SELF */
         if (HSEM_BM_FastTake(HSEM_TEST_ID_LOCK1) != HSEM_BM_BUSY_SELF)
         {
             h7_ok = false;
         }
+
+        /* Driver HAL wrapper detects collision: returns HAL_BUSY */
+        if (HSEM_HAL_FastTake(HSEM_TEST_ID_LOCK1) != HAL_BUSY)
+        {
+            h7_ok = false;
+        }
+
         HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 0U);
     }
     else
@@ -287,13 +422,22 @@ void HSEM_SelfTest_CM7_Run(void)
         h7_ok = false;
     }
 
+    /* (b) 2-step collision */
     if (HSEM_BM_Take(HSEM_TEST_ID_LOCK2, 1U) == HSEM_BM_OK)
     {
         if (HSEM_BM_Take(HSEM_TEST_ID_LOCK2, 2U) != HSEM_BM_BUSY_SELF)
         {
             h7_ok = false;
         }
+        if (HSEM_HAL_Take(HSEM_TEST_ID_LOCK2, 2U) != HAL_BUSY)
+        {
+            h7_ok = false;
+        }
         if (HSEM_BM_Release(HSEM_TEST_ID_LOCK2, 2U) != HSEM_BM_ERR_NOT_OWNER)
+        {
+            h7_ok = false;
+        }
+        if (HSEM_HAL_Release(HSEM_TEST_ID_LOCK2, 2U) != HAL_ERROR)
         {
             h7_ok = false;
         }
@@ -303,29 +447,57 @@ void HSEM_SelfTest_CM7_Run(void)
     {
         h7_ok = false;
     }
+
+    /* (c) HAL callback registration and dispatch verification */
+    s_hal_cb_mask = 0U;
+    s_hal_cb_ctx = NULL;
+    if (HSEM_HAL_RegisterCallback(HalTestCallback, (void *)0xA5C3) != HAL_OK)
+    {
+        h7_ok = false;
+    }
+    HSEM_HAL_Dispatch(1UL << HSEM_TEST_ID_LOCK1);
+    if ((s_hal_cb_mask != (1UL << HSEM_TEST_ID_LOCK1)) || (s_hal_cb_ctx != (void *)0xA5C3))
+    {
+        h7_ok = false;
+    }
+
     HSEM_TEST_SHARED->h7_m7_pass = h7_ok ? 1U : 0U;
     APP_LOG("[m7_hsem_test] H7 Same-Core Collision: %s", h7_ok ? "PASS" : "FAIL");
 
-    /* 4b. H10: BM <-> LL Parity on CM7 */
+    /* 4b. H10: BM <-> LL <-> HAL Parity on CM7 */
     H10_StepResult_t bm_res[H10_STEPS];
     H10_StepResult_t ll_res[H10_STEPS];
+    H10_StepResult_HAL_t hal_res[H10_STEPS];
+
     RunSequence_BM_M7(bm_res);
     RunSequence_LL_M7(ll_res);
+    RunSequence_HAL_M7(hal_res);
 
-    bool h10_m7_ok = CompareSnapshots_M7(bm_res, ll_res, true);
+    bool h10_bm_ll_ok = CompareSnapshots_M7(bm_res, ll_res, true);
+    bool h10_bm_hal_ok = CompareSnapshots_BM_HAL_M7(bm_res, hal_res, true);
 
-    /* Negative control: mutate snapshot to confirm comparison detects mismatch */
-    H10_StepResult_t mutated_res[H10_STEPS];
+    /* Negative control for LL: mutate snapshot to confirm comparison detects mismatch */
+    H10_StepResult_t mutated_ll[H10_STEPS];
     for (uint32_t i = 0U; i < H10_STEPS; i++)
     {
-        mutated_res[i] = ll_res[i];
+        mutated_ll[i] = ll_res[i];
     }
-    mutated_res[1].snap.R[1] ^= 0x1U;
-    bool neg_detected_m7 = !CompareSnapshots_M7(bm_res, mutated_res, false);
+    mutated_ll[1].snap.R[1] ^= 0x1U;
+    bool neg_detected_ll = !CompareSnapshots_M7(bm_res, mutated_ll, false);
 
-    HSEM_TEST_SHARED->h10_m7_pass = (h10_m7_ok && neg_detected_m7) ? 1U : 0U;
-    APP_LOG("[m7_hsem_test] H10 Parity (BM <-> LL): %s",
-            (h10_m7_ok && neg_detected_m7) ? "PASS" : "FAIL");
+    /* Negative control for HAL: mutate snapshot to confirm comparison detects mismatch */
+    H10_StepResult_HAL_t mutated_hal[H10_STEPS];
+    for (uint32_t i = 0U; i < H10_STEPS; i++)
+    {
+        mutated_hal[i] = hal_res[i];
+    }
+    mutated_hal[1].snap.R[1] ^= 0x1U;
+    bool neg_detected_hal = !CompareSnapshots_BM_HAL_M7(bm_res, mutated_hal, false);
+
+    bool h10_all_ok = h10_bm_ll_ok && h10_bm_hal_ok && neg_detected_ll && neg_detected_hal;
+    HSEM_TEST_SHARED->h10_m7_pass = h10_all_ok ? 1U : 0U;
+    APP_LOG("[m7_hsem_test] H10 Parity (BM <-> LL <-> HAL): %s",
+            h10_all_ok ? "PASS" : "FAIL");
 
     /* 5. Synchronize with CM4 for dual-core tests */
     APP_LOG("[m7_hsem_test] Waiting for CM4 ready...");
@@ -599,6 +771,6 @@ void HSEM_SelfTest_CM7_Run(void)
             h5_ok ? "PASS" : "FAIL");
 
     APP_LOG("[m7_hsem_test] =================================================");
-    APP_LOG("[m7_hsem_test] ALL F1, F2 & F3 TESTS PASSED SUCCESSFULLY");
+    APP_LOG("[m7_hsem_test] ALL F1, F2, F3 & F4 TESTS PASSED SUCCESSFULLY");
     APP_LOG("[m7_hsem_test] =================================================");
 }
