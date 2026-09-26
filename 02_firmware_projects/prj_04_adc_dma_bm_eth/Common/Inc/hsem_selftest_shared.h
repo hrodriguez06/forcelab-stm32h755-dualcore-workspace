@@ -16,11 +16,22 @@
 
 #define HSEM_TEST_ID_START          24U
 #define HSEM_TEST_ID_END            31U
-#define HSEM_TEST_ID_LOCK1          24U
+
+/* Disjoint semaphore partitions for concurrent boot tests (H0, H3, H7, H10) */
+#define HSEM_TEST_M7_LOCK1          24U
+#define HSEM_TEST_M7_LOCK2          25U
+#define HSEM_TEST_M7_NOTIFY         26U
+
+#define HSEM_TEST_M4_LOCK1          28U
+#define HSEM_TEST_M4_LOCK2          29U
+#define HSEM_TEST_M4_NOTIFY         30U
+
+/* Synchronized dual-core test semaphores (gated by go_signal) */
+#define HSEM_TEST_ID_LOCK1          24U  /* H1, H1b */
 #define HSEM_TEST_ID_LOCK2          25U
-#define HSEM_TEST_ID_NOTIFY         26U
-#define HSEM_TEST_ID_TIMEOUT        27U
-#define HSEM_TEST_ID_RECOV_CM7      28U
+#define HSEM_TEST_ID_NOTIFY         26U  /* H9 */
+#define HSEM_TEST_ID_TIMEOUT        27U  /* H4 */
+#define HSEM_TEST_ID_RECOV_CM7      28U  /* H8 CM7 canary */
 
 #define HSEM_TEST_CLEAR_KEY         0xA5C3U
 #define HSEM_TEST_H1_ITERATIONS     1000000UL

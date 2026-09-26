@@ -55,7 +55,7 @@
 #define HEARTBEAT_TASK_PRIO          (tskIDLE_PRIORITY + 1U)
 #define HEARTBEAT_PERIOD_MS          500U
 
-#define STATUS_TASK_STACK_WORDS      512U
+#define STATUS_TASK_STACK_WORDS      1024U
 #define STATUS_TASK_PRIO             (tskIDLE_PRIORITY + 1U)
 #define STATUS_PERIOD_MS             2000U
 

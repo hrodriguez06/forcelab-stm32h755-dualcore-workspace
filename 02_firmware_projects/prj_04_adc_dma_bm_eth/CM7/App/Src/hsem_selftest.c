@@ -135,7 +135,7 @@ static bool CompareSnapshots_M7(const H10_StepResult_t bm[H10_STEPS],
             }
             return false;
         }
-        for (uint32_t r = 0; r < 8; r++)
+        for (uint32_t r = 0; r < 3; r++)
         {
             if (bm[i].snap.R[r] != ll[i].snap.R[r])
             {
@@ -243,7 +243,7 @@ static bool CompareSnapshots_BM_HAL_M7(const H10_StepResult_t bm[H10_STEPS],
             }
             return false;
         }
-        for (uint32_t r = 0; r < 8; r++)
+        for (uint32_t r = 0; r < 3; r++)
         {
             if (bm[i].snap.R[r] != hal[i].snap.R[r])
             {
@@ -306,6 +306,23 @@ void HSEM_SelfTest_CM7_Run(void)
 #endif
     APP_LOG(" Phase F4: HAL Tier Validation & BM <-> LL <-> HAL Parity (H0, H1, H1b, H3, H4, H5, H7, H8, H9, H10)");
     APP_LOG("=================================================================");
+
+    /* Reset test synchronization state and release any lingering test semaphores */
+    Hsem_ResetTestRegisters_M7();
+    HSEM_BM_SetClearKey(HSEM_TEST_CLEAR_KEY);
+    (void)HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU1, HSEM_TEST_CLEAR_KEY);
+    (void)HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU2, HSEM_TEST_CLEAR_KEY);
+
+    HSEM_TEST_SHARED->cm7_ready = 0U;
+    HSEM_TEST_SHARED->cm4_ready = 0U;
+    HSEM_TEST_SHARED->cm7_done = 0U;
+    HSEM_TEST_SHARED->cm4_done = 0U;
+    HSEM_TEST_SHARED->go_signal = 0U;
+    __DMB();
+
+    /* Signal CM4 that HSEM selftest phase is active */
+    HSEM_TEST_SHARED->phase = 1U;
+    __DMB();
 
     /* 1. Driver and DWT initialization on CM7 */
     HsemBm_Status_t init_st = HSEM_BM_Init();
@@ -465,9 +482,9 @@ void HSEM_SelfTest_CM7_Run(void)
     APP_LOG("[m7_hsem_test] H7 Same-Core Collision: %s", h7_ok ? "PASS" : "FAIL");
 
     /* 4b. H10: BM <-> LL <-> HAL Parity on CM7 */
-    H10_StepResult_t bm_res[H10_STEPS];
-    H10_StepResult_t ll_res[H10_STEPS];
-    H10_StepResult_HAL_t hal_res[H10_STEPS];
+    static H10_StepResult_t bm_res[H10_STEPS];
+    static H10_StepResult_t ll_res[H10_STEPS];
+    static H10_StepResult_HAL_t hal_res[H10_STEPS];
 
     RunSequence_BM_M7(bm_res);
     RunSequence_LL_M7(ll_res);
@@ -477,7 +494,7 @@ void HSEM_SelfTest_CM7_Run(void)
     bool h10_bm_hal_ok = CompareSnapshots_BM_HAL_M7(bm_res, hal_res, true);
 
     /* Negative control for LL: mutate snapshot to confirm comparison detects mismatch */
-    H10_StepResult_t mutated_ll[H10_STEPS];
+    static H10_StepResult_t mutated_ll[H10_STEPS];
     for (uint32_t i = 0U; i < H10_STEPS; i++)
     {
         mutated_ll[i] = ll_res[i];
@@ -486,7 +503,7 @@ void HSEM_SelfTest_CM7_Run(void)
     bool neg_detected_ll = !CompareSnapshots_M7(bm_res, mutated_ll, false);
 
     /* Negative control for HAL: mutate snapshot to confirm comparison detects mismatch */
-    H10_StepResult_HAL_t mutated_hal[H10_STEPS];
+    static H10_StepResult_HAL_t mutated_hal[H10_STEPS];
     for (uint32_t i = 0U; i < H10_STEPS; i++)
     {
         mutated_hal[i] = hal_res[i];
@@ -498,6 +515,8 @@ void HSEM_SelfTest_CM7_Run(void)
     HSEM_TEST_SHARED->h10_m7_pass = h10_all_ok ? 1U : 0U;
     APP_LOG("[m7_hsem_test] H10 Parity (BM <-> LL <-> HAL): %s",
             h10_all_ok ? "PASS" : "FAIL");
+
+    Hsem_ResetTestRegisters_M7();
 
     /* 5. Synchronize with CM4 for dual-core tests */
     APP_LOG("[m7_hsem_test] Waiting for CM4 ready...");

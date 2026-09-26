@@ -183,7 +183,7 @@ static bool CompareSnapshots_M4(const H10_StepResult_t bm[H10_STEPS],
         {
             return false;
         }
-        for (uint32_t r = 0; r < 8; r++)
+        for (uint32_t r = 4; r < 7; r++)
         {
             if (bm[i].snap.R[r] != ll[i].snap.R[r])
             {
@@ -204,6 +204,12 @@ static bool CompareSnapshots_M4(const H10_StepResult_t bm[H10_STEPS],
 
 void HSEM_SelfTest_CM4_Run(void)
 {
+    /* Wait for CM7 to signal that HSEM selftest phase is active */
+    while (HSEM_TEST_SHARED->phase != 1U)
+    {
+        __NOP();
+    }
+
     /* 1. Driver and DWT initialization */
     HsemBm_Status_t init_st = HSEM_BM_Init();
     bool tb_ok = HSEM_BM_TimebaseStart();
@@ -215,16 +221,16 @@ void HSEM_SelfTest_CM4_Run(void)
     bool h0_ok = (init_st == HSEM_BM_OK) && (HSEM_BM_GetCoreId() == HSEM_BM_COREID_CPU2);
 
     /* Test 1-step take characterization */
-    if (HSEM_BM_FastTake(HSEM_TEST_ID_LOCK1) == HSEM_BM_OK)
+    if (HSEM_BM_FastTake(HSEM_TEST_M4_LOCK1) == HSEM_BM_OK)
     {
-        uint32_t r_val = HSEM->R[HSEM_TEST_ID_LOCK1];
+        uint32_t r_val = HSEM->R[HSEM_TEST_M4_LOCK1];
         uint32_t c_id = (r_val >> 8) & 0x0FU;
         uint32_t p_id = r_val & 0xFFU;
         if ((c_id != HSEM_BM_COREID_CPU2) || (p_id != 0U))
         {
             h0_ok = false;
         }
-        HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 0U);
+        HSEM_BM_Release(HSEM_TEST_M4_LOCK1, 0U);
     }
     else
     {
@@ -233,21 +239,21 @@ void HSEM_SelfTest_CM4_Run(void)
 
     /* Test GetOwner on free semaphore does not take it (C11) */
     HsemBm_Owner_t owner = { 0 };
-    if (!HSEM_BM_GetOwner(HSEM_TEST_ID_LOCK1, &owner) || owner.locked || (owner.core_id != 0U))
+    if (!HSEM_BM_GetOwner(HSEM_TEST_M4_LOCK1, &owner) || owner.locked || (owner.core_id != 0U))
     {
         h0_ok = false;
     }
-    if (HSEM_BM_IsLocked(HSEM_TEST_ID_LOCK1))
+    if (HSEM_BM_IsLocked(HSEM_TEST_M4_LOCK1))
     {
         h0_ok = false;
     }
 
     /* Parameter rejection tests (C6) */
     if (HSEM_BM_FastTake(32U) != HSEM_BM_ERR_PARAM) h0_ok = false;
-    if (HSEM_BM_Take(HSEM_TEST_ID_LOCK1, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
-    if (HSEM_BM_Take(HSEM_TEST_ID_LOCK1, 256U) != HSEM_BM_ERR_PARAM) h0_ok = false;
+    if (HSEM_BM_Take(HSEM_TEST_M4_LOCK1, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
+    if (HSEM_BM_Take(HSEM_TEST_M4_LOCK1, 256U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_Release(32U, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
-    if (HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 256U) != HSEM_BM_ERR_PARAM) h0_ok = false;
+    if (HSEM_BM_Release(HSEM_TEST_M4_LOCK1, 256U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_SetClearKey(0U) != false) h0_ok = false;
     if (HSEM_BM_ReleaseAllOfCore(2U, 0xA5C3U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU2, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
@@ -258,26 +264,26 @@ void HSEM_SelfTest_CM4_Run(void)
     /* 3. H3: Release Protection on CM4 */
     bool h3_ok = true;
     /* 2-step with proc 7 */
-    if (HSEM_BM_Take(HSEM_TEST_ID_LOCK1, 7U) == HSEM_BM_OK)
+    if (HSEM_BM_Take(HSEM_TEST_M4_LOCK1, 7U) == HSEM_BM_OK)
     {
         /* (a) Raw release attempt with wrong proc 8 */
-        HSEM->R[HSEM_TEST_ID_LOCK1] = (HSEM_BM_COREID_CPU2 << 8) | 8U;
+        HSEM->R[HSEM_TEST_M4_LOCK1] = (HSEM_BM_COREID_CPU2 << 8) | 8U;
         __DMB();
         /* Verify still held by proc 7 */
-        uint32_t r = HSEM->R[HSEM_TEST_ID_LOCK1];
+        uint32_t r = HSEM->R[HSEM_TEST_M4_LOCK1];
         if (((r & (1UL << 31)) == 0U) || ((r & 0xFFU) != 7U))
         {
             h3_ok = false;
         }
 
         /* (d) HSEM_BM_Release with wrong proc */
-        if (HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 8U) != HSEM_BM_ERR_NOT_OWNER)
+        if (HSEM_BM_Release(HSEM_TEST_M4_LOCK1, 8U) != HSEM_BM_ERR_NOT_OWNER)
         {
             h3_ok = false;
         }
 
         /* Release correctly */
-        if (HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 7U) != HSEM_BM_OK)
+        if (HSEM_BM_Release(HSEM_TEST_M4_LOCK1, 7U) != HSEM_BM_OK)
         {
             h3_ok = false;
         }
@@ -288,16 +294,16 @@ void HSEM_SelfTest_CM4_Run(void)
     }
 
     /* 1-step (proc 0) */
-    if (HSEM_BM_FastTake(HSEM_TEST_ID_LOCK1) == HSEM_BM_OK)
+    if (HSEM_BM_FastTake(HSEM_TEST_M4_LOCK1) == HSEM_BM_OK)
     {
         /* Raw release with proc 5 */
-        HSEM->R[HSEM_TEST_ID_LOCK1] = (HSEM_BM_COREID_CPU2 << 8) | 5U;
+        HSEM->R[HSEM_TEST_M4_LOCK1] = (HSEM_BM_COREID_CPU2 << 8) | 5U;
         __DMB();
-        if (!HSEM_BM_IsLocked(HSEM_TEST_ID_LOCK1))
+        if (!HSEM_BM_IsLocked(HSEM_TEST_M4_LOCK1))
         {
             h3_ok = false;
         }
-        HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 0U);
+        HSEM_BM_Release(HSEM_TEST_M4_LOCK1, 0U);
     }
     else
     {
@@ -307,32 +313,32 @@ void HSEM_SelfTest_CM4_Run(void)
 
     /* 4. H7: Same-Core Context Collision on CM4 (S1) */
     bool h7_ok = true;
-    if (HSEM_BM_FastTake(HSEM_TEST_ID_LOCK1) == HSEM_BM_OK)
+    if (HSEM_BM_FastTake(HSEM_TEST_M4_LOCK1) == HSEM_BM_OK)
     {
         /* Context B on same core attempts FastTake */
-        if (HSEM_BM_FastTake(HSEM_TEST_ID_LOCK1) != HSEM_BM_BUSY_SELF)
+        if (HSEM_BM_FastTake(HSEM_TEST_M4_LOCK1) != HSEM_BM_BUSY_SELF)
         {
             h7_ok = false;
         }
-        HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 0U);
+        HSEM_BM_Release(HSEM_TEST_M4_LOCK1, 0U);
     }
     else
     {
         h7_ok = false;
     }
 
-    if (HSEM_BM_Take(HSEM_TEST_ID_LOCK2, 1U) == HSEM_BM_OK)
+    if (HSEM_BM_Take(HSEM_TEST_M4_LOCK2, 1U) == HSEM_BM_OK)
     {
         /* Context B on same core attempts Take with proc 2 */
-        if (HSEM_BM_Take(HSEM_TEST_ID_LOCK2, 2U) != HSEM_BM_BUSY_SELF)
+        if (HSEM_BM_Take(HSEM_TEST_M4_LOCK2, 2U) != HSEM_BM_BUSY_SELF)
         {
             h7_ok = false;
         }
-        if (HSEM_BM_Release(HSEM_TEST_ID_LOCK2, 2U) != HSEM_BM_ERR_NOT_OWNER)
+        if (HSEM_BM_Release(HSEM_TEST_M4_LOCK2, 2U) != HSEM_BM_ERR_NOT_OWNER)
         {
             h7_ok = false;
         }
-        HSEM_BM_Release(HSEM_TEST_ID_LOCK2, 1U);
+        HSEM_BM_Release(HSEM_TEST_M4_LOCK2, 1U);
     }
     else
     {
@@ -341,15 +347,15 @@ void HSEM_SelfTest_CM4_Run(void)
     HSEM_TEST_SHARED->h7_m4_pass = h7_ok ? 1U : 0U;
 
     /* 5. H10: BM <-> LL Parity on CM4 */
-    H10_StepResult_t bm_res[H10_STEPS];
-    H10_StepResult_t ll_res[H10_STEPS];
+    static H10_StepResult_t bm_res[H10_STEPS];
+    static H10_StepResult_t ll_res[H10_STEPS];
     RunSequence_BM_M4(bm_res);
     RunSequence_LL_M4(ll_res);
 
     bool h10_ok = CompareSnapshots_M4(bm_res, ll_res);
 
     /* Negative control: mutate a snapshot to confirm comparison detects mismatch */
-    H10_StepResult_t mutated_res[H10_STEPS];
+    static H10_StepResult_t mutated_res[H10_STEPS];
     for (uint32_t i = 0U; i < H10_STEPS; i++)
     {
         mutated_res[i] = ll_res[i];

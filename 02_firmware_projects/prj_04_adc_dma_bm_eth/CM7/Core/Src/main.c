@@ -55,6 +55,15 @@ int main(void)
        shared memory or clocks are ready from a previous execution. */
     g_shared.magic = 0U;
 
+#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
+    volatile uint32_t *p_test_shared = (volatile uint32_t *)HSEM_TEST_SHARED_ADDR;
+    for (uint32_t i = 0U; i < (sizeof(HsemTestShared_t) / sizeof(uint32_t)); i++)
+    {
+        p_test_shared[i] = 0U;
+    }
+    __DMB();
+#endif
+
 #if CM4_BOOT_ENABLED
     /* Release CPU2 boot in RCC_GCR in case BCM4=0. */
     HAL_RCCEx_EnableBootCore(RCC_BOOT_C2);
@@ -63,6 +72,11 @@ int main(void)
        the HSEM notification. Wait for D2CKRDY to drop when CPU2 parks. */
     HSEM_BM_Init();
     HSEM_BM_TimebaseStart();
+#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
+    HSEM_BM_SetClearKey(HSEM_TEST_CLEAR_KEY);
+    (void)HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU1, HSEM_TEST_CLEAR_KEY);
+    (void)HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU2, HSEM_TEST_CLEAR_KEY);
+#endif
     (void)HSEM_BM_BootWaitCpu2Parked(32000000UL); /* 500 ms @ 64 MHz */
 
 #if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
