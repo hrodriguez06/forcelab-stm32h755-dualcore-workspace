@@ -118,8 +118,9 @@ int main(void)
 
 #if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
     /* ---- Phase F2 Boot Tests (H5, H5b, H5c) ----------------------------- */
-    /* H5: Verify D2CKRDY stays 0 for 500 ms after CPU2 parks */
-    bool h5_ok = true;
+    /* H5: Wait for CPU2 to boot and park in STOP (D2CKRDY -> 0) */
+    HsemBm_Status_t park_st = HSEM_BM_BootWaitCpu2Parked(200000000UL);
+    bool h5_ok = (park_st == HSEM_BM_OK);
     for (uint32_t ms = 0; ms < 500; ms++)
     {
         if ((RCC->CR & RCC_CR_D2CKRDY) != 0U)
@@ -143,16 +144,22 @@ int main(void)
     EXTI->SWIER1 |= (1UL << 23);
     for (volatile uint32_t s = 0; s < 400000U; s++) { __NOP(); } /* ~10 ms */
     EXTI->C2EMR1 &= ~(1UL << 23);
+    EXTI->C2PR1 = (1UL << 23);
+    EXTI->PR1 = (1UL << 23);
     bool h5c_ok = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
 
     /* Now set valid magic and release CPU2 */
     Shared_Init();
-    if (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) != HSEM_BM_OK)
+    bool h5_release_ok = (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) == HSEM_BM_OK);
+    if (!h5_release_ok)
     {
         Error_Handler();
     }
-    bool h5_release_ok = ((RCC->CR & RCC_CR_D2CKRDY) != 0U);
 
+    HSEM_TEST_SHARED->h5_ok = h5_ok ? 1U : 0U;
+    HSEM_TEST_SHARED->h5b_ok = h5b_ok ? 1U : 0U;
+    HSEM_TEST_SHARED->h5c_ok = h5c_ok ? 1U : 0U;
+    HSEM_TEST_SHARED->h5_rel_ok = h5_release_ok ? 1U : 0U;
     HSEM_TEST_SHARED->h5_pass = (h5_ok && h5b_ok && h5c_ok && h5_release_ok) ? 1U : 0U;
 #else
     /* The clock tree is up and shared memory is ready: release CPU2. */

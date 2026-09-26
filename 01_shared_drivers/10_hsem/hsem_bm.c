@@ -550,12 +550,28 @@ HsemBm_Status_t HSEM_BM_BootWaitForCpu1(const HsemBm_BootWait_t *cfg)
     __ISB();
 
     /* Loop until semaphore flag is asserted AND ready condition is met */
-    while (!(((HSEM_COMMON->ISR & sem_mask) != 0U) &&
-             ((cfg->ready == (bool (*)(void *))0) || cfg->ready(cfg->ctx))))
+    for (;;)
     {
+        /* Clear any latched event from previous execution / wake */
         __SEV();
         __WFE();
+        /* Enter D2 domain STOP mode */
         __WFE();
+
+        /* Woken up: check if HSEM notification arrived and ready callback passes */
+        bool sem_asserted = ((HSEM_COMMON->ISR & sem_mask) != 0U);
+        if (sem_asserted && ((cfg->ready == (bool (*)(void *))0) || cfg->ready(cfg->ctx)))
+        {
+            break;
+        }
+
+        /* Not ready yet (spurious EXTI event or premature HSEM release before ready).
+           If HSEM was released prematurely, clear ISR flag in ICR so CPU2 can enter
+           STOP again and be re-notified on the subsequent valid release. */
+        if (sem_asserted)
+        {
+            HSEM_COMMON->ICR = sem_mask;
+        }
     }
 
     /* Cleanup notification and restore SCR */

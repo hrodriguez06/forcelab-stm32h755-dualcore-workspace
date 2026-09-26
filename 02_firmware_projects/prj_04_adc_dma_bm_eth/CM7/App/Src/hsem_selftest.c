@@ -415,7 +415,11 @@ void HSEM_SelfTest_CM7_Run(void)
 
     /* ---- H5: Boot Handshake ---- */
     bool h5_ok = (HSEM_TEST_SHARED->h5_pass != 0U);
-    APP_LOG("[m7_hsem_test] H5 Boot Handshake (delayed release, H5b pre-magic, H5c spurious EXTI): %s",
+    APP_LOG("[m7_hsem_test] H5 Boot Handshake: delay500ms=%lu h5b_pre_magic=%lu h5c_spurious_exti=%lu release=%lu -> %s",
+            HSEM_TEST_SHARED->h5_ok,
+            HSEM_TEST_SHARED->h5b_ok,
+            HSEM_TEST_SHARED->h5c_ok,
+            HSEM_TEST_SHARED->h5_rel_ok,
             h5_ok ? "PASS" : "FAIL");
 
     APP_LOG("[m7_hsem_test] =================================================");
