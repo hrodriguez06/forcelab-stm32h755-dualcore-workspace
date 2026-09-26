@@ -60,6 +60,11 @@ static inline HsemBm_Status_t CheckInit(void)
     return HSEM_BM_OK;
 }
 
+HsemBm_Status_t HSEM_BM_CheckInit(void)
+{
+    return CheckInit();
+}
+
 HsemBm_Status_t HSEM_BM_Init(void)
 {
     uint32_t part_no = (SCB->CPUID & SCB_CPUID_PARTNO_Msk) >> SCB_CPUID_PARTNO_Pos;
@@ -474,6 +479,12 @@ HsemBm_Status_t HSEM_BM_TakeOrNotify(uint32_t id, uint32_t proc_id)
         return HSEM_BM_ERR_PARAM;
     }
 
+    HsemBm_Status_t init_st = CheckInit();
+    if (init_st != HSEM_BM_OK)
+    {
+        return init_st;
+    }
+
     HsemBm_Status_t status;
     if (proc_id == 0U)
     {
@@ -488,7 +499,12 @@ HsemBm_Status_t HSEM_BM_TakeOrNotify(uint32_t id, uint32_t proc_id)
     {
         return HSEM_BM_OK;
     }
-    if ((status != HSEM_BM_BUSY) && (status != HSEM_BM_BUSY_SELF))
+    if (status == HSEM_BM_BUSY_SELF)
+    {
+        /* M3: Do not arm notification if held by this core; return BUSY_SELF immediately */
+        return HSEM_BM_BUSY_SELF;
+    }
+    if (status != HSEM_BM_BUSY)
     {
         return status;
     }
@@ -509,8 +525,12 @@ HsemBm_Status_t HSEM_BM_TakeOrNotify(uint32_t id, uint32_t proc_id)
     {
         return HSEM_BM_OK;
     }
+    if (status == HSEM_BM_BUSY_SELF)
+    {
+        return HSEM_BM_BUSY_SELF;
+    }
 
-    /* Arm notification on failure */
+    /* Arm notification on failure (held by other core) */
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
     HSEM_COMMON->IER |= (1UL << id);
@@ -537,7 +557,7 @@ HsemBm_Status_t HSEM_BM_BootWaitForCpu1(const HsemBm_BootWait_t *cfg)
     (void)RCC->AHB4ENR;
 
     uint32_t sem_mask = (1UL << cfg->sem_id);
-    HSEM_COMMON->ICR = sem_mask;
+    /* m1: Do not clear ICR upon entry so an early release flag is not dropped */
     HSEM_COMMON->IER |= sem_mask;
 
     uint32_t scr_orig = SCB->SCR;
@@ -557,6 +577,12 @@ HsemBm_Status_t HSEM_BM_BootWaitForCpu1(const HsemBm_BootWait_t *cfg)
         __WFE();
         /* Enter D2 domain STOP mode */
         __WFE();
+
+        /* B2: Record that CPU2 woke from WFE */
+        if (cfg->wake_count != (volatile uint32_t *)0)
+        {
+            (*cfg->wake_count)++;
+        }
 
         /* Woken up: check if HSEM notification arrived and ready callback passes */
         bool sem_asserted = ((HSEM_COMMON->ISR & sem_mask) != 0U);
@@ -578,6 +604,9 @@ HsemBm_Status_t HSEM_BM_BootWaitForCpu1(const HsemBm_BootWait_t *cfg)
     HSEM_COMMON->ICR = sem_mask;
     HSEM_COMMON->IER &= ~sem_mask;
     SCB->SCR = scr_orig;
+
+    /* m2: RM0399 §7.7.4 requires clearing pending IRQ in NVIC after waking via SEVONPEND */
+    NVIC_ClearPendingIRQ(HSEM2_IRQn);
 
     return HSEM_BM_OK;
 #endif

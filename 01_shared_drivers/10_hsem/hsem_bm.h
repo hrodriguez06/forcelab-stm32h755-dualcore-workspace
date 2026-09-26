@@ -48,6 +48,7 @@ typedef struct
 
 /* ---- Setup, per core ---------------------------------------------------- */
 HsemBm_Status_t HSEM_BM_Init(void);            /* HSEMEN (banked, read-back), core check (S9); idempotent */
+HsemBm_Status_t HSEM_BM_CheckInit(void);       /* Check HSEMEN clock and core identity without state */
 bool            HSEM_BM_TimebaseStart(void);   /* DWT CYCCNT on; core-local; true if CYCCNT advances */
 uint32_t        HSEM_BM_GetCoreId(void);       /* this core's COREID, as verified by Init */
 
@@ -80,9 +81,10 @@ HsemBm_Status_t HSEM_BM_TakeOrNotify(uint32_t id, uint32_t proc_id);  /* §11.3.
 /* ---- Boot handshake (F2) ------------------------------------------------ */
 typedef struct
 {
-    uint32_t sem_id;              /*!< From the project (shared_memory.h), never from the driver */
-    bool   (*ready)(void *ctx);   /*!< Extra condition, e.g. SHARED_MAGIC; NULL = flag only        */
+    uint32_t sem_id;                     /*!< From the project (shared_memory.h), never from the driver */
+    bool   (*ready)(void *ctx);          /*!< Extra condition, e.g. SHARED_MAGIC; NULL = flag only        */
     void    *ctx;
+    volatile uint32_t *wake_count;       /*!< Optional: incremented on every wake from WFE (B2)         */
 } HsemBm_BootWait_t;
 
 HsemBm_Status_t HSEM_BM_BootWaitForCpu1(const HsemBm_BootWait_t *cfg);           /* CPU2; no timeout (C13) */

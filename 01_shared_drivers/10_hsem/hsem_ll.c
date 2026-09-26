@@ -21,6 +21,12 @@ HsemBm_Status_t HSEM_LL_FastTake(uint32_t id)
         return HSEM_BM_ERR_PARAM;
     }
 
+    HsemBm_Status_t init_st = HSEM_BM_CheckInit();
+    if (init_st != HSEM_BM_OK)
+    {
+        return init_st;
+    }
+
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
 
@@ -49,6 +55,12 @@ HsemBm_Status_t HSEM_LL_Take(uint32_t id, uint32_t proc_id)
     if (id > 31U || proc_id == 0U || proc_id > 255U)
     {
         return HSEM_BM_ERR_PARAM;
+    }
+
+    HsemBm_Status_t init_st = HSEM_BM_CheckInit();
+    if (init_st != HSEM_BM_OK)
+    {
+        return init_st;
     }
 
     /* Check if already held by this core (no re-entry) or other core */
@@ -85,7 +97,15 @@ HsemBm_Status_t HSEM_LL_TakeTimeoutEx(uint32_t id, uint32_t proc_id, uint32_t ma
         return HSEM_BM_ERR_PARAM;
     }
 
-    if ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0U)
+    HsemBm_Status_t init_st = HSEM_BM_CheckInit();
+    if (init_st != HSEM_BM_OK)
+    {
+        return init_st;
+    }
+
+    /* M2: Check both TRCENA and CYCCNTENA */
+    if (((CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) == 0U) ||
+        ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0U))
     {
         return HSEM_BM_ERR_TIMEBASE;
     }
@@ -94,11 +114,8 @@ HsemBm_Status_t HSEM_LL_TakeTimeoutEx(uint32_t id, uint32_t proc_id, uint32_t ma
     for (;;)
     {
         HsemBm_Status_t st = (proc_id == 0U) ? HSEM_LL_FastTake(id) : HSEM_LL_Take(id, proc_id);
-        if (st == HSEM_BM_OK)
-        {
-            return HSEM_BM_OK;
-        }
-        if (st == HSEM_BM_ERR_PARAM)
+        /* M1: Return immediately on OK, BUSY_SELF, or error; only retry on BUSY */
+        if (st != HSEM_BM_BUSY)
         {
             return st;
         }
@@ -128,6 +145,12 @@ HsemBm_Status_t HSEM_LL_Release(uint32_t id, uint32_t proc_id)
         return HSEM_BM_ERR_PARAM;
     }
 
+    HsemBm_Status_t init_st = HSEM_BM_CheckInit();
+    if (init_st != HSEM_BM_OK)
+    {
+        return init_st;
+    }
+
     /* Check ownership before writing (C11) */
     if (!LL_HSEM_IsSemaphoreLocked(HSEM, id) ||
         (LL_HSEM_GetCoreId(HSEM, id) != LL_HSEM_COREID) ||
@@ -146,6 +169,11 @@ HsemBm_Status_t HSEM_LL_Release(uint32_t id, uint32_t proc_id)
 bool HSEM_LL_NotifyEnable(uint32_t sem_mask)
 {
     if (sem_mask == 0U)
+    {
+        return false;
+    }
+
+    if (HSEM_BM_CheckInit() != HSEM_BM_OK)
     {
         return false;
     }
@@ -172,6 +200,11 @@ bool HSEM_LL_NotifyDisable(uint32_t sem_mask)
         return false;
     }
 
+    if (HSEM_BM_CheckInit() != HSEM_BM_OK)
+    {
+        return false;
+    }
+
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
 
@@ -189,6 +222,11 @@ bool HSEM_LL_NotifyDisable(uint32_t sem_mask)
 
 uint32_t HSEM_LL_NotifyTake(void)
 {
+    if (HSEM_BM_CheckInit() != HSEM_BM_OK)
+    {
+        return 0U;
+    }
+
     uint32_t active;
     uint32_t primask = __get_PRIMASK();
     __disable_irq();

@@ -25,6 +25,11 @@ HAL_StatusTypeDef HSEM_HAL_FastTake(uint32_t id)
         return HAL_ERROR;
     }
 
+    if (HSEM_BM_CheckInit() != HSEM_BM_OK)
+    {
+        return HAL_ERROR;
+    }
+
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
 
@@ -60,6 +65,11 @@ HAL_StatusTypeDef HSEM_HAL_Take(uint32_t id, uint32_t proc_id)
         return HAL_ERROR;
     }
 
+    if (HSEM_BM_CheckInit() != HSEM_BM_OK)
+    {
+        return HAL_ERROR;
+    }
+
     /* Check if already locked by any core (no re-entry, RM0399 §11.3.3) */
     uint32_t r = HSEM->R[id];
     if ((r & HSEM_R_LOCK) != 0U)
@@ -85,9 +95,28 @@ HAL_StatusTypeDef HSEM_HAL_TakeTimeoutEx(uint32_t id, uint32_t proc_id, uint32_t
         return HAL_ERROR;
     }
 
-    if ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0U)
+    if (HSEM_BM_CheckInit() != HSEM_BM_OK)
+    {
+        return HAL_ERROR;
+    }
+
+    /* M2: Check both TRCENA and CYCCNTENA */
+    if (((CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) == 0U) ||
+        ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0U))
     {
         return HAL_ERROR; /* ERR_TIMEBASE -> HAL_ERROR */
+    }
+
+    /* M1: S1 check - if already locked by this core, return HAL_BUSY immediately (BUSY_SELF) */
+    uint32_t my_core = HSEM_BM_GetCoreId();
+    uint32_t r = HSEM->R[id];
+    if ((r & HSEM_R_LOCK) != 0U)
+    {
+        uint32_t holder_core = (r & HSEM_R_COREID_Msk) >> HSEM_R_COREID_Pos;
+        if (holder_core == my_core)
+        {
+            return HAL_BUSY;
+        }
     }
 
     uint32_t start = DWT->CYCCNT;
@@ -101,6 +130,17 @@ HAL_StatusTypeDef HSEM_HAL_TakeTimeoutEx(uint32_t id, uint32_t proc_id, uint32_t
         if (st == HAL_ERROR)
         {
             return st;
+        }
+
+        /* Check if it became held by THIS core while spinning */
+        r = HSEM->R[id];
+        if ((r & HSEM_R_LOCK) != 0U)
+        {
+            uint32_t holder_core = (r & HSEM_R_COREID_Msk) >> HSEM_R_COREID_Pos;
+            if (holder_core == my_core)
+            {
+                return HAL_BUSY;
+            }
         }
 
         uint32_t elapsed = DWT->CYCCNT - start;
@@ -124,6 +164,11 @@ HAL_StatusTypeDef HSEM_HAL_TakeTimeout(uint32_t id, uint32_t proc_id, uint32_t m
 HAL_StatusTypeDef HSEM_HAL_Release(uint32_t id, uint32_t proc_id)
 {
     if (id > 31U || proc_id > 255U)
+    {
+        return HAL_ERROR;
+    }
+
+    if (HSEM_BM_CheckInit() != HSEM_BM_OK)
     {
         return HAL_ERROR;
     }
@@ -157,6 +202,11 @@ HAL_StatusTypeDef HSEM_HAL_NotifyEnable(uint32_t sem_mask)
         return HAL_ERROR;
     }
 
+    if (HSEM_BM_CheckInit() != HSEM_BM_OK)
+    {
+        return HAL_ERROR;
+    }
+
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
 
@@ -170,6 +220,11 @@ HAL_StatusTypeDef HSEM_HAL_NotifyEnable(uint32_t sem_mask)
 HAL_StatusTypeDef HSEM_HAL_NotifyDisable(uint32_t sem_mask)
 {
     if (sem_mask == 0U)
+    {
+        return HAL_ERROR;
+    }
+
+    if (HSEM_BM_CheckInit() != HSEM_BM_OK)
     {
         return HAL_ERROR;
     }
@@ -191,8 +246,11 @@ static void                  *s_callback_ctx = NULL;
 
 HAL_StatusTypeDef HSEM_HAL_RegisterCallback(HsemHal_FreeCallback_t cb, void *ctx)
 {
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
     s_callback = cb;
     s_callback_ctx = ctx;
+    __set_PRIMASK(primask);
     return HAL_OK;
 }
 
