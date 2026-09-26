@@ -26,14 +26,30 @@
 extern "C" {
 #endif
 
-/* ---- HSEM identifiers ----------------------------------------------------
-   HSEM 0 is reserved by ST for the classic boot handshake (M4 waits in
-   HAL_PWREx_ClearPendingEvent/__WFE until M7 releases HSEM 0).             */
+/* ============================================================================
+ * Semaphore Allocation & Ownership Table (RM0399 §11, S1 mitigation, M6)
+ * ============================================================================
+ * ID  | Name                    | Owner / Master | Description
+ * ----+-------------------------+----------------+----------------------------
+ *  0  | HSEM_ID_BOOT_SYNC       | CPU1 (CM7)     | M7 -> M4 boot release
+ *  1  | HSEM_ID_SHARED_STATE    | Mutex (Dual)   | Guards SharedMemory_t.state
+ *  2  | HSEM_ID_M7_TO_M4_MBOX   | CPU1 (CM7)     | Guards m7_to_m4 mailbox
+ *  3  | HSEM_ID_M4_TO_M7_MBOX   | CPU2 (CM4)     | Guards m4_to_m7 mailbox
+ *  4  | HSEM_ID_ADC_DATA        | CPU2 (CM4)     | Guards ADC telemetry/waveform
+ *  5  | BOARD_GPIO_HSEM_ID      | Mutex (Dual)   | Reserved for 00_gpio pin lock
+ * 6..23 | Reserved              | —              | Reserved for future drivers
+ * 24..26| HSEM_TEST_ID_CM7_*    | CPU1 (CM7)     | Selftest IDs dedicated to CM7
+ * 27  | HSEM_TEST_ID_CROSS      | Mutex (Dual)   | Cross-core contention tests
+ * 28..30| HSEM_TEST_ID_CM4_*    | CPU2 (CM4)     | Selftest IDs dedicated to CM4
+ * 31  | HSEM_TEST_ID_NOTIFY     | Mutex (Dual)   | Notification tests
+ * ============================================================================
+ */
 #define HSEM_ID_BOOT_SYNC       0U   /* reserved: M7 -> M4 boot release      */
 #define HSEM_ID_SHARED_STATE    1U   /* guards SharedMemory_t.state          */
 #define HSEM_ID_M7_TO_M4_MBOX   2U   /* guards m7_to_m4                      */
 #define HSEM_ID_M4_TO_M7_MBOX   3U   /* guards m4_to_m7                      */
 #define HSEM_ID_ADC_DATA        4U   /* guards adc telemetry data            */
+#define BOARD_GPIO_HSEM_ID      5U   /* reserved for 00_gpio shared pin lock */
 
 #define SHARED_MBOX_SIZE        64U  /* multiple of 32 (cache line)          */
 #define SHARED_ADC_WAVEFORM_SAMPLES 512U /* 512 samples = 1.024 ms @ 500 kSPS (10 cycles @ 10 kHz) */
@@ -80,8 +96,10 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t m4_to_m7_len;
     volatile uint8_t  m4_to_m7[SHARED_MBOX_SIZE];
 
-    volatile uint32_t adc_lock_fail_count; /* Failures in Shared_TryLockCycles */
-    uint8_t           _pad2[20];           /* Pad struct to 32-byte multiple   */
+    volatile uint32_t m7_adc_lock_fail_count; /* Failures in Shared_TryLockCycles on CM7 (m3) */
+    volatile uint32_t m4_adc_lock_fail_count; /* Failures in Shared_TryLockCycles on CM4 (m3) */
+    volatile uint32_t cpu2_wake_count;        /* WFE wakeups during boot handshake (B2) */
+    uint8_t           _pad2[12];              /* Pad struct to 32-byte multiple */
 
 } SharedMemory_t;
 
@@ -101,15 +119,21 @@ void Shared_Init(void);
 
 #define SHARED_MAGIC   0x48375353UL   /* "H7SS" */
 
-#include "hsem_bm.h"
+/* ---- HSEM take / release (m4: pure C function declarations, no hsem_bm.h) -- */
+void Shared_Lock(uint32_t id);
+void Shared_Unlock(uint32_t id);
+#define SHARED_LOCK(id)     Shared_Lock(id)
+#define SHARED_UNLOCK(id)   Shared_Unlock(id)
 
-/* ---- HSEM take / release (1-step lock, process ID 0) ---------------------
-   Requires HSEM peripheral clock enabled on the calling core.
-   Note: FastTake is 1-step locking; process ID is always 0.                */
-#define SHARED_LOCK(id)     do { } while (HSEM_BM_FastTake(id) != HSEM_BM_OK)
-#define SHARED_UNLOCK(id)   (void)HSEM_BM_Release((id), 0U)
-
-#define SHARED_ADC_TRYLOCK_CYCLES  50000UL /* ~125 µs @ 400 MHz, ~250 µs @ 200 MHz */
+/* M7: Derived from measured SRAM4 retention under interrupt jitter: 25 µs */
+#define SHARED_ADC_TRYLOCK_US            25U
+#define SHARED_ADC_TRYLOCK_CYCLES_CM7   (SHARED_ADC_TRYLOCK_US * 400U) /* 10,000 cycles @ 400 MHz */
+#define SHARED_ADC_TRYLOCK_CYCLES_CM4   (SHARED_ADC_TRYLOCK_US * 200U) /*  5,000 cycles @ 200 MHz */
+#if defined(CORE_CM4)
+#define SHARED_ADC_TRYLOCK_CYCLES        SHARED_ADC_TRYLOCK_CYCLES_CM4
+#else
+#define SHARED_ADC_TRYLOCK_CYCLES        SHARED_ADC_TRYLOCK_CYCLES_CM7
+#endif
 
 /**
   * @brief  Attempts to acquire an HSEM with a bounded number of retries (spin loops).

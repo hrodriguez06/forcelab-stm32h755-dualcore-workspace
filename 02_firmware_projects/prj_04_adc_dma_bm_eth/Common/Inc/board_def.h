@@ -125,6 +125,9 @@ extern "C" {
 #define BOARD_ADC_DMA_REQUEST                 9U             /* DMAMUX1: adc1_dma */
 #define BOARD_SELFTEST_TIM_REQUEST            70U            /* DMAMUX1: tim7_up */
 
+/* ---- Hardware Semaphore Clear Key (RM0399 §11.3.6, M6) ----------------- */
+#define BOARD_HSEM_CLEAR_KEY                  0xA5C3U
+
 #ifdef __cplusplus
 }
 #endif

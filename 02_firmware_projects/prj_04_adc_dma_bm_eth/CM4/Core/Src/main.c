@@ -26,6 +26,7 @@
 
 #include "main.h"
 #include "shared_memory.h"
+#include "hsem_bm.h"
 #include "adc_acquisition.h"
 #if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
 #include "uart_bm.h"
@@ -164,9 +165,10 @@ static bool Shared_MagicReady(void *ctx)
 static void CPU2_WaitForCPU1(void)
 {
     const HsemBm_BootWait_t cfg = {
-        .sem_id = HSEM_ID_BOOT_SYNC,
-        .ready  = Shared_MagicReady,
-        .ctx    = NULL
+        .sem_id     = HSEM_ID_BOOT_SYNC,
+        .ready      = Shared_MagicReady,
+        .ctx        = NULL,
+        .wake_count = &g_shared.cpu2_wake_count
     };
     (void)HSEM_BM_BootWaitForCpu1(&cfg);
 }

@@ -72,12 +72,12 @@ int main(void)
        the HSEM notification. Wait for D2CKRDY to drop when CPU2 parks. */
     HSEM_BM_Init();
     HSEM_BM_TimebaseStart();
-#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
-    HSEM_BM_SetClearKey(HSEM_TEST_CLEAR_KEY);
-    (void)HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU1, HSEM_TEST_CLEAR_KEY);
-    (void)HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU2, HSEM_TEST_CLEAR_KEY);
-#endif
-    (void)HSEM_BM_BootWaitCpu2Parked(32000000UL); /* 500 ms @ 64 MHz */
+    /* M6: Set clear key unconditionally in all builds */
+    HSEM_BM_SetClearKey(BOARD_HSEM_CLEAR_KEY);
+    if (HSEM_BM_BootWaitCpu2Parked(32000000UL) != HSEM_BM_OK)
+    {
+        Error_Handler();
+    }
 
 #if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
     /* ---- Phase F2 Boot Tests (H5, H5b, H5c) ----------------------------- */

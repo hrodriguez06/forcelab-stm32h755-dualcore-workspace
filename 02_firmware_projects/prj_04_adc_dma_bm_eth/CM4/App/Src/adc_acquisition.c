@@ -34,6 +34,11 @@ static uint16_t s_adc_dma_buffer[ADC_BUFFER_SIZE] DMA_BM_ALIGN_32;
 
 static AdcBm_Handle_t s_adc_handle;
 
+/* B1d: Retention measurement variables */
+volatile uint32_t g_adc_lock_hold_cycles_max = 0U;
+volatile uint32_t g_adc_lock_hold_cycles_min = 0xFFFFFFFFUL;
+volatile uint32_t g_adc_lock_hold_cycles_last = 0U;
+
 static void GPIO_Analog_Init(void)
 {
     /* Enable GPIO port clock via bare-metal helper */
@@ -175,7 +180,7 @@ bool ADC_Acquisition_Init(void)
     }
     else
     {
-        g_shared.adc_lock_fail_count++;
+        g_shared.m4_adc_lock_fail_count++;
     }
 
     return true;
@@ -200,6 +205,8 @@ void ADC_Acquisition_Process(void)
          */
         if (Shared_TryLockCycles(HSEM_ID_ADC_DATA, SHARED_ADC_TRYLOCK_CYCLES))
         {
+            uint32_t t_hold_start = DWT->CYCCNT;
+
             g_shared.adc.latest_raw         = s_adc_handle.stats.latest_raw;
             g_shared.adc.average_raw        = s_adc_handle.stats.average_raw;
             g_shared.adc.min_raw            = s_adc_handle.stats.min_raw;
@@ -218,10 +225,16 @@ void ADC_Acquisition_Process(void)
             g_shared.adc.waveform_len       = SHARED_ADC_WAVEFORM_SAMPLES;
             memcpy((void *)g_shared.adc.waveform, src, sizeof(uint16_t) * SHARED_ADC_WAVEFORM_SAMPLES);
             SHARED_UNLOCK(HSEM_ID_ADC_DATA);
+
+            /* B1d: Record retention cycle duration */
+            uint32_t hold_cyc = DWT->CYCCNT - t_hold_start;
+            g_adc_lock_hold_cycles_last = hold_cyc;
+            if (hold_cyc > g_adc_lock_hold_cycles_max) { g_adc_lock_hold_cycles_max = hold_cyc; }
+            if (hold_cyc < g_adc_lock_hold_cycles_min) { g_adc_lock_hold_cycles_min = hold_cyc; }
         }
         else
         {
-            g_shared.adc_lock_fail_count++;
+            g_shared.m4_adc_lock_fail_count++;
         }
     }
 }

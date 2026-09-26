@@ -17,6 +17,7 @@
   */
 
 #include "shared_memory.h"
+#include "hsem_bm.h"
 
 /* For __DMB() / __DSB(). Included here rather than in shared_memory.h because
    that header is the golden copy shared with the documentation hub and is
@@ -61,11 +62,24 @@ void Shared_Init(void)
     __DSB();
 }
 
+void Shared_Lock(uint32_t id)
+{
+    while (HSEM_BM_FastTake(id) != HSEM_BM_OK)
+    {
+        __NOP();
+    }
+}
+
+void Shared_Unlock(uint32_t id)
+{
+    (void)HSEM_BM_Release(id, 0U);
+}
+
 bool Shared_TryLock(uint32_t id, uint32_t retries)
 {
     while (retries > 0U)
     {
-        if (HAL_HSEM_FastTake(id) == HAL_OK)
+        if (HSEM_BM_FastTake(id) == HSEM_BM_OK)
         {
             return true;
         }

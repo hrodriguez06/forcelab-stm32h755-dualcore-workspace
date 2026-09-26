@@ -68,6 +68,11 @@ _Static_assert(sizeof(WaveformHeader_t) == 56U,
 
 static struct udp_pcb *s_adc_pcb = NULL;
 
+/* DWT cycle measurement of HSEM lock retention on CM7 (B1d) */
+volatile uint32_t g_m7_adc_lock_hold_cycles_max = 0;
+volatile uint32_t g_m7_adc_lock_hold_cycles_min = 0xFFFFFFFFU;
+volatile uint32_t g_m7_adc_lock_hold_cycles_last = 0;
+
 static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
                             const ip_addr_t *addr, u16_t port)
 {
@@ -126,6 +131,7 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
             if (Shared_TryLockCycles(HSEM_ID_ADC_DATA, SHARED_ADC_TRYLOCK_CYCLES))
             {
+                uint32_t dwt_start = DWT->CYCCNT;
                 hdr->magic              = WAVE_MAGIC;
                 hdr->version            = WAVE_VERSION;
                 hdr->header_len         = (uint16_t)sizeof(WaveformHeader_t);
@@ -146,13 +152,18 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
                 memcpy(sample_dest, (const void *)g_shared.adc.waveform,
                        sizeof(uint16_t) * SHARED_ADC_WAVEFORM_SAMPLES);
                 SHARED_UNLOCK(HSEM_ID_ADC_DATA);
+                uint32_t hold = DWT->CYCCNT - dwt_start;
+                g_m7_adc_lock_hold_cycles_last = hold;
+                if (hold > g_m7_adc_lock_hold_cycles_max) { g_m7_adc_lock_hold_cycles_max = hold; }
+                if (hold < g_m7_adc_lock_hold_cycles_min) { g_m7_adc_lock_hold_cycles_min = hold; }
+
                 hdr->m4_heartbeat       = g_shared.m4_heartbeat;
 
                 (void)udp_sendto(pcb, wp, addr, port);
             }
             else
             {
-                g_shared.adc_lock_fail_count++;
+                g_shared.m7_adc_lock_fail_count++;
             }
             pbuf_free(wp);
         }
@@ -166,9 +177,10 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
     if (!Shared_TryLockCycles(HSEM_ID_ADC_DATA, SHARED_ADC_TRYLOCK_CYCLES))
     {
-        g_shared.adc_lock_fail_count++;
+        g_shared.m7_adc_lock_fail_count++;
         return; /* Failed to acquire HSEM: do not stall FreeRTOS tcpip thread */
     }
+    uint32_t dwt_start = DWT->CYCCNT;
     ch      = g_shared.adc.channel;
     latest  = g_shared.adc.latest_raw;
     avg     = g_shared.adc.average_raw;
@@ -184,6 +196,10 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     rate    = g_shared.adc.sampling_rate_hz;
     seq     = g_shared.adc.waveform_seq;
     SHARED_UNLOCK(HSEM_ID_ADC_DATA);
+    uint32_t hold = DWT->CYCCNT - dwt_start;
+    g_m7_adc_lock_hold_cycles_last = hold;
+    if (hold > g_m7_adc_lock_hold_cycles_max) { g_m7_adc_lock_hold_cycles_max = hold; }
+    if (hold < g_m7_adc_lock_hold_cycles_min) { g_m7_adc_lock_hold_cycles_min = hold; }
     m4_hb = g_shared.m4_heartbeat;
 
     if (is_json)

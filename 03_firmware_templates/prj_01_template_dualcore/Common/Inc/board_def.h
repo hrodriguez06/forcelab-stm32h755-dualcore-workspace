@@ -67,6 +67,9 @@ extern "C" {
 #define BOARD_CONSOLE_RX_PIN                  GPIO_PIN_9
 #define BOARD_CONSOLE_RX_AF                   GPIO_AF7_USART3
 
+/* ---- Hardware Semaphore Clear Key (RM0399 §11.3.6, M6) ----------------- */
+#define BOARD_HSEM_CLEAR_KEY                  0xA5C3U
+
 #ifdef __cplusplus
 }
 #endif

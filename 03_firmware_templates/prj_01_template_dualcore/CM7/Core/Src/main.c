@@ -54,7 +54,12 @@ int main(void)
        not fail fatally if CPU2 is gated (BCM4=0) and waiting for BOOT_C2. */
     HSEM_BM_Init();
     HSEM_BM_TimebaseStart();
-    (void)HSEM_BM_BootWaitCpu2Parked(200000000UL); /* 500 ms @ 400 MHz */
+    HSEM_BM_SetClearKey(BOARD_HSEM_CLEAR_KEY);
+    /* m5: 500 ms @ 64 MHz HSI = 32,000,000 cycles */
+    if (HSEM_BM_BootWaitCpu2Parked(32000000UL) != HSEM_BM_OK)
+    {
+        Error_Handler();
+    }
 #endif
 
     /* Memory attributes first, then the caches.
