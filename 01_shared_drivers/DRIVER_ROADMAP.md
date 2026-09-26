@@ -27,7 +27,7 @@ no lo sustituye.
 | `07_adc` | Hecho y auditado | BM, LL, HAL. |
 | `08_eth` | En trabajo | HAL. E1 y E2 abiertos (ver `08_eth/README.md` §10). |
 | `09_fdcan` | **Vacío** | |
-| `10_hsem` | Hecho y auditado | BM, LL, HAL + utilidad de arranque. F0–F5 completadas y auditadas en hardware Nucleo-H755ZI-Q. |
+| `10_hsem` | **Vacío** | Plan F0–F5 escrito en `10_hsem/IMPLEMENTATION_PLAN.md`, sin ejecutar. |
 
 ---
 
@@ -139,10 +139,6 @@ Los IDs son del proyecto (`shared_memory.h`), nunca del driver (regla 1).
 
 **Criterio de salida:** H1–H6 en verde; `prj_04` y la plantilla usan el driver
 para el arranque; `tools/build_all.ps1 -Clean` 8/8.
-
-**Estado:** Criterio superado (Sep 2026). Pruebas H0–H11 completadas y validadas
-en hardware NUCLEO-H755ZI-Q con controles negativos; arranque migrado en
-`prj_04` y plantilla dual-core; tiers BM, LL y HAL implementados y auditados (F0–F5).
 
 ---
 

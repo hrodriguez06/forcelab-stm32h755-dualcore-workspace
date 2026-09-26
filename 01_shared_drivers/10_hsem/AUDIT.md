@@ -1,0 +1,576 @@
+# Registro de Auditoría: Driver HSEM (10_hsem)
+
+Este documento registra los resultados de auditoría independientes para cada una de las fases (F0 a F5) del plan de implementación del driver `10_hsem`, según el protocolo definido en `IMPLEMENTATION_PLAN.md`.
+
+---
+
+## Fase F0: Base y Caracterización de Silicio
+
+- **Fecha:** Sep 26, 2026
+- **Rama:** `driver/hsem`
+- **Plataforma:** NUCLEO-H755ZI-Q (STM32H755ZI Silicon Rev V, ID 0x450, ST-LINK/V3 en COM4)
+- **Estado de Fase F0:** **APROBADA (GATE PASSED)**
+
+### 1. Entregables y Acciones de la Fase F0
+
+1. **Tabla de tamaños de referencia (8 builds con -Werror):**
+   Ejecución limpia con `tools/build_all.ps1 -Clean`:
+   * `prj_01_template_dualcore` [debug]: CM7 83,520 B, CM4 15,092 B
+   * `prj_01_template_dualcore` [release]: CM7 82,472 B, CM4 14,844 B
+   * `prj_02_eth_lwip_dualcore` [debug]: CM7 205,980 B, CM4 15,092 B
+   * `prj_02_eth_lwip_dualcore` [release]: CM7 202,004 B, CM4 14,844 B
+   * `prj_03_adc_dma_eth` [debug]: CM7 208,516 B, CM4 36,364 B
+   * `prj_03_adc_dma_eth` [release]: CM7 204,476 B, CM4 34,208 B
+   * `prj_04_adc_dma_bm_eth` [debug]: CM7 209,236 B, CM4 24,184 B
+   * `prj_04_adc_dma_bm_eth` [release]: CM7 205,292 B, CM4 23,796 B
+   Con `HSEM_DRIVER_SELFTEST=OFF` (por defecto), los binarios conservan **exactamente el mismo tamaño al byte**.
+
+2. **Capturas de referencia de arranque y 20 resets en caliente:**
+   * `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/warm_resets_reference.txt`: 20/20 resets con `boot=OK`, `CPU2 alive` en cada uno y relación de incrementos m4/m7 = 20/4 = 5.0 constante.
+   * `03_firmware_templates/prj_01_template_dualcore/docs/warm_resets_reference.txt`: 20/20 resets con `boot=OK`, `CPU2 alive` y relación de incrementos m4/m7 = 15/4 = 3.75 (documentando la divergencia S5 antes de migración).
+
+3. **Comprobación de DWT CYCCNT en ambos núcleos (sin depurador conectado):**
+   * CM7: Inicialización con desbloqueo de `DWT_LAR` (`0xE0001FB0 = 0xC5ACCE55`) y `CoreDebug_DEMCR_TRCENA`. Delta medido: 4020 ciclos. `cm7_dwt_ok = 1`.
+   * CM4: Inicialización con `CoreDebug_DEMCR_TRCENA` y `CYCCNTENA`. Delta medido: 5521 ciclos. `cm4_dwt_ok = 1`.
+
+4. **Comprobación de lectura del banco RLR desde el depurador:**
+   * Lectura SWD HOTPLUG de `0x58026480` (HSEM_RLR[0]): devolvió `0x80000300` (LOCK=1, COREID=3, PROCID=0).
+   * La lectura por depuración toma el semáforo como bus master 0 (CPU1). Confirmado que los volcados de depuración deben restringirse a solo HSEM_R (`0x58026400-0x5802647C`).
+
+5. **Esqueleto de Selftest:**
+   * Creada opción `HSEM_DRIVER_SELFTEST` en `prj_04/CMakeLists.txt`.
+   * Añadido preset `selftest-hsem` en `prj_04/CMakePresets.json`.
+   * Archivos creados: `hsem_selftest_shared.h`, `CM4/App/Src/hsem_selftest.c`, `CM4/App/Inc/hsem_selftest.h`, `CM7/App/Src/hsem_selftest.c`, `CM7/App/Inc/hsem_selftest.h`.
+
+6. **Control Negativo H2 (sin driver, registros a mano):**
+   * Parte A (Contador sin lock): N = 100,000 por núcleo (esperado 200,000). Resultado final = 156,378. Pérdida de incrementos = 43,622 (> 0, **PASS**).
+   * Parte B (Registro roto sin lock): N = 50,000 lecturas. Lecturas rotas observadas = 15,408 (> 0, **PASS**).
+   * Evidencia registrada en `docs/hsem_selftest_capture.txt`.
+
+7. **Benchmark B1 Parte 1:**
+   * Tiempos crudos registrados en `docs/hsem_b1_baseline.txt`:
+     - CM7 (400 MHz): FastTake = 16 cyc (40 ns), Take = 30 cyc (75 ns), Release = 3 cyc (7.5 ns).
+     - CM4 (200 MHz): FastTake = 8 cyc (40 ns), Take = 24 cyc (120 ns), Release = 6 cyc (30 ns).
+   * Retención en prj_04: HSEM 4 (ADC) ~1.35 µs; HSEM 3 (Mailbox con S11 en CM7) hasta ~6-12 ms.
+
+### 2. Tabla de Cumplimiento de Criterios (Fase F0)
+
+| # | Criterio | Comprobación | Estado |
+|---|----------|--------------|--------|
+| A1 | Reglas del catálogo | Selftest aislado, sin modificar drivers existentes | PASS |
+| A2 | C1: Sin IDs fijos en driver | No hay driver aún; selftest usa IDs 24..31 | PASS |
+| A4 | C6: Validación previa | Validada empíricamente en hardware | PASS |
+| A5 | C7: Sin estado en BM/LL | Estructuras selftest en SRAM4 | PASS |
+| A12 | C9: Matriz de compilación | 8/8 PASSED con `build_all.ps1 -Clean` | PASS |
+| A14 | Pruebas de fase | Flasheo de `selftest-hsem` y captura en hardware | PASS |
+| A15 | R1: Control negativo H2 | H2 pierde 43,622 incrementos y 15,408 lecturas rotas | PASS |
+| A16 | R2: Trazabilidad | Hash git presente en salida de selftest | PASS |
+| A17 | R4: No destructivo | Selftest en IDs 24..31; app continúa operativa | PASS |
+
+Gate de salida de F0 completado y validado. Listo para iniciar Fase F1 (`hsem_bm` núcleo).
+
+---
+
+## Fase F1: Núcleo `hsem_bm` (Bare-Metal)
+
+- **Fecha:** Sep 26, 2026
+- **Rama:** `driver/hsem`
+- **Rango de Commits:** `a8ec2a2..5f78246`
+  - `a8ec2a2`: `feat(hsem): implement hsem_bm bare-metal driver core`
+  - `86aa56c`: `test(prj_04): add F1 BM selftest suite (H0, H1, H1b, H3, H4, H7, H8, H9)`
+  - `5f78246`: `test(prj_04): record F1 selftest hardware evidence`
+- **Plataforma:** NUCLEO-H755ZI-Q (STM32H755ZI Silicon Rev V, ID 0x450, ST-LINK/V3 en COM4)
+- **Estado de Fase F1:** **APROBADA (GATE PASSED)**
+
+### 1. Entregables y Acciones de la Fase F1
+
+1. **Implementación del driver `hsem_bm`:**
+   - Creados `01_shared_drivers/10_hsem/hsem_bm.h` y `01_shared_drivers/10_hsem/hsem_bm.c`.
+   - Registrado target `stm32h7_driver_hsem_bm` (INTERFACE) en `01_shared_drivers/CMakeLists.txt`.
+   - API de funciones públicas de BM completada y congelada (C2).
+
+2. **Verificación de C7 (.bss = 0, .data = 0 en BM):**
+   `arm-none-eabi-size` sobre `hsem_bm.c.obj`:
+   - CM7 (Cortex-M7): `text=1460, data=0, bss=0`
+   - CM4 (Cortex-M4): `text=1416, data=0, bss=0`
+   - Cero estado en RAM global / estática: 100% verificado.
+
+3. **Verificación de C10 y C11 (objdump & grep):**
+   - Accesos a registros HSEM son exclusivamente de palabra de 32 bits (`ldr.w`, `str.w`). Cero instrucciones `ldrb/strb/ldrh/strh` hacia el periférico HSEM (`0x58026400`).
+   - Instrucciones `dmb sy` generadas tras `FastTake`/`Take` con éxito y antes del `str` de liberación en `Release` y `ReleaseAllOfCore`.
+   - Lectura de `HSEM_RLR` restringida a `HSEM_BM_FastTake` y `HSEM_BM_TakeOrNotify`. `HSEM_BM_GetOwner` e `IsLocked` leen `HSEM_R`.
+
+4. **Verificación de C12 y C8:**
+   - PRIMASK es guardado con `__get_PRIMASK()` y restaurado con `__set_PRIMASK()`. Cero llamadas a `__enable_irq()`.
+   - Cero dependencias hacia capas superiores: libre de FreeRTOS, `cmsis_os` y HAL en `hsem_bm.*`.
+
+5. **Matriz de compilación CI (8/8 builds con -Werror):**
+   Ejecución con `tools/build_all.ps1 -Clean`:
+   - `prj_01_template_dualcore` [debug]: CM7 83,520 B (delta: 0 B), CM4 15,092 B (delta: 0 B)
+   - `prj_01_template_dualcore` [release]: CM7 82,472 B (delta: 0 B), CM4 14,844 B (delta: 0 B)
+   - `prj_02_eth_lwip_dualcore` [debug]: CM7 205,980 B (delta: 0 B), CM4 15,092 B (delta: 0 B)
+   - `prj_02_eth_lwip_dualcore` [release]: CM7 202,004 B (delta: 0 B), CM4 14,844 B (delta: 0 B)
+   - `prj_03_adc_dma_eth` [debug]: CM7 208,516 B (delta: 0 B), CM4 36,364 B (delta: 0 B)
+   - `prj_03_adc_dma_eth` [release]: CM7 204,476 B (delta: 0 B), CM4 34,208 B (delta: 0 B)
+   - `prj_04_adc_dma_bm_eth` [debug]: CM7 209,236 B (delta: 0 B), CM4 24,184 B (delta: 0 B)
+   - `prj_04_adc_dma_bm_eth` [release]: CM7 205,292 B (delta: 0 B), CM4 23,796 B (delta: 0 B)
+   Todas las 8 compilaciones pasaron limpiamente sin warnings. Cero sobrecoste de memoria en las configuraciones por defecto.
+
+6. **Resultados de las pruebas en hardware (NUCLEO-H755ZI-Q, commit `86aa56c` limpio):**
+   - **H0 (Caracterización y rechazo de parámetros C6):** PASS en ambos núcleos. COREID reporta 3 en CM7 y 1 en CM4. Rechazos de IDs inválidos (≥ 32), PROCIDs inválidos (0 en Take, 256), clave 0 y núcleos inválidos devuelven `HSEM_BM_ERR_PARAM`.
+   - **H1 (Exclusión mutua en contención):** 1,000,000 de incrementos por núcleo (2,000,000 total). Total observado = 2,000,000. Pérdida = 0 (**PASS**, exacto, frente a 43,622 pérdidas observadas en el control negativo H2).
+   - **H1b (Coherencia en registro multi-palabra):** 1,000,000 de lecturas de array de 8 palabras compartidas bajo lock. Lecturas rotas = 0 (**PASS**, frente a 15,408 en el control H2).
+   - **H3 (Protección de liberación):** Liberación con PROCID erróneo o núcleo ajeno es ignorada en hardware y rechazada con `HSEM_BM_ERR_NOT_OWNER` (**PASS**).
+   - **H4 (Timeout acotado en ciclos):** Espera con timeout acotado de 10 ms; tiempo medido con SysTick = 10 ms exactos, `relax` llamado 36,272 veces, estado devuelto = `HSEM_BM_ERR_TIMEOUT` (**PASS**).
+   - **H7 (Detección de colisión en mismo núcleo - S1):** Detección atómica de reentrancia no permitida bajo PRIMASK; devuelve `HSEM_BM_ERR_BUSY_SELF` evitando corrupción de exclusión (**PASS**).
+   - **H8 (Recuperación con clave):** Liberación masiva de semáforos de CM4 con `ReleaseAllOfCore` y clave de desbloqueo válida; el semáforo 28 de CM7 permanece intacto (**PASS**).
+   - **H9 (Notificaciones por interrupción):** 1,000/1,000 interrupciones de notificación transferidas sin pérdida ni interrupciones espurias (**PASS**).
+   - Continuidad de la aplicación: Tras la ejecución de los selftests (IDs 24..31), el enlace Ethernet (100 Mbps FD) y las tareas de la aplicación continúan respondiendo normalmente.
+
+### 2. Tabla de Cumplimiento de Criterios (Fase F1)
+
+| # | Criterio | Comprobación | Estado |
+|---|----------|--------------|--------|
+| A1 | Reglas del catálogo | API limpia, Doxygen completo, tipos bien definidos | PASS |
+| A2 | C1: Sin IDs fijos en driver | `grep -nE "HSEM_ID_\|BOARD_\|shared_memory\|0xA5C3" 10_hsem/` = 0 | PASS |
+| A3 | C2: API congelada tras F1 | Cabecera `hsem_bm.h` completa para todos los contratos de BM | PASS |
+| A4 | C6: Validación previa | Todo parámetro verificado antes de tocar `HSEM->` | PASS |
+| A5 | C7: Sin estado en BM/LL | `.bss = 0`, `.data = 0` en CM4 y CM7 | PASS |
+| A6 | C8: Dependencias hacia abajo | `hsem_bm` solo depende de CMSIS (`stm32h7xx.h`) | PASS |
+| A7 | C10: Barreras y accesos 32-bit | `dmb` tras take y antes de release; solo accesos palabra | PASS |
+| A8 | C11: RLR solo donde toca | `RLR` únicamente en `FastTake` y `TakeOrNotify` | PASS |
+| A9 | C12: PRIMASK guardado y restaurado | Cero `__enable_irq`; restaura PRIMASK previo | PASS |
+| A10 | C13: Esperas acotadas | Timeouts en ciclos de DWT con hook `relax` | PASS |
+| A11 | Símbolos del proyecto | No define `HSEMx_IRQHandler` ni `HAL_HSEM_FreeCallback` | PASS |
+| A12 | C9: Matriz de compilación | 8/8 PASSED con `build_all.ps1 -Clean` (-Werror) | PASS |
+| A13 | R3: Tamaños | Binarios con selftest apagado conservan tamaño de F0 | PASS |
+| A14 | Pruebas de fase | H0, H1, H1b, H3, H4, H7, H8, H9 ejecutadas y capturadas | PASS |
+| A15 | R1: Controles negativos | H2 pierde 43,622 incrementos; H1 pierde 0 exactos | PASS |
+| A16 | R2: Trazabilidad | Hash git `86aa56c` (sin -dirty) en la captura de hardware | PASS |
+| A17 | R4: No destructivo | Selftest en IDs 24..31; app (ETH/ADC) sigue operativa | PASS |
+| A18 | Oráculo independiente | H1 usa contadores privados, H4 SysTick, H9 recuento | PASS |
+| A19 | Matriz de cumplimiento | RM0399 / ES0445 / ARMv7-M cubierta para BM | PASS |
+| A20 | Documentación | Registrada en `AUDIT.md` y captura en `docs/` | PASS |
+
+Gate de salida de F1 completado y validado. Listo para iniciar Fase F2 (Arranque y Migración).
+
+---
+
+## Fase F2: Arranque y Migración de Proyectos
+
+- **Fecha:** Sep 26, 2026
+- **Rama:** `driver/hsem`
+- **Rango de Commits:** `9616e98..6f1692f`
+  - `9616e98`: `refactor(boot): migrate prj_04 and dualcore template to HSEM_BM boot handshake`
+  - `3a43823`: `fix(boot): resolve compilation warnings and EXTI register in CM7 main`
+  - `cb62eb6`: `fix(hsem): improve boot handshake STOP re-entry and H5 verification sequence`
+  - `c557c6e`: `fix(hsem): correct boot sequence ordering so D2 domain remains in DSTOP during H5 verification`
+  - `0748c71`: `fix(hsem): test H5 delay and premature events early while D2 domain is in DSTOP`
+  - `eed2be7`: `fix(template): remove duplicate Shared_Init in CM7 app_main after HSEM boot release`
+  - `2b792a8`: `test(prj_04): record F2 passing selftest capture`
+  - `6f1692f`: `test(hsem): record H6 20 warm resets for prj_04 and dualcore template`
+- **Plataforma:** NUCLEO-H755ZI-Q (STM32H755ZI Silicon Rev V, ID 0x450, ST-LINK/V3 en COM4)
+- **Estado de Fase F2:** **APROBADA (GATE PASSED)**
+
+### 1. Entregables y Acciones de la Fase F2
+
+1. **Implementación de funciones de handshake de arranque:**
+   - Implementadas `HSEM_BM_BootWaitForCpu1`, `HSEM_BM_BootWaitCpu2Parked` y `HSEM_BM_BootReleaseCpu2` en `01_shared_drivers/10_hsem/hsem_bm.c`.
+   - CPU2 (`BootWaitForCpu1`): Configura `PWR_CPU2CR.PDDS_D2 = 0`, `SCB->SCR.SLEEPDEEP`, activa `SEVONPEND` y `HSEM C2IER[id]`, y ejecuta bucle `WFE`. Al despertar de forma prematura (e.g. H5b o H5c), limpia `C2ICR` antes de re-aparcar en STOP para permitir el sueño profundo. Al despertar legítimo, limpia interrupción, deshabilita `C2IER[id]` y restaura `SCB->SCR` a su valor previo (C12).
+   - CPU1 (`BootWaitCpu2Parked` y `BootReleaseCpu2`): `BootWaitCpu2Parked` espera hasta que `RCC_CR.D2CKRDY == 0` con timeout en ciclos. `BootReleaseCpu2` ejecuta `HSEM_BM_FastTake` con verificación de retorno, emite `__DMB()`, libera el semáforo y espera hasta que `D2CKRDY == 1` o agote `max_cycles`.
+
+2. **Migración de `prj_04_adc_dma_bm_eth` y plantilla `prj_01_template_dualcore`:**
+   - `SHARED_LOCK`/`SHARED_UNLOCK` migrados a macros transparentes sobre `HSEM_BM_FastTake` y `HSEM_BM_Release`.
+   - Incorporada `Shared_TryLockCycles(id, max_cycles)` y migrados `adc_acquisition.c` y `adc_server.c` con tracking de fallos en `g_shared.adc_lock_failures`.
+   - S11 remediado en `Status_Task`: copia local del buzón y liberación inmediata de HSEM 3 antes de la invocación de `APP_LOG`.
+   - S5 corregido en `prj_01_template_dualcore`: CM4 ya no diverge en el arranque; relación de heartbeats normalizada.
+   - Eliminada doble llamada a `Shared_Init` en `app_main.c` de la plantilla.
+   - Secuencia de arranque en `CM7/Core/Src/main.c`: verificación de H5 (500 ms de delay), H5b (liberación antes de magic) y H5c (evento espurio EXTI) ejecutadas antes de activar periféricos D2, garantizando que el dominio D2 permanezca en DSTOP durante las pruebas.
+   - Verificación estricta de aislamiento: `git diff main` sobre `prj_02`, `prj_03` y `prj_eth_lwip_node` es exactamente 0.
+
+3. **Matriz de compilación CI (8/8 builds con -Werror):**
+   Ejecución limpia con `tools/build_all.ps1 -Clean`:
+   - `prj_01_template_dualcore` [debug]: CM7 84,140 B (+620 B), CM4 14,916 B (-176 B)
+   - `prj_01_template_dualcore` [release]: CM7 83,048 B (+576 B), CM4 14,700 B (-144 B)
+   - `prj_02_eth_lwip_dualcore` [debug]: CM7 205,980 B (delta: 0 B), CM4 15,092 B (delta: 0 B)
+   - `prj_02_eth_lwip_dualcore` [release]: CM7 202,004 B (delta: 0 B), CM4 14,844 B (delta: 0 B)
+   - `prj_03_adc_dma_eth` [debug]: CM7 208,516 B (delta: 0 B), CM4 36,364 B (delta: 0 B)
+   - `prj_03_adc_dma_eth` [release]: CM7 204,476 B (delta: 0 B), CM4 34,208 B (delta: 0 B)
+   - `prj_04_adc_dma_bm_eth` [debug]: CM7 210,108 B (+872 B), CM4 24,552 B (+368 B)
+   - `prj_04_adc_dma_bm_eth` [release]: CM7 206,176 B (+884 B), CM4 24,116 B (+320 B)
+   Todas las 8 compilaciones pasaron exitosamente sin warnings. El crecimiento de CM4 release en `prj_04` es de solo +320 bytes (muy inferior al umbral de 1 KB).
+
+4. **Resultados de las pruebas en hardware (NUCLEO-H755ZI-Q, commit `0748c71` limpio):**
+   - **H5 (Boot Handshake):** CPU1 retarda 500 ms mientras muestrea `D2CKRDY == 0` continuamente; H5b (liberación sin magic) verifica que CPU2 re-aparca en STOP (`D2CKRDY == 0`); H5c (disparo de evento software EXTI línea 23 a CPU2) verifica que CPU2 ignora el evento y re-aparca; liberación formal con magic hace que `D2CKRDY` suba a 1 y CPU2 comience ejecución (**PASS**).
+   - **H6 (20 Warm Resets consecutivos en prj_04):** 20/20 arranques exitosos con `CPU2 alive` en cada uno; relación de contadores `m7=4, m4=20` (ratio 5.0) idéntica a la referencia de F0 (**PASS**). Evidencia guardada en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/warm_resets_f2.txt`.
+   - **H6 (20 Warm Resets consecutivos en plantilla dualcore):** 20/20 arranques exitosos con `CPU2 alive` en cada uno; relación de contadores `m7=1, m4=1` (ratio 1.0 constante), confirmando la resolución definitiva de S5 (**PASS**). Evidencia guardada en `03_firmware_templates/prj_01_template_dualcore/docs/warm_resets_f2.txt`.
+   - **Conjunto de pruebas BM (H0, H1, H1b, H3, H4, H7, H8, H9):** 100% PASS en la suite completa de `selftest-hsem`. 2,000,000 incrementos bajo lock con 0 pérdidas y 1,000,000 lecturas con 0 lecturas rotas.
+
+### 2. Tabla de Cumplimiento de Criterios (Fase F2)
+
+| # | Criterio | Comprobación | Estado |
+|---|----------|--------------|--------|
+| A1 | Reglas del catálogo | Contratos de handshake y boot documentados y limpios | PASS |
+| A2 | C1: Sin IDs fijos en driver | `sem_id` proviene exclusivamente del llamador (`cfg->sem_id`) | PASS |
+| A3 | C2: API congelada tras F1 | Cabecera `hsem_bm.h` sin cambios desde F1 (`git diff` vacío) | PASS |
+| A4 | C6: Validación previa | Verificación de parámetros antes de acceder a hardware | PASS |
+| A5 | C7: Sin estado en BM/LL | `.bss = 0`, `.data = 0` en CM4 y CM7 en release | PASS |
+| A6 | C8: Dependencias hacia abajo | Cero dependencias de FreeRTOS o HAL en `hsem_bm.*` | PASS |
+| A7 | C10: Barreras y accesos 32-bit | `dmb` verificado en objdump; accesos exclusivos de 32 bits a HSEM | PASS |
+| A8 | C11: RLR solo donde toca | RLR leído únicamente en `FastTake` y `TakeOrNotify` | PASS |
+| A9 | C12: PRIMASK guardado y restaurado | `SCB->SCR` y PRIMASK restaurados a su estado original | PASS |
+| A10 | C13: Esperas acotadas | Timeouts en ciclos DWT (`max_cycles`) para CPU1 | PASS |
+| A11 | Símbolos del proyecto | No define `HSEMx_IRQHandler` ni callbacks del proyecto | PASS |
+| A12 | C9: Matriz de compilación | 8/8 PASSED con `build_all.ps1 -Clean` (-Werror) | PASS |
+| A13 | R3: Tamaños | Deltas de tamaño documentados; diff nulo en prj_02/03 | PASS |
+| A14 | Pruebas de fase | H5, H5b, H5c y H6 (20/20 resets en dos proyectos) PASS | PASS |
+| A15 | R1: Controles negativos | H5b y H5c re-aparcan en STOP; H2 mantiene pérdida de incrementos | PASS |
+| A16 | R2: Trazabilidad | Hash git sin -dirty en todas las capturas y suites | PASS |
+| A17 | R4: No destructivo | Aplicaciones de red y adquisición operativas tras arranque | PASS |
+| A18 | Oráculo independiente | `D2CKRDY` en H5; monitor serie externo para H6 | PASS |
+| A19 | Matriz de cumplimiento | Handshake RM0399 §7/§9/§11/§21 y ARMv7-M cubiertos | PASS |
+| A20 | Documentación | Registro en `AUDIT.md`, capturas en `docs/` | PASS |
+
+Gate de salida de F2 completado y validado. Listo para iniciar Fase F3 (`hsem_ll`).
+
+---
+
+## Fase F3: Driver Low-Layer (`hsem_ll`) y Paridad BM ↔ LL
+
+- **Fecha:** Sep 26, 2026
+- **Rama:** `driver/hsem`
+- **Rango de Commits:** `24ccb76..3091ee5`
+  - `24ccb76`: `feat(hsem): implement hsem_ll low-layer driver and CMake target`
+  - `a86756f`: `test(prj_04): add H10 BM-LL parity test to hsem selftest suite`
+  - `617ec43`: `fix(hsem): partition test semaphores and reset ICR flags in H10 parity test`
+  - `3091ee5`: `test(prj_04): record passing F3 capture for HSEM LL tier parity`
+- **Plataforma:** NUCLEO-H755ZI-Q (STM32H755ZI Silicon Rev V, ID 0x450, ST-LINK/V3 en COM4)
+- **Estado de Fase F3:** **APROBADA (GATE PASSED)**
+
+### 1. Entregables y Acciones de la Fase F3
+
+1. **Implementación del driver `hsem_ll` (`01_shared_drivers/10_hsem/`):**
+   - `hsem_ll.h`: Cabecera autocontenida que compila de forma aislada sin requerir `USE_FULL_LL_DRIVER` ni incluir `stm32h7xx_hal.h`.
+   - `hsem_ll.c`: Wrapper ligero sobre los helpers inline de ST LL (`LL_HSEM_1StepLock`, `LL_HSEM_2StepLock`, `LL_HSEM_ReleaseLock`, `LL_HSEM_EnableIT_C*`, `LL_HSEM_DisableIT_C*`, `LL_HSEM_ClearFlag_C*`, `LL_HSEM_GetStatus`).
+   - Mismo retorno `HsemBm_Status_t` que el tier BM: `OK`, `BUSY`, `BUSY_SELF`, `TIMEOUT`, `ERR_PARAM`, `ERR_NOT_OWNER`, `ERR_TIMEBASE`.
+   - Incorpora las protecciones críticas requeridas por RM0399 / ARMv7-M:
+     - Detección de colisión en el mismo núcleo (S1) bajo PRIMASK previo a `LL_HSEM_1StepLock` y `LL_HSEM_2StepLock` devolviendo `BUSY_SELF`.
+     - Barreras de memoria `__DMB()` tras locks exitosos y antes de release (C10).
+     - Verificación previa de pertenencia en `HSEM_LL_Release` (C11) devolviendo `ERR_NOT_OWNER` si no pertenece al núcleo/proceso.
+     - Esperas acotadas por ciclos DWT CYCCNT en `HSEM_LL_TakeTimeout` y `HSEM_LL_TakeTimeoutEx` (C13).
+     - Limpieza de `CnICR` y manejo de PRIMASK en `NotifyEnable`, `NotifyDisable` y `NotifyTake`.
+   - Huella en RAM (C7): Verificado con `arm-none-eabi-size` que `.bss = 0` y `.data = 0` tanto en CM7 (572 B text) como en CM4 (576 B text).
+   - Accesos de 32 bits (C10): Verificado con `objdump` que no existen instrucciones `ldrb`, `ldrh`, `strb`, ni `strh`.
+
+2. **Integración en CMake:**
+   - Creado target `stm32h7_driver_hsem_ll` en `01_shared_drivers/CMakeLists.txt`.
+   - Enlazado en `prj_04_adc_dma_bm_eth` en CM7 y CM4 bajo la opción `HSEM_DRIVER_SELFTEST`.
+
+3. **Prueba de Paridad H10 (BM ↔ LL) en Hardware:**
+   - Secuencia de 7 pasos ejecutada sucesivamente bajo BM y bajo LL:
+     - Paso 0: `FastTake` de 1 paso.
+     - Paso 1: `Take` de 2 pasos con proc_id 42.
+     - Paso 2: `Release` con proc_id 42 (genera flag ISR en hardware).
+     - Paso 3: `Release` con proc_id erróneo 99 (`ERR_NOT_OWNER`, sin escritura).
+     - Paso 4: `Release` con proc_id correcto 0.
+     - Paso 5: `NotifyEnable` (`CnIER` configurado, `CnICR` limpiado).
+     - Paso 6: `NotifyDisable` (`CnIER` deshabilitado, `CnICR` limpiado).
+   - Partición de semáforos de prueba: CM7 opera en semáforos 24, 25, 26; CM4 opera en semáforos 28, 29, 30.
+   - Reseteo completo de periférico (`Hsem_ResetTestRegisters_M*`) antes de cada pasada: libera semáforos de prueba, deshabilita `CnIER = 0` y limpia flags `CnICR = 0xFFFFFFFFUL` bajo `__DSB(); __ISB();`.
+   - Comparación estricta de fotos de registros (`R[24..31]`, `CnIER`, `CnISR`) y estados de retorno en cada paso: **PARIDAD EXACTA (PASS)** en CM7 y CM4.
+   - Controles negativos (R1): Mutación deliberada de un bit en la foto de LL detectada como fallo de paridad en ambos núcleos.
+
+4. **Captura en Hardware (commit `617ec43` sin -dirty):**
+   - Registrada en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/hsem_selftest_capture.txt`.
+   - CM7: `[m7_hsem_test] H10 Parity (BM <-> LL): PASS`
+   - CM4: `[m4_hsem_test] H7 same_core=PASS H9 notifications=1000 H10 parity=PASS`
+   - Validación completa acumulada de F1, F2 y F3 (H0, H1 2M incs, H1b 1M lecturas, H3, H4, H5, H7, H8, H9, H10) en verde.
+
+5. **Matriz de compilación CI (8/8 builds con -Werror):**
+   - Ejecución limpia con `tools/build_all.ps1 -Clean`: las 8 configuraciones compilaron sin warnings ni errores.
+   - `git diff main` sobre `prj_02`, `prj_03` y `prj_eth_lwip_node` es exactamente 0.
+
+### 2. Tabla de Cumplimiento de Criterios (Fase F3)
+
+| # | Criterio | Comprobación | Estado |
+|---|----------|--------------|--------|
+| A1 | Reglas del catálogo | Contratos LL consistentes con arquitectura del catálogo | PASS |
+| A2 | C1: Sin IDs fijos en driver | Funciones reciben `id` y `proc_id` desde llamador | PASS |
+| A3 | C2: API congelada | `hsem_bm.h` y `hsem_ll.h` estables y congeladas | PASS |
+| A4 | C6: Validación previa | Verificación de límites antes de invocar registros LL | PASS |
+| A5 | C7: Sin estado en BM/LL | `.bss = 0`, `.data = 0` en CM7 y CM4 verificado con `size` | PASS |
+| A6 | C8: Dependencias hacia abajo | Autocontenido sin HAL en `hsem_ll.h` | PASS |
+| A7 | C10: Barreras y accesos 32-bit | `dmb/dsb` presentes; 0 accesos de 8/16 bits en objdump | PASS |
+| A8 | C11: RLR solo donde toca | RLR leído solo en `FastTake` | PASS |
+| A9 | C12: PRIMASK guardado y restaurado | PRIMASK gestionado en S1, NotifyEnable/Disable/Take | PASS |
+| A10 | C13: Esperas acotadas | `TakeTimeout` acotado por DWT CYCCNT | PASS |
+| A11 | Símbolos del proyecto | No define `HSEMx_IRQHandler` ni callbacks de aplicación | PASS |
+| A12 | C9: Matriz de compilación | 8/8 PASSED con `build_all.ps1 -Clean` (-Werror) | PASS |
+| A13 | R3: Tamaños | Impacto nulo en builds de producción sin selftest | PASS |
+| A14 | Pruebas de fase | H10 BM ↔ LL parity PASS en CM7 y CM4 | PASS |
+| A15 | R1: Controles negativos | Mutación de foto detectada como fallo de paridad en CM7 y CM4 | PASS |
+| A16 | R2: Trazabilidad | Captura registrada con hash limpio `617ec43` | PASS |
+| A17 | R4: No destructivo | Selftest en IDs 24..30; ETH y adquisición funcionando | PASS |
+| A18 | Oráculo independiente | Comparación bit a bit de snapshots de hardware | PASS |
+| A19 | Matriz de cumplimiento | RM0399 §11, ES0445 y ARMv7-M cubiertos para LL | PASS |
+| A20 | Documentación | Registrada en `AUDIT.md` y captura en `docs/` | PASS |
+
+Gate de salida de F3 completado y validado. Listo para iniciar Fase F4 (`hsem_hal`).
+
+---
+
+## Fase F4: Capa HAL (`hsem_hal`) y Paridad Trilateral (BM ↔ LL ↔ HAL)
+
+- **Fecha:** Sep 26, 2026
+- **Rama:** `driver/hsem`
+- **Rango de Commits:** `507b60c..1873429`
+  - `904b75c`: `feat(hsem): implement hsem_hal driver and extend H10 to BM-LL-HAL parity`
+  - `1873429`: `fix(prj_04): resolve selftest desync and stack overflow on CM7 H10 parity`
+  - `dc0cf24`: `test(prj_04): record passing F4 capture for HSEM HAL tier parity`
+- **Plataforma:** NUCLEO-H755ZI-Q (STM32H755ZI Silicon Rev V, ID 0x450, ST-LINK/V3 en COM4)
+- **Estado de Fase F4:** **APROBADA (GATE PASSED)**
+
+### 1. Entregables y Acciones de la Fase F4
+
+1. **Implementación del driver `hsem_hal` (`01_shared_drivers/10_hsem/`):**
+   - Creados `hsem_hal.h` y `hsem_hal.c`.
+   - Wrapper defensivo sobre las funciones del HAL de ST (`HAL_HSEM_*`).
+   - Corrige las deficiencias y bugs conocidos de la capa ST HAL:
+     - **S1:** Detección de colisión en el mismo núcleo (reentrancia no permitida) bajo PRIMASK, retornando `HAL_BUSY` (remediando el bug de ST HAL que devuelve `HAL_OK` erróneamente por lectura ciega de `RLR`).
+     - **S2:** Inserción de barreras de memoria `__DMB()` tras locks exitosos y antes de liberaciones.
+     - **S6:** Limpieza previa de flags pendientes antes de activar notificaciones para prevenir interrupciones espurias.
+     - **S7:** Protección de PRIMASK en activación y desactivación de interrupciones de notificación.
+     - **S10:** Validación previa de parámetros (límites de IDs, process IDs válidos, ciclos de timeout) con mapeo consistente a `HAL_StatusTypeDef`: `HAL_OK`, `HAL_BUSY`, `HAL_TIMEOUT` y `HAL_ERROR`.
+   - Preserva la propiedad de símbolos de aplicación (C8): NO define `HAL_HSEM_FreeCallback` ni `HSEMx_IRQHandler`. Proporciona `HSEM_HAL_RegisterCallback(cb, ctx)`, `HSEM_HAL_Dispatch(sem_mask)` e `HSEM_HAL_IRQService()`.
+
+2. **Integración en CMake:**
+   - Creado target `stm32h7_driver_hsem_hal` (INTERFACE) en `01_shared_drivers/CMakeLists.txt`.
+   - Enlazado en `prj_04_adc_dma_bm_eth` en CM7 bajo la opción `HSEM_DRIVER_SELFTEST`.
+
+3. **Pruebas de Paridad y Validación HAL en Hardware:**
+   - **Extensión de H7 para validación de HAL y control negativo de S1:**
+     - `HAL_HSEM_FastTake` directo de ST confirma el bug S1 (devuelve `HAL_OK` indebidamente en contexto colisionado).
+     - `HSEM_HAL_FastTake` detecta la colisión y devuelve `HAL_BUSY` (**PASS**).
+     - `HSEM_HAL_Take` con proceso colisionado devuelve `HAL_BUSY` (**PASS**).
+     - `HSEM_HAL_Release` con proceso no propietario devuelve `HAL_ERROR` (**PASS**).
+     - `HSEM_HAL_RegisterCallback` y `HSEM_HAL_Dispatch` probados exitosamente con contexto y máscara arbitrarios (**PASS**).
+   - **Extensión de H10 a paridad trilateral (BM ↔ LL ↔ HAL):**
+     - Secuencia idéntica de 7 pasos ejecutada bajo BM, LL y HAL.
+     - Normalización de estados de BM a HAL con `BmStatusToHal`.
+     - Comparación estricta de fotos de hardware (`R[24..26]`, `C1IER`, `C1ISR`) y códigos de retorno: **PARIDAD EXACTA (PASS)**.
+     - Controles negativos independientes para LL y HAL con mutación de bits detectados exitosamente como desajustes (**PASS**).
+   - **Robustecimiento de arranque y aislamiento:**
+     - Partición de semáforos de prueba entre núcleos: CM7 opera en semáforos 24..26; CM4 opera en semáforos 28..30.
+     - Sincronización explícita entre núcleos mediante flag `phase = 1U` y liberación preventiva de semáforos residuales en hardware con `ReleaseAllOfCore` y clave de seguridad.
+     - Arrays de snapshots de H10 movidos a variables `static` (.bss) y stack de `Status_Task` ampliado a 1024 palabras para prevenir desbordamientos en FreeRTOS.
+
+4. **Captura en Hardware (commit limpio `1873429` sin -dirty):**
+   - Registrada en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/hsem_selftest_capture.txt`.
+   - CM7:
+     - `[m7_hsem_test] H0 Characterization: PASS`
+     - `[m7_hsem_test] H3 Release Protection: PASS`
+     - `[m7_hsem_test] H7 Same-Core Collision: PASS`
+     - `[m7_hsem_test] H10 Parity (BM <-> LL <-> HAL): PASS`
+     - `[m7_hsem_test] H1 Result: total=2000000, expected=2000000, lost=0 (PASS: exact mutual exclusion)`
+     - `[m7_hsem_test] H1b Result: N=1000000, torn_reads=0 (PASS: 0 torn reads)`
+     - `[m7_hsem_test] H4 Result: elapsed=10 ms, relax_calls=36085, status=TIMEOUT (PASS)`
+     - `[m7_hsem_test] H8 Result: PASS`
+     - `[m7_hsem_test] H9 Result: 1000/1000 notifications received (PASS)`
+     - `[m7_hsem_test] H5 Boot Handshake: delay500ms=1 h5b_pre_magic=1 h5c_spurious_exti=1 release=1 -> PASS`
+     - `[m7_hsem_test] ALL F1, F2, F3 & F4 TESTS PASSED SUCCESSFULLY`
+   - CM4:
+     - `[m4_hsem_test] banner rev=1873429 core=CM4 HSEM_BM/LL`
+     - `[m4_hsem_test] H0 characterization=PASS H3 release_prot=PASS`
+     - `[m4_hsem_test] H7 same_core=PASS H9 notifications=1000 H10 parity=PASS`
+   - Enlace Ethernet activo a 100 Mbps Full Duplex y comunicación IPC bidireccional completamente operativa.
+
+5. **Matriz de compilación CI (8/8 builds con -Werror):**
+   - Ejecución limpia con `tools/build_all.ps1 -Clean`:
+     - `prj_01_template_dualcore` [debug & release]: PASSED
+     - `prj_02_eth_lwip_dualcore` [debug & release]: PASSED
+     - `prj_03_adc_dma_eth` [debug & release]: PASSED
+     - `prj_04_adc_dma_bm_eth` [debug & release]: PASSED
+   - Las 8 configuraciones compilaron limpiamente sin warnings ni errores.
+   - `git diff main` sobre `prj_02`, `prj_03` y `prj_eth_lwip_node` se mantiene en 0.
+
+### 2. Tabla de Cumplimiento de Criterios (Fase F4)
+
+| # | Criterio | Comprobación | Estado |
+|---|----------|--------------|--------|
+| A1 | Reglas del catálogo | API HAL conforme a las directrices de arquitectura | PASS |
+| A2 | C1: Sin IDs fijos en driver | Funciones HAL reciben parámetros dinámicos | PASS |
+| A3 | C2: API congelada | `hsem_hal.h` congelada y autocontenida | PASS |
+| A4 | C6: Validación previa | Verificación de parámetros antes de llamar al HAL de ST | PASS |
+| A5 | C7: Sin estado en BM/LL | Verificado que BM y LL no añaden RAM de estado | PASS |
+| A6 | C8: Dependencias hacia abajo | `hsem_hal` solo enlaza hacia `hsem_bm` y ST HAL | PASS |
+| A7 | C10: Barreras y accesos 32-bit | `__DMB()` tras locks y antes de release | PASS |
+| A8 | C11: Verificación de propiedad | Verificación honesta antes de llamar a `HAL_HSEM_Release` | PASS |
+| A9 | C12: PRIMASK guardado y restaurado | `__get_PRIMASK()` / `__set_PRIMASK()` en FastTake y notificaciones | PASS |
+| A10 | C13: Esperas acotadas | `TakeTimeout` acotado por DWT CYCCNT | PASS |
+| A11 | Símbolos del proyecto | No define `HAL_HSEM_FreeCallback` ni `HSEMx_IRQHandler` | PASS |
+| A12 | C9: Matriz de compilación | 8/8 PASSED con `build_all.ps1 -Clean` (-Werror) | PASS |
+| A13 | R3: Tamaños | Impacto nulo en builds de producción sin selftest | PASS |
+| A14 | Pruebas de fase | H10 BM ↔ LL ↔ HAL parity PASS en hardware | PASS |
+| A15 | R1: Controles negativos | S1 reproducido con HAL crudo; mutaciones detectadas en BM↔LL y BM↔HAL | PASS |
+| A16 | R2: Trazabilidad | Captura registrada con commit limpio `1873429` | PASS |
+| A17 | R4: No destructivo | Selftest en IDs 24..30; app (ETH/ADC) continúa ejecutando | PASS |
+| A18 | Oráculo independiente | Comparación bit a bit de snapshots de registros | PASS |
+| A19 | Matriz de cumplimiento | Remediaciones S1, S2, S6, S7, S10 validadas | PASS |
+| A20 | Documentación | Registrada en `AUDIT.md` y captura en `docs/` | PASS |
+
+Gate de salida de F4 completado y validado. Listo para iniciar Fase F5 (Cierre y Documentación Final).
+
+---
+
+## Fase F5: Cierre, Documentación, Acciones Correctivas y Regresión Final
+
+- **Fecha:** Sep 26, 2026
+- **Rama:** `driver/hsem` (fusionada en `main`)
+- **Rango de Commits:** `1f5c5ef..f4d2a43`
+  - `1f9c731`: `fix(prj_04,template): initialize HSEM timebase on CM4 and tune ADC trylock cycles`
+  - `84e373c`: `docs(hsem): update roadmap, catalog, guidelines, and hub documentation (S13)`
+  - `b86ede6`: `test(prj_04): record H11 regression test capture under full load`
+  - `f4d2a43`: `docs(hsem): complete driver documentation and close F5 gate`
+- **Plataforma:** NUCLEO-H755ZI-Q (STM32H755ZI Silicon Rev V, ID 0x450, ST-LINK/V3 en COM4)
+- **Estado de Fase F5:** **APROBADA (FINAL AUDIT GATE PASSED)**
+
+### 1. Entregables y Acciones de la Fase F5
+
+1. **Documentación canónica del driver (`01_shared_drivers/10_hsem/README.md`):**
+   - Documentación completa cubriendo contratos de API, especificaciones de silicio RM0399 (§11), modelo de memoria ARMv7-M, ausencia de erratas en ES0445 Rev 6, benchmarks de silicio B1, y matriz de cumplimiento.
+   - Detalle de trampas de silicio (acceso indebido por SWD al banco RLR, persistencia en SRAM4 tras warm reset, prohibición de locks en ISR).
+
+2. **Sincronización del catálogo y guías de arquitectura:**
+   - Actualizado `01_shared_drivers/README.md` reflejando los tres tiers y la utilidad de arranque dual-core.
+   - Actualizado `01_shared_drivers/CMakeLists.txt` con justificación formal de los targets de interfaz y la ausencia de target genérico sin sufijo (Regla C4).
+   - Actualizado `00_docs_stm32h7/DRIVER_ARCHITECTURE_GUIDELINES.md` reflejando la estructura final de archivos.
+   - Preservación estricta de `01_shared_drivers/DRIVER_ROADMAP.md` conforme a las directrices del usuario.
+
+3. **Correcciones del Hub de Documentación (Hallazgo S13):**
+   - `00_docs_stm32h7/docs/peripherals/hsem_dualcore/README.md`:
+     - Corregida la afirmación imprecisa de "1-cycle lock" (latencia real de bus AHB ~40 ns medida con DWT).
+     - Alineado el mapa de IDs canónico con `shared_memory.h` (evitando colisiones entre GPIO, RCC y ADC).
+     - Incorporados ejemplos de uso seguro con barreras `__DMB()`, verificación de pertenencia y timeouts en ciclos.
+   - `00_docs_stm32h7/docs/00_core_and_system/dual_core_boot_ipc.md`:
+     - Sustituido el antipatrón de sondeo de CubeMX (`while (!HAL_HSEM_IsSemTaken(0))` y luego `while (HAL_HSEM_IsSemTaken(0))`) que provocaba bloqueos definitivos cuando CPU1 tomaba y soltaba el semáforo rápidamente.
+     - Documentado el mecanismo robusto del driver basado en interrupción `C2IER`, evento `SEVONPEND`, reposo en STOP y verificación de doble predicado.
+
+4. **Prueba de Regresión en Producción H11 (Cero Selftest):**
+   - Flasheada la imagen de producción con `HSEM_DRIVER_SELFTEST=OFF` en la placa física.
+   - Arranque en frío y caliente verificado con el handshake HSEM 0.
+   - Enlace Ethernet activo a 100 Mbps Full Duplex (`net_check.py`: ICMP 4/4, barrido de tamaños UDP 1 a 1472 B, ráfaga de 100 paquetes sin pérdidas ni errores DMA).
+   - Adquisición ininterrumpida de ADC1 a 500 kSPS con DMA1 hacia SRAM4 y streaming por UDP (`query_adc.py`):
+     - Muestras adquiridas: > 9,000,000 con `rate = 500000 Hz`.
+     - `adc_overrun_count = 0`, `half_overrun_count = 0`, `dma_err = 0`.
+     - `g_shared.adc_lock_fail_count` verificado en silicio en `0x380084E8`: **exactamente 0 fallos**.
+   - Captura formal registrada en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/hsem_regression_capture.txt`.
+
+5. **Matriz CI de Compilación Limpia (8/8 builds con -Werror):**
+   - Ejecución limpia con `tools/build_all.ps1 -Clean`:
+     - `prj_01_template_dualcore` [debug & release]: PASSED
+     - `prj_02_eth_lwip_dualcore` [debug & release]: PASSED
+     - `prj_03_adc_dma_eth` [debug & release]: PASSED
+     - `prj_04_adc_dma_bm_eth` [debug & release]: PASSED
+   - Las 8 configuraciones compilaron limpiamente sin warnings ni errores.
+   - Proyectos no migrados (`prj_02`, `prj_03` y `prj_eth_lwip_node`) con `git diff main` estrictamente vacío.
+
+---
+
+### 2. Registro Integral de Acciones Correctivas de la Auditoría
+
+A lo largo de las auditorías de las fases F0 a F5 se identificaron y subsanaron los siguientes defectos y riesgos, registrándose sus acciones correctivas correspondientes:
+
+#### Acción Correctiva AC-1 (Clase: Mayor): Partición de semáforos de prueba y sincronización por fases en arranque
+- **Origen:** Fase F4 (Prueba H10 de paridad HAL).
+- **Defecto:** Al arrancar el selftest, ambos núcleos ejecutaban pruebas de caracterización concurrentes (H0, H3, H7) sobre el semáforo 24. Si CM4 tomaba el semáforo 24 antes de que CM7 completara su caracterización, CM7 fallaba en el paso 0 de H10 reportando `BUSY`.
+- **Causa Raíz:** Falta de aislamiento en el espacio de semáforos para pruebas que no requerían contención deliberada.
+- **Acción Correctiva:**
+  1. Se particionaron los semáforos de prueba: CM7 utiliza exclusivamente los semáforos 24..26; CM4 utiliza los semáforos 28..30. Los semáforos 27 y 31 se reservaron para pruebas de contención cruzada.
+  2. Se implementó una sincronización explícita mediante la variable `phase` en `HSEM_TEST_SHARED`, garantizando que CM4 no inicie pruebas de caracterización hasta que CM7 haya completado su inicialización de hardware.
+- **Verificación:** Prueba H10 repetida en hardware con paridad exacta 100% limpia.
+
+#### Acción Correctiva AC-2 (Clase: Mayor): Eliminación de locks huérfanos y estado residual tras warm resets
+- **Origen:** Fase F4 (Resets en caliente bajo depuración).
+- **Defecto:** Tras un reset por software (`-rst` en CubeProgrammer), la memoria SRAM4 (`0x38009000`) conserva valores de la ejecución previa (`go_signal = 1`, `cm4_ready = 1`). Esto provocaba que CM4 arrancara de inmediato hacia las pruebas H1/H8 mientras CM7 aún estaba en fase de boot. Además, semáforos que quedaron bloqueados por una interrupción del depurador permanecían tomados en el silicio.
+- **Causa Raíz:** SRAM4 está en el dominio D3 y no es limpiada por hardware en un reset del procesador.
+- **Acción Correctiva:**
+  1. Al inicio de `CM7/Core/Src/main.c`, antes de habilitar el arranque de CM4, se inicializa a cero todo el bloque `HSEM_TEST_SHARED`.
+  2. Se invoca `HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU1, KEY)` y `HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU2, KEY)` para liberar cualquier semáforo huérfano en el hardware.
+- **Verificación:** 20 resets en caliente consecutivos ejecutados sin fallos de sincronización.
+
+#### Acción Correctiva AC-3 (Clase: Bloqueante): Desbordamiento de pila de tarea FreeRTOS (`Status_Task`)
+- **Origen:** Fase F4 (Ejecución de H10 en CM7).
+- **Defecto:** Al ejecutar H10 en CM7, el sistema caía en `vApplicationStackOverflowHook` con código de fallo en los LEDs de diagnóstico de la placa.
+- **Causa Raíz:** Las funciones de prueba de H10 asignaban en la pila local 5 arrays de estructuras `HsemRegSnapshot_t` de 7 pasos (`bm_res`, `ll_res`, `hal_res`, `mutated_ll`, `mutated_hal`), consumiendo ~1,540 bytes sobre un stack de tarea configurado en 512 palabras (2048 bytes), el cual ya contenía marcos de FreeRTOS y lwIP.
+- **Acción Correctiva:**
+  1. Se declararon los arrays de snapshots de H10 como `static` en `CM7/App/Src/hsem_selftest.c`, trasladándolos a la sección `.bss` y liberando la pila.
+  2. Se incrementó la pila de `Status_Task` de 512 a 1024 palabras (`STATUS_TASK_STACK_WORDS = 1024U`) en `app_main.h`.
+- **Verificación:** Tarea `Status_Task` ejecutando continuamente con margen de pila holgado y reporte por VCP correcto.
+
+#### Acción Correctiva AC-4 (Clase: Mayor): Inicialización incondicional de DWT y HSEM en CM4 para producción
+- **Origen:** Fase F5 (Prueba de regresión H11).
+- **Defecto:** Al compilar con `HSEM_DRIVER_SELFTEST=OFF`, la llamada a `Shared_TryLockCycles(HSEM_ID_ADC_DATA, ...)` en `adc_acquisition.c` devolvía `false` durante el arranque, incrementando `adc_lock_fail_count` a 1.
+- **Causa Raíz:** `HSEM_BM_Init()` y `HSEM_BM_TimebaseStart()` estaban colocadas únicamente dentro del bloque `#if HSEM_DRIVER_SELFTEST` en `CM4/Core/Src/main.c`. Al compilar la versión normal de producción, el contador DWT `CYCCNT` de CM4 no se habilitaba, por lo que `HSEM_BM_TakeTimeout` abortaba inmediatamente con el código `HSEM_BM_ERR_TIMEBASE` por diseño de seguridad (Regla C13).
+- **Acción Correctiva:**
+  Se reubicaron `HSEM_BM_Init()` y `HSEM_BM_TimebaseStart()` de forma incondicional justo después de `HAL_Init()` en `CM4/Core/Src/main.c` y en `03_firmware_templates/prj_01_template_dualcore/CM4/Core/Src/main.c`.
+- **Verificación:** DWT `CYCCNT` activo en ambos núcleos; `adc_lock_fail_count` verificado en memoria (`0x380084E8`) manteniéndose en **0**.
+
+#### Acción Correctiva AC-5 (Clase: Menor): Calibración de la ventana de timeout `SHARED_ADC_TRYLOCK_CYCLES`
+- **Origen:** Fase F5 (Streaming continuo de ADC a 500 kSPS).
+- **Defecto:** Con `SHARED_ADC_TRYLOCK_CYCLES` fijado en 10,000 ciclos (~25 µs en CM7 @ 400 MHz), se observó un fallo aislado de lock cuando la tarea de red de CM7 intentó leer la forma de onda mientras CM4 realizaba la copia `memcpy` de 1024 bytes bajo interrupciones del sistema (SysTick / ADC IRQ).
+- **Causa Raíz:** Si una interrupción de CM4 se intercala durante la copia de 1024 bytes en SRAM4, el tiempo de retención del lock se extiende transitoriamente más allá de los 25 µs.
+- **Acción Correctiva:**
+  Se recalibró `SHARED_ADC_TRYLOCK_CYCLES` a 50,000 ciclos en `shared_memory.h` (~125 µs en CM7 @ 400 MHz, ~250 µs en CM4 @ 200 MHz). Esta ventana es completamente despreciable para la latencia del hilo `tcpip`, pero garantiza margen holgado frente a cualquier jitter de interrupciones en CM4.
+- **Verificación:** 10 consultas consecutivas de telemetría y forma de onda vía `query_adc.py` ejecutadas sin un solo timeout y con `adc_lock_fail_count = 0`.
+
+#### Acción Correctiva AC-6 (Clase: Documentación / S13): Reescritura del Hub de Documentación
+- **Origen:** Fase F5 (Auditoría de consistencia documental).
+- **Defecto:** Los archivos `00_docs_stm32h7/docs/peripherals/hsem_dualcore/README.md` y `00_docs_stm32h7/docs/00_core_and_system/dual_core_boot_ipc.md` contenían información contradictoria y promovían ejemplos de código que causaban bloqueos en caliente.
+- **Causa Raíz:** Documentación inicial basada en notas tempranas y ejemplos preliminares de ST CubeMX sin validar en silicio.
+- **Acción Correctiva:**
+  Reescritura completa de ambos documentos técnicos, sincronizando la tabla canónica de IDs de semáforos, corrigiendo los datos de latencia de silicio, y documentando el handshake formal con eventos `SEVONPEND` y `WFE`.
+- **Verificación:** Inspección cruzada sin contradicciones en todo el catálogo de documentación.
+
+#### Acción Correctiva AC-7 (Clase: Control de Configuración): Preservación de `DRIVER_ROADMAP.md`
+- **Origen:** Instrucción expresa de usuario en Fase F5.
+- **Defecto:** El archivo `01_shared_drivers/DRIVER_ROADMAP.md` había sido actualizado con el estado de cierre de HSEM en el commit `84e373c`.
+- **Acción Correctiva:**
+  Se restauró `01_shared_drivers/DRIVER_ROADMAP.md` a su estado exacto previo (`e61575f`), dejándolo 100% inalterado conforme a la ordenanza del usuario.
+- **Verificación:** `git diff e61575f -- 01_shared_drivers/DRIVER_ROADMAP.md` verificado completamente vacío.
+
+---
+
+### 3. Tabla de Cumplimiento de Criterios (Fase F5)
+
+| # | Criterio | Comprobación | Estado |
+|---|----------|--------------|--------|
+| A1 | Reglas del catálogo | Código, nombres de archivo y directrices arquitectónicas conformes | PASS |
+| A2 | C1: Sin IDs fijos en driver | `grep -nE "HSEM_ID_\|BOARD_\|shared_memory\|0xA5C3" 10_hsem/*.c` = 0 | PASS |
+| A3 | C2: API congelada | `hsem_bm.h` y `hsem_ll.h` idénticas a sus tags de cierre | PASS |
+| A4 | C6: Validación previa | Comprobada en H0 y en ejecución normal | PASS |
+| A5 | C7: Sin estado en BM/LL | `.map` confirma `.bss = 0` y `.data = 0` en `hsem_bm.o` y `hsem_ll.o` | PASS |
+| A6 | C8: Dependencias hacia abajo | BM usa solo CMSIS; LL usa inlines; HAL usa ST HAL; sin FreeRTOS | PASS |
+| A7 | C10: Barreras y accesos 32-bit | `dmb sy` presente tras tomas y antes de releases; solo `ldr.w`/`str.w` | PASS |
+| A8 | C11: RLR solo donde corresponde | Solo invocado en `FastTake` y `TakeOrNotify`; diagnósticos leen `R` | PASS |
+| A9 | C12: PRIMASK guardado y restaurado | 0 `__enable_irq()`; siempre `__get_PRIMASK()` / `__set_PRIMASK()` | PASS |
+| A10 | C13: Esperas acotadas por DWT | `CYCCNT` probado en ambos núcleos; excepción de STOP documentada | PASS |
+| A11 | Símbolos del proyecto | 0 definiciones de `HAL_HSEM_FreeCallback` ni `HSEMx_IRQHandler` | PASS |
+| A12 | C9: Matriz de compilación | 8/8 PASSED con `build_all.ps1 -Clean` (-Werror) | PASS |
+| A13 | R3: Tamaños | Impacto verificado sobre binarios de producción enlazados | PASS |
+| A14 | Pruebas de hardware | Flasheo de producción y captura de H11 en NUCLEO-H755ZI-Q | PASS |
+| A15 | R1: Controles negativos | H2 falla demostrando pérdidas; mutaciones de H10 detectadas | PASS |
+| A16 | R2: Trazabilidad | Capturas firmadas con el commit limpio correspondiente | PASS |
+| A17 | R4: No destructivo | App (ETH a 100 Mbps y ADC a 500 kSPS) ejecutando con 0 errores | PASS |
+| A18 | Oráculo independiente | Snaphots de registros, contadores independientes y ticks de hardware | PASS |
+| A19 | Matriz de cumplimiento | RM0399 §11, ES0445 y ARMv7-M cubiertos al 100% | PASS |
+| A20 | Documentación completa | `README.md`, `AUDIT.md` y reportes técnicos finalizados y verificados | PASS |
+
+---
+
+### 4. Veredicto Final de la Auditoría
+
+El driver `10_hsem` ha superado con éxito todos los controles de calidad, pruebas de silicio, comprobaciones de arquitectura y criterios de robustez definidos en el protocolo de ingeniería. Todas las acciones correctivas fueron implementadas, verificadas en hardware real y consolidadas en el repositorio.
+
+**Veredicto:** **APROBADO SIN RESERVAS (FINAL GATE CLOSED).**
+
+
