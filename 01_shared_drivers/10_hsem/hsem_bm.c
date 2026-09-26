@@ -550,20 +550,12 @@ HsemBm_Status_t HSEM_BM_BootWaitForCpu1(const HsemBm_BootWait_t *cfg)
     __ISB();
 
     /* Loop until semaphore flag is asserted AND ready condition is met */
-    for (;;)
+    while (!(((HSEM_COMMON->ISR & sem_mask) != 0U) &&
+             ((cfg->ready == (bool (*)(void *))0) || cfg->ready(cfg->ctx))))
     {
         __SEV();
         __WFE();
         __WFE();
-
-        uint32_t isr = HSEM_COMMON->ISR;
-        bool flag_ok = ((isr & sem_mask) != 0U);
-        bool ready_ok = (cfg->ready == (bool (*)(void *))0) || cfg->ready(cfg->ctx);
-
-        if (flag_ok && ready_ok)
-        {
-            break;
-        }
     }
 
     /* Cleanup notification and restore SCR */
@@ -630,7 +622,7 @@ HsemBm_Status_t HSEM_BM_BootReleaseCpu2(uint32_t sem_id, uint32_t max_cycles)
 
     uint32_t start_cycles = DWT->CYCCNT;
 
-    while ((RCC->CR & RCC_CR_D2CKRDY) == 0U)
+    do
     {
         HsemBm_Status_t take_st = HSEM_BM_FastTake(sem_id);
         if (take_st != HSEM_BM_OK)
@@ -648,7 +640,7 @@ HsemBm_Status_t HSEM_BM_BootReleaseCpu2(uint32_t sem_id, uint32_t max_cycles)
         {
             return HSEM_BM_TIMEOUT;
         }
-    }
+    } while ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
 
     return HSEM_BM_OK;
 #endif
