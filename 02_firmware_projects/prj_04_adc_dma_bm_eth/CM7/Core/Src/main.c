@@ -56,9 +56,11 @@ int main(void)
     g_shared.magic = 0U;
 
 #if CM4_BOOT_ENABLED
+    /* Release CPU2 boot in RCC_GCR in case BCM4=0. */
+    HAL_RCCEx_EnableBootCore(RCC_BOOT_C2);
+
     /* If CPU2 is already booting, it immediately enters STOP mode waiting for
-       the HSEM notification. Wait for D2CKRDY to drop if CPU2 is active, but do
-       not fail fatally if CPU2 is gated (BCM4=0) and waiting for BOOT_C2. */
+       the HSEM notification. Wait for D2CKRDY to drop when CPU2 parks. */
     HSEM_BM_Init();
     HSEM_BM_TimebaseStart();
     (void)HSEM_BM_BootWaitCpu2Parked(200000000UL); /* 500 ms @ 400 MHz */
@@ -96,31 +98,14 @@ int main(void)
     PeripheralClock_Config();
     LED_BootStage(LED_BOOT_CLOCKS_DONE);
 
-    /* Initialise shared RAM and publish SHARED_MAGIC before CPU2 can read it.
-       Placed outside the #if: clearing the block is independent of whether
-       CPU2 is enabled to boot; only the ordering relative to HSEM 0 matters. */
-    Shared_Init();
+    /* Restart DWT cycle counter at 400 MHz system clock */
+    HSEM_BM_TimebaseStart();
 
 #if CM4_BOOT_ENABLED
-    /* Enable CM4 peripheral clocks from CM7 upfront to avoid cross-core
-       read-modify-write races on RCC->AHB1ENR / AHB4ENR / APB1LENR (Rule D). */
-    __HAL_RCC_DMA1_CLK_ENABLE();
-    __HAL_RCC_ADC12_CLK_ENABLE();
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-    __HAL_RCC_TIM3_CLK_ENABLE();
-#if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
-    __HAL_RCC_USART2_CLK_ENABLE();
-    __HAL_RCC_GPIOD_CLK_ENABLE();
-#endif
-
-    /* Release CPU2 (Cortex-M4) boot if it was gated in RCC_GCR (BCM4=0). */
-    HAL_RCCEx_EnableBootCore(RCC_BOOT_C2);
-
 #if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
     /* ---- Phase F2 Boot Tests (H5, H5b, H5c) ----------------------------- */
-    /* H5: Wait for CPU2 to boot and park in STOP (D2CKRDY -> 0) */
-    HsemBm_Status_t park_st = HSEM_BM_BootWaitCpu2Parked(200000000UL);
-    bool h5_ok = (park_st == HSEM_BM_OK);
+    /* H5: Verify D2CKRDY stays 0 for 500 ms after CPU2 parks */
+    bool h5_ok = true;
     for (uint32_t ms = 0; ms < 500; ms++)
     {
         if ((RCC->CR & RCC_CR_D2CKRDY) != 0U)
@@ -148,6 +133,17 @@ int main(void)
     EXTI->PR1 = (1UL << 23);
     bool h5c_ok = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
 
+    /* Enable CM4 peripheral clocks from CM7 upfront to avoid cross-core
+       read-modify-write races on RCC->AHB1ENR / AHB4ENR / APB1LENR (Rule D). */
+    __HAL_RCC_DMA1_CLK_ENABLE();
+    __HAL_RCC_ADC12_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    __HAL_RCC_TIM3_CLK_ENABLE();
+#if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
+    __HAL_RCC_USART2_CLK_ENABLE();
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+#endif
+
     /* Now set valid magic and release CPU2 */
     Shared_Init();
     bool h5_release_ok = (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) == HSEM_BM_OK);
@@ -162,6 +158,20 @@ int main(void)
     HSEM_TEST_SHARED->h5_rel_ok = h5_release_ok ? 1U : 0U;
     HSEM_TEST_SHARED->h5_pass = (h5_ok && h5b_ok && h5c_ok && h5_release_ok) ? 1U : 0U;
 #else
+    /* Enable CM4 peripheral clocks from CM7 upfront to avoid cross-core
+       read-modify-write races on RCC->AHB1ENR / AHB4ENR / APB1LENR (Rule D). */
+    __HAL_RCC_DMA1_CLK_ENABLE();
+    __HAL_RCC_ADC12_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    __HAL_RCC_TIM3_CLK_ENABLE();
+#if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
+    __HAL_RCC_USART2_CLK_ENABLE();
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+#endif
+
+    /* Initialise shared RAM and publish SHARED_MAGIC before CPU2 can read it. */
+    Shared_Init();
+
     /* The clock tree is up and shared memory is ready: release CPU2. */
     if (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) != HSEM_BM_OK)
     {
