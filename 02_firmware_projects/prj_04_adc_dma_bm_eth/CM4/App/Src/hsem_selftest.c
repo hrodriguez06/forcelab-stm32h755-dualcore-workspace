@@ -1,18 +1,19 @@
 /**
   ******************************************************************************
   * @file    hsem_selftest.c
-  * @brief   HSEM driver self-test implementation for Cortex-M4.
+  * @brief   HSEM driver self-test implementation for Cortex-M4 (F1 Selftest).
   ******************************************************************************
   */
 
 #include "hsem_selftest.h"
 #include "hsem_selftest_shared.h"
+#include "hsem_bm.h"
 #include "board_def.h"
 #include "shared_memory.h"
 #include "stm32h7xx.h"
 #include <string.h>
 
-#define ST_MAX_LINES 16
+#define ST_MAX_LINES 20
 static char s_lines[ST_MAX_LINES][SHARED_MBOX_SIZE];
 static uint32_t s_line_count = 0U;
 static uint32_t s_line_len = 0U;
@@ -69,101 +70,266 @@ static void Line_U32(uint32_t v)
 
 void HSEM_SelfTest_CM4_Run(void)
 {
-    /* 1. Ensure HSEM clock is enabled */
-    __HAL_RCC_HSEM_CLK_ENABLE();
-    (void)RCC->AHB4ENR; /* Readback */
+    /* 1. Driver and DWT initialization */
+    HsemBm_Status_t init_st = HSEM_BM_Init();
+    bool tb_ok = HSEM_BM_TimebaseStart();
 
-    /* 2. DWT CYCCNT initialization on CM4 */
-    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+    HSEM_TEST_SHARED->cm4_dwt_ok = tb_ok ? 1U : 0U;
+    HSEM_TEST_SHARED->cm4_dwt_delta = DWT->CYCCNT;
 
-    uint32_t t0 = DWT->CYCCNT;
-    for (volatile uint32_t k = 0; k < 500U; k++)
+    /* 2. H0 Characterization on CM4 */
+    bool h0_ok = (init_st == HSEM_BM_OK) && (HSEM_BM_GetCoreId() == HSEM_BM_COREID_CPU2);
+
+    /* Test 1-step take characterization */
+    if (HSEM_BM_FastTake(HSEM_TEST_ID_LOCK1) == HSEM_BM_OK)
     {
-        __NOP();
+        uint32_t r_val = HSEM->R[HSEM_TEST_ID_LOCK1];
+        uint32_t c_id = (r_val >> 8) & 0x0FU;
+        uint32_t p_id = r_val & 0xFFU;
+        if ((c_id != HSEM_BM_COREID_CPU2) || (p_id != 0U))
+        {
+            h0_ok = false;
+        }
+        HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 0U);
     }
-    uint32_t t1 = DWT->CYCCNT;
-    uint32_t delta = t1 - t0;
+    else
+    {
+        h0_ok = false;
+    }
 
-    HSEM_TEST_SHARED->cm4_dwt_delta = delta;
-    HSEM_TEST_SHARED->cm4_dwt_ok = (delta > 0U) ? 1U : 0U;
+    /* Test GetOwner on free semaphore does not take it (C11) */
+    HsemBm_Owner_t owner = { 0 };
+    if (!HSEM_BM_GetOwner(HSEM_TEST_ID_LOCK1, &owner) || owner.locked || (owner.core_id != 0U))
+    {
+        h0_ok = false;
+    }
+    if (HSEM_BM_IsLocked(HSEM_TEST_ID_LOCK1))
+    {
+        h0_ok = false;
+    }
 
-    /* 3. B1: Raw timing baseline on CM4 (using ID 24) */
-    /* Release any hold on ID 24 first */
-    HSEM->R[24] = (1U << 8); /* CM4 core_id = 1 */
-    __DMB();
+    /* Parameter rejection tests (C6) */
+    if (HSEM_BM_FastTake(32U) != HSEM_BM_ERR_PARAM) h0_ok = false;
+    if (HSEM_BM_Take(HSEM_TEST_ID_LOCK1, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
+    if (HSEM_BM_Take(HSEM_TEST_ID_LOCK1, 256U) != HSEM_BM_ERR_PARAM) h0_ok = false;
+    if (HSEM_BM_Release(32U, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
+    if (HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 256U) != HSEM_BM_ERR_PARAM) h0_ok = false;
+    if (HSEM_BM_SetClearKey(0U) != false) h0_ok = false;
+    if (HSEM_BM_ReleaseAllOfCore(2U, 0xA5C3U) != HSEM_BM_ERR_PARAM) h0_ok = false;
+    if (HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU2, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
+    if (HSEM_BM_NotifyEnable(0U) != false) h0_ok = false;
 
-    /* FastTake: 1-step read of RLR */
-    uint32_t c_start = DWT->CYCCNT;
-    volatile uint32_t rlr_val = HSEM->RLR[24];
-    uint32_t fast_take_cyc = DWT->CYCCNT - c_start;
-    (void)rlr_val;
+    HSEM_TEST_SHARED->h0_m4_pass = h0_ok ? 1U : 0U;
 
-    /* Release */
-    c_start = DWT->CYCCNT;
-    HSEM->R[24] = (1U << 8);
-    uint32_t rel_cyc = DWT->CYCCNT - c_start;
-    __DMB();
+    /* 3. H3: Release Protection on CM4 */
+    bool h3_ok = true;
+    /* 2-step with proc 7 */
+    if (HSEM_BM_Take(HSEM_TEST_ID_LOCK1, 7U) == HSEM_BM_OK)
+    {
+        /* (a) Raw release attempt with wrong proc 8 */
+        HSEM->R[HSEM_TEST_ID_LOCK1] = (HSEM_BM_COREID_CPU2 << 8) | 8U;
+        __DMB();
+        /* Verify still held by proc 7 */
+        uint32_t r = HSEM->R[HSEM_TEST_ID_LOCK1];
+        if (((r & (1UL << 31)) == 0U) || ((r & 0xFFU) != 7U))
+        {
+            h3_ok = false;
+        }
 
-    /* 2-step Take */
-    c_start = DWT->CYCCNT;
-    HSEM->R[24] = (1U << 31) | (1U << 8) | 7U; /* LOCK | COREID 1 | PROCID 7 */
-    volatile uint32_t r_read = HSEM->R[24];
-    uint32_t take_cyc = DWT->CYCCNT - c_start;
-    (void)r_read;
+        /* (d) HSEM_BM_Release with wrong proc */
+        if (HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 8U) != HSEM_BM_ERR_NOT_OWNER)
+        {
+            h3_ok = false;
+        }
 
-    /* Release */
-    HSEM->R[24] = (1U << 8) | 7U;
-    __DMB();
+        /* Release correctly */
+        if (HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 7U) != HSEM_BM_OK)
+        {
+            h3_ok = false;
+        }
+    }
+    else
+    {
+        h3_ok = false;
+    }
 
-    HSEM_TEST_SHARED->cm4_raw_fast_take_cycles = fast_take_cyc;
-    HSEM_TEST_SHARED->cm4_raw_take_cycles = take_cyc;
-    HSEM_TEST_SHARED->cm4_raw_release_cycles = rel_cyc;
+    /* 1-step (proc 0) */
+    if (HSEM_BM_FastTake(HSEM_TEST_ID_LOCK1) == HSEM_BM_OK)
+    {
+        /* Raw release with proc 5 */
+        HSEM->R[HSEM_TEST_ID_LOCK1] = (HSEM_BM_COREID_CPU2 << 8) | 5U;
+        __DMB();
+        if (!HSEM_BM_IsLocked(HSEM_TEST_ID_LOCK1))
+        {
+            h3_ok = false;
+        }
+        HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 0U);
+    }
+    else
+    {
+        h3_ok = false;
+    }
+    HSEM_TEST_SHARED->h3_m4_pass = h3_ok ? 1U : 0U;
 
-    /* 4. H2 Negative Control: Concurrent contention without lock */
+    /* 4. H7: Same-Core Context Collision on CM4 (S1) */
+    bool h7_ok = true;
+    if (HSEM_BM_FastTake(HSEM_TEST_ID_LOCK1) == HSEM_BM_OK)
+    {
+        /* Context B on same core attempts FastTake */
+        if (HSEM_BM_FastTake(HSEM_TEST_ID_LOCK1) != HSEM_BM_BUSY_SELF)
+        {
+            h7_ok = false;
+        }
+        HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 0U);
+    }
+    else
+    {
+        h7_ok = false;
+    }
+
+    if (HSEM_BM_Take(HSEM_TEST_ID_LOCK2, 1U) == HSEM_BM_OK)
+    {
+        /* Context B on same core attempts Take with proc 2 */
+        if (HSEM_BM_Take(HSEM_TEST_ID_LOCK2, 2U) != HSEM_BM_BUSY_SELF)
+        {
+            h7_ok = false;
+        }
+        if (HSEM_BM_Release(HSEM_TEST_ID_LOCK2, 2U) != HSEM_BM_ERR_NOT_OWNER)
+        {
+            h7_ok = false;
+        }
+        HSEM_BM_Release(HSEM_TEST_ID_LOCK2, 1U);
+    }
+    else
+    {
+        h7_ok = false;
+    }
+    HSEM_TEST_SHARED->h7_m4_pass = h7_ok ? 1U : 0U;
+
+    /* 5. Synchronize with CM7 for dual-core tests */
     HSEM_TEST_SHARED->cm4_ready = 1U;
     __DMB();
 
-    /* Wait for CM7 to signal start of H2 Part A */
+    /* Wait for CM7 to signal start */
     while (HSEM_TEST_SHARED->go_signal != 1U)
     {
         __NOP();
     }
 
-    /* Part A: Increment shared_counter without lock */
-    uint32_t m4_count = 0U;
-    for (uint32_t i = 0U; i < HSEM_TEST_H2_ITERATIONS; i++)
+    /* ---- H1 Phase 1: 1-step FastTake mutual exclusion ---- */
+    uint32_t m4_h1_count = 0U;
+    for (uint32_t i = 0U; i < HSEM_TEST_H1_ITERATIONS; i++)
     {
-        uint32_t val = HSEM_TEST_SHARED->shared_counter;
-        /* Small delay window to force bus collisions */
-        __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-        __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-        HSEM_TEST_SHARED->shared_counter = val + 1U;
-        m4_count++;
+        while (HSEM_BM_FastTake(HSEM_TEST_ID_LOCK1) != HSEM_BM_OK)
+        {
+            __NOP();
+        }
+        HSEM_TEST_SHARED->h1_shared_counter++;
+        m4_h1_count++;
+        HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 0U);
     }
-    HSEM_TEST_SHARED->m4_h2_count = m4_count;
+    HSEM_TEST_SHARED->h1_m4_private_count = m4_h1_count;
     __DMB();
     HSEM_TEST_SHARED->cm4_done = 1U;
 
-    /* Wait for CM7 to signal start of H2 Part B */
+    /* Wait for CM7 to move to Phase 2 */
     while (HSEM_TEST_SHARED->go_signal != 2U)
     {
         __NOP();
     }
 
-    /* Part B: Continuously write 8-word registers without lock */
-    for (uint32_t i = 0U; i < HSEM_TEST_H2_TORN_ITERS; i++)
+    /* ---- H1b: Torn Register with Lock ---- */
+    /* CM4 continuously writes 8 words under lock */
+    for (uint32_t i = 0U; i < HSEM_TEST_H1B_ITERATIONS; i++)
     {
+        while (HSEM_BM_FastTake(HSEM_TEST_ID_LOCK1) != HSEM_BM_OK)
+        {
+            __NOP();
+        }
         uint32_t v = i + 1U;
         for (uint32_t w = 0U; w < 8U; w++)
         {
-            HSEM_TEST_SHARED->shared_reg[w] = v;
+            HSEM_TEST_SHARED->h1b_shared_reg[w] = v;
         }
+        HSEM_BM_Release(HSEM_TEST_ID_LOCK1, 0U);
     }
     __DMB();
     HSEM_TEST_SHARED->cm4_done = 2U;
 
-    /* 5. Format CM4 selftest lines */
+    /* Wait for CM7 to move to Phase 3: H4 Timeout */
+    while (HSEM_TEST_SHARED->go_signal != 3U)
+    {
+        __NOP();
+    }
+
+    /* ---- H4: Bounded Timeout cooperation ---- */
+    /* CM4 takes ID_TIMEOUT and holds it for 5 ms, then releases */
+    HSEM_BM_FastTake(HSEM_TEST_ID_TIMEOUT);
+    HSEM_TEST_SHARED->cm4_done = 3U;
+    __DMB();
+
+    /* Hold for 5 ms */
+    HAL_Delay(5);
+    HSEM_BM_Release(HSEM_TEST_ID_TIMEOUT, 0U);
+
+    /* Wait for CM7 step C */
+    while (HSEM_TEST_SHARED->go_signal != 4U)
+    {
+        __NOP();
+    }
+
+    /* CM4 takes ID_TIMEOUT and holds it for 25 ms (CM7 times out at 10 ms) */
+    HSEM_BM_FastTake(HSEM_TEST_ID_TIMEOUT);
+    HSEM_TEST_SHARED->cm4_done = 4U;
+    __DMB();
+
+    HAL_Delay(25);
+    HSEM_BM_Release(HSEM_TEST_ID_TIMEOUT, 0U);
+
+    /* Wait for CM7 to move to Phase 5: H8 Recovery */
+    while (HSEM_TEST_SHARED->go_signal != 5U)
+    {
+        __NOP();
+    }
+
+    /* ---- H8: Recovery ---- */
+    /* CM4 takes IDs 24..27 and stops */
+    HSEM_BM_FastTake(24U);
+    HSEM_BM_FastTake(25U);
+    HSEM_BM_FastTake(26U);
+    HSEM_BM_FastTake(27U);
+    HSEM_TEST_SHARED->cm4_done = 5U;
+    __DMB();
+
+    /* Wait for CM7 to perform recovery */
+    while (HSEM_TEST_SHARED->go_signal != 6U)
+    {
+        __NOP();
+    }
+
+    /* ---- H9: Notifications ---- */
+    /* CM4 subscribes to ID 26 notifications */
+    HSEM_BM_NotifyEnable(1UL << HSEM_TEST_ID_NOTIFY);
+    HSEM_TEST_SHARED->cm4_done = 6U;
+    __DMB();
+
+    uint32_t notifications_seen = 0U;
+    while (notifications_seen < HSEM_TEST_H9_COUNT)
+    {
+        uint32_t mask = HSEM_BM_NotifyTake();
+        if ((mask & (1UL << HSEM_TEST_ID_NOTIFY)) != 0U)
+        {
+            notifications_seen++;
+            /* Re-arm for next */
+            HSEM_BM_NotifyEnable(1UL << HSEM_TEST_ID_NOTIFY);
+        }
+    }
+    HSEM_TEST_SHARED->h9_m4_notifications = notifications_seen;
+    HSEM_BM_NotifyDisable(1UL << HSEM_TEST_ID_NOTIFY);
+    HSEM_TEST_SHARED->cm4_done = 7U;
+    __DMB();
+
+    /* Format CM4 summary lines */
     Line_Begin();
     Line_Str("banner rev=");
 #if defined(FW_GIT_REV)
@@ -171,29 +337,21 @@ void HSEM_SelfTest_CM4_Run(void)
 #else
     Line_Str("unknown");
 #endif
-    Line_Str(" core=CM4");
+    Line_Str(" core=CM4 HSEM_BM");
     Line_End();
 
     Line_Begin();
-    Line_Str("DWT CYCCNT running=");
-    Line_U32(HSEM_TEST_SHARED->cm4_dwt_ok);
-    Line_Str(" delta=");
-    Line_U32(HSEM_TEST_SHARED->cm4_dwt_delta);
+    Line_Str("H0 characterization=");
+    Line_Str(h0_ok ? "PASS" : "FAIL");
+    Line_Str(" H3 release_prot=");
+    Line_Str(h3_ok ? "PASS" : "FAIL");
     Line_End();
 
     Line_Begin();
-    Line_Str("B1 raw_fast_take=");
-    Line_U32(fast_take_cyc);
-    Line_Str(" raw_take=");
-    Line_U32(take_cyc);
-    Line_Str(" raw_release=");
-    Line_U32(rel_cyc);
-    Line_End();
-
-    Line_Begin();
-    Line_Str("H2 m4_count=");
-    Line_U32(m4_count);
-    Line_Str(" done=2");
+    Line_Str("H7 same_core=");
+    Line_Str(h7_ok ? "PASS" : "FAIL");
+    Line_Str(" H9 notifications=");
+    Line_U32(notifications_seen);
     Line_End();
 }
 

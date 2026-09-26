@@ -140,6 +140,9 @@ if(HSEM_DRIVER_SELFTEST)
     target_sources(${TARGET} PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/App/Src/hsem_selftest.c
     )
+    target_link_libraries(${TARGET} PRIVATE
+        stm32h7_driver_hsem_bm
+    )
 endif()
 
 set_target_properties(${TARGET} PROPERTIES
