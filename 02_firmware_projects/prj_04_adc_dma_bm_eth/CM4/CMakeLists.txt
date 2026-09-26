@@ -135,6 +135,7 @@ if(HSEM_DRIVER_SELFTEST)
     )
     target_link_libraries(${TARGET} PRIVATE
         stm32h7_driver_hsem_bm
+        stm32h7_driver_hsem_ll
     )
 endif()
 

@@ -77,6 +77,11 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t h9_m4_notifications;
     volatile uint32_t h9_m7_notifications;
 
+    /* H10 Parity (BM <-> LL) */
+    volatile uint32_t h10_m4_pass;
+    volatile uint32_t h10_m7_pass;
+
+
     /* Synchronization completion flags */
     volatile uint32_t cm4_done;
     volatile uint32_t cm7_done;

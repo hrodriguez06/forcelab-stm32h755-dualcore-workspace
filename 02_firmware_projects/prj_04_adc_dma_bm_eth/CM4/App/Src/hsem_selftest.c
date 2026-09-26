@@ -8,6 +8,7 @@
 #include "hsem_selftest.h"
 #include "hsem_selftest_shared.h"
 #include "hsem_bm.h"
+#include "hsem_ll.h"
 #include "board_def.h"
 #include "shared_memory.h"
 #include "stm32h7xx.h"
@@ -66,6 +67,131 @@ static void Line_U32(uint32_t v)
             s_lines[s_line_count][s_line_len] = '\0';
         }
     }
+}
+
+#define H10_STEPS  7U
+
+typedef struct {
+    uint32_t R[8];    /* R[24] through R[31] */
+    uint32_t IER;     /* CnIER */
+    uint32_t ISR;     /* CnISR */
+} HsemSnapshot_t;
+
+typedef struct {
+    HsemBm_Status_t st;
+    HsemSnapshot_t  snap;
+} H10_StepResult_t;
+
+static void Hsem_TakeSnapshot_M4(HsemSnapshot_t *s)
+{
+    for (uint32_t i = 0; i < 8; i++)
+    {
+        s->R[i] = HSEM->R[24 + i];
+    }
+    s->IER = HSEM->C2IER;
+    s->ISR = HSEM->C2ISR;
+}
+
+static void RunSequence_BM_M4(H10_StepResult_t res[H10_STEPS])
+{
+    (void)HSEM_BM_Release(24, 0);
+    (void)HSEM_BM_Release(25, 42);
+    (void)HSEM_BM_NotifyDisable(0xFFFFFFFFUL);
+
+    /* Step 0: FastTake on sem 24 */
+    res[0].st = HSEM_BM_FastTake(24);
+    Hsem_TakeSnapshot_M4(&res[0].snap);
+
+    /* Step 1: 2-step Take on sem 25, proc 42 */
+    res[1].st = HSEM_BM_Take(25, 42);
+    Hsem_TakeSnapshot_M4(&res[1].snap);
+
+    /* Step 2: Release sem 25, proc 42 */
+    res[2].st = HSEM_BM_Release(25, 42);
+    Hsem_TakeSnapshot_M4(&res[2].snap);
+
+    /* Step 3: Release sem 24 with wrong proc 99 */
+    res[3].st = HSEM_BM_Release(24, 99);
+    Hsem_TakeSnapshot_M4(&res[3].snap);
+
+    /* Step 4: Release sem 24 with correct proc 0 */
+    res[4].st = HSEM_BM_Release(24, 0);
+    Hsem_TakeSnapshot_M4(&res[4].snap);
+
+    /* Step 5: NotifyEnable sem 26 */
+    bool en = HSEM_BM_NotifyEnable(1UL << 26);
+    res[5].st = en ? HSEM_BM_OK : HSEM_BM_ERR_PARAM;
+    Hsem_TakeSnapshot_M4(&res[5].snap);
+
+    /* Step 6: NotifyDisable sem 26 */
+    bool dis = HSEM_BM_NotifyDisable(1UL << 26);
+    res[6].st = dis ? HSEM_BM_OK : HSEM_BM_ERR_PARAM;
+    Hsem_TakeSnapshot_M4(&res[6].snap);
+}
+
+static void RunSequence_LL_M4(H10_StepResult_t res[H10_STEPS])
+{
+    (void)HSEM_LL_Release(24, 0);
+    (void)HSEM_LL_Release(25, 42);
+    (void)HSEM_LL_NotifyDisable(0xFFFFFFFFUL);
+
+    /* Step 0: FastTake on sem 24 */
+    res[0].st = HSEM_LL_FastTake(24);
+    Hsem_TakeSnapshot_M4(&res[0].snap);
+
+    /* Step 1: 2-step Take on sem 25, proc 42 */
+    res[1].st = HSEM_LL_Take(25, 42);
+    Hsem_TakeSnapshot_M4(&res[1].snap);
+
+    /* Step 2: Release sem 25, proc 42 */
+    res[2].st = HSEM_LL_Release(25, 42);
+    Hsem_TakeSnapshot_M4(&res[2].snap);
+
+    /* Step 3: Release sem 24 with wrong proc 99 */
+    res[3].st = HSEM_LL_Release(24, 99);
+    Hsem_TakeSnapshot_M4(&res[3].snap);
+
+    /* Step 4: Release sem 24 with correct proc 0 */
+    res[4].st = HSEM_LL_Release(24, 0);
+    Hsem_TakeSnapshot_M4(&res[4].snap);
+
+    /* Step 5: NotifyEnable sem 26 */
+    bool en = HSEM_LL_NotifyEnable(1UL << 26);
+    res[5].st = en ? HSEM_BM_OK : HSEM_BM_ERR_PARAM;
+    Hsem_TakeSnapshot_M4(&res[5].snap);
+
+    /* Step 6: NotifyDisable sem 26 */
+    bool dis = HSEM_LL_NotifyDisable(1UL << 26);
+    res[6].st = dis ? HSEM_BM_OK : HSEM_BM_ERR_PARAM;
+    Hsem_TakeSnapshot_M4(&res[6].snap);
+}
+
+static bool CompareSnapshots_M4(const H10_StepResult_t bm[H10_STEPS],
+                               const H10_StepResult_t ll[H10_STEPS])
+{
+    for (uint32_t i = 0; i < H10_STEPS; i++)
+    {
+        if (bm[i].st != ll[i].st)
+        {
+            return false;
+        }
+        for (uint32_t r = 0; r < 8; r++)
+        {
+            if (bm[i].snap.R[r] != ll[i].snap.R[r])
+            {
+                return false;
+            }
+        }
+        if (bm[i].snap.IER != ll[i].snap.IER)
+        {
+            return false;
+        }
+        if (bm[i].snap.ISR != ll[i].snap.ISR)
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 void HSEM_SelfTest_CM4_Run(void)
@@ -206,7 +332,26 @@ void HSEM_SelfTest_CM4_Run(void)
     }
     HSEM_TEST_SHARED->h7_m4_pass = h7_ok ? 1U : 0U;
 
-    /* 5. Synchronize with CM7 for dual-core tests */
+    /* 5. H10: BM <-> LL Parity on CM4 */
+    H10_StepResult_t bm_res[H10_STEPS];
+    H10_StepResult_t ll_res[H10_STEPS];
+    RunSequence_BM_M4(bm_res);
+    RunSequence_LL_M4(ll_res);
+
+    bool h10_ok = CompareSnapshots_M4(bm_res, ll_res);
+
+    /* Negative control: mutate a snapshot to confirm comparison detects mismatch */
+    H10_StepResult_t mutated_res[H10_STEPS];
+    for (uint32_t i = 0U; i < H10_STEPS; i++)
+    {
+        mutated_res[i] = ll_res[i];
+    }
+    mutated_res[1].snap.R[1] ^= 0x1U;
+    bool neg_detected = !CompareSnapshots_M4(bm_res, mutated_res);
+
+    HSEM_TEST_SHARED->h10_m4_pass = (h10_ok && neg_detected) ? 1U : 0U;
+
+    /* 6. Synchronize with CM7 for dual-core tests */
     HSEM_TEST_SHARED->cm4_ready = 1U;
     __DMB();
 
@@ -337,7 +482,7 @@ void HSEM_SelfTest_CM4_Run(void)
 #else
     Line_Str("unknown");
 #endif
-    Line_Str(" core=CM4 HSEM_BM");
+    Line_Str(" core=CM4 HSEM_BM/LL");
     Line_End();
 
     Line_Begin();
@@ -352,6 +497,8 @@ void HSEM_SelfTest_CM4_Run(void)
     Line_Str(h7_ok ? "PASS" : "FAIL");
     Line_Str(" H9 notifications=");
     Line_U32(notifications_seen);
+    Line_Str(" H10 parity=");
+    Line_Str(HSEM_TEST_SHARED->h10_m4_pass ? "PASS" : "FAIL");
     Line_End();
 }
 
