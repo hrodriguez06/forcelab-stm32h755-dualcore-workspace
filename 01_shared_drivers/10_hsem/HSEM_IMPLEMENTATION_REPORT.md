@@ -168,7 +168,7 @@ Durante todo el desarrollo se auditaron 13 criterios no negociables:
 - **Commits auditados:** `1f9c731` -> `84e373c` -> `b86ede6` -> `f4d2a43`
 - **Implementación:**
   - Creado `01_shared_drivers/10_hsem/README.md` exhaustivo.
-  - Actualizado `01_shared_drivers/README.md`, `CMakeLists.txt`, `DRIVER_ROADMAP.md` y `DRIVER_ARCHITECTURE_GUIDELINES.md`.
+  - Actualizado `01_shared_drivers/README.md`, `CMakeLists.txt` y `DRIVER_ARCHITECTURE_GUIDELINES.md` (preservando estrictamente inalterado `DRIVER_ROADMAP.md`).
   - Corregido el hub de documentación (`hsem_dualcore` y `dual_core_boot_ipc.md`) resolviendo definitivamente S13.
   - Inicialización formal del timebase DWT y HSEM en CM4 al arrancar (`CM4/Core/Src/main.c` y plantilla).
   - Calibración de `SHARED_ADC_TRYLOCK_CYCLES` a 50,000 ciclos (~125 µs en CM7, ~250 µs en CM4) para absorber variaciones por jitter de interrupciones en la copia de datos de CM4.
