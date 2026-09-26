@@ -63,7 +63,46 @@ int main(void)
        the HSEM notification. Wait for D2CKRDY to drop when CPU2 parks. */
     HSEM_BM_Init();
     HSEM_BM_TimebaseStart();
-    (void)HSEM_BM_BootWaitCpu2Parked(200000000UL); /* 500 ms @ 400 MHz */
+    (void)HSEM_BM_BootWaitCpu2Parked(32000000UL); /* 500 ms @ 64 MHz */
+
+#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
+    /* ---- Phase F2 Boot Tests (H5, H5b, H5c) ----------------------------- */
+    /* H5: Verify D2CKRDY stays 0 for 500 ms after CPU2 parks */
+    bool h5_ok = true;
+    uint32_t t_h5_start = DWT->CYCCNT;
+    while ((DWT->CYCCNT - t_h5_start) < 32000000UL) /* 500 ms @ 64 MHz HSI */
+    {
+        if ((RCC->CR & RCC_CR_D2CKRDY) != 0U)
+        {
+            h5_ok = false;
+            break;
+        }
+    }
+
+    /* H5b: Release HSEM before magic is valid */
+    g_shared.magic = 0U;
+    __DMB();
+    HSEM_BM_FastTake(HSEM_ID_BOOT_SYNC);
+    HSEM_BM_Release(HSEM_ID_BOOT_SYNC, 0U);
+    /* Wait ~10 ms (640,000 cycles) for CPU2 to wake, verify magic, and re-park into STOP */
+    uint32_t t_h5b = DWT->CYCCNT;
+    while ((DWT->CYCCNT - t_h5b) < 640000UL) { __NOP(); }
+    bool h5b_ok = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
+
+    /* H5c: Spurious EXTI event to CPU2 via EXTI_SWIER1 */
+    EXTI->C2EMR1 |= (1UL << 23);
+    EXTI->SWIER1 |= (1UL << 23);
+    uint32_t t_h5c = DWT->CYCCNT;
+    while ((DWT->CYCCNT - t_h5c) < 640000UL) { __NOP(); }
+    EXTI->C2EMR1 &= ~(1UL << 23);
+    EXTI->C2PR1 = (1UL << 23);
+    EXTI->PR1 = (1UL << 23);
+    bool h5c_ok = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
+
+    HSEM_TEST_SHARED->h5_ok = h5_ok ? 1U : 0U;
+    HSEM_TEST_SHARED->h5b_ok = h5b_ok ? 1U : 0U;
+    HSEM_TEST_SHARED->h5c_ok = h5c_ok ? 1U : 0U;
+#endif
 #endif
 
     /* Memory attributes first, then the caches.
@@ -102,62 +141,6 @@ int main(void)
     HSEM_BM_TimebaseStart();
 
 #if CM4_BOOT_ENABLED
-#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
-    /* ---- Phase F2 Boot Tests (H5, H5b, H5c) ----------------------------- */
-    /* H5: Verify D2CKRDY stays 0 for 500 ms after CPU2 parks */
-    bool h5_ok = true;
-    for (uint32_t ms = 0; ms < 500; ms++)
-    {
-        if ((RCC->CR & RCC_CR_D2CKRDY) != 0U)
-        {
-            h5_ok = false;
-            break;
-        }
-        for (volatile uint32_t s = 0; s < 40000U; s++) { __NOP(); }
-    }
-
-    /* H5b: Release HSEM before magic is valid */
-    g_shared.magic = 0U;
-    __DMB();
-    HSEM_BM_FastTake(HSEM_ID_BOOT_SYNC);
-    HSEM_BM_Release(HSEM_ID_BOOT_SYNC, 0U);
-    for (volatile uint32_t s = 0; s < 400000U; s++) { __NOP(); } /* ~10 ms */
-    bool h5b_ok = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
-
-    /* H5c: Spurious EXTI event to CPU2 via EXTI_SWIER1 */
-    EXTI->C2EMR1 |= (1UL << 23);
-    EXTI->SWIER1 |= (1UL << 23);
-    for (volatile uint32_t s = 0; s < 400000U; s++) { __NOP(); } /* ~10 ms */
-    EXTI->C2EMR1 &= ~(1UL << 23);
-    EXTI->C2PR1 = (1UL << 23);
-    EXTI->PR1 = (1UL << 23);
-    bool h5c_ok = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
-
-    /* Enable CM4 peripheral clocks from CM7 upfront to avoid cross-core
-       read-modify-write races on RCC->AHB1ENR / AHB4ENR / APB1LENR (Rule D). */
-    __HAL_RCC_DMA1_CLK_ENABLE();
-    __HAL_RCC_ADC12_CLK_ENABLE();
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-    __HAL_RCC_TIM3_CLK_ENABLE();
-#if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
-    __HAL_RCC_USART2_CLK_ENABLE();
-    __HAL_RCC_GPIOD_CLK_ENABLE();
-#endif
-
-    /* Now set valid magic and release CPU2 */
-    Shared_Init();
-    bool h5_release_ok = (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) == HSEM_BM_OK);
-    if (!h5_release_ok)
-    {
-        Error_Handler();
-    }
-
-    HSEM_TEST_SHARED->h5_ok = h5_ok ? 1U : 0U;
-    HSEM_TEST_SHARED->h5b_ok = h5b_ok ? 1U : 0U;
-    HSEM_TEST_SHARED->h5c_ok = h5c_ok ? 1U : 0U;
-    HSEM_TEST_SHARED->h5_rel_ok = h5_release_ok ? 1U : 0U;
-    HSEM_TEST_SHARED->h5_pass = (h5_ok && h5b_ok && h5c_ok && h5_release_ok) ? 1U : 0U;
-#else
     /* Enable CM4 peripheral clocks from CM7 upfront to avoid cross-core
        read-modify-write races on RCC->AHB1ENR / AHB4ENR / APB1LENR (Rule D). */
     __HAL_RCC_DMA1_CLK_ENABLE();
@@ -173,10 +156,18 @@ int main(void)
     Shared_Init();
 
     /* The clock tree is up and shared memory is ready: release CPU2. */
-    if (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) != HSEM_BM_OK)
+    bool h5_release_ok = (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) == HSEM_BM_OK);
+    if (!h5_release_ok)
     {
         Error_Handler();
     }
+
+#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
+    HSEM_TEST_SHARED->h5_rel_ok = h5_release_ok ? 1U : 0U;
+    HSEM_TEST_SHARED->h5_pass = (HSEM_TEST_SHARED->h5_ok &&
+                                 HSEM_TEST_SHARED->h5b_ok &&
+                                 HSEM_TEST_SHARED->h5c_ok &&
+                                 HSEM_TEST_SHARED->h5_rel_ok) ? 1U : 0U;
 #endif
 #endif
 
