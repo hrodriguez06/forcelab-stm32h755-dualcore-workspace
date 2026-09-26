@@ -91,11 +91,12 @@ target_link_options(${TARGET} PRIVATE
     -Wl,--no-warn-rwx-segments
 )
 
-# CPU2 links bare-metal drivers (adc_bm, dma_bm, gpio_bm)
+# CPU2 links bare-metal drivers (adc_bm, dma_bm, gpio_bm, hsem_bm)
 target_link_libraries(${TARGET} PRIVATE
     stm32h7_driver_adc_bm
     stm32h7_driver_dma
     stm32h7_driver_gpio
+    stm32h7_driver_hsem_bm
 )
 
 if(UART_DRIVER_SELFTEST)

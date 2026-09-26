@@ -80,6 +80,9 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t m4_to_m7_len;
     volatile uint8_t  m4_to_m7[SHARED_MBOX_SIZE];
 
+    volatile uint32_t adc_lock_fail_count; /* Failures in Shared_TryLockCycles */
+    uint8_t           _pad2[20];           /* Pad struct to 32-byte multiple   */
+
 } SharedMemory_t;
 
 /* One instance in memory, but shared_memory.c is compiled into BOTH images.
@@ -98,18 +101,31 @@ void Shared_Init(void);
 
 #define SHARED_MAGIC   0x48375353UL   /* "H7SS" */
 
-/* ---- HSEM take / release (2-step lock, process ID 0) ---------------------
-   Requires the HSEM clock: __HAL_RCC_HSEM_CLK_ENABLE();                    */
-#define SHARED_LOCK(id)     do { } while (HAL_HSEM_FastTake(id) != HAL_OK)
-#define SHARED_UNLOCK(id)   HAL_HSEM_Release((id), 0U)
+#include "hsem_bm.h"
+
+/* ---- HSEM take / release (1-step lock, process ID 0) ---------------------
+   Requires HSEM peripheral clock enabled on the calling core.
+   Note: FastTake is 1-step locking; process ID is always 0.                */
+#define SHARED_LOCK(id)     do { } while (HSEM_BM_FastTake(id) != HSEM_BM_OK)
+#define SHARED_UNLOCK(id)   (void)HSEM_BM_Release((id), 0U)
+
+#define SHARED_ADC_TRYLOCK_CYCLES  10000UL /* ~25 µs @ 400 MHz, ~50 µs @ 200 MHz */
 
 /**
-  * @brief  Attempts to acquire an HSEM with a bounded number of retries.
+  * @brief  Attempts to acquire an HSEM with a bounded number of retries (spin loops).
   * @param  id      HSEM channel ID (0..31).
   * @param  retries Maximum spin iterations before giving up.
   * @return true if semaphore was successfully taken, false on timeout.
   */
 bool Shared_TryLock(uint32_t id, uint32_t retries);
+
+/**
+  * @brief  Attempts to acquire an HSEM with a bounded timeout in DWT cycles.
+  * @param  id         HSEM channel ID (0..31).
+  * @param  max_cycles Maximum DWT cycles before giving up.
+  * @return true if semaphore was successfully taken, false on timeout.
+  */
+bool Shared_TryLockCycles(uint32_t id, uint32_t max_cycles);
 
 #ifdef __cplusplus
 }

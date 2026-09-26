@@ -90,6 +90,10 @@ target_link_options(${TARGET} PRIVATE
     -Wl,--no-warn-rwx-segments
 )
 
+target_link_libraries(${TARGET} PRIVATE
+    stm32h7_driver_hsem_bm
+)
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"

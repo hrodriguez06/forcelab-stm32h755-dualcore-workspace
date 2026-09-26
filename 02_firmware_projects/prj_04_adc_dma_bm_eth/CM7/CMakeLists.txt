@@ -115,6 +115,7 @@ target_link_libraries(${TARGET} PRIVATE
     stm32h7_driver_led
     stm32h7_driver_uart
     stm32h7_driver_eth
+    stm32h7_driver_hsem_bm
 )
 
 if(UART_DRIVER_SELFTEST)

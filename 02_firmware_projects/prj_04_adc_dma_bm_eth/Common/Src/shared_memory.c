@@ -73,3 +73,8 @@ bool Shared_TryLock(uint32_t id, uint32_t retries)
     }
     return false;
 }
+
+bool Shared_TryLockCycles(uint32_t id, uint32_t max_cycles)
+{
+    return (HSEM_BM_TakeTimeout(id, 0U, max_cycles, (HsemBm_RelaxHook_t)0, (void *)0) == HSEM_BM_OK);
+}

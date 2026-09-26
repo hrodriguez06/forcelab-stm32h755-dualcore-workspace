@@ -98,6 +98,7 @@ target_link_options(${TARGET} PRIVATE
 target_link_libraries(${TARGET} PRIVATE
     stm32h7_driver_led
     stm32h7_driver_uart
+    stm32h7_driver_hsem_bm
 )
 
 set_target_properties(${TARGET} PROPERTIES

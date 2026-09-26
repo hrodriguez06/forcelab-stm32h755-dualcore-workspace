@@ -62,9 +62,12 @@ void Shared_Init(void);
 
 #define SHARED_MAGIC   0x48375353UL   /* "H7SS" */
 
-/* ---- HSEM take / release (2-step lock, process ID 0) ---------------------
-   Requires the HSEM clock: __HAL_RCC_HSEM_CLK_ENABLE();                    */
-#define SHARED_LOCK(id)     do { } while (HAL_HSEM_FastTake(id) != HAL_OK)
-#define SHARED_UNLOCK(id)   HAL_HSEM_Release((id), 0U)
+#include "hsem_bm.h"
+
+/* ---- HSEM take / release (1-step lock, process ID 0) ---------------------
+   Requires HSEM peripheral clock enabled on the calling core.
+   Note: FastTake is 1-step locking; process ID is always 0.                */
+#define SHARED_LOCK(id)     do { } while (HSEM_BM_FastTake(id) != HSEM_BM_OK)
+#define SHARED_UNLOCK(id)   (void)HSEM_BM_Release((id), 0U)
 
 #endif /* SHARED_MEMORY_H */
