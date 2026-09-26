@@ -153,3 +153,82 @@ Gate de salida de F0 completado y validado. Listo para iniciar Fase F1 (`hsem_bm
 | A20 | Documentación | Registrada en `AUDIT.md` y captura en `docs/` | PASS |
 
 Gate de salida de F1 completado y validado. Listo para iniciar Fase F2 (Arranque y Migración).
+
+---
+
+## Fase F2: Arranque y Migración de Proyectos
+
+- **Fecha:** Sep 26, 2026
+- **Rama:** `driver/hsem`
+- **Rango de Commits:** `9616e98..6f1692f`
+  - `9616e98`: `refactor(boot): migrate prj_04 and dualcore template to HSEM_BM boot handshake`
+  - `3a43823`: `fix(boot): resolve compilation warnings and EXTI register in CM7 main`
+  - `cb62eb6`: `fix(hsem): improve boot handshake STOP re-entry and H5 verification sequence`
+  - `c557c6e`: `fix(hsem): correct boot sequence ordering so D2 domain remains in DSTOP during H5 verification`
+  - `0748c71`: `fix(hsem): test H5 delay and premature events early while D2 domain is in DSTOP`
+  - `eed2be7`: `fix(template): remove duplicate Shared_Init in CM7 app_main after HSEM boot release`
+  - `2b792a8`: `test(prj_04): record F2 passing selftest capture`
+  - `6f1692f`: `test(hsem): record H6 20 warm resets for prj_04 and dualcore template`
+- **Plataforma:** NUCLEO-H755ZI-Q (STM32H755ZI Silicon Rev V, ID 0x450, ST-LINK/V3 en COM4)
+- **Estado de Fase F2:** **APROBADA (GATE PASSED)**
+
+### 1. Entregables y Acciones de la Fase F2
+
+1. **Implementación de funciones de handshake de arranque:**
+   - Implementadas `HSEM_BM_BootWaitForCpu1`, `HSEM_BM_BootWaitCpu2Parked` y `HSEM_BM_BootReleaseCpu2` en `01_shared_drivers/10_hsem/hsem_bm.c`.
+   - CPU2 (`BootWaitForCpu1`): Configura `PWR_CPU2CR.PDDS_D2 = 0`, `SCB->SCR.SLEEPDEEP`, activa `SEVONPEND` y `HSEM C2IER[id]`, y ejecuta bucle `WFE`. Al despertar de forma prematura (e.g. H5b o H5c), limpia `C2ICR` antes de re-aparcar en STOP para permitir el sueño profundo. Al despertar legítimo, limpia interrupción, deshabilita `C2IER[id]` y restaura `SCB->SCR` a su valor previo (C12).
+   - CPU1 (`BootWaitCpu2Parked` y `BootReleaseCpu2`): `BootWaitCpu2Parked` espera hasta que `RCC_CR.D2CKRDY == 0` con timeout en ciclos. `BootReleaseCpu2` ejecuta `HSEM_BM_FastTake` con verificación de retorno, emite `__DMB()`, libera el semáforo y espera hasta que `D2CKRDY == 1` o agote `max_cycles`.
+
+2. **Migración de `prj_04_adc_dma_bm_eth` y plantilla `prj_01_template_dualcore`:**
+   - `SHARED_LOCK`/`SHARED_UNLOCK` migrados a macros transparentes sobre `HSEM_BM_FastTake` y `HSEM_BM_Release`.
+   - Incorporada `Shared_TryLockCycles(id, max_cycles)` y migrados `adc_acquisition.c` y `adc_server.c` con tracking de fallos en `g_shared.adc_lock_failures`.
+   - S11 remediado en `Status_Task`: copia local del buzón y liberación inmediata de HSEM 3 antes de la invocación de `APP_LOG`.
+   - S5 corregido en `prj_01_template_dualcore`: CM4 ya no diverge en el arranque; relación de heartbeats normalizada.
+   - Eliminada doble llamada a `Shared_Init` en `app_main.c` de la plantilla.
+   - Secuencia de arranque en `CM7/Core/Src/main.c`: verificación de H5 (500 ms de delay), H5b (liberación antes de magic) y H5c (evento espurio EXTI) ejecutadas antes de activar periféricos D2, garantizando que el dominio D2 permanezca en DSTOP durante las pruebas.
+   - Verificación estricta de aislamiento: `git diff main` sobre `prj_02`, `prj_03` y `prj_eth_lwip_node` es exactamente 0.
+
+3. **Matriz de compilación CI (8/8 builds con -Werror):**
+   Ejecución limpia con `tools/build_all.ps1 -Clean`:
+   - `prj_01_template_dualcore` [debug]: CM7 84,140 B (+620 B), CM4 14,916 B (-176 B)
+   - `prj_01_template_dualcore` [release]: CM7 83,048 B (+576 B), CM4 14,700 B (-144 B)
+   - `prj_02_eth_lwip_dualcore` [debug]: CM7 205,980 B (delta: 0 B), CM4 15,092 B (delta: 0 B)
+   - `prj_02_eth_lwip_dualcore` [release]: CM7 202,004 B (delta: 0 B), CM4 14,844 B (delta: 0 B)
+   - `prj_03_adc_dma_eth` [debug]: CM7 208,516 B (delta: 0 B), CM4 36,364 B (delta: 0 B)
+   - `prj_03_adc_dma_eth` [release]: CM7 204,476 B (delta: 0 B), CM4 34,208 B (delta: 0 B)
+   - `prj_04_adc_dma_bm_eth` [debug]: CM7 210,108 B (+872 B), CM4 24,552 B (+368 B)
+   - `prj_04_adc_dma_bm_eth` [release]: CM7 206,176 B (+884 B), CM4 24,116 B (+320 B)
+   Todas las 8 compilaciones pasaron exitosamente sin warnings. El crecimiento de CM4 release en `prj_04` es de solo +320 bytes (muy inferior al umbral de 1 KB).
+
+4. **Resultados de las pruebas en hardware (NUCLEO-H755ZI-Q, commit `0748c71` limpio):**
+   - **H5 (Boot Handshake):** CPU1 retarda 500 ms mientras muestrea `D2CKRDY == 0` continuamente; H5b (liberación sin magic) verifica que CPU2 re-aparca en STOP (`D2CKRDY == 0`); H5c (disparo de evento software EXTI línea 23 a CPU2) verifica que CPU2 ignora el evento y re-aparca; liberación formal con magic hace que `D2CKRDY` suba a 1 y CPU2 comience ejecución (**PASS**).
+   - **H6 (20 Warm Resets consecutivos en prj_04):** 20/20 arranques exitosos con `CPU2 alive` en cada uno; relación de contadores `m7=4, m4=20` (ratio 5.0) idéntica a la referencia de F0 (**PASS**). Evidencia guardada en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/warm_resets_f2.txt`.
+   - **H6 (20 Warm Resets consecutivos en plantilla dualcore):** 20/20 arranques exitosos con `CPU2 alive` en cada uno; relación de contadores `m7=1, m4=1` (ratio 1.0 constante), confirmando la resolución definitiva de S5 (**PASS**). Evidencia guardada en `03_firmware_templates/prj_01_template_dualcore/docs/warm_resets_f2.txt`.
+   - **Conjunto de pruebas BM (H0, H1, H1b, H3, H4, H7, H8, H9):** 100% PASS en la suite completa de `selftest-hsem`. 2,000,000 incrementos bajo lock con 0 pérdidas y 1,000,000 lecturas con 0 lecturas rotas.
+
+### 2. Tabla de Cumplimiento de Criterios (Fase F2)
+
+| # | Criterio | Comprobación | Estado |
+|---|----------|--------------|--------|
+| A1 | Reglas del catálogo | Contratos de handshake y boot documentados y limpios | PASS |
+| A2 | C1: Sin IDs fijos en driver | `sem_id` proviene exclusivamente del llamador (`cfg->sem_id`) | PASS |
+| A3 | C2: API congelada tras F1 | Cabecera `hsem_bm.h` sin cambios desde F1 (`git diff` vacío) | PASS |
+| A4 | C6: Validación previa | Verificación de parámetros antes de acceder a hardware | PASS |
+| A5 | C7: Sin estado en BM/LL | `.bss = 0`, `.data = 0` en CM4 y CM7 en release | PASS |
+| A6 | C8: Dependencias hacia abajo | Cero dependencias de FreeRTOS o HAL en `hsem_bm.*` | PASS |
+| A7 | C10: Barreras y accesos 32-bit | `dmb` verificado en objdump; accesos exclusivos de 32 bits a HSEM | PASS |
+| A8 | C11: RLR solo donde toca | RLR leído únicamente en `FastTake` y `TakeOrNotify` | PASS |
+| A9 | C12: PRIMASK guardado y restaurado | `SCB->SCR` y PRIMASK restaurados a su estado original | PASS |
+| A10 | C13: Esperas acotadas | Timeouts en ciclos DWT (`max_cycles`) para CPU1 | PASS |
+| A11 | Símbolos del proyecto | No define `HSEMx_IRQHandler` ni callbacks del proyecto | PASS |
+| A12 | C9: Matriz de compilación | 8/8 PASSED con `build_all.ps1 -Clean` (-Werror) | PASS |
+| A13 | R3: Tamaños | Deltas de tamaño documentados; diff nulo en prj_02/03 | PASS |
+| A14 | Pruebas de fase | H5, H5b, H5c y H6 (20/20 resets en dos proyectos) PASS | PASS |
+| A15 | R1: Controles negativos | H5b y H5c re-aparcan en STOP; H2 mantiene pérdida de incrementos | PASS |
+| A16 | R2: Trazabilidad | Hash git sin -dirty en todas las capturas y suites | PASS |
+| A17 | R4: No destructivo | Aplicaciones de red y adquisición operativas tras arranque | PASS |
+| A18 | Oráculo independiente | `D2CKRDY` en H5; monitor serie externo para H6 | PASS |
+| A19 | Matriz de cumplimiento | Handshake RM0399 §7/§9/§11/§21 y ARMv7-M cubiertos | PASS |
+| A20 | Documentación | Registro en `AUDIT.md`, capturas en `docs/` | PASS |
+
+Gate de salida de F2 completado y validado. Listo para iniciar Fase F3 (`hsem_ll`).
