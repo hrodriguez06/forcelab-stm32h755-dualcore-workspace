@@ -46,6 +46,7 @@
 #endif
 
 #include <stdbool.h>
+#include <string.h>
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -125,6 +126,26 @@ static void Heartbeat_Task(void *arg)
     }
 }
 
+static bool DrainMbox(char *dest, size_t dest_size)
+{
+    bool has_data = false;
+    SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);
+    if (g_shared.m4_to_m7_len > 0U)
+    {
+        uint32_t len = g_shared.m4_to_m7_len;
+        if (len >= dest_size)
+        {
+            len = (uint32_t)(dest_size - 1U);
+        }
+        memcpy(dest, (const void *)g_shared.m4_to_m7, len);
+        dest[len] = '\0';
+        g_shared.m4_to_m7_len = 0U;
+        has_data = true;
+    }
+    SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
+    return has_data;
+}
+
 static void Status_Task(void *arg)
 {
     TickType_t last = xTaskGetTickCount();
@@ -161,23 +182,19 @@ static void Status_Task(void *arg)
         }
 
 #if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
-        SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);
-        if (g_shared.m4_to_m7_len > 0U)
+        char mbox_uart[SHARED_MBOX_SIZE];
+        if (DrainMbox(mbox_uart, sizeof(mbox_uart)))
         {
-            APP_LOG("[m4_uart_test] %s", (char *)g_shared.m4_to_m7);
-            g_shared.m4_to_m7_len = 0U;
+            APP_LOG("[m4_uart_test] %s", mbox_uart);
         }
-        SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
 #endif
 
 #if defined(DMA_DRIVER_SELFTEST) && DMA_DRIVER_SELFTEST
-        SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);
-        if (g_shared.m4_to_m7_len > 0U)
+        char mbox_dma[SHARED_MBOX_SIZE];
+        if (DrainMbox(mbox_dma, sizeof(mbox_dma)))
         {
-            APP_LOG("[m4_dma_test] %s", (char *)g_shared.m4_to_m7);
-            g_shared.m4_to_m7_len = 0U;
+            APP_LOG("[m4_dma_test] %s", mbox_dma);
         }
-        SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
 
         static bool s_m7_dma_tested = false;
         if (!s_m7_dma_tested)
@@ -188,13 +205,11 @@ static void Status_Task(void *arg)
 #endif
 
 #if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
-        SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);
-        if (g_shared.m4_to_m7_len > 0U)
+        char mbox_hsem[SHARED_MBOX_SIZE];
+        if (DrainMbox(mbox_hsem, sizeof(mbox_hsem)))
         {
-            APP_LOG("[m4_hsem_test] %s", (char *)g_shared.m4_to_m7);
-            g_shared.m4_to_m7_len = 0U;
+            APP_LOG("[m4_hsem_test] %s", mbox_hsem);
         }
-        SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
 
         static bool s_m7_hsem_tested = false;
         if (!s_m7_hsem_tested)
@@ -301,13 +316,11 @@ static void Status_Task(void *arg)
                     (unsigned int)ll_stats_avg);
         }
 
-        SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);
-        if (g_shared.m4_to_m7_len > 0U)
+        char mbox_adc[SHARED_MBOX_SIZE];
+        if (DrainMbox(mbox_adc, sizeof(mbox_adc)))
         {
-            APP_LOG("[m4_adc_test] %s", (char *)g_shared.m4_to_m7);
-            g_shared.m4_to_m7_len = 0U;
+            APP_LOG("[m4_adc_test] %s", mbox_adc);
         }
-        SHARED_UNLOCK(HSEM_ID_M4_TO_M7_MBOX);
 #endif
 
         APP_LOG("[ipc] m7=%lu m4=%lu  (CPU2 %s)",
