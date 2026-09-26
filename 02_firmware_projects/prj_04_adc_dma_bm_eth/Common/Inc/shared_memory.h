@@ -109,7 +109,7 @@ void Shared_Init(void);
 #define SHARED_LOCK(id)     do { } while (HSEM_BM_FastTake(id) != HSEM_BM_OK)
 #define SHARED_UNLOCK(id)   (void)HSEM_BM_Release((id), 0U)
 
-#define SHARED_ADC_TRYLOCK_CYCLES  10000UL /* ~25 µs @ 400 MHz, ~50 µs @ 200 MHz */
+#define SHARED_ADC_TRYLOCK_CYCLES  50000UL /* ~125 µs @ 400 MHz, ~250 µs @ 200 MHz */
 
 /**
   * @brief  Attempts to acquire an HSEM with a bounded number of retries (spin loops).

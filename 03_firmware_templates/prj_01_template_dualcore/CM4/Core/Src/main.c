@@ -51,6 +51,9 @@ int main(void)
     HAL_Init();
     HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
 
+    HSEM_BM_Init();
+    HSEM_BM_TimebaseStart();
+
     /* Deliberately not calling Shared_Init(): the block belongs to CPU1 and is
        already initialised by the time this core is released. Zeroing it here
        would wipe whatever CPU1 has published. */
