@@ -51,11 +51,14 @@ HsemBm_Status_t HSEM_LL_Take(uint32_t id, uint32_t proc_id)
         return HSEM_BM_ERR_PARAM;
     }
 
-    /* Check if already held by this core (no re-entry) */
-    if (LL_HSEM_IsSemaphoreLocked(HSEM, id) &&
-        (LL_HSEM_GetCoreId(HSEM, id) == LL_HSEM_COREID))
+    /* Check if already held by this core (no re-entry) or other core */
+    if (LL_HSEM_IsSemaphoreLocked(HSEM, id))
     {
-        return HSEM_BM_BUSY_SELF;
+        if (LL_HSEM_GetCoreId(HSEM, id) == LL_HSEM_COREID)
+        {
+            return HSEM_BM_BUSY_SELF;
+        }
+        return HSEM_BM_BUSY;
     }
 
     uint32_t status = LL_HSEM_2StepLock(HSEM, id, proc_id);
@@ -174,8 +177,10 @@ bool HSEM_LL_NotifyDisable(uint32_t sem_mask)
 
 #if defined(CORE_CM4)
     LL_HSEM_DisableIT_C2IER(HSEM, sem_mask);
+    LL_HSEM_ClearFlag_C2ICR(HSEM, sem_mask);
 #else
     LL_HSEM_DisableIT_C1IER(HSEM, sem_mask);
+    LL_HSEM_ClearFlag_C1ICR(HSEM, sem_mask);
 #endif
 
     __set_PRIMASK(primask);
@@ -185,6 +190,8 @@ bool HSEM_LL_NotifyDisable(uint32_t sem_mask)
 uint32_t HSEM_LL_NotifyTake(void)
 {
     uint32_t active;
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
 
 #if defined(CORE_CM4)
     active = READ_REG(HSEM->C2MISR);
@@ -204,5 +211,6 @@ uint32_t HSEM_LL_NotifyTake(void)
     }
 #endif
 
+    __set_PRIMASK(primask);
     return active;
 }

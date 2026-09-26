@@ -92,76 +92,84 @@ static void Hsem_TakeSnapshot_M4(HsemSnapshot_t *s)
     s->ISR = HSEM->C2ISR;
 }
 
+static void Hsem_ResetTestRegisters_M4(void)
+{
+    (void)HSEM_BM_Release(28, 0);
+    (void)HSEM_BM_Release(28, 99);
+    (void)HSEM_BM_Release(29, 42);
+    (void)HSEM_BM_Release(30, 0);
+    HSEM->C2IER = 0U;
+    HSEM->C2ICR = 0xFFFFFFFFUL;
+    __DSB();
+    __ISB();
+}
+
 static void RunSequence_BM_M4(H10_StepResult_t res[H10_STEPS])
 {
-    (void)HSEM_BM_Release(24, 0);
-    (void)HSEM_BM_Release(25, 42);
-    (void)HSEM_BM_NotifyDisable(0xFFFFFFFFUL);
+    Hsem_ResetTestRegisters_M4();
 
-    /* Step 0: FastTake on sem 24 */
-    res[0].st = HSEM_BM_FastTake(24);
+    /* Step 0: FastTake on sem 28 */
+    res[0].st = HSEM_BM_FastTake(28);
     Hsem_TakeSnapshot_M4(&res[0].snap);
 
-    /* Step 1: 2-step Take on sem 25, proc 42 */
-    res[1].st = HSEM_BM_Take(25, 42);
+    /* Step 1: 2-step Take on sem 29, proc 42 */
+    res[1].st = HSEM_BM_Take(29, 42);
     Hsem_TakeSnapshot_M4(&res[1].snap);
 
-    /* Step 2: Release sem 25, proc 42 */
-    res[2].st = HSEM_BM_Release(25, 42);
+    /* Step 2: Release sem 29, proc 42 */
+    res[2].st = HSEM_BM_Release(29, 42);
     Hsem_TakeSnapshot_M4(&res[2].snap);
 
-    /* Step 3: Release sem 24 with wrong proc 99 */
-    res[3].st = HSEM_BM_Release(24, 99);
+    /* Step 3: Release sem 28 with wrong proc 99 */
+    res[3].st = HSEM_BM_Release(28, 99);
     Hsem_TakeSnapshot_M4(&res[3].snap);
 
-    /* Step 4: Release sem 24 with correct proc 0 */
-    res[4].st = HSEM_BM_Release(24, 0);
+    /* Step 4: Release sem 28 with correct proc 0 */
+    res[4].st = HSEM_BM_Release(28, 0);
     Hsem_TakeSnapshot_M4(&res[4].snap);
 
-    /* Step 5: NotifyEnable sem 26 */
-    bool en = HSEM_BM_NotifyEnable(1UL << 26);
+    /* Step 5: NotifyEnable sem 30 */
+    bool en = HSEM_BM_NotifyEnable(1UL << 30);
     res[5].st = en ? HSEM_BM_OK : HSEM_BM_ERR_PARAM;
     Hsem_TakeSnapshot_M4(&res[5].snap);
 
-    /* Step 6: NotifyDisable sem 26 */
-    bool dis = HSEM_BM_NotifyDisable(1UL << 26);
+    /* Step 6: NotifyDisable sem 30 */
+    bool dis = HSEM_BM_NotifyDisable(1UL << 30);
     res[6].st = dis ? HSEM_BM_OK : HSEM_BM_ERR_PARAM;
     Hsem_TakeSnapshot_M4(&res[6].snap);
 }
 
 static void RunSequence_LL_M4(H10_StepResult_t res[H10_STEPS])
 {
-    (void)HSEM_LL_Release(24, 0);
-    (void)HSEM_LL_Release(25, 42);
-    (void)HSEM_LL_NotifyDisable(0xFFFFFFFFUL);
+    Hsem_ResetTestRegisters_M4();
 
-    /* Step 0: FastTake on sem 24 */
-    res[0].st = HSEM_LL_FastTake(24);
+    /* Step 0: FastTake on sem 28 */
+    res[0].st = HSEM_LL_FastTake(28);
     Hsem_TakeSnapshot_M4(&res[0].snap);
 
-    /* Step 1: 2-step Take on sem 25, proc 42 */
-    res[1].st = HSEM_LL_Take(25, 42);
+    /* Step 1: 2-step Take on sem 29, proc 42 */
+    res[1].st = HSEM_LL_Take(29, 42);
     Hsem_TakeSnapshot_M4(&res[1].snap);
 
-    /* Step 2: Release sem 25, proc 42 */
-    res[2].st = HSEM_LL_Release(25, 42);
+    /* Step 2: Release sem 29, proc 42 */
+    res[2].st = HSEM_LL_Release(29, 42);
     Hsem_TakeSnapshot_M4(&res[2].snap);
 
-    /* Step 3: Release sem 24 with wrong proc 99 */
-    res[3].st = HSEM_LL_Release(24, 99);
+    /* Step 3: Release sem 28 with wrong proc 99 */
+    res[3].st = HSEM_LL_Release(28, 99);
     Hsem_TakeSnapshot_M4(&res[3].snap);
 
-    /* Step 4: Release sem 24 with correct proc 0 */
-    res[4].st = HSEM_LL_Release(24, 0);
+    /* Step 4: Release sem 28 with correct proc 0 */
+    res[4].st = HSEM_LL_Release(28, 0);
     Hsem_TakeSnapshot_M4(&res[4].snap);
 
-    /* Step 5: NotifyEnable sem 26 */
-    bool en = HSEM_LL_NotifyEnable(1UL << 26);
+    /* Step 5: NotifyEnable sem 30 */
+    bool en = HSEM_LL_NotifyEnable(1UL << 30);
     res[5].st = en ? HSEM_BM_OK : HSEM_BM_ERR_PARAM;
     Hsem_TakeSnapshot_M4(&res[5].snap);
 
-    /* Step 6: NotifyDisable sem 26 */
-    bool dis = HSEM_LL_NotifyDisable(1UL << 26);
+    /* Step 6: NotifyDisable sem 30 */
+    bool dis = HSEM_LL_NotifyDisable(1UL << 30);
     res[6].st = dis ? HSEM_BM_OK : HSEM_BM_ERR_PARAM;
     Hsem_TakeSnapshot_M4(&res[6].snap);
 }
@@ -346,10 +354,11 @@ void HSEM_SelfTest_CM4_Run(void)
     {
         mutated_res[i] = ll_res[i];
     }
-    mutated_res[1].snap.R[1] ^= 0x1U;
+    mutated_res[1].snap.R[5] ^= 0x1U;
     bool neg_detected = !CompareSnapshots_M4(bm_res, mutated_res);
 
     HSEM_TEST_SHARED->h10_m4_pass = (h10_ok && neg_detected) ? 1U : 0U;
+    Hsem_ResetTestRegisters_M4();
 
     /* 6. Synchronize with CM7 for dual-core tests */
     HSEM_TEST_SHARED->cm4_ready = 1U;

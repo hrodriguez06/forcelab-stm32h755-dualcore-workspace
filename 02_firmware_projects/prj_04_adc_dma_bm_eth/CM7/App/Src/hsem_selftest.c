@@ -37,11 +37,21 @@ static void Hsem_TakeSnapshot_M7(HsemSnapshot_t *s)
     s->ISR = HSEM->C1ISR;
 }
 
-static void RunSequence_BM_M7(H10_StepResult_t res[H10_STEPS])
+static void Hsem_ResetTestRegisters_M7(void)
 {
     (void)HSEM_BM_Release(24, 0);
+    (void)HSEM_BM_Release(24, 99);
     (void)HSEM_BM_Release(25, 42);
-    (void)HSEM_BM_NotifyDisable(0xFFFFFFFFUL);
+    (void)HSEM_BM_Release(26, 0);
+    HSEM->C1IER = 0U;
+    HSEM->C1ICR = 0xFFFFFFFFUL;
+    __DSB();
+    __ISB();
+}
+
+static void RunSequence_BM_M7(H10_StepResult_t res[H10_STEPS])
+{
+    Hsem_ResetTestRegisters_M7();
 
     /* Step 0: FastTake on sem 24 */
     res[0].st = HSEM_BM_FastTake(24);
@@ -76,9 +86,7 @@ static void RunSequence_BM_M7(H10_StepResult_t res[H10_STEPS])
 
 static void RunSequence_LL_M7(H10_StepResult_t res[H10_STEPS])
 {
-    (void)HSEM_LL_Release(24, 0);
-    (void)HSEM_LL_Release(25, 42);
-    (void)HSEM_LL_NotifyDisable(0xFFFFFFFFUL);
+    Hsem_ResetTestRegisters_M7();
 
     /* Step 0: FastTake on sem 24 */
     res[0].st = HSEM_LL_FastTake(24);
@@ -112,27 +120,48 @@ static void RunSequence_LL_M7(H10_StepResult_t res[H10_STEPS])
 }
 
 static bool CompareSnapshots_M7(const H10_StepResult_t bm[H10_STEPS],
-                               const H10_StepResult_t ll[H10_STEPS])
+                               const H10_StepResult_t ll[H10_STEPS],
+                               bool log_mismatch)
 {
     for (uint32_t i = 0; i < H10_STEPS; i++)
     {
         if (bm[i].st != ll[i].st)
         {
+            if (log_mismatch)
+            {
+                APP_LOG("[m7_hsem_test] H10 step %lu status mismatch: BM=%d LL=%d",
+                        i, (int)bm[i].st, (int)ll[i].st);
+            }
             return false;
         }
         for (uint32_t r = 0; r < 8; r++)
         {
             if (bm[i].snap.R[r] != ll[i].snap.R[r])
             {
+                if (log_mismatch)
+                {
+                    APP_LOG("[m7_hsem_test] H10 step %lu R[%lu] mismatch: BM=0x%08lX LL=0x%08lX",
+                            i, 24 + r, bm[i].snap.R[r], ll[i].snap.R[r]);
+                }
                 return false;
             }
         }
         if (bm[i].snap.IER != ll[i].snap.IER)
         {
+            if (log_mismatch)
+            {
+                APP_LOG("[m7_hsem_test] H10 step %lu IER mismatch: BM=0x%08lX LL=0x%08lX",
+                        i, bm[i].snap.IER, ll[i].snap.IER);
+            }
             return false;
         }
         if (bm[i].snap.ISR != ll[i].snap.ISR)
         {
+            if (log_mismatch)
+            {
+                APP_LOG("[m7_hsem_test] H10 step %lu ISR mismatch: BM=0x%08lX LL=0x%08lX",
+                        i, bm[i].snap.ISR, ll[i].snap.ISR);
+            }
             return false;
         }
     }
@@ -283,7 +312,7 @@ void HSEM_SelfTest_CM7_Run(void)
     RunSequence_BM_M7(bm_res);
     RunSequence_LL_M7(ll_res);
 
-    bool h10_m7_ok = CompareSnapshots_M7(bm_res, ll_res);
+    bool h10_m7_ok = CompareSnapshots_M7(bm_res, ll_res, true);
 
     /* Negative control: mutate snapshot to confirm comparison detects mismatch */
     H10_StepResult_t mutated_res[H10_STEPS];
@@ -292,7 +321,7 @@ void HSEM_SelfTest_CM7_Run(void)
         mutated_res[i] = ll_res[i];
     }
     mutated_res[1].snap.R[1] ^= 0x1U;
-    bool neg_detected_m7 = !CompareSnapshots_M7(bm_res, mutated_res);
+    bool neg_detected_m7 = !CompareSnapshots_M7(bm_res, mutated_res, false);
 
     HSEM_TEST_SHARED->h10_m7_pass = (h10_m7_ok && neg_detected_m7) ? 1U : 0U;
     APP_LOG("[m7_hsem_test] H10 Parity (BM <-> LL): %s",
