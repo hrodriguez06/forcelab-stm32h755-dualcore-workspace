@@ -44,10 +44,6 @@ extern uint32_t _e_itcm;
 
 int main(void)
 {
-#if CM4_BOOT_ENABLED
-    int32_t timeout;
-#endif
-
     /* Before anything else, so that every later stage has a way to report.
        Bare-metal on purpose: no HAL, no clock tree, no MPU yet. */
     LED_Init();
@@ -143,10 +139,10 @@ int main(void)
     bool h5b_ok = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
 
     /* H5c: Spurious EXTI event to CPU2 via EXTI_SWIER1 */
-    EXTI_D2->C2EMR1 |= (1UL << 23);
+    EXTI->C2EMR1 |= (1UL << 23);
     EXTI->SWIER1 |= (1UL << 23);
     for (volatile uint32_t s = 0; s < 400000U; s++) { __NOP(); } /* ~10 ms */
-    EXTI_D2->C2EMR1 &= ~(1UL << 23);
+    EXTI->C2EMR1 &= ~(1UL << 23);
     bool h5c_ok = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
 
     /* Now set valid magic and release CPU2 */
@@ -164,6 +160,7 @@ int main(void)
     {
         Error_Handler();
     }
+#endif
 #endif
 
     app_main();

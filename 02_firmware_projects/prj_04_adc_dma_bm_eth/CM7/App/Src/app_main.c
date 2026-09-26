@@ -126,7 +126,7 @@ static void Heartbeat_Task(void *arg)
     }
 }
 
-static bool DrainMbox(char *dest, size_t dest_size)
+__attribute__((unused)) static bool DrainMbox(char *dest, size_t dest_size)
 {
     bool has_data = false;
     SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX);

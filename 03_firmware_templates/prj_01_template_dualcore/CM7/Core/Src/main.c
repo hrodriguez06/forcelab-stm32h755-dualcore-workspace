@@ -23,6 +23,8 @@
 #include "mpu_config.h"
 #include "app_main.h"
 #include "led_bm.h"
+#include "shared_memory.h"
+#include "hsem_bm.h"
 
 static void SystemClock_Config(void);
 static void PeripheralClock_Config(void);
@@ -35,14 +37,16 @@ extern uint32_t _e_itcm;
 
 int main(void)
 {
-#if CM4_BOOT_ENABLED
-    int32_t timeout;
-#endif
-
     /* Before anything else, so that every later stage has a way to report.
        Bare-metal on purpose: no HAL, no clock tree, no MPU yet. */
     LED_Init();
     LED_BootStage(LED_BOOT_LEDS_ALIVE);
+
+    /* Immediately invalidate SHARED_MAGIC upon boot / warm reset.
+       .shared_ram is NOLOAD and preserves SRAM4 data across warm resets.
+       Clearing magic here guarantees CPU2 will never mistakenly assume
+       shared memory or clocks are ready from a previous execution. */
+    g_shared.magic = 0U;
 
 #if CM4_BOOT_ENABLED
     /* If CPU2 is already booting, it immediately enters STOP mode waiting for
@@ -79,6 +83,11 @@ int main(void)
     SystemClock_Config();
     PeripheralClock_Config();
     LED_BootStage(LED_BOOT_CLOCKS_DONE);
+
+    /* Initialise shared RAM and publish SHARED_MAGIC before CPU2 can read it.
+       Placed outside the #if: clearing the block is independent of whether
+       CPU2 is enabled to boot; only the ordering relative to HSEM 0 matters. */
+    Shared_Init();
 
 #if CM4_BOOT_ENABLED
     /* The clock tree is up and shared memory is ready: release CPU2. */
