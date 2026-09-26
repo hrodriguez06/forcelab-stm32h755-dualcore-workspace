@@ -90,8 +90,10 @@ The architecture supports two deployment locations:
 │   └── .gitkeep
 │
 └── 10_hsem/                            # Hardware Semaphore (Dual-Core IPC) - needs both cores alive
-    ├── .gitkeep
-    └── hsem_bm.h  / hsem_bm.c          # Direct lock/unlock for shared SRAM4
+    ├── README.md                       # Architectural contracts, RM0399 silicon facts, benchmarks
+    ├── hsem_bm.h  / hsem_bm.c          # Core primitives, validation, DWT timebase, boot handshake
+    ├── hsem_ll.h  / hsem_ll.c          # LL inline wrappers with identical BM parity
+    └── hsem_hal.h / hsem_hal.c         # HAL wrapper with honest release and IRQ dispatcher
 ```
 
 > **The numbering is global.** A project-local `Custom_Drivers/` uses the same

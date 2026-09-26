@@ -31,7 +31,7 @@ because it needs both cores already running.
 ├── 07_adc/                     # ADC1, ADC2, ADC3 (ADC sampling, analog watchdogs)
 ├── 08_eth/                     # Ethernet MAC + LAN8742 PHY - its own ETH DMA, descriptors in SRAM3; does not link 02_dma
 ├── 09_fdcan/                   # FDCAN1, FDCAN2 industrial communications
-└── 10_hsem/                    # Hardware Semaphore for M7 <-> M4 IPC - needs both cores alive
+└── 10_hsem/                    # Hardware Semaphore for M7 <-> M4 IPC (hsem_bm, hsem_ll, hsem_hal) + boot handshake
 ```
 
 > **Adding a peripheral:** the prefix is a position in the boot sequence, so a new

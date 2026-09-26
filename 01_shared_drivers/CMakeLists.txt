@@ -86,6 +86,11 @@ target_sources(stm32h7_driver_eth INTERFACE
 )
 target_link_libraries(stm32h7_driver_eth INTERFACE stm32h7_driver_gpio)
 
+# 10_hsem: Hardware Semaphore for dual-core mutual exclusion & boot synchronization.
+# Rule C4: There is deliberately no unsuffixed stm32h7_driver_hsem target (no legacy
+# target name existed, and unsuffixed means BM in dma/gpio vs HAL in uart/adc).
+# stm32h7_driver_hsem_bm is the single source of truth for validation, barriers,
+# DWT cycle timebase, and boot handshake. The LL and HAL tiers link against BM.
 add_library(stm32h7_driver_hsem_bm INTERFACE)
 target_include_directories(stm32h7_driver_hsem_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/10_hsem)
 target_sources(stm32h7_driver_hsem_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/10_hsem/hsem_bm.c)
