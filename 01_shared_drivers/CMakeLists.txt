@@ -90,6 +90,12 @@ add_library(stm32h7_driver_hsem_bm INTERFACE)
 target_include_directories(stm32h7_driver_hsem_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/10_hsem)
 target_sources(stm32h7_driver_hsem_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/10_hsem/hsem_bm.c)
 
+add_library(stm32h7_driver_hsem_ll INTERFACE)
+target_include_directories(stm32h7_driver_hsem_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/10_hsem)
+target_sources(stm32h7_driver_hsem_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/10_hsem/hsem_ll.c)
+target_link_libraries(stm32h7_driver_hsem_ll INTERFACE stm32h7_driver_hsem_bm)
+
+
 # Umbrella interface library, linking all available shared drivers for backwards compatibility
 add_library(stm32h7_shared_drivers INTERFACE)
 target_link_libraries(stm32h7_shared_drivers INTERFACE
