@@ -27,7 +27,7 @@ no lo sustituye.
 | `07_adc` | Hecho y auditado | BM, LL, HAL. |
 | `08_eth` | En trabajo | HAL. E1 y E2 abiertos (ver `08_eth/README.md` §10). |
 | `09_fdcan` | **Vacío** | |
-| `10_hsem` | **Vacío** | Plan F0–F5 escrito en `10_hsem/IMPLEMENTATION_PLAN.md`, sin ejecutar. |
+| `10_hsem` | Implementado, auditoría con bloqueantes abiertos | BM, LL, HAL. Auditoría independiente abierta (B1–B6, M1–M7). |
 
 ---
 
