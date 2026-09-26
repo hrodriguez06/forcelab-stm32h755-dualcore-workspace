@@ -232,3 +232,88 @@ Gate de salida de F1 completado y validado. Listo para iniciar Fase F2 (Arranque
 | A20 | Documentación | Registro en `AUDIT.md`, capturas en `docs/` | PASS |
 
 Gate de salida de F2 completado y validado. Listo para iniciar Fase F3 (`hsem_ll`).
+
+---
+
+## Fase F3: Driver Low-Layer (`hsem_ll`) y Paridad BM ↔ LL
+
+- **Fecha:** Sep 26, 2026
+- **Rama:** `driver/hsem`
+- **Rango de Commits:** `24ccb76..3091ee5`
+  - `24ccb76`: `feat(hsem): implement hsem_ll low-layer driver and CMake target`
+  - `a86756f`: `test(prj_04): add H10 BM-LL parity test to hsem selftest suite`
+  - `617ec43`: `fix(hsem): partition test semaphores and reset ICR flags in H10 parity test`
+  - `3091ee5`: `test(prj_04): record passing F3 capture for HSEM LL tier parity`
+- **Plataforma:** NUCLEO-H755ZI-Q (STM32H755ZI Silicon Rev V, ID 0x450, ST-LINK/V3 en COM4)
+- **Estado de Fase F3:** **APROBADA (GATE PASSED)**
+
+### 1. Entregables y Acciones de la Fase F3
+
+1. **Implementación del driver `hsem_ll` (`01_shared_drivers/10_hsem/`):**
+   - `hsem_ll.h`: Cabecera autocontenida que compila de forma aislada sin requerir `USE_FULL_LL_DRIVER` ni incluir `stm32h7xx_hal.h`.
+   - `hsem_ll.c`: Wrapper ligero sobre los helpers inline de ST LL (`LL_HSEM_1StepLock`, `LL_HSEM_2StepLock`, `LL_HSEM_ReleaseLock`, `LL_HSEM_EnableIT_C*`, `LL_HSEM_DisableIT_C*`, `LL_HSEM_ClearFlag_C*`, `LL_HSEM_GetStatus`).
+   - Mismo retorno `HsemBm_Status_t` que el tier BM: `OK`, `BUSY`, `BUSY_SELF`, `TIMEOUT`, `ERR_PARAM`, `ERR_NOT_OWNER`, `ERR_TIMEBASE`.
+   - Incorpora las protecciones críticas requeridas por RM0399 / ARMv7-M:
+     - Detección de colisión en el mismo núcleo (S1) bajo PRIMASK previo a `LL_HSEM_1StepLock` y `LL_HSEM_2StepLock` devolviendo `BUSY_SELF`.
+     - Barreras de memoria `__DMB()` tras locks exitosos y antes de release (C10).
+     - Verificación previa de pertenencia en `HSEM_LL_Release` (C11) devolviendo `ERR_NOT_OWNER` si no pertenece al núcleo/proceso.
+     - Esperas acotadas por ciclos DWT CYCCNT en `HSEM_LL_TakeTimeout` y `HSEM_LL_TakeTimeoutEx` (C13).
+     - Limpieza de `CnICR` y manejo de PRIMASK en `NotifyEnable`, `NotifyDisable` y `NotifyTake`.
+   - Huella en RAM (C7): Verificado con `arm-none-eabi-size` que `.bss = 0` y `.data = 0` tanto en CM7 (572 B text) como en CM4 (576 B text).
+   - Accesos de 32 bits (C10): Verificado con `objdump` que no existen instrucciones `ldrb`, `ldrh`, `strb`, ni `strh`.
+
+2. **Integración en CMake:**
+   - Creado target `stm32h7_driver_hsem_ll` en `01_shared_drivers/CMakeLists.txt`.
+   - Enlazado en `prj_04_adc_dma_bm_eth` en CM7 y CM4 bajo la opción `HSEM_DRIVER_SELFTEST`.
+
+3. **Prueba de Paridad H10 (BM ↔ LL) en Hardware:**
+   - Secuencia de 7 pasos ejecutada sucesivamente bajo BM y bajo LL:
+     - Paso 0: `FastTake` de 1 paso.
+     - Paso 1: `Take` de 2 pasos con proc_id 42.
+     - Paso 2: `Release` con proc_id 42 (genera flag ISR en hardware).
+     - Paso 3: `Release` con proc_id erróneo 99 (`ERR_NOT_OWNER`, sin escritura).
+     - Paso 4: `Release` con proc_id correcto 0.
+     - Paso 5: `NotifyEnable` (`CnIER` configurado, `CnICR` limpiado).
+     - Paso 6: `NotifyDisable` (`CnIER` deshabilitado, `CnICR` limpiado).
+   - Partición de semáforos de prueba: CM7 opera en semáforos 24, 25, 26; CM4 opera en semáforos 28, 29, 30.
+   - Reseteo completo de periférico (`Hsem_ResetTestRegisters_M*`) antes de cada pasada: libera semáforos de prueba, deshabilita `CnIER = 0` y limpia flags `CnICR = 0xFFFFFFFFUL` bajo `__DSB(); __ISB();`.
+   - Comparación estricta de fotos de registros (`R[24..31]`, `CnIER`, `CnISR`) y estados de retorno en cada paso: **PARIDAD EXACTA (PASS)** en CM7 y CM4.
+   - Controles negativos (R1): Mutación deliberada de un bit en la foto de LL detectada como fallo de paridad en ambos núcleos.
+
+4. **Captura en Hardware (commit `617ec43` sin -dirty):**
+   - Registrada en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/hsem_selftest_capture.txt`.
+   - CM7: `[m7_hsem_test] H10 Parity (BM <-> LL): PASS`
+   - CM4: `[m4_hsem_test] H7 same_core=PASS H9 notifications=1000 H10 parity=PASS`
+   - Validación completa acumulada de F1, F2 y F3 (H0, H1 2M incs, H1b 1M lecturas, H3, H4, H5, H7, H8, H9, H10) en verde.
+
+5. **Matriz de compilación CI (8/8 builds con -Werror):**
+   - Ejecución limpia con `tools/build_all.ps1 -Clean`: las 8 configuraciones compilaron sin warnings ni errores.
+   - `git diff main` sobre `prj_02`, `prj_03` y `prj_eth_lwip_node` es exactamente 0.
+
+### 2. Tabla de Cumplimiento de Criterios (Fase F3)
+
+| # | Criterio | Comprobación | Estado |
+|---|----------|--------------|--------|
+| A1 | Reglas del catálogo | Contratos LL consistentes con arquitectura del catálogo | PASS |
+| A2 | C1: Sin IDs fijos en driver | Funciones reciben `id` y `proc_id` desde llamador | PASS |
+| A3 | C2: API congelada | `hsem_bm.h` y `hsem_ll.h` estables y congeladas | PASS |
+| A4 | C6: Validación previa | Verificación de límites antes de invocar registros LL | PASS |
+| A5 | C7: Sin estado en BM/LL | `.bss = 0`, `.data = 0` en CM7 y CM4 verificado con `size` | PASS |
+| A6 | C8: Dependencias hacia abajo | Autocontenido sin HAL en `hsem_ll.h` | PASS |
+| A7 | C10: Barreras y accesos 32-bit | `dmb/dsb` presentes; 0 accesos de 8/16 bits en objdump | PASS |
+| A8 | C11: RLR solo donde toca | RLR leído solo en `FastTake` | PASS |
+| A9 | C12: PRIMASK guardado y restaurado | PRIMASK gestionado en S1, NotifyEnable/Disable/Take | PASS |
+| A10 | C13: Esperas acotadas | `TakeTimeout` acotado por DWT CYCCNT | PASS |
+| A11 | Símbolos del proyecto | No define `HSEMx_IRQHandler` ni callbacks de aplicación | PASS |
+| A12 | C9: Matriz de compilación | 8/8 PASSED con `build_all.ps1 -Clean` (-Werror) | PASS |
+| A13 | R3: Tamaños | Impacto nulo en builds de producción sin selftest | PASS |
+| A14 | Pruebas de fase | H10 BM ↔ LL parity PASS en CM7 y CM4 | PASS |
+| A15 | R1: Controles negativos | Mutación de foto detectada como fallo de paridad en CM7 y CM4 | PASS |
+| A16 | R2: Trazabilidad | Captura registrada con hash limpio `617ec43` | PASS |
+| A17 | R4: No destructivo | Selftest en IDs 24..30; ETH y adquisición funcionando | PASS |
+| A18 | Oráculo independiente | Comparación bit a bit de snapshots de hardware | PASS |
+| A19 | Matriz de cumplimiento | RM0399 §11, ES0445 y ARMv7-M cubiertos para LL | PASS |
+| A20 | Documentación | Registrada en `AUDIT.md` y captura en `docs/` | PASS |
+
+Gate de salida de F3 completado y validado. Listo para iniciar Fase F4 (`hsem_hal`).
+
