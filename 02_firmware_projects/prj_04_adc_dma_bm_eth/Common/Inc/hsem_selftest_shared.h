@@ -65,6 +65,10 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t h8_pass;
     volatile uint32_t h8_cm4_stopped;
 
+    /* H5 Boot Handshake */
+    volatile uint32_t h5_pass;
+    volatile uint32_t h5_measured_ms;
+
     /* H9 Notification */
     volatile uint32_t h9_m4_notifications;
     volatile uint32_t h9_m7_notifications;

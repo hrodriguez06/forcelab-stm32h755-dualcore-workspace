@@ -31,7 +31,7 @@ void HSEM_SelfTest_CM7_Run(void)
 #else
     APP_LOG(" STM32H755 HSEM Driver Self-Test");
 #endif
-    APP_LOG(" Phase F1: BM Tier Validation (H0, H1, H1b, H3, H4, H7, H8, H9)");
+    APP_LOG(" Phase F2: BM Tier & Boot Handshake (H0, H1, H1b, H3, H4, H5, H7, H8, H9)");
     APP_LOG("=================================================================");
 
     /* 1. Driver and DWT initialization on CM7 */
@@ -413,7 +413,12 @@ void HSEM_SelfTest_CM7_Run(void)
             HSEM_TEST_SHARED->h9_m4_notifications, (uint32_t)HSEM_TEST_H9_COUNT,
             h9_ok ? "PASS" : "FAIL");
 
+    /* ---- H5: Boot Handshake ---- */
+    bool h5_ok = (HSEM_TEST_SHARED->h5_pass != 0U);
+    APP_LOG("[m7_hsem_test] H5 Boot Handshake (delayed release, H5b pre-magic, H5c spurious EXTI): %s",
+            h5_ok ? "PASS" : "FAIL");
+
     APP_LOG("[m7_hsem_test] =================================================");
-    APP_LOG("[m7_hsem_test] ALL F1 TESTS PASSED SUCCESSFULLY");
+    APP_LOG("[m7_hsem_test] ALL F1 & F2 TESTS PASSED SUCCESSFULLY");
     APP_LOG("[m7_hsem_test] =================================================");
 }

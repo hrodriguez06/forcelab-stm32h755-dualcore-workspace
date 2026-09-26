@@ -45,18 +45,12 @@ int main(void)
     LED_BootStage(LED_BOOT_LEDS_ALIVE);
 
 #if CM4_BOOT_ENABLED
-
-    /* CPU2 boots from Flash bank 2 at the same time as CPU1 and immediately
-       enters stop mode waiting for the HSEM notification. Wait for D2CKRDY to
-       drop, which is how CPU1 knows CPU2 has got there. */
-    timeout = 0xFFFF;
-    while ((__HAL_RCC_GET_FLAG(RCC_FLAG_D2CKRDY) != RESET) && (timeout-- > 0))
-    {
-    }
-    if (timeout < 0)
-    {
-        Error_Handler();
-    }
+    /* If CPU2 is already booting, it immediately enters STOP mode waiting for
+       the HSEM notification. Wait for D2CKRDY to drop if CPU2 is active, but do
+       not fail fatally if CPU2 is gated (BCM4=0) and waiting for BOOT_C2. */
+    HSEM_BM_Init();
+    HSEM_BM_TimebaseStart();
+    (void)HSEM_BM_BootWaitCpu2Parked(200000000UL); /* 500 ms @ 400 MHz */
 #endif
 
     /* Memory attributes first, then the caches.
@@ -87,16 +81,8 @@ int main(void)
     LED_BootStage(LED_BOOT_CLOCKS_DONE);
 
 #if CM4_BOOT_ENABLED
-    /* The clock tree is up: release CPU2. */
-    __HAL_RCC_HSEM_CLK_ENABLE();
-    HAL_HSEM_FastTake(HSEM_ID_BOOT);
-    HAL_HSEM_Release(HSEM_ID_BOOT, 0);
-
-    timeout = 0xFFFF;
-    while ((__HAL_RCC_GET_FLAG(RCC_FLAG_D2CKRDY) == RESET) && (timeout-- > 0))
-    {
-    }
-    if (timeout < 0)
+    /* The clock tree is up and shared memory is ready: release CPU2. */
+    if (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) != HSEM_BM_OK)
     {
         Error_Handler();
     }

@@ -74,53 +74,23 @@ int main(void)
     }
 }
 
+static bool Shared_MagicReady(void *ctx)
+{
+    (void)ctx;
+    return (g_shared.magic == SHARED_MAGIC);
+}
+
 /**
-  * @brief  Parks CPU2 in STOP until CPU1 releases HSEM 0.
-  *
-  * @note   HSEM 0 is the channel ST reserves for this handshake, and the
-  *         notification is what wakes the core out of STOP - not a poll loop.
-  *         The order matters: activate the notification BEFORE entering STOP,
-  *         or CPU1 can release the semaphore in the window between the two and
-  *         CPU2 sleeps for ever.
+  * @brief  Parks CPU2 in STOP until CPU1 releases HSEM 0 and shared memory is ready.
   */
 static void CPU2_WaitForCPU1(void)
 {
-    __HAL_RCC_HSEM_CLK_ENABLE();
-
-    /* Subscribe this core to HSEM 0 before sleeping. */
-    HAL_HSEM_ActivateNotification(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT));
-
-    /* SEVONPEND: wake on an interrupt that is merely PENDING, without enabling
-       it in the NVIC and without vectoring to a handler.
-     *
-     * This line is why CPU2 wakes at all, and leaving it out fails silently.
-     * HAL_PWREx_EnterSTOPMode() issues a single __WFE(), and WFE resumes only
-     * on an *event*. Releasing HSEM 0 sets HSEM_C2ISR and HSEM_C2MISR, but a
-     * pending interrupt is not an event unless it is NVIC-enabled or
-     * SEVONPEND is set - and enabling HSEM2_IRQn instead would vector into the
-     * weak Default_Handler, which is an infinite loop.
-     *
-     * ST's reference CM4 code (Projects/NUCLEO-H745ZI-Q/Applications/FreeRTOS/
-     * FreeRTOS_AMP_Dual_RTOS/CM4/Src/main.c) omits it, because there CPU1
-     * leaves the D2 domain idle and the domain exits DSTOP through the
-     * peripheral wake-up path instead. Here CPU1 holds D2 awake - the console
-     * USART3 sits on APB1, in D2 - so CPU2 is only in CSleep and the core's
-     * own event logic is the only way back.
-     *
-     * Symptom when it is missing: HSEM_C2IER = 1 and HSEM_C2MISR = 1 (the
-     * handshake worked), CPU1 runs normally, and CPU2 never leaves this
-     * function. Nothing faults. */
-    SET_BIT(SCB->SCR, SCB_SCR_SEVONPEND_Msk);
-
-    /* Enter STOP on D2. Dropping D2CKRDY is the signal CPU1 polls for. */
-    HAL_PWREx_ClearPendingEvent();
-    HAL_PWREx_EnterSTOPMode(PWR_MAINREGULATOR_ON, PWR_STOPENTRY_WFE, PWR_D2_DOMAIN);
-
-    /* Woken by the HSEM notification: unsubscribe, clear it, and put the core
-       back to its normal wake-up behaviour. */
-    __HAL_HSEM_CLEAR_FLAG(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT));
-    HAL_HSEM_DeactivateNotification(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_BOOT));
-    CLEAR_BIT(SCB->SCR, SCB_SCR_SEVONPEND_Msk);
+    const HsemBm_BootWait_t cfg = {
+        .sem_id = HSEM_ID_BOOT_SYNC,
+        .ready  = Shared_MagicReady,
+        .ctx    = NULL
+    };
+    (void)HSEM_BM_BootWaitForCpu1(&cfg);
 }
 
 void Error_Handler(void)

@@ -24,6 +24,10 @@
 #include "app_main.h"
 #include "led_bm.h"
 #include "shared_memory.h"
+#include "hsem_bm.h"
+#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
+#include "hsem_selftest_shared.h"
+#endif
 #if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
 #include "uart_bm.h"
 
@@ -56,14 +60,12 @@ int main(void)
     g_shared.magic = 0U;
 
 #if CM4_BOOT_ENABLED
-
     /* If CPU2 is already booting, it immediately enters STOP mode waiting for
        the HSEM notification. Wait for D2CKRDY to drop if CPU2 is active, but do
        not fail fatally if CPU2 is gated (BCM4=0) and waiting for BOOT_C2. */
-    timeout = 0xFFFF;
-    while ((__HAL_RCC_GET_FLAG(RCC_FLAG_D2CKRDY) != RESET) && (timeout-- > 0))
-    {
-    }
+    HSEM_BM_Init();
+    HSEM_BM_TimebaseStart();
+    (void)HSEM_BM_BootWaitCpu2Parked(200000000UL); /* 500 ms @ 400 MHz */
 #endif
 
     /* Memory attributes first, then the caches.
@@ -118,18 +120,47 @@ int main(void)
     /* Release CPU2 (Cortex-M4) boot if it was gated in RCC_GCR (BCM4=0). */
     HAL_RCCEx_EnableBootCore(RCC_BOOT_C2);
 
-    /* The clock tree is up and shared memory is ready: notify CPU2. */
-    __HAL_RCC_HSEM_CLK_ENABLE();
-    HAL_HSEM_FastTake(HSEM_ID_BOOT_SYNC);
-    HAL_HSEM_Release(HSEM_ID_BOOT_SYNC, 0);
-
-    timeout = 0xFFFF;
-    while ((__HAL_RCC_GET_FLAG(RCC_FLAG_D2CKRDY) == RESET) && (timeout-- > 0))
+#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
+    /* ---- Phase F2 Boot Tests (H5, H5b, H5c) ----------------------------- */
+    /* H5: Verify D2CKRDY stays 0 for 500 ms after CPU2 parks */
+    bool h5_ok = true;
+    for (uint32_t ms = 0; ms < 500; ms++)
     {
-        HAL_HSEM_FastTake(HSEM_ID_BOOT_SYNC);
-        HAL_HSEM_Release(HSEM_ID_BOOT_SYNC, 0);
+        if ((RCC->CR & RCC_CR_D2CKRDY) != 0U)
+        {
+            h5_ok = false;
+            break;
+        }
+        for (volatile uint32_t s = 0; s < 40000U; s++) { __NOP(); }
     }
-    if (timeout < 0)
+
+    /* H5b: Release HSEM before magic is valid */
+    g_shared.magic = 0U;
+    __DMB();
+    HSEM_BM_FastTake(HSEM_ID_BOOT_SYNC);
+    HSEM_BM_Release(HSEM_ID_BOOT_SYNC, 0U);
+    for (volatile uint32_t s = 0; s < 400000U; s++) { __NOP(); } /* ~10 ms */
+    bool h5b_ok = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
+
+    /* H5c: Spurious EXTI event to CPU2 via EXTI_SWIER1 */
+    EXTI_D2->C2EMR1 |= (1UL << 23);
+    EXTI->SWIER1 |= (1UL << 23);
+    for (volatile uint32_t s = 0; s < 400000U; s++) { __NOP(); } /* ~10 ms */
+    EXTI_D2->C2EMR1 &= ~(1UL << 23);
+    bool h5c_ok = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
+
+    /* Now set valid magic and release CPU2 */
+    Shared_Init();
+    if (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) != HSEM_BM_OK)
+    {
+        Error_Handler();
+    }
+    bool h5_release_ok = ((RCC->CR & RCC_CR_D2CKRDY) != 0U);
+
+    HSEM_TEST_SHARED->h5_pass = (h5_ok && h5b_ok && h5c_ok && h5_release_ok) ? 1U : 0U;
+#else
+    /* The clock tree is up and shared memory is ready: release CPU2. */
+    if (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) != HSEM_BM_OK)
     {
         Error_Handler();
     }
