@@ -127,6 +127,13 @@ if(DMA_DRIVER_SELFTEST)
     )
 endif()
 
+if(HSEM_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE HSEM_DRIVER_SELFTEST=1)
+    target_sources(${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/App/Src/hsem_selftest.c
+    )
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"

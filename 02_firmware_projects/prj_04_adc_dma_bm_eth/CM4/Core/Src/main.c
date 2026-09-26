@@ -41,6 +41,9 @@
 #if defined(DMA_DRIVER_SELFTEST) && DMA_DRIVER_SELFTEST
 #include "dma_selftest.h"
 #endif
+#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
+#include "hsem_selftest.h"
+#endif
 
 #define HEARTBEAT_DELAY_LOOPS   2000000UL
 
@@ -101,6 +104,11 @@ int main(void)
     DMA_SelfTest_CM4_Run();
 #endif
 
+#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
+    /* Run shared HSEM driver selftest on CM4 */
+    HSEM_SelfTest_CM4_Run();
+#endif
+
     /* Initialize ADC1 + DMA1 with TIM3 hardware trigger */
     if (!ADC_Acquisition_Init())
     {
@@ -132,6 +140,11 @@ int main(void)
 #if defined(DMA_DRIVER_SELFTEST) && DMA_DRIVER_SELFTEST
         /* One result line per mailbox slot CPU1 has freed. */
         DMA_SelfTest_CM4_Poll();
+#endif
+
+#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
+        /* One result line per mailbox slot CPU1 has freed. */
+        HSEM_SelfTest_CM4_Poll();
 #endif
     }
 }

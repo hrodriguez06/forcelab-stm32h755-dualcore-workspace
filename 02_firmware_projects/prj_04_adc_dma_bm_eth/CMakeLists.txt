@@ -50,6 +50,9 @@ option(ADC_DRIVER_SELFTEST "Enable shared ADC driver self-test" OFF)
 # Optional selftest: exercises shared DMA driver (BM & LL on CM4, BM & HAL on CM7)
 option(DMA_DRIVER_SELFTEST "Enable shared DMA driver self-test" OFF)
 
+# Optional selftest: exercises shared HSEM driver (BM, LL, HAL and dual-core contention)
+option(HSEM_DRIVER_SELFTEST "Enable shared HSEM driver self-test" OFF)
+
 # ---- External dependencies -------------------------------------------------
 # The STM32CubeH7 package is shared across projects to avoid duplicating 110 MB.
 # Defaults to the submodule in prj_eth_lwip_node or can be overridden via

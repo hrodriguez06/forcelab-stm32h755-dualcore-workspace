@@ -135,6 +135,13 @@ if(DMA_DRIVER_SELFTEST)
     target_link_libraries(${TARGET} PRIVATE stm32h7_driver_dma_bm stm32h7_driver_dma_hal stm32h7_driver_dma_ll)
 endif()
 
+if(HSEM_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE HSEM_DRIVER_SELFTEST=1)
+    target_sources(${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/App/Src/hsem_selftest.c
+    )
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"
