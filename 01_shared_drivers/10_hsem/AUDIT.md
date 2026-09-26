@@ -317,3 +317,106 @@ Gate de salida de F2 completado y validado. Listo para iniciar Fase F3 (`hsem_ll
 
 Gate de salida de F3 completado y validado. Listo para iniciar Fase F4 (`hsem_hal`).
 
+---
+
+## Fase F4: Capa HAL (`hsem_hal`) y Paridad Trilateral (BM ↔ LL ↔ HAL)
+
+- **Fecha:** Sep 26, 2026
+- **Rama:** `driver/hsem`
+- **Rango de Commits:** `507b60c..1873429`
+  - `904b75c`: `feat(hsem): implement hsem_hal driver and extend H10 to BM-LL-HAL parity`
+  - `1873429`: `fix(prj_04): resolve selftest desync and stack overflow on CM7 H10 parity`
+  - `dc0cf24`: `test(prj_04): record passing F4 capture for HSEM HAL tier parity`
+- **Plataforma:** NUCLEO-H755ZI-Q (STM32H755ZI Silicon Rev V, ID 0x450, ST-LINK/V3 en COM4)
+- **Estado de Fase F4:** **APROBADA (GATE PASSED)**
+
+### 1. Entregables y Acciones de la Fase F4
+
+1. **Implementación del driver `hsem_hal` (`01_shared_drivers/10_hsem/`):**
+   - Creados `hsem_hal.h` y `hsem_hal.c`.
+   - Wrapper defensivo sobre las funciones del HAL de ST (`HAL_HSEM_*`).
+   - Corrige las deficiencias y bugs conocidos de la capa ST HAL:
+     - **S1:** Detección de colisión en el mismo núcleo (reentrancia no permitida) bajo PRIMASK, retornando `HAL_BUSY` (remediando el bug de ST HAL que devuelve `HAL_OK` erróneamente por lectura ciega de `RLR`).
+     - **S2:** Inserción de barreras de memoria `__DMB()` tras locks exitosos y antes de liberaciones.
+     - **S6:** Limpieza previa de flags pendientes antes de activar notificaciones para prevenir interrupciones espurias.
+     - **S7:** Protección de PRIMASK en activación y desactivación de interrupciones de notificación.
+     - **S10:** Validación previa de parámetros (límites de IDs, process IDs válidos, ciclos de timeout) con mapeo consistente a `HAL_StatusTypeDef`: `HAL_OK`, `HAL_BUSY`, `HAL_TIMEOUT` y `HAL_ERROR`.
+   - Preserva la propiedad de símbolos de aplicación (C8): NO define `HAL_HSEM_FreeCallback` ni `HSEMx_IRQHandler`. Proporciona `HSEM_HAL_RegisterCallback(cb, ctx)`, `HSEM_HAL_Dispatch(sem_mask)` e `HSEM_HAL_IRQService()`.
+
+2. **Integración en CMake:**
+   - Creado target `stm32h7_driver_hsem_hal` (INTERFACE) en `01_shared_drivers/CMakeLists.txt`.
+   - Enlazado en `prj_04_adc_dma_bm_eth` en CM7 bajo la opción `HSEM_DRIVER_SELFTEST`.
+
+3. **Pruebas de Paridad y Validación HAL en Hardware:**
+   - **Extensión de H7 para validación de HAL y control negativo de S1:**
+     - `HAL_HSEM_FastTake` directo de ST confirma el bug S1 (devuelve `HAL_OK` indebidamente en contexto colisionado).
+     - `HSEM_HAL_FastTake` detecta la colisión y devuelve `HAL_BUSY` (**PASS**).
+     - `HSEM_HAL_Take` con proceso colisionado devuelve `HAL_BUSY` (**PASS**).
+     - `HSEM_HAL_Release` con proceso no propietario devuelve `HAL_ERROR` (**PASS**).
+     - `HSEM_HAL_RegisterCallback` y `HSEM_HAL_Dispatch` probados exitosamente con contexto y máscara arbitrarios (**PASS**).
+   - **Extensión de H10 a paridad trilateral (BM ↔ LL ↔ HAL):**
+     - Secuencia idéntica de 7 pasos ejecutada bajo BM, LL y HAL.
+     - Normalización de estados de BM a HAL con `BmStatusToHal`.
+     - Comparación estricta de fotos de hardware (`R[24..26]`, `C1IER`, `C1ISR`) y códigos de retorno: **PARIDAD EXACTA (PASS)**.
+     - Controles negativos independientes para LL y HAL con mutación de bits detectados exitosamente como desajustes (**PASS**).
+   - **Robustecimiento de arranque y aislamiento:**
+     - Partición de semáforos de prueba entre núcleos: CM7 opera en semáforos 24..26; CM4 opera en semáforos 28..30.
+     - Sincronización explícita entre núcleos mediante flag `phase = 1U` y liberación preventiva de semáforos residuales en hardware con `ReleaseAllOfCore` y clave de seguridad.
+     - Arrays de snapshots de H10 movidos a variables `static` (.bss) y stack de `Status_Task` ampliado a 1024 palabras para prevenir desbordamientos en FreeRTOS.
+
+4. **Captura en Hardware (commit limpio `1873429` sin -dirty):**
+   - Registrada en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/hsem_selftest_capture.txt`.
+   - CM7:
+     - `[m7_hsem_test] H0 Characterization: PASS`
+     - `[m7_hsem_test] H3 Release Protection: PASS`
+     - `[m7_hsem_test] H7 Same-Core Collision: PASS`
+     - `[m7_hsem_test] H10 Parity (BM <-> LL <-> HAL): PASS`
+     - `[m7_hsem_test] H1 Result: total=2000000, expected=2000000, lost=0 (PASS: exact mutual exclusion)`
+     - `[m7_hsem_test] H1b Result: N=1000000, torn_reads=0 (PASS: 0 torn reads)`
+     - `[m7_hsem_test] H4 Result: elapsed=10 ms, relax_calls=36085, status=TIMEOUT (PASS)`
+     - `[m7_hsem_test] H8 Result: PASS`
+     - `[m7_hsem_test] H9 Result: 1000/1000 notifications received (PASS)`
+     - `[m7_hsem_test] H5 Boot Handshake: delay500ms=1 h5b_pre_magic=1 h5c_spurious_exti=1 release=1 -> PASS`
+     - `[m7_hsem_test] ALL F1, F2, F3 & F4 TESTS PASSED SUCCESSFULLY`
+   - CM4:
+     - `[m4_hsem_test] banner rev=1873429 core=CM4 HSEM_BM/LL`
+     - `[m4_hsem_test] H0 characterization=PASS H3 release_prot=PASS`
+     - `[m4_hsem_test] H7 same_core=PASS H9 notifications=1000 H10 parity=PASS`
+   - Enlace Ethernet activo a 100 Mbps Full Duplex y comunicación IPC bidireccional completamente operativa.
+
+5. **Matriz de compilación CI (8/8 builds con -Werror):**
+   - Ejecución limpia con `tools/build_all.ps1 -Clean`:
+     - `prj_01_template_dualcore` [debug & release]: PASSED
+     - `prj_02_eth_lwip_dualcore` [debug & release]: PASSED
+     - `prj_03_adc_dma_eth` [debug & release]: PASSED
+     - `prj_04_adc_dma_bm_eth` [debug & release]: PASSED
+   - Las 8 configuraciones compilaron limpiamente sin warnings ni errores.
+   - `git diff main` sobre `prj_02`, `prj_03` y `prj_eth_lwip_node` se mantiene en 0.
+
+### 2. Tabla de Cumplimiento de Criterios (Fase F4)
+
+| # | Criterio | Comprobación | Estado |
+|---|----------|--------------|--------|
+| A1 | Reglas del catálogo | API HAL conforme a las directrices de arquitectura | PASS |
+| A2 | C1: Sin IDs fijos en driver | Funciones HAL reciben parámetros dinámicos | PASS |
+| A3 | C2: API congelada | `hsem_hal.h` congelada y autocontenida | PASS |
+| A4 | C6: Validación previa | Verificación de parámetros antes de llamar al HAL de ST | PASS |
+| A5 | C7: Sin estado en BM/LL | Verificado que BM y LL no añaden RAM de estado | PASS |
+| A6 | C8: Dependencias hacia abajo | `hsem_hal` solo enlaza hacia `hsem_bm` y ST HAL | PASS |
+| A7 | C10: Barreras y accesos 32-bit | `__DMB()` tras locks y antes de release | PASS |
+| A8 | C11: Verificación de propiedad | Verificación honesta antes de llamar a `HAL_HSEM_Release` | PASS |
+| A9 | C12: PRIMASK guardado y restaurado | `__get_PRIMASK()` / `__set_PRIMASK()` en FastTake y notificaciones | PASS |
+| A10 | C13: Esperas acotadas | `TakeTimeout` acotado por DWT CYCCNT | PASS |
+| A11 | Símbolos del proyecto | No define `HAL_HSEM_FreeCallback` ni `HSEMx_IRQHandler` | PASS |
+| A12 | C9: Matriz de compilación | 8/8 PASSED con `build_all.ps1 -Clean` (-Werror) | PASS |
+| A13 | R3: Tamaños | Impacto nulo en builds de producción sin selftest | PASS |
+| A14 | Pruebas de fase | H10 BM ↔ LL ↔ HAL parity PASS en hardware | PASS |
+| A15 | R1: Controles negativos | S1 reproducido con HAL crudo; mutaciones detectadas en BM↔LL y BM↔HAL | PASS |
+| A16 | R2: Trazabilidad | Captura registrada con commit limpio `1873429` | PASS |
+| A17 | R4: No destructivo | Selftest en IDs 24..30; app (ETH/ADC) continúa ejecutando | PASS |
+| A18 | Oráculo independiente | Comparación bit a bit de snapshots de registros | PASS |
+| A19 | Matriz de cumplimiento | Remediaciones S1, S2, S6, S7, S10 validadas | PASS |
+| A20 | Documentación | Registrada en `AUDIT.md` y captura en `docs/` | PASS |
+
+Gate de salida de F4 completado y validado. Listo para iniciar Fase F5 (Cierre y Documentación Final).
+
