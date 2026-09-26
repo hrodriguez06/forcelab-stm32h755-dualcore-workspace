@@ -165,13 +165,17 @@ bool ADC_Acquisition_Init(void)
     TIM3->CR1 |= TIM_CR1_CEN;
 
     /* 10. Initial metadata in shared memory */
-    if (Shared_TryLock(HSEM_ID_ADC_DATA, 1000U))
+    if (Shared_TryLockCycles(HSEM_ID_ADC_DATA, SHARED_ADC_TRYLOCK_CYCLES))
     {
         g_shared.adc.channel          = adc_cfg.channel;
         g_shared.adc.sampling_rate_hz = BOARD_ADC_SAMPLING_RATE_HZ;
         g_shared.adc.waveform_seq     = 0U;
         g_shared.adc.waveform_len     = SHARED_ADC_WAVEFORM_SAMPLES;
         SHARED_UNLOCK(HSEM_ID_ADC_DATA);
+    }
+    else
+    {
+        g_shared.adc_lock_fail_count++;
     }
 
     return true;
@@ -194,7 +198,7 @@ void ADC_Acquisition_Process(void)
         /* Publish telemetry and waveform snapshot to shared memory.
          * NEVER lock HSEM in ISR: this function runs strictly in super-loop context.
          */
-        if (Shared_TryLock(HSEM_ID_ADC_DATA, 1000U))
+        if (Shared_TryLockCycles(HSEM_ID_ADC_DATA, SHARED_ADC_TRYLOCK_CYCLES))
         {
             g_shared.adc.latest_raw         = s_adc_handle.stats.latest_raw;
             g_shared.adc.average_raw        = s_adc_handle.stats.average_raw;
@@ -214,6 +218,10 @@ void ADC_Acquisition_Process(void)
             g_shared.adc.waveform_len       = SHARED_ADC_WAVEFORM_SAMPLES;
             memcpy((void *)g_shared.adc.waveform, src, sizeof(uint16_t) * SHARED_ADC_WAVEFORM_SAMPLES);
             SHARED_UNLOCK(HSEM_ID_ADC_DATA);
+        }
+        else
+        {
+            g_shared.adc_lock_fail_count++;
         }
     }
 }

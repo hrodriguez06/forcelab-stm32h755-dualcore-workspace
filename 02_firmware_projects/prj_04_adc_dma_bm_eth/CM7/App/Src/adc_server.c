@@ -124,7 +124,7 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
             WaveformHeader_t *hdr = (WaveformHeader_t *)wp->payload;
             uint8_t *sample_dest = (uint8_t *)wp->payload + sizeof(WaveformHeader_t);
 
-            if (Shared_TryLock(HSEM_ID_ADC_DATA, 1000U))
+            if (Shared_TryLockCycles(HSEM_ID_ADC_DATA, SHARED_ADC_TRYLOCK_CYCLES))
             {
                 hdr->magic              = WAVE_MAGIC;
                 hdr->version            = WAVE_VERSION;
@@ -150,6 +150,10 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
                 (void)udp_sendto(pcb, wp, addr, port);
             }
+            else
+            {
+                g_shared.adc_lock_fail_count++;
+            }
             pbuf_free(wp);
         }
         return;
@@ -160,8 +164,9 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     int      len = 0;
     uint32_t ch, latest, avg, min_val, max_val, mv, samples, tc, ht, err, ovr, adc_ovr, rate, seq, m4_hb;
 
-    if (!Shared_TryLock(HSEM_ID_ADC_DATA, 1000U))
+    if (!Shared_TryLockCycles(HSEM_ID_ADC_DATA, SHARED_ADC_TRYLOCK_CYCLES))
     {
+        g_shared.adc_lock_fail_count++;
         return; /* Failed to acquire HSEM: do not stall FreeRTOS tcpip thread */
     }
     ch      = g_shared.adc.channel;
