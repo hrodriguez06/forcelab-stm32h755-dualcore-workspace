@@ -1,0 +1,120 @@
+[23:33:59] ================================================================================
+[23:33:59] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md):
+[23:33:59] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[23:33:59] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[23:33:59] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[23:33:59] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[23:33:59] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[23:33:59] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[23:33:59] ================================================================================
+[23:34:00] [ad2] Opened AD2 (SN 210321B5D38D) in safe state S2 (all inputs). Handle=1
+[23:34:00] [ad2] Running T0b(a) host OE guards verification...
+[23:34:00] [ad2] T0b(a) host OE guards PASSED (prohibited bits and bus owner mismatch rejected).
+[23:34:00] [serial] Connecting to COM4 at 115200 8N1...
+[23:34:00] [serial] Connected. Resetting MCU under S2 safe state (S10)...
+[23:34:00] [serial] Waiting for banner (S8)...
+[23:34:00]  
+[23:34:00] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev a692afc ===
+[23:34:00] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[23:34:00] [sys] silicon revision id=0x2003
+[23:34:00] [ipc] shared block at 0x38008000, magic=0x48375353
+[23:34:00] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[23:34:00] [net] starting TCP/IP stack
+[23:34:00] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[23:34:00] [net] mac=02:00:00:00:00:01 phy_addr=0
+[23:34:00] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[23:34:00] [phy] partner advertised:
+[23:34:00] [net] udp echo listening on port 7
+[23:34:00] [adc_srv] listening on UDP port 5001
+[23:34:00] [m7_gpio_test] Rev a692afc
+[23:34:00] [m7_gpio_test] GPIO_BENCH v1 idle
+[23:34:00] [host] S8 banner verified (Rev a692afc, GPIO_BENCH v1).
+[23:34:00] [m7_gpio_test] Waiting for HOST_REQ to start session...
+[23:34:00] [host] Handshaking session start with MCU...
+[23:34:00] [host] Session start synchronized.
+[23:34:00] [m7_gpio_test] Host connected. Starting tests.
+[23:34:00] [m7_gpio_test] T0b(b) claim guards: PASS
+[23:34:00] [m7_gpio_test] T0b_c ready bus=MCU
+[23:34:00] [ad2] Step T0b(c): Testing S5 negative control (MCU driving 0x5A)...
+[23:34:00] [ad2] Bus readback during loose check: 0x5A (expected 0x5A)
+[23:34:00] [ad2] ABORT: bus contention check failed at T0b(c) (expected for negative control)
+[23:34:00] [ad2] T0b(c) S5 negative control PASSED (contention caught, AD2 remained input).
+[23:34:00] [m7_gpio_test] T0b(c) MCU driving bus to 0x5A (AD2 in input)
+[23:34:00] [m7_gpio_test] T0b(c) S5 negative control: PASS
+[23:34:00] [m7_gpio_test] T0b_d ready bus=NONE
+[23:34:00] [ad2] Step T0b(d): Testing 10-second timeout to bench_safe()...
+[23:34:00] [ad2] Remaining silent for 10.5 seconds without asserting HOST_REQ...
+[23:34:11] [m7_gpio_test] T0b(d) waiting for HOST_REQ timeout (10s)...
+[23:34:11] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[23:34:11] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[23:34:11] [net] link up: 100 Mbps full duplex
+[23:34:11] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[23:34:11] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[23:34:11] [m7_gpio_test] T0b(d) timeout expired -> bench_safe() invoked, all pins input (PASS)
+[23:34:11] [ad2] T0b(d) timeout test PASSED.
+[23:34:11] [m7_gpio_test] T0b VERDICT: PASS
+[23:34:11] [m7_gpio_test] T0a_loose ready bus=NONE
+[23:34:11] [ad2] Step T0a: Testing loose lines (pull-up, pull-down, analog)...
+[23:34:11] [m7_gpio_test] BUSCHK up
+[23:34:11] [ad2] BUSCHK up: DIO0..DIO7 = 0xFF (expected 0xFF)
+[23:34:11] [m7_gpio_test] BUSCHK down
+[23:34:11] [ad2] BUSCHK down: DIO0..DIO7 = 0x00 (expected 0x00)
+[23:34:11] [m7_gpio_test] BUSCHK analog
+[23:34:11] [ad2] BUSCHK analog negative control: DIO read 0x01
+[23:34:11] [m7_gpio_test] T0a loose check: PASS
+[23:34:11] [m7_gpio_test] BUSCHK up
+[23:34:11] [ad2] BUSCHK up: DIO0..DIO7 = 0xFF (expected 0xFF)
+[23:34:11] [m7_gpio_test] BUSCHK down
+[23:34:11] [ad2] BUSCHK down: DIO0..DIO7 = 0x00 (expected 0x00)
+[23:34:11] [m7_gpio_test] T0a_mcu ready bus=MCU
+[23:34:11] [ad2] Step T0a: Walking-1 MCU -> AD2...
+[23:34:11] [ad2] Walking-1 MCU->AD2 bit 9 (DIO9): OK (DIO=0x2200)
+[23:34:11] [ad2] Walking-1 MCU->AD2 bit 11 (DIO11): OK (DIO=0x2800)
+[23:34:11] [ad2] Walking-1 MCU->AD2 bit 0 (DIO0): OK (DIO=0x2001)
+[23:34:11] [ad2] Walking-1 MCU->AD2 bit 1 (DIO1): OK (DIO=0x2002)
+[23:34:11] [ad2] Walking-1 MCU->AD2 bit 2 (DIO2): OK (DIO=0x2004)
+[23:34:11] [ad2] Walking-1 MCU->AD2 bit 3 (DIO3): OK (DIO=0x2008)
+[23:34:11] [ad2] Walking-1 MCU->AD2 bit 4 (DIO4): OK (DIO=0x2010)
+[23:34:11] [ad2] Walking-1 MCU->AD2 bit 5 (DIO5): OK (DIO=0x2020)
+[23:34:11] [ad2] Walking-1 MCU->AD2 bit 6 (DIO6): OK (DIO=0x2040)
+[23:34:11] [ad2] Walking-1 MCU->AD2 bit 7 (DIO7): OK (DIO=0x2080)
+[23:34:11] [ad2] Walking-1 MCU->AD2 bit 14 (DIO14): OK (DIO=0x6000)
+[23:34:11] [m7_gpio_test] T0a MCU->AD2 walking-1: PASS
+[23:34:11] [m7_gpio_test] BUSCHK up
+[23:34:11] [ad2] BUSCHK up: DIO0..DIO7 = 0xFF (expected 0xFF)
+[23:34:11] [m7_gpio_test] BUSCHK down
+[23:34:11] [ad2] BUSCHK down: DIO0..DIO7 = 0x00 (expected 0x00)
+[23:34:11] [m7_gpio_test] T0a_ad2 ready bus=AD2
+[23:34:11] [ad2] Step T0a: Walking-1 AD2 -> MCU...
+[23:34:11] [ad2] Walking-1 AD2->MCU DIO8: OK
+[23:34:11] [ad2] Walking-1 AD2->MCU DIO10: OK
+[23:34:11] [ad2] Walking-1 AD2->MCU DIO0: OK
+[23:34:11] [ad2] Walking-1 AD2->MCU DIO1: OK
+[23:34:11] [ad2] Walking-1 AD2->MCU DIO2: OK
+[23:34:11] [ad2] Walking-1 AD2->MCU DIO3: OK
+[23:34:11] [ad2] Walking-1 AD2->MCU DIO4: OK
+[23:34:11] [ad2] Walking-1 AD2->MCU DIO5: OK
+[23:34:11] [ad2] Walking-1 AD2->MCU DIO6: OK
+[23:34:11] [ad2] Walking-1 AD2->MCU DIO7: OK
+[23:34:11] [m7_gpio_test] T0a AD2->MCU walking-1: PASS
+[23:34:11] [m7_gpio_test] T0a_scope ready bus=NONE
+[23:34:11] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[23:34:11] [ad2] PF14/PF15 LOW: Scope1=0.014V, Scope2=0.036V (expected <= 0.4V)
+[23:34:11] [ad2] PF14/PF15 HIGH: Scope1=3.307V, Scope2=3.314V (expected >= 2.9V)
+[23:34:11] [m7_gpio_test] T0a Scope check: PASS
+[23:34:11] [m7_gpio_test] T0a VERDICT: PASS
+[23:34:11] [m7_gpio_test] T15 ready bus=NONE
+[23:34:11] [m7_gpio_test] T15 race control: iterations=500000 cm7_corruptions=0 cm4_corruptions=500000 total=500000 -> PASS
+[23:34:11] [m7_gpio_test] CM4 sub-verdict: done=1 all_passed=1 -> PASS
+[23:34:11] [m7_gpio_test] =================================================
+[23:34:11] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED (PASS)
+[23:34:11] [host] Firmware announced ALL GPIO SELF-TESTS PASSED.
+[23:34:11] [m7_gpio_test] =================================================
+[23:34:11] [ipc] m7=23 m4=0  (CPU2 starting)
+[23:34:11] [m4_gpio_test] Rev a692afc
+[23:34:11] [m4_gpio_test] T15 race count=500000 corruptions=500000
+[23:34:11] [m4_gpio_test] CM4 VERDICT=PASS
+[23:34:11] [host] CM4 logs drained.
+[23:34:11] ================================================================================
+[23:34:11] HOST VERDICT=PASS
+[23:34:11] ================================================================================
