@@ -1,5 +1,5 @@
-[+ 0.485s]  
-[+ 0.491s] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+[+ 0.484s]  
+[+ 0.491s] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev bfc7147 ===
 [+ 0.495s] [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [+ 0.498s] [sys] silicon revision id=0x2003
 [+ 0.502s] [ipc] shared block at 0x38008000, magic=0x48375353
@@ -8,12 +8,12 @@
 [+ 0.515s] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
 [+ 0.519s] [net] mac=02:00:00:00:00:01 phy_addr=0
 [+ 0.524s] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
-[+ 0.527s] [phy] partner advertised:
+[+ 0.526s] [phy] partner advertised:
 [+ 0.530s] [net] udp echo listening on port 7
 [+ 0.533s] [adc_srv] listening on UDP port 5001
 [+ 0.533s]  
 [+ 0.539s] =================================================================
-[+ 0.543s]  STM32H755 HSEM Driver Self-Test - Rev 680f68c
+[+ 0.543s]  STM32H755 HSEM Driver Self-Test - Rev bfc7147
 [+ 0.549s]  Phase F1-F4: Core, Characterization, Contention, Parity & Recovery
 [+ 0.555s] =================================================================
 [+ 0.559s] [m7_hsem_test] DWT CYCCNT running: 1 (delta=4527)
@@ -25,38 +25,38 @@
 [+ 0.596s] [m7_hsem_test] H10 Parity (BM <-> LL <-> HAL, 14 steps): PASS (LL_match=1, HAL_match=1, neg_ll=1, neg_hal=1)
 [+ 0.599s] [m7_hsem_test] Waiting for CM4 ready...
 [+ 0.606s] [m7_hsem_test] Starting H2 Negative Control (contention without lock)...
-[+ 0.631s] [m7_hsem_test] H2 Part A (counter without lock): N=100000, m7=100000, m4=100000, final=157226, lost=42774 (PASS: data loss reproduced)
-[+ 0.663s] [m7_hsem_test] H2 Part B (torn register without lock): N=50000, torn_reads=7895 (PASS: torn reads reproduced)
+[+ 0.631s] [m7_hsem_test] H2 Part A (counter without lock): N=100000, m7=100000, m4=100000, final=155471, lost=44529 (PASS: data loss reproduced)
+[+ 0.663s] [m7_hsem_test] H2 Part B (torn register without lock): N=50000, torn_reads=8259 (PASS: torn reads reproduced)
 [+ 0.670s] [m7_hsem_test] Starting H1 1-step FastTake (500000 increments per core under lock)...
-[+ 1.288s] [m7_hsem_test] H1 (1-step FastTake): total=1000000, expected=1000000, lost=0 (PASS: exact mutual exclusion)
-[+ 1.295s] [m7_hsem_test] Starting H1 2-step Take (500000 increments per core under lock)...
-[+ 1.971s] [m7_hsem_test] H1 (2-step Take): total=1000000, expected=1000000, lost=0 (PASS: exact mutual exclusion)
-[+ 1.977s] [m7_hsem_test] Starting H1b (500000 reads of 8-word array under lock)...
-[+ 2.208s] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
-[+ 2.215s] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
-[+ 2.218s] [net] link up: 100 Mbps full duplex
-[+ 2.791s] [m7_hsem_test] H1b Result: N=500000, torn_reads=0 (PASS: 0 torn reads)
-[+ 2.795s] [m7_hsem_test] Starting H4 Bounded Timeout...
-[+ 2.818s] [m7_hsem_test] H4 CM7 Result: elapsed=10 ms, relax_calls=35960, status=TIMEOUT (PASS)
-[+ 2.857s] [m7_hsem_test] H4 Symmetric (CM4 timeout on CM7 lock): PASS
-[+ 2.861s] [m7_hsem_test] Starting H8 Recovery...
-[+ 2.863s] [m7_hsem_test] H8 Result: PASS
-[+ 2.869s] [m7_hsem_test] Starting H9 Notifications (NVIC interrupt-driven)...
-[+ 2.877s] [m7_hsem_test] H9 negative control 1 (IER disabled): CM4 IRQs=0 (PASS: 0 IRQs)
-[+ 2.885s] [m7_hsem_test] H9 negative control 2 (stale flag on enable): CM4 spurious IRQs=0 (PASS: 0 spurious)
-[+ 2.892s] [m7_hsem_test] H9 CM7->CM4 notifications: sent=500, cm4_irqs=500 (PASS)
-[+ 2.898s] [m7_hsem_test] H9 CM4->CM7 HAL notifications: cm7_irqs=100/100 (PASS)
-[+ 2.909s] [m7_hsem_test] H5 Boot Handshake: delay500ms=1 h5b_pre_magic=1 h5c_spurious_exti=1 (woke=1 reparked=1) release=1 -> PASS
-[+ 2.915s] [m7_hsem_test] =================================================
-[+ 2.920s] [m7_hsem_test] VERDICT: ALL HSEM SELF-TESTS PASSED (PASS)
-[+ 2.925s] [m7_hsem_test] =================================================
-[+ 2.928s] [ipc] m7=5 m4=0  (CPU2 starting)
-[+ 2.933s] [m4_hsem_test] banner rev=680f68c core=CM4 HSEM_BM/LL
-[+ 2.936s] [ipc] m7=5 m4=1  (CPU2 alive)
-[+ 4.483s] [m4_hsem_test] H0 characterization=PASS H3 release_prot=PASS
-[+ 4.486s] [ipc] m7=9 m4=16  (CPU2 alive)
-[+ 5.481s] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
-[+ 6.455s] [m4_hsem_test] H7 same_core=PASS H7 neg_raw_hal=0
-[+ 6.458s] [ipc] m7=13 m4=36  (CPU2 alive)
-[+ 8.428s] [m4_hsem_test] H10 parity=PASS H4 symmetric=PASS
-[+ 8.430s] [ipc] m7=17 m4=56  (CPU2 alive)
+[+ 1.287s] [m7_hsem_test] H1 (1-step FastTake): total=1000000, expected=1000000, lost=0 (PASS: exact mutual exclusion)
+[+ 1.294s] [m7_hsem_test] Starting H1 2-step Take (500000 increments per core under lock)...
+[+ 1.969s] [m7_hsem_test] H1 (2-step Take): total=1000000, expected=1000000, lost=0 (PASS: exact mutual exclusion)
+[+ 1.975s] [m7_hsem_test] Starting H1b (500000 reads of 8-word array under lock)...
+[+ 2.206s] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[+ 2.213s] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[+ 2.216s] [net] link up: 100 Mbps full duplex
+[+ 2.800s] [m7_hsem_test] H1b Result: N=500000, torn_reads=0 (PASS: 0 torn reads)
+[+ 2.804s] [m7_hsem_test] Starting H4 Bounded Timeout...
+[+ 2.827s] [m7_hsem_test] H4 CM7 Result: elapsed=10 ms, relax_calls=36340, status=TIMEOUT (PASS)
+[+ 2.866s] [m7_hsem_test] H4 Symmetric (CM4 timeout on CM7 lock): PASS
+[+ 2.870s] [m7_hsem_test] Starting H8 Recovery...
+[+ 2.872s] [m7_hsem_test] H8 Result: PASS
+[+ 2.878s] [m7_hsem_test] Starting H9 Notifications (NVIC interrupt-driven)...
+[+ 2.886s] [m7_hsem_test] H9 negative control 1 (IER disabled): CM4 IRQs=0 (PASS: 0 IRQs)
+[+ 2.895s] [m7_hsem_test] H9 negative control 2 (stale flag on enable): CM4 spurious IRQs=0 (PASS: 0 spurious)
+[+ 2.901s] [m7_hsem_test] H9 CM7->CM4 notifications: sent=500, cm4_irqs=500 (PASS)
+[+ 2.908s] [m7_hsem_test] H9 CM4->CM7 HAL notifications: cm7_irqs=100/100 (PASS)
+[+ 2.918s] [m7_hsem_test] H5 Boot Handshake: delay500ms=1 h5b_pre_magic=1 h5c_spurious_exti=1 (woke=1 reparked=1) release=1 -> PASS
+[+ 2.924s] [m7_hsem_test] =================================================
+[+ 2.929s] [m7_hsem_test] VERDICT: ALL HSEM SELF-TESTS PASSED (PASS)
+[+ 2.934s] [m7_hsem_test] =================================================
+[+ 2.937s] [ipc] m7=5 m4=0  (CPU2 starting)
+[+ 2.942s] [m4_hsem_test] banner rev=bfc7147 core=CM4 HSEM_BM/LL
+[+ 2.945s] [ipc] m7=5 m4=1  (CPU2 alive)
+[+ 4.480s] [m4_hsem_test] H0 characterization=PASS H3 release_prot=PASS
+[+ 4.482s] [ipc] m7=9 m4=16  (CPU2 alive)
+[+ 5.477s] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[+ 6.450s] [m4_hsem_test] H7 same_core=PASS H7 neg_raw_hal=0
+[+ 6.453s] [ipc] m7=13 m4=36  (CPU2 alive)
+[+ 8.426s] [m4_hsem_test] H10 parity=PASS H4 symmetric=PASS
+[+ 8.426s] [ipc] m7=17 m4=56  (CPU2 alive)
