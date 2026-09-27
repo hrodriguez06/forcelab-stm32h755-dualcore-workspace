@@ -146,6 +146,7 @@ Clases de severidad. Alta: comportamiento incorrecto silencioso. Media: acepta u
 ├── IMPLEMENTATION_PLAN.md  # este archivo; se borra al cierre (queda en git)
 ├── IMPLEMENTER_INSTRUCTIONS.md  # reglas para el implementador; se borra al cierre
 ├── F0_CORRECTION_INSTRUCTIONS.md # qué corregir tras la auditoría de F0; se borra al cierre
+├── F0_CORRECTION_2_INSTRUCTIONS.md # qué corregir tras la reauditoría 1 de F0; se borra al cierre
 ├── IMPLEMENTATION_REPORT.md     # lo escribe SOLO el implementador: hechos y resultados, sin veredictos
 ├── AUDIT.md                # lo escribe SOLO el auditor; se borra al cierre (queda en git)
 ├── gpio_bm.h / .c          # en el .h solo se añade
