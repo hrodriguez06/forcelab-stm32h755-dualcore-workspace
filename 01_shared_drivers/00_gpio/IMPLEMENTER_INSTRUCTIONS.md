@@ -4,7 +4,9 @@ Sep 26, 2026 · @Hector
 
 Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta: el núcleo BM de `gpio_bm` (F0, F1a, F1b) y EXTI + SYSCFG (F2). Otra persona audita cada fase de forma independiente y repite tus pruebas en la placa.
 
-Este documento dice qué te toca, qué no te toca y qué tienes que entregar. Si algo de aquí choca con el plan, manda el plan. Una excepción: lo que este documento te **prohíbe** sigue prohibido aunque el plan lo mencione.
+Este documento dice qué te toca, qué no te toca y qué tienes que entregar.
+
+> **F0 está en corrección.** La auditoría de F0 (`AUDIT.md`) no pasó. Qué corregir y en qué orden está en [`F0_CORRECTION_INSTRUCTIONS.md`](F0_CORRECTION_INSTRUCTIONS.md). No empieces F1a hasta que la reauditoría de F0 pase. Si algo de aquí choca con el plan, manda el plan. Una excepción: lo que este documento te **prohíbe** sigue prohibido aunque el plan lo mencione.
 
 ---
 
