@@ -14,6 +14,9 @@
 
 cmake_minimum_required(VERSION 3.22)
 
+# 00_gpio is the bottom of the stack: everything that drives a pin needs its
+# port clocked first, so the drivers below link it rather than each carrying a
+# private copy of the same register write.
 add_library(stm32h7_driver_gpio_bm INTERFACE)
 target_include_directories(stm32h7_driver_gpio_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/00_gpio)
 target_sources(stm32h7_driver_gpio_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/00_gpio/gpio_bm.c)
