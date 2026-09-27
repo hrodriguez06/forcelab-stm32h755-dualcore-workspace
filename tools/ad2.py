@@ -83,13 +83,17 @@ def ad2_set_oe(dwf_lib, hdwf: int, mask: int, step_bus_owner: int) -> None:
 class AD2:
     """Analog Discovery 2 instrument controller with safety guards."""
 
-    def __init__(self, sn: Optional[str] = "210321B5D38D") -> None:
+    def __init__(self, sn: Optional[str] = "210321B5D38D", dwf_lib: Any = None) -> None:
         self.target_sn = sn
         self._hdwf = ctypes.c_int(0)
-        try:
-            self._dwf = ctypes.cdll.dwf
-        except Exception as e:
-            raise AD2Error(f"Could not load dwf.dll: {e}") from e
+        self._output_val = 0
+        if dwf_lib is not None:
+            self._dwf = dwf_lib
+        else:
+            try:
+                self._dwf = ctypes.cdll.dwf
+            except Exception as e:
+                raise AD2Error(f"Could not load dwf.dll: {e}") from e
 
     @property
     def handle(self) -> int:
@@ -132,17 +136,27 @@ class AD2:
             raise AD2Error(f"Failed to open AD2 (idx={device_idx}): {err}")
 
         # S2: Safe state S2 on open - Digital IO reset and all inputs
+        self._output_val = 0
         self._dwf.FDwfDigitalIOReset(self._hdwf)
         ad2_set_oe(self._dwf, self._hdwf.value, 0x0000, GPIO_BENCH_BUS_NONE)
 
     def set_safe_state(self) -> None:
         """S2: Put AD2 into safe state (all DIO lines configured as inputs / tri-state)."""
         if self._hdwf.value != 0:
+            self._output_val = 0
             ad2_set_oe(self._dwf, self._hdwf.value, 0x0000, GPIO_BENCH_BUS_NONE)
 
     def set_oe(self, mask: int, step_bus_owner: int) -> None:
         """S3: Set DIO output enable through guarded function."""
         ad2_set_oe(self._dwf, self._hdwf.value, mask, step_bus_owner)
+
+    def get_oe(self) -> int:
+        """Read back current Output Enable mask from hardware."""
+        if self._hdwf.value == 0:
+            return 0
+        readback = ctypes.c_uint32()
+        self._dwf.FDwfDigitalIOOutputEnableGet(self._hdwf, ctypes.byref(readback))
+        return readback.value & 0xFFFF
 
     def close(self) -> None:
         """Close device safely, ensuring S2 on exit."""
@@ -164,8 +178,9 @@ class AD2:
     # ---- Digital I/O --------------------------------------------------------
 
     def digital_io_write(self, value: int, mask: int = 0xFFFF) -> None:
-        """Set output values on digital IO pins enabled as outputs."""
-        self._dwf.FDwfDigitalIOOutputSet(self._hdwf, ctypes.c_uint32(value & mask & 0xFFFF))
+        """Set output values on digital IO pins enabled as outputs, preserving unmasked outputs (m6)."""
+        self._output_val = (self._output_val & ~mask) | (value & mask)
+        self._dwf.FDwfDigitalIOOutputSet(self._hdwf, ctypes.c_uint32(self._output_val & 0xFFFF))
         self._dwf.FDwfDigitalIOConfigure(self._hdwf)
 
     def digital_io_read(self) -> int:
