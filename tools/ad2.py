@@ -60,6 +60,7 @@ def ad2_set_oe(dwf_lib, hdwf: int, mask: int, step_bus_owner: int) -> None:
         # Safety violation: force safe state S2 immediately
         try:
             dwf_lib.FDwfDigitalIOReset(ctypes.c_int(hdwf))
+            dwf_lib.FDwfDigitalIOConfigure(ctypes.c_int(hdwf))
         except Exception:
             pass
         prohibited = mask & ~allowed
@@ -70,6 +71,7 @@ def ad2_set_oe(dwf_lib, hdwf: int, mask: int, step_bus_owner: int) -> None:
 
     # Exactly one call site for FDwfDigitalIOOutputEnableSet in workspace (A27)
     dwf_lib.FDwfDigitalIOOutputEnableSet(ctypes.c_int(hdwf), ctypes.c_uint32(mask & 0xFFFF))
+    dwf_lib.FDwfDigitalIOConfigure(ctypes.c_int(hdwf))
 
     # Read-back verification
     readback = ctypes.c_uint32()
@@ -164,6 +166,7 @@ class AD2:
     def digital_io_write(self, value: int, mask: int = 0xFFFF) -> None:
         """Set output values on digital IO pins enabled as outputs."""
         self._dwf.FDwfDigitalIOOutputSet(self._hdwf, ctypes.c_uint32(value & mask & 0xFFFF))
+        self._dwf.FDwfDigitalIOConfigure(self._hdwf)
 
     def digital_io_read(self) -> int:
         """Read 16-bit status of digital IO pins (DIO 0..15)."""
