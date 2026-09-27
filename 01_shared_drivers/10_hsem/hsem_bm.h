@@ -72,6 +72,7 @@ HsemBm_Status_t HSEM_BM_ReleaseAllOfCore(uint32_t core_id, uint16_t key); /* key
 
 /* ---- Notification: the calling core's line only ------------------------- */
 bool            HSEM_BM_NotifyEnable(uint32_t sem_mask);   /* CnICR first, then CnIER, under PRIMASK */
+bool            HSEM_BM_NotifyRearm(uint32_t sem_mask);    /* Re-arms CnIER without clearing CnICR (R-M1) */
 bool            HSEM_BM_NotifyDisable(uint32_t sem_mask);
 uint32_t        HSEM_BM_NotifyTake(void);   /* CnMISR -> clear those CnIER bits, write CnICR, DSB */
 uint32_t        HSEM_BM_GetRawStatus(void); /* CnISR */

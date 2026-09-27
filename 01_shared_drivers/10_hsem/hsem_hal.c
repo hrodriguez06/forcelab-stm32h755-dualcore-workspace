@@ -217,6 +217,27 @@ HAL_StatusTypeDef HSEM_HAL_NotifyEnable(uint32_t sem_mask)
     return HAL_OK;
 }
 
+HAL_StatusTypeDef HSEM_HAL_NotifyRearm(uint32_t sem_mask)
+{
+    if (sem_mask == 0U)
+    {
+        return HAL_ERROR;
+    }
+
+    if (HSEM_BM_CheckInit() != HSEM_BM_OK)
+    {
+        return HAL_ERROR;
+    }
+
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
+    HAL_HSEM_ActivateNotification(sem_mask);
+
+    __set_PRIMASK(primask);
+    return HAL_OK;
+}
+
 HAL_StatusTypeDef HSEM_HAL_NotifyDisable(uint32_t sem_mask)
 {
     if (sem_mask == 0U)

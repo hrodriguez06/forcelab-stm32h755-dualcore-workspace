@@ -93,6 +93,13 @@ HAL_StatusTypeDef HSEM_HAL_Release(uint32_t id, uint32_t proc_id);
 HAL_StatusTypeDef HSEM_HAL_NotifyEnable(uint32_t sem_mask);
 
 /**
+  * @brief  Re-arms notifications without clearing pending interrupt flags (R-M1).
+  * @param  sem_mask Bitmask of semaphores (bit N = semaphore N).
+  * @retval HAL_OK on success, HAL_ERROR if sem_mask == 0 or driver uninitialized.
+  */
+HAL_StatusTypeDef HSEM_HAL_NotifyRearm(uint32_t sem_mask);
+
+/**
   * @brief  Disables notifications for semaphores under PRIMASK (S7).
   * @param  sem_mask Bitmask of semaphores (bit N = semaphore N).
   * @retval HAL_OK on success, HAL_ERROR if sem_mask == 0.

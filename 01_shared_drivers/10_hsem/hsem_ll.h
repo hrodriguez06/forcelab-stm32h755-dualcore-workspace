@@ -94,6 +94,13 @@ HsemBm_Status_t HSEM_LL_Release(uint32_t id, uint32_t proc_id);
 bool            HSEM_LL_NotifyEnable(uint32_t sem_mask);
 
 /**
+  * @brief  Re-arms notifications without clearing pending interrupt flags (R-M1).
+  * @param  sem_mask Bitmask of semaphores (bit N = semaphore N).
+  * @retval true on success, false on invalid parameter or uninitialized driver.
+  */
+bool            HSEM_LL_NotifyRearm(uint32_t sem_mask);
+
+/**
   * @brief  Disables notifications for a set of semaphores on this core using LL.
   * @param  sem_mask Bitmask of semaphores (bit N = semaphore N).
   * @retval true on success, false on invalid parameter.

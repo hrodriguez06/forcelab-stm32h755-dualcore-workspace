@@ -193,6 +193,31 @@ bool HSEM_LL_NotifyEnable(uint32_t sem_mask)
     return true;
 }
 
+bool HSEM_LL_NotifyRearm(uint32_t sem_mask)
+{
+    if (sem_mask == 0U)
+    {
+        return false;
+    }
+
+    if (HSEM_BM_CheckInit() != HSEM_BM_OK)
+    {
+        return false;
+    }
+
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
+#if defined(CORE_CM4)
+    LL_HSEM_EnableIT_C2IER(HSEM, sem_mask);
+#else
+    LL_HSEM_EnableIT_C1IER(HSEM, sem_mask);
+#endif
+
+    __set_PRIMASK(primask);
+    return true;
+}
+
 bool HSEM_LL_NotifyDisable(uint32_t sem_mask)
 {
     if (sem_mask == 0U)

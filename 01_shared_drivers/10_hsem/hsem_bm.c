@@ -316,7 +316,7 @@ HsemBm_Status_t HSEM_BM_Release(uint32_t id, uint32_t proc_id)
 
 bool HSEM_BM_IsLocked(uint32_t id)
 {
-    if (id >= HSEM_BM_NUM_SEMAPHORES)
+    if ((id >= HSEM_BM_NUM_SEMAPHORES) || (CheckInit() != HSEM_BM_OK))
     {
         return false;
     }
@@ -328,7 +328,7 @@ bool HSEM_BM_IsLocked(uint32_t id)
 
 bool HSEM_BM_GetOwner(uint32_t id, HsemBm_Owner_t *out)
 {
-    if ((id >= HSEM_BM_NUM_SEMAPHORES) || (out == (HsemBm_Owner_t *)0))
+    if ((id >= HSEM_BM_NUM_SEMAPHORES) || (out == (HsemBm_Owner_t *)0) || (CheckInit() != HSEM_BM_OK))
     {
         return false;
     }
@@ -345,7 +345,7 @@ bool HSEM_BM_GetOwner(uint32_t id, HsemBm_Owner_t *out)
 
 uint32_t HSEM_BM_GetLockedMask(uint32_t core_id)
 {
-    if ((core_id != HSEM_BM_COREID_CPU1) && (core_id != HSEM_BM_COREID_CPU2))
+    if (((core_id != HSEM_BM_COREID_CPU1) && (core_id != HSEM_BM_COREID_CPU2)) || (CheckInit() != HSEM_BM_OK))
     {
         return 0U;
     }
@@ -395,9 +395,9 @@ HsemBm_Status_t HSEM_BM_ReleaseAllOfCore(uint32_t core_id, uint16_t key)
     HSEM->CR = ((uint32_t)key << HSEM_CR_KEY_SHIFT) | (core_id << HSEM_CR_COREID_SHIFT);
     __DMB();
 
-    /* Verify whether hardware accepted the key */
+    /* Verify whether hardware accepted the key (m7) */
     uint32_t mask_after = HSEM_BM_GetLockedMask(core_id);
-    if (mask_after == 0U)
+    if ((mask_after & mask_before) == 0U)
     {
         return HSEM_BM_OK;
     }
@@ -407,7 +407,7 @@ HsemBm_Status_t HSEM_BM_ReleaseAllOfCore(uint32_t core_id, uint16_t key)
 
 bool HSEM_BM_NotifyEnable(uint32_t sem_mask)
 {
-    if (sem_mask == 0U)
+    if ((sem_mask == 0U) || (CheckInit() != HSEM_BM_OK))
     {
         return false;
     }
@@ -423,9 +423,28 @@ bool HSEM_BM_NotifyEnable(uint32_t sem_mask)
     return true;
 }
 
+bool HSEM_BM_NotifyRearm(uint32_t sem_mask)
+{
+    if ((sem_mask == 0U) || (CheckInit() != HSEM_BM_OK))
+    {
+        return false;
+    }
+
+    /* R-M1: Re-arm CnIER without clearing CnICR so releases arriving between
+     * NotifyTake and Rearm are preserved.
+     */
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
+    HSEM_COMMON->IER |= sem_mask;
+
+    __set_PRIMASK(primask);
+    return true;
+}
+
 bool HSEM_BM_NotifyDisable(uint32_t sem_mask)
 {
-    if (sem_mask == 0U)
+    if ((sem_mask == 0U) || (CheckInit() != HSEM_BM_OK))
     {
         return false;
     }
@@ -442,6 +461,11 @@ bool HSEM_BM_NotifyDisable(uint32_t sem_mask)
 
 uint32_t HSEM_BM_NotifyTake(void)
 {
+    if (CheckInit() != HSEM_BM_OK)
+    {
+        return 0U;
+    }
+
     uint32_t misr = HSEM_COMMON->MISR;
     if (misr != 0U)
     {
@@ -460,6 +484,10 @@ uint32_t HSEM_BM_NotifyTake(void)
 
 uint32_t HSEM_BM_GetRawStatus(void)
 {
+    if (CheckInit() != HSEM_BM_OK)
+    {
+        return 0U;
+    }
     return HSEM_COMMON->ISR;
 }
 
