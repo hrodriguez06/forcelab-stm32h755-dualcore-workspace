@@ -109,17 +109,25 @@ int main(void)
     /* H5c: Spurious EXTI line 15 event to CPU2 via EXTI_SWIER1 (B2) */
     uint32_t wake_before_h5c = g_shared.cpu2_wake_count;
     EXTI->C2EMR1 |= (1UL << 15);
+    EXTI->C2IMR1 |= (1UL << 15);
     EXTI->SWIER1 |= (1UL << 15);
     __DSB();
-    /* Clear mask and pending immediately so it is a single event pulse */
+
+    /* Wait for CPU2 to wake up and increment wake_count (timeout ~10 ms @ 64 MHz HSI) */
+    uint32_t t_h5c_wake = DWT->CYCCNT;
+    while ((g_shared.cpu2_wake_count == wake_before_h5c) &&
+           ((DWT->CYCCNT - t_h5c_wake) < 640000UL))
+    {
+        __NOP();
+    }
+    bool woke_h5c = (g_shared.cpu2_wake_count > wake_before_h5c);
+
+    /* Disarm EXTI line 15 and clear pending so CPU2 can re-park into STOP */
     EXTI->C2EMR1 &= ~(1UL << 15);
+    EXTI->C2IMR1 &= ~(1UL << 15);
     EXTI->C2PR1 = (1UL << 15);
     EXTI->PR1 = (1UL << 15);
     __DSB();
-
-    /* Wait ~10 ms (640,000 cycles @ 64 MHz HSI) for CPU2 to wake, verify magic != SHARED_MAGIC, and re-park into STOP */
-    uint32_t t_h5c = DWT->CYCCNT;
-    while ((DWT->CYCCNT - t_h5c) < 640000UL) { __NOP(); }
 
     /* Poll for CPU2 to re-park (D2CKRDY == 0) with up to 50 ms timeout */
     bool reparked_h5c = false;
@@ -133,7 +141,6 @@ int main(void)
         }
     }
 
-    bool woke_h5c = (g_shared.cpu2_wake_count > wake_before_h5c);
     bool h5c_ok = woke_h5c && reparked_h5c;
 
     HSEM_TEST_SHARED->h5_ok = h5_ok ? 1U : 0U;
