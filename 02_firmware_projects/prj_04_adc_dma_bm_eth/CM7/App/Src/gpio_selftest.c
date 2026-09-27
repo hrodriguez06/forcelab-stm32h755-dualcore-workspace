@@ -144,7 +144,7 @@ static void bench_safe(void)
 
     /* GPIOE: Configure PE2..PE6 and PE8..PE15 as INPUT (00).
        Crucial: PE0 and PE1 (bits 3:0 of MODER/PUPDR) are NEVER touched! */
-    uint32_t mask_pe2_to_pe6 = 0x00003FC0UL;  /* pins 2, 3, 4, 5, 6 */
+    uint32_t mask_pe2_to_pe6 = 0x00003FF0UL;  /* pins 2, 3, 4, 5, 6 */
     uint32_t mask_pe8_to_pe15 = 0xFFFF0000UL; /* pins 8..15 */
     uint32_t clear_mask_e = mask_pe2_to_pe6 | mask_pe8_to_pe15;
 
@@ -352,7 +352,7 @@ static bool test_t0b_timeout(void)
     bench_safe();
 
     /* Verify all wired test pins are inputs */
-    bool all_inputs = (((GPIOE->MODER & 0xFFFF3FC0UL) == 0U) &&
+    bool all_inputs = (((GPIOE->MODER & 0xFFFF3FF0UL) == 0U) &&
                        ((GPIOF->MODER & ((3UL << 28U) | (3UL << 30U))) == 0U) &&
                        ((GPIOA->MODER & (3UL << 16U)) == 0U));
 
