@@ -1,0 +1,80 @@
+[   0.042] auditor b1_run mode=none repo HEAD=d472beb
+[   0.042] state before:
+[   0.042] $ STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x3800a000 128
+[   0.219]   Reset mode  : Software reset
+[   0.219]   0x3800A000 : A4B273F1 00000000 A4B273F2 A4B273F2
+[   0.219]   0x3800A010 : 00000002 00000000 00000003 00000000
+[   0.219]   0x3800A020 : 00000000 0007A03D 0007A120 00000000
+[   0.219]   0x3800A030 : 00000000 00000028 00000000 00000028
+[   0.219]   0x3800A040 : 0007A120 0007A120 00000000 00000000
+[   0.219]   0x3800A050 : 00000000 00000000 00000000 00000000
+[   0.219]   0x3800A060 : 00000000 00000000 00000001 00000001
+[   0.219]   0x3800A070 : 00000000 00000000 00000000 00000000
+[   0.219] $ STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x3800a000 128
+[   0.378]   Reset mode  : Software reset
+[   0.378]   0x3800A000 : A4B273F1 00000000 A4B273F2 A4B273F2
+[   0.378]   0x3800A010 : 00000002 00000000 00000003 00000000
+[   0.378]   0x3800A020 : 00000000 0007A03D 0007A120 00000000
+[   0.378]   0x3800A030 : 00000000 00000028 00000000 00000028
+[   0.378]   0x3800A040 : 0007A120 0007A120 00000000 00000000
+[   0.378]   0x3800A050 : 00000000 00000000 00000000 00000000
+[   0.378]   0x3800A060 : 00000000 00000000 00000001 00000001
+[   0.378]   0x3800A070 : 00000000 00000000 00000000 00000000
+[   0.380] $ STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
+[   0.545]   Reset mode  : Software reset
+[   0.545]   MCU Reset
+[   0.545]  
+[   0.546] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev d472beb ===
+[   0.546] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[   0.546] [sys] silicon revision id=0x2003
+[   0.546] [ipc] shared block at 0x38008000, magic=0x48375353
+[   0.549] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[   0.551] [net] starting TCP/IP stack
+[   0.558] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[   0.562] [net] mac=02:00:00:00:00:01 phy_addr=0
+[   0.567] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[   0.569] [phy] partner advertised:
+[   0.572] [net] udp echo listening on port 7
+[   0.576] [adc_srv] listening on UDP port 5001
+[   0.579] [ipc] m7=1 m4=0  (CPU2 starting)
+[   0.581] [m7_gpio_test] Rev d472beb
+[   0.584] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[   0.729] [m7_gpio_test] T15 phase (a) CM7 solo: corruptions=0 (expected 0)
+[   0.734] [m7_gpio_test] T15 phase (b) CM4 solo: corruptions=0 (expected 0)
+[   0.744] [m7_gpio_test] T15 phase (c) concurrent: total_corruptions=36 (CM7=0, CM4=36, overlap CM7=499710, CM4=500000)
+[   0.747] [m7_gpio_test] T15 VERDICT: PASS
+[   0.750] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[   0.753] [m7_gpio_test] GPIO_BENCH v1 idle
+[   0.758] [m7_gpio_test] Waiting for HOST_REQ to start session...
+[   2.156] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[   2.163] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[   2.166] [net] link up: 100 Mbps full duplex
+[   2.558] [m4_gpio_test] Rev d472beb
+[   2.566] [m4_gpio_test] T15 phase (b) CM4 solo: corruptions=0
+[   2.576] [m4_gpio_test] T15 phase (c) CM4 corruptions=36 overlap=500000
+[   2.580] [m4_gpio_test] CM4 VERDICT=PASS
+[   2.585] [ipc] m7=5 m4=19  (CPU2 alive)
+[   4.536] [ipc] m7=8 m4=39  (CPU2 alive)
+[   5.537] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[   6.514] [ipc] m7=12 m4=59  (CPU2 alive)
+[   8.491] [ipc] m7=16 m4=79  (CPU2 alive)
+[  10.468] [ipc] m7=20 m4=99  (CPU2 alive)
+[  10.489] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  12.446] [ipc] m7=24 m4=119  (CPU2 alive)
+[  14.423] [ipc] m7=28 m4=139  (CPU2 alive)
+[  15.441] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  16.400] [ipc] m7=32 m4=159  (CPU2 alive)
+[  18.377] [ipc] m7=36 m4=179  (CPU2 alive)
+[  20.354] [ipc] m7=40 m4=199  (CPU2 alive)
+[  20.391] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  20.612] state after:
+[  20.612] $ STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x3800a000 128
+[  20.789]   Reset mode  : Software reset
+[  20.789]   0x3800A000 : D57DF6FA 00000000 D57DF6FB D57DF6FB
+[  20.789]   0x3800A010 : 00000002 00000000 00000003 00000000
+[  20.789]   0x3800A020 : 00000000 00079FFE 0007A120 00000000
+[  20.789]   0x3800A030 : 00000000 00000000 00000024 00000024
+[  20.789]   0x3800A040 : 0007A120 0007A120 00000000 00000000
+[  20.789]   0x3800A050 : 00000000 00000000 00000000 00000000
+[  20.789]   0x3800A060 : 00000000 00000000 00000001 00000001
+[  20.789]   0x3800A070 : 00000000 00000000 00000000 00000000

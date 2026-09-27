@@ -1,0 +1,89 @@
+diff --git a/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/gpio_selftest.c b/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/gpio_selftest.c
+index 07b16cb..47d4266 100644
+--- a/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/gpio_selftest.c
++++ b/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/gpio_selftest.c
+@@ -192,7 +192,7 @@ void GPIO_SelfTest_CM4_Run(void)
+ 
+         /* Verify own bits */
+         uint32_t readback = (GPIOF->MODER >> (11U * 2U)) & 3U;
+-        if (readback != val)
++        if (readback == val) /* AUDIT MUTATION */
+         {
+             corruptions_b++;
+         }
+[   0.049] auditor b1_run mode=none repo HEAD=d472beb
+[   0.049] state before:
+[   0.049] $ STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x3800a000 128
+[   0.220]   Reset mode  : Software reset
+[   0.220]   0x3800A000 : 4B23A1B9 00000000 4B23A1BA 4B23A1BA
+[   0.220]   0x3800A010 : 00000002 00000000 00000003 00000000
+[   0.220]   0x3800A020 : 00000000 0007A11F 00071720 00000000
+[   0.220]   0x3800A030 : 0000C350 00008B8E 00000000 00008B8E
+[   0.221]   0x3800A040 : 0007A120 0007A120 00000000 00000000
+[   0.221]   0x3800A050 : 00000000 00000000 00000000 00000000
+[   0.221]   0x3800A060 : 00000000 00000000 00000001 00000000
+[   0.221]   0x3800A070 : 00000000 00000000 00000000 00000000
+[   0.221] $ STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x3800a000 128
+[   0.366]   Reset mode  : Software reset
+[   0.366]   0x3800A000 : 4B23A1B9 00000000 4B23A1BA 4B23A1BA
+[   0.366]   0x3800A010 : 00000002 00000000 00000003 00000000
+[   0.366]   0x3800A020 : 00000000 0007A11F 00071720 00000000
+[   0.366]   0x3800A030 : 0000C350 00008B8E 00000000 00008B8E
+[   0.366]   0x3800A040 : 0007A120 0007A120 00000000 00000000
+[   0.366]   0x3800A050 : 00000000 00000000 00000000 00000000
+[   0.366]   0x3800A060 : 00000000 00000000 00000001 00000000
+[   0.366]   0x3800A070 : 00000000 00000000 00000000 00000000
+[   0.368] $ STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
+[   0.541]   Reset mode  : Software reset
+[   0.541]   MCU Reset
+[   0.541]  
+[   0.541] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev d472beb-dirty ===
+[   0.541] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[   0.541] [sys] silicon revision id=0x2003
+[   0.544] [ipc] shared block at 0x38008000, magic=0x48375353
+[   0.548] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[   0.551] [net] starting TCP/IP stack
+[   0.558] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[   0.561] [net] mac=02:00:00:00:00:01 phy_addr=0
+[   0.567] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[   0.569] [phy] partner advertised:
+[   0.572] [net] udp echo listening on port 7
+[   0.575] [adc_srv] listening on UDP port 5001
+[   0.578] [ipc] m7=1 m4=0  (CPU2 starting)
+[   0.581] [m7_gpio_test] Rev d472beb-dirty
+[   0.585] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[   0.730] [m7_gpio_test] T15 phase (a) CM7 solo: corruptions=0 (expected 0)
+[   0.736] [m7_gpio_test] T15 phase (b) CM4 solo: corruptions=50000 (expected 0)
+[   0.746] [m7_gpio_test] T15 phase (c) concurrent: total_corruptions=35726 (CM7=35726, CM4=0, overlap CM7=499999, CM4=464673)
+[   0.749] [m7_gpio_test] T15 VERDICT: FAIL
+[   0.752] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[   0.755] [m7_gpio_test] GPIO_BENCH v1 idle
+[   0.760] [m7_gpio_test] Waiting for HOST_REQ to start session...
+[   2.155] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[   2.161] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[   2.165] [net] link up: 100 Mbps full duplex
+[   2.556] [m4_gpio_test] Rev d472beb-dirty
+[   2.565] [m4_gpio_test] T15 phase (b) CM4 solo: corruptions=50000
+[   2.574] [m4_gpio_test] T15 phase (c) CM4 corruptions=0 overlap=464673
+[   2.580] [m4_gpio_test] CM4 VERDICT=FAIL
+[   2.584] [ipc] m7=5 m4=19  (CPU2 alive)
+[   4.533] [ipc] m7=8 m4=39  (CPU2 alive)
+[   5.534] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[   6.510] [ipc] m7=12 m4=59  (CPU2 alive)
+[   8.487] [ipc] m7=16 m4=79  (CPU2 alive)
+[  10.462] [ipc] m7=20 m4=99  (CPU2 alive)
+[  10.484] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  12.438] [ipc] m7=24 m4=119  (CPU2 alive)
+[  14.415] [ipc] m7=28 m4=139  (CPU2 alive)
+[  15.432] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  15.548] state after:
+[  15.548] $ STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x3800a000 128
+[  15.722]   Reset mode  : Software reset
+[  15.722]   0x3800A000 : 5CF03042 00000000 5CF03043 5CF03043
+[  15.722]   0x3800A010 : 00000002 00000000 00000003 00000000
+[  15.722]   0x3800A020 : 00000000 0007A11F 00071721 00000000
+[  15.722]   0x3800A030 : 0000C350 00008B8E 00000000 00008B8E
+[  15.722]   0x3800A040 : 0007A120 0007A120 00000000 00000000
+[  15.722]   0x3800A050 : 00000000 00000000 00000000 00000000
+[  15.722]   0x3800A060 : 00000000 00000000 00000001 00000000
+[  15.722]   0x3800A070 : 00000000 00000000 00000000 00000000

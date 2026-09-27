@@ -53,7 +53,12 @@ Siguen vigentes todas las reglas de [`IMPLEMENTER_INSTRUCTIONS.md`](IMPLEMENTER_
 4. Si algo no cuadra: S2 (`OE = 0` con read-back), log `ABORT: bus contention check failed at <step>` y excepción `BenchAbort`.
 5. Si todo cuadra, devuelve un objeto testigo ligado a `step`.
 
-Toda transmisión "bus = AD2" pasa por una única función, `drive_bus(ad2, token, value)`, que exige un testigo válido de **ese mismo paso** y lo consume. Sin testigo, no hay bus. Los pasos "bus = MCU" también llaman a `s5_verify_released` antes de dar el `HOST_REQ` que autoriza al MCU a conducir.
+Toda transmisión "bus = AD2" pasa por una única función, `drive_bus(ad2, token, value)`, que exige un testigo válido de **ese mismo paso**. Sin testigo, no hay bus. *(Errata E6, reauditoría 1: antes decía que el testigo se consumía en cada transmisión.)* El testigo:
+
+- solo lo crea `s5_verify_released`; ningún otro código puede fabricarlo;
+- autoriza todas las transmisiones de su paso;
+- deja de valer en cuanto el seguimiento de pasos (S7) sale de ese paso, y ante cualquier aborto;
+- `drive_bus` toma el dueño del bus del paso validado, no de un argumento. Los pasos "bus = MCU" también llaman a `s5_verify_released` antes de dar el `HOST_REQ` que autoriza al MCU a conducir.
 
 **S7, tabla de pasos compartida.**
 

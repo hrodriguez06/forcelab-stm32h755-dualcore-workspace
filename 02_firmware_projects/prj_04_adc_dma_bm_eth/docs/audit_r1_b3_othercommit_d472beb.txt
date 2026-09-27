@@ -1,0 +1,35 @@
+[08:53:00] ================================================================================
+[08:53:00] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[08:53:00] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[08:53:00] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[08:53:00] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[08:53:00] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[08:53:00] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[08:53:00] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[08:53:00] ================================================================================
+[08:53:00] [host] Expected firmware revision from git: d472beb
+[probe 08:53:01] ad2_set_oe(mask=0x0000, owner=0)
+[08:53:01] [ad2] Opened AD2 (SN 210321B5D38D) in safe state S2 (all inputs). Handle=1
+[08:53:01] [host] S10: Confirmed AD2 in S2 safe state (OE=0x0000). Resetting target MCU...
+[probe 08:53:01] subprocess -c port=SWD mode=HOTPLUG -rst  (OE read-back now: 0x0000)
+[08:53:01] [host] S10: Target MCU reset via C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe (exit code 0).
+[08:53:01] [serial] Connecting to COM4 at 115200 8N1...
+[08:53:01] [serial] Connected. Waiting for banner (S8)...
+[08:53:01] [m7_gpio_test] T15 phase (a) CM7 solo: corruptions=0 (expected 0)
+[08:53:01] [m7_gpio_test] T15 phase (b) CM4 solo: corruptions=0 (expected 0)
+[08:53:01] [m7_gpio_test] T15 phase (c) concurrent: total_corruptions=43 (CM7=22, CM4=21, overlap CM7=499742, CM4=500000)
+[08:53:01] [m7_gpio_test] T15 VERDICT: PASS
+[08:53:01] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[08:53:01] [m7_gpio_test] GPIO_BENCH v1 idle
+[08:53:01] [m7_gpio_test] Waiting for HOST_REQ to start session...
+[08:53:02] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[08:53:02] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[08:53:02] [net] link up: 100 Mbps full duplex
+[08:53:03] [m4_gpio_test] Rev a72c4bb
+[probe 08:53:03] ad2_set_oe(mask=0x0000, owner=0)
+[probe 08:53:03] ad2_set_oe(mask=0x0000, owner=0)
+[08:53:03] ERROR during selftest execution: ABORT: banner revision mismatch (got a72c4bb, expected d472beb)
+[08:53:03] ================================================================================
+[08:53:03] HOST VERDICT=FAIL
+[08:53:03] ================================================================================
+[probe 08:53:03] gpio_hw_check exit code 1

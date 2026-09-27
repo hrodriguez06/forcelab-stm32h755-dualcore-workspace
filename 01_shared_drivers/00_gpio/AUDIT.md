@@ -138,3 +138,138 @@ Por orden:
 - **Las capturas no se editan.** Cada una es la salida de una sola ejecución, con `Rev` limpio y marcas de tiempo.
 - **Un control que no falla cuando debe invalida su prueba.** Eso incluye los veredictos fijos: un `PASS` que no se calcula es un bloqueante.
 - **Ante una contradicción del plan, se pregunta** (instrucciones §7); no se rodea.
+
+---
+
+## Reauditoría 1 de F0
+
+Sep 27, 2026 · auditor: Claude (el mismo del plan) · commit auditado: `d472beb` (rama `driver/gpio`, rango `9942fd9..d472beb` sobre `ebfc5fa`)
+
+**Veredicto: F0 sigue sin pasar.** Una parte importante está bien hecha y la he verificado en la placa:
+
+- **T15 (B1)** pasa en frío, tras un reset sin tocar SRAM4 y con el bloque envenenado, y falla cuando rompo a propósito una comparación.
+- **La referencia T18 (B5)** es cruda y completa.
+- **El host no habilita ninguna salida ni resetea con `OE` ≠ 0** antes de un banner válido (S8, S10).
+- **La imagen de producción** es la de `ca569b6` byte a byte, salvo el hash.
+
+Pero el host todavía no cumple S5 ni S7, y su veredicto puede dar PASS sin que haya pasado nada:
+
+- **B2 sigue abierto:** si el firmware se calla después de arrancar la sesión, el host da `HOST VERDICT=PASS`. Lo he reproducido con el script entregado, sin modificarlo.
+- **B3 sigue abierto:** los timeouts no abortan, los testigos del bus se fabrican a mano en tres sitios, y uno de ellos autoriza una transmisión aunque el anuncio del MCU no haya llegado.
+- **B4 sigue abierto:** T0b(c) da PASS con cualquier `BenchAbort`, incluido un timeout. Un MCU que no conduce nada lo aprueba.
+- **Dos defectos nuevos impiden que la ejecución completa pase:** el host y el firmware no hacen el mismo handshake (R-B1), y el lector de líneas del host pierde y desordena líneas (R-B2).
+
+Falta además el paso 7 de las instrucciones: no hay ninguna ejecución de esta imagen con el AD2 (§4, punto 4). Aun así, el mensaje de entrega dice "implementado y verificado" (M3).
+
+Por la regla A27 no he ejecutado la sesión completa con el AD2 (A18). Sí he ejecutado todo lo que no necesita que el AD2 conduzca; está en la tabla siguiente.
+
+Guía usada: `IMPLEMENTATION_PLAN.md` (en `cf75af6`), `F0_CORRECTION_INSTRUCTIONS.md` (en `ebfc5fa`), el mensaje de entrega y `IMPLEMENTATION_REPORT.md` en `d472beb`, el código y la placa.
+
+### Qué ejecuté yo (reauditoría 1)
+
+Capturas en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/audit_r1_*_d472beb.txt`.
+
+| # | Qué | Resultado |
+| --- | --- | --- |
+| 1 | `py -m unittest test_gpio_hw_check` en `d472beb` | 22/22 OK. Coincide con `gpio_f0_unittest_a72c4bb.txt`. Qué prueban de verdad: B2 y B3, abajo |
+| 2 | Lectura de `git diff ebfc5fa..d472beb`: selftest de CM7 y CM4, `gpio_bench_protocol.h`, `main.c`, `app_main.c`, `gpio_hw_check.py`, `test_gpio_hw_check.py`, `tools/ad2.py`, más `app_log.c` | Hallazgos abajo |
+| 3 | Un arnés mío: `run_selftest()` del script entregado, sin modificar, con un puerto serie guionizado, la `MockDwf` de las pruebas del implementador y un reloj falso. Tres escenarios | **(A)** El firmware imprime el banner y `T15 VERDICT: FAIL`, y luego se calla: `HOST VERDICT=PASS`, código de salida 0. **(B)** El resultado de T0b(b), el anuncio de T0b(c) y `BUSCHK up` llegan en una sola lectura del puerto: T0b(b) da FAIL tras 10 s de espera, T0b(c) da "PASSED" por timeout y `BUSCHK up` se procesa después. **(C)** Se anuncia T0b(c) y el MCU no conduce ni imprime nada más: T0b(c) "PASSED" y `HOST VERDICT=PASS`. Captura: `audit_r1_host_sim_d472beb.txt` |
+| 4 | Imagen `selftest-gpio` compilada por mí en `d472beb` (limpia, `Rev d472beb`), flasheada con el AD2 cerrado (S2). Bloque de 256 B en `0x3800A000` puesto a cero por SWD, reset y 30 s de consola, con el bloque volcado antes y después | T15: (a) 0 corrupciones, (b) 0, (c) 40, con solapamiento de 499 773 en CM7 y 500 000 en CM4. `T15 VERDICT: PASS` y `CM4 VERDICT=PASS`. `session_id` nuevo. Captura: `audit_r1_t15_zero` |
+| 5 | Reset sin tocar SRAM4, con los flags de la ejecución 4 todavía en el bloque | (c) 36; solapamiento 499 710 y 500 000; PASS en los dos núcleos; otro `session_id`. Captura: `audit_r1_t15_warm` |
+| 6 | Bloque envenenado por SWD (la palabra *n* vale *n* + 1: `go_signal` = 4, `cm4_ready` = 3, `cm4_done` = 27, `cm4_all_passed` = 28…) y reset | (c) 51; PASS en los dos núcleos; el bloque queda coherente. Captura: `audit_r1_t15_poison` |
+| 7 | Mutación mía para B2: en la fase (b) de CM4, `readback != val` pasa a `readback == val`. Imagen `d472beb-dirty` | (b) 50 000 corrupciones, `T15 VERDICT: FAIL`, `CM4 VERDICT=FAIL`. El diff y la consola en `audit_r1_b2_mutation`. El fuente está restaurado |
+| 8 | B3 en la placa. El script entregado corre dentro de un envoltorio mío que registra cada `ad2_set_oe` y cada reset, con el `OE` leído en ese momento. Primera prueba: contra la imagen `-dirty` de #7 | `ABORT: banner revision is dirty`. `OE` = 0x0000 en todas las escrituras, y 0x0000 al resetear. Captura: `audit_r1_b3_dirty` |
+| 9 | Lo mismo, contra la imagen de producción (`debug`, `d472beb`) | `ABORT: banner missing or invalid within 15 seconds`; `OE` siempre 0. Captura: `audit_r1_b3_production` |
+| 10 | Lo mismo, contra una `selftest-gpio` que compilé en `a72c4bb` | `ABORT: banner revision mismatch (got a72c4bb, expected d472beb)`; `OE` siempre 0. Captura: `audit_r1_b3_othercommit`. En #8, #9 y #10 la primera línea que ve el host es `T15 phase (a)`: pierde el banner de CM7, y el hash que valida es el de `[m4_gpio_test] Rev …` (B3 d) |
+| 11 | Producción (`debug`) de `d472beb` y de `ca569b6` compiladas en la misma ruta (worktree temporal, ya borrado) y comparadas byte a byte | CM4: idénticas (8 936 B). CM7: 89 124 B, con 7 bytes distintos en 0x1257C: `d472beb` frente a `ca569b6`. **Código idéntico** |
+| 12 | Las cuatro capturas de T18 | Salida cruda, sin cabeceras. 300 `[DSO OSCILLOGRAM]` con `Seq` estrictamente creciente. Burst 100/100. En la consola, `rx_nobuf = tx_nobuf = dma_err = 0`. En el volcado SWD, `m7_adc_lock_fail_count` y `m4_adc_lock_fail_count` (0x380084E8 y 0x380084EC, direcciones comprobadas con gdb sobre el ELF) valen 0 |
+| 13 | El UM2408 sobre PA8 (`pdftotext`) | "PA8 = D6/USB_SOF/MCO1", en TP4. No hay "lógica de alimentación del USB" (M3) |
+| 14 | `tools/build_all.ps1 -Clean` en `d472beb` | 8/8 PASS. `prj_04` debug: CM7 text 88 956 B (8 B más que mi build de #9, compilada en otra carpeta: la ruta de `__FILE__`, N3), CM4 8 908 B. Release: CM7 85 044 B, CM4 8 476 B |
+
+La placa quedó con `prj_04` **debug** de `d472beb` flasheado y el AD2 cerrado (S2).
+
+### Estado de los hallazgos de F0
+
+| ID | Estado | Por qué |
+| --- | --- | --- |
+| B1 | **Cerrado** | #4–#7. El bloque se inicializa antes de liberar CPU2 (`CM7 main.c:212-220`). Las esperas son de 5 s medidos con `CYCCNT`. PF10 y PF11 están en entrada antes de empezar. Hay tres fases, con el solapamiento medido en los dos núcleos. Y el veredicto falla cuando tiene que fallar. Queda R-m1 |
+| B2 | **Abierto** | En el firmware está hecho: CM4 y T15 se calculan (#7), y T0a AD2→MCU compara la palabra entera (`CM7 gpio_selftest.c:833`). En el host no: **(a)** el veredicto final no exige nada. Ni el `VERDICT` del firmware, ni la secuencia completa de pasos, ni `T15 VERDICT`, ni el contenido de `CM4 VERDICT=`. El bucle sale a los 120 s con `all_passed` como estaba (`gpio_hw_check.py:494`, `:765`); es #3 (A). **(b)** La prueba de sueltas compara DIO0–DIO7 (`:562-576`), no las 13 líneas. **(c)** El firmware imprime `PASS` en pruebas que no mide y las mete en su `VERDICT` global: `T0a_loose` (`CM7 gpio_selftest.c:628`), MCU→AD2 (`:777`) y scope (`:905`). **(d)** Las pruebas unitarias de B2 comparan literales (`assertNotIn("OK", "…FAIL")`) y no llaman al código del script |
+| B3 | **Abierto** | Se cumplen S8 (ninguna salida antes del banner: #8–#10), S10 (`reset_mcu_safe`: #8–#10 y la prueba unitaria), `s5_verify_released` y la tabla de pasos con expresión regular. No se cumple lo siguiente. **(a) S7: los timeouts no abortan.** `wait_mcu_ack` sin mirar el resultado en `:487`, `:676`, `:682`, `:709` y `:711`; `pulse_host_req()` sin mirarlo en 12 sitios; `wait_for_line` sin mirarlo en `:562`, `:695` y en el scope. **(b) S5: los testigos se fabrican a mano.** `token = BusToken(...)` en `:659`, `:687` y `:696`. `drive_bus` acepta cualquier `BusToken`, y el paso lo pone quien llama. En `:695-697` el host conduce 0xFF aunque no haya llegado `T0a_ad2 analog control ready`. **(c)** `drive_bus` pasa siempre `GPIO_BENCH_BUS_AD2` (`:123`): el dueño del bus no sale del anuncio validado. **(d) S8:** el banner se reconoce por la subcadena `"Rev "` en cualquier línea (`:420`), y el puerto se abre después del reset (`:361-366`). Por eso se pierde `[m7_gpio_test] Rev` y el hash que se valida es el de CM4 (#8–#10). **(e)** Las pruebas S8b y S7b no prueban el script. S8b copia el parser dentro de la propia prueba; S7b solo comprueba que `wait_mcu_ack` devuelve `False` |
+| B4 | **Abierto** | T0b(c) llama a `s5_verify_released`, que es lo que se pedía. Pero da PASS con **cualquier** `BenchAbort` (`:528-534`), también con el timeout de `BUSCHK up`: es #3 (C). El `OE` se lee una sola vez, al final, no durante todo el paso. Y después del aborto el host da un pulso de `HOST_REQ` que el firmware no espera (`:541`; R-B1) |
+| B5 | **Cerrado** | #11 y #12. Las capturas son de `90327d1`, no del commit entregado. Lo acepto: de `90327d1` a `d472beb` no cambia ningún fuente de firmware (`git diff --stat`), y #11 prueba que la producción es la de `ca569b6` |
+| M1 | **Abierto** (con menos alcance) | CM7 tiene la variable única, la tabla constante y la guarda sin parámetro. Pero T0b(b) escribe `s_current_step_id` directamente seis veces (`CM7 gpio_selftest.c:449-476`), en vez de pasar por `bench_enter_step`, que tenía que ser la única escritura. CM4 no tiene tabla: usa `if` sueltos y escribe `s_current_step_id` a mano (`CM4 gpio_selftest.c:132`). Además permite PE6 en cualquier paso (`:100-103`), cuando en el paso 8 PE6 lo conduce CM7 |
+| M2 | **Cerrado por lectura** | Toda prueba que falla sale por `exit:` con `bench_safe()`, y `bench_claim_pins` valida todos los pines antes de escribir. La T0b(b) ampliada no la he ejecutado (A27) |
+| M3 | **Abierto** | **(a)** El paso 7 no está hecho, y ni el informe ni el mensaje de entrega lo dicen; el mensaje dice "implementado y verificado". **(b)** El informe dice que PA8 está "conectada a MCO1 y a la lógica de alimentación del USB". El UM2408 dice D6/USB_SOF/MCO1 (#13). Y la desviación real de F0 (el paso falso `10U` para reclamar PA8) no se describe. **(c)** Fila B4: "…y señaliza al MCU que ejecuta `bench_safe()`". La prueba citada no hace eso, y se llama `test_b4_t0b_c_negative_control_catches_contention`. **(d)** Fila B1: "cold boot con inicialización a cero", sin captura |
+| m1 | Cerrado | `CM7 gpio_selftest.c:713-727`: se mira el retorno de cada reclamación |
+| m2 | **Abierto** | El `_Static_assert` (`gpio_bench_protocol.h:66`) mide desde 0x38000000. Pero `.shared_ram` empieza en 0x38008000 y el área de HSEM en 0x38009000. Admite un `SharedMemory_t` de hasta 40 KB, cuando el límite real es 4 KB. Y no comprueba el área de HSEM |
+| m3 | Cerrado | `--checklist-confirmed`; sin la opción, sale con código 2 |
+| m4 | Cerrado | `GPIO_SelfTest_Task` con prioridad `tskIDLE_PRIORITY + 1`. En #4–#6 el monitor de IPC sigue imprimiendo |
+| m5 | Cerrado | `gpio_f0_build_6ea9558.txt` (N9) |
+| m6 | Cerrado | `ad2.py` guarda una copia (`_output_val`) y hace lectura-modificación-escritura |
+| m7 | Cerrado | El comentario vuelve a estar |
+
+### Protocolo A1–A27 (reauditoría 1)
+
+| # | Punto | Resultado | Nota |
+| --- | --- | --- | --- |
+| A1–A3, A5, A7 | Catálogo, literales, API, targets, estado | Pasa | `gpio_bm.[ch]` y el CMake del driver no cambian, salvo el comentario de m7 |
+| A16 | Build | **Pasa** | 8/8 en mi ejecución (#14) |
+| A17 | R3: tamaños y binario | **Pasa** | #11 |
+| A18 | Pruebas de la fase, repetidas por mí | **No ejecutado** | Bloqueado por A27. Solo lo que no necesita que el AD2 conduzca (#4–#10) |
+| A19 | R1: controles negativos | **Falla** | T15 sí (#7). T0b(c) no (B4), y el veredicto del host tampoco (B2) |
+| A21 | R2: trazabilidad | Pasa con notas | `Rev` limpio en mis capturas; B3 (d) |
+| A22 | R4: no destructivas | Pasa | PE0 y PE1 no se tocan; T15 solo usa PF10 y PF11 |
+| A23 | Oráculo independiente | **Falla** | B2 (a), (b) y (c) |
+| A26 | Documentación | **Falla** | M3 |
+| A27 | Seguridad eléctrica S1–S10 | **Falla, bloqueante** | S7 y S5 en el host (B3 a, b, c); B4 |
+
+Sobre A27: por lectura del código, **hoy no hay ningún camino con dos conductores a la vez**. El MCU solo conduce el bus en los pasos 4 y 8. El AD2 solo lo conduce en el paso 9, después de un `s5_verify_released` que ha pasado, y el firmware no vuelve a sacar el bus después del paso 8. Pero es lo mismo que en F0: la seguridad depende de que la secuencia salga bien, no de las guardas. Un timeout ignorado o una línea perdida (R-B2) dejan al host actuando sobre un paso que el MCU ya no está ejecutando, y S5 y S7 existen justamente para ese caso.
+
+### Hallazgos nuevos
+
+#### Bloqueantes
+
+| ID | Dónde | Hallazgo | Qué hace falta |
+| --- | --- | --- | --- |
+| R-B1 | `gpio_hw_check.py:519`, `:541`, `:597-611`; `CM7 gpio_selftest.c:422-487`, `:638-680` | **El host y el firmware no hacen el mismo handshake.** Paso 7: el host ve `MCU_ACK` en alto y llama a `pulse_host_req()` (`:603`), que mantiene `HOST_REQ` en alto hasta que `MCU_ACK` baje. El firmware mantiene `MCU_ACK` en alto hasta que `HOST_REQ` baje (`:664-666`). Cada lado espera al otro. A los 10 s el firmware da el timeout, falla la prueba y sale por `bench_safe()`; solo entonces baja `MCU_ACK` y el host sigue. Además, el host da pulsos que el firmware no espera: uno tras T0b(b), que no tiene handshake (`:519`), y otro tras T0b(c), cuyo único handshake ya lo consumió `s5_verify_released` (`:541`). Ese pulso de más lo puede recoger el paso siguiente: el `mcu_handshake` de T0b(c), que entonces suelta el bus antes de que el host lo lea, o la espera de T0b(d), que entonces da "spurious HOST_REQ". Lo digo por lectura del código; la entrega no trae ninguna ejecución con la que contrastarlo | Definir en `gpio_bench_protocol.h`, paso a paso, cuántos handshakes hay y quién sube qué, y que los dos lados sigan esa definición. Una prueba del host contra un modelo del firmware (un arnés como el de #3) que ejecute la secuencia entera |
+| R-B2 | `gpio_hw_check.py:377-392`, `:496-502` | **El lector de líneas pierde y desordena líneas.** `read_next_line` vuelve en cuanto encuentra la línea que busca y descarta el resto de ese trozo. El bucle principal guarda el resto de su propio trozo en una lista local y lo procesa **después** de que el manejador del paso haya leído más datos del puerto. Resultado de #3 (B): un FAIL falso en T0b(b) y un PASS falso en T0b(c). Que llegue más de una línea en una lectura es lo normal: el firmware imprime el resultado de T0b(b), el anuncio de T0b(c) y `BUSCHK up` seguidos, sin handshake entre ellos | Una sola cola de líneas: todo el que lee consume de ella, en orden, y nada se descarta |
+
+#### Menores
+
+| ID | Dónde | Hallazgo |
+| --- | --- | --- |
+| R-m1 | `CM7 gpio_selftest.c:384-397`; `CM4 gpio_selftest.c:263-272` | Cada núcleo pone su `in_loop` a 0 **antes** de publicar sus resultados. El otro núcleo espera ese 0 y lee enseguida, así que puede leer un resultado todavía sin escribir. Como el bloque se pone a cero al arrancar, eso solo produce un FAIL falso, nunca un PASS. Además, las dos esperas ignoran su timeout |
+| R-m2 | `CM7 app_log.c:40-43` | `App_Log` descarta la línea si no consigue el mutex en 100 ms, y la tarea del selftest tiene la prioridad más baja. El protocolo depende de esas líneas (`STEP`, `BUSCHK`, resultados). Una línea perdida tiene que acabar en aborto, nunca en PASS. Hoy, con B4 como está, perder `BUSCHK up` da un PASS en T0b(c) |
+| R-m3 | `CM7 gpio_selftest.c:762` | El control de T0a MCU→AD2 borra el bit 5 de `PUPDR` y quita así el pull-down de PE2 (`HOST_REQ`) durante el resto del paso. La máscara correcta es `0xFFFF3FC0` |
+
+#### Notas
+
+- **N7:** El margen de T15 (c) es pequeño pero real: entre 36 y 51 corrupciones en 500 000 iteraciones, en cuatro ejecuciones (#4, #5, #6 y la de #10). El criterio es > 0 y el control del control da 0. Si un cambio posterior estrecha la ventana, (c) fallará antes de dar un PASS falso.
+- **N8:** `cm7_ready` no lo escribe nadie. Sobra en `GpioSelfTestShared_t` o falta su uso.
+- **N9:** `gpio_f0_build_6ea9558.txt` está en UTF-16, porque salió de un `Tee` de PowerShell. Se lee, pero el resto de capturas están en ASCII. La firma es la de `6ea9558`; después de ese commit solo cambió el comentario de m7.
+- **N10:** El `session_id` cambia en cada arranque (cuatro valores distintos en cuatro arranques: el del flasheo, #4, #5 y #6). Las banderas llevan una sesión de verdad.
+- **N11:** En CM7 hay escrituras directas a `MODER`, `PUPDR` y `ODR` fuera de `bench_claim_*`. Todas ponen pines en entrada, en analógico o con pull; la única salida directa es PE7 (`MCU_ACK`, solo MCU) en `bench_safe()`. Eléctricamente es correcto. A partir de ahora leo la comprobación de A27 como "toda configuración en salida o AF pasa por la guarda".
+
+### Errata de las instrucciones (mía)
+
+- **E6:** `F0_CORRECTION_INSTRUCTIONS.md` §2.1 pedía un testigo **de un solo uso** por paso. En el paso 9 hay 17 transmisiones del bus (8 bits, sus 8 liberaciones y el control), así que la regla obligaba a repetir la prueba S5 en cada una o a fabricar testigos. El implementador hizo lo segundo, en vez de preguntar (§6). Corrijo la regla en ese mismo archivo, en el mismo cambio que este informe. Ahora: el testigo solo lo crea `s5_verify_released`; autoriza todas las transmisiones de su paso; y deja de valer cuando el seguimiento de pasos sale de ese paso o ante cualquier aborto.
+
+### Lo que sí queda confirmado
+
+- **T15 (B1):** en la placa, con la inicialización por sesión, y con un veredicto que puede fallar.
+- **Referencia T18 (B5)** y **paridad de la producción** con `ca569b6` (byte a byte).
+- **S8 y S10 en el host:** con un banner inválido no hay ninguna salida, y el reset se hace con `OE` = 0. Lo he comprobado en tres ejecuciones reales con un registro independiente de cada escritura de `OE`.
+- **La guarda de máscaras `ad2_set_oe`:** sigue siendo el único camino a `OutputEnableSet`.
+- **M2** en el firmware, y los menores m1 y m3–m7.
+
+### Para cerrar F0
+
+Por orden:
+
+1. **R-B1 y R-B2.** Una definición de handshake por paso, compartida por los dos lados, y un lector de líneas con cola. Con una prueba del host contra un modelo del firmware que recorra toda la secuencia, incluidos los tres escenarios de #3.
+2. **B3.** Cada espera que agota el tiempo va a S2 y aborta. Los testigos solo salen de `s5_verify_released`, con la regla de E6. `drive_bus` toma el dueño del bus del paso validado. El banner se valida con `^\[m7_gpio_test\] Rev ([0-9a-f]{7})$`, con el puerto abierto **antes** del reset, y el `Rev` de CM4 tiene que coincidir. S8b y S7b tienen que probar el código del script.
+3. **B4.** T0b(c) solo pasa si el aborto es por el valor leído (el patrón que anuncia el MCU, no 0xFF) y con el `OE` leído 0 en el bus en cada punto del paso. Un timeout es FAIL.
+4. **B2.** `HOST VERDICT=PASS` solo con: la secuencia completa observada, `T15 VERDICT: PASS`, `CM4 VERDICT=PASS`, el `VERDICT` del firmware y cada comparación del host en OK; cualquier timeout es FAIL. Las sueltas comparan las 13 líneas. El firmware no imprime `PASS` en lo que no mide. Y pruebas unitarias que llamen al código del script.
+5. **M1, m2, R-m1, R-m2 y R-m3.**
+6. **M3:** una sección nueva en el informe ("Respuesta a la reauditoría 1") que corrija lo de arriba y diga qué está hecho y qué no.
+7. **El paso 7 de las instrucciones,** con las dos capturas de la sesión completa con el AD2. Luego haré yo la misma ejecución (A18), empezando por T0b.

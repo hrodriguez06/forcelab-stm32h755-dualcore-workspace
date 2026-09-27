@@ -1,0 +1,37 @@
+[08:51:18] ================================================================================
+[08:51:18] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[08:51:18] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[08:51:18] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[08:51:18] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[08:51:18] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[08:51:18] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[08:51:18] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[08:51:18] ================================================================================
+[08:51:18] [host] Expected firmware revision from git: d472beb
+[probe 08:51:19] ad2_set_oe(mask=0x0000, owner=0)
+[08:51:19] [ad2] Opened AD2 (SN 210321B5D38D) in safe state S2 (all inputs). Handle=1
+[08:51:19] [host] S10: Confirmed AD2 in S2 safe state (OE=0x0000). Resetting target MCU...
+[probe 08:51:19] subprocess -c port=SWD mode=HOTPLUG -rst  (OE read-back now: 0x0000)
+[08:51:19] [host] S10: Target MCU reset via C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe (exit code 0).
+[08:51:19] [serial] Connecting to COM4 at 115200 8N1...
+[08:51:19] [serial] Connected. Waiting for banner (S8)...
+[08:51:21] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[08:51:21] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[08:51:21] [net] link up: 100 Mbps full duplex
+[08:51:21] [ipc] m7=4 m4=20  (CPU2 alive)
+[08:51:23] [ipc] m7=8 m4=40  (CPU2 alive)
+[08:51:24] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[08:51:25] [ipc] m7=12 m4=60  (CPU2 alive)
+[08:51:27] [ipc] m7=16 m4=80  (CPU2 alive)
+[08:51:29] [ipc] m7=20 m4=100  (CPU2 alive)
+[08:51:29] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[08:51:31] [ipc] m7=24 m4=120  (CPU2 alive)
+[08:51:33] [ipc] m7=28 m4=140  (CPU2 alive)
+[08:51:34] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[probe 08:51:34] ad2_set_oe(mask=0x0000, owner=0)
+[probe 08:51:34] ad2_set_oe(mask=0x0000, owner=0)
+[08:51:34] ERROR during selftest execution: ABORT: banner missing or invalid within 15 seconds
+[08:51:34] ================================================================================
+[08:51:34] HOST VERDICT=FAIL
+[08:51:34] ================================================================================
+[probe 08:51:34] gpio_hw_check exit code 1

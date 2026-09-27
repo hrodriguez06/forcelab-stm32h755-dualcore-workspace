@@ -1,0 +1,91 @@
+# auditor: gpio_hw_check.run_selftest (d472beb) with scripted serial, simulated dwf.dll (MockDwf of test_gpio_hw_check.py) and a fake clock
+============================== A: firmware silent after session start ==============================
+[t=   0.00] ================================================================================
+[t=   0.00] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[t=   0.00] ================================================================================
+[t=   0.00] [host] Expected firmware revision from git: abc1234
+[t=   0.00] [ad2] Opened AD2 (SN 210321B5D38D) in safe state S2 (all inputs). Handle=1
+[t=   0.00] [sim] reset_mcu_safe called, OE=0x0000
+[t=   0.00] [serial] Connecting to SIM at 115200 8N1...
+[t=   0.00] [serial] Connected. Waiting for banner (S8)...
+[t=   0.20] [m7_gpio_test] Rev abc1234
+[t=   0.20] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[t=   0.20] [m7_gpio_test] T15 VERDICT: FAIL
+[t=   0.20] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[t=   0.20] [m7_gpio_test] GPIO_BENCH v1 idle
+[t=   0.25] [host] S8 banner verified (Rev abc1234, GPIO_BENCH v1).
+[t=   0.25] [ad2] Running T0b(a) host OE guards verification...
+[t=   0.25] [ad2] T0b(a) host OE guards PASSED (prohibited bits and bus owner mismatch rejected).
+[t=   0.25] [host] Handshaking session start with MCU...
+[t=   0.45] [host] Session start synchronized.
+[t= 120.55] ================================================================================
+[t= 120.55] HOST VERDICT=PASS
+[t= 120.55] ================================================================================
+[sim] exit code 0 | OE writes: ['0x0', '0x1000', '0x0', '0x1000', '0x0']
+============================== B: T0b(b)/T0b(c) lines in one chunk ==============================
+[t=   0.00] ================================================================================
+[t=   0.00] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[t=   0.00] ================================================================================
+[t=   0.00] [host] Expected firmware revision from git: abc1234
+[t=   0.00] [ad2] Opened AD2 (SN 210321B5D38D) in safe state S2 (all inputs). Handle=1
+[t=   0.00] [sim] reset_mcu_safe called, OE=0x0000
+[t=   0.00] [serial] Connecting to SIM at 115200 8N1...
+[t=   0.00] [serial] Connected. Waiting for banner (S8)...
+[t=   0.20] [m7_gpio_test] Rev abc1234
+[t=   0.20] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[t=   0.20] [m7_gpio_test] T15 VERDICT: FAIL
+[t=   0.20] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[t=   0.20] [m7_gpio_test] GPIO_BENCH v1 idle
+[t=   0.25] [host] S8 banner verified (Rev abc1234, GPIO_BENCH v1).
+[t=   0.25] [ad2] Running T0b(a) host OE guards verification...
+[t=   0.25] [ad2] T0b(a) host OE guards PASSED (prohibited bits and bus owner mismatch rejected).
+[t=   0.25] [host] Handshaking session start with MCU...
+[t=   0.45] [host] Session start synchronized.
+[t=   0.65] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[t=   0.65] [host] Step 3 validated (bus=NONE, v=1).
+[t=  10.70] [ad2] T0b(b) firmware claim guards FAILED!
+[t=  10.80] [m7_gpio_test] T0b_b guards verification: PASS
+[t=  10.80] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[t=  10.80] [host] Step 4 validated (bus=MCU, v=1).
+[t=  10.80] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[t=  20.85] [ad2] ABORT: bus contention check failed at 4: timeout waiting for BUSCHK up
+[t=  20.85] [ad2] s5_verify_released successfully caught contention: ABORT: bus contention check failed at 4: timeout waiting for BUSCHK up
+[t=  20.85] [ad2] T0b(c) S5 negative control PASSED (BenchAbort raised, OE bus remained 0x00).
+[t=  20.95] [m7_gpio_test] BUSCHK up
+[t= 120.55] ================================================================================
+[t= 120.55] HOST VERDICT=FAIL
+[t= 120.55] ================================================================================
+[sim] exit code 1 | OE writes: ['0x0', '0x1000', '0x0', '0x1000', '0x0', '0x1000', '0x0']
+============================== C: T0b(c) with no BUSCHK up ==============================
+[t=   0.00] ================================================================================
+[t=   0.00] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[t=   0.00] ================================================================================
+[t=   0.00] [host] Expected firmware revision from git: abc1234
+[t=   0.00] [ad2] Opened AD2 (SN 210321B5D38D) in safe state S2 (all inputs). Handle=1
+[t=   0.00] [sim] reset_mcu_safe called, OE=0x0000
+[t=   0.00] [serial] Connecting to SIM at 115200 8N1...
+[t=   0.00] [serial] Connected. Waiting for banner (S8)...
+[t=   0.20] [m7_gpio_test] Rev abc1234
+[t=   0.20] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[t=   0.20] [m7_gpio_test] T15 VERDICT: FAIL
+[t=   0.20] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[t=   0.20] [m7_gpio_test] GPIO_BENCH v1 idle
+[t=   0.25] [host] S8 banner verified (Rev abc1234, GPIO_BENCH v1).
+[t=   0.25] [ad2] Running T0b(a) host OE guards verification...
+[t=   0.25] [ad2] T0b(a) host OE guards PASSED (prohibited bits and bus owner mismatch rejected).
+[t=   0.25] [host] Handshaking session start with MCU...
+[t=   0.45] [host] Session start synchronized.
+[t=   0.65] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[t=   0.65] [host] Step 3 validated (bus=NONE, v=1).
+[t=   0.85] [m7_gpio_test] T0b_b guards verification: PASS
+[t=   0.85] [ad2] T0b(b) firmware claim guards PASSED.
+[t=   1.10] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[t=   1.10] [host] Step 4 validated (bus=MCU, v=1).
+[t=   1.10] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[t=  11.15] [ad2] ABORT: bus contention check failed at 4: timeout waiting for BUSCHK up
+[t=  11.15] [ad2] s5_verify_released successfully caught contention: ABORT: bus contention check failed at 4: timeout waiting for BUSCHK up
+[t=  11.15] [ad2] T0b(c) S5 negative control PASSED (BenchAbort raised, OE bus remained 0x00).
+[t= 120.55] ================================================================================
+[t= 120.55] HOST VERDICT=PASS
+[t= 120.55] ================================================================================
+[sim] exit code 0 | OE writes: ['0x0', '0x1000', '0x0', '0x1000', '0x0', '0x1000', '0x0']
