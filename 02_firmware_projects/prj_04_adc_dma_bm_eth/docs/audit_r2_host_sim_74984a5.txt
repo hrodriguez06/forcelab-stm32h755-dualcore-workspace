@@ -1,0 +1,28 @@
+# auditor, re-audit 2: gpio_hw_check.run_selftest (74984a5) with scripted serial, simulated dwf.dll and a fake clock
+## A firmware silent after session start
+[t=  10.17] ERROR during selftest execution: ABORT: Timeout waiting for protocol line matching '^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)'
+[t=  10.17] HOST VERDICT=FAIL
+[sim] exit code 1; simulated time 10.2 s; OE writes ['0x0', '0x1000', '0x0', '0x1000', '0x0', '0x0']
+## B T0b(b)/T0b(c) lines in one chunk, MCU never ACKs
+[t=  10.31] ERROR during selftest execution: ABORT: Timeout in HS_MCU Phase 1 (waiting for MCU_ACK=1)
+[t=  10.31] HOST VERDICT=FAIL
+[sim] exit code 1; simulated time 10.3 s; OE writes ['0x0', '0x1000', '0x0', '0x1000', '0x0', '0x0']
+## C T0b(c) announced, then nothing
+[t=  10.30] ERROR during selftest execution: ABORT: Timeout waiting for protocol line matching '^\[m7_gpio_test\] BUSCHK up drive=(0x[0-9a-fA-F]+)'
+[t=  10.30] HOST VERDICT=FAIL
+[sim] exit code 1; simulated time 10.3 s; OE writes ['0x0', '0x1000', '0x0', '0x1000', '0x0', '0x0']
+
+## D contention inside the delivered fw_model harness
+D: model MCU drives the bus while the AD2 drives it (step 9)
+   [10:30:15] ERROR during selftest execution: ELECTRICAL INVARIANT VIOLATED! Contention on lines 0x00FF (MCU OE=0x20FF, AD2 OE=0x10FF)
+   [10:30:15] HOST VERDICT=FAIL
+  exit code 1; ElectricalContentionError raised 1 time(s) inside run_selftest, none reached the caller
+
+## E s5_verify_released with both bus comparisons replaced by 'if False', then the delivered unit tests
+-    if bus_up != 0xFF:
++    if False:  # AUDIT MUTATION: guard disabled
+-    if bus_down != 0x00:
++    if False:  # AUDIT MUTATION: guard disabled
+Ran 17 tests in 2.349s
+
+OK

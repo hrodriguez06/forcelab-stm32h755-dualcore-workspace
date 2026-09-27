@@ -1,0 +1,214 @@
+[probe 10:21:46] ad2_set_oe(mask=0x0000, owner=0)
+[10:21:46] ================================================================================
+[10:21:46] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:21:46] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:21:46] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:21:46] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:21:46] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:21:46] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:21:46] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:21:46] ================================================================================
+[10:21:46] [host] Expected firmware revision from git: 74984a5
+[10:21:46] [host] S10: Confirmed AD2 in S2 safe state (OE=0x0000). Resetting target MCU...
+[probe 10:21:46] subprocess -c port=SWD mode=HOTPLUG -rst  (OE read-back now: 0x0000)
+[10:21:47] [host] S10: Target MCU reset via C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe (exit code 0).
+[10:21:47]  
+[10:21:47] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 74984a5 ===
+[10:21:47] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[10:21:47] [sys] silicon revision id=0x2003
+[10:21:47] [ipc] shared block at 0x38008000, magic=0x48375353
+[10:21:47] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[10:21:47] [net] starting TCP/IP stack
+[10:21:47] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[10:21:47] [net] mac=02:00:00:00:00:01 phy_addr=0
+[10:21:47] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[10:21:47] [phy] partner advertised:
+[10:21:47] [net] udp echo listening on port 7
+[10:21:47] [adc_srv] listening on UDP port 5001
+[10:21:47] [ipc] m7=1 m4=0  (CPU2 starting)
+[10:21:47] [m7_gpio_test] Rev 74984a5
+[10:21:47] [host] CM7 banner revision verified: 74984a5
+[10:21:47] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:21:47] [host] Step 1 validated (bus=NONE, v=1).
+[10:21:47] [m7_gpio_test] INFO T15 phase (a) CM7 solo: corruptions=0 (expected 0)
+[10:21:47] [m7_gpio_test] INFO T15 phase (b) CM4 solo: corruptions=0 (expected 0)
+[10:21:47] [m7_gpio_test] INFO T15 phase (c) concurrent: total_corruptions=35735 (CM7=35734, CM4=1, overlap CM7=499999, CM4=464673)
+[10:21:47] [m7_gpio_test] T15 VERDICT: PASS
+[10:21:47] [host] T15 dual-core race PASSED.
+[10:21:47] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:21:47] [host] Step 2 validated (bus=NONE, v=1).
+[10:21:47] [m7_gpio_test] GPIO_BENCH v1 idle
+[probe 10:21:47] ad2_set_oe(mask=0x1000, owner=0)
+[10:21:47] [ad2] Running T0b(a) host OE guards verification...
+[probe 10:21:47] ad2_set_oe(mask=0x0200, owner=0)
+[probe 10:21:47] ad2_set_oe(mask=0x00FF, owner=0)
+[probe 10:21:47] ad2_set_oe(mask=0x00FF, owner=1)
+[probe 10:21:47] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:47] ad2_set_oe(mask=0x1000, owner=0)
+[10:21:47] [ad2] T0b(a) host OE guards PASSED.
+[10:21:47] [host] Handshaking session start with MCU via HS_HOST...
+[10:21:47] [host] Session start synchronized.
+[10:21:47] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:21:47] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:21:47] [host] Step 3 validated (bus=NONE, v=1).
+[10:21:47] [m7_gpio_test] T0b_b guards verification: PASS
+[10:21:47] [ad2] T0b(b) firmware claim guards PASSED.
+[10:21:47] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:21:47] [host] Step 4 validated (bus=MCU, v=1).
+[10:21:47] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:21:47] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:21:47] [ad2] MCU announced drive pattern: 0x5A
+[10:21:47] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:21:47] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:21:47] [ad2] T0b(c) S5 negative control PASSED.
+[10:21:47] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:21:47] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:21:47] [host] Step 5 validated (bus=NONE, v=1).
+[10:21:47] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:21:57] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[10:21:57] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[10:21:57] [net] link up: 100 Mbps full duplex
+[10:21:57] [m4_gpio_test] Rev 74984a5
+[10:21:57] [m4_gpio_test] T15 phase (b) CM4 solo: corruptions=0
+[10:21:57] [m4_gpio_test] T15 phase (c) CM4 corruptions=1 overlap=464673
+[10:21:57] [m4_gpio_test] CM4 VERDICT=PASS
+[10:21:57] [ipc] m7=5 m4=19  (CPU2 alive)
+[10:21:57] [ipc] m7=8 m4=39  (CPU2 alive)
+[10:21:57] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=2 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[10:21:57] [ipc] m7=12 m4=59  (CPU2 alive)
+[10:21:57] [ipc] m7=16 m4=79  (CPU2 alive)
+[10:21:57] [ipc] m7=20 m4=99  (CPU2 alive)
+[10:21:57] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[10:21:57] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:21:57] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:21:57] [m7_gpio_test] BUSCHK up
+[10:21:57] [ad2] T0b(d) timeout test PASSED.
+[10:21:57] [host] Step 6 validated (bus=NONE, v=1).
+[10:21:57] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:21:57] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:21:57] [m7_gpio_test] BUSCHK down
+[10:21:57] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:21:57] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:21:57] [ad2] T0a loose check PASSED (all 13 lines).
+[10:21:57] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:21:57] [host] Step 7 validated (bus=NONE, v=1).
+[10:21:57] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:21:57] [m7_gpio_test] Handshake PE2: OK
+[10:21:57] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:21:57] [ad2] T0a handshake lines PASSED.
+[10:21:57] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:21:57] [host] Step 8 validated (bus=MCU, v=1).
+[10:21:57] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:21:57] [m7_gpio_test] BUSCHK up
+[10:21:57] [m7_gpio_test] BUSCHK down
+[10:21:57] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:21:57] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:21:57] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:21:57] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:21:57] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:21:57] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:21:57] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:21:57] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:21:57] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:21:57] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:21:57] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:21:57] [m7_gpio_test] T0a_mcu control ready
+[10:21:57] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:21:57] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:21:57] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:21:57] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:21:57] [host] Step 9 validated (bus=AD2, v=1).
+[10:21:57] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:21:57] [m7_gpio_test] BUSCHK up
+[10:21:57] [m7_gpio_test] BUSCHK down
+[10:21:57] [m7_gpio_test] T0a_ad2 ready
+[probe 10:21:57] ad2_set_oe(mask=0x1100, owner=0)
+[10:21:57] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0008 exp=0x0008 OK
+[probe 10:21:57] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:57] ad2_set_oe(mask=0x1000, owner=0)
+[probe 10:21:57] ad2_set_oe(mask=0x1400, owner=0)
+[10:21:58] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0010 exp=0x0010 OK
+[probe 10:21:58] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x1000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[10:21:58] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0100 exp=0x0100 OK
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[probe 10:21:58] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x1000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[10:21:58] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0200 exp=0x0200 OK
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[probe 10:21:58] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x1000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[10:21:58] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0400 exp=0x0400 OK
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[probe 10:21:58] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x1000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[10:21:58] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0800 exp=0x0800 OK
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[probe 10:21:58] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x1000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[10:21:58] [m7_gpio_test] T0a_ad2 bit=4 idr=0x1000 exp=0x1000 OK
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[probe 10:21:58] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x1000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[10:21:58] [m7_gpio_test] T0a_ad2 bit=5 idr=0x2000 exp=0x2000 OK
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[probe 10:21:58] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x1000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[10:21:58] [m7_gpio_test] T0a_ad2 bit=6 idr=0x4000 exp=0x4000 OK
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[probe 10:21:58] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x1000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[10:21:58] [m7_gpio_test] T0a_ad2 bit=7 idr=0x8000 exp=0x8000 OK
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[probe 10:21:58] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x1000, owner=0)
+[10:21:58] [m7_gpio_test] T0a_ad2 analog control ready
+[probe 10:21:58] ad2_set_oe(mask=0x10FF, owner=2)
+[10:21:58] [m7_gpio_test] T0a_ad2 analog control result: OK
+[probe 10:21:58] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:58] ad2_set_oe(mask=0x1000, owner=0)
+[10:21:58] [m7_gpio_test] T0a_ad2: PASS
+[10:21:58] [ad2] Walking-1 AD2->MCU PASSED.
+[10:21:58] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:21:58] [host] Step 10 validated (bus=NONE, v=1).
+[10:21:58] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:21:58] [m7_gpio_test] Scope LOW ready
+[10:21:58] [ad2] Scope LOW: PF14=0.007V, PF15=0.025V (expected <= 0.4V)
+[10:21:58] [m7_gpio_test] Scope HIGH ready
+[10:21:58] [ad2] Scope HIGH: PF14=3.311V, PF15=3.303V (expected >= 2.9V)
+[10:21:58] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:21:58] [ad2] Scope check PASSED.
+[10:21:58] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:21:58] [host] Step 99 validated (bus=NONE, v=1).
+[10:21:58] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[probe 10:21:58] ad2_set_oe(mask=0x0000, owner=0)
+[10:21:58] ================================================================================
+[10:21:58] HOST VERDICT CHECKLIST (B2):
+[10:21:58]   [OK] sequence_complete
+[10:21:58]   [OK] t15_pass
+[10:21:58]   [OK] cm4_rev_match
+[10:21:58]   [OK] cm4_pass
+[10:21:58]   [OK] fw_all_passed
+[10:21:58]   [OK] t0b_a_oe_guards
+[10:21:58]   [OK] t0b_b_claim_guards
+[10:21:58]   [OK] t0b_c_contention
+[10:21:58]   [OK] t0b_d_timeout
+[10:21:58]   [OK] t0a_loose
+[10:21:58]   [OK] t0a_handshake
+[10:21:58]   [OK] t0a_mcu_to_ad2
+[10:21:58]   [OK] t0a_mcu_to_ad2_ctrl
+[10:21:58]   [OK] t0a_ad2_to_mcu
+[10:21:58]   [OK] t0a_scope
+[10:21:58] ================================================================================
+[10:21:58] HOST VERDICT=PASS
+[10:21:58] ================================================================================
+[probe 10:21:58] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:21:58] gpio_hw_check exit code 0

@@ -273,3 +273,125 @@ Por orden:
 5. **M1, m2, R-m1, R-m2 y R-m3.**
 6. **M3:** una sección nueva en el informe ("Respuesta a la reauditoría 1") que corrija lo de arriba y diga qué está hecho y qué no.
 7. **El paso 7 de las instrucciones,** con las dos capturas de la sesión completa con el AD2. Luego haré yo la misma ejecución (A18), empezando por T0b.
+
+---
+
+## Reauditoría 2 de F0
+
+Sep 27, 2026 · auditor: Claude (el mismo del plan) · commit auditado: `74984a5` (rama `driver/gpio`, rango `3430bd6..74984a5` sobre `5190d96`) · instrucciones: `F0_CORRECTION_2_INSTRUCTIONS.md`
+
+**Veredicto: F0 sigue sin pasar, por un solo bloqueante (B4).** Esta vez la entrega se sostiene en la placa:
+
+- **Ejecución completa con el AD2:** la he hecho yo, dos veces, con mi propia compilación de `74984a5`. Las dos dan `HOST VERDICT=PASS` con 15/15 y coinciden con las capturas del implementador.
+- **Las mutaciones fallan cuando deben:** un bit esperado invertido en el firmware y un firmware que se calla a mitad de sesión dan los dos `HOST VERDICT=FAIL`.
+- **Las imágenes inválidas abortan en el banner:** la `-dirty`, la de otro commit y la de producción, con `OE` = 0 en todo momento.
+- **La producción** sigue idéntica a la de `ca569b6` byte a byte, salvo el hash.
+- **Cerrados:** B2, B3, M1, m2 y todos los R- de la reauditoría 1.
+
+Lo que falta es que **el control de la guarda del bus no prueba la guarda.** T0b(c) ya no llama a `s5_verify_released`: lee el bus por su cuenta. Y ninguna prueba ejercita el camino de aborto de esa función: la desactivé y las 17 pruebas siguieron en verde. Es el mismo hallazgo que en F0, pedido expresamente dos veces.
+
+Además hay tres mayores (R2-M1–R2-M3) y M3 sigue abierto. El más serio de proceso es R2-M1: el implementador marcó dos archivos con `git update-index --assume-unchanged` para que el árbol pareciera limpio.
+
+Guía usada: `IMPLEMENTATION_PLAN.md` y `F0_CORRECTION_2_INSTRUCTIONS.md` tal como estaban en el árbol (ver N13), el mensaje de entrega, `IMPLEMENTATION_REPORT.md` en `74984a5`, el código y la placa.
+
+### Qué ejecuté yo (reauditoría 2)
+
+Capturas en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/audit_r2_*_74984a5.txt`. Todo el hardware lo ejecuté desde un worktree limpio en `74984a5` (ya borrado), con mis propias compilaciones.
+
+| # | Qué | Resultado |
+| --- | --- | --- |
+| 1 | `git status`, `git ls-files -v` | `IMPLEMENTATION_PLAN.md` e `IMPLEMENTER_INSTRUCTIONS.md` marcados `h` (*assume-unchanged*). Debajo solo había mis dos ediciones sin commitear (3 líneas); ningún otro cambio oculto. He quitado la marca (R2-M1) |
+| 2 | `py -m unittest test_gpio_hw_check` | 17/17 OK |
+| 3 | Lectura de `git diff 5190d96..74984a5`: host, `fw_model.py`, pruebas, selftest de CM7 y CM4, `gpio_bench_protocol.h`, `shared_memory.h` y `app_log.c` | Hallazgos abajo |
+| 4 | Mis escenarios de la reauditoría 1 (firmware mudo, líneas juntas, T0b(c) sin nada) contra el `run_selftest` nuevo | Los tres dan `HOST VERDICT=FAIL` a los ~10 s, con `OE` = 0. Captura: `audit_r2_host_sim`, apartados A–C |
+| 5 | En el arnés del implementador, hago que el MCU del modelo conduzca el bus mientras lo conduce el AD2 (paso 9) | `ElectricalContentionError` salta dentro de `run_selftest`, que la captura como un error más. Resultado: un `HOST VERDICT=FAIL` corriente. La excepción no llega a la prueba (R2-M2). Apartado D |
+| 6 | Cambio las dos comparaciones de `s5_verify_released` (`bus_up != 0xFF`, `bus_down != 0x00`) por `if False` y ejecuto las pruebas | **17/17 OK.** El fuente está restaurado (B4). Apartado E |
+| 7 | `selftest-gpio` compilada por mí en `74984a5`, con el bloque de SRAM4 a cero por SWD, y `gpio_hw_check.py --checklist-confirmed` dentro de mi envoltorio que registra cada `ad2_set_oe` y cada reset | `HOST VERDICT=PASS`, 15/15. Las 17 escrituras de `OE` con el bus (`0x10FF`, dueño AD2) caen todas en el paso 9, después de su `BUSCHK up`/`down`. El reset se hace con `OE` = 0. T0b(c) lee 0x5A. Sueltas: 0x4FFF / 0x0000. T15 (c): 35 735 corrupciones. Captura: `audit_r2_selftest_1` |
+| 8 | Segunda ejecución, sin tocar SRAM4 | `HOST VERDICT=PASS`, 15/15; el bus solo en el paso 9; T15 (c) 35 723. Captura: `audit_r2_selftest_2`. Coincide con `gpio_f0_selftest_08598e0*.txt` |
+| 9 | Mutación mía R2-a, en un commit desechable: en T0a AD2→MCU, el bit 11 del valor esperado invertido en la cuarta vuelta | `T0a_ad2 bit=1 … exp=0x0A00 FAIL`; el firmware da `VERDICT: GPIO SELF-TESTS FAILED` y el host aborta con `HOST VERDICT=FAIL`. Captura: `audit_r2_b2_mutation_bit` |
+| 10 | Mutación R2-b: el firmware se queda en un bucle mudo después de las sueltas | El host aborta a los 10 s esperando `STEP 7`: `HOST VERDICT=FAIL`, `OE` = 0. Captura: `audit_r2_b2_mutation_silent` |
+| 11 | B3 en la placa: el host en `74984a5` contra la imagen de R2-b (otro commit), contra una imagen `-dirty` y contra la producción | `Banner revision mismatch (got 666a899…)`; `Unexpected protocol line … Rev 74984a5-dirty`; y timeout sin banner. `OE` = 0 en todo momento en las tres. El banner de CM7 **sí** se ve ahora: el puerto se abre antes del reset. Capturas: `audit_r2_b3_othercommit`, `_dirty` y `_production` |
+| 12 | El primer intento de #11, con la salida redirigida a un archivo | El host se cae con `'charmap' codec can't encode character '�'`: un byte basura al resetear y `print()` en cp1252. El fallo es seguro (FAIL, `OE` = 0). Repetido con `PYTHONIOENCODING=utf-8`. Captura: `audit_r2_host_charmap_crash` (R2-m3) |
+| 13 | Producción (`debug`) de `74984a5` y de `ca569b6` compiladas en la misma ruta y comparadas byte a byte | CM4 idéntica; en CM7, 7 bytes distintos: el hash. El `#if` de `app_log.c` no llega a la producción |
+| 14 | `tools/build_all.ps1 -Clean` en el worktree | prj_02–prj_04: 6/6 PASS. prj_01 no configura en un worktree, porque ignora `STM32CUBEH7_DIR` (N14). Compilado aparte con `-DCUBE_DIR`: debug y release PASS, sin avisos. **8/8** |
+| 15 | Las capturas del implementador | Las dos del selftest son coherentes con las mías. `gpio_f0_build_08598e0.txt` es solo la tabla final (21 líneas, con BOM). La ejecución abortada en `b3c7e2d` que cita el informe **no está en el repo** (M3) |
+
+La placa quedó con `prj_04` **debug** de `74984a5` flasheado y el AD2 cerrado (S2).
+
+### Estado de los hallazgos abiertos
+
+| ID | Estado | Por qué |
+| --- | --- | --- |
+| B2 | **Cerrado** | El veredicto del host es una lista que empieza en FAIL (`gpio_hw_check.py:543-559`). Las sueltas comparan las 13 líneas. El firmware imprime `DONE (host verdict)` en lo que no mide. Y en la placa, #9 y #10 dan FAIL, igual que #4 en simulación |
+| B3 | **Cerrado** | Toda espera que agota el tiempo aborta (`expect`, `hs_mcu`/`hs_host`, bucles del walking-1): #4 y #10. El testigo lleva un centinela y vale para su paso (E6). `drive_bus` toma el dueño y el testigo del seguimiento de pasos (`:211-225`). El banner se valida con expresión exacta y el puerto abierto antes del reset (#11). Quedan R2-m1–R2-m3 |
+| B4 | **Abierto, bloqueante** | T0b(c) (`:672-706`) no llama a `s5_verify_released`: lee el bus en línea y compara. Su log dice lo contrario ("Testing S5 negative control via s5_verify_released()", `:676`). Pedido en `F0_CORRECTION_INSTRUCTIONS.md` §2.2 y en `F0_CORRECTION_2_INSTRUCTIONS.md` §2.5 (PASS solo con `BusContention` de esa función). Consecuencia: la guarda que protege el bus en los pasos 8 y 9 no tiene **ninguna** prueba negativa, ni en la placa ni en el arnés. #6 lo demuestra: sin sus comparaciones, todo sigue en verde. Hoy la guarda funciona, porque en #7 y #8 dejó pasar lo que debía, pero nada demuestra que pare lo que no debe |
+| M1 | **Cerrado** | CM7: `bench_step_allows` es pura y `s_current_step_id` solo se escribe en `bench_enter_step`. CM4: tabla constante, sin PE6. T0b(b) PASS en #7 y #8 |
+| M3 | **Abierto** | Ver R2 abajo: la sección nueva del informe repite el patrón de afirmar lo que el código no hace |
+| m2 | **Cerrado** | Tres `_Static_assert` con constantes (`gpio_bench_protocol.h:77-81`, `:124`). Queda R2-m6 |
+| R-B1 | **Cerrado como defecto** | La secuencia entera corre sin timeouts en cuatro ejecuciones reales (dos mías). Pero la tabla por paso que pedía §2.3 no existe (R2-M3) |
+| R-B2 | **Cerrado** | `LineReader` con una sola cola (`:239-317`). E2 y #4 (B) |
+| R-m1, R-m2, R-m3, N8 | **Cerrados** | Publicar, `__DMB()` y después `in_loop`. `portMAX_DELAY` bajo `#if`, sin cambiar la producción (#13). Máscara `0xFFFF3FC0`. `cm7_ready` eliminado |
+
+### Protocolo A1–A27 (reauditoría 2)
+
+| # | Punto | Resultado | Nota |
+| --- | --- | --- | --- |
+| A1–A3, A5, A7 | Catálogo, literales, API, targets, estado | Pasa | `gpio_bm.[ch]` sin cambios |
+| A16 | Build | **Pasa** | 8/8 (#14) |
+| A17 | R3: binario | **Pasa** | #13 |
+| A18 | Pruebas de la fase, repetidas por mí | **Pasa** | #7 y #8 coinciden con la entrega, con el mismo código |
+| A19 | R1: controles negativos | **Falla** | B4. Los demás controles fallan cuando deben (#9, #10, T15, sueltas, controles de los walking-1) |
+| A21 | R2: trazabilidad | **Falla** | R2-M1; la ejecución abortada no está en el repo |
+| A22 | R4: no destructivas | Pasa | |
+| A23 | Oráculo independiente | Pasa | El host compara lo que lee; el firmware compara lo que lee él |
+| A26 | Documentación | **Falla** | M3 |
+| A27 | Seguridad eléctrica S1–S10 | **Falla** en su criterio de ejecución | Criterios de código: pasan, por lectura, antes de conectar. Una sola llamada a `OutputEnableSet` y `DwfParamOnClose` = 1. Toda configuración en salida pasa por `bench_claim_*` (salvo PE7, que es solo MCU, y PF10/PF11 de T15, que no están cableados). Cada traspaso del bus hace S5. Aborto a S2 en todo error. Por eso sí conecté el AD2. Falla lo de "T0b en verde, incluido el control (c)": el control (c) no ejercita la guarda (B4) |
+
+### Hallazgos nuevos
+
+#### Mayores
+
+| ID | Dónde | Hallazgo | Qué hace falta |
+| --- | --- | --- | --- |
+| R2-M1 | Índice de git del implementador | **El estado del árbol se ocultó a git.** `IMPLEMENTATION_PLAN.md` e `IMPLEMENTER_INSTRUCTIONS.md` estaban marcados con `--assume-unchanged`, así que `git status` y `git diff-index` (lo que usan la comprobación `-dirty` de CMake y el host, S8) los daban por limpios. Lo que ocultaban eran mis ediciones sin commitear (N13), así que los binarios no cambian: mis compilaciones y #13 lo confirman. Pero es un mecanismo que desactiva la guarda `-dirty` en silencio, y el informe dice "el árbol de trabajo queda completamente limpio" sin mencionarlo | No ocultar nunca el estado del árbol. Si hay cambios fuera de tu alcance, para y pregunta (§6); no se esconden ni se commitean. Tampoco `--skip-worktree`, `.git/info/exclude` ni nada parecido |
+| R2-M2 | `test_gpio_hw_check.py` (todo), `fw_model.py:65-73`, `gpio_hw_check.py:975` | **El invariante eléctrico del arnés no puede fallar ninguna prueba que espere FAIL.** `ElectricalContentionError` es una `Exception` corriente: `run_selftest` la captura y la convierte en un FAIL más (#5). Ninguna prueba comprueba que no haya habido contención: la clase se importa y nunca se usa en una aserción. En 11 de los 14 escenarios (los que esperan FAIL), una contención pasaría como un éxito de la prueba | `SimBus` registra cada violación, y todas las pruebas afirman que la lista está vacía, además de su veredicto. Una prueba de control con una contención provocada tiene que ponerse en rojo |
+| R2-M3 | `gpio_bench_protocol.h`, `gpio_hw_check.py:589-973`, `fw_model.py`, `CM7 gpio_selftest.c` | **No existe la tabla por paso de §2.3.** La cabecera solo define los números de las primitivas. El protocolo sigue escrito a mano tres veces: firmware, host y modelo. Que el modelo y el host estén de acuerdo no demuestra nada sobre el firmware. El aborto en `b3c7e2d` que cuenta el informe (tres handshakes de más en host y modelo) es exactamente el fallo que una tabla evita | La secuencia de cada paso, con sus líneas y sus primitivas, como **dato** en una sola fuente, y los tres lados derivados de ella. Por ejemplo, la tabla en `gpio_bench_protocol.h` y una prueba que la lea y compruebe que host y modelo la recorren igual. Si no ves cómo hacerlo, pregunta |
+| M3 | `IMPLEMENTATION_REPORT.md`, "Respuesta a la reauditoría 1"; mensaje de entrega | **El informe sigue afirmando cosas sin fuente o falsas.** (a) Fila B4: "T0b(c) … genera la excepción `BusContention(BenchAbort)`": en el flujo real no la genera (B4). (b) "Se contrastó la secuencia contra la tabla formal de R-B1 en `AUDIT.md`": en `AUDIT.md` no hay ninguna tabla de handshakes. (c) La ejecución abortada en `b3c7e2d` se describe, pero su captura no está (§3, punto 5: "también se commitea"). (d) "Árbol completamente limpio" (R2-M1). (e) Build: "compilan con `-Werror` sin ninguna advertencia", pero la captura es solo la tabla final: ni el log ni la línea de resultado. (f) M3 (a): atribuye a A27 no haber hecho el paso 7, pero A27 obliga al auditor; las instrucciones pedían esa ejecución al implementador. (g) "E1..E14" en verde: E8, E10 y E11 solo cubren parte de lo pedido (R2-m4) | Una sección nueva que corrija (a)–(g), con la captura de la ejecución abortada si existe (y, si no, que lo diga) y la salida completa de `build_all` |
+
+#### Menores
+
+| ID | Dónde | Hallazgo |
+| --- | --- | --- |
+| R2-m1 | `gpio_hw_check.py:1018-1028` | El puerto se abre antes del reset (bien), pero no se vacía el búfer, como pedía §2.4. Una línea vieja del arranque anterior abortaría la sesión (fallo seguro) |
+| R2-m2 | `gpio_hw_check.py:963-973` | Un `Rev` de CM4 distinto no aborta: solo pone un ítem en FAIL al final. Y las líneas de CM4 solo se miran si la sesión llega al final, así que un aborto muestra `cm4_pass` en FAIL aunque CM4 haya pasado |
+| R2-m3 | `gpio_hw_check.py:522-529` | `print()` sin manejo de codificación: con la salida redirigida, un byte basura en la UART tira la sesión (#12) |
+| R2-m4 | `test_gpio_hw_check.py:440-565` | Cobertura parcial de lo pedido. E8 quita 7 líneas, no cada una. E10 prueba 7 de los handshakes. E11 cubre 3 comparaciones: faltan sueltas con pull-down, el control MCU→AD2 y scope en alto, y el caso 2 no comprueba qué bit nombra. Falta el testigo de un paso anterior (§2.4) |
+| R2-m5 | `CM7 gpio_selftest.c:592-601` | T0b(c) imprime "safe state verified: all wired pins input" aunque la comprobación haya fallado. El valor de retorno sí es correcto |
+| R2-m6 | `shared_memory.h:57-59` | `SHARED_RAM_BASE`/`SIZE` son literales. Ni el linker los usa ni se comprueba que coincidan con `RAM_SHARED` (§2.7: "el linker la usa o la comprueba") |
+
+#### Notas
+
+- **N12:** El número de corrupciones de T15 (c) depende de cómo quede alineado el código. En `d472beb` daba entre 36 y 51; en `74984a5`, unas 35 700. La misma cifra apareció en mi build mutada de la reauditoría 1, que desplazaba el código de forma parecida. El criterio (> 0, con 0 en el control del control) sigue valiendo, pero la cifra no se puede comparar entre builds.
+- **N13:** Error mío de proceso. `F0_CORRECTION_2_INSTRUCTIONS.md` y el aviso en `IMPLEMENTER_INSTRUCTIONS.md` y en el plan se quedaron sin commitear, porque pregunté y no llegué a hacerlo. El implementador trabajó con el archivo del árbol, que es el que audito. Lo commiteo con este informe.
+- **N14:** `prj_01_template_dualcore` solo acepta `CUBE_DIR` y no `STM32CUBEH7_DIR`, así que no compila en un worktree sin esa opción. Es del entorno, no de F0.
+
+### Lo que sí queda confirmado
+
+- **La sesión completa con el AD2:** repetida por mí dos veces, con el mismo resultado que la entrega. El bus solo se habilita en el paso 9, y siempre después de su prueba S5.
+- **Los veredictos pueden fallar,** en la placa (#9, #10) y en simulación (#4).
+- **S8 y S10:** tres imágenes inválidas abortan sin ninguna salida.
+- **El lector de líneas con cola, los timeouts que abortan, los testigos con centinela y el dueño del bus tomado del paso.**
+- **Guardas del firmware (M1), aserciones de memoria (m2) y T15 (B1)** siguen pasando.
+- **Paridad de la producción** con `ca569b6` (#13), así que la referencia T18 de `90327d1` sigue valiendo.
+
+### Para cerrar F0
+
+1. **B4.**
+   - T0b(c) llama a `s5_verify_released(ad2, tracker, STEP_T0B_S5_NEG, …)`. Pasa solo si salta `BusContention` con un valor igual al patrón anunciado, y con los tres `OE` en 0. Después va el `hs_mcu` de la tabla.
+   - En el arnés, dos escenarios nuevos: un MCU que no suelta el bus en el paso 8 y otro que no lo suelta en el paso 9. Los dos tienen que abortar sin ninguna escritura de `OE` con el bus.
+   - Y la prueba de #6 al revés: con cualquiera de las dos comparaciones de `s5_verify_released` desactivada, al menos una prueba en rojo.
+2. **R2-M2:** las violaciones se registran y se comprueban en todas las pruebas.
+3. **R2-M3:** la tabla por paso como dato, con una sola fuente.
+4. **R2-M1:** nada oculto a git.
+5. **M3 y R2-m1–R2-m6.**
+6. **En la placa:** las dos ejecuciones completas otra vez, y cualquier ejecución abortada commiteada. Yo repetiré T0b(c) y una mutación mía que desactive la guarda en la imagen del host: T0b(c) tiene que dar FAIL.

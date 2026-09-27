@@ -1,0 +1,54 @@
+[probe 10:26:45] ad2_set_oe(mask=0x0000, owner=0)
+[10:26:45] ================================================================================
+[10:26:45] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:26:45] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:26:45] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:26:45] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:26:45] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:26:45] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:26:45] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:26:45] ================================================================================
+[10:26:45] [host] Expected firmware revision from git: 74984a5
+[10:26:45] [host] S10: Confirmed AD2 in S2 safe state (OE=0x0000). Resetting target MCU...
+[probe 10:26:45] subprocess -c port=SWD mode=HOTPLUG -rst  (OE read-back now: 0x0000)
+[10:26:45] [host] S10: Target MCU reset via C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe (exit code 0).
+[10:26:45]  
+[10:26:45] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 74984a5-dirty ===
+[10:26:45] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[10:26:45] [sys] silicon revision id=0x2003
+[10:26:45] [ipc] shared block at 0x38008000, magic=0x48375353
+[10:26:45] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[10:26:45] [net] starting TCP/IP stack
+[10:26:45] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[10:26:45] [net] mac=02:00:00:00:00:01 phy_addr=0
+[10:26:45] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[10:26:45] [phy] partner advertised:
+[10:26:45] [net] udp echo listening on port 7
+[10:26:45] [adc_srv] listening on UDP port 5001
+[10:26:45] [ipc] m7=1 m4=0  (CPU2 starting)
+[10:26:45] [m7_gpio_test] Rev 74984a5-dirty
+[probe 10:26:45] ad2_set_oe(mask=0x0000, owner=0)
+[10:26:45] ERROR during selftest execution: ABORT: Unexpected protocol line received: '[m7_gpio_test] Rev 74984a5-dirty' (expected pattern: '^\[m7_gpio_test\] Rev ([0-9a-f]{7})$')
+[probe 10:26:45] ad2_set_oe(mask=0x0000, owner=0)
+[10:26:45] ================================================================================
+[10:26:45] HOST VERDICT CHECKLIST (B2):
+[10:26:45]   [FAIL] sequence_complete
+[10:26:45]   [FAIL] t15_pass
+[10:26:45]   [FAIL] cm4_rev_match
+[10:26:45]   [FAIL] cm4_pass
+[10:26:45]   [FAIL] fw_all_passed
+[10:26:45]   [FAIL] t0b_a_oe_guards
+[10:26:45]   [FAIL] t0b_b_claim_guards
+[10:26:45]   [FAIL] t0b_c_contention
+[10:26:45]   [FAIL] t0b_d_timeout
+[10:26:45]   [FAIL] t0a_loose
+[10:26:45]   [FAIL] t0a_handshake
+[10:26:45]   [FAIL] t0a_mcu_to_ad2
+[10:26:45]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:26:45]   [FAIL] t0a_ad2_to_mcu
+[10:26:45]   [FAIL] t0a_scope
+[10:26:45] ================================================================================
+[10:26:45] HOST VERDICT=FAIL
+[10:26:45] ================================================================================
+[probe 10:26:45] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:26:45] gpio_hw_check exit code 1

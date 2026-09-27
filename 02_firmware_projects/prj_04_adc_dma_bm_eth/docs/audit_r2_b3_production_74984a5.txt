@@ -1,0 +1,66 @@
+[probe 10:28:16] ad2_set_oe(mask=0x0000, owner=0)
+[10:28:16] ================================================================================
+[10:28:16] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:28:16] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:28:16] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:28:16] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:28:16] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:28:16] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:28:16] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:28:16] ================================================================================
+[10:28:16] [host] Expected firmware revision from git: 74984a5
+[10:28:16] [host] S10: Confirmed AD2 in S2 safe state (OE=0x0000). Resetting target MCU...
+[probe 10:28:16] subprocess -c port=SWD mode=HOTPLUG -rst  (OE read-back now: 0x0000)
+[10:28:17] [host] S10: Target MCU reset via C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe (exit code 0).
+[10:28:17]  
+[10:28:17] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 74984a5 ===
+[10:28:17] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[10:28:17] [sys] silicon revision id=0x2003
+[10:28:17] [ipc] shared block at 0x38008000, magic=0x48375353
+[10:28:17] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[10:28:17] [net] starting TCP/IP stack
+[10:28:17] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[10:28:17] [net] mac=02:00:00:00:00:01 phy_addr=0
+[10:28:17] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[10:28:17] [phy] partner advertised:
+[10:28:17] [net] udp echo listening on port 7
+[10:28:17] [adc_srv] listening on UDP port 5001
+[10:28:17] [ipc] m7=1 m4=0  (CPU2 starting)
+[10:28:18] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[10:28:18] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[10:28:18] [net] link up: 100 Mbps full duplex
+[10:28:19] [ipc] m7=4 m4=20  (CPU2 alive)
+[10:28:21] [ipc] m7=8 m4=40  (CPU2 alive)
+[10:28:22] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[10:28:23] [ipc] m7=12 m4=60  (CPU2 alive)
+[10:28:25] [ipc] m7=16 m4=80  (CPU2 alive)
+[10:28:27] [ipc] m7=20 m4=100  (CPU2 alive)
+[10:28:27] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[10:28:29] [ipc] m7=24 m4=120  (CPU2 alive)
+[10:28:30] [ipc] m7=28 m4=140  (CPU2 alive)
+[10:28:31] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[probe 10:28:32] ad2_set_oe(mask=0x0000, owner=0)
+[10:28:32] ERROR during selftest execution: ABORT: Timeout waiting for protocol line matching '^\[m7_gpio_test\] Rev ([0-9a-f]{7})$'
+[probe 10:28:32] ad2_set_oe(mask=0x0000, owner=0)
+[10:28:32] ================================================================================
+[10:28:32] HOST VERDICT CHECKLIST (B2):
+[10:28:32]   [FAIL] sequence_complete
+[10:28:32]   [FAIL] t15_pass
+[10:28:32]   [FAIL] cm4_rev_match
+[10:28:32]   [FAIL] cm4_pass
+[10:28:32]   [FAIL] fw_all_passed
+[10:28:32]   [FAIL] t0b_a_oe_guards
+[10:28:32]   [FAIL] t0b_b_claim_guards
+[10:28:32]   [FAIL] t0b_c_contention
+[10:28:32]   [FAIL] t0b_d_timeout
+[10:28:32]   [FAIL] t0a_loose
+[10:28:32]   [FAIL] t0a_handshake
+[10:28:32]   [FAIL] t0a_mcu_to_ad2
+[10:28:32]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:28:32]   [FAIL] t0a_ad2_to_mcu
+[10:28:32]   [FAIL] t0a_scope
+[10:28:32] ================================================================================
+[10:28:32] HOST VERDICT=FAIL
+[10:28:32] ================================================================================
+[probe 10:28:32] ad2_set_oe(mask=0x0000, owner=0)
+[probe 10:28:32] gpio_hw_check exit code 1
