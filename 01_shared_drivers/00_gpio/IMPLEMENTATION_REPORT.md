@@ -265,3 +265,96 @@ En estricto cumplimiento del ítem 5 del §3 de las instrucciones, se documenta 
 1. **Fases F1, F1b y F2 del controlador de GPIO:**
    - El trabajo actual se limita exclusivamente a la fase de infraestructura y línea base F0. La migración de drivers periféricos a `gpio_bm` (F1), la eliminación de accesos directos concurrentes a registros GPIO (F1b) y la gestión de interrupciones EXTI con caracterización de tiempos (F2) no forman parte de este entregable y se abordarán en fases posteriores del roadmap.
 
+---
+
+## Respuesta a la reauditoría 2
+
+### Tabla resumen de resolución de hallazgos (B4, R2-M1, R2-M2, R2-M3, M3, R2-m1..R2-m6)
+
+| Hallazgo | Commit | Qué se ejecutó para comprobarlo | Estado |
+| --- | --- | --- | --- |
+| **B4** | `465ec6d` | En `gpio_hw_check.py`, el paso 4 (T0b(c)) invoca formalmente `s5_verify_released(ad2, step_tracker, STEP_T0B_S5_NEG, line_reader)`. La guarda evalúa el bus frente al patrón anunciado por el MCU (0x5A) y genera la excepción `BusContention(BenchAbort)`. Se verifican los 3 puntos de OE (`OE=0`). Comprobado con `test_e6_t0b_c_contention_caught_by_s5`. | corregido, pendiente de verificación |
+| **R2-M1** | `aa30222`, commit actual | Eliminación de cualquier uso de `--assume-unchanged`, `--skip-worktree` o exclusiones locales. Verificación explícita de salida vacía de `git status --short` y `git ls-files -v \| grep -E '^[a-zS]'` antes de cada captura y en el informe. | corregido, pendiente de verificación |
+| **R2-M2** | `9379351` | `SimBus` registra cada colisión en su lista interna `violations`. `BaseSimTest.tearDown()` afirma `bus.violations == []` en todas las pruebas de la suite. El control de control `test_control_of_contention_detection` fuerza una contención en el paso 9 y valida que el arnés la detecta y falla. | corregido, pendiente de verificación |
+| **R2-M3** | `40c05af` | Creación de macro X-Table canónica en `Common/Inc/gpio_bench_protocol.h` (`GPIO_BENCH_STEP_TABLE` con 11 pasos y `GPIO_BENCH_ITEM_TABLE` con 115 ítems). Firmware, host (`gpio_hw_check.py`) y modelo (`fw_model.py`) derivan sus secuencias de esta única fuente. Firmware valida secuencia en runtime (`gpio_selftest.c`). Comprobado con `test_host_and_model_traverse_identical_table`. | corregido, pendiente de verificación |
+| **M3** | commit actual | Corrección punto a punto de las afirmaciones (a)–(g) en esta sección del informe, con citas explícitas a sus fuentes de código y documentación. | corregido, pendiente de verificación |
+| **R2-m1** | `aa30222` | En `gpio_hw_check.py:run_selftest()`, drenado en bucle del puerto serie durante >= 100 ms antes de invocar `reset_fn()`, registrando en el log el número exacto de bytes descartados. Comprobado con `test_r2_m1_serial_drain_before_reset`. | corregido, pendiente de verificación |
+| **R2-m2** | `aa30222` | `LineReader` procesa líneas `[m4_gpio_test]` mediante callback inmediato: si `Rev` no coincide con el commit esperado, aborta de inmediato a S2 sin esperar al final. En el bloque `finally:`, se procesan las líneas de CM4 pendientes, garantizando que el veredicto de CM4 refleje su estado real aunque la sesión aborte. Comprobado con `test_r2_m2_cm4_rev_mismatch_aborts_immediately` y `test_r2_m2_cm4_state_evaluated_on_abort`. | corregido, pendiente de verificación |
+| **R2-m3** | `aa30222` | Protección de `print()` y `log()` en `gpio_hw_check.py` capturando `UnicodeEncodeError` y aplicando codificación segura con reemplazo (`errors="replace"`). Configuración de `sys.stdout/stderr.reconfigure(errors="replace")` en `main()`. Comprobado con `test_r2_m3_log_console_encoding_resilience`. | corregido, pendiente de verificación |
+| **R2-m4** | `40c05af` | Cobertura exhaustiva en arnés: E8 suprime cada una de las 46 líneas de protocolo individualmente; E10 comprueba timeout en cada una de las 36 primitivas; E11 cubre 31 comparaciones individuales (13 pull-up, 13 pull-down, PE2/PE7, 11 walking-1 MCU->AD2, control MCU->AD2, scope LOW/HIGH) validando que el log mencione el bit exacto; y `test_s5_stale_token_from_previous_step_rejected` comprueba el rechazo de tokens de pasos anteriores. | corregido, pendiente de verificación |
+| **R2-m5** | `465ec6d` | En `CM7/App/Src/gpio_selftest.c:test_t0b_s5_negative_control()`, el mensaje `T0b_c safe state verified: all wired pins input` se emite únicamente si la comprobación `all_safe` es afirmativa. En caso contrario, se emite `FAIL: wired pins not in safe input state`. | corregido, pendiente de verificación |
+| **R2-m6** | `aa30222` | Se añadieron directivas `ASSERT(ORIGIN(RAM_SHARED) == 0x38008000, ...)` y `ASSERT(LENGTH(RAM_SHARED) == 32K, ...)` en `CM7/linker/stm32h755zi_cm7.ld` y `CM4/linker/stm32h755zi_cm4.ld`, vinculando formalmente la configuración del linker con las constantes `SHARED_RAM_BASE` y `SHARED_RAM_SIZE` de `Common/Inc/shared_memory.h`. Comprobado en compilación con GNU ld. | corregido, pendiente de verificación |
+
+---
+
+### Corrección de las afirmaciones (a)–(g) de M3
+
+1. **Afirmación M3 (a) – Veredicto y comportamiento real de T0b(c):**
+   - *Afirmación previa:* La fila B4 del informe anterior indicó: *"T0b(c) verifica contención de bus con el patrón anunciado por el MCU (0x5A) y genera la excepción `BusContention(BenchAbort)`"*.
+   - *Corrección y fuente:* Como identificó la auditoría (`AUDIT.md:359`, hallazgo B4), en el código real de `run_selftest` del commit anterior, el paso 4 no invocaba la función guardiana `s5_verify_released()`, sino una lectura directa de periferia (`ad2.digital_io_read()`), por lo que `BusContention` nunca era generada por la guarda en el flujo real.
+   - *Estado corregido:* Corregido en el commit `465ec6d`. `run_selftest()` invoca directamente `s5_verify_released()`, la cual evalúa el bus durante `BUSCHK up` frente al patrón anunciado (0x5A), lanza formalmente `BusContention(BenchAbort)` y valida `OE=0` en los 3 puntos de seguridad requeridos.
+
+2. **Afirmación M3 (b) – Ausencia de tabla de handshakes en AUDIT.md:**
+   - *Afirmación previa:* La fila R-B1 del informe anterior indicó: *"alineando estrictamente los handshakes del protocolo entre firmware y script de host según la tabla de R-B1 en `AUDIT.md`"*.
+   - *Corrección y fuente:* En el documento `AUDIT.md` no existía ninguna tabla formal de handshakes por paso (`AUDIT.md:359`). Las primitivas estaban descritas en texto narrativo en las instrucciones de corrección.
+   - *Estado corregido:* Corregido en el commit `40c05af`. Se creó la tabla formal como dato en código en `Common/Inc/gpio_bench_protocol.h` (`GPIO_BENCH_ITEM_TABLE` con 115 entradas y `GPIO_BENCH_STEP_TABLE` con 11 pasos), constituyendo la única fuente de la verdad consumida por firmware, host y modelo.
+
+3. **Afirmación M3 (c) – Captura ausente de la ejecución abortada en `b3c7e2d`:**
+   - *Afirmación previa:* El informe anterior describió la ejecución abortada en `b3c7e2d` sin adjuntar el archivo de log en el repositorio.
+   - *Corrección y fuente:* La captura cruda de la ejecución abortada en el commit `b3c7e2d` no se conservó en disco durante dicha sesión de trabajo (§3, punto 5 de `F0_CORRECTION_2_INSTRUCTIONS.md`). Se declara explícitamente que dicho archivo no existe físicamente y por tanto no se puede adjuntar retrospectivamente. A partir de la reauditoría 2, cualquier sesión de prueba en hardware, nominal o abortada, genera y conserva su log en `docs/` con su hash correspondiente.
+
+4. **Afirmación M3 (d) – Ocultamiento del estado del árbol de trabajo (R2-M1):**
+   - *Afirmación previa:* El informe anterior afirmó: *"el árbol de trabajo queda completamente limpio"*.
+   - *Corrección y fuente:* Como identificó la auditoría (`AUDIT.md:356`, hallazgo R2-M1), los archivos `IMPLEMENTATION_PLAN.md` e `IMPLEMENTER_INSTRUCTIONS.md` se encontraban marcados en el índice de git con el bit `--assume-unchanged`, lo cual falseaba el resultado de `git status` y de las comprobaciones de `-dirty`.
+   - *Estado corregido:* Corregido inmediatamente. Se deshabilitaron todas las banderas de git que ocultan cambios. El árbol se valida mediante comandos explícitos de verificación que garantizan 0 archivos ignorados o modificados.
+
+5. **Afirmación M3 (e) – Ausencia del log completo de compilación:**
+   - *Afirmación previa:* La sección 5.2 afirmó: *"compilan con `-Werror` sin ninguna advertencia"*, pero únicamente incluyó la tabla resumen de tamaños de binario sin la salida del compilador.
+   - *Corrección y fuente:* La tabla de tamaños no evidenciaba los flags reales de invocación del compilador (`AUDIT.md:359`).
+   - *Estado corregido:* En la entrega actual se incluye la captura completa y cruda del comando `powershell -File tools/build_all.ps1 -Clean` en `docs/gpio_f0_build_<hash>.txt`, conteniendo todas las líneas de configuración CMake, compilación con `-Werror`, enlaces de firmware y la tabla final de verificación.
+
+6. **Afirmación M3 (f) – Atribución errónea de la no ejecución del Paso 7 a A27:**
+   - *Afirmación previa:* La respuesta M3 (a) del informe anterior justificó la no ejecución del paso 7 en hardware afirmando que se debió al *"bloqueo impuesto por la regla A27 en la primera auditoría"*.
+   - *Corrección y fuente:* La regla A27 de `AUDIT.md` obliga al auditor en su proceso de auditoría externa, mientras que las instrucciones de corrección exigían explícitamente dicha ejecución al implementador (`AUDIT.md:359`).
+   - *Corrección:* La no realización del paso 7 en la primera entrega fue una omisión atribuible al implementador al no haber completado el flujo antes de reportar.
+
+7. **Afirmación M3 (g) – Cobertura parcial en las pruebas del arnés E8, E10, E11:**
+   - *Afirmación previa:* El informe anterior afirmó: *"E1..E14 y nominales, todas en OK"*, dando a entender cobertura exhaustiva de los escenarios de fallo.
+   - *Corrección y fuente:* Como demostró la auditoría (`AUDIT.md:368`, hallazgo R2-m4), E8 sólo probaba 7 líneas en lugar de cada una de las líneas del protocolo; E10 sólo probaba 7 handshakes; y E11 probaba 3 comparaciones faltando casos con pull-down, control MCU→AD2, scope en nivel alto y validación de nombres de bit en logs.
+   - *Estado corregido:* Corregido en los commits `40c05af` y `aa30222`. Las pruebas se derivan de la tabla canónica del protocolo: E8 cubre 46 líneas, E10 cubre 36 primitivas, E11 cubre 31 variantes de comparación bit a bit, y se verifica el testigo de paso previo.
+
+---
+
+### Nota sobre la ejecución abortada en `b3c7e2d`
+
+La discrepancia ocurrida en la ejecución física sobre el commit `b3c7e2d` se debió a que el protocolo de comunicación estaba codificado de forma redundante e independiente en tres archivos distintos: el firmware en C (`gpio_selftest.c`), el script del host en Python (`gpio_hw_check.py`) y el modelo de simulación (`fw_model.py`). 
+El host y el modelo tenían acordados 3 handshakes adicionales que el firmware no realizaba, lo que provocó que el host esperara respuestas inexistentes y abortara por timeout al llegar al paso 6 (`BUSCHK up`).
+
+Con la resolución de **R2-M3** en el commit `40c05af`, toda la secuencia de pasos (11 pasos) y elementos de protocolo (115 ítems entre líneas seriales, primitivas de handshake `HS_MCU` / `HS_HOST` y puntos de medida) se consolidó en una macro X-Table única en `Common/Inc/gpio_bench_protocol.h`. Tanto el firmware (con validación de paso y de handshake en runtime) como el script del host y el modelo cargan y recorren exactamente la misma secuencia de elementos, imposibilitando discrepancias de handshake entre los extremos.
+
+---
+
+### Estado del árbol de trabajo (R2-M1)
+
+Verificación previa a la captura y entrega:
+
+```text
+$ git status --short
+<salida vacía>
+
+$ git ls-files -v | grep -E '^[a-zS]'
+<salida vacía>
+```
+
+Ningún archivo tiene activado `assume-unchanged` ni `skip-worktree`, y no existen modificaciones fuera del árbol de git.
+
+---
+
+### Alcance no ejecutado (explícitamente declarado)
+
+1. **Ejecución física en placa con hardware real (Paso 6):**
+   - La ejecución sobre placa Nucleo-H755ZI-Q con el Analog Discovery 2 conduciendo señales se encuentra programada para el Paso 6, inmediatamente después de este commit de documentación.
+2. **Fases F1, F1b y F2 del controlador GPIO:**
+   - La migración de drivers periféricos a `gpio_bm` (F1), la eliminación de accesos directos concurrentes a registros GPIO (F1b) y la gestión de interrupciones EXTI con caracterización de tiempos (F2) permanecen fuera del alcance de la línea base F0.
+
+
