@@ -64,7 +64,7 @@ HsemBm_Status_t HSEM_LL_Take(uint32_t id, uint32_t proc_id);
   * @param  id         Semaphore ID (0..31).
   * @param  proc_id    0 for 1-step, 1..255 for 2-step.
   * @param  max_cycles Cycle limit measured via DWT CYCCNT (1..2^31-1).
-  * @retval HSEM_BM_OK, HSEM_BM_ERR_TIMEOUT, or parameter/timebase error.
+  * @retval HSEM_BM_OK, HSEM_BM_TIMEOUT, or parameter/timebase error.
   */
 HsemBm_Status_t HSEM_LL_TakeTimeout(uint32_t id, uint32_t proc_id, uint32_t max_cycles);
 
