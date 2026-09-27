@@ -3,12 +3,13 @@ STM32H755 Shared Drivers Library: HSEM Driver (10_hsem)
 Test H11: Full Regression & In-System Performance Capture
 Platform: NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK/V3 COM4)
 Configuration: prj_04_adc_dma_bm_eth [debug preset], HSEM_DRIVER_SELFTEST=OFF
+Firmware Git Revision: 3d64fb4
 Date: 2026-09-26
 ================================================================================
 
 1. System Boot Log (ST-LINK VCP COM4 @ 115200 8N1):
 ---------------------------------------------------
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -31,49 +32,47 @@ Date: 2026-09-26
 [ipc] m7=16 m4=80  (CPU2 alive)
 [ipc] m7=20 m4=100  (CPU2 alive)
 [ipc] m7=24 m4=120  (CPU2 alive)
-[ipc] m7=28 m4=140  (CPU2 alive)
-[ipc] m7=32 m4=160  (CPU2 alive)
-[ipc] m7=36 m4=180  (CPU2 alive)
 
 Result: PASS
 - CPU2 handshake via HSEM_BM_BootWaitForCpu1 and HSEM_BM_BootReleaseCpu2 completed.
-- Dual-core heartbeat ratio m4/m7 = 180 / 36 = 5.0 (stable, matching baseline).
+- Dual-core heartbeat ratio m4/m7 = 120 / 24 = 5.0 (stable, matching baseline).
 
 2. Network Stress Test (tools/net_check.py against 192.168.1.150):
 ------------------------------------------------------------------
-Board    : 192.168.1.150 (prj_04_adc_dma_bm_eth)
+Board    : 192.168.1.150
 UDP echo : port 7
 
   OK    ICMP  4/4 replies
-  OK    UDP     1 B  rtt= 2.09 ms
-  OK    UDP    25 B  rtt= 1.32 ms
-  OK    UDP   512 B  rtt= 3.12 ms
-  OK    UDP  1024 B  rtt= 2.24 ms
-  OK    UDP  1472 B  rtt= 2.83 ms
+  OK    UDP     1 B  rtt= 3.11 ms
+  OK    UDP    25 B  rtt= 1.70 ms
+  OK    UDP   512 B  rtt= 3.82 ms
+  OK    UDP  1024 B  rtt= 5.43 ms
+  OK    UDP  1472 B  rtt= 3.32 ms
   OK    burst  100/100 returned  (0.1 s)
 
 PASS  3/3 checks
 Board counters after burst:
-[net] link=100 Mbps full duplex ip=192.168.1.150 rx=114 tx=111 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=106 tx=105 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
 
 Result: PASS (0 rx_nobuf, 0 tx_nobuf, 0 dma_err, 0 acl_drop)
 
 3. ADC Telemetry & Waveform Streaming under Shared_TryLockCycles (tools/query_adc.py):
 --------------------------------------------------------------------------------------
 [*] Querying ADC telemetry from 192.168.1.150:5001 (Mode: TEXT)...
-[0001] ADC1_CH5 [PB1 [A3]]: raw=1100, avg=1053 (0.053 V), min=890, max=1289, rate=500000, seq=5404, samples=2766848, dma_tc=2702, dma_ht=2702, err=0, ovr=0, adc_ovr=0, m4_hb=55
-[0002] ADC1_CH5 [PB1 [A3]]: raw=1029, avg=1059 (0.053 V), min=879, max=1337, rate=500000, seq=5603, samples=2868736, dma_tc=2801, dma_ht=2802, err=0, ovr=0, adc_ovr=0, m4_hb=57
-[0003] ADC1_CH5 [PB1 [A3]]: raw=1062, avg=1039 (0.052 V), min=883, max=1228, rate=500000, seq=5721, samples=2929152, dma_tc=2860, dma_ht=2861, err=0, ovr=0, adc_ovr=0, m4_hb=58
-[0004] ADC1_CH5 [PB1 [A3]]: raw=1146, avg=1049 (0.052 V), min=887, max=1320, rate=500000, seq=5821, samples=2980352, dma_tc=2910, dma_ht=2911, err=0, ovr=0, adc_ovr=0, m4_hb=59
-[0005] ADC1_CH5 [PB1 [A3]]: raw=1075, avg=1054 (0.053 V), min=876, max=1316, rate=500000, seq=5922, samples=3032064, dma_tc=2961, dma_ht=2961, err=0, ovr=0, adc_ovr=0, m4_hb=60
-[0006] ADC1_CH5 [PB1 [A3]]: raw=1129, avg=1045 (0.052 V), min=893, max=1192, rate=500000, seq=6023, samples=3083776, dma_tc=3011, dma_ht=3012, err=0, ovr=0, adc_ovr=0, m4_hb=61
-[0007] ADC1_CH5 [PB1 [A3]]: raw=941, avg=1065 (0.053 V), min=869, max=1306, rate=500000, seq=6124, samples=3135488, dma_tc=3062, dma_ht=3062, err=0, ovr=0, adc_ovr=0, m4_hb=62
-[0008] ADC1_CH5 [PB1 [A3]]: raw=1234, avg=1048 (0.052 V), min=886, max=1346, rate=500000, seq=6225, samples=3187200, dma_tc=3112, dma_ht=3113, err=0, ovr=0, adc_ovr=0, m4_hb=63
-[0009] ADC1_CH5 [PB1 [A3]]: raw=999, avg=1056 (0.053 V), min=884, max=1384, rate=500000, seq=6326, samples=3238912, dma_tc=3163, dma_ht=3163, err=0, ovr=0, adc_ovr=0, m4_hb=64
-[0010] ADC1_CH5 [PB1 [A3]]: raw=976, avg=1053 (0.053 V), min=877, max=1298, rate=500000, seq=6427, samples=3290624, dma_tc=3213, dma_ht=3214, err=0, ovr=0, adc_ovr=0, m4_hb=65
+[0001] ADC1_CH5 [PB1 [A3]]: raw=1149, avg=1028 (0.051 V), min=880, max=1192, rate=500000, seq=45056, samples=23068672, dma_tc=22528, dma_ht=22528, err=0, ovr=0, adc_ovr=0, m4_hb=461
+[0002] ADC1_CH5 [PB1 [A3]]: raw=1059, avg=1023 (0.051 V), min=871, max=1184, rate=500000, seq=45158, samples=23120896, dma_tc=22579, dma_ht=22579, err=0, ovr=0, adc_ovr=0, m4_hb=462
+[0003] ADC1_CH5 [PB1 [A3]]: raw=999, avg=1038 (0.052 V), min=871, max=1271, rate=500000, seq=45259, samples=23172608, dma_tc=22629, dma_ht=22630, err=0, ovr=0, adc_ovr=0, m4_hb=463
+[0004] ADC1_CH5 [PB1 [A3]]: raw=1044, avg=1031 (0.051 V), min=886, max=1179, rate=500000, seq=45360, samples=23224320, dma_tc=22680, dma_ht=22680, err=0, ovr=0, adc_ovr=0, m4_hb=464
+[0005] ADC1_CH5 [PB1 [A3]]: raw=1065, avg=1026 (0.051 V), min=882, max=1181, rate=500000, seq=45461, samples=23276032, dma_tc=22730, dma_ht=22731, err=0, ovr=0, adc_ovr=0, m4_hb=465
+[0006] ADC1_CH5 [PB1 [A3]]: raw=1069, avg=1029 (0.051 V), min=887, max=1202, rate=500000, seq=45562, samples=23327744, dma_tc=22781, dma_ht=22781, err=0, ovr=0, adc_ovr=0, m4_hb=466
+[0007] ADC1_CH5 [PB1 [A3]]: raw=997, avg=1023 (0.051 V), min=874, max=1175, rate=500000, seq=45663, samples=23379456, dma_tc=22831, dma_ht=22832, err=0, ovr=0, adc_ovr=0, m4_hb=467
+[0008] ADC1_CH5 [PB1 [A3]]: raw=951, avg=1028 (0.051 V), min=879, max=1184, rate=500000, seq=45764, samples=23431168, dma_tc=22882, dma_ht=22882, err=0, ovr=0, adc_ovr=0, m4_hb=468
+[0009] ADC1_CH5 [PB1 [A3]]: raw=1016, avg=1021 (0.051 V), min=855, max=1168, rate=500000, seq=45865, samples=23482880, dma_tc=22932, dma_ht=22933, err=0, ovr=0, adc_ovr=0, m4_hb=469
+[0010] ADC1_CH5 [PB1 [A3]]: raw=1006, avg=1025 (0.051 V), min=879, max=1160, rate=500000, seq=45965, samples=23534080, dma_tc=22982, dma_ht=22983, err=0, ovr=0, adc_ovr=0, m4_hb=470
 
 JSON Telemetry Sample:
-[0001] CH5: 53 mV (raw: 972, avg: 1053, min: 891, max: 1208) | Rate: 500000 Hz | Seq: 176089 | Samples: 90157568 | TC: 88044 | OVR: 0 | M4 HB: 1803
+[*] Querying ADC telemetry from 192.168.1.150:5001 (Mode: JSON)...
+[0001] CH5:   52 mV (raw:   979, avg:  1039, min:   866, max:  1288) | Rate: 500000 Hz | Seq: 55050 | Samples: 28185600 | TC: 27525 | OVR: 0 | M4 HB: 563
 
 Result: PASS
 - Rate = 500000 Hz (nominal 500 kSPS).
@@ -81,9 +80,12 @@ Result: PASS
 
 4. Shared Memory Lock Contention Verification (STM32_Programmer_CLI HOTPLUG):
 -----------------------------------------------------------------------------
-Memory inspection of g_shared.adc_lock_fail_count at 0x380084E8:
+Memory inspection of g_shared fail counters at 0x380084E0:
 0x380084E0 : 00000000 00000000 00000000 00000000
-0x380084F0 : 00000000 00000000 00000000 00000000
+0x380084F0 : 00000001 00000000 00000000 00000000
 
 Result: PASS
-- adc_lock_fail_count = 0 (zero timeout failures in Shared_TryLockCycles under full streaming load).
+- m7_adc_lock_fail_count = 0
+- m4_adc_lock_fail_count = 0
+- cpu2_wake_count = 1
+Zero timeout failures in Shared_TryLockCycles under full streaming load.

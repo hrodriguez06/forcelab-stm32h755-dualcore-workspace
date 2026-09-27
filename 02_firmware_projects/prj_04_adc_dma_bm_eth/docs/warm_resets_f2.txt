@@ -1,11 +1,12 @@
 ================================================================================
-prj_04_adc_dma_bm_eth F2: 20 Consecutive Warm Resets (H6 Test)
+Benchmark H6: 20 Consecutive Warm Resets on prj_04 (Phase F2)
+Firmware Git Revision: 3d64fb4
 Target: NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK V3)
 Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 ================================================================================
 
 --- WARM RESET 1/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -24,7 +25,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 2/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -43,7 +44,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 3/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -62,7 +63,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 4/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -81,7 +82,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 5/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -100,7 +101,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 6/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -119,7 +120,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 7/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -138,7 +139,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 8/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -157,7 +158,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 9/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -176,7 +177,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 10/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -195,7 +196,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 11/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -214,7 +215,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 12/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -233,7 +234,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 13/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -252,7 +253,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 14/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -271,7 +272,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 15/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -290,7 +291,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 16/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -309,7 +310,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 17/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -328,7 +329,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 18/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -347,7 +348,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 19/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
@@ -366,7 +367,7 @@ Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
 [ipc] m7=4 m4=20  (CPU2 alive)
 
 --- WARM RESET 20/20 ---
-=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 3d64fb4 ===
 [sys] sysclk=400000000 Hz hclk=200000000 Hz
 [sys] silicon revision id=0x2003
 [ipc] shared block at 0x38008000, magic=0x48375353
