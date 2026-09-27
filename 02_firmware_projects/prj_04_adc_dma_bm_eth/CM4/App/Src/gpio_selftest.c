@@ -3,6 +3,8 @@
   * @file    gpio_selftest.c
   * @brief   GPIO driver self-test implementation for Cortex-M4 (prj_04).
   *          Coordinated dual-core tests (T15 race negative control without lock).
+  *          Implements M1 (step-known guard), B2 (calculated verdict),
+  *          and B1 (rebuilt T15 with 3 phases, session ID, and overlap count).
   ******************************************************************************
   */
 
@@ -18,6 +20,8 @@ static char s_lines[ST_MAX_LINES][SHARED_MBOX_SIZE];
 static uint32_t s_line_count = 0U;
 static uint32_t s_line_len = 0U;
 static uint32_t s_line_next = 0U;
+
+static uint8_t s_current_step_id = GPIO_BENCH_STEP_T15_RACE;
 
 static void Line_Begin(void)
 {
@@ -69,11 +73,11 @@ static void Line_U32(uint32_t v)
 }
 
 /**
- * @brief Safety guard S4: Bench claim check for Cortex-M4.
+ * @brief Safety guard S4: Bench claim check for Cortex-M4 (M1).
+ *        No step parameter accepted; reads s_current_step_id.
  */
-static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin, uint32_t step)
+static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin)
 {
-    (void)step;
     /* PE0 and PE1 (LD2) NEVER allowed */
     if (port == GPIOE && (pin == 0U || pin == 1U))
     {
@@ -84,10 +88,13 @@ static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin, uint32_t step)
     {
         return false;
     }
-    /* Unwired pins PF6..PF11 allowed (PF11 used by CM4 for T15 race) */
-    if (port == GPIOF && (pin >= 6U && pin <= 11U))
+    /* Unwired pin PF11 allowed ONLY during T15 race */
+    if (s_current_step_id == GPIO_BENCH_STEP_T15_RACE)
     {
-        return true;
+        if (port == GPIOF && pin == 11U)
+        {
+            return true;
+        }
     }
     /* PE6 is Solo MCU (CM4 ACK) */
     if (port == GPIOE && pin == 6U)
@@ -96,6 +103,8 @@ static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin, uint32_t step)
     }
     return false;
 }
+
+
 
 void GPIO_SelfTest_CM4_Run(void)
 {
@@ -109,8 +118,10 @@ void GPIO_SelfTest_CM4_Run(void)
     RCC->AHB4ENR |= RCC_AHB4ENR_GPIOFEN;
     __DSB();
 
-    /* Safety guard S4 check on unwired test pin PF11 */
-    if (!bench_claim_output(GPIOF, 11U, GPIO_BENCH_STEP_T15_RACE))
+    s_current_step_id = GPIO_BENCH_STEP_T15_RACE;
+
+    /* Safety guard S4 check on unwired test pin PF11 (M1) */
+    if (!bench_claim_output(GPIOF, 11U))
     {
         Line_Begin();
         Line_Str("ERROR: bench_claim_output rejected PF11!");
