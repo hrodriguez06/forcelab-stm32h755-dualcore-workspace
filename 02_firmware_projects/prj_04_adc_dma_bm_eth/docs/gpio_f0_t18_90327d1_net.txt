@@ -1,0 +1,14 @@
+Board    : 192.168.1.150 (prj_04_adc_dma_bm_eth)
+UDP echo : port 7
+
+  OK    ICMP  4/4 replies
+  OK    UDP     1 B  rtt= 2.73 ms
+  OK    UDP    25 B  rtt= 1.84 ms
+  OK    UDP   512 B  rtt= 5.88 ms
+  OK    UDP  1024 B  rtt= 2.97 ms
+  OK    UDP  1472 B  rtt= 3.68 ms
+  OK    burst  100/100 returned  (0.1 s)
+
+PASS  3/3 checks
+Now confirm the board agrees: rx_nobuf, tx_nobuf and dma_err
+should all still read 0 in  py tools/monitor.py --timeout 15
