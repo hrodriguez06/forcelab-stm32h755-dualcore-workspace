@@ -1,0 +1,77 @@
+[   1.566]  
+[   1.573] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 8bb0884 ===
+[   1.577] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[   1.580] [sys] silicon revision id=0x2003
+[   1.584] [ipc] shared block at 0x38008000, magic=0x48375353
+[   1.588] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[   1.591] [net] starting TCP/IP stack
+[   1.598] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[   1.601] [net] mac=02:00:00:00:00:01 phy_addr=0
+[   1.607] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[   1.609] [phy] partner advertised:
+[   1.612] [net] udp echo listening on port 7
+[   1.615] [adc_srv] listening on UDP port 5001
+[   1.619] [m7_gpio_test] Rev 8bb0884
+[   1.621] [m7_gpio_test] GPIO_BENCH v1 idle
+[   1.626] [m7_gpio_test] Waiting for HOST_REQ to start session...
+[   3.193] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[   3.200] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[   3.203] [net] link up: 100 Mbps full duplex
+[   6.568] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  11.514] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  16.461] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  21.406] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  26.350] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  31.294] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  36.238] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  41.180] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  46.124] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  51.069] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  56.016] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  60.870] [m7_gpio_test] TIMEOUT waiting for HOST_REQ
+[  60.873] [ipc] m7=121 m4=0  (CPU2 starting)
+[  60.876] [m4_gpio_test] Rev 8bb0884
+[  60.880] [m4_gpio_test] TIMEOUT waiting for go_signal from CM7
+[  60.883] [ipc] m7=121 m4=593  (CPU2 alive)
+[  60.887] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.891] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.895] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.899] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.902] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.906] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.910] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.914] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.917] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.921] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.925] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.929] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.933] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.936] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.940] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.944] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.948] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.951] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.955] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.964] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  60.968] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.972] [ipc] m7=121 m4=593  (CPU2 NOT RESPONDING)
+[  60.975] [ipc] m7=121 m4=594  (CPU2 alive)
+[  60.978] [ipc] m7=121 m4=594  (CPU2 NOT RESPONDING)
+[  60.982] [ipc] m7=121 m4=594  (CPU2 NOT RESPONDING)
+[  60.986] [ipc] m7=121 m4=594  (CPU2 NOT RESPONDING)
+[  60.990] [ipc] m7=121 m4=594  (CPU2 NOT RESPONDING)
+[  60.994] [ipc] m7=121 m4=594  (CPU2 NOT RESPONDING)
+[  60.997] [ipc] m7=121 m4=594  (CPU2 NOT RESPONDING)
+[  61.001] [ipc] m7=121 m4=594  (CPU2 NOT RESPONDING)
+[  62.834] [ipc] m7=124 m4=612  (CPU2 alive)
+[  64.809] [ipc] m7=128 m4=632  (CPU2 alive)
+[  65.910] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  66.784] [ipc] m7=132 m4=652  (CPU2 alive)
+[  68.759] [ipc] m7=136 m4=672  (CPU2 alive)
+[  70.734] [ipc] m7=140 m4=692  (CPU2 alive)
+[  70.856] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  72.709] [ipc] m7=144 m4=712  (CPU2 alive)
+[  74.684] [ipc] m7=148 m4=732  (CPU2 alive)
+[  75.800] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  76.658] [ipc] m7=152 m4=752  (CPU2 alive)
+[  78.633] [ipc] m7=156 m4=772  (CPU2 alive)
