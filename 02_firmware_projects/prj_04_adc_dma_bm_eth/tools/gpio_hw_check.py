@@ -20,6 +20,7 @@ Implements the test orchestrator for 00_gpio (Phase F0):
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import os
 import pathlib
 import re
@@ -53,7 +54,7 @@ from tools.ad2 import (
 from tools.monitor import SerialPort
 
 
-# ---- Protocol Constants (gpio_bench_protocol.h) -----------------------------
+# ---- Protocol Constants & Table Parser (gpio_bench_protocol.h) -------------
 GPIO_BENCH_PROTOCOL_VERSION = 1
 
 STEP_T15_RACE       = 1
@@ -85,19 +86,56 @@ BUS_OWNER_FROM_NAME = {
     "AD2":  GPIO_BENCH_BUS_AD2,
 }
 
-EXPECTED_STEP_SEQUENCE = [
-    (STEP_T15_RACE,       "NONE"),
-    (STEP_IDLE,           "NONE"),
-    (STEP_T0B_GUARDS,     "NONE"),
-    (STEP_T0B_S5_NEG,     "MCU"),
-    (STEP_T0B_TIMEOUT,    "NONE"),
-    (STEP_T0A_LOOSE,      "NONE"),
-    (STEP_T0A_HANDSHAKE,  "NONE"),
-    (STEP_T0A_MCU_TO_AD2, "MCU"),
-    (STEP_T0A_AD2_TO_MCU, "AD2"),
-    (STEP_T0A_SCOPE,      "NONE"),
-    (STEP_DONE,           "NONE"),
-]
+
+@dataclass(frozen=True)
+class StepDef:
+    step_id: int
+    name: str
+    bus_owner: str
+
+
+@dataclass(frozen=True)
+class BenchItem:
+    step_id: int
+    item_type: str         # 'LINE', 'PRIM', 'MEASURE'
+    primitive: str         # 'NONE', 'HS_MCU', 'HS_HOST'
+    name: str
+    line_pattern: str
+    bit_arg: int
+
+
+def load_protocol_from_header(header_path: Optional[pathlib.Path] = None) -> tuple[list[StepDef], list[BenchItem]]:
+    """Parse protocol step definitions and items from gpio_bench_protocol.h (R2-M3)."""
+    if header_path is None:
+        header_path = PROJECT_ROOT / "Common" / "Inc" / "gpio_bench_protocol.h"
+    text = header_path.read_text(encoding="utf-8")
+
+    steps: list[StepDef] = []
+    step_pattern = re.compile(r'X\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*,\s*GPIO_BENCH_BUS_(\w+)\s*\)')
+    for m in step_pattern.finditer(text):
+        steps.append(StepDef(step_id=int(m.group(1)), name=m.group(2), bus_owner=m.group(3)))
+
+    items: list[BenchItem] = []
+    item_pattern = re.compile(
+        r'X\s*\(\s*(\d+)\s*,\s*BENCH_ITEM_(\w+)\s*,\s*GPIO_BENCH_PRIM_(\w+)\s*,\s*"([^"]*)"\s*,\s*"([^"]*)"\s*,\s*(0x[0-9a-fA-F]+|\d+)\s*\)'
+    )
+    for m in item_pattern.finditer(text):
+        raw_bit = m.group(6)
+        bit_val = int(raw_bit, 16) if raw_bit.startswith("0x") else int(raw_bit)
+        items.append(BenchItem(
+            step_id=int(m.group(1)),
+            item_type=m.group(2),
+            primitive=m.group(3),
+            name=m.group(4),
+            line_pattern=m.group(5),
+            bit_arg=bit_val,
+        ))
+
+    return steps, items
+
+
+PROTOCOL_STEPS, PROTOCOL_ITEMS = load_protocol_from_header()
+EXPECTED_STEP_SEQUENCE = [(s.step_id, s.bus_owner) for s in PROTOCOL_STEPS]
 
 STEP_RE = re.compile(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)")
 
@@ -444,6 +482,7 @@ def s5_verify_released(
     line_reader: LineReader,
     clock=RealClock(),
     log_fn: Optional[Callable[[str], None]] = None,
+    rec_fn: Optional[Callable[[str], None]] = None,
 ) -> BusToken:
     """S5: Break-before-make electrical verification of bus release.
     1. Read-back OE & 0x00FF == 0 (Point 1: step start).
@@ -458,6 +497,12 @@ def s5_verify_released(
     8. Handshake HS_MCU.
     9. Creates and installs valid BusToken in tracker.
     """
+    prefix = ""
+    if step_id == STEP_T0A_MCU_TO_AD2:
+        prefix = "step8"
+    elif step_id == STEP_T0A_AD2_TO_MCU:
+        prefix = "step9"
+
     oe_start = ad2.get_oe() & AD2_DIO_BUS_MASK
     if oe_start != 0:
         tracker.invalidate_token()
@@ -469,6 +514,11 @@ def s5_verify_released(
 
     # 1. Wait for BUSCHK up line
     m_up = line_reader.expect(r"^\[m7_gpio_test\] BUSCHK up(?: drive=(0x[0-9a-fA-F]+))?", timeout_s=10.0)
+    if rec_fn:
+        if step_id == STEP_T0B_S5_NEG:
+            rec_fn("step4_buschk_drive")
+        elif prefix:
+            rec_fn(f"{prefix}_buschk_up")
     announced = int(m_up.group(1), 16) if m_up.group(1) else None
 
     oe_pre = ad2.get_oe() & AD2_DIO_BUS_MASK
@@ -487,10 +537,14 @@ def s5_verify_released(
             log_fn(f"[ad2] {msg}")
         raise BusContention(bus_up, msg, announced=announced, oe_checks=(oe_start, oe_pre, oe_post))
 
+    if rec_fn and prefix:
+        rec_fn(f"{prefix}_up")
     hs_mcu(ad2, clock, log_fn=log_fn, timeout_s=10.0)
 
     # 2. Wait for BUSCHK down line
     line_reader.expect(r"^\[m7_gpio_test\] BUSCHK down", timeout_s=10.0)
+    if rec_fn and prefix:
+        rec_fn(f"{prefix}_buschk_down")
 
     oe_pre_down = ad2.get_oe() & AD2_DIO_BUS_MASK
     dio_down = ad2.digital_io_read()
@@ -508,6 +562,8 @@ def s5_verify_released(
             log_fn(f"[ad2] {msg}")
         raise BenchAbort(msg)
 
+    if rec_fn and prefix:
+        rec_fn(f"{prefix}_down")
     hs_mcu(ad2, clock, log_fn=log_fn, timeout_s=10.0)
 
     token = BusToken(step_id, _TOKEN_SENTINEL)
@@ -526,6 +582,7 @@ def run_selftest(
     log_path: Optional[pathlib.Path] = None,
     checklist_confirmed: bool = False,
     log_fn: Optional[Callable[[str], None]] = None,
+    visited_items: Optional[list[str]] = None,
 ) -> int:
     """Executes the full GPIO selftest suite with dependency injection.
     Accepts simulated mocks in testing or real hardware objects in production.
@@ -542,6 +599,10 @@ def run_selftest(
             log_file.write(line + "\n")
         if log_fn:
             log_fn(line)
+
+    def rec(item_name: str) -> None:
+        if visited_items is not None:
+            visited_items.append(item_name)
 
     # Print S9 Operational Checklist (m3: operator declared)
     log("================================================================================")
@@ -610,20 +671,25 @@ def run_selftest(
 
         # Step 1: T15 announcement & verdict
         m_step1 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
+        rec("step1_announcement")
         step_tracker.validate_announcement(m_step1.group(0), ad2, log_fn=log)
 
         m_t15 = line_reader.expect(r"^\[m7_gpio_test\] T15 VERDICT: (PASS|FAIL)", timeout_s=15.0)
+        rec("step1_verdict")
         if m_t15.group(1) == "PASS":
             checklist_results["t15_pass"] = True
+            rec("HOST_CHECK t15_pass")
             log("[host] T15 dual-core race PASSED.")
         else:
             log("[host] T15 dual-core race FAILED!")
 
         # Step 2: IDLE announcement
         m_step2 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
+        rec("step2_announcement")
         step_tracker.validate_announcement(m_step2.group(0), ad2, log_fn=log)
 
         m_idle = line_reader.expect(r"^\[m7_gpio_test\] GPIO_BENCH v(\d+) idle$", timeout_s=10.0)
+        rec("step2_idle")
         proto_v = int(m_idle.group(1))
         if proto_v != GPIO_BENCH_PROTOCOL_VERSION:
             on_abort()
@@ -663,6 +729,7 @@ def run_selftest(
 
         if t0b_a_passed:
             checklist_results["t0b_a_oe_guards"] = True
+            rec("HOST_CHECK t0b_a_oe_guards")
             log("[ad2] T0b(a) host OE guards PASSED.")
         else:
             log("[ad2] T0b(a) host OE guards FAILED!")
@@ -670,28 +737,33 @@ def run_selftest(
 
         # 4. Synchronize session start with MCU: HS_HOST
         log("[host] Handshaking session start with MCU via HS_HOST...")
+        rec("session_start")
         hs_host(ad2, clock=clock, log_fn=log, timeout_s=10.0)
         log("[host] Session start synchronized.")
 
         # 5. Step 3: T0b(b) Firmware Guards Verification
         m_step3 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
+        rec("step3_announcement")
         step_tracker.validate_announcement(m_step3.group(0), ad2, log_fn=log)
 
         m_claim = line_reader.expect(r"^\[m7_gpio_test\] T0b_b guards verification: (PASS|FAIL)", timeout_s=10.0)
+        rec("step3_guards_pass")
         if m_claim.group(1) == "PASS":
             checklist_results["t0b_b_claim_guards"] = True
+            rec("HOST_CHECK t0b_b_claim_guards")
             log("[ad2] T0b(b) firmware claim guards PASSED.")
         else:
             log("[ad2] T0b(b) firmware claim guards FAILED!")
 
         # 6. Step 4: T0b(c) S5 Negative Control (B4)
         m_step4 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
+        rec("step4_announcement")
         step_tracker.validate_announcement(m_step4.group(0), ad2, log_fn=log)
 
         log("[ad2] Step T0b(c): Calling s5_verify_released to verify S5 guard stops contention...")
         t0b_c_contention_caught = False
         try:
-            s5_verify_released(ad2, step_tracker, STEP_T0B_S5_NEG, line_reader, clock=clock, log_fn=log)
+            s5_verify_released(ad2, step_tracker, STEP_T0B_S5_NEG, line_reader, clock=clock, log_fn=log, rec_fn=rec)
             log("[ad2] T0b(c) S5 negative control FAILED: s5_verify_released did not detect contention!")
         except BusContention as bc:
             oe_p1, oe_p2, oe_p3 = bc.oe_checks if bc.oe_checks else (1, 1, 1)
@@ -701,6 +773,7 @@ def run_selftest(
             if bc.announced is not None and bc.value == bc.announced and oe_p1 == 0 and oe_p2 == 0 and oe_p3 == 0:
                 t0b_c_contention_caught = True
                 checklist_results["t0b_c_contention"] = True
+                rec("HOST_CHECK t0b_c_contention")
                 log("[ad2] T0b(c) S5 negative control PASSED.")
             else:
                 log(f"[ad2] T0b(c) S5 negative control FAILED (read=0x{bc.value:02X}, exp=0x{bc.announced:02X}, OE=({oe_p1},{oe_p2},{oe_p3}))")
@@ -716,32 +789,41 @@ def run_selftest(
         # Handshake for contention check (single handshake in T0b(c))
         # Restore HOST_REQ as output static (since S2 set it to input)
         ad2.set_oe(AD2_DIO_HOST_REQ, GPIO_BENCH_BUS_NONE)
+        rec("t0b_c_sync")
         hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
         # MCU releases bus and announces safe state
         line_reader.expect(r"^\[m7_gpio_test\] T0b_c safe state verified: all wired pins input", timeout_s=10.0)
+        rec("step4_safe_verified")
 
         # 7. Step 5: T0b(d) 10-second Timeout Test
         m_step5 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
+        rec("step5_announcement")
         step_tracker.validate_announcement(m_step5.group(0), ad2, log_fn=log)
 
         log("[ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...")
+        rec("HOST_WAIT t0b_d_timeout")
         clock.sleep(10.5)
 
         m_tout = line_reader.expect(r"^\[m7_gpio_test\] timeout expired -> bench_safe\(\) invoked \((PASS|FAIL)\)", timeout_s=5.0)
+        rec("step5_timeout_pass")
         if m_tout.group(1) == "PASS":
             checklist_results["t0b_d_timeout"] = True
+            rec("HOST_CHECK t0b_d_timeout")
             log("[ad2] T0b(d) timeout test PASSED.")
         else:
             log("[ad2] T0b(d) timeout test FAILED!")
 
         # 8. Step 6: T0a Loose Lines Check (13 lines)
         m_step6 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
+        rec("step6_announcement")
         step_tracker.validate_announcement(m_step6.group(0), ad2, log_fn=log)
 
         log("[ad2] Step T0a: Testing loose lines (13 lines)...")
         line_reader.expect(r"^\[m7_gpio_test\] BUSCHK up", timeout_s=10.0)
+        rec("step6_buschk_up")
         dio_up = ad2.digital_io_read() & AD2_DIO_LOOSE_13_MASK
+        rec("HOST_READ loose_up")
         log(f"[ad2] Loose check pull-up read: 0x{dio_up:04X} (expected 0x{AD2_DIO_LOOSE_13_MASK:04X})")
         loose_up_ok = (dio_up == AD2_DIO_LOOSE_13_MASK)
         if not loose_up_ok:
@@ -749,19 +831,24 @@ def run_selftest(
             for b in range(16):
                 if diff & (1 << b):
                     log(f"[ad2] Loose check pull-up FAILED on DIO{b} (observed=0, expected=1)")
+        rec("step6_up")
         hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
         line_reader.expect(r"^\[m7_gpio_test\] BUSCHK down", timeout_s=10.0)
+        rec("step6_buschk_down")
         dio_down = ad2.digital_io_read() & AD2_DIO_LOOSE_13_MASK
+        rec("HOST_READ loose_down")
         log(f"[ad2] Loose check pull-down read: 0x{dio_down:04X} (expected 0x0000)")
         loose_down_ok = (dio_down == 0x0000)
         if not loose_down_ok:
             for b in range(16):
                 if dio_down & (1 << b):
                     log(f"[ad2] Loose check pull-down FAILED on DIO{b} (observed=1, expected=0)")
+        rec("step6_down")
         hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
         line_reader.expect(r"^\[m7_gpio_test\] T0a_loose: DONE \(host verdict\)", timeout_s=10.0)
+        rec("step6_loose_done")
         if loose_up_ok and loose_down_ok:
             checklist_results["t0a_loose"] = True
             log("[ad2] T0a loose check PASSED (all 13 lines).")
@@ -770,32 +857,39 @@ def run_selftest(
 
         # 9. Step 7: T0a Handshake Lines (PE2 / PE7)
         m_step7 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
+        rec("step7_announcement")
         step_tracker.validate_announcement(m_step7.group(0), ad2, log_fn=log)
 
         log("[ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...")
         # 1. HS_HOST: MCU validates PE2 HIGH then LOW
+        rec("step7_pe2")
         hs_host(ad2, clock=clock, log_fn=log, timeout_s=10.0)
         line_reader.expect(r"^\[m7_gpio_test\] Handshake PE2: OK", timeout_s=10.0)
+        rec("step7_handshake_pe2")
 
         # 2. HS_MCU: Host validates PE7 HIGH then LOW
+        rec("step7_pe7")
         hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0)
         line_reader.expect(r"^\[m7_gpio_test\] T0a_handshake: DONE \(host verdict\)", timeout_s=10.0)
+        rec("step7_handshake_done")
         checklist_results["t0a_handshake"] = True
         log("[ad2] T0a handshake lines PASSED.")
 
         # 10. Step 8: T0a Walking-1 MCU -> AD2 (11 lines)
         m_step8 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
+        rec("step8_announcement")
         step_tracker.validate_announcement(m_step8.group(0), ad2, log_fn=log)
 
         log("[ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...")
         # S5 break-before-make verification
-        s5_verify_released(ad2, step_tracker, STEP_T0A_MCU_TO_AD2, line_reader, clock=clock, log_fn=log)
+        s5_verify_released(ad2, step_tracker, STEP_T0A_MCU_TO_AD2, line_reader, clock=clock, log_fn=log, rec_fn=rec)
 
         mcu_walk_bits = [9, 11, 0, 1, 2, 3, 4, 5, 6, 7, 14]
         mcu_walk_mask = (1 << 9) | (1 << 11) | (1 << 14) | AD2_DIO_BUS_MASK
         mcu_walk_passed = True
 
         for exp_bit in mcu_walk_bits:
+            rec("HOST_READ mcu_bit")
             # During HS_MCU phase 1, MCU is asserting ACK and driving exactly exp_bit
             # Wait for MCU_ACK
             start_w = clock.monotonic()
@@ -820,6 +914,7 @@ def run_selftest(
             else:
                 log(f"[ad2] Walking-1 MCU->AD2 DIO{exp_bit}: OK (0x{dio_val:04X})")
 
+            rec(f"step8_mcu_{exp_bit}")
             # Complete HS_MCU phases 2..4
             ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
             start_w = clock.monotonic()
@@ -832,6 +927,8 @@ def run_selftest(
 
         # MCU -> AD2 Negative Control
         line_reader.expect(r"^\[m7_gpio_test\] T0a_mcu control ready", timeout_s=10.0)
+        rec("step8_control_ready")
+        rec("HOST_READ mcu_ctrl")
         # Read during handshake
         start_c = clock.monotonic()
         while not bool(ad2.digital_io_read() & AD2_DIO_MCU_ACK):
@@ -851,6 +948,7 @@ def run_selftest(
                 if dio_ctrl & (1 << b):
                     log(f"[ad2]   Leaked high output on DIO{b}!")
 
+        rec("step8_ctrl")
         ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
         start_c = clock.monotonic()
         while bool(ad2.digital_io_read() & AD2_DIO_MCU_ACK):
@@ -861,6 +959,7 @@ def run_selftest(
         ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
 
         line_reader.expect(r"^\[m7_gpio_test\] T0a_mcu: DONE \(host verdict\)", timeout_s=10.0)
+        rec("step8_mcu_done")
         if mcu_walk_passed:
             checklist_results["t0a_mcu_to_ad2"] = True
             log("[ad2] Walking-1 MCU->AD2 PASSED.")
@@ -869,18 +968,22 @@ def run_selftest(
 
         # 11. Step 9: T0a Walking-1 AD2 -> MCU (10 lines)
         m_step9 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
+        rec("step9_announcement")
         step_tracker.validate_announcement(m_step9.group(0), ad2, log_fn=log)
 
         log("[ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...")
-        token = s5_verify_released(ad2, step_tracker, STEP_T0A_AD2_TO_MCU, line_reader, clock=clock, log_fn=log)
+        token = s5_verify_released(ad2, step_tracker, STEP_T0A_AD2_TO_MCU, line_reader, clock=clock, log_fn=log, rec_fn=rec)
 
         line_reader.expect(r"^\[m7_gpio_test\] T0a_ad2 ready", timeout_s=10.0)
+        rec("step9_ad2_ready")
+        rec("step9_ready")
         hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
         ad2_walk_bits = [8, 10, 0, 1, 2, 3, 4, 5, 6, 7]
         ad2_walk_passed = True
 
         for b in ad2_walk_bits:
+            rec("HOST_DRIVE ad2_bit")
             if b < 8:
                 drive_bus(ad2, step_tracker, 1 << b)
             else:
@@ -888,10 +991,12 @@ def run_selftest(
                 ad2.digital_io_write(1 << b, 1 << b)
 
             # Signal data ready via HS_HOST
+            rec(f"step9_ad2_{b}")
             hs_host(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
             # Wait for MCU announcement
             m_bit = line_reader.expect(r"^\[m7_gpio_test\] T0a_ad2 bit=(\d+) idr=0x([0-9a-fA-F]+) exp=0x([0-9a-fA-F]+) (OK|FAIL)", timeout_s=10.0)
+            rec(f"step9_ad2_{b}_res")
             bit_status = m_bit.group(4)
             if bit_status != "OK":
                 ad2_walk_passed = False
@@ -907,10 +1012,14 @@ def run_selftest(
 
         # AD2 -> MCU Negative Control
         line_reader.expect(r"^\[m7_gpio_test\] T0a_ad2 analog control ready", timeout_s=10.0)
+        rec("step9_analog_ready")
+        rec("HOST_DRIVE ad2_analog")
         drive_bus(ad2, step_tracker, 0xFF)
+        rec("step9_analog")
         hs_host(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
         m_analog = line_reader.expect(r"^\[m7_gpio_test\] T0a_ad2 analog control result: (OK|FAIL)", timeout_s=10.0)
+        rec("step9_analog_res")
         if m_analog.group(1) != "OK":
             ad2_walk_passed = False
             log("[ad2] AD2->MCU analog control reported FAIL by MCU!")
@@ -919,6 +1028,7 @@ def run_selftest(
         ad2.set_oe(AD2_DIO_HOST_REQ, GPIO_BENCH_BUS_NONE)
 
         m_ad2_verdict = line_reader.expect(r"^\[m7_gpio_test\] T0a_ad2: (PASS|FAIL)", timeout_s=10.0)
+        rec("step9_verdict")
         if m_ad2_verdict.group(1) == "PASS" and ad2_walk_passed:
             checklist_results["t0a_ad2_to_mcu"] = True
             log("[ad2] Walking-1 AD2->MCU PASSED.")
@@ -927,6 +1037,7 @@ def run_selftest(
 
         # 12. Step 10: T0a Scope 1 & Scope 2 DC Levels
         m_step10 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
+        rec("step10_announcement")
         step_tracker.validate_announcement(m_step10.group(0), ad2, log_fn=log)
 
         log("[ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...")
@@ -935,7 +1046,9 @@ def run_selftest(
         clock.sleep(0.05)
 
         line_reader.expect(r"^\[m7_gpio_test\] Scope LOW ready", timeout_s=10.0)
+        rec("step10_low_ready")
         clock.sleep(0.01)
+        rec("HOST_MEASURE scope_low")
         v1_low = ad2.analog_in_read_dc(0)
         v2_low = ad2.analog_in_read_dc(1)
         log(f"[ad2] Scope LOW: PF14={v1_low:.3f}V, PF15={v2_low:.3f}V (expected <= 0.4V)")
@@ -945,10 +1058,13 @@ def run_selftest(
                 log(f"[ad2]   Scope 1 (PF14) VOL out of range: {v1_low:.3f}V > 0.4V")
             if v2_low > 0.4:
                 log(f"[ad2]   Scope 2 (PF15) VOL out of range: {v2_low:.3f}V > 0.4V")
+        rec("step10_low")
         hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
         line_reader.expect(r"^\[m7_gpio_test\] Scope HIGH ready", timeout_s=10.0)
+        rec("step10_high_ready")
         clock.sleep(0.01)
+        rec("HOST_MEASURE scope_high")
         v1_high = ad2.analog_in_read_dc(0)
         v2_high = ad2.analog_in_read_dc(1)
         log(f"[ad2] Scope HIGH: PF14={v1_high:.3f}V, PF15={v2_high:.3f}V (expected >= 2.9V)")
@@ -958,9 +1074,11 @@ def run_selftest(
                 log(f"[ad2]   Scope 1 (PF14) VOH out of range: {v1_high:.3f}V < 2.9V")
             if v2_high < 2.9:
                 log(f"[ad2]   Scope 2 (PF15) VOH out of range: {v2_high:.3f}V < 2.9V")
+        rec("step10_high")
         hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
         line_reader.expect(r"^\[m7_gpio_test\] T0a_scope: DONE \(host verdict\)", timeout_s=10.0)
+        rec("step10_scope_done")
         if scope_low_ok and scope_high_ok:
             checklist_results["t0a_scope"] = True
             log("[ad2] Scope check PASSED.")
@@ -969,10 +1087,12 @@ def run_selftest(
 
         # 13. Step 99: Final Verdicts and CM4 Drain
         m_step99 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
+        rec("step99_announcement")
         step_tracker.validate_announcement(m_step99.group(0), ad2, log_fn=log)
         checklist_results["sequence_complete"] = True
 
         m_fw_all = line_reader.expect(r"^\[m7_gpio_test\] VERDICT: (ALL GPIO SELF-TESTS PASSED|GPIO SELF-TESTS FAILED)", timeout_s=10.0)
+        rec("step99_verdict")
         if m_fw_all.group(1) == "ALL GPIO SELF-TESTS PASSED":
             checklist_results["fw_all_passed"] = True
 

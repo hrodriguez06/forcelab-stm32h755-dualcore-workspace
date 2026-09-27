@@ -14,6 +14,11 @@ import re
 import time
 from typing import Callable, Optional, Sequence
 
+try:
+    from tools.gpio_hw_check import PROTOCOL_STEPS, PROTOCOL_ITEMS, BenchItem, StepDef
+except ImportError:
+    from gpio_hw_check import PROTOCOL_STEPS, PROTOCOL_ITEMS, BenchItem, StepDef
+
 
 class ElectricalContentionError(Exception):
     """Raised when both MCU and AD2 drive the same line at the same time."""
@@ -220,13 +225,17 @@ class FirmwareModel:
         self.step_id = 0
         self.state = "INIT"
         self._step_generator = None
+        self.visited_items: list[str] = []
 
         self.bus.set_mcu_safe()
 
-    def log_m7(self, msg: str) -> None:
+    def log_m7(self, msg: str, item_name: Optional[str] = None) -> None:
         """Emit a line from CM7."""
-        if self.faults.drop_protocol_line and self.faults.drop_protocol_line in msg:
-            return
+        if item_name:
+            self.visited_items.append(item_name)
+        if self.faults.drop_protocol_line:
+            if (item_name and self.faults.drop_protocol_line == item_name) or (self.faults.drop_protocol_line in msg):
+                return
         line = f"{msg}\r\n".encode("utf-8")
         self.tx_queue.append(line)
 
@@ -235,8 +244,13 @@ class FirmwareModel:
         line = f"{msg}\r\n".encode("utf-8")
         self.tx_queue.append(line)
 
+    def record_item(self, item_name: str) -> None:
+        """Record a non-serial protocol item (e.g. host measurement point) (R2-M3)."""
+        self.visited_items.append(item_name)
+
     def hs_mcu(self, step_name: str) -> bool:
         """Firmware executes HS_MCU primitive: MCU asserts ACK -> waits REQ -> drops ACK -> waits REQ drop."""
+        self.visited_items.append(step_name)
         if self.faults.handshake_timeout_step == step_name:
             # Deliberately stall without asserting ACK
             return False
@@ -270,6 +284,7 @@ class FirmwareModel:
 
     def hs_host(self, step_name: str) -> bool:
         """Firmware executes HS_HOST primitive: waits REQ -> asserts ACK -> waits REQ drop -> drops ACK."""
+        self.visited_items.append(step_name)
         if self.faults.handshake_timeout_step == step_name:
             return False
 
@@ -301,11 +316,12 @@ class FirmwareModel:
 
     def _enter_step(self, step_id: int, bus_owner_str: str) -> None:
         self.step_id = step_id
+        announcement_name = f"step{step_id}_announcement"
         if self.faults.step_out_of_seq and self.faults.step_out_of_seq[0] == step_id:
             _, bad_id, bad_bus = self.faults.step_out_of_seq
-            self.log_m7(f"[m7_gpio_test] STEP id={bad_id} bus={bad_bus} v=1")
+            self.log_m7(f"[m7_gpio_test] STEP id={bad_id} bus={bad_bus} v=1", item_name=announcement_name)
             return
-        self.log_m7(f"[m7_gpio_test] STEP id={step_id} bus={bus_owner_str} v=1")
+        self.log_m7(f"[m7_gpio_test] STEP id={step_id} bus={bus_owner_str} v=1", item_name=announcement_name)
 
     def run_coroutine(self):
         """Generator that runs the entire firmware flow."""
@@ -325,16 +341,18 @@ class FirmwareModel:
         self.log_m7("[m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)")
         self.log_m7("[m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)")
         if self.faults.t15_verdict_fail:
-            self.log_m7("[m7_gpio_test] T15 VERDICT: FAIL")
+            self.log_m7("[m7_gpio_test] T15 VERDICT: FAIL", item_name="step1_verdict")
         else:
-            self.log_m7("[m7_gpio_test] T15 VERDICT: PASS")
+            self.log_m7("[m7_gpio_test] T15 VERDICT: PASS", item_name="step1_verdict")
+        self.record_item("HOST_CHECK t15_pass")
         yield
 
         # 4. IDLE State
         proto_v = self.faults.banner_version or 1
         self._enter_step(STEP_IDLE, "NONE")
-        self.log_m7(f"[m7_gpio_test] GPIO_BENCH v{proto_v} idle")
+        self.log_m7(f"[m7_gpio_test] GPIO_BENCH v{proto_v} idle", item_name="step2_idle")
         self.log_m7("[m7_gpio_test] INFO Waiting for HOST_REQ to start session...")
+        self.record_item("HOST_CHECK t0b_a_oe_guards")
         yield
 
         # Session Start Handshake: HS_HOST
@@ -349,7 +367,8 @@ class FirmwareModel:
 
         # 5. Step 3: T0b(b) Firmware Guards Verification
         self._enter_step(STEP_T0B_GUARDS, "NONE")
-        self.log_m7("[m7_gpio_test] T0b_b guards verification: PASS")
+        self.log_m7("[m7_gpio_test] T0b_b guards verification: PASS", item_name="step3_guards_pass")
+        self.record_item("HOST_CHECK t0b_b_claim_guards")
         yield
 
         # 6. Step 4: T0b(c) S5 Negative Control
@@ -359,30 +378,33 @@ class FirmwareModel:
             self.bus.set_mcu_output(DIO_BUS_MASK, 0x5A)
 
         if not self.faults.t0b_c_skip_buschk:
-            self.log_m7("[m7_gpio_test] BUSCHK up drive=0x5A")
+            self.log_m7("[m7_gpio_test] BUSCHK up drive=0x5A", item_name="step4_buschk_drive")
+        self.record_item("HOST_CHECK t0b_c_contention")
         yield
 
         # Handshake for contention check (single handshake in T0b(c))
-        ok = yield from self.hs_mcu("step4_buschk")
+        ok = yield from self.hs_mcu("t0b_c_sync")
         if not ok:
             return
 
         # Release bus
         self.bus.clear_mcu_output(DIO_BUS_MASK)
         if self.faults.t0b_c_safe_fail:
-            self.log_m7("[m7_gpio_test] T0b_c safe state verification FAILED: pins not input")
+            self.log_m7("[m7_gpio_test] T0b_c safe state verification FAILED: pins not input", item_name="step4_safe_verified")
         else:
-            self.log_m7("[m7_gpio_test] T0b_c safe state verified: all wired pins input")
+            self.log_m7("[m7_gpio_test] T0b_c safe state verified: all wired pins input", item_name="step4_safe_verified")
         yield
 
         # 7. Step 5: T0b(d) 10-second Timeout Test
         self._enter_step(STEP_T0B_TIMEOUT, "NONE")
+        self.record_item("HOST_WAIT t0b_d_timeout")
         # MCU waits 10.0 seconds for HOST_REQ, which host will not send
         start = self.clock.monotonic()
         while self.clock.monotonic() - start < 10.0:
             yield
 
-        self.log_m7("[m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)")
+        self.log_m7("[m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)", item_name="step5_timeout_pass")
+        self.record_item("HOST_CHECK t0b_d_timeout")
         yield
 
         # 8. Step 6: T0a Loose Lines Check (13 lines)
@@ -393,9 +415,11 @@ class FirmwareModel:
             if (1 << b) & DIO_LOOSE_13_MASK:
                 pupdr_val |= (1 << (b * 2))
         if self.faults.invert_mcu_bit and self.faults.invert_mcu_bit[0] == "loose_up":
-            pupdr_val ^= (1 << (self.faults.invert_mcu_bit[1] * 2))
+            b_idx = self.faults.invert_mcu_bit[1]
+            pupdr_val = (pupdr_val & ~(3 << (b_idx * 2))) | (2 << (b_idx * 2))
         self.bus.mcu_pupdr = pupdr_val
-        self.log_m7("[m7_gpio_test] BUSCHK up")
+        self.log_m7("[m7_gpio_test] BUSCHK up", item_name="step6_buschk_up")
+        self.record_item("HOST_READ loose_up")
         yield
         ok = yield from self.hs_mcu("step6_up")
         if not ok:
@@ -407,16 +431,18 @@ class FirmwareModel:
             if (1 << b) & DIO_LOOSE_13_MASK:
                 pupdr_val |= (2 << (b * 2))
         if self.faults.invert_mcu_bit and self.faults.invert_mcu_bit[0] == "loose_down":
-            pupdr_val ^= (2 << (self.faults.invert_mcu_bit[1] * 2))
+            b_idx = self.faults.invert_mcu_bit[1]
+            pupdr_val = (pupdr_val & ~(3 << (b_idx * 2))) | (1 << (b_idx * 2))
         self.bus.mcu_pupdr = pupdr_val
-        self.log_m7("[m7_gpio_test] BUSCHK down")
+        self.log_m7("[m7_gpio_test] BUSCHK down", item_name="step6_buschk_down")
+        self.record_item("HOST_READ loose_down")
         yield
         ok = yield from self.hs_mcu("step6_down")
         if not ok:
             return
 
         self.bus.mcu_pupdr = 0
-        self.log_m7("[m7_gpio_test] T0a_loose: DONE (host verdict)")
+        self.log_m7("[m7_gpio_test] T0a_loose: DONE (host verdict)", item_name="step6_loose_done")
         yield
 
         # 9. Step 7: T0a Handshake Lines (PE2 HOST_REQ, PE7 MCU_ACK)
@@ -426,14 +452,17 @@ class FirmwareModel:
         ok = yield from self.hs_host("step7_pe2")
         if not ok:
             return
-        self.log_m7("[m7_gpio_test] Handshake PE2: OK")
+        if self.faults.firmware_comparison_fail == "step7_pe2":
+            self.log_m7("[m7_gpio_test] Handshake PE2: FAIL", item_name="step7_handshake_pe2")
+        else:
+            self.log_m7("[m7_gpio_test] Handshake PE2: OK", item_name="step7_handshake_pe2")
         yield
 
         # 2. HS_MCU tests PE7
         ok = yield from self.hs_mcu("step7_pe7")
         if not ok:
             return
-        self.log_m7("[m7_gpio_test] T0a_handshake: DONE (host verdict)")
+        self.log_m7("[m7_gpio_test] T0a_handshake: DONE (host verdict)", item_name="step7_handshake_done")
         yield
 
         # 10. Step 8: T0a Walking-1 MCU -> AD2 (11 lines)
@@ -443,7 +472,7 @@ class FirmwareModel:
             self.bus.mcu_pupdr = 0xAAAA  # Pulled down -> bus reads 0x00 != 0xFF
         else:
             self.bus.mcu_pupdr = 0x5555  # Bus pull-up
-        self.log_m7("[m7_gpio_test] BUSCHK up")
+        self.log_m7("[m7_gpio_test] BUSCHK up", item_name="step8_buschk_up")
         yield
         ok = yield from self.hs_mcu("step8_up")
         if not ok:
@@ -452,7 +481,7 @@ class FirmwareModel:
             self.bus.mcu_pupdr = 0x5555  # Pulled up -> bus reads 0xFF != 0x00
         else:
             self.bus.mcu_pupdr = 0xAAAA  # Bus pull-down
-        self.log_m7("[m7_gpio_test] BUSCHK down")
+        self.log_m7("[m7_gpio_test] BUSCHK down", item_name="step8_buschk_down")
         yield
         ok = yield from self.hs_mcu("step8_down")
         if not ok:
@@ -466,7 +495,8 @@ class FirmwareModel:
             if self.faults.invert_mcu_bit and self.faults.invert_mcu_bit[0] == f"mcu_ad2_{b}":
                 val = (1 << self.faults.invert_mcu_bit[1])
             self.bus.set_mcu_output(val, val)
-            ok = yield from self.hs_mcu(f"step8_bit_{b}")
+            self.record_item("HOST_READ mcu_bit")
+            ok = yield from self.hs_mcu(f"step8_mcu_{b}")
             self.bus.clear_mcu_output(val)
             if not ok:
                 return
@@ -477,7 +507,8 @@ class FirmwareModel:
             # Leak output!
             ctrl_val = (1 << self.faults.invert_mcu_bit[1])
             self.bus.set_mcu_output(ctrl_val, ctrl_val)
-        self.log_m7("[m7_gpio_test] T0a_mcu control ready")
+        self.log_m7("[m7_gpio_test] T0a_mcu control ready", item_name="step8_control_ready")
+        self.record_item("HOST_READ mcu_ctrl")
         yield
         ok = yield from self.hs_mcu("step8_ctrl")
         if ctrl_val:
@@ -485,7 +516,7 @@ class FirmwareModel:
         if not ok:
             return
 
-        self.log_m7("[m7_gpio_test] T0a_mcu: DONE (host verdict)")
+        self.log_m7("[m7_gpio_test] T0a_mcu: DONE (host verdict)", item_name="step8_mcu_done")
         yield
 
         # 11. Step 9: T0a Walking-1 AD2 -> MCU (10 lines)
@@ -495,7 +526,7 @@ class FirmwareModel:
             self.bus.mcu_pupdr = 0xAAAA  # Pulled down -> bus reads 0x00 != 0xFF
         else:
             self.bus.mcu_pupdr = 0x5555  # Bus pull-up
-        self.log_m7("[m7_gpio_test] BUSCHK up")
+        self.log_m7("[m7_gpio_test] BUSCHK up", item_name="step9_buschk_up")
         yield
         ok = yield from self.hs_mcu("step9_up")
         if not ok:
@@ -504,14 +535,14 @@ class FirmwareModel:
             self.bus.mcu_pupdr = 0x5555  # Pulled up -> bus reads 0xFF != 0x00
         else:
             self.bus.mcu_pupdr = 0xAAAA  # Bus pull-down
-        self.log_m7("[m7_gpio_test] BUSCHK down")
+        self.log_m7("[m7_gpio_test] BUSCHK down", item_name="step9_buschk_down")
         yield
         ok = yield from self.hs_mcu("step9_down")
         if not ok:
             return
         self.bus.mcu_pupdr = 0
 
-        self.log_m7("[m7_gpio_test] T0a_ad2 ready")
+        self.log_m7("[m7_gpio_test] T0a_ad2 ready", item_name="step9_ad2_ready")
         yield
         ok = yield from self.hs_mcu("step9_ready")
         if not ok:
@@ -525,7 +556,8 @@ class FirmwareModel:
         ad2_walk_bits = [8, 10, 0, 1, 2, 3, 4, 5, 6, 7]
         step9_failed = False
         for b in ad2_walk_bits:
-            ok = yield from self.hs_host(f"step9_bit_{b}")
+            self.record_item("HOST_DRIVE ad2_bit")
+            ok = yield from self.hs_host(f"step9_ad2_{b}")
             if not ok:
                 return
             idr = self.bus.read_mcu_idr(1 << b)
@@ -535,12 +567,13 @@ class FirmwareModel:
                 bit_ok = False
             if not bit_ok:
                 step9_failed = True
-            self.log_m7(f"[m7_gpio_test] T0a_ad2 bit={b} idr=0x{idr:04X} exp=0x{exp:04X} {'OK' if bit_ok else 'FAIL'}")
+            self.log_m7(f"[m7_gpio_test] T0a_ad2 bit={b} idr=0x{idr:04X} exp=0x{exp:04X} {'OK' if bit_ok else 'FAIL'}", item_name=f"step9_ad2_{b}_res")
             yield
 
         # AD2 -> MCU Negative Control: MCU bus in analog, AD2 drives 0xFF
         self.bus.mcu_analog = DIO_BUS_MASK
-        self.log_m7("[m7_gpio_test] T0a_ad2 analog control ready")
+        self.log_m7("[m7_gpio_test] T0a_ad2 analog control ready", item_name="step9_analog_ready")
+        self.record_item("HOST_DRIVE ad2_analog")
         yield
         ok = yield from self.hs_host("step9_analog")
         if not ok:
@@ -551,11 +584,11 @@ class FirmwareModel:
             ctrl_ok = False
         if not ctrl_ok:
             step9_failed = True
-        self.log_m7(f"[m7_gpio_test] T0a_ad2 analog control result: {'OK' if ctrl_ok else 'FAIL'}")
+        self.log_m7(f"[m7_gpio_test] T0a_ad2 analog control result: {'OK' if ctrl_ok else 'FAIL'}", item_name="step9_analog_res")
         yield
         self.bus.mcu_analog = 0
 
-        self.log_m7(f"[m7_gpio_test] T0a_ad2: {'FAIL' if step9_failed else 'PASS'}")
+        self.log_m7(f"[m7_gpio_test] T0a_ad2: {'FAIL' if step9_failed else 'PASS'}", item_name="step9_verdict")
         yield
 
         # 12. Step 10: T0a Scope 1 & 2 DC Levels
@@ -563,8 +596,12 @@ class FirmwareModel:
         self.bus.pf14_voltage = 0.0
         self.bus.pf15_voltage = 0.0
         if self.faults.invert_mcu_bit and self.faults.invert_mcu_bit[0] == "scope_low":
-            self.bus.pf14_voltage = 1.5
-        self.log_m7("[m7_gpio_test] Scope LOW ready")
+            if self.faults.invert_mcu_bit[1] == 15:
+                self.bus.pf15_voltage = 1.5
+            else:
+                self.bus.pf14_voltage = 1.5
+        self.log_m7("[m7_gpio_test] Scope LOW ready", item_name="step10_low_ready")
+        self.record_item("HOST_MEASURE scope_low")
         yield
         ok = yield from self.hs_mcu("step10_low")
         if not ok:
@@ -573,14 +610,18 @@ class FirmwareModel:
         self.bus.pf14_voltage = 3.3
         self.bus.pf15_voltage = 3.3
         if self.faults.invert_mcu_bit and self.faults.invert_mcu_bit[0] == "scope_high":
-            self.bus.pf14_voltage = 2.0
-        self.log_m7("[m7_gpio_test] Scope HIGH ready")
+            if self.faults.invert_mcu_bit[1] == 15:
+                self.bus.pf15_voltage = 2.0
+            else:
+                self.bus.pf14_voltage = 2.0
+        self.log_m7("[m7_gpio_test] Scope HIGH ready", item_name="step10_high_ready")
+        self.record_item("HOST_MEASURE scope_high")
         yield
         ok = yield from self.hs_mcu("step10_high")
         if not ok:
             return
 
-        self.log_m7("[m7_gpio_test] T0a_scope: DONE (host verdict)")
+        self.log_m7("[m7_gpio_test] T0a_scope: DONE (host verdict)", item_name="step10_scope_done")
         yield
 
         # 13. Step 99: Done & CM4 Results
@@ -595,9 +636,9 @@ class FirmwareModel:
 
         if (self.faults.t15_verdict_fail or self.faults.cm4_verdict_fail or
             step9_failed or self.faults.firmware_comparison_fail):
-            self.log_m7("[m7_gpio_test] VERDICT: GPIO SELF-TESTS FAILED")
+            self.log_m7("[m7_gpio_test] VERDICT: GPIO SELF-TESTS FAILED", item_name="step99_verdict")
         else:
-            self.log_m7("[m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED")
+            self.log_m7("[m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED", item_name="step99_verdict")
         yield
 
     def step(self) -> None:

@@ -41,7 +41,15 @@ static const BenchStepPerm_t k_step_perms[] = {
     { GPIO_BENCH_STEP_DONE,           GPIO_BENCH_BUS_NONE, "NONE", 0U,         (1U << 7),                                                        0U },
 };
 
+#define EXPAND_BENCH_ITEM(s, t, p, n, l, b) { (uint8_t)(s), (uint8_t)(t), (uint8_t)(p), (n), (l), (uint8_t)(b) },
+
+const BenchProtocolItem_t g_bench_protocol_items[] = {
+    GPIO_BENCH_PROTOCOL_TABLE(EXPAND_BENCH_ITEM)
+};
+const size_t g_bench_protocol_item_count = sizeof(g_bench_protocol_items) / sizeof(g_bench_protocol_items[0]);
+
 static uint8_t s_current_step_id = GPIO_BENCH_STEP_T15_RACE;
+static uint32_t s_step_prim_idx = 0U;
 
 static const BenchStepPerm_t *bench_get_perm_for_step(uint8_t step_id)
 {
@@ -58,6 +66,7 @@ static const BenchStepPerm_t *bench_get_perm_for_step(uint8_t step_id)
 static void bench_enter_step(uint8_t step_id)
 {
     s_current_step_id = step_id;
+    s_step_prim_idx = 0U;
     const BenchStepPerm_t *perm = bench_get_perm_for_step(step_id);
     const char *bus_str = (perm != NULL) ? perm->bus_name : "NONE";
     APP_LOG("[m7_gpio_test] STEP id=%u bus=%s v=%u",
@@ -256,6 +265,16 @@ static bool wait_host_req(bool expected_high, uint32_t timeout_ms)
  */
 static bool hs_mcu(void)
 {
+    /* Check protocol table at runtime (R2-M3) */
+    uint8_t expected = bench_get_expected_primitive(s_current_step_id, s_step_prim_idx);
+    if (expected != GPIO_BENCH_PRIM_HS_MCU)
+    {
+        bench_safe();
+        APP_LOG("[m7_gpio_test] ABORT step=%u reason=protocol", (unsigned int)s_current_step_id);
+        return false;
+    }
+    s_step_prim_idx++;
+
     /* Phase 1: MCU asserts MCU_ACK = 1 */
     set_mcu_ack(true);
 
@@ -289,6 +308,16 @@ static bool hs_mcu(void)
  */
 static bool hs_host_sample(uint32_t timeout_ms, uint32_t *p_idr)
 {
+    /* Check protocol table at runtime (R2-M3) */
+    uint8_t expected = bench_get_expected_primitive(s_current_step_id, s_step_prim_idx);
+    if (expected != GPIO_BENCH_PRIM_HS_HOST)
+    {
+        bench_safe();
+        APP_LOG("[m7_gpio_test] ABORT step=%u reason=protocol", (unsigned int)s_current_step_id);
+        return false;
+    }
+    s_step_prim_idx++;
+
     /* Phase 1: Wait for HOST_REQ = 1 */
     if (!wait_host_req(true, timeout_ms))
     {

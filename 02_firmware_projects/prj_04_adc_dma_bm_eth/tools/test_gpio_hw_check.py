@@ -63,6 +63,9 @@ from gpio_hw_check import (
     hs_mcu,
     hs_host,
     run_selftest,
+    _TOKEN_SENTINEL,
+    PROTOCOL_STEPS,
+    PROTOCOL_ITEMS,
 )
 from fw_model import (
     SimBus,
@@ -458,20 +461,13 @@ class TestHarnessScenarios(BaseSimTest):
 
     # ---- E8: Se pierde una línea de protocolo cualquiera --------------------
     def test_e8_dropped_protocol_lines_all_abort(self):
-        """E8: Dropping any single protocol line aborts to S2 and fails, never passes."""
-        protocol_lines_to_test = [
-            "[m7_gpio_test] Rev",
-            "[m7_gpio_test] T15 VERDICT:",
-            "[m7_gpio_test] GPIO_BENCH v1 idle",
-            "[m7_gpio_test] T0b_b guards",
-            "[m7_gpio_test] Handshake PE2: OK",
-            "[m7_gpio_test] T0a_mcu: DONE",
-            "[m7_gpio_test] T0a_scope: DONE",
-        ]
+        """E8: Dropping any single protocol line from the table aborts to S2 and fails (R2-m4)."""
+        protocol_lines = [it for it in PROTOCOL_ITEMS if it.item_type == "LINE"]
+        self.assertGreater(len(protocol_lines), 0, "No protocol lines in table")
 
-        for target_line in protocol_lines_to_test:
+        for item in protocol_lines:
             faults = FaultInjectionConfig()
-            faults.drop_protocol_line = target_line
+            faults.drop_protocol_line = item.name
             ad2, ser, clock, reset_fn, _, _ = self.create_simulated_bench(faults=faults)
             logs: list[str] = []
 
@@ -484,9 +480,9 @@ class TestHarnessScenarios(BaseSimTest):
                 log_fn=logs.append,
             )
 
-            self.assertNotEqual(code, 0, f"Expected abort when dropping '{target_line}'")
-            self.assertEqual(ad2.get_oe(), 0x0000, f"AD2 OE not 0 after dropping '{target_line}'")
-            self.assertTrue(any("HOST VERDICT=FAIL" in l for l in logs))
+            self.assertNotEqual(code, 0, f"Expected abort when dropping '{item.name}'")
+            self.assertEqual(ad2.get_oe(), 0x0000, f"AD2 OE not 0 after dropping '{item.name}'")
+            self.assertTrue(any("HOST VERDICT=FAIL" in l for l in logs), f"HOST VERDICT=FAIL missing when dropping '{item.name}'")
 
     # ---- E9: STEP fuera de secuencia o dueño incorrecto ---------------------
     def test_e9_step_out_of_seq_or_wrong_owner_aborts_before_bus(self):
@@ -525,20 +521,13 @@ class TestHarnessScenarios(BaseSimTest):
 
     # ---- E10: Cada handshake agota el tiempo --------------------------------
     def test_e10_handshake_timeouts_abort_cleanly(self):
-        """E10: Each handshake timeout aborts to S2, fails, and leaves OE=0."""
-        hs_points = [
-            "session_start",
-            "step4_buschk",
-            "step6_up",
-            "step7_pe2",
-            "step8_up",
-            "step9_ready",
-            "step10_low",
-        ]
+        """E10: Each handshake primitive from the table times out, aborts to S2, and leaves OE=0 (R2-m4)."""
+        prim_items = [it for it in PROTOCOL_ITEMS if it.item_type == "PRIM"]
+        self.assertGreater(len(prim_items), 0, "No handshake primitives in table")
 
-        for pt in hs_points:
+        for item in prim_items:
             faults = FaultInjectionConfig()
-            faults.handshake_timeout_step = pt
+            faults.handshake_timeout_step = item.name
             ad2, ser, clock, reset_fn, _, _ = self.create_simulated_bench(faults=faults)
             logs: list[str] = []
 
@@ -551,38 +540,82 @@ class TestHarnessScenarios(BaseSimTest):
                 log_fn=logs.append,
             )
 
-            self.assertNotEqual(code, 0, f"Expected non-zero code on handshake timeout at {pt}")
-            self.assertEqual(ad2.get_oe(), 0x0000, f"OE not 0 after handshake timeout at {pt}")
+            self.assertNotEqual(code, 0, f"Expected non-zero code on handshake timeout at {item.name}")
+            self.assertEqual(ad2.get_oe(), 0x0000, f"OE not 0 after handshake timeout at {item.name}")
 
     # ---- E11: Un bit cambiado en cada comparación del host ------------------
     def test_e11_host_comparison_bit_mismatches_identified(self):
-        """E11: Inverted bit in host comparison fails and explicitly names the bit."""
-        # 1. Loose pull-up with DIO3 inverted
-        faults_loose = FaultInjectionConfig()
-        faults_loose.invert_mcu_bit = ("loose_up", 3)
-        ad2, ser, clock, reset_fn, _, _ = self.create_simulated_bench(faults=faults_loose)
-        logs: list[str] = []
-        code = run_selftest(serial_port=ser, ad2=ad2, clock=clock, reset_fn=reset_fn, expected_rev="ca569b6", log_fn=logs.append)
-        self.assertNotEqual(code, 0)
-        self.assertTrue(any("DIO3" in l and "FAILED" in l for l in logs), "Log did not name failing DIO3 bit!")
+        """E11: Each host comparison with an inverted bit fails and explicitly names that bit (R2-m4)."""
+        loose_bits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14]
+        # 1. Loose pull-up (13 lines)
+        for b in loose_bits:
+            faults = FaultInjectionConfig()
+            faults.invert_mcu_bit = ("loose_up", b)
+            ad2, ser, clock, reset_fn, _, _ = self.create_simulated_bench(faults=faults)
+            logs: list[str] = []
+            code = run_selftest(serial_port=ser, ad2=ad2, clock=clock, reset_fn=reset_fn, expected_rev="ca569b6", log_fn=logs.append)
+            self.assertNotEqual(code, 0, f"Expected failure on loose_up DIO{b}")
+            self.assertTrue(any(f"DIO{b}" in l and "FAILED" in l for l in logs), f"Log did not name failing DIO{b} on loose_up")
 
-        # 2. Walking-1 MCU->AD2 with DIO0 inverted during DIO9 walk
-        faults_walk = FaultInjectionConfig()
-        faults_walk.invert_mcu_bit = ("mcu_ad2_9", 0)
-        ad2, ser, clock, reset_fn, _, _ = self.create_simulated_bench(faults=faults_walk)
+        # 2. Loose pull-down (13 lines)
+        for b in loose_bits:
+            faults = FaultInjectionConfig()
+            faults.invert_mcu_bit = ("loose_down", b)
+            ad2, ser, clock, reset_fn, _, _ = self.create_simulated_bench(faults=faults)
+            logs = []
+            code = run_selftest(serial_port=ser, ad2=ad2, clock=clock, reset_fn=reset_fn, expected_rev="ca569b6", log_fn=logs.append)
+            self.assertNotEqual(code, 0, f"Expected failure on loose_down DIO{b}")
+            self.assertTrue(any(f"DIO{b}" in l and "FAILED" in l for l in logs), f"Log did not name failing DIO{b} on loose_down")
+
+        # 3. Handshake (PE2 and PE7)
+        for hs_name in ["step7_pe2", "step7_pe7"]:
+            faults = FaultInjectionConfig()
+            faults.handshake_timeout_step = hs_name
+            ad2, ser, clock, reset_fn, _, _ = self.create_simulated_bench(faults=faults)
+            logs = []
+            code = run_selftest(serial_port=ser, ad2=ad2, clock=clock, reset_fn=reset_fn, expected_rev="ca569b6", log_fn=logs.append)
+            self.assertNotEqual(code, 0, f"Expected failure on handshake {hs_name}")
+            self.assertEqual(ad2.get_oe(), 0x0000)
+
+        # 4. Walking-1 MCU->AD2 (11 lines)
+        mcu_walk_bits = [9, 11, 0, 1, 2, 3, 4, 5, 6, 7, 14]
+        for b in mcu_walk_bits:
+            faults = FaultInjectionConfig()
+            faults.invert_mcu_bit = (f"mcu_ad2_{b}", (b + 1) % 8 if b < 8 else 0)
+            ad2, ser, clock, reset_fn, _, _ = self.create_simulated_bench(faults=faults)
+            logs = []
+            code = run_selftest(serial_port=ser, ad2=ad2, clock=clock, reset_fn=reset_fn, expected_rev="ca569b6", log_fn=logs.append)
+            self.assertNotEqual(code, 0, f"Expected failure on walking-1 MCU->AD2 bit {b}")
+            self.assertTrue(any(f"DIO{b}" in l for l in logs), f"Log did not name failing DIO{b} on walking-1 MCU->AD2")
+
+        # 5. MCU->AD2 negative control
+        faults_ctrl = FaultInjectionConfig()
+        faults_ctrl.invert_mcu_bit = ("mcu_ad2_ctrl", 3)
+        ad2, ser, clock, reset_fn, _, _ = self.create_simulated_bench(faults=faults_ctrl)
         logs = []
         code = run_selftest(serial_port=ser, ad2=ad2, clock=clock, reset_fn=reset_fn, expected_rev="ca569b6", log_fn=logs.append)
         self.assertNotEqual(code, 0)
-        self.assertTrue(any("Bit mismatch on DIO" in l for l in logs))
+        self.assertTrue(any("DIO3" in l and "Leaked high output" in l for l in logs))
 
-        # 3. Scope voltage out of range
-        faults_scope = FaultInjectionConfig()
-        faults_scope.invert_mcu_bit = ("scope_low", 14)
-        ad2, ser, clock, reset_fn, _, _ = self.create_simulated_bench(faults=faults_scope)
-        logs = []
-        code = run_selftest(serial_port=ser, ad2=ad2, clock=clock, reset_fn=reset_fn, expected_rev="ca569b6", log_fn=logs.append)
-        self.assertNotEqual(code, 0)
-        self.assertTrue(any("Scope 1 (PF14) VOL out of range" in l for l in logs))
+        # 6. Scope LOW (PF14 and PF15)
+        for ch, pin_name in [(14, "Scope 1 (PF14)"), (15, "Scope 2 (PF15)")]:
+            faults_scope_low = FaultInjectionConfig()
+            faults_scope_low.invert_mcu_bit = ("scope_low", ch)
+            ad2, ser, clock, reset_fn, _, _ = self.create_simulated_bench(faults=faults_scope_low)
+            logs = []
+            code = run_selftest(serial_port=ser, ad2=ad2, clock=clock, reset_fn=reset_fn, expected_rev="ca569b6", log_fn=logs.append)
+            self.assertNotEqual(code, 0)
+            self.assertTrue(any(f"{pin_name} VOL out of range" in l for l in logs), f"Log did not name {pin_name} VOL out of range")
+
+        # 7. Scope HIGH (PF14 and PF15)
+        for ch, pin_name in [(14, "Scope 1 (PF14)"), (15, "Scope 2 (PF15)")]:
+            faults_scope_high = FaultInjectionConfig()
+            faults_scope_high.invert_mcu_bit = ("scope_high", ch)
+            ad2, ser, clock, reset_fn, _, _ = self.create_simulated_bench(faults=faults_scope_high)
+            logs = []
+            code = run_selftest(serial_port=ser, ad2=ad2, clock=clock, reset_fn=reset_fn, expected_rev="ca569b6", log_fn=logs.append)
+            self.assertNotEqual(code, 0)
+            self.assertTrue(any(f"{pin_name} VOH out of range" in l for l in logs), f"Log did not name {pin_name} VOH out of range")
 
     # ---- E12: El firmware da FAIL en comparaciones --------------------------
     def test_e12_firmware_comparison_fail_reported(self):
@@ -757,23 +790,27 @@ class TestHarnessScenarios(BaseSimTest):
         spec_up = importlib.util.spec_from_loader("gpio_hw_check_mut_up", loader=None)
         mod_up = importlib.util.module_from_spec(spec_up)
         mod_up.__file__ = str(src_path)
-        exec(compile(mutated_up, "gpio_hw_check_mut_up.py", "exec"), mod_up.__dict__)
+        sys.modules["gpio_hw_check_mut_up"] = mod_up
+        try:
+            exec(compile(mutated_up, "gpio_hw_check_mut_up.py", "exec"), mod_up.__dict__)
 
-        # Test A: Under mod_up, E15 case A (step 8 bad up) is NOT caught by S5!
-        faults_up = FaultInjectionConfig()
-        faults_up.step8_buschk_up_fail = True
-        ad2_u, ser_u, clock_u, reset_u, _, _ = self.create_simulated_bench(faults=faults_up)
-        logs_u = []
-        mod_up.run_selftest(serial_port=ser_u, ad2=ad2_u, clock=clock_u, reset_fn=reset_u, expected_rev="ca569b6", log_fn=logs_u.append)
-        caught_s5_up = any("bus contention check failed at step 8" in l for l in logs_u)
-        self.assertFalse(caught_s5_up, "Mutated module should fail to catch S5 bus_up contention!")
+            # Test A: Under mod_up, E15 case A (step 8 bad up) is NOT caught by S5!
+            faults_up = FaultInjectionConfig()
+            faults_up.step8_buschk_up_fail = True
+            ad2_u, ser_u, clock_u, reset_u, _, _ = self.create_simulated_bench(faults=faults_up)
+            logs_u = []
+            mod_up.run_selftest(serial_port=ser_u, ad2=ad2_u, clock=clock_u, reset_fn=reset_u, expected_rev="ca569b6", log_fn=logs_u.append)
+            caught_s5_up = any("bus contention check failed at step 8" in l for l in logs_u)
+            self.assertFalse(caught_s5_up, "Mutated module should fail to catch S5 bus_up contention!")
 
-        # Test B: Under mod_up, T0b(c) (E6 nominal) fails because s5_verify_released did NOT catch contention!
-        ad2_t0b, ser_t0b, clock_t0b, reset_t0b, _, _ = self.create_simulated_bench()
-        logs_t0b = []
-        code_t0b = mod_up.run_selftest(serial_port=ser_t0b, ad2=ad2_t0b, clock=clock_t0b, reset_fn=reset_t0b, expected_rev="ca569b6", log_fn=logs_t0b.append)
-        self.assertNotEqual(code_t0b, 0, "Disabling bus_up check must cause T0b(c) to FAIL")
-        self.assertFalse(any("T0b(c) S5 negative control PASSED" in l for l in logs_t0b), "T0b(c) must not pass when bus_up check is disabled")
+            # Test B: Under mod_up, T0b(c) (E6 nominal) fails because s5_verify_released did NOT catch contention!
+            ad2_t0b, ser_t0b, clock_t0b, reset_t0b, _, _ = self.create_simulated_bench()
+            logs_t0b = []
+            code_t0b = mod_up.run_selftest(serial_port=ser_t0b, ad2=ad2_t0b, clock=clock_t0b, reset_fn=reset_t0b, expected_rev="ca569b6", log_fn=logs_t0b.append)
+            self.assertNotEqual(code_t0b, 0, "Disabling bus_up check must cause T0b(c) to FAIL")
+            self.assertFalse(any("T0b(c) S5 negative control PASSED" in l for l in logs_t0b), "T0b(c) must not pass when bus_up check is disabled")
+        finally:
+            sys.modules.pop("gpio_hw_check_mut_up", None)
 
         # 2. Mutate bus_down comparison: 'if bus_down != 0x00:' -> 'if False:'
         self.assertIn("if bus_down != 0x00:", src_text)
@@ -782,16 +819,41 @@ class TestHarnessScenarios(BaseSimTest):
         spec_down = importlib.util.spec_from_loader("gpio_hw_check_mut_down", loader=None)
         mod_down = importlib.util.module_from_spec(spec_down)
         mod_down.__file__ = str(src_path)
-        exec(compile(mutated_down, "gpio_hw_check_mut_down.py", "exec"), mod_down.__dict__)
+        sys.modules["gpio_hw_check_mut_down"] = mod_down
+        try:
+            exec(compile(mutated_down, "gpio_hw_check_mut_down.py", "exec"), mod_down.__dict__)
 
-        # Test C: Under mod_down, E15 case B (step 8 bad down) is NOT caught by S5!
-        faults_down = FaultInjectionConfig()
-        faults_down.step8_buschk_down_fail = True
-        ad2_d, ser_d, clock_d, reset_d, _, _ = self.create_simulated_bench(faults=faults_down)
-        logs_d = []
-        mod_down.run_selftest(serial_port=ser_d, ad2=ad2_d, clock=clock_d, reset_fn=reset_d, expected_rev="ca569b6", log_fn=logs_d.append)
-        caught_s5_down = any("BUSCHK down gave 0xFF, expected 0x00" in l for l in logs_d)
-        self.assertFalse(caught_s5_down, "Mutated module should fail to catch S5 bus_down contention!")
+            # Test C: Under mod_down, E15 case B (step 8 bad down) is NOT caught by S5!
+            faults_down = FaultInjectionConfig()
+            faults_down.step8_buschk_down_fail = True
+            ad2_d, ser_d, clock_d, reset_d, _, _ = self.create_simulated_bench(faults=faults_down)
+            logs_d = []
+            mod_down.run_selftest(serial_port=ser_d, ad2=ad2_d, clock=clock_d, reset_fn=reset_d, expected_rev="ca569b6", log_fn=logs_d.append)
+            caught_s5_down = any("BUSCHK down gave 0xFF, expected 0x00" in l for l in logs_d)
+            self.assertFalse(caught_s5_down, "Mutated module should fail to catch S5 bus_down contention!")
+        finally:
+            sys.modules.pop("gpio_hw_check_mut_down", None)
+
+    # ---- Recorrido idéntico de la tabla (R2-M3) -----------------------------
+    def test_host_and_model_traverse_identical_table(self):
+        """R2-M3: Host and model read protocol items from header and traverse them identically."""
+        ad2, ser, clock, reset_fn, fw, bus = self.create_simulated_bench()
+        host_visited: list[str] = []
+
+        code = run_selftest(
+            serial_port=ser,
+            ad2=ad2,
+            clock=clock,
+            reset_fn=reset_fn,
+            expected_rev="ca569b6",
+            visited_items=host_visited,
+        )
+
+        self.assertEqual(code, 0)
+        expected_items = [it.name for it in PROTOCOL_ITEMS]
+        self.assertEqual(host_visited, expected_items, "Host did not visit table items in exact order")
+        self.assertEqual(fw.visited_items, expected_items, "Firmware model did not visit table items in exact order")
+        self.assertEqual(host_visited, fw.visited_items, "Host and model visited items differ")
 
 
 class TestSafetyGuardsDirect(BaseSimTest):
@@ -827,6 +889,22 @@ class TestSafetyGuardsDirect(BaseSimTest):
         tracker.abort()
         with self.assertRaises(AD2SafetyViolation):
             drive_bus(self.ad2, tracker, 0x55)
+
+    def test_s5_stale_token_from_previous_step_rejected(self):
+        """S5: BusToken generated for a previous step is rejected if used in another step (§2.4)."""
+        tracker = StepTracker(EXPECTED_STEP_SEQUENCE)
+        # Advance to step 8
+        tracker.advance_step(STEP_T0A_MCU_TO_AD2, GPIO_BENCH_BUS_MCU)
+        token_step8 = BusToken(STEP_T0A_MCU_TO_AD2, _TOKEN_SENTINEL)
+
+        # Advance tracker to step 9 (bus=AD2)
+        tracker.advance_step(STEP_T0A_AD2_TO_MCU, GPIO_BENCH_BUS_AD2)
+        # Manually install stale step 8 token
+        tracker._current_token = token_step8
+
+        # Calling drive_bus with stale token must raise AD2SafetyViolation before DLL
+        with self.assertRaises(AD2SafetyViolation):
+            drive_bus(self.ad2, tracker, 0xAA)
 
     def test_s10_reset_mcu_safe_enforces_oe_zero(self):
         """S10: reset_mcu_safe raises AD2SafetyViolation when OE != 0x0000."""
