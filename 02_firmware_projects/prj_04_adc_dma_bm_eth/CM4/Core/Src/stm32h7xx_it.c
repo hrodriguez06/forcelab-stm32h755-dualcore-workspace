@@ -87,3 +87,11 @@ void ADC_IRQHandler(void)
 {
     ADC_Acquisition_ADC_IRQHandler();
 }
+
+#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
+extern void HSEM_SelfTest_CM4_IRQHandler(void);
+void HSEM2_IRQHandler(void)
+{
+    HSEM_SelfTest_CM4_IRQHandler();
+}
+#endif

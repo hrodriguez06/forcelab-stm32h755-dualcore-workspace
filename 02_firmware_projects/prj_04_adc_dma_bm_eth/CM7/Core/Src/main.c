@@ -96,22 +96,28 @@ int main(void)
     /* H5b: Release HSEM before magic is valid */
     g_shared.magic = 0U;
     __DMB();
+    uint32_t wake_before_h5b = g_shared.cpu2_wake_count;
     HSEM_BM_FastTake(HSEM_ID_BOOT_SYNC);
     HSEM_BM_Release(HSEM_ID_BOOT_SYNC, 0U);
-    /* Wait ~10 ms (640,000 cycles) for CPU2 to wake, verify magic, and re-park into STOP */
+    /* Wait ~10 ms (640,000 cycles @ 64 MHz HSI) for CPU2 to wake, verify magic != SHARED_MAGIC, and re-park into STOP */
     uint32_t t_h5b = DWT->CYCCNT;
     while ((DWT->CYCCNT - t_h5b) < 640000UL) { __NOP(); }
-    bool h5b_ok = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
+    bool woke_h5b = (g_shared.cpu2_wake_count > wake_before_h5b);
+    bool reparked_h5b = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
+    bool h5b_ok = woke_h5b && reparked_h5b;
 
-    /* H5c: Spurious EXTI event to CPU2 via EXTI_SWIER1 */
-    EXTI->C2EMR1 |= (1UL << 23);
-    EXTI->SWIER1 |= (1UL << 23);
+    /* H5c: Spurious EXTI line 15 event to CPU2 via EXTI_SWIER1 (B2) */
+    uint32_t wake_before_h5c = g_shared.cpu2_wake_count;
+    EXTI->C2EMR1 |= (1UL << 15);
+    EXTI->SWIER1 |= (1UL << 15);
     uint32_t t_h5c = DWT->CYCCNT;
     while ((DWT->CYCCNT - t_h5c) < 640000UL) { __NOP(); }
-    EXTI->C2EMR1 &= ~(1UL << 23);
-    EXTI->C2PR1 = (1UL << 23);
-    EXTI->PR1 = (1UL << 23);
-    bool h5c_ok = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
+    EXTI->C2EMR1 &= ~(1UL << 15);
+    EXTI->C2PR1 = (1UL << 15);
+    EXTI->PR1 = (1UL << 15);
+    bool woke_h5c = (g_shared.cpu2_wake_count > wake_before_h5c);
+    bool reparked_h5c = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
+    bool h5c_ok = woke_h5c && reparked_h5c;
 
     HSEM_TEST_SHARED->h5_ok = h5_ok ? 1U : 0U;
     HSEM_TEST_SHARED->h5b_ok = h5b_ok ? 1U : 0U;

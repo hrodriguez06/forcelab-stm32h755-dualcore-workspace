@@ -75,4 +75,12 @@ void ETH_IRQHandler(void)
     HAL_ETH_IRQHandler(ETH_Driver_GetHandle());
 }
 
+#if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
+extern void HSEM_SelfTest_CM7_IRQHandler(void);
+void HSEM1_IRQHandler(void)
+{
+    HSEM_SelfTest_CM7_IRQHandler();
+}
+#endif
+
 
