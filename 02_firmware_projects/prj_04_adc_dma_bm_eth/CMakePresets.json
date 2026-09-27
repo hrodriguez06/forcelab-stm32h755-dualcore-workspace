@@ -68,6 +68,21 @@
         "ADC_DRIVER_SELFTEST": "OFF",
         "DMA_DRIVER_SELFTEST": "OFF"
       }
+    },
+    {
+      "name": "selftest-gpio",
+      "displayName": "Dual-Core Debug with GPIO Selftest (CM7 + CM4)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/selftest-gpio",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "GPIO_DRIVER_SELFTEST": "ON",
+        "HSEM_DRIVER_SELFTEST": "OFF",
+        "UART_DRIVER_SELFTEST": "OFF",
+        "ADC_DRIVER_SELFTEST": "OFF",
+        "DMA_DRIVER_SELFTEST": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -76,6 +91,7 @@
     { "name": "selftest",      "configurePreset": "selftest"      },
     { "name": "selftest-adc",  "configurePreset": "selftest-adc"  },
     { "name": "selftest-uart", "configurePreset": "selftest-uart" },
-    { "name": "selftest-hsem", "configurePreset": "selftest-hsem" }
+    { "name": "selftest-hsem", "configurePreset": "selftest-hsem" },
+    { "name": "selftest-gpio", "configurePreset": "selftest-gpio" }
   ]
 }

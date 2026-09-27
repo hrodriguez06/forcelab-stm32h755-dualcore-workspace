@@ -54,6 +54,9 @@ extern "C" {
 #define HSEM_ID_M4_TO_M7_MBOX   3U   /* guards m4_to_m7                      */
 #define HSEM_ID_ADC_DATA        4U   /* guards adc telemetry data            */
 #define BOARD_GPIO_HSEM_ID      5U   /* reserved for 00_gpio shared pin lock */
+#ifndef GPIO_TEST_SHARED_ADDR
+#define GPIO_TEST_SHARED_ADDR   0x3800A000UL /* 00_gpio dual-core selftest SRAM4 area */
+#endif
 
 #define SHARED_MBOX_SIZE        64U  /* multiple of 32 (cache line)          */
 #define SHARED_ADC_WAVEFORM_SAMPLES 512U /* 512 samples = 1.024 ms @ 500 kSPS (10 cycles @ 10 kHz) */

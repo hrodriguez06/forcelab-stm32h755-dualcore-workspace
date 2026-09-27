@@ -45,6 +45,10 @@
 #include "hsem_selftest.h"
 #endif
 
+#if defined(GPIO_DRIVER_SELFTEST) && GPIO_DRIVER_SELFTEST
+#include "gpio_selftest.h"
+#endif
+
 #include <stdbool.h>
 #include <string.h>
 
@@ -324,6 +328,21 @@ static void Status_Task(void *arg)
         if (DrainMbox(mbox_adc, sizeof(mbox_adc)))
         {
             APP_LOG("[m4_adc_test] %s", mbox_adc);
+        }
+#endif
+
+#if defined(GPIO_DRIVER_SELFTEST) && GPIO_DRIVER_SELFTEST
+        char mbox_gpio[SHARED_MBOX_SIZE];
+        while (DrainMbox(mbox_gpio, sizeof(mbox_gpio)))
+        {
+            APP_LOG("[m4_gpio_test] %s", mbox_gpio);
+        }
+
+        static bool s_m7_gpio_tested = false;
+        if (!s_m7_gpio_tested)
+        {
+            s_m7_gpio_tested = true;
+            GPIO_SelfTest_CM7_Run();
         }
 #endif
 

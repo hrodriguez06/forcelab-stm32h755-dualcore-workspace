@@ -148,6 +148,16 @@ if(HSEM_DRIVER_SELFTEST)
     )
 endif()
 
+if(GPIO_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE GPIO_DRIVER_SELFTEST=1)
+    target_sources(${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/App/Src/gpio_selftest.c
+    )
+    target_link_libraries(${TARGET} PRIVATE
+        stm32h7_driver_gpio_bm
+    )
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"
