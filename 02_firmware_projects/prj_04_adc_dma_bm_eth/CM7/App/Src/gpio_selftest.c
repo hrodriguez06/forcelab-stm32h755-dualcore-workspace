@@ -557,10 +557,6 @@ static bool test_t0b_claim_guards(void)
         bench_safe();
         return false;
     }
-    if (!hs_mcu())
-    {
-        return false;
-    }
     return true;
 }
 
@@ -603,11 +599,6 @@ static bool test_t0b_s5_neg(void)
     }
 
     APP_LOG("[m7_gpio_test] T0b_c safe state verified: all wired pins input");
-
-    if (!hs_mcu())
-    {
-        return false;
-    }
 
     return pass;
 }
@@ -654,7 +645,7 @@ static bool test_t0a_loose(void)
 
     /* 1. Pull-up check on 13 test lines (PE7 MCU_ACK stays OUTPUT, PE2 HOST_REQ stays INPUT) */
     uint32_t pupdr_e = GPIOE->PUPDR;
-    pupdr_e &= ~0xFFFF3F00UL;
+    pupdr_e &= ~0xFFFF3FC0UL;
     pupdr_e |= (0x55550000UL | (1UL << (5U * 2U)) | (1UL << (6U * 2U)) | (1UL << (3U * 2U)) | (1UL << (4U * 2U)));
     GPIOE->PUPDR = pupdr_e;
 
@@ -670,7 +661,7 @@ static bool test_t0a_loose(void)
 
     /* 2. Pull-down check */
     pupdr_e = GPIOE->PUPDR;
-    pupdr_e &= ~0xFFFF3F00UL;
+    pupdr_e &= ~0xFFFF3FC0UL;
     pupdr_e |= (0xAAAA0000UL | (2UL << (5U * 2U)) | (2UL << (6U * 2U)) | (2UL << (3U * 2U)) | (2UL << (4U * 2U)));
     GPIOE->PUPDR = pupdr_e;
 

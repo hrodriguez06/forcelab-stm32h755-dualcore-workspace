@@ -319,9 +319,6 @@ class FirmwareModel:
         self._enter_step(STEP_T0B_GUARDS, "NONE")
         self.log_m7("[m7_gpio_test] T0b_b guards verification: PASS")
         yield
-        ok = yield from self.hs_mcu("step3_guards")
-        if not ok:
-            return
 
         # 6. Step 4: T0b(c) S5 Negative Control
         self._enter_step(STEP_T0B_S5_NEG, "MCU")
@@ -333,7 +330,7 @@ class FirmwareModel:
             self.log_m7("[m7_gpio_test] BUSCHK up drive=0x5A")
         yield
 
-        # Handshake for contention check
+        # Handshake for contention check (single handshake in T0b(c))
         ok = yield from self.hs_mcu("step4_buschk")
         if not ok:
             return
@@ -342,9 +339,6 @@ class FirmwareModel:
         self.bus.clear_mcu_output(DIO_BUS_MASK)
         self.log_m7("[m7_gpio_test] T0b_c safe state verified: all wired pins input")
         yield
-        ok = yield from self.hs_mcu("step4_safe")
-        if not ok:
-            return
 
         # 7. Step 5: T0b(d) 10-second Timeout Test
         self._enter_step(STEP_T0B_TIMEOUT, "NONE")
@@ -355,9 +349,6 @@ class FirmwareModel:
 
         self.log_m7("[m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)")
         yield
-        ok = yield from self.hs_mcu("step5_timeout")
-        if not ok:
-            return
 
         # 8. Step 6: T0a Loose Lines Check (13 lines)
         self._enter_step(STEP_T0A_LOOSE, "NONE")

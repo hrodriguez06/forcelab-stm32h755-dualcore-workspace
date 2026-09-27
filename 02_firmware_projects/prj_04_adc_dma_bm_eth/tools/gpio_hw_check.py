@@ -668,7 +668,6 @@ def run_selftest(
             log("[ad2] T0b(b) firmware claim guards PASSED.")
         else:
             log("[ad2] T0b(b) firmware claim guards FAILED!")
-        hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
         # 6. Step 4: T0b(c) S5 Negative Control (B4)
         m_step4 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
@@ -700,12 +699,11 @@ def run_selftest(
         else:
             log(f"[ad2] T0b(c) S5 negative control FAILED (caught={t0b_c_contention_caught}, bus=0x{bus_read:02X}, exp=0x{announced_pattern:02X})")
 
-        # Handshake for contention check
+        # Handshake for contention check (single handshake in T0b(c))
         hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
         # MCU releases bus and announces safe state
         line_reader.expect(r"^\[m7_gpio_test\] T0b_c safe state verified: all wired pins input", timeout_s=10.0)
-        hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
         # 7. Step 5: T0b(d) 10-second Timeout Test
         m_step5 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
@@ -720,8 +718,6 @@ def run_selftest(
             log("[ad2] T0b(d) timeout test PASSED.")
         else:
             log("[ad2] T0b(d) timeout test FAILED!")
-
-        hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
         # 8. Step 6: T0a Loose Lines Check (13 lines)
         m_step6 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)

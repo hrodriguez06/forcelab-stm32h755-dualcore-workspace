@@ -508,8 +508,8 @@ class TestHarnessScenarios(unittest.TestCase):
         """E10: Each handshake timeout aborts to S2, fails, and leaves OE=0."""
         hs_points = [
             "session_start",
-            "step3_guards",
             "step4_buschk",
+            "step6_up",
             "step7_pe2",
             "step8_up",
             "step9_ready",
