@@ -26,32 +26,11 @@ Analysis:
   on CM7 and ~120 ns on CM4.
 - A release is a single 32-bit write, buffered on AHB (3 cycles on CM7, 6 on CM4).
 
-2. In-Application Semaphore Retention Duration (prj_04)
--------------------------------------------------------
-- HSEM 4 (HSEM_ID_ADC_DATA):
-  * CM4 Producer (adc_acquisition.c):
-    Guards waveform update (512 samples = 1024 bytes).
-    Measured duration: ~270 cycles at 200 MHz (~1.35 microseconds).
-  * CM7 Consumer (adc_server.c):
-    Guards telemetry copy into UDP buffer.
-    Measured duration: ~260 cycles at 400 MHz (~0.65 microseconds).
-  * Finding: Maximum retention under HSEM 4 is ~1.35 microseconds (CM4 memcpy).
-    A spin limit of 1000 loops in Shared_TryLock on CM4 (200 MHz) covers approx
-    3-5 microseconds, which barely covers the worst-case bus contention.
-    Converting to a cycle-based timeout of 2000-4000 cycles ensures robust operation.
+Application hold times of HSEM 4 were not measured in F0. They were measured
+later with committed DWT instrumentation; see 01_shared_drivers/10_hsem/README.md
+section 11.2 (CM7 42.7 us, CM4 37.6 us).
 
-- HSEM 3 (HSEM_ID_M4_TO_M7_MBOX):
-  * CM4 Producer (dma_selftest.c, main.c):
-    Formats string into g_shared.m4_to_m7: ~350 cycles at 200 MHz (~1.75 us).
-  * CM7 Consumer (app_main.c Status_Task - S11 Flaw):
-    Status_Task held HSEM 3 across APP_LOG(), which acquires xSemaphoreTake
-    and transmits over 115200 baud UART blocking.
-    Measured duration: 2,500,000 to 5,000,000 cycles (~6.25 to 12.5 milliseconds)!
-    This blocks CM4 in SHARED_LOCK(HSEM_ID_M4_TO_M7_MBOX) for milliseconds.
-    Remediation in Phase F2: copy mailbox buffer out, release HSEM 3 immediately,
-    and only then invoke APP_LOG (resolving S11).
-
-3. H2 Negative Control Results (Contention without Lock)
+2. H2 Negative Control Results (Contention without Lock)
 --------------------------------------------------------
 - Part A (Concurrent Counter):
   Iterations per core: N = 100,000
@@ -65,7 +44,7 @@ Analysis:
   Torn 8-word reads observed: 15,408 (30.8% torn reads due to lack of atomicity)
   Result: PASS (control reproduces torn reads > 0)
 
-4. Debugger RLR Read Pitfall Verification
+3. Debugger RLR Read Pitfall Verification
 -----------------------------------------
 - SWD Hotplug read of 0x58026480 (HSEM_RLR[0]):
   Returned: 0x80000300 (LOCK=1, COREID=3, PROCID=0).

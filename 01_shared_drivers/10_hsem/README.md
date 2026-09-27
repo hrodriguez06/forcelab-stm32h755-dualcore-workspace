@@ -1,141 +1,142 @@
-# STM32H755 Shared Hardware Semaphore (HSEM) Driver (`01_shared_drivers/10_hsem`)
+# STM32H755 Shared HSEM Driver (`01_shared_drivers/10_hsem`)
 
-Peripheral-First (Plan A), 3-tier shared Hardware Semaphore driver for the
-STM32H755ZI dual-core microcontroller: Cortex-M7 (CPU1) and Cortex-M4 (CPU2).
-Provides atomic mutual exclusion, single-core collision protection, bounded
-cycle timeouts, interrupt notifications, and a race-free dual-core boot handshake.
+Peripheral-First (Plan A), 3-tier shared driver for the Hardware Semaphore of the
+STM32H755ZI: 32 semaphores shared by CPU1 (Cortex-M7) and CPU2 (Cortex-M4). It
+provides 1-step and 2-step locks that also exclude contexts of the same core, a
+release that refuses to act when the caller is not the owner, lock timeouts
+bounded in CPU cycles, recovery of a dead core's semaphores, interrupt
+notifications, and the CPU1 → CPU2 boot handshake as a library function.
 
-Status: Implemented and audited. Corrective actions for independent audit findings
-(B1–B6, M1–M7, m1–m8) are implemented and verified via multi-project CI builds and
-hardware-in-the-loop self-tests. The test suite is self-identifying and every
-hardware test has a recorded negative control. What is covered, and what is not,
-is documented in [section 9](#9-validation).
+Status: validated on a NUCLEO-H755ZI-Q (silicon Rev V, `REV_ID = 0x2003`) on
+2026-09-26. An independent audit found 13 defects in the first delivery and
+closed the driver at `b6d0b26` (commit `6f7af43`), after reproducing every
+hardware result itself. What that covers, and what it does not, is in
+[section 11](#11-validation).
 
 ---
 
 ## 1. Tiers
 
-| Tier | Files | CMake Target | Links | ST Dependency | Typical Use |
+| Tier | Files | CMake target | Links | ST dependency | Typical use |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Bare-Metal** | `hsem_bm.[c\|h]` | `stm32h7_driver_hsem_bm` | — | CMSIS only (`stm32h7xx.h`) | Cortex-M4 deterministic loops, pre-RTOS bring-up, boot handshake, fault diagnostics |
-| **Low-Level** | `hsem_ll.[c\|h]` | `stm32h7_driver_hsem_ll` | `stm32h7_driver_hsem_bm` | `stm32h7xx_ll_hsem.h` inlines | LL inline wrappers, identical semantics to BM |
-| **HAL** | `hsem_hal.[c\|h]` | `stm32h7_driver_hsem_hal` | `stm32h7_driver_hsem_bm` | ST HAL (`HAL_HSEM_*`) | Cortex-M7 FreeRTOS / lwIP, HAL handle callbacks |
+| **Bare-Metal** | `hsem_bm.[c\|h]` | `stm32h7_driver_hsem_bm` | - | CMSIS only (`stm32h7xx.h`) | Both cores, the boot handshake, CM4 without HAL, fault paths |
+| **Low-Level** | `hsem_ll.[c\|h]` | `stm32h7_driver_hsem_ll` | `stm32h7_driver_hsem_bm` | `stm32h7xx_ll_hsem.h` inlines | Projects written against LL constants |
+| **HAL** | `hsem_hal.[c\|h]` | `stm32h7_driver_hsem_hal` | `stm32h7_driver_hsem_bm` | ST HAL (`HAL_HSEM_*`) | Cortex-M7 with FreeRTOS, HAL interrupt callbacks |
 
 ```cmake
 target_link_libraries(cm4_firmware PRIVATE stm32h7_driver_hsem_bm)   # or _ll
-target_link_libraries(cm7_firmware PRIVATE stm32h7_driver_hsem_hal)  # or _bm, _ll
+target_link_libraries(cm7_firmware PRIVATE stm32h7_driver_hsem_bm)   # or _ll, _hal
 ```
 
 ```c
 #include "hsem_bm.h"    /* never "10_hsem/hsem_bm.h": the directory is on the include path */
 ```
 
-- **No unsuffixed target (Rule C4):** There is deliberately no `stm32h7_driver_hsem`
-  target. Unlike DMA/GPIO (where unsuffixed means BM) or UART/ADC (where unsuffixed
-  means HAL), HSEM was built with all three tiers simultaneously; callers must
-  explicitly select `_bm`, `_ll`, or `_hal`.
-- **`hsem_bm` is the single source of truth:** Validation logic, PRIMASK protection,
-  memory barriers (`__DMB()`), DWT cycle timebase, and the dual-core boot handshake
-  live exclusively in `hsem_bm`. Both LL and HAL link against `hsem_bm` and reuse
-  these primitives.
-- **Zero RAM state in BM and LL (Rule C7):** `.bss` and `.data` of `hsem_bm.o` and
-  `hsem_ll.o` are exactly **0 bytes**. Both cores execute the same code without
-  sharing any memory state beyond the hardware registers.
-- **Strict downward dependencies (Rule C8):** BM depends only on CMSIS headers.
-  LL depends only on ST LL inlines and BM. HAL is enclosed within
-  `#if defined(HAL_HSEM_MODULE_ENABLED)` and BM. The driver never includes FreeRTOS
-  or project headers (`board_def.h`, `shared_memory.h`).
-- **No reserved project symbols (Rule A11):** The driver never defines
-  `HAL_HSEM_FreeCallback` or `HSEMx_IRQHandler`. Those belong strictly to the
-  application project or CubeMX HAL overrides.
+- **There is no unsuffixed `stm32h7_driver_hsem`.** The name means BM in `dma` and
+  `gpio` and HAL in `uart` and `adc`; there was no older name to keep, so every
+  project names the tier it wants. The umbrella `stm32h7_shared_drivers` does not
+  link HSEM.
+- **`hsem_bm` is the single copy** of the validation, the core check, the PRIMASK
+  sections, the barriers, the DWT timebase, the recovery path and the boot
+  handshake. LL and HAL call into it. The recovery, diagnostic and boot functions
+  exist only in BM.
+- **BM and LL keep no state in RAM** (`.data = .bss = 0` in the linked image), so
+  both cores run the same code and share nothing but the peripheral. HAL keeps one
+  callback pointer per image.
+- **LL needs no LL `.c` file** and no `USE_FULL_LL_DRIVER`, and it never includes
+  `stm32h7xx_hal.h`. **HAL compiles to nothing** without `HAL_HSEM_MODULE_ENABLED`.
+- **The driver never defines `HSEM1_IRQHandler`, `HSEM2_IRQHandler` or
+  `HAL_HSEM_FreeCallback`.** They belong to the project's `stm32h7xx_it.c` and to
+  CubeMX (see §6).
 
-### 1.1 Feature Matrix
+### 1.1 Feature matrix
 
 | Feature | BM | LL | HAL |
 | :--- | :---: | :---: | :---: |
-| 1-Step Fast Lock (atomic `RLR` read) | yes | yes | yes |
-| 2-Step Lock (`Rx` write + readback with `PROCID`) | yes | yes | yes |
-| Single-core re-entrancy / self-collision detection (S1) | yes (`BUSY_SELF`) | yes (`BUSY_SELF`) | yes (`HAL_BUSY`) |
-| Honest release verification (checks owner before clearing) | yes | yes | yes |
-| Memory barriers (`__DMB()`) on lock/unlock | yes | yes | yes |
-| Strictly 32-bit word register accesses | yes | yes | yes |
-| Bounded wait in CPU cycles (DWT `CYCCNT`) | yes | yes | yes |
-| Cooperative `relax` callback hook during wait | yes (`…Ex`) | yes (`…Ex`) | yes (`…Ex`) |
-| Query lock status, owner core and process ID | yes | via BM | via BM |
-| Active semaphore bitmask (`GetLockedMask`) | yes | via BM | via BM |
-| Bulk release by core with security key (`ReleaseAllOfCore`) | yes | via BM | via BM |
-| Interrupt / event notification enable/disable | yes | yes | yes |
-| Atomic take-or-notify (`TakeOrNotify`) | yes | no | no |
-| IRQ service with trailing `__DSB()` | — | — | `HSEM_HAL_IRQService` |
-| Callback dispatch mechanism | `NotifyTake` | `NotifyTake` | `RegisterCallback` / `Dispatch` |
-| Race-free dual-core boot handshake | yes | via BM | via BM |
+| 1-step lock (`RLR` read, PROCID 0) | yes | yes | yes |
+| 2-step lock (`R` write + read-back, PROCID 1..255) | yes | yes | yes |
+| Refuses a lock already held by this core (`BUSY_SELF`) | yes | yes | yes (`HAL_BUSY`) |
+| Release checks the owner before writing | yes | yes | yes |
+| `DMB` after the take and before the release | yes | yes | yes |
+| Everything validated before the first peripheral access | yes | yes | yes |
+| Core check against `SCB->CPUID`, `HSEMEN` check | yes | yes | yes |
+| Wait bounded in DWT cycles, with a `relax` hook | yes | yes | yes |
+| Owner, lock status, mask of a core's semaphores | yes | via BM | via BM |
+| Release all semaphores of a core (`ReleaseAllOfCore`) | yes | via BM | via BM |
+| Notification: enable (clears a stale flag), re-arm, disable | yes | yes | yes |
+| One-shot notification service (`NotifyTake`) | yes | yes | `HAL_HSEM_IRQHandler` via `HSEM_HAL_IRQService` |
+| Take-or-arm-notification (`TakeOrNotify`, RM0399 §11.3.7) | yes | no | no |
+| Callback registry | - | - | `RegisterCallback` / `Dispatch` |
+| Boot handshake | yes | via BM | via BM |
 
 ---
 
-## 2. API Summary
+## 2. API summary
 
-### 2.1 Return Status (`HsemBm_Status_t`)
+### 2.1 Status codes
 
-All BM and LL functions map to these canonical status codes:
+BM and LL return `HsemBm_Status_t`. HAL returns `HAL_StatusTypeDef` with a fixed
+mapping; the detail behind `HAL_BUSY` is still available from `HSEM_BM_GetOwner`.
 
-| Code | Value | Description |
-| :--- | :---: | :--- |
-| `HSEM_BM_OK` | 0 | Semaphore acquired by caller, or operation successful |
-| `HSEM_BM_BUSY` | 1 | Semaphore is currently held by the other core |
-| `HSEM_BM_BUSY_SELF` | 2 | Held by THIS core: other PROCID, other context, or re-entry (S1) |
-| `HSEM_BM_TIMEOUT` | 3 | Semaphore was not acquired before `max_cycles` elapsed |
-| `HSEM_BM_ERR_PARAM` | 4 | Invalid parameter (`id > 31`, `proc_id > 255`, `cycles == 0`, key `0`) |
-| `HSEM_BM_ERR_NOT_OWNER` | 5 | Release refused: caller is not the registered owner; nothing written |
-| `HSEM_BM_ERR_TIMEBASE` | 6 | DWT `CYCCNT` not running: a bounded cycle wait is impossible |
-| `HSEM_BM_ERR_CORE` | 7 | Build flag `CORE_CM4` disagrees with `SCB->CPUID`, or RCC clock off |
+| `HsemBm_Status_t` | Meaning | HAL |
+| :--- | :--- | :--- |
+| `HSEM_BM_OK` | Taken by the caller, or done | `HAL_OK` |
+| `HSEM_BM_BUSY` | Held by the other core | `HAL_BUSY` |
+| `HSEM_BM_BUSY_SELF` | Held by this core: another context, another PROCID, or a re-entry | `HAL_BUSY` |
+| `HSEM_BM_TIMEOUT` | Still held when `max_cycles` ran out | `HAL_TIMEOUT` |
+| `HSEM_BM_ERR_PARAM` | Refused before touching the peripheral | `HAL_ERROR` |
+| `HSEM_BM_ERR_NOT_OWNER` | Release refused: the caller does not hold it; nothing was written | `HAL_ERROR` |
+| `HSEM_BM_ERR_TIMEBASE` | DWT `CYCCNT` is not running, so a bounded wait is impossible | `HAL_ERROR` |
+| `HSEM_BM_ERR_CORE` | `CORE_CM4` disagrees with `SCB->CPUID`, or `HSEMEN` is off on this core | `HAL_ERROR` |
 
-HAL functions return standard `HAL_StatusTypeDef` (`HAL_OK`, `HAL_BUSY`, `HAL_TIMEOUT`, `HAL_ERROR`).
+A `bool` would not do here: a caller that retries while it gets `false` would spin
+for ever on an invalid ID.
 
-### 2.2 `hsem_bm.h` API
+### 2.2 `hsem_bm.h`
 
 ```c
-/* Initialization & Timebase Primitives */
-HsemBm_Status_t HSEM_BM_Init(void);
-HsemBm_Status_t HSEM_BM_CheckInit(void);
-bool            HSEM_BM_TimebaseStart(void);
-uint32_t        HSEM_BM_GetCoreId(void);
+/* Setup, per core */
+HsemBm_Status_t HSEM_BM_Init(void);            /* HSEMEN on this core's RCC bank, read back; core check */
+HsemBm_Status_t HSEM_BM_CheckInit(void);       /* the same checks, no writes (every call runs them)     */
+bool            HSEM_BM_TimebaseStart(void);   /* DWT CYCCNT on (unlocks DWT_LAR on the M7)             */
+uint32_t        HSEM_BM_GetCoreId(void);       /* 3 on CM7, 1 on CM4                                    */
 
-/* Locking & Releasing */
-HsemBm_Status_t HSEM_BM_FastTake(uint32_t id);
-HsemBm_Status_t HSEM_BM_Take(uint32_t id, uint32_t proc_id);
+/* Lock */
+HsemBm_Status_t HSEM_BM_FastTake(uint32_t id);                          /* 1-step, PROCID 0      */
+HsemBm_Status_t HSEM_BM_Take(uint32_t id, uint32_t proc_id);            /* 2-step, proc_id 1..255 */
 HsemBm_Status_t HSEM_BM_TakeTimeout(uint32_t id, uint32_t proc_id, uint32_t max_cycles);
 HsemBm_Status_t HSEM_BM_TakeTimeoutEx(uint32_t id, uint32_t proc_id, uint32_t max_cycles,
-                                      void (*relax)(void *ctx), void *ctx);
+                                      void (*relax)(void *ctx), void *ctx);   /* proc_id 0 = 1-step */
 HsemBm_Status_t HSEM_BM_Release(uint32_t id, uint32_t proc_id);
 
-/* Status & Inspection (strictly reads Rx, never RLRx) */
+/* State: reads HSEM_Rx only, never HSEM_RLRx */
 bool            HSEM_BM_IsLocked(uint32_t id);
 bool            HSEM_BM_GetOwner(uint32_t id, HsemBm_Owner_t *out);
 uint32_t        HSEM_BM_GetLockedMask(uint32_t core_id);
 
-/* Recovery (RM0399 §11.3.6) */
-bool            HSEM_BM_SetClearKey(uint16_t key);
+/* Recovery, RM0399 §11.3.6 */
+bool            HSEM_BM_SetClearKey(uint16_t key);                      /* key 0 refused */
 HsemBm_Status_t HSEM_BM_ReleaseAllOfCore(uint32_t core_id, uint16_t key);
 
-/* Notifications */
-bool            HSEM_BM_NotifyEnable(uint32_t sem_mask);
-bool            HSEM_BM_NotifyRearm(uint32_t sem_mask);
+/* Notification, the calling core's line only */
+bool            HSEM_BM_NotifyEnable(uint32_t sem_mask);   /* clear CnICR, then set CnIER: first arm */
+bool            HSEM_BM_NotifyRearm(uint32_t sem_mask);    /* set CnIER only: re-arm from the ISR    */
 bool            HSEM_BM_NotifyDisable(uint32_t sem_mask);
-uint32_t        HSEM_BM_NotifyTake(void);
-uint32_t        HSEM_BM_GetRawStatus(void);
-IRQn_Type       HSEM_BM_GetIRQn(void);
+uint32_t        HSEM_BM_NotifyTake(void);                  /* MISR -> clear those IER bits, ICR, DSB */
+uint32_t        HSEM_BM_GetRawStatus(void);                /* CnISR                                  */
+IRQn_Type       HSEM_BM_GetIRQn(void);                     /* HSEM1_IRQn on CM7, HSEM2_IRQn on CM4   */
 HsemBm_Status_t HSEM_BM_TakeOrNotify(uint32_t id, uint32_t proc_id);
 
-/* Dual-Core Boot Handshake */
-HsemBm_Status_t HSEM_BM_BootWaitForCpu1(const HsemBm_BootWait_t *cfg);
-HsemBm_Status_t HSEM_BM_BootWaitCpu2Parked(uint32_t max_cycles);
-HsemBm_Status_t HSEM_BM_BootReleaseCpu2(uint32_t sem_id, uint32_t max_cycles);
+/* Boot handshake */
+HsemBm_Status_t HSEM_BM_BootWaitForCpu1(const HsemBm_BootWait_t *cfg);        /* CPU2 only, no timeout */
+HsemBm_Status_t HSEM_BM_BootWaitCpu2Parked(uint32_t max_cycles);              /* CPU1 only             */
+HsemBm_Status_t HSEM_BM_BootReleaseCpu2(uint32_t sem_id, uint32_t max_cycles); /* CPU1 only            */
 ```
 
-### 2.3 `hsem_ll.h` API
+### 2.3 `hsem_ll.h`
 
-Drop-in replacement using ST LL static inlines (`stm32h7xx_ll_hsem.h`), maintaining identical
-status codes and safety invariants:
+Same semantics and status codes as BM, built on the ST LL inlines. The line
+(C1 or C2) is chosen with `CORE_CM4`.
 
 ```c
 HsemBm_Status_t HSEM_LL_FastTake(uint32_t id);
@@ -150,13 +151,15 @@ bool            HSEM_LL_NotifyDisable(uint32_t sem_mask);
 uint32_t        HSEM_LL_NotifyTake(void);
 ```
 
-*(Diagnostic queries, recovery, and boot handshake are reused directly from `hsem_bm.h`.)*
+`LL_HSEM_1StepLock` reports success also when the same core already holds the
+semaphore (its own documentation says so). The wrapper adds the `BUSY_SELF` check.
 
-### 2.4 `hsem_hal.h` API
+### 2.4 `hsem_hal.h`
 
-Wrapper around ST HAL (`stm32h7xx_hal_hsem.c`) that injects parameter validation,
-`__DMB()` memory barriers, honest release verification, DWT cycle timeouts, and
-callback registration:
+A wrapper around `HAL_HSEM_*` that adds what the HAL leaves out (see §5):
+validation that survives `USE_FULL_ASSERT` being off, the core check, `BUSY_SELF`,
+barriers, an owner check before the release, cycle timeouts and PRIMASK around
+the `CnIER` read-modify-writes.
 
 ```c
 HAL_StatusTypeDef HSEM_HAL_FastTake(uint32_t id);
@@ -169,295 +172,563 @@ HAL_StatusTypeDef HSEM_HAL_NotifyEnable(uint32_t sem_mask);
 HAL_StatusTypeDef HSEM_HAL_NotifyRearm(uint32_t sem_mask);
 HAL_StatusTypeDef HSEM_HAL_NotifyDisable(uint32_t sem_mask);
 HAL_StatusTypeDef HSEM_HAL_RegisterCallback(HsemHal_FreeCallback_t cb, void *ctx);
-void              HSEM_HAL_IRQService(void);
-void              HSEM_HAL_Dispatch(uint32_t sem_mask);
+void              HSEM_HAL_IRQService(void);            /* HAL_HSEM_IRQHandler + __DSB()            */
+void              HSEM_HAL_Dispatch(uint32_t sem_mask); /* call it from the project's FreeCallback */
 ```
 
 ---
 
-## 3. Board Definition & Architecture Contract
+## 3. Project contract
 
-### 3.1 Rule C1: Dynamic Allocation Only
-The driver does not contain any `#define` for semaphore IDs, security keys, or PROCIDs.
-All identifiers are supplied dynamically by the caller.
+The driver defines no semaphore ID, PROCID or key. The project does.
 
-In dual-core projects (`prj_04_adc_dma_bm_eth`), IDs are declared in `shared_memory.h`:
+### 3.1 IDs and their owners (`shared_memory.h`)
 
 ```c
-#define HSEM_ID_BOOT_SYNC         0U   /* reserved: M7 -> M4 boot release      */
-#define HSEM_ID_SHARED_STATE      1U   /* guards SharedMemory_t.state          */
-#define HSEM_ID_M7_TO_M4_MBOX     2U   /* guards m7_to_m4 mailbox              */
-#define HSEM_ID_M4_TO_M7_MBOX     3U   /* guards m4_to_m7 mailbox              */
-#define HSEM_ID_ADC_DATA          4U   /* guards adc telemetry and waveform    */
-#define BOARD_GPIO_HSEM_ID        5U   /* reserved for 00_gpio shared pin lock */
-#define BOARD_HSEM_TEST_ID_FIRST 24U   /* IDs 24..31 reserved for selftests    */
+#define HSEM_ID_BOOT_SYNC       0U   /* CPU1 -> CPU2 boot release                 */
+#define HSEM_ID_SHARED_STATE    1U   /* SharedMemory_t.state (reserved, unused)   */
+#define HSEM_ID_M7_TO_M4_MBOX   2U   /* m7_to_m4 mailbox (reserved, unused)       */
+#define HSEM_ID_M4_TO_M7_MBOX   3U   /* m4_to_m7 mailbox                          */
+#define HSEM_ID_ADC_DATA        4U   /* ADC telemetry and waveform                */
+#define BOARD_GPIO_HSEM_ID      5U   /* 00_gpio cross-core pin lock (00_gpio F1)  */
+/* 24..31: driver selftests only, never used by the application */
 ```
 
-And the security clear key is defined in `board_def.h`:
+For every ID, write down **which contexts take it on each core, and with which
+procedure**. A 1-step lock is correct only when a single context per core uses
+that ID (or the caller holds PRIMASK from take to release). A second context on
+the same core needs the 2-step lock with its own PROCID. The driver detects a
+colliding take (`BUSY_SELF`), but it cannot tell which context releases a 1-step
+lock (§10).
+
+Today, in `prj_04`: HSEM 3 is taken with `SHARED_LOCK` by `Status_Task` on CM7
+and by the super-loop on CM4. HSEM 4 is taken with `Shared_TryLockCycles` by the
+`tcpip` thread on CM7 and by the super-loop on CM4.
+
+### 3.2 Clear key (`board_def.h`)
+
 ```c
-#define BOARD_HSEM_CLEAR_KEY      0xA5C3U
+#define BOARD_HSEM_CLEAR_KEY    0xA5C3U   /* never 0 */
 ```
 
-### 3.2 SRAM4 Placement & Cache Coherency
-Hardware semaphores coordinate CPU timing and bus arbitration, but **they do not
-perform data cache maintenance**.
-- Shared memory structures (`g_shared`) must be placed in **SRAM4 (`0x38000000`, D3 domain)**.
-- SRAM4 is configured as **Normal, Non-Cacheable** in `mpu_config.c` on Cortex-M7.
-- Cortex-M4 has no data cache.
-- Consequently, neither core requires cache clean or invalidate operations to observe
-  updates made by the other core under semaphore protection.
+CPU1 sets it once, with `HSEM_BM_SetClearKey`, before it releases CPU2, in every
+build. `HSEM_KEYR` resets to 0, and a key of 0 would let any stray write to
+`HSEM_CR` free a core's semaphores; that is why the driver refuses it. `KEYR` is
+shared and either core may write it, so "only CPU1 sets it" is a project rule.
 
----
+### 3.3 Order of calls on each core
 
-## 4. Rules the Driver Enforces
-
-1. **Validation Before Hardware Access (Rule C6):**
-   `id > 31`, `proc_id > 255`, `proc_id == 0` in 2-step `Take`, `max_cycles == 0`,
-   `key == 0`, and empty masks are rejected immediately before touching `HSEM->`.
-2. **Honest Release (Rule C11 / Finding S1):**
-   RM0399 §11.3.5 states that releasing a semaphore with an incorrect `COREID` or
-   `PROCID` is **ignored silently by hardware**. The driver explicitly reads `Rx`
-   prior to writing, verifying that the caller is indeed the owner. If not, it
-   writes nothing and returns `HSEM_BM_ERR_NOT_OWNER`.
-3. **Memory Barriers (Rule C10 / Finding S2):**
-   Under ARMv7-M, memory accesses between Normal (SRAM4) and Device (HSEM peripheral)
-   memory are not ordered without an explicit barrier. A `__DMB()` is executed
-   immediately after acquiring a lock, and immediately prior to releasing it.
-4. **Strictly 32-bit Word Accesses (Rule C10):**
-   RM0399 §11.4 mandates that all HSEM registers must be accessed as 32-bit words.
-   Byte or half-word accesses trigger a bus error. Verified by assembly inspection:
-   only `ldr.w` and `str.w` are emitted.
-5. **Single-Core Re-entrancy Protection (Finding S1):**
-   The 1-step lock (`RLR`) automatically assigns `PROCID = 0` and grants ownership to
-   any context on that core. To prevent a second task or ISR on the same core from
-   inadvertently entering the critical section, `FastTake` reads `Rx` under PRIMASK.
-   If already held by the calling core, it returns `HSEM_BM_BUSY_SELF` (or `HAL_BUSY`).
-6. **Local Critical Sections (Rule C12 / Finding S7):**
-   Bitwise RMW operations on `CnIER` and `FastTake` pre-checks save and restore
-   `PRIMASK` via `__get_PRIMASK()` and `__set_PRIMASK()`. Interrupts are never
-   blindly re-enabled with `__enable_irq()`, ensuring safety when called from fault
-   handlers or nested ISRs.
-7. **Bounded Cycle Timeouts (Rule C13 / Finding S3 & S4):**
-   All timeout loops are bounded by DWT `CYCCNT` cycles, guaranteeing calibrated time
-   duration on each core. Callers can provide a `relax` callback (e.g. `taskYIELD` or `__WFE`).
-
----
-
-## 5. Silicon Facts & RM0399 / ARMv7-M Matrix
-
-| Silicon Fact / RM0399 Rule | Implementation Mechanism | Validation |
+| Core | Where | Calls |
 | :--- | :--- | :--- |
-| **RM §11.3.8 Table 95:** COREID 3 = CM7, COREID 1 = CM4 | `Init` checks `SCB->CPUID` against expected Cortex-M core. | H0 |
-| **RM §11.3.3:** 1-step lock forces PROCID = 0 | `FastTake` performs pre-check under PRIMASK for `BUSY_SELF`. | H7 |
-| **RM §11.3.3:** 2-step lock checks COREID + PROCID | `Take` writes `Rx` and verifies readback. | H1, H3 |
-| **RM §11.3.5:** Unauthorized release ignored silently | `Release` checks owner before writing (`ERR_NOT_OWNER`). | H3 |
-| **RM §11.3.6:** Reset all semaphores of a core | `ReleaseAllOfCore` writes `KEYR` and `HSEM_CR`. | H8 |
-| **RM §11.3.7:** Notification procedure | `TakeOrNotify`, `NotifyEnable` clears flag before arming. | H9 |
-| **RM §11.4:** 32-bit accesses only | `uint32_t volatile` pointers only; no byte/half-word instructions. | objdump |
-| **RM §11.4.2:** Reading `RLR` locks semaphore | Only `FastTake` and `TakeOrNotify` read `RLR`; diagnostics read `R`. | H0, grep |
-| **ARMv7-M:** Normal vs Device memory ordering | `__DMB()` following lock acquisition and before release. | H1b, objdump |
-| **ARMv7-M:** WFE wake-up requires event | `BootWaitForCpu1` arms `SEVONPEND` to convert pending IRQ to event. | H5 |
+| CPU1 | Start of `main`, before the MPU and the clock tree | `g_shared.magic = 0` → `HAL_RCCEx_EnableBootCore(RCC_BOOT_C2)` → `HSEM_BM_Init()` → `HSEM_BM_TimebaseStart()` → `HSEM_BM_SetClearKey(BOARD_HSEM_CLEAR_KEY)` → `HSEM_BM_BootWaitCpu2Parked(32000000)` (500 ms at HSI 64 MHz) |
+| CPU1 | After the clock tree and CPU2's peripheral clocks | `Shared_Init()` (publishes `SHARED_MAGIC` last) → `HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000)` |
+| CPU2 | First line of `main` | `HSEM_BM_BootWaitForCpu1(&cfg)`, then `HAL_Init()`, `HSEM_BM_Init()`, `HSEM_BM_TimebaseStart()` |
+
+Any take with a timeout needs `HSEM_BM_TimebaseStart()` on that core first,
+otherwise it returns `HSEM_BM_ERR_TIMEBASE`.
+
+### 3.4 Data placement
+
+The HSEM orders accesses; it does not keep caches coherent. Data protected by a
+semaphore goes in `.shared_ram` (SRAM4, `0x38008000`), which the CM7 MPU maps as
+Normal non-cacheable. The CM4 has no data cache. Anything placed in cacheable
+memory needs explicit clean and invalidate around the lock.
+
+### 3.5 Lock timeouts (`shared_memory.h`)
+
+Limits are written in time and converted per core, because each core's `CYCCNT`
+counts its own clock:
+
+```c
+#define SHARED_ADC_TRYLOCK_US            100U
+#define SHARED_ADC_TRYLOCK_CYCLES_CM7   (SHARED_ADC_TRYLOCK_US * 400U)   /* 40 000 at 400 MHz */
+#define SHARED_ADC_TRYLOCK_CYCLES_CM4   (SHARED_ADC_TRYLOCK_US * 200U)   /* 20 000 at 200 MHz */
+```
+
+A limit has to come from a measured hold time. In `prj_04`, HSEM 4 is held up to
+37.6 µs by CM4 and 42.7 µs by CM7 (§11.2). A first calibration of 25 µs, below
+those holds, silently dropped UDP replies and ADC publications. The peaks are
+published in `g_shared.m7_adc_lock_hold_cycles_max` and
+`g_shared.m4_adc_lock_hold_cycles_max`, and every failed try counts in
+`m7_/m4_adc_lock_fail_count` (one counter per core, so neither is a cross-core
+read-modify-write).
 
 ---
 
-## 6. Silicon Errata (ES0445 Rev 6)
+## 4. Rules the driver enforces
 
-STM32H755ZI Silicon Errata sheet **ES0445** does **not** list any errata for the
-Hardware Semaphore (HSEM) peripheral across Silicon Revisions Y, X, and V.
-
-All synchronization constraints are dictated directly by RM0399 hardware architecture
-and the ARMv7-M memory consistency model.
+1. **Validate before touching the peripheral.** `id > 31`, `proc_id > 255`,
+   `proc_id = 0` in `Take`, an empty mask, a key of 0, an unknown `core_id`,
+   `max_cycles` of 0 or above 2³¹ − 1, a wrong core or `HSEMEN` off: each returns
+   an error before the first `HSEM->` access. PROCID 0 is kept for the 1-step lock,
+   because a 2-step lock with PROCID 0 would be indistinguishable from it.
+2. **1-step lock with self-detection.** Under PRIMASK, `FastTake` reads `R[id]`
+   first. If this core already holds it, it returns `BUSY_SELF` without reading
+   `RLR`; otherwise it reads `RLR[id]`. Without PRIMASK, an ISR could take the
+   semaphore between the two reads and the interrupted context would think it was
+   its own.
+3. **2-step lock.** `Take` reads `R[id]` (a hit by this core is `BUSY_SELF`, even
+   with the same PROCID: no re-entry), writes `LOCK | COREID | PROCID` and reads it
+   back.
+4. **Honest release.** RM0399 §11.3.5: a release with the wrong COREID or PROCID
+   is ignored by the hardware, silently and without an interrupt. `Release` reads
+   `R[id]` and, if the caller is not the owner, returns `ERR_NOT_OWNER` without
+   writing. It does not read back afterwards: the other core may take the
+   semaphore in the next cycle, and that is not a failure.
+5. **Barriers.** ARMv7-M does not order Normal memory (SRAM4) against Device memory
+   (the HSEM) without a barrier. A `__DMB()` follows every successful take and
+   precedes every release, in all three tiers.
+6. **Word accesses only.** RM0399 §11.4: byte and half-word accesses cause a bus
+   error. The driver uses only 32-bit volatile accesses (checked with objdump).
+7. **Never read `RLR` to look.** Reading `HSEM_RLRx` takes the semaphore
+   (RM0399 §11.4.2). `RLR` is read only inside `FastTake` (and therefore
+   `TakeOrNotify`). `IsLocked`, `GetOwner` and `GetLockedMask` read `R`.
+8. **PRIMASK saved and restored, never forced.** Every read-modify-write of
+   `CnIER`, and the 1-step detection, run with PRIMASK saved and restored with
+   `__set_PRIMASK(saved)`. The driver never calls `__enable_irq()`, so it can be
+   used from a fault handler.
+9. **Bounded waits.** Every wait in the driver ends after a number of DWT cycles,
+   except `BootWaitForCpu1`: CPU2 is in STOP, where `CYCCNT` does not count, and
+   has nothing else to do. `TakeTimeoutEx` returns at once on anything other than
+   `BUSY`, so a `BUSY_SELF` never waits for the timeout. `relax(ctx)` runs between
+   attempts and never with the semaphore held. `CYCCNT` keeps counting with
+   PRIMASK set, so a timeout also works inside a critical section, where
+   `HAL_GetTick` would not advance.
 
 ---
 
-## 7. Dual-Core Boot Handshake
+## 5. Why not call `HAL_HSEM_*` directly
+
+This is what the audit of the copies in the projects found, and what the driver
+does instead. It is the reason to use the driver even in the HAL tier.
+
+| `HAL_HSEM_*` (and the copies in the projects) | Consequence | Driver |
+| :--- | :--- | :--- |
+| `HAL_HSEM_FastTake` returns `HAL_OK` to any context of the core that already holds the semaphore (RM0399 §11.3.3 note) | Two FreeRTOS tasks, or a task and an ISR, are inside the critical section at once, and the first release frees it for both | `BUSY_SELF` (§4.2) |
+| No `DMB` in take or release | On CM7 a write to shared data can become visible after the release | §4.5 |
+| `SHARED_LOCK` spins for ever; no way to see the owner | A halted, faulted or reset core hangs the other one with no diagnostic | `TakeTimeout`, `GetOwner`, `GetLockedMask`, `ReleaseAllOfCore` |
+| `HAL_HSEM_Release` is `void` and not checked | A wrong release does nothing, and nobody finds out | `ERR_NOT_OWNER` |
+| `HAL_HSEM_ActivateNotification` and `HAL_HSEM_IRQHandler` both read-modify-write `CnIER`, unprotected | A task and the ISR of the same core lose or resurrect an enable bit | PRIMASK (§4.8) |
+| The own COREID comes from `CORE_CM4` at compile time | An image built with the wrong macro takes the semaphore through `RLR` and reports it busy: it stays locked for ever | Core check against `SCB->CPUID` in every call |
+| IDs are checked only by `assert_param`, compiled out in these projects | `R[id]` with `id` 32..63 lands on the `RLR` bank and 64 on `C1IER`: `HAL_HSEM_Release(64, 0)` writes CPU1's interrupt enables | §4.1 |
+| `HAL_PWREx_EnterSTOPMode`, used by the old CPU2 boot wait, read-modify-writes `PWR_CR1`, which is shared | A write by CPU1 to `CR1` during boot (`DBP`, PVD) can be lost | The boot wait writes only `PWR_CPU2CR` and `SCB->SCR` |
+| The boot handshake was copied into every project and had diverged | The warm-reset fix of `9034a5f` (CPU2 leaving STOP early and running on HSI with a 3× SysTick) had reached only `prj_04` | One function, `HSEM_BM_BootWaitForCpu1` |
+
+---
+
+## 6. Notifications
+
+- **The line belongs to the calling core.** The `CnIER`/`CnICR`/`CnISR`/`CnMISR`
+  set is chosen with `CORE_CM4`, the same way as `HSEM_COMMON` in CMSIS. The IRQ is
+  `HSEM1_IRQn` on CM7 and `HSEM2_IRQn` on CM4 (`HSEM_BM_GetIRQn`).
+- **A notification does not take the semaphore.** Whoever receives it still has to
+  take it.
+- **Three ways to set the enable bit, for three moments:**
+  - `NotifyEnable` for the first arm: it clears `CnICR` and then sets `CnIER`, so an
+    old flag does not fire.
+  - `NotifyTake` in the ISR: it reads `CnMISR`, clears exactly those `IER` bits and
+    flags, and ends with `DSB` so that the line drops before the M7 leaves the ISR.
+    It is one-shot, like `HAL_HSEM_IRQHandler`.
+  - `NotifyRearm` to arm again from the ISR: it sets `CnIER` only. A release that
+    arrived between `NotifyTake` and the re-arm is still in `CnISR` and fires at
+    once. Re-arming with `NotifyEnable` would erase it.
+- **Notifications are flags, not counters.** Releases that happen while the flag is
+  still set merge into one interrupt. Count events in your own data, not in IRQs.
+- **`TakeOrNotify`** follows RM0399 §11.3.7: try; if busy, clear `CnICR` and try
+  again; if still busy, set `CnIER` and return `BUSY`. It returns `BUSY_SELF`
+  without arming anything when this core holds the semaphore.
+- **HAL tier:** the project defines the handler and the weak callback, and the
+  driver dispatches:
+
+  ```c
+  void HSEM1_IRQHandler(void)             { HSEM_HAL_IRQService(); }         /* stm32h7xx_it.c */
+  void HAL_HSEM_FreeCallback(uint32_t m)  { HSEM_HAL_Dispatch(m); }
+  ```
+
+---
+
+## 7. Dual-core boot handshake
 
 ```mermaid
 sequenceDiagram
-    participant C7 as CPU1 (Cortex-M7)
-    participant H as HSEM Peripheral
-    participant C4 as CPU2 (Cortex-M4)
-
-    Note over C4: Boot from reset (BCM4=1)
-    C4->>H: Enable HSEMEN, C2ICR, C2IER[0]
-    C4->>C4: Set SEVONPEND, PDDS_D2=0, SLEEPDEEP, WFE
-    Note over C4: CPU2 parks in STOP (D2CKRDY drops to 0)
-
-    Note over C7: Boot from reset (BCM7=1)
-    C7->>C7: Invalidate SHARED_MAGIC (magic=0)
-    C7->>H: Enable HSEMEN, TimebaseStart(), SetClearKey(BOARD_HSEM_CLEAR_KEY)
-    C7->>C7: BootWaitCpu2Parked (monitors D2CKRDY == 0)
-    C7->>C7: Configure MPU, Caches, Clocks (SystemClock_Config)
-    C7->>C7: Shared_Init (clears SRAM4, writes SHARED_MAGIC last + DMB)
-    C7->>H: BootReleaseCpu2: FastTake(0) + DMB + Release(0)
-    H-->>C4: C2ISR[0]=1 -> Event triggered via SEVONPEND
-
-    C4->>C4: Wakes from WFE -> verifies flag & magic==SHARED_MAGIC
-    Note over C4: If spurious wakeup -> increments wake_count and returns to WFE
-    C4->>H: Clear C2ICR[0], Disable C2IER[0]
-    C4->>C4: Restore SCB->SCR, ClearPendingIRQ(HSEM2_IRQn), Init HAL & Peripherals
+    participant C7 as CPU1 (M7)
+    participant H as HSEM
+    participant C4 as CPU2 (M4)
+    C4->>H: HSEMEN, C2IER[0]
+    C4->>C4: SEVONPEND, PDDS_D2 = 0, SLEEPDEEP, WFE (D2CKRDY = 0)
+    C7->>C7: magic = 0, EnableBootCore, Init, Timebase, SetClearKey
+    C7->>C7: BootWaitCpu2Parked (D2CKRDY = 0), MPU, caches, clocks
+    C7->>C7: Shared_Init (SHARED_MAGIC last, after a DMB)
+    loop until D2CKRDY = 1 or max_cycles
+        C7->>H: FastTake(0) == OK, DMB, Release(0)
+        H-->>C4: C2ISR[0] = 1 -> event through SEVONPEND
+        C4->>C4: flag and ready()? no -> wake_count++, WFE again
+    end
+    C4->>H: C2ICR[0], C2IER[0] = 0
+    C4->>C4: SCB->SCR restored, NVIC pending of HSEM2 cleared
 ```
 
-### 7.1 Double Predicate Verification
-On soft resets (`-rst`), SRAM4 retains stale memory contents. If CPU2 wakes
-prematurely from an electrical glitch or warm reset, evaluating `magic` alone could
-cause CPU2 to start executing before CPU1 has configured the clock tree.
-`HSEM_BM_BootWaitForCpu1` enforces a double predicate:
-1. `C2ISR[id]` flag must be set by CPU1 releasing HSEM 0.
-2. The user-supplied `ready()` callback must return `true` (verifying `magic == SHARED_MAGIC`).
+```c
+/* CPU2 */
+static bool magic_ready(void *ctx) { (void)ctx; return g_shared.magic == SHARED_MAGIC; }
+
+const HsemBm_BootWait_t cfg = {
+    .sem_id     = HSEM_ID_BOOT_SYNC,
+    .ready      = magic_ready,
+    .ctx        = NULL,
+    .wake_count = &g_shared.cpu2_wake_count,   /* optional: counts every wake from WFE */
+};
+(void)HSEM_BM_BootWaitForCpu1(&cfg);
+```
+
+- **Two conditions, both required.** The HSEM flag is reset with the system, so it
+  cannot be stale. `SHARED_MAGIC` lives in SRAM4, which survives a warm reset, so
+  on its own it can be the previous run's. CPU2 leaves only when the flag is set
+  **and** `ready()` is true. Any other wake (an early release, a stray event) sends
+  it back to `WFE`.
+- **`SEVONPEND` is what wakes CPU2.** `WFE` resumes on an event, and a pending
+  interrupt becomes one only with `SEVONPEND` (or when it is enabled in the NVIC,
+  which would vector into the default handler). Without it, `C2ISR[0]` and
+  `C2MISR[0]` are 1, CPU1 runs normally, and CPU2 never leaves the wait. Nothing
+  faults.
+- **The wait does not clear `C2ICR` on entry,** so a release that arrived before
+  CPU2 armed is not lost. It clears the NVIC pending bit of `HSEM2_IRQn` on the way
+  out (RM0399 §7.7.4), so a later `NVIC_EnableIRQ` does not enter the ISR for
+  nothing.
+- **It does not write `PWR_CR1`** (shared); `LPDS` is already 0 after reset.
+- **`D2CKRDY` is the D2 domain, not the core.** CPU1 uses it as the "CPU2 has
+  parked" and "CPU2 is running" signal. The domain can be awake while CPU2 sits in
+  `WFE`. When you need to know what CPU2 did, ask CPU2 (that is what `wake_count`
+  is for).
+- **`BootReleaseCpu2` checks its own take** and returns the status without
+  releasing if the take fails. It never writes RCC; enabling `BOOT_C2` stays with
+  the project.
 
 ---
 
-## 8. Usage Examples
+## 8. Silicon facts and the RM0399 / ARMv7-M matrix
 
-### 8.1 1-Step Fast Lock (Single Task / Interrupt-free)
+| Rule | Mechanism | Test |
+| :--- | :--- | :--- |
+| RM §11.3.8, table 95: COREID 3 = CM7, 1 = CM4; a master that is not authorised is ignored | Core check against `SCB->CPUID` in every call | H0 |
+| RM §11.3.3: 1-step lock, PROCID forced to 0, not safe for several processes of one master | `BUSY_SELF` under PRIMASK | H7 |
+| RM §11.3.3: 2-step lock, write then read back COREID and PROCID | `Take` | H1, H3 |
+| RM §11.3.5: a release with a wrong COREID/PROCID is ignored silently | `ERR_NOT_OWNER`, nothing written | H3 |
+| RM §11.3.6: `HSEM_CR` with the key frees every semaphore of a COREID | `ReleaseAllOfCore` writes `HSEM_CR`; `SetClearKey` writes `KEYR` | H8 |
+| RM §11.3.7: notification procedure; an interrupt does not lock | `TakeOrNotify`; `NotifyEnable` clears the flag before arming, `NotifyRearm` keeps it | H9 |
+| RM §11.4: word accesses only | 32-bit volatile accesses | objdump |
+| RM §11.4.2: reading `RLR` takes the semaphore | `RLR` read only in `FastTake` | H0, grep |
+| RM §11.4.3-6: one `IER/ICR/ISR/MISR` set per CPU line | Line from `CORE_CM4`; `IER` read-modify-write under PRIMASK | H9, H10 |
+| RM §9.7.1: `RCC_AHB4ENR.HSEMEN` is banked per core | `Init` on each core, with read-back | H0 |
+| RM §7: CPU2 STOP of D2 = `PWR_CPU2CR.PDDS_D2 = 0` + `SLEEPDEEP`; `PWR_CR1` is shared | Only `CPU2CR` and `SCR` (restored) are written | H5 |
+| ARMv7-M: Normal vs Device ordering needs a barrier | `DMB` after the take, before the release | H1b, objdump |
+| ARMv7-M: `WFE` wakes on an event; `SEVONPEND` turns a pending IRQ into one | `BootWaitForCpu1` | H5 |
+
+---
+
+## 9. Silicon errata (ES0445 rev 6)
+
+ES0445 has no entry for the HSEM (a search for `HSEM` and `semaphore` returns
+nothing). Every constraint in this driver comes from RM0399 and the ARMv7-M memory
+model.
+
+---
+
+## 10. Examples
+
+### A. 1-step lock, one context per core (`hsem_bm`)
+
 ```c
-#include "hsem_bm.h"
-
-void LogTelemetry(void)
+if (HSEM_BM_FastTake(HSEM_ID_ADC_DATA) == HSEM_BM_OK)   /* the DMB is inside */
 {
-    if (HSEM_BM_FastTake(HSEM_ID_ADC_DATA) == HSEM_BM_OK)
-    {
-        /* Memory barrier __DMB() already executed */
-        g_shared.adc.millivolts = ReadMv();
+    g_shared.adc.millivolts = mv;
+    (void)HSEM_BM_Release(HSEM_ID_ADC_DATA, 0U);        /* PROCID 0 for a 1-step lock */
+}
+```
 
-        /* Honest release verifies ownership before clearing */
-        HSEM_BM_Release(HSEM_ID_ADC_DATA, 0U);
+### B. Two FreeRTOS tasks on the CM7 sharing one ID (`hsem_bm`)
+
+```c
+#define PROC_TASK_A   1U   /* one PROCID per context, never 0 */
+#define PROC_TASK_B   2U
+
+/* in task A */
+if (HSEM_BM_Take(HSEM_ID_SHARED_STATE, PROC_TASK_A) == HSEM_BM_OK)
+{
+    update_state();
+    (void)HSEM_BM_Release(HSEM_ID_SHARED_STATE, PROC_TASK_A);
+}
+/* task B, meanwhile, gets HSEM_BM_BUSY_SELF and can retry later */
+```
+
+### C. Bounded wait that yields the CPU (`hsem_bm` + FreeRTOS)
+
+```c
+static void yield(void *ctx) { (void)ctx; taskYIELD(); }   /* taskYIELD is a macro: wrap it */
+
+HsemBm_Status_t st = HSEM_BM_TakeTimeoutEx(HSEM_ID_ADC_DATA, 0U,
+                                           SHARED_ADC_TRYLOCK_CYCLES, yield, NULL);
+if (st == HSEM_BM_OK)
+{
+    memcpy(local, (const void *)g_shared.adc.waveform, sizeof(local));
+    (void)HSEM_BM_Release(HSEM_ID_ADC_DATA, 0U);
+}
+else
+{
+    g_shared.m7_adc_lock_fail_count++;   /* TIMEOUT or BUSY_SELF: count it, never ignore it */
+}
+```
+
+### D. Notification with interrupt on the CM4 (`hsem_bm`)
+
+```c
+void HSEM2_IRQHandler(void)                       /* the project's stm32h7xx_it.c */
+{
+    uint32_t mask = HSEM_BM_NotifyTake();         /* one-shot: IER bits of 'mask' now off */
+    if ((mask & HSEM_BM_SEM_MASK(MY_ID)) != 0U)
+    {
+        s_released++;                             /* try the take in thread context, not here */
+        (void)HSEM_BM_NotifyRearm(HSEM_BM_SEM_MASK(MY_ID));   /* keeps a release that arrived meanwhile */
+    }
+}
+
+/* setup, thread context */
+(void)HSEM_BM_NotifyEnable(HSEM_BM_SEM_MASK(MY_ID));          /* clears any stale flag first */
+NVIC_ClearPendingIRQ(HSEM2_IRQn);
+NVIC_SetPriority(HSEM2_IRQn, 5U);
+NVIC_EnableIRQ(HSEM2_IRQn);
+```
+
+### E. Recovering the semaphores of a dead CPU2 (CPU1)
+
+```c
+if (HSEM_BM_TakeTimeout(HSEM_ID_ADC_DATA, 0U, SHARED_ADC_TRYLOCK_CYCLES) == HSEM_BM_TIMEOUT)
+{
+    HsemBm_Owner_t o;
+    if (HSEM_BM_GetOwner(HSEM_ID_ADC_DATA, &o) && (o.core_id == HSEM_BM_COREID_CPU2))
+    {
+        /* only once CPU2 is known to be dead: this frees ALL of its semaphores */
+        (void)HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU2, BOARD_HSEM_CLEAR_KEY);
     }
 }
 ```
 
-### 8.2 2-Step Lock with Process ID (FreeRTOS Tasks)
-```c
-#include "hsem_bm.h"
+---
 
-#define TASK_A_PROC_ID   0x01U
+## 11. Validation
 
-void TaskA_Function(void *arg)
-{
-    for (;;)
-    {
-        if (HSEM_BM_Take(HSEM_ID_SHARED_STATE, TASK_A_PROC_ID) == HSEM_BM_OK)
-        {
-            UpdateSharedState();
-            HSEM_BM_Release(HSEM_ID_SHARED_STATE, TASK_A_PROC_ID);
-        }
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-}
+Board: NUCLEO-H755ZI-Q, silicon Rev V (`REV_ID = 0x2003`). No external hardware:
+both cores, the console and the ST-LINK. Project:
+`02_firmware_projects/prj_04_adc_dma_bm_eth`, CMake preset `selftest-hsem`
+(`HSEM_DRIVER_SELFTEST=ON`), code in `CM4/App/Src/hsem_selftest.c` and
+`CM7/App/Src/hsem_selftest.c`. The tests use only IDs 24..31 and their own area in
+SRAM4 (`0x38009000`). Each core prints its `Rev <git hash>` first. CM7 prints the
+global verdict only after CM4 has finished, and it includes CM4's results.
+
+### 11.1 Self-test
+
+Numbers from the auditor's run on 2026-09-26 (`b6d0b26`).
+
+| Test | What it proves | Negative control | Result |
+| :--- | :--- | :--- | :--- |
+| H0 | COREID 3 / 1 on each core, `Init`, every parameter refused, `GetOwner`/`IsLocked` leave a free semaphore free | A raw `RLR` read does take the semaphore; registers compared before and after the refusals | PASS on both cores |
+| H1 | Exclusion across cores: 500 000 increments per core under the 1-step lock, and again under the 2-step lock | H2 | total 1 000 000 = sum of the two private counters, 0 lost, in both variants |
+| H1b | No torn record: 8-word writes by CM4 read under the lock by CM7 | H2 | 500 000 reads, 0 torn |
+| H2 | The control of H1/H1b: the same work without the lock | It must lose, or H1 proves nothing | 39 907 lost increments, 19 232 torn reads (every run so far: 39 907-45 217 and 6 206-19 232) |
+| H3 | A raw release with the wrong PROCID, a raw release written by the other core (checked to set no ISF) and a driver release by a non-owner all leave the lock held | The right release frees it | PASS on both cores |
+| H4 | Timeout on CM7 against a lock held by CM4, and the reverse, measured with each core's HAL tick (not the DWT the driver uses) | Free → `OK` at once; released at 5 ms → `OK` | `TIMEOUT` at 10 ms, about 36 000 `relax` calls |
+| H5 | Boot: `D2CKRDY` stays 0 for 500 ms; a release before the magic (H5b) and a spurious event on configurable EXTI line 15 (H5c) wake CPU2, which goes back to STOP | CPU2's own `wake_count` must increase, then `D2CKRDY` must return to 0 | `woke=1 reparked=1` in H5b and H5c; release PASS |
+| H6 | 20 warm resets of the production image | The pre-migration reference, with the same checks | 20/20, first sample `m7=4 m4=20`, same ratio as the reference (a 3× SysTick would triple it) |
+| H7 | A second take by the same core returns `BUSY_SELF` (1-step and 2-step, BM and HAL); a cross-PROCID release returns `ERR_NOT_OWNER` | A raw `HAL_HSEM_FastTake` returns `HAL_OK`: the hazard exists | PASS; raw HAL = 0 (`HAL_OK`) |
+| H8 | CM4 holds IDs 24-27 and stops; CM7 sees the owner, times out, and frees them with the key; its own ID 28 stays held | A wrong key frees nothing | PASS |
+| H9 | Interrupt-driven notifications through the NVIC: 500 CM7 → CM4 (BM ISR, `NotifyRearm`) and 100 CM4 → CM7 (`HSEM_HAL_IRQService` + callback) | `IER` off → 0 IRQs; a stale flag, recorded as present before `NotifyEnable` → 0 IRQs | 500/500 and 100/100, controls 0 and 0 (`stale flag was=1`) |
+| H10 | BM, LL and HAL give the same status and the same `R[24..30]`, `CnIER` and `CnISR` over 13 steps: take, re-entry, `TakeTimeoutEx` on a self-held lock, releases, parameter errors, notify | A deliberately altered snapshot is detected | PASS on CM4 (BM ↔ LL) and CM7 (BM ↔ LL ↔ HAL) |
+| H11 | Production (selftest off) under load: ETH at 100 Mbps, ADC1 at 500 kSPS, 150 text queries and 300 back-to-back `WAVE` requests | Per-core fail counters and hold peaks read through SWD | 300/300 replies, both fail counters 0, `err`/`ovr`/`adc_ovr` = 0 |
+
+### 11.2 Measurements (B1)
+
+| What | CM7 (400 MHz) | CM4 (200 MHz) |
+| :--- | :--- | :--- |
+| Raw 1-step take (`RLR` read) | 16 cycles (40 ns) | 8 cycles (40 ns) |
+| Raw 2-step take (write + read-back) | 30 cycles (75 ns) | 24 cycles (120 ns) |
+| Raw release (buffered write) | 3 cycles | 6 cycles |
+| Longest hold of HSEM 4 in `prj_04` | 17 069 cycles (42.7 µs), `WAVE` reply | 7 525 cycles (37.6 µs), `ADC_Acquisition_Process` |
+
+A read of the HSEM costs about 40 ns from either core (AHB4, D3 domain). The hold
+times are what the limit in §3.5 is sized against.
+
+### 11.3 Evidence and independent run
+
+In `prj_04_adc_dma_bm_eth/docs/`, each file the output of a single run:
+
+- `hsem_selftest_capture.txt`: the self-test at `869decb`, with timestamps,
+  through `CM4 VERDICT=PASS`.
+- `warm_resets_f2.txt`: H6 at `35165d2`. `warm_resets_reference.txt` is the
+  pre-migration reference.
+- `hsem_regression_capture.txt`: H11 at `35165d2`, with the SWD dump of the
+  counters.
+
+The auditor rebuilt and re-ran the self-test, H6 and H11 on the board, from a
+clean build, at `afa410d` and at `b6d0b26`. The 25 µs trylock problem of §3.5 was
+found that way.
+
+### 11.4 Reproducing it
+
+```powershell
+.\tools\env.ps1
+cd 02_firmware_projects\prj_04_adc_dma_bm_eth
+cmake --preset selftest-hsem; cmake --build --preset selftest-hsem
+py tools/flash.py --preset selftest-hsem
+py ..\..\tools\capture_hsem_run.py --out hsem.txt            # resets and captures until CM4 VERDICT
 ```
 
-### 8.3 Bounded Wait with Cooperative OS Yield
-```c
-#include "hsem_bm.h"
-#include "FreeRTOS.h"
-#include "task.h"
+For H6 and H11, flash the production image and run:
 
-bool ReadBufferWithTimeout(void)
-{
-    /* Wait up to 10,000 cycles (~25 µs @ 400 MHz), yielding to FreeRTOS scheduler */
-    HsemBm_Status_t st = HSEM_BM_TakeTimeoutEx(
-        HSEM_ID_ADC_DATA, 0U, 10000UL,
-        (void (*)(void *))taskYIELD, NULL);
-
-    if (st == HSEM_BM_OK)
-    {
-        memcpy(local_buf, (void *)g_shared.adc.waveform, 1024);
-        HSEM_BM_Release(HSEM_ID_ADC_DATA, 0U);
-        return true;
-    }
-    return false;
-}
+```powershell
+py tools/flash.py --preset debug
+py ..\..\tools\run_warm_resets.py --port COM4 --out h6.txt --title "H6"
+py tools/query_adc.py --wave --count 300
+STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x380084E0 32   # fail counters at +0x08/+0x0C, peaks at +0x14/+0x18
 ```
 
----
+Read only `0x58026400-0x5802647C` of the HSEM from the debugger (§12).
 
-## 9. Validation
+### 11.5 Not exercised in hardware
 
-The driver is validated through the hardware self-test suite running on physical hardware:
+- `TakeOrNotify`. Its return values were reviewed, not run.
+- The re-arm race itself. H9 spaces its releases so that the ISR always finishes
+  before the next one, so it would also pass with a re-arm that loses releases.
+  `NotifyRearm` is correct by construction (it does not touch `CnICR`). A
+  deterministic test: the CM4 ISR, after `NotifyTake`, waits for CM7 to release
+  again, and only then re-arms; one more IRQ must arrive with `NotifyRearm` and
+  none with `NotifyEnable`.
+- `ReleaseAllOfCore` while the target core takes one of the same IDs again.
+- Any call with `HSEMEN` off. `CheckInit` refuses it before the peripheral is
+  touched, but no test switches the clock off.
+- A core halted by the debugger while it holds a semaphore, and a CPU-scoped
+  reset.
+- Silicon revisions other than V.
 
-| Test ID | Objective | Negative Control | Verification Result |
-| :---: | :--- | :--- | :--- |
-| **H0** | Silicon characterization, COREID validation, invalid parameter rejection | Raw direct read of `RLR` locks semaphore; parameter errors reject upfront | COREID: CM7=3, CM4=1. Direct RLR read confirms lock. |
-| **H1** | Exact mutual exclusion under lock: 1-step `FastTake` (500k iterations per core) | Unprotected increments lose counts (H2) | Total = 1,000,000, Lost = 0 |
-| **H1 (2-step)** | Exact mutual exclusion under lock: 2-step `Take` (500k iterations per core) | Unprotected increments lose counts (H2) | Total = 1,000,000, Lost = 0 |
-| **H1b** | Torn-read protection across memory domains (8-word records under lock) | Unprotected reads yield torn records (H2) | 500,000 reads, 0 torn reads |
-| **H2** | Negative control for H1 & H1b (deliberate contention without lock) | Required to fail if hazard is not reproduced | Data loss reproduced (> 0 lost), torn reads reproduced (> 0 torn) |
-| **H3** | Honest release protection: wrong PROCID, cross-core unauthorized release | Authorized release succeeds and clears lock | Unauthorized release returns `ERR_NOT_OWNER`, lock remains held |
-| **H4** | Bounded wait timeout: 10 ms wait against held lock (CM7 waiting on CM4) | Immediate return when free | Returned `TIMEOUT` at 10.0 ms; `relax` calls invoked |
-| **H4 (sym)** | Symmetric bounded wait timeout: 10 ms wait against held lock (CM4 waiting on CM7) | Immediate return when free | Returned `TIMEOUT` at 10.0 ms; `relax` calls invoked |
-| **H5** | Boot handshake: 500 ms wait, release before magic (H5b), spurious EXTI line 15 (H5c) | Evaluates `cpu2_wake_count` in SRAM4 | `D2CKRDY` stays 0 for 500 ms; H5b and H5c wake and re-park safely |
-| **H6** | 20 consecutive warm resets across dual cores | Divergence S5 observed before migration | 20/20 resets successful; stable heartbeat ratio |
-| **H7** | Same-core collision: 1-step re-entrancy and cross-PROCID releases | Raw `HAL_HSEM_FastTake` returns `HAL_OK` (hazard confirmed) | Driver returns `BUSY_SELF` (or `HAL_BUSY`); cross-release returns `ERR_NOT_OWNER` |
-| **H8** | Bulk recovery: `ReleaseAllOfCore` with security key | Invalid key leaves locks intact | Target core semaphores cleared; other core semaphores untouched |
-| **H9** | Asynchronous notifications: NVIC interrupt-driven (`HSEM2_IRQn` on CM4, `HSEM1_IRQn` on CM7) | Neg 1: IER disabled yields 0 IRQs; Neg 2: stale flag cleared on enable yields 0 spurious IRQs | 500/500 notifications received on CM4, 100/100 received on CM7 |
-| **H10** | Tier parity: bit-for-bit register snapshots across BM, LL, and HAL (13 steps) | Mutated snapshots detect mismatches | Exact match across registers and return statuses |
-| **H11** | Full regression under load (Ethernet UDP burst + 500 kSPS ADC streaming) | Inspected per-core fail counters | ADC rate = 500 kSPS, `err/ovr/adc_ovr = 0`, lock fail counts = 0 |
+### 11.6 Flash budget
 
-### 9.1 Hardware Benchmark B1
-Direct measurements using DWT `CYCCNT`:
-
-- **Raw Peripheral Access Latency (AHB4 via D3 domain):**
-  - Cortex-M7 (CPU1 @ 400 MHz): `FastTake` = 16 cycles (40.0 ns), `Take` = 30 cycles (75.0 ns), `Release` = 3 cycles (7.5 ns).
-  - Cortex-M4 (CPU2 @ 200 MHz): `FastTake` = 8 cycles (40.0 ns), `Take` = 24 cycles (120.0 ns), `Release` = 6 cycles (30.0 ns).
-- **Application Retention Times (HSEM 4 / `HSEM_ID_ADC_DATA`):**
-  - Measured empirically via DWT cycle counters in `adc_acquisition.c` and `adc_server.c`, exposed in `g_shared`:
-    - **CM4 Peak Retention:** Up to **7,525 cycles @ 200 MHz (37.6 µs)** during `ADC_Acquisition_Process` (integer statistics computation + telemetry copy + 1024-byte waveform `memcpy`).
-    - **CM7 Peak Retention:** Up to **17,069 cycles @ 400 MHz (42.7 µs)** during UDP `WAVE` serialization (56-byte header + 1024-byte waveform payload) in FreeRTOS ethernet task.
-    - **Calibrated Trylock Timeout:** **100 µs** (`SHARED_ADC_TRYLOCK_US = 100U`), giving 40,000 cycles on CM7 and 20,000 cycles on CM4. This provides a $>2\times$ safety margin over the maximum measured retention, completely eliminating contention timeouts and UDP packet drops under continuous load (R-B1).
-
-### 9.2 Unexercised Features & Scope Exclusions (R-m5)
-The following functions or scenarios are implemented in the driver codebase but are not exercised within the automated selftest suite:
-1. **`TakeOrNotify`:** Atomic take-or-notify primitive is implemented in `hsem_bm.c` (remediating M3 by returning `BUSY_SELF` immediately if locked by the same core without arming spurious notifications). The selftest exercises separate take and NVIC interrupt notification paths instead.
-2. **`ReleaseAllOfCore` concurrent re-take:** Recovery under idle conditions is verified in H8 with security key. The edge case where the target core concurrently re-takes a semaphore between hardware clear and status readback is protected in driver logic via `(mask_after & mask_before) == 0U`, but is not artificially forced in selftest.
-3. **BM calls with uninitialized peripheral clock (`HSEMEN = 0`):** LL and HAL tiers verify rejection via `HSEM_BM_CheckInit()`; calling raw BM functions with RCC clock disabled is unexercised in selftest to avoid triggering bus faults on the test harness.
+`hsem_bm` linked into the `prj_04` release images: **852 B** on CM4 and
+**1 088 B** on CM7 (`.text`, measured from the `.map`, with "Discarded input
+sections" excluded). With `--gc-sections`, functions a project does not call cost
+nothing.
 
 ---
 
-## 10. Known Limitations, Pitfalls & Caveats
+## 12. Known limitations and caveats
 
-1. **SWD Debugger Access (RLR Bank Hazard):**
-   Reading memory addresses `0x58026480..0x580264FC` (`HSEM_RLRx`) through an SWD
-   debugger or GDB takes the semaphores as bus master 0 (CPU1). Memory dump tools
-   must strictly restrict inspection to `0x58026400..0x5802647C` (`HSEM_Rx`), which
-   is non-destructive.
-2. **SRAM4 Warm Reset Persistence:**
-   On warm reset, SRAM4 (`0x38008000`) is not cleared by hardware, whereas HSEM
-   peripheral registers are fully reset to 0 by system reset. CPU1 must explicitly
-   re-initialize `g_shared` (zeroing `magic` until structures are valid) in `Shared_Init()`
-   at the start of `main()`. Explicit `ReleaseAllOfCore()` is not required at boot
-   because hardware semaphores are already cleared on reset.
-3. **No HSEM Locks in ISR Context:**
-   Never attempt to lock an HSEM inside an Interrupt Service Routine. If the ISR
-   preempts the thread holding that same HSEM, the core deadlocks permanently.
-   `adc_acquisition.c` and `07_adc` follow this rule strictly.
-4. **Timebase Prerequisite:**
-   Calling `TakeTimeout` requires a running DWT `CYCCNT`. Both cores must call
-   `HSEM_BM_TimebaseStart()` and `HSEM_BM_Init()` before invoking timeout-bounded
-   operations.
-
----
-
-## 11. Scope
-
-### In Scope
-- Core locking primitives (1-step and 2-step) across BM, LL, and HAL tiers.
-- Honest release verification and single-core self-collision detection.
-- Bounded cycle timeouts with `relax` hooks.
-- Banked interrupt and event notifications via NVIC.
-- Dual-core boot synchronization utilities.
-- Target hardware validation on STM32H755ZI.
-
-### Out of Scope
-- Peripheral clock configuration (managed by RCC / `SystemClock_Config`).
-- Core boot release register `RCC_GCR.BOOT_C2` (managed by `HAL_RCCEx_EnableBootCore`).
-- RTOS mutex integration or queuing (the application chooses whether to yield).
-- Project semaphore ID definitions (managed by `shared_memory.h` / `board_def.h`).
+- **A debugger that reads the `RLR` bank takes the semaphores.** A read of
+  `0x58026480` through SWD returned `0x80000300` and left semaphore 0 locked by
+  COREID 3. Memory views, SVD peripheral viewers and `mdw` dumps must stay inside
+  `0x58026400-0x5802647C` (`R`) and `0x58026500-0x58026544`.
+- **The release of a 1-step lock does not know the context.** Every context of a
+  core releases with PROCID 0. `BUSY_SELF` stops a second context from taking, but
+  if that context releases anyway, the hardware accepts it. Where several contexts
+  use one ID, use the 2-step lock with one PROCID each.
+- **Never spin on a lock inside an ISR.** If the thread it interrupted holds the
+  semaphore, `FastTake` returns `BUSY_SELF` for ever and the core hangs. In an ISR,
+  try once or use a short `TakeTimeout`.
+- **Cycle limits are the calling core's cycles.** The same number is twice as long
+  on CM4 as on CM7, and much longer on HSI (64 MHz) before the clock tree is up.
+  Write limits in time and convert them per core and per phase.
+- **The DWT has to be started on each core.** `TimebaseStart` unlocks `DWT_LAR` on
+  the M7, which a debugger hides by setting `TRCENA` itself; check it with the
+  debugger disconnected.
+- **`BootWaitForCpu1` has no timeout,** by design (§4.9).
+- **`ReleaseAllOfCore` frees every semaphore of that core,** including ones that
+  core still legitimately holds. Use it only when that core is known to be dead. It
+  returns `ERR_PARAM` if the target takes one of the same IDs again between the
+  clear and the read-back, although the clear worked.
+- **HAL tier:** one callback per image, registered with PRIMASK. `HSEM_HAL_Take`
+  returns `HAL_BUSY` whenever the semaphore is locked, by either core.
+- **`HsemBm_BootWait_t` gained `wake_count`** after the API was frozen. It is the
+  last field and NULL keeps the old behaviour.
+- **Open items in the projects** (not in the driver), noted at the audit close:
+  - The ID table in `prj_04/Common/Inc/shared_memory.h` does not describe IDs 1-3
+    correctly. HSEM 3 is taken with `SHARED_LOCK` (1-step, unbounded) on both
+    cores, not with `Shared_TryLockCycles`, and IDs 1 and 2 are not used.
+  - The H0 register comparison includes `HSEM_CR`, which always reads 0
+    (RM0399 §11.4.7). `R[0..31]` and `KEYR` would mean something.
+  - The "300 / 300" line of `hsem_regression_capture.txt` is a written summary,
+    not the output of `query_adc.py`. The auditor reproduced it, but the next
+    capture should carry the raw output.
 
 ---
 
-## 12. Audit Status
+## 13. Consumers
 
-Formal audit findings and verification records are maintained independently in `AUDIT.md`.
-All corrective actions for findings B1–B6, M1–M7, and m1–m8 have been implemented and
-verified on the physical target.
+| Project | Tiers | Notes |
+| :--- | :--- | :--- |
+| `prj_04_adc_dma_bm_eth` | BM on both cores; LL and HAL only in `selftest-hsem` | Boot through the driver. `SHARED_LOCK` / `Shared_TryLock` / `Shared_TryLockCycles` in `shared_memory.c` are built on `hsem_bm`; `shared_memory.h` includes only `<stdint.h>` and `<stdbool.h>` |
+| `prj_01_template_dualcore` | BM on both cores | Boot through the driver, key set. New projects start from here |
+| `prj_02_eth_lwip_dualcore`, `prj_03_adc_dma_eth` | none | Not migrated (`DRIVER_ROADMAP.md` §8). They keep a hand-written handshake that leaves STOP on any wake, without the fix of `9034a5f`, and `SHARED_LOCK` over `HAL_HSEM_FastTake` |
+| `prj_eth_lwip_node` | none | Private copies, by decision |
+| `00_gpio` F1 (planned) | BM | Installs a cross-core lock hook on `HSEM_BM_FastTake(BOARD_GPIO_HSEM_ID)`, under PRIMASK |
+
+---
+
+## 14. Scope
+
+| Item | Status |
+| :--- | :--- |
+| Locks, release, state, recovery, notifications, boot handshake | In, all tiers where §1.1 says so |
+| RTOS mutexes, queues, priority inheritance | Out: the project decides whether and how to yield (`relax`) |
+| IDs, PROCIDs, keys | Out: project (`shared_memory.h`, `board_def.h`) |
+| RCC (`BOOT_C2`, clock tree) | Out: the driver only reads `RCC_CR.D2CKRDY` |
+| `HSEMx_IRQHandler`, `HAL_HSEM_FreeCallback` | Out: project |
+| `TakeOrNotify` in LL and HAL | Not provided; use BM |
+
+---
+
+## 15. Changing this driver
+
+Several projects build this driver unchanged, and both cores depend on it at the
+same time. Before changing it:
+
+1. **Public signatures and existing struct fields are immutable**
+   (`01_shared_drivers/README.md` rule 2). Add new functions, or new fields at the
+   end of a struct with 0/NULL meaning the old behaviour. Check with
+   `git diff main -- '01_shared_drivers/10_hsem/*.h'`: only additions or comments.
+2. **Validate before the first peripheral access,** and keep BM, LL and HAL giving
+   the same result, including on error paths. Extend H10 with every new path.
+3. **Every test needs a negative control that prints its value** and fails the
+   test when it does not reproduce the hazard. An expected result computed by the
+   code under test proves nothing: use an independent oracle (private counters,
+   the other core's tick, register snapshots, CPU2's own `wake_count`).
+4. **Captures are the output of one run,** with timestamps and a clean
+   `Rev <hash>` on both cores, and are never edited. A new run is a new file or a
+   new section.
+5. **Size limits from measurements.** Any timeout that depends on how long the
+   other side holds a lock comes from a recorded hold time, with the margin
+   written down.
+6. **Tests use IDs 24..31 only** and must not free, hold or corrupt anything the
+   application uses. Check `GetLockedMask` before a recovery test.
+7. **Before merging:** `.\tools\build_all.ps1 -Clean` (8/8 with `-Werror`), a clean
+   `selftest-hsem` build, the self-test on the board with both verdicts, H6, and
+   the H11 load with the SWD counter read.
+
+---
+
+## 16. History
+
+| Milestone | Commits |
+| :--- | :--- |
+| Implementation plan (audit of the copies in the projects, 13 findings) | `7038e3d` |
+| First delivery, phases F0-F5 (BM, boot handshake and migration, LL, HAL, docs) | `2a82d5e` … `f4d2a43` |
+| Independent audit of `992f309`: blockers in the evidence, the tests and the README | recorded in `4ac6bac` |
+| Corrections 1: LL/HAL parity, `CheckInit`, EXTI line 15 for H5c, interrupt-driven H9, conditional verdict, README rewrite | `79a84ad` … `afa410d` |
+| Corrections 2: 100 µs trylock from measured holds, `NotifyRearm`, dual-core verdict | `13b9da1` … `b6d0b26` |
+| Audit closed | `6f7af43` |
+
+The implementation plan, the audit record and the implementation report were
+removed from this folder once what a user of the driver needs was folded into this
+README. They stay in git history:
+
+```bash
+git show 7038e3d:01_shared_drivers/10_hsem/IMPLEMENTATION_PLAN.md
+git show 6f7af43:01_shared_drivers/10_hsem/AUDIT.md
+git show 6f7af43:01_shared_drivers/10_hsem/HSEM_IMPLEMENTATION_REPORT.md
+```

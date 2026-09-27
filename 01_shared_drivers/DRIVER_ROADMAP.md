@@ -27,7 +27,7 @@ no lo sustituye.
 | `07_adc` | Hecho y auditado | BM, LL, HAL. |
 | `08_eth` | En trabajo | HAL. E1 y E2 abiertos (ver `08_eth/README.md` §10). |
 | `09_fdcan` | **Vacío** | |
-| `10_hsem` | Hecho y auditado | BM, LL, HAL + utilidad de arranque. Auditoría cerrada en `b6d0b26`; cinco menores apuntados en `10_hsem/AUDIT.md`. |
+| `10_hsem` | Hecho y auditado | BM, LL, HAL + utilidad de arranque. Auditoría cerrada en `b6d0b26`; lo pendiente, en `10_hsem/README.md` §11.5 y §12. |
 
 ---
 
