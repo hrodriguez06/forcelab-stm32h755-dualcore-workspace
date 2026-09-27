@@ -142,6 +142,8 @@ Clases de severidad. Alta: comportamiento incorrecto silencioso. Media: acepta u
 00_gpio/
 ├── README.md               # se actualiza en cada fase; al cierre absorbe este plan
 ├── IMPLEMENTATION_PLAN.md  # este archivo; se borra al cierre (queda en git)
+├── IMPLEMENTER_INSTRUCTIONS.md  # reglas para el implementador; se borra al cierre
+├── IMPLEMENTATION_REPORT.md     # lo escribe SOLO el implementador: hechos y resultados, sin veredictos
 ├── AUDIT.md                # lo escribe SOLO el auditor; se borra al cierre (queda en git)
 ├── gpio_bm.h / .c          # en el .h solo se añade
 ```
@@ -414,7 +416,7 @@ Todo va en la rama `driver/gpio`. Cada fase termina en commits del estilo del re
 | **F1a: núcleo `gpio_bm`** | Todo el contrato de F1a: G3, G4, G5, G8 (lock, deinit, ReadConfig), G9, G10, G15, C10–C12. Selftest: T1, T2, T3–T10, T15 (con hook, en GPIOF), T16 y B1 | Protocolo A1–A26 en verde. `git diff ca569b6 -- 00_gpio/gpio_bm.h`: solo añade. B1 publicado. **API congelada.** |
 | **F1b: cierre de G1** | Hook e instalación en `prj_04` y en la plantilla; `SHARED_GPIO_LOCK_*` salido de B1; migración de los escritores de la tabla; excepción G14 documentada; tabla de IDs de `shared_memory.h` actualizada. T15b, T18 y los selftests UART y ADC | A20 (mapa de escritores) sin excepciones no documentadas. T18 igual que la referencia de F0 y `mX_gpio_lock_fail_count = 0`. `git diff` vacío en `prj_02`, `prj_03` y `prj_eth_lwip_node` |
 | **F2: EXTI + SYSCFG** | Contrato de F2. T11–T14 y T17. Regresión T18 | A1–A26 en verde, más A24 y A25. Ningún handler en el driver (grep) |
-| **Cierre** | README de `00_gpio` reescrito desde el código (validado, no ejercitado, limitaciones, mapa de escritores, excepción G14). Línea de `00_gpio` en el README del catálogo. Estado de `00_gpio` en `DRIVER_ROADMAP.md` §1 y §5.2. `10_hsem/README.md` §13 (TakeTimeout). Se borran `IMPLEMENTATION_PLAN.md` y `AUDIT.md`: quedan en git, con los hashes en la historia del README | Nada documentado sin código detrás. Merge y borrado de la rama |
+| **Cierre** | Solo cuando la auditoría de F2 pase, y a petición del auditor. **Implementador:** README de `00_gpio` reescrito desde el código (validado, no ejercitado, limitaciones, mapa de escritores, excepción G14), línea de `00_gpio` en el README del catálogo y `10_hsem/README.md` §13 (TakeTimeout). **Responsable del catálogo, no el implementador:** estado de `00_gpio` en `DRIVER_ROADMAP.md` §1 y §5.2, borrado de `IMPLEMENTATION_PLAN.md`, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md` y `AUDIT.md` (quedan en git, con los hashes en la historia del README), merge y borrado de la rama | Nada documentado sin código detrás. Auditoría de cierre en `AUDIT.md` |
 
 ## Plan de pruebas
 
@@ -448,12 +450,13 @@ Cada prueba tiene un **control negativo** (R1) y un **oráculo** que no es el dr
 
 ### Qué me entrega el implementador al cerrar una fase
 
-1. El rango de commits en `driver/gpio`, con el árbol limpio y el push hecho (así la rama deja rastro).
+1. El rango de commits en `driver/gpio`, con el árbol limpio. La rama tiene que existir como rama, no como un fast-forward sobre `main`, y con push si el repositorio tiene remoto (hoy no lo tiene).
 2. La salida de `tools/build_all.ps1 -Clean`: 8/8 con `-Werror` y tamaños del `.map` frente a F0.
 3. La captura de `gpio_hw_check.py`: una sola ejecución, sin editar, con marcas de tiempo, `Rev <hash>` igual al commit y sin `-dirty` en los dos núcleos, hasta `HOST VERDICT=`.
 4. La lista de controles negativos de la fase, con el valor que dio cada uno.
 5. Los fragmentos de objdump y `.map` que pide la fase.
 6. Los cambios de estado de los hallazgos, citados en los mensajes de commit. **El implementador no escribe en `AUDIT.md`.**
+7. `IMPLEMENTATION_REPORT.md` con la sección de la fase, según la plantilla de `IMPLEMENTER_INSTRUCTIONS.md` §5. Lo contrasto con el código y las capturas. Una afirmación del informe sin fuente, o con lenguaje de veredicto ("auditado", "cerrado", "aprobado"), es un hallazgo.
 
 ### Qué compruebo y cómo
 
