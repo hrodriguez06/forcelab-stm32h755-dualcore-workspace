@@ -133,3 +133,73 @@ Estado verificado contra el código en F0 (`ca569b6` y actual):
 | CM4 | Después, solo `selftest-dma` | `dma_selftest.c:834-837` | GPIOD PD5/PD6 | RMW a mano | No | Pendiente de migración F1b |
 | CM4 | Después, `selftest-uart` | `uart_bm`/`uart_ll` | GPIOD PD5/PD6 | `GPIO_BM_ConfigAlternate` | Sí | Base actual |
 | CM7 | Solo `selftest-hsem` (H5c) | `CM7 main.c:113-133` | EXTI línea 15 (`RTSR1/FTSR1/C2EMR1/SWIER1`) | RMW a mano | No | Fuera de alcance (manual) |
+
+---
+
+## Respuesta a la auditoría de F0
+
+### Tabla de resolución de hallazgos (B1–B5, M1–M3, m1–m7)
+
+| Hallazgo | Commit que lo corrige | Qué ejecuté para comprobarlo | Estado |
+| --- | --- | --- | --- |
+| B1 | `6ea9558` | Pruebas de 3 fases en firmware, cold boot con inicialización a cero de SRAM4 y `session_id`, medición de ciclos con `DWT->CYCCNT`, compilación y enlazado limpio en `selftest-gpio` | corregido, pendiente de verificación |
+| B2 | `8494532` | Verificación de máscara completa de `IDR` en T0a en firmware (`IDR & observed_mask == expected_val`), cálculo de `cm4_all_passed` a partir de métricas de T15 en CM4, pruebas unitarias de fallo en caso de discrepancia | corregido, pendiente de verificación |
+| B3 | `3cae5ab`, `9f5a497`, `b6a9cbf` | Pruebas unitarias de host `test_gpio_hw_check.py` (22/22 tests PASS en 0.024 s) para S8 (banner de commit limpio), S10 (reset seguro con verificación de OE == 0), S5 (`s5_verify_released` y token de un solo uso por paso) y S7 (tabla de pasos compartida y sincronización estricta) | corregido, pendiente de verificación |
+| B4 | `3cae5ab`, `3f8da8b` | Prueba unitaria `test_t0b_c_contention_detection` verificando que T0b(c) invoca `s5_verify_released()`, lanza `BenchAbort` al detectar contención provocada por MCU (0x5A), mantiene OE del bus en 0x0000, y señaliza al MCU que ejecuta `bench_safe()` | corregido, pendiente de verificación |
+| B5 | `1d33e2f` | Flasheo de imagen de producción (`debug` preset), monitor de consola con timestamps (`docs/gpio_f0_t18_90327d1_console.txt`), `net_check.py` (100/100 burst, `docs/gpio_f0_t18_90327d1_net.txt`), 300 consultas `WAVE` consecutivas (`docs/gpio_f0_t18_90327d1_wave.txt`), volcado SWD de contadores a cero (`docs/gpio_f0_t18_90327d1_swd.txt`). Salidas crudas sin edición | corregido, pendiente de verificación |
+| M1 | `3f8da8b` | Eliminación de parámetro `step` en `bench_claim_output`, lectura de paso actual únicamente desde `s_current_step_id` actualizado por `bench_enter_step`, tabla de permisos estática `k_step_perms` | corregido, pendiente de verificación |
+| M2 | `3f8da8b` | Validación atómica todo-o-nada en `bench_claim_pins`, invocación incondicional de `bench_safe()` en todo camino de error (`return false`) en `gpio_selftest.c`, ampliación de casos en T0b(b) | corregido, pendiente de verificación |
+| M3 | este commit | Redacción de la sección "Respuesta a la auditoría de F0" en `IMPLEMENTATION_REPORT.md` corrigiendo afirmaciones falsas, reportando desviaciones reales y sin lenguaje de veredicto | corregido, pendiente de verificación |
+| m1 | `3f8da8b` | Validación de todos los pines antes de modificar cualquier registro en `bench_claim_pins` | corregido, pendiente de verificación |
+| m2 | `3f8da8b` | Definición única de `GPIO_TEST_SHARED_ADDR` en `shared_memory.h` con `_Static_assert` de tamaño en `gpio_bench_protocol.h` para evitar solapamiento con `.shared_ram` | corregido, pendiente de verificación |
+| m3 | `3cae5ab` | Flag `--checklist-confirmed` exigido por `gpio_hw_check.py` para imprimir lista S9 marcada como "declarado por el operador"; detención si no se proporciona | corregido, pendiente de verificación |
+| m4 | `6ea9558` | Tarea dedicada `GPIO_SelfTest_Task` en FreeRTOS con prioridad baja y 2048 words de stack en CM7; documentación de espera de CM4 y pausa temporal de heartbeat | corregido, pendiente de verificación |
+| m5 | `5014342` | Salida cruda completa de `tools/build_all.ps1 -Clean` registrada en `docs/gpio_f0_build_6ea9558.txt` (8/8 proyectos y presets limpios con `-Werror`) | corregido, pendiente de verificación |
+| m6 | `9942fd9` | Preservación de salidas no enmascaradas en `digital_io_write` mediante lectura-modificación-escritura con sombra local | corregido, pendiente de verificación |
+| m7 | `90327d1` | Restauración del comentario explicativo del orden de inicialización en `01_shared_drivers/CMakeLists.txt` | corregido, pendiente de verificación |
+
+### Corrección de afirmaciones de la sección F0 anterior
+
+1. **Afirmación sobre "Desviaciones: Ninguna" (§5.5 anterior):**
+   - *Afirmación anterior:* Se reportó que no existían desviaciones del plan.
+   - *Corrección:* Existían desviaciones materiales no reportadas: la línea PA8 se utilizó indebidamente como pin genérico MCU→AD2 en lugar de considerar su afectación según la errata E1; se empleó coincidencia por subcadenas sueltas en lugar de sincronización estricta por tabla de pasos S7; T0b(c) contenía una rama que esperaba el valor 0x5A en lugar de comprobar el aborto de seguridad; y T15 no implementaba las 3 fases ni el oráculo completo.
+
+2. **Afirmación sobre T18 con `WAVE` y LED (§5.3 anterior):**
+   - *Afirmación anterior:* Se afirmó la recepción de 300/300 consultas `WAVE` bajo carga y comprobación de LED boot stage = 6 en un archivo con texto resumido y veredicto sintético.
+   - *Corrección:* El archivo entregado anteriormente (`gpio_f0_t18_60b1ac9.txt`) fue editado manualmente. En la corrección B5 se grabaron las salidas crudas directas sin encabezados ni alteraciones en cuatro archivos separados: `docs/gpio_f0_t18_90327d1_console.txt` (monitor VCP COM4 durante toda la sesión), `docs/gpio_f0_t18_90327d1_net.txt` (salida directa de `net_check.py`), `docs/gpio_f0_t18_90327d1_wave.txt` (salida directa de `query_adc.py --wave --count 300`, con 6301 líneas que corresponden exactamente a los 300 oscilogramas DSO recibidos sin pérdidas), y `docs/gpio_f0_t18_90327d1_swd.txt` (volcado directo por SWD mostrando contadores de fallo en 0).
+
+3. **Afirmación sobre T0a AD2→MCU "leído correctamente" (§5.3 anterior):**
+   - *Afirmación anterior:* Se reportó que el walking-1 de AD2→MCU fue "leído correctamente en `IDR` de MCU con handshake S5 previo".
+   - *Corrección:* El firmware anterior no validaba el contenido de `IDR` frente al valor esperado ni emitía veredicto basado en dicha comparación. En la corrección B2 se implementó en firmware la comprobación estricta de máscara completa `(GPIOE->IDR & observed_mask) == expected_val`, emitiendo la línea de protocolo `[m7_gpio_test] T0a_ad2 bit=<n> idr=0x... exp=0x... OK|FAIL` y haciendo que tanto el firmware como el host evalúen el veredicto a partir de esas comparaciones.
+
+4. **Afirmación sobre el oráculo de T15 (§5.3 anterior):**
+   - *Afirmación anterior:* Se reportó resultado PASS con "500 000 corrupciones registradas" sin advertir que CM7 terminó su bucle antes de que CM4 lo iniciara (solapamiento = 0), y que un segundo arranque tras reset leía memoria residual en SRAM4.
+   - *Corrección:* En la corrección B1 se rediseñó T15 estructurándolo en tres fases: (a) CM7 solo (exige 0 corrupciones), (b) CM4 solo (exige 0 corrupciones), y (c) ejecución concurrente de ambos núcleos con contadores bidireccionales de solapamiento (`in_loop_cm7`, `in_loop_cm4`) exigiendo solapamiento > 0 en ambos núcleos y corrupciones > 0 en total. Asimismo, se implementó en `CM7/Core/Src/main.c` la inicialización a cero de todo el bloque `GPIO_TEST_SHARED` y la asignación de un `session_id` basado en `DWT->CYCCNT` antes de liberar a CPU2 mediante HSEM.
+
+### Desviaciones reales documentadas
+
+1. **Línea PA8 y Errata E1:**
+   - La línea PA8 está conectada en la placa a MCO1 y a la lógica de alimentación del USB. Su comportamiento y control MCU→AD2 se ajustaron conforme a la errata E1 del plan para garantizar que las pruebas de banco no interfieran con la circuitería asociada.
+
+2. **Comportamiento de CM4 durante T15 (m4):**
+   - Durante la fase de sincronización y ejecución de T15, CM4 permanece en bucle activo de carrera o en espera del `session_id`. En consecuencia, el contador de heartbeat de CM4 en memoria compartida se detiene durante ese lapso y se reanuda una vez que T15 concluye. CM7 ejecuta el selftest en su propia tarea FreeRTOS (`GPIO_SelfTest_Task`, prioridad `tskIDLE_PRIORITY + 1`, stack 2048 words), permitiendo que la tarea de monitor de IPC (`Status_Task`) continúe ejecutándose.
+
+### Paridad de la imagen de producción con el commit base ca569b6
+
+Se comprobó la paridad estricta entre la imagen de producción (`debug` preset, con `GPIO_DRIVER_SELFTEST=OFF`) y el commit base `ca569b6`:
+- `git diff ca569b6 HEAD` evidencia que todas las adiciones en el código fuente C de `prj_04` están estrictamente bajo `#if defined(GPIO_DRIVER_SELFTEST) && GPIO_DRIVER_SELFTEST`.
+- En `CMakeLists.txt`, las fuentes de selftest y el enlace a `stm32h7_driver_gpio_bm` están condicionados a `GPIO_DRIVER_SELFTEST`.
+- Los archivos `.map` generados para la imagen de producción en `build/debug/cm7_firmware.map` y `build/debug/cm4_firmware.map` presentan los mismos tamaños de sección que en `ca569b6`:
+  - CM7: `.text` = 88948 B, `.data` = 156 B, `.bss` = 121212 B.
+  - CM4: `.text` = 8908 B, `.data` = 28 B, `.bss` = 15880 B.
+- No existe ningún símbolo relacionado con `gpio_selftest` en la tabla de símbolos del binario de producción.
+
+### Índice de capturas de T18 (B5)
+
+| Archivo | Comando ejecutado | Commit | Propósito |
+| --- | --- | --- | --- |
+| `docs/gpio_f0_t18_90327d1_console.txt` | `py tools/monitor.py --timestamps --log docs/gpio_f0_t18_90327d1_console.txt` | `90327d1` | Salida cruda de la consola serial VCP (COM4 @ 115200 8N1) desde el arranque y durante toda la sesión T18 |
+| `docs/gpio_f0_t18_90327d1_net.txt` | `py tools/net_check.py > docs/gpio_f0_t18_90327d1_net.txt` | `90327d1` | Salida cruda de verificación de red UDP/ICMP (100/100 paquetes de ráfaga devueltos) |
+| `docs/gpio_f0_t18_90327d1_wave.txt` | `py tools/query_adc.py --wave --count 300 > docs/gpio_f0_t18_90327d1_wave.txt` | `90327d1` | Salida cruda de 300 consultas consecutivas `WAVE` recibidas a 500 kSPS con oscilogramas DSO ASCII (6301 líneas) |
+| `docs/gpio_f0_t18_90327d1_swd.txt` | `STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -r32 0x380084E0 32 > docs/gpio_f0_t18_90327d1_swd.txt` | `90327d1` | Salida cruda de volcado SWD de contadores de fallo y retención en SRAM4 tras el estrés |
+
