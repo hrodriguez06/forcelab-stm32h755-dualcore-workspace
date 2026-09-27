@@ -20,6 +20,7 @@ static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin, uint32_t step);
 static void bench_safe(void);
 static bool wait_host_req(bool expected_high, uint32_t timeout_ms);
 static void set_mcu_ack(bool high);
+static bool mcu_handshake(uint32_t timeout_ms);
 
 /**
  * @brief Safety guard S4: Bench claim check for Cortex-M7.
@@ -130,7 +131,9 @@ static bool bench_set_pin_mode(GPIO_TypeDef *port, uint32_t pin, uint32_t mode, 
 
 /**
  * @brief Enforces S2 Safe State on MCU side.
- *        All wired test pins set to INPUT mode (00) without pull, except PE7 (MCU_ACK) which is OUTPUT LOW.
+ *        All wired test pins set to INPUT mode (00) without pull, except:
+ *          - PE7 (MCU_ACK) which is OUTPUT LOW (01)
+ *          - PE2 (HOST_REQ) which is INPUT with pull-down (10)
  *        PE0 and PE1 (LD2) are completely UNTOUCHED.
  */
 static void bench_safe(void)
@@ -139,7 +142,7 @@ static void bench_safe(void)
     RCC->AHB4ENR |= (RCC_AHB4ENR_GPIOAEN | RCC_AHB4ENR_GPIOEEN | RCC_AHB4ENR_GPIOFEN);
     __DSB();
 
-    /* GPIOE: Configure PE2..PE6 and PE8..PE15 as INPUT (00) without pull (00).
+    /* GPIOE: Configure PE2..PE6 and PE8..PE15 as INPUT (00).
        Crucial: PE0 and PE1 (bits 3:0 of MODER/PUPDR) are NEVER touched! */
     uint32_t mask_pe2_to_pe6 = 0x00003FC0UL;  /* pins 2, 3, 4, 5, 6 */
     uint32_t mask_pe8_to_pe15 = 0xFFFF0000UL; /* pins 8..15 */
@@ -147,6 +150,9 @@ static void bench_safe(void)
 
     GPIOE->MODER &= ~clear_mask_e;
     GPIOE->PUPDR &= ~clear_mask_e;
+
+    /* PE2 (HOST_REQ): pull-down so it stays cleanly 0 when AD2 is not driving */
+    GPIOE->PUPDR |= (2UL << (2U * 2U));
 
     /* PE7 (MCU_ACK) is Solo MCU: set to OUTPUT LOW (01) */
     if (bench_claim_output(GPIOE, 7U, GPIO_BENCH_STEP_IDLE))
@@ -205,6 +211,21 @@ static bool wait_host_req(bool expected_high, uint32_t timeout_ms)
 }
 
 /**
+ * @brief 4-phase asynchronous level handshake on MCU side.
+ */
+static bool mcu_handshake(uint32_t timeout_ms)
+{
+    set_mcu_ack(true);
+    if (!wait_host_req(true, timeout_ms))
+    {
+        set_mcu_ack(false);
+        return false;
+    }
+    set_mcu_ack(false);
+    return wait_host_req(false, timeout_ms);
+}
+
+/**
  * @brief S5 Bus handover loose check.
  */
 static bool s5_check_bus_loose(void)
@@ -218,15 +239,8 @@ static bool s5_check_bus_loose(void)
     HAL_Delay(GPIO_BENCH_DEADTIME_MS);
 
     uint32_t idr_up = (GPIOE->IDR >> 8U) & 0xFFU;
-    APP_LOG("[m7_gpio_test] BUSCHK up (MCU read: 0x%02lX)", idr_up);
-    set_mcu_ack(true);
-    if (!wait_host_req(true, GPIO_BENCH_TIMEOUT_MS))
-    {
-        bench_safe();
-        return false;
-    }
-    set_mcu_ack(false);
-    if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS))
+    APP_LOG("[m7_gpio_test] BUSCHK up");
+    if (!mcu_handshake(GPIO_BENCH_TIMEOUT_MS))
     {
         bench_safe();
         return false;
@@ -241,15 +255,8 @@ static bool s5_check_bus_loose(void)
     HAL_Delay(GPIO_BENCH_DEADTIME_MS);
 
     uint32_t idr_down = (GPIOE->IDR >> 8U) & 0xFFU;
-    APP_LOG("[m7_gpio_test] BUSCHK down (MCU read: 0x%02lX)", idr_down);
-    set_mcu_ack(true);
-    if (!wait_host_req(true, GPIO_BENCH_TIMEOUT_MS))
-    {
-        bench_safe();
-        return false;
-    }
-    set_mcu_ack(false);
-    if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS))
+    APP_LOG("[m7_gpio_test] BUSCHK down");
+    if (!mcu_handshake(GPIO_BENCH_TIMEOUT_MS))
     {
         bench_safe();
         return false;
@@ -316,12 +323,8 @@ static bool test_t0b_s5_neg(void)
 
     APP_LOG("[m7_gpio_test] T0b(c) MCU driving bus to 0x5A (AD2 in input)");
 
-    /* Signal ready to host via MCU_ACK */
-    set_mcu_ack(true);
     /* Host executes S5 check, detects driven bus, aborts safely, and pulses HOST_REQ */
-    bool host_ok = wait_host_req(true, GPIO_BENCH_TIMEOUT_MS);
-    set_mcu_ack(false);
-    (void)wait_host_req(false, GPIO_BENCH_TIMEOUT_MS);
+    bool host_ok = mcu_handshake(GPIO_BENCH_TIMEOUT_MS);
 
     /* Release bus back to safe input */
     bench_safe();
@@ -355,6 +358,10 @@ static bool test_t0b_timeout(void)
 
     APP_LOG("[m7_gpio_test] T0b(d) timeout expired -> bench_safe() invoked, all pins input (%s)",
             all_inputs ? "PASS" : "FAIL");
+
+    /* Re-synchronize with host after the timeout */
+    (void)mcu_handshake(5000U);
+
     return all_inputs;
 }
 
@@ -364,28 +371,23 @@ static bool test_t0a_loose(void)
 {
     APP_LOG("[m7_gpio_test] T0a_loose ready bus=NONE");
 
-    /* 1. Pull-up check on all test lines */
-    /* PE8..PE15: pull-up */
+    /* 1. Pull-up check on all test lines (PE7 MCU_ACK stays OUTPUT, PE2 HOST_REQ stays INPUT) */
     uint32_t pupdr_e = GPIOE->PUPDR;
-    pupdr_e &= ~0xFFFF3FC0UL;
-    pupdr_e |= (0x55550000UL | (1UL << (5U * 2U)) | (1UL << (6U * 2U)) | (1UL << (7U * 2U)));
+    pupdr_e &= ~0xFFFF3F00UL;
+    pupdr_e |= (0x55550000UL | (1UL << (5U * 2U)) | (1UL << (6U * 2U)) | (1UL << (3U * 2U)) | (1UL << (4U * 2U)));
     GPIOE->PUPDR = pupdr_e;
 
-    /* PA8: pull-up */
     GPIOA->PUPDR &= ~(3UL << 16U);
     GPIOA->PUPDR |= (1UL << 16U);
 
     HAL_Delay(GPIO_BENCH_DEADTIME_MS);
     APP_LOG("[m7_gpio_test] BUSCHK up");
-    set_mcu_ack(true);
-    if (!wait_host_req(true, GPIO_BENCH_TIMEOUT_MS)) return false;
-    set_mcu_ack(false);
-    if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS)) return false;
+    if (!mcu_handshake(GPIO_BENCH_TIMEOUT_MS)) return false;
 
     /* 2. Pull-down check */
     pupdr_e = GPIOE->PUPDR;
-    pupdr_e &= ~0xFFFF3FC0UL;
-    pupdr_e |= (0xAAAA0000UL | (2UL << (5U * 2U)) | (2UL << (6U * 2U)) | (2UL << (7U * 2U)));
+    pupdr_e &= ~0xFFFF3F00UL;
+    pupdr_e |= (0xAAAA0000UL | (2UL << (5U * 2U)) | (2UL << (6U * 2U)) | (2UL << (3U * 2U)) | (2UL << (4U * 2U)));
     GPIOE->PUPDR = pupdr_e;
 
     GPIOA->PUPDR &= ~(3UL << 16U);
@@ -393,10 +395,7 @@ static bool test_t0a_loose(void)
 
     HAL_Delay(GPIO_BENCH_DEADTIME_MS);
     APP_LOG("[m7_gpio_test] BUSCHK down");
-    set_mcu_ack(true);
-    if (!wait_host_req(true, GPIO_BENCH_TIMEOUT_MS)) return false;
-    set_mcu_ack(false);
-    if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS)) return false;
+    if (!mcu_handshake(GPIO_BENCH_TIMEOUT_MS)) return false;
 
     /* 3. Analog negative control: PE8..PE15 in analog mode (MODER = 11, PUPDR = 00) */
     GPIOE->PUPDR &= ~0xFFFF0000UL;
@@ -405,13 +404,9 @@ static bool test_t0a_loose(void)
         bench_set_pin_mode(GPIOE, pin, 3U, 0U, GPIO_BENCH_STEP_T0A_LOOSE);
     }
     HAL_Delay(GPIO_BENCH_DEADTIME_MS);
-    uint32_t idr_analog = (GPIOE->IDR >> 8U) & 0xFFU;
-    APP_LOG("[m7_gpio_test] BUSCHK analog (MCU read IDR: 0x%02lX)", idr_analog);
+    APP_LOG("[m7_gpio_test] BUSCHK analog");
 
-    set_mcu_ack(true);
-    if (!wait_host_req(true, GPIO_BENCH_TIMEOUT_MS)) return false;
-    set_mcu_ack(false);
-    if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS)) return false;
+    if (!mcu_handshake(GPIO_BENCH_TIMEOUT_MS)) return false;
 
     bench_safe();
     APP_LOG("[m7_gpio_test] T0a loose check: PASS");
@@ -445,7 +440,7 @@ static bool test_t0a_mcu_to_ad2(void)
     GPIOE->BSRR = (0xFFE0UL << 16U);
     GPIOA->BSRR = (1UL << (8U + 16U));
 
-    /* Walking-1 across test lines: PE5, PE6, PA8, and PE8..PE15 */
+    /* Walking-1 across test lines: PE5, PE6, and PE8..PE15 */
     uint32_t test_pins[] = { 5U, 6U, 8U, 9U, 10U, 11U, 12U, 13U, 14U, 15U };
     for (uint32_t i = 0U; i < sizeof(test_pins) / sizeof(test_pins[0]); i++)
     {
@@ -453,10 +448,7 @@ static bool test_t0a_mcu_to_ad2(void)
         GPIOE->BSRR = (1UL << pin);
         HAL_Delay(1);
 
-        set_mcu_ack(true);
-        if (!wait_host_req(true, GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
-        set_mcu_ack(false);
-        if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
+        if (!mcu_handshake(GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
 
         GPIOE->BSRR = (1UL << (pin + 16U));
     }
@@ -464,10 +456,7 @@ static bool test_t0a_mcu_to_ad2(void)
     /* Test PA8 */
     GPIOA->BSRR = (1UL << 8U);
     HAL_Delay(1);
-    set_mcu_ack(true);
-    if (!wait_host_req(true, GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
-    set_mcu_ack(false);
-    if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
+    if (!mcu_handshake(GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
     GPIOA->BSRR = (1UL << (8U + 16U));
 
     bench_safe();
@@ -486,22 +475,31 @@ static bool test_t0a_ad2_to_mcu(void)
         return false;
     }
 
-    /* Configure input pull-down on PE2 (HOST_REQ), PE3 (EXTI3), PE4 (EXTI4), PE8..PE15 */
+    /* Configure input pull-down on PE3 (EXTI3), PE4 (EXTI4), PE8..PE15 */
     uint32_t pupdr = GPIOE->PUPDR;
-    pupdr &= ~0xFFFF003CUL;
-    pupdr |= (0xAAAA0000UL | (2UL << (2U * 2U)) | (2UL << (3U * 2U)) | (2UL << (4U * 2U)));
+    pupdr &= ~0xFFFF0030UL;
+    pupdr |= (0xAAAA0000UL | (2UL << (3U * 2U)) | (2UL << (4U * 2U)));
     GPIOE->PUPDR = pupdr;
 
-    /* Signal ready to host */
-    set_mcu_ack(true);
-    if (!wait_host_req(true, GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
-    set_mcu_ack(false);
-    if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
+    /* Signal ready to host via initial handshake */
+    if (!mcu_handshake(GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
 
-    /* Host walks bits on AD2 and confirms with REQ/ACK */
-    for (uint32_t i = 0U; i < 11U; i++)
+    /* Host walks bits on AD2 and confirms with REQ/ACK for each of the 10 bits */
+    uint32_t expected_mcu_pins[] = { 3U, 4U, 8U, 9U, 10U, 11U, 12U, 13U, 14U, 15U };
+    for (uint32_t i = 0U; i < sizeof(expected_mcu_pins) / sizeof(expected_mcu_pins[0]); i++)
     {
+        uint32_t pin = expected_mcu_pins[i];
+        /* Wait for host to assert HOST_REQ */
         if (!wait_host_req(true, GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
+
+        /* Read pin state */
+        bool pin_state = ((GPIOE->IDR & (1UL << pin)) != 0U);
+        if (!pin_state)
+        {
+            APP_LOG("[m7_gpio_test] T0a AD2->MCU bit on pin %lu read LOW!", pin);
+        }
+
+        /* Acknowledge */
         set_mcu_ack(true);
         if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
         set_mcu_ack(false);
@@ -526,18 +524,12 @@ static bool test_t0a_scope(void)
     /* 1. Drive LOW */
     GPIOF->BSRR = (1UL << (14U + 16U)) | (1UL << (15U + 16U));
     HAL_Delay(2);
-    set_mcu_ack(true);
-    if (!wait_host_req(true, GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
-    set_mcu_ack(false);
-    if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
+    if (!mcu_handshake(GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
 
     /* 2. Drive HIGH */
     GPIOF->BSRR = (1UL << 14U) | (1UL << 15U);
     HAL_Delay(2);
-    set_mcu_ack(true);
-    if (!wait_host_req(true, GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
-    set_mcu_ack(false);
-    if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
+    if (!mcu_handshake(GPIO_BENCH_TIMEOUT_MS)) { bench_safe(); return false; }
 
     bench_safe();
     APP_LOG("[m7_gpio_test] T0a Scope check: PASS");
@@ -646,6 +638,19 @@ void GPIO_SelfTest_CM7_Run(void)
 
     /* Enforce S2 safe state initially */
     bench_safe();
+
+    /* Synchronize start with host */
+    APP_LOG("[m7_gpio_test] Waiting for HOST_REQ to start session...");
+    if (!wait_host_req(true, 60000U))
+    {
+        APP_LOG("[m7_gpio_test] TIMEOUT waiting for HOST_REQ");
+        bench_safe();
+        return;
+    }
+    set_mcu_ack(true);
+    if (!wait_host_req(false, 5000U)) { bench_safe(); return; }
+    set_mcu_ack(false);
+    APP_LOG("[m7_gpio_test] Host connected. Starting tests.");
 
     /* T0b: Guards verification before any bus movement */
     bool t0b_claim_ok = test_t0b_claim_guards();

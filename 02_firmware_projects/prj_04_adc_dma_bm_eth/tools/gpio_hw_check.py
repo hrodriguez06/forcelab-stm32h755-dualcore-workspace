@@ -41,14 +41,7 @@ from tools.ad2 import (
     AD2_DIO_MCU_ACK,
     AD2_DIO_MCO1_PA8,
 )
-from tools.monitor import SerialPort, autodetect
-
-
-def pulse_host_req(ad2: AD2, duration_ms: float = 2.0) -> None:
-    """Pulse PE2 (HOST_REQ, DIO12) HIGH then LOW."""
-    ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
-    time.sleep(duration_ms / 1000.0)
-    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
+from tools.monitor import SerialPort
 
 
 def wait_mcu_ack(ad2: AD2, expected_high: bool, timeout_s: float = 10.0) -> bool:
@@ -59,8 +52,20 @@ def wait_mcu_ack(ad2: AD2, expected_high: bool, timeout_s: float = 10.0) -> bool
         is_high = bool(dio & AD2_DIO_MCU_ACK)
         if is_high == expected_high:
             return True
-        time.sleep(0.001)
+        time.sleep(0.0005)
     return False
+
+
+def host_handshake(ad2: AD2, timeout_s: float = 10.0) -> bool:
+    """4-phase asynchronous level handshake: wait for MCU_ACK=1, set HOST_REQ=1, wait for MCU_ACK=0, set HOST_REQ=0."""
+    if not wait_mcu_ack(ad2, True, timeout_s):
+        return False
+    ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+    if not wait_mcu_ack(ad2, False, timeout_s):
+        ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
+        return False
+    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
+    return True
 
 
 def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Path | None) -> int:
@@ -136,10 +141,9 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
                 pending = b""
                 banner_found = False
                 fw_rev = ""
-                step_name = ""
 
                 start_time = time.monotonic()
-                while time.monotonic() - start_time < 30.0:
+                while time.monotonic() - start_time < 45.0:
                     chunk = ser.read()
                     if chunk:
                         pending += chunk
@@ -157,11 +161,23 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
                                 banner_found = True
                                 log(f"[host] S8 banner verified (Rev {fw_rev}, GPIO_BENCH v1).")
 
+                            if "Waiting for HOST_REQ to start session" in text:
+                                # Synchronize session start with MCU
+                                log("[host] Handshaking session start with MCU...")
+                                ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+                                if wait_mcu_ack(ad2, True, 10.0):
+                                    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
+                                    wait_mcu_ack(ad2, False, 10.0)
+                                    log("[host] Session start synchronized.")
+                                else:
+                                    log("[host] FAIL: MCU did not ACK session start!")
+                                    all_passed = False
+
                             # Dispatch test steps
-                            if "T0b_c ready bus=MCU" in text:
+                            elif "T0b_c ready bus=MCU" in text:
                                 # T0b(c) S5 negative control
                                 log("[ad2] Step T0b(c): Testing S5 negative control (MCU driving 0x5A)...")
-                                if wait_mcu_ack(ad2, True, 5.0):
+                                if wait_mcu_ack(ad2, True, 10.0):
                                     time.sleep(0.002)
                                     dio = ad2.digital_io_read()
                                     bus_val = dio & AD2_DIO_BUS_MASK
@@ -172,89 +188,106 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
                                     else:
                                         log(f"[ad2] T0b(c) FAIL: expected 0x5A, got 0x{bus_val:02X}")
                                         all_passed = False
-                                    pulse_host_req(ad2)
-                                    wait_mcu_ack(ad2, False, 5.0)
+                                    ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+                                    wait_mcu_ack(ad2, False, 10.0)
+                                    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
 
                             elif "T0b_d ready bus=NONE" in text:
                                 log("[ad2] Step T0b(d): Testing 10-second timeout to bench_safe()...")
-                                log("[ad2] Remaining silent for 10.5 seconds without toggling HOST_REQ...")
+                                log("[ad2] Remaining silent for 10.5 seconds without asserting HOST_REQ...")
                                 time.sleep(10.5)
+
+                            elif "timeout expired -> bench_safe() invoked" in text:
+                                # Re-synchronize after timeout test
+                                if wait_mcu_ack(ad2, True, 5.0):
+                                    ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+                                    wait_mcu_ack(ad2, False, 5.0)
+                                    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
+                                    log("[ad2] T0b(d) timeout test PASSED.")
 
                             elif "T0a_loose ready bus=NONE" in text:
                                 log("[ad2] Step T0a: Testing loose lines (pull-up, pull-down, analog)...")
 
                             elif "BUSCHK up" in text:
                                 # Pull-up check
-                                if wait_mcu_ack(ad2, True, 5.0):
+                                if wait_mcu_ack(ad2, True, 10.0):
                                     dio = ad2.digital_io_read()
                                     bus = dio & AD2_DIO_BUS_MASK
                                     log(f"[ad2] BUSCHK up: DIO0..DIO7 = 0x{bus:02X} (expected 0xFF)")
                                     if bus != 0xFF:
                                         log(f"[ad2] BUSCHK up FAILED on lines: 0x{~bus & 0xFF:02X}")
                                         all_passed = False
-                                    pulse_host_req(ad2)
-                                    wait_mcu_ack(ad2, False, 5.0)
+                                    ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+                                    wait_mcu_ack(ad2, False, 10.0)
+                                    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
 
                             elif "BUSCHK down" in text:
                                 # Pull-down check
-                                if wait_mcu_ack(ad2, True, 5.0):
+                                if wait_mcu_ack(ad2, True, 10.0):
                                     dio = ad2.digital_io_read()
                                     bus = dio & AD2_DIO_BUS_MASK
                                     log(f"[ad2] BUSCHK down: DIO0..DIO7 = 0x{bus:02X} (expected 0x00)")
                                     if bus != 0x00:
                                         log(f"[ad2] BUSCHK down FAILED on lines: 0x{bus:02X}")
                                         all_passed = False
-                                    pulse_host_req(ad2)
-                                    wait_mcu_ack(ad2, False, 5.0)
+                                    ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+                                    wait_mcu_ack(ad2, False, 10.0)
+                                    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
 
                             elif "BUSCHK analog" in text:
                                 # Analog negative control
-                                if wait_mcu_ack(ad2, True, 5.0):
+                                if wait_mcu_ack(ad2, True, 10.0):
                                     dio = ad2.digital_io_read()
                                     log(f"[ad2] BUSCHK analog negative control: DIO read 0x{dio & 0xFF:02X}")
-                                    pulse_host_req(ad2)
-                                    wait_mcu_ack(ad2, False, 5.0)
+                                    ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+                                    wait_mcu_ack(ad2, False, 10.0)
+                                    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
 
                             elif "T0a_mcu ready bus=MCU" in text:
                                 log("[ad2] Step T0a: Walking-1 MCU -> AD2...")
                                 # S5 pre-check handled by BUSCHK up/down, followed by bit tests
-                                bit_idx = 0
-                                # Pins to test: PE5(DIO9), PE6(DIO11), PE8..PE15(DIO0..DIO7), PA8(DIO14)
                                 expected_dios = [9, 11, 0, 1, 2, 3, 4, 5, 6, 7, 14]
                                 for exp_dio in expected_dios:
-                                    if wait_mcu_ack(ad2, True, 5.0):
+                                    if wait_mcu_ack(ad2, True, 10.0):
                                         dio = ad2.digital_io_read()
                                         mask = (1 << exp_dio)
                                         is_set = bool(dio & mask)
                                         log(f"[ad2] Walking-1 MCU->AD2 bit {exp_dio} (DIO{exp_dio}): {'OK' if is_set else 'FAIL'} (DIO=0x{dio:04X})")
                                         if not is_set:
                                             all_passed = False
-                                        pulse_host_req(ad2)
-                                        wait_mcu_ack(ad2, False, 5.0)
+                                        ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+                                        wait_mcu_ack(ad2, False, 10.0)
+                                        ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
 
                             elif "T0a_ad2 ready bus=AD2" in text:
                                 log("[ad2] Step T0a: Walking-1 AD2 -> MCU...")
                                 # S5 pre-check handled by BUSCHK up/down
-                                if wait_mcu_ack(ad2, True, 5.0):
-                                    pulse_host_req(ad2)
-                                    wait_mcu_ack(ad2, False, 5.0)
+                                # Synchronize before driving
+                                if wait_mcu_ack(ad2, True, 10.0):
+                                    ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+                                    wait_mcu_ack(ad2, False, 10.0)
+                                    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
 
-                                # Drive walking-1 on allowed AD2 lines: DIO8, DIO10, DIO12, DIO0..DIO7
+                                # Drive walking-1 on allowed AD2 lines: DIO8(PE3), DIO10(PE4), DIO0..DIO7(PE8..PE15)
                                 ad2_test_bits = [8, 10, 0, 1, 2, 3, 4, 5, 6, 7]
                                 for b in ad2_test_bits:
                                     bus_owner = GPIO_BENCH_BUS_AD2 if b < 8 else GPIO_BENCH_BUS_NONE
                                     oe_mask = AD2_DIO_HOST_REQ | (1 << b)
                                     ad2.set_oe(oe_mask, bus_owner)
-                                    ad2.digital_io_write(1 << b, 1 << b)
+                                    ad2.digital_io_write((1 << b) | AD2_DIO_HOST_REQ, (1 << b) | AD2_DIO_HOST_REQ)
                                     time.sleep(0.001)
 
-                                    pulse_host_req(ad2)
-                                    wait_mcu_ack(ad2, True, 5.0)
+                                    if wait_mcu_ack(ad2, True, 10.0):
+                                        log(f"[ad2] Walking-1 AD2->MCU DIO{b}: OK")
+                                    else:
+                                        log(f"[ad2] Walking-1 AD2->MCU DIO{b}: FAIL (no ACK)")
+                                        all_passed = False
+
                                     ad2.digital_io_write(0, 1 << b)
                                     ad2.set_safe_state()
                                     ad2.set_oe(AD2_DIO_HOST_REQ, GPIO_BENCH_BUS_NONE)
-                                    pulse_host_req(ad2)
-                                    wait_mcu_ack(ad2, False, 5.0)
+                                    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
+                                    wait_mcu_ack(ad2, False, 10.0)
 
                             elif "T0a_scope ready bus=NONE" in text:
                                 log("[ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...")
@@ -263,7 +296,7 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
                                 time.sleep(0.05)
 
                                 # 1. LOW measurement
-                                if wait_mcu_ack(ad2, True, 5.0):
+                                if wait_mcu_ack(ad2, True, 10.0):
                                     time.sleep(0.01)
                                     v1_low = ad2.analog_in_read_dc(0)
                                     v2_low = ad2.analog_in_read_dc(1)
@@ -271,11 +304,12 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
                                     if v1_low > 0.4 or v2_low > 0.4:
                                         log("[ad2] Scope VOL check FAILED!")
                                         all_passed = False
-                                    pulse_host_req(ad2)
-                                    wait_mcu_ack(ad2, False, 5.0)
+                                    ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+                                    wait_mcu_ack(ad2, False, 10.0)
+                                    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
 
                                 # 2. HIGH measurement
-                                if wait_mcu_ack(ad2, True, 5.0):
+                                if wait_mcu_ack(ad2, True, 10.0):
                                     time.sleep(0.01)
                                     v1_high = ad2.analog_in_read_dc(0)
                                     v2_high = ad2.analog_in_read_dc(1)
@@ -283,8 +317,9 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
                                     if v1_high < 2.9 or v2_high < 2.9:
                                         log("[ad2] Scope VOH check FAILED!")
                                         all_passed = False
-                                    pulse_host_req(ad2)
-                                    wait_mcu_ack(ad2, False, 5.0)
+                                    ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+                                    wait_mcu_ack(ad2, False, 10.0)
+                                    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
 
                             elif "VERDICT: ALL GPIO SELF-TESTS PASSED" in text:
                                 log("[host] Firmware announced ALL GPIO SELF-TESTS PASSED.")
@@ -295,7 +330,7 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
                                 all_passed = False
                                 break
 
-                    time.sleep(0.005)
+                    time.sleep(0.002)
 
     except Exception as e:
         log(f"ERROR during selftest execution: {e}")
