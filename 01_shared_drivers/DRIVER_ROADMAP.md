@@ -17,7 +17,7 @@ no lo sustituye.
 
 | Carpeta | Estado | Notas |
 | :--- | :--- | :--- |
-| `00_gpio` | Parcial | Solo `gpio_bm`: reloj de puerto, AF push-pull, analógico. Plan F0–F6 escrito en `00_gpio/IMPLEMENTATION_PLAN.md`, sin ejecutar. |
+| `00_gpio` | Parcial | Solo `gpio_bm`: reloj de puerto, AF push-pull, analógico. Plan de F1–F2 (revisión 2, 2026-09-26) en `00_gpio/IMPLEMENTATION_PLAN.md`, sin ejecutar. |
 | `01_led` | Hecho | `led_bm`. Sin README. |
 | `02_dma` | Hecho y auditado | BM, LL, HAL. BDMA solo validado en M2M. |
 | `03_tim` | **Vacío** | |
@@ -151,11 +151,14 @@ orden.
 
 - **G1 es un fallo real hoy.** En `prj_04`, CM7 configura PB13 (TXD1 de
   Ethernet, `HAL_GPIO_Init`) en `net_task` después de liberar a CPU2, y CM4
-  configura PB1 (ADC, `GPIO_BM_ConfigAnalog`) al despertar. Las dos escrituras
-  son read-modify-write sin protección sobre el mismo `GPIOB_MODER`. Si se
-  intercalan, PB13 puede volver a analógico: el enlace sigue arriba y la
-  transmisión muere sin que nada lo detecte. F1 lo cierra con sección crítica
-  y el hook HSEM del paso 1.
+  configura PB1 (ADC) al despertar, escribiendo `MODER` y `PUPDR` a mano en
+  `GPIO_Analog_Init()` (`CM4/App/Src/adc_acquisition.c`). Ninguna de las dos
+  escrituras pasa por `gpio_bm`: las dos son read-modify-write sin protección
+  sobre el mismo `GPIOB_MODER`. Si se intercalan, PB13 puede volver a
+  analógico: el enlace sigue arriba y la transmisión muere sin que nada lo
+  detecte. F1 lo cierra con sección crítica y el hook HSEM del paso 1, y
+  haciendo que **todos** los escritores de un puerto compartido tomen ese lock
+  (hallazgo G13 del plan).
 - **Lo que necesitan los siguientes:**
   - I2C necesita AF **open-drain**; hoy `GPIO_BM_ConfigAlternate()` solo hace
     push-pull.
