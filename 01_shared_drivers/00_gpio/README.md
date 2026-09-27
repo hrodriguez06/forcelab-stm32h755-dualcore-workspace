@@ -209,7 +209,7 @@ catalogue driver in phases F0-F6:
 - **F5:** dual pads (conditional).
 - **F6:** documentation closure.
 
-The test plan uses an Analog Discovery 2 on GPIOF. **None of it is implemented.**
+The test plan uses an Analog Discovery 2 on GPIOE (PE8-PE15 bus, PE2-PE7 EXTI and handshake) and PF14/PF15 (analog probes); PF0-PF5, PF12 and PF13 do not reach any connector on this board. **None of it is implemented.**
 This README describes only what exists. Update it phase by phase as the plan is
 carried out.
 

@@ -15,7 +15,7 @@ Este documento dice qué te toca, qué no te toca y qué tienes que entregar. Si
 - **No hagas auditorías, ni de tu trabajo ni del de nadie.** No escribas "auditoría", "auditado", "aprobado", "cerrado", "validado por auditoría" ni nada parecido para describir una fase o un hallazgo. Lo más que puede decir tu trabajo de sí mismo es **"entregado para auditoría"**.
 - **No crees, edites ni borres `00_gpio/AUDIT.md`.** Lo escribe solo el auditor. Si no estás de acuerdo con un hallazgo, contéstalo en tu informe (§5.6), no en ese archivo.
 - **No marques un hallazgo como cerrado.** Un hallazgo (`G1`, `B1`, `M1`, `m1`…) se cierra cuando el auditor lo verifica. Tu commit dice que lo *corrige*, no que lo cierra.
-- **No rellenes la tabla A1–A26** del protocolo de auditoría del plan. Es la lista de lo que el auditor comprobará, y te sirve para saber qué va a mirar. No es un formulario tuyo.
+- **No rellenes la tabla A1–A27** del protocolo de auditoría del plan. Es la lista de lo que el auditor comprobará, y te sirve para saber qué va a mirar. No es un formulario tuyo.
 - **No empieces la fase siguiente** hasta que el auditor haya dejado en `AUDIT.md` que la fase actual pasa. Mientras esperas, corrige lo que te pida.
 
 Este reparto no es una formalidad. En `10_hsem`, las auditorías de fase las escribió el implementador y el informe se declaraba "auditado y cerrado al 100 %". La auditoría independiente las anuló todas: el hallazgo B6 (`git show 6f7af43:01_shared_drivers/10_hsem/AUDIT.md`) cuenta por qué.
@@ -64,7 +64,7 @@ Usa la opción por defecto de cada una (plan, "Decisiones abiertas" 1–6). Si c
 
 - **Antes de cualquier build,** ejecuta `.\tools\env.ps1` en PowerShell: cmake, ninja y gcc están dentro de los directorios de STM32CubeIDE. Matriz: `.\tools\build_all.ps1 -Clean`.
 - **Python:** usa `py`, no `python`. Solo biblioteca estándar; el AD2 se maneja por ctypes sobre `dwf.dll`, sin pip.
-- **Analog Discovery 2 (SN 210321B5D38D):** cierra la GUI de WaveForms antes de ejecutar los scripts, porque el SDK solo abre un dispositivo libre. Pon **330 Ω en serie** en todas las DIO. El cableado es el de la sección "Banco de pruebas" del plan.
+- **Analog Discovery 2 (SN 210321B5D38D):** cierra la GUI de WaveForms antes de ejecutar los scripts, porque el SDK solo abre un dispositivo libre. El cableado es el de la sección "Banco de pruebas" del plan y **va directo, sin resistencias en serie**. Lee §3.6 antes de escribir una sola línea del script o del selftest.
 - **Depurador:** no leas con el depurador el banco `RLR` del HSEM (`0x58026480`–`0x580264FC`), porque leerlo toma los semáforos (`10_hsem/README.md` §12). Las capturas de prueba se hacen **en frío y sin depurador conectado**.
 - **Placa colgada después de un cambio:** conecta con "connect under reset" y lee `MPU_CTRL` y `SCB_CFSR` antes de nada.
 
@@ -83,10 +83,26 @@ Si una captura no cumple **todo** esto, no vale como evidencia:
 - **Cada prueba imprime el valor de su control negativo.** Si el control no reproduce el peligro, la prueba **falla**, aunque la parte positiva salga bien. El caso típico es T15: si el bucle sin lock no pierde, hay que ensanchar la ventana. Nunca se da por buena.
 - **El oráculo no puede ser el driver.** Usa lo que dice el plan en cada fila: el AD2, la imagen de `HAL_GPIO_Init`, contadores privados o fotos de registros.
 - **Las pruebas no son destructivas (R4):**
-  - solo GPIOF, PA8 y las líneas EXTI 8, 10 y 12; **nunca la 15**, que la usa H5c de HSEM, ni PC13;
+  - solo los pines del "Banco de pruebas" del plan (GPIOE salvo PE1, PF6–PF11, PF14, PF15 y PA8) y las líneas EXTI 0, 3 y 4;
+  - **nunca PE1**, que es el LED LD2; **nunca la línea 15**, que la usa H5c de HSEM; **nunca PC13**;
   - guarda y restaura `RCC_CFGR` (T10), y `CSION` y `CCCSR` (T17);
-  - `LCKR` solo en PF5–PF7.
+  - `LCKR` solo en PF7–PF9, y como última prueba de la imagen.
+- **No cambies el cableado del plan sin preguntar.** Está sacado de UM2408 Rev 6, tablas 17 y 19. En esta placa, PF0–PF5, PF12 y PF13 no llegan a ningún conector.
 - **El veredicto se calcula,** nunca se imprime sin más. CM7 lo imprime cuando CM4 ha terminado, e incluye los resultados de CM4.
+
+### 3.6 Seguridad eléctrica: sin resistencias en serie
+
+Entre el AD2 y la Nucleo no hay ninguna resistencia. Si tu código hace que el MCU y el AD2 conduzcan la misma línea a la vez, o que el AD2 conduzca con la placa sin alimentar, **se puede dañar el hardware**, y no siempre de forma visible. Por eso las reglas S1–S10 del plan ("Seguridad eléctrica (obligatoria)") no son recomendaciones:
+
+- **Impleméntalas antes que ninguna prueba,** en F0: `ad2_set_oe()` como único camino a `FDwfDigitalIOOutputEnableSet`, `bench_claim_output()` como único camino a `MODER`/`OTYPER`/`AFR` de un pin cableado, `bench_safe()` en el firmware, el estado seguro S2 en `try/finally`, `DwfParamOnClose = 1`, `gpio_bench_protocol.h` con la tabla de pasos y la comprobación del banner (S8).
+- **T0b va antes que todo lo demás.** Hasta que el auditor la vea en verde en su propia ejecución, no ejecutes ninguna prueba que mueva el bus PE8–PE15. T0a (líneas sueltas y cableado) se repite al empezar **cada** sesión.
+- **Nunca pruebes una guarda provocando una contienda de verdad.** El control de T0b(c) está diseñado para que el MCU conduzca el bus mientras el AD2 está en **entrada**: sin riesgo. Si se te ocurre otra forma de probar una guarda, pregunta antes.
+- **No cambies la dirección de ninguna línea "solo MCU" / "solo AD2"** de la tabla de cableado, ni añadas líneas, ni conectes W1, W2, V+ o V−. Las resistencias de 22 kΩ de PF14/PF15 van **a un riel** (GND y 3V3), nunca en serie con el pin; no las muevas ni añadas componentes.
+- **No flashees ni resetees con el script corriendo** (S10). Primero paras el script (AD2 en S2) y luego flasheas.
+- **Si algo sale raro** (una lectura inesperada en la prueba de sueltas, un `ABORT`, un pin que se calienta, el LED de la Nucleo que se apaga), **para, deja el AD2 en S2, desconecta las DIO** y apúntalo en el informe (§5.8) antes de volver a intentarlo.
+- En la captura, la lista de comprobación del "Procedimiento operativo" del plan va al principio, marcada.
+
+El auditor revisa todo esto en el punto A27. Un incumplimiento es **bloqueante** aunque todas las pruebas pasen, y el auditor no conecta el AD2 a tu imagen hasta que esté corregido.
 
 ---
 
@@ -182,7 +198,7 @@ El mapa del plan con una columna nueva: commit que migra cada escritor, o
 
 La lista completa de entregables y gates está en la tabla "Fases" del plan. Aquí van los puntos donde es fácil equivocarse.
 
-- **F0:** aún no tocas `gpio_bm.c`. El control de T15 tiene que salir con **> 0 corrupciones** usando RMW a mano, y la referencia de T18 se captura **antes** de cualquier cambio. Estos son los binarios que se comparan después.
+- **F0:** lo primero son las guardas de seguridad (§3.6) y T0b; sin eso, nada que use el AD2 más allá de T0a. Aún no tocas `gpio_bm.c`. El control de T15 tiene que salir con **> 0 corrupciones** usando RMW a mano, y la referencia de T18 se captura **antes** de cualquier cambio. Estos son los binarios que se comparan después.
 - **F1a:**
   - En `gpio_bm.h` solo se añade. Compruébalo tú con `git diff ca569b6 -- 01_shared_drivers/00_gpio/gpio_bm.h` antes de entregar.
   - B1 se mide aquí, y de él sale el límite del lock de F1b.
@@ -202,6 +218,7 @@ La lista completa de entregables y gates está en la tabla "Fases" del plan. Aqu
 Para y pregunta, sin seguir por tu cuenta, si:
 
 - una prueba no se puede hacer como dice el plan (por hardware, porque el control no reproduce el peligro o por R4);
+- una prueba parece necesitar que el MCU y el AD2 conduzcan la misma línea, o tocar una línea con una dirección distinta de la de la tabla (S1);
 - necesitas cambiar una firma, un criterio C, un gate o algo de `10_hsem`;
 - el cambio en `08_eth` choca con el trabajo de E1/E2;
 - quieres elegir una opción distinta de la de por defecto en una decisión abierta;

@@ -29,8 +29,10 @@ Base: `ca569b6` de `main`, árbol limpio. Fuentes normativas, por orden de prece
 | 5 | Las funciones nuevas devuelven `GpioBm_Status_t`, no `bool` | Lección de HSEM (§2.1 de su README): un llamador que reintenta mientras recibe `false` se queda girando para siempre ante un parámetro inválido |
 | 6 | Nuevo criterio C12 (honestidad): una escritura que el hardware ignora (pin bloqueado por `LCKR`) nunca devuelve éxito | Equivalente de C11 de HSEM |
 | 7 | Cada prueba lleva control negativo y oráculo independiente. El "si sale 0, se registra como no reproducido" de T15 desaparece: **si el control no reproduce el peligro, la prueba falla** | Hoja de ruta §6 R1 |
-| 8 | Protocolo de auditoría A1–A26, clases de hallazgo y reglas de entrega, como en `10_hsem` | Hoja de ruta §6.4 y §6.5 |
+| 8 | Protocolo de auditoría A1–A27, clases de hallazgo y reglas de entrega, como en `10_hsem` | Hoja de ruta §6.4 y §6.5 |
 | 9 | G2 ya está cerrado (`a2096d2`). `BOARD_GPIO_HSEM_ID = 5` ya está reservado en `prj_04/Common/Inc/shared_memory.h:56` | Leído en el código |
+| 11 | **Sin resistencias en serie ni componentes externos.** Nueva sección de seguridad eléctrica S1–S10 (dirección fija por línea, guardas por máscara, traspaso del bus con prueba eléctrica, estado seguro), nueva T0b que prueba las guardas y nuevo punto de auditoría A27, siempre bloqueante. Se quitan W1 y las resistencias de 330 Ω y 47 kΩ. En PF14/PF15 quedan 22 kΩ **a un riel** (GND y 3V3) más 150 pF a GND. T5 mide R<sub>PU</sub> y R<sub>PD</sub> con una carga del scope medida, no supuesta. T6 usa PF15 como una línea I2C. T9 exige solo LOW frente a VERY\_HIGH. Todo esto se verificó en la placa y los valores de referencia están en cada fila | Sin resistencias en serie, nada limita la corriente en una contienda (DS12923 tabla 11: 20 mA por pin, +0 mA de inyección). En serie, los 22 kΩ formaban un RC de unos 9 µs y la entrada del AD2 resultó ser de unos 361 kΩ, no de 1 MΩ |
+| 10 | **Cableado nuevo.** El bus pasa de PF0–PF7 a PE8–PE15, y EXTI, handshake y respuestas de las ISR a PE2–PE7. En la MB1363, PF0–PF5, PF12 y PF13 no llegan a ningún conector | UM2408 Rev 6, tablas 17 y 19. La revisión del 23-09 suponía, sin comprobarlo, que los morpho sacaban todos los pines |
 
 ## Criterios de catálogo
 
@@ -108,7 +110,7 @@ Clases de severidad. Alta: comportamiento incorrecto silencioso. Media: acepta u
 | G9 | Baja | — | Reconfigurar PA13/PA14 deja a la placa sin SWD, sin ningún error | La API nueva lo rechaza sin `allow_debug_pins`; la legacy no cambia | F1a |
 | G10 | Diseño | 5 tipos de pin | Cada consumidor tiene su tipo de pin; `board_def.h` usa máscaras y `gpio_bm` índices | `GpioBm_Pin_t`, `GPIO_BM_PIN_MASK()` y `GPIO_BM_PIN_INDEX()`. Los tipos existentes no se tocan | F1a |
 | G11 | Build | `CMakeLists.txt:20` | Target sin sufijo | `_gpio_bm` + alias | F0 |
-| G12 | Pruebas | — | Nunca se han ejercitado en la placa: salida, OD, pulls, entrada, lock, EXTI ni la carrera | T0–T18 | F0–F2 |
+| G12 | Pruebas | — | Nunca se han ejercitado en la placa: salida, OD, pulls, entrada, lock, EXTI ni la carrera | T0a–T18 | F0–F2 |
 | **G13** | **Alta** | Mapa de escritores | **Escritores fuera de `gpio_bm` en puertos compartidos.** `HAL_GPIO_Init` en los MSP de `eth_hal` y `uart_hal`, y RMW a mano en `adc_acquisition.c` y en los selftests. Mientras uno solo de ellos no tome el lock, G1 sigue abierto | Envolver o migrar cada escritor posterior a la liberación que toque un puerto compartido | F1b |
 | **G14** | Media | `led_bm.c:146` | `LED_PanicRed` hace RMW de `MODER` desde un fault handler, sin lock. No puede tomar un HSEM: el otro núcleo podría tenerlo y el fault no puede esperar | Excepción documentada: el camino de fallo es terminal. Se escribe en el README y en el mapa | F1b (doc) |
 | **G15** | Baja | — | Con `bool` no se distingue "lock ocupado" de "parámetro inválido" | `GpioBm_Status_t` en la API nueva | F1a |
@@ -374,23 +376,100 @@ Placa NUCLEO-H755ZI-Q (Rev V) con un **Analog Discovery 2** (SN 210321B5D38D, Wa
 
 ### Cableado
 
-El bus de prueba va en **GPIOF**, que ningún proyecto usa. Todas las líneas del AD2 van con **330 Ω en serie**.
+**Qué pines son accesibles.** Según UM2408 Rev 6 (tablas 17 y 19, "NUCLEO-H745ZI-Q and NUCLEO-H755ZI-Q pin assignments" y "Pin assignment of MCU with ST morpho connector"), la MB1363 **no** saca todos los pines a los conectores. De GPIOF solo llegan PF6–PF11, PF14 y PF15; **PF0–PF5, PF12 y PF13 no están en ningún conector**. La revisión anterior del plan ponía el bus en PF0–PF7 y no se podía cablear.
 
-| AD2 | MCU | Uso |
-| --- | --- | --- |
-| DIO0–7 | PF0–PF7 | Bus de 8 bits (salida: captura LA; entrada: patrón) |
-| DIO8 / DIO9 | PF8 / PF9 | EXTI8 de CM7 / respuesta de la ISR de CM7 |
-| DIO10 / DIO11 | PF10 / PF11 | EXTI10 de CM4 / respuesta de la ISR de CM4 |
-| DIO12 / DIO13 | PF12 / PF13 | `HOST_REQ` (AD2→MCU) / `MCU_ACK` (MCU→AD2) |
-| DIO14 | PA8 | MCO1 en AF0 (T10) |
-| Scope 1+ (1− a GND) | PF14 | Pulls, OD, analógico |
-| W1 → 47 kΩ → PF14 | PF14 | Fuente Thévenin (T5, T6) |
-| Scope 2+ | PF15 + 100–220 pF a GND | t<sub>r</sub> por `OSPEEDR` (T9) |
-| GND | GND | Referencia única |
+De GPIOE llegan todos menos PE1, que es LD2 (el LED amarillo, `BOARD_LED_YELLOW`). En el esquemático MB1363, las demás líneas de GPIOE solo van a los conectores; las opciones de motor control de PE6, PE8 y PE15 son solder bridges que no vienen montados. Además, `prj_04` no usa GPIOE salvo el LED. Por eso el bus de prueba va en **GPIOE**: PE8–PE15 son el byte alto contiguo de `ODR`. Las medidas analógicas y los pines sin cablear van en GPIOF.
 
-- **T0 verifica el cableado físicamente.** Un walking-1 en PF0–PF7 tiene que aparecer en DIO0–7 en el mismo orden. El implementador confirma además en UM2408/MB1363 que ningún PFx tiene carga ni solder bridge en la placa, y lo escribe en el README.
-- **Líneas EXTI de la prueba:** 8 y 10 (y 12 para SWIER). **Nunca la 15**, que usa H5c de HSEM.
+Las DIO van **directas, sin resistencias en serie** (no hay forma de ponerlas en este banco). Por eso el procedimiento de [Seguridad eléctrica](#seguridad-eléctrica-obligatoria) es obligatorio y se audita. La columna "Quién conduce" es parte de ese procedimiento: una línea marcada "solo MCU" o "solo AD2" nunca la conduce el otro lado, en ninguna prueba.
+
+Posiciones sacadas de UM2408 tabla 17, figura 17 y tabla 19: Zio en los conectores hembra de arriba (CN7–CN10) y morpho en los pines macho de los lados (CN11/CN12). **Verificado en la placa el 2026-09-26:** las 15 líneas DIO0–DIO14, en los dos sentidos, sin abiertos, cruces ni cortos. Lo hizo el auditor por SWD con S1–S6 (ver T0a). También está verificada la topología analógica de PF14/PF15 (T5, T6 y T9 de referencia más abajo).
+
+| AD2 | MCU | Zio | Morpho | Uso | Quién conduce |
+| --- | --- | --- | --- | --- | --- |
+| DIO0 | PE8 | CN10-18 (D42) | CN12-40 | Bus bit 0 | **Bus**: MCU *o* AD2, según el paso, con el traspaso S5 |
+| DIO1 | PE9 | CN9-15 (D71) | CN12-52 | Bus bit 1 | Bus |
+| DIO2 | PE10 | CN10-24 (D40) | CN12-47 | Bus bit 2 | Bus |
+| DIO3 | PE11 | CN10-6 (D5) | CN12-56 | Bus bit 3 | Bus |
+| DIO4 | PE12 | CN10-26 (D39) | CN12-49 | Bus bit 4 | Bus |
+| DIO5 | PE13 | CN10-10 (D3) | CN12-55 | Bus bit 5 | Bus |
+| DIO6 | PE14 | CN10-8 (D4) | CN12-51 | Bus bit 6 | Bus |
+| DIO7 | PE15 | CN10-30 (D37) | CN12-53 | Bus bit 7 | Bus |
+| DIO8 | PE3 | CN9-22 (D60) | CN11-47 | Entrada EXTI3 de CM7 (`EXTI3_IRQn`) | **Solo AD2** |
+| DIO9 | PE5 | CN9-18 (D58) | CN11-50 | Respuesta de la ISR de CM7 | **Solo MCU** |
+| DIO10 | PE4 | CN9-16 (D57) | CN11-48 | Entrada EXTI4 de CM4 (`EXTI4_IRQn`) | **Solo AD2** |
+| DIO11 | PE6 | CN9-20 (D59) | CN11-62 | Respuesta de la ISR de CM4 | **Solo MCU** |
+| DIO12 | PE2 | CN9-14 (D56) | CN11-46 | `HOST_REQ` (AD2→MCU) | **Solo AD2** |
+| DIO13 | PE7 | CN10-20 (D41) | CN12-44 | `MCU_ACK` (MCU→AD2) | **Solo MCU** |
+| DIO14 | PA8 | CN10-4 (D6) | CN12-23 | MCO1 en AF0 (T10). También es el TP4 (USB SOF) | **Solo MCU** |
+| DIO15 | — | — | — | Sin conectar | Nadie |
+| Scope 1+ (1− a GND) | PF14 | CN9-19 (D69) | CN12-50 | R<sub>PU</sub> (T5), OD sin pull externo (T6), t<sub>r</sub> (T9). En el pin: **22 kΩ a GND** y **150 pF a GND** | Solo MCU (el osciloscopio es una entrada) |
+| Scope 2+ (2− a GND) | PF15 | CN9-21 (D68) | CN12-60 | R<sub>PD</sub> (T5), OD como I2C (T6), t<sub>r</sub> (T9). En el pin: **22 kΩ a 3V3** (CN8-7 o CN11-16) y **150 pF a GND** | Solo MCU |
+| GND | GND | CN9-12, CN10-5… | CN11-8, CN12-9… | Referencia única | — |
+
+```text
+PF14 ──┬──────── Scope 1+        PF15 ──┬──────── Scope 2+
+       ├─[22k]── GND                   ├─[22k]── 3V3
+       └─[150p]─ GND                   └─[150p]─ GND
+Scope 1− y 2− a GND.   W1, W2, V+ y V− sin conectar.
+```
+
+Las dos resistencias van **a un riel, nunca en serie** entre el pin y el osciloscopio. En serie formaban un RC de unos 9 µs, y T9 medía la resistencia y no el pin. Conectadas a un riel son seguras en cualquier estado del MCU: la corriente máxima por el pin es 3,3 V / 22 kΩ = 0,15 mA, frente a 20 mA de `IIO`. Con la placa sin alimentar, 3V3 también está a 0 V, así que no hay inyección. Los 150 pF son una carga capacitiva normal para una salida.
+
+**No se conectan nunca a la placa:** W1, W2, V+ ni V− del AD2; ninguna DIO a 3V3, 5V, VIN, NRST, BOOT0 o a un pin que no esté en esta tabla; ningún componente más que los cuatro de PF14/PF15.
+
+Pines que se usan **sin cablear** (nadie los conduce desde fuera):
+
+| Pines | Uso |
+| --- | --- |
+| PF6–PF11 | T2 (paridad): cubren `AFR[0]` (PF6, PF7) y `AFR[1]` (PF8–PF11) |
+| PF10 / PF11 | T15: pin de CM7 / pin de CM4 |
+| PF7–PF9 | T16 (`LCKR`). Va la última, porque el bloqueo dura hasta el reset |
+| PE0 | Libre; su línea EXTI 0 es la de SWIER en T14(d) |
+
+- **T0a verifica el cableado físicamente** al empezar cada sesión. Un walking-1 en PE8–PE15 tiene que aparecer en DIO0–7 en el mismo orden, y cada línea "solo" en su pin.
+- **Nunca se toca PE1 (LD2).** GPIOE es un puerto que también usa la producción: CM7 configura PE1 antes de liberar a CPU2 y después solo escribe en él con `BSRR`. Cualquier foto o reconfiguración de GPIOE en las pruebas deja PE1 intacto. Eso además convierte a GPIOE en un puerto compartido real durante el selftest, que es justo lo que el lock tiene que proteger.
+- **Líneas EXTI de la prueba:** 3 (CM7), 4 (CM4) y 0 (SWIER). Cada núcleo tiene su propio vector. **Nunca la 15**, que usa H5c de HSEM.
 - **Área SRAM4 de la prueba:** se define en F0 fuera de `.shared_ram` de producción y del área de HSEM (`0x38009000`), y se escribe en `shared_memory.h`.
+
+### Seguridad eléctrica (obligatoria)
+
+**Por qué es estricta.** No hay ninguna resistencia entre el AD2 y el MCU, así que nada limita la corriente:
+
+- Si el MCU y el AD2 conducen la misma línea a niveles opuestos, la corriente la fijan solo sus dos etapas de salida. DS12923 tabla 11 limita a **20 mA** lo que puede absorber un pin (`IIO`).
+- Conducir un pin por encima de VDD es inyección positiva, y la misma tabla la da como **+0 mA** (`IINJ(PIN)`, pines FT): no se permite ninguna. Eso ocurre si el AD2 conduce con la placa sin alimentar.
+
+Cualquiera de los dos casos puede dañar el pin sin dar ningún síntoma inmediato. Estas reglas no se pueden relajar, y cada una tiene su comprobación.
+
+**Definiciones.** Una línea está **conducida** por un lado si ese lado la tiene en salida push-pull, en open-drain, en AF o en DIO con salida habilitada. Una línea está **suelta** si los dos lados la tienen en entrada o analógico. Un pull del MCU (30–50 kΩ, unos 110 µA como máximo) no cuenta como conducir.
+
+| # | Regla | Cómo se aplica | Quién lo comprueba |
+| --- | --- | --- | --- |
+| S1 | **Un conductor por línea como máximo, siempre.** Las líneas "solo MCU" y "solo AD2" de la tabla de cableado no cambian nunca de dirección. Solo el bus PE8–PE15 cambia, y solo con el traspaso S5 | Máscaras constantes a los dos lados (S3, S4) | Revisión de código (A27) + T0b |
+| S2 | **Estado seguro por defecto.** Al abrir el dispositivo, al cerrarlo, entre pruebas, ante cualquier excepción, timeout o fin del script: el AD2 con todas las DIO en entrada. Al arrancar, al abortar y al terminar el selftest: el MCU con todos los pines cableados en entrada, salvo `MCU_ACK` | AD2: `FDwfDigitalIOReset` + `OutputEnable = 0` con read-back (`FDwfDigitalIOOutputEnableGet`) antes de cualquier otra cosa; `FDwfParamSet(DwfParamOnClose, 1)` (stop), **nunca 0** (seguir corriendo); todo en `try/finally`. MCU: función `bench_safe()` llamada al arrancar, en cada error, en el timeout y al final | A27, T0b |
+| S3 | **Guarda del host.** Toda escritura de `OutputEnable` pasa por una única función, `ad2_set_oe(mask, step)`. Lanza una excepción, y deja antes el AD2 en S2, si la máscara tiene algún bit fuera de `{DIO8, DIO10, DIO12}` ∪ (`0x00FF` solo si el paso actual es "bus = AD2") | Constantes en `gpio_hw_check.py`, sin ningún otro camino a `FDwfDigitalIOOutputEnableSet` | grep + T0b |
+| S4 | **Guarda del firmware.** Toda configuración de un pin cableado como salida, OD o AF pasa por `bench_claim_output(port, pin, step)`. Esa función rechaza PE2, PE3 y PE4 siempre, PE8–PE15 si el paso no es "bus = MCU", PA8 fuera de T10, y **PE0/PE1 siempre**. Solo se aceptan PE5, PE6, PE7, PF14 y PF15, y los pines sin cablear PF6–PF11 | Una tabla constante en `gpio_selftest.c`; ningún otro camino escribe `MODER`/`OTYPER`/`AFR` de un pin cableado | grep + T0b |
+| S5 | **Traspaso del bus con prueba eléctrica (break-before-make).** Nadie conduce el bus sin haber demostrado, midiendo, que el otro lado lo soltó | Ver el procedimiento de abajo | T0b |
+| S6 | **Tiempo muerto.** Entre que un lado suelta y el otro conduce pasan al menos **1 ms**, y la prueba de S5 va en medio | Esperas explícitas a los dos lados | Lectura |
+| S7 | **Paso sincronizado.** El host solo actúa sobre el paso *n* si el firmware anunció exactamente `Tn ready bus=<MCU\|AD2\|NONE>` y ese anuncio coincide con la tabla del host. Si no coincide, o si falta el handshake más de 10 s, se va a S2 y se aborta. El firmware hace lo mismo si no llega `HOST_REQ` en 10 s | Tabla de pasos compartida (una cabecera `gpio_bench_protocol.h` y su espejo en el script) con un número de versión que se imprime | A27 |
+| S8 | **Solo la imagen correcta.** El host no habilita ninguna salida hasta haber leído en la consola `Rev <hash>` y `GPIO_BENCH v<n> idle` de la imagen `selftest-gpio`, con la misma versión de protocolo que el script | Parser del banner en el script | A27 |
+| S9 | **Alimentación.** El AD2 solo habilita salidas con la Nucleo alimentada y el firmware en marcha (S8 lo implica). Nunca se desconecta el USB de la Nucleo ni se la resetea a mano con un script activo. La masa se conecta la primera y se desconecta la última. Con el cableado puesto, el AD2 queda conectado por USB mientras la Nucleo esté alimentada, para no conducir hacia un AD2 sin alimentar | Procedimiento operativo (abajo) | Lista de comprobación en la captura |
+| S10 | **Flashear y depurar.** Durante un flasheo o un reset el MCU pone los pines en analógico, y eso es seguro **solo si el AD2 está en S2**. El script no puede estar corriendo mientras se flashea. Una sesión SWD que escribe pines (como en T0) sigue S1–S6 igual que el firmware | `flash.py` solo con el script parado | Lectura |
+
+**Procedimiento S5, traspaso del bus** (en los dos sentidos se parte de "bus suelto"):
+
+1. **Prueba de que el bus está suelto.** Con el AD2 en entrada en el bus (OE read-back = 0), el MCU pone PE8–PE15 en entrada con pull-up, espera 1 ms y anuncia `BUSCHK up`. El host lee **0xFF**, o aborta. Luego el MCU pone pull-down y anuncia `BUSCHK down`, y el host lee **0x00**, o aborta. Una línea que no sigue a los dos pulls la está conduciendo alguien, o está abierta: en cualquier caso, **no se conduce**. El MCU también lee su `IDR` en los dos estados: 0xFF y 0x00, o aborta.
+2. **Bus → AD2** (T4, T7, T8 como estímulo): con el bus suelto y probado, el MCU deja los pines en entrada (o analógico en T7), hace read-back de `MODER` (00 u 11 en los 8 pines) y sube `MCU_ACK` con `bus=AD2`. El host espera 1 ms, habilita `OE = 0x00FF` con S3, trabaja, pone `OE = 0` con read-back y da un pulso en `HOST_REQ`. El MCU baja `MCU_ACK`: el bus vuelve a estar suelto.
+3. **Bus → MCU** (T3, T8, T13 si aplica): con el bus suelto y probado **en este mismo paso** (punto 1), el host confirma `OE & 0xFF = 0` por read-back y da un pulso en `HOST_REQ`. El MCU espera 1 ms, conduce con S4 y sube `MCU_ACK`. Al terminar, el MCU vuelve a entrada con read-back de `MODER` y baja `MCU_ACK`.
+4. Cualquier lectura inesperada en 1–3 lleva a S2 a los dos lados y a `ABORT: bus contention check failed at Tn`. **La prueba no se reintenta automáticamente.**
+
+**Procedimiento operativo** (se transcribe como lista de comprobación al principio de cada captura):
+
+1. Nucleo y AD2 conectados por USB al mismo PC. GUI de WaveForms cerrada.
+2. Cables: masa primero; luego las DIO según la tabla. Nada en W1, W2, V+ ni V−.
+3. Flashear `selftest-gpio` con el script **parado**.
+4. Arrancar `gpio_hw_check.py`. El script aplica S2, espera el banner (S8) y hace la prueba de sueltas de todas las líneas cableadas (T0a) antes de habilitar ninguna salida.
+5. Al terminar o abortar, el script deja el AD2 en S2. Solo entonces se puede flashear otra imagen, resetear o desconectar.
+6. Para quitar el cableado: parar el script, desconectar las DIO y la masa la última.
 
 ### Herramientas
 
@@ -403,7 +482,7 @@ El bus de prueba va en **GPIOF**, que ningún proyecto usa. Todas las líneas de
 
 - Preset `selftest-gpio` (`GPIO_DRIVER_SELFTEST=ON`). El código va en `CM4/App/Src/gpio_selftest.c` y `CM7/App/Src/gpio_selftest.c`, nunca en `main.c`.
 - Cada núcleo imprime primero `Rev <FW_GIT_REV>`.
-- CM4 corre después de instalar el hook y antes de `ADC_Acquisition_Init()`. CM7 corre en `Status_Task`, como DMA y HSEM. Las ISR de prueba (`EXTI9_5_IRQHandler` en CM7 y `EXTI15_10_IRQHandler` en CM4) viven en `gpio_selftest.c` bajo la opción; `stm32h7xx_it.c` no define ninguna EXTI.
+- CM4 corre después de instalar el hook y antes de `ADC_Acquisition_Init()`. CM7 corre en `Status_Task`, como DMA y HSEM. Las ISR de prueba (`EXTI3_IRQHandler` en CM7, `EXTI4_IRQHandler` en CM4 y `EXTI0_IRQHandler` para SWIER) viven en `gpio_selftest.c` bajo la opción; `stm32h7xx_it.c` no define ninguna EXTI.
 - **Veredicto global.** CM7 lo imprime solo después de que CM4 haya terminado, e incluye los flags de CM4. Las pruebas con AD2 pasan solo si **también** pasan las líneas `[ad2]` de la misma captura. El script imprime `HOST VERDICT=` al final.
 
 ## Fases
@@ -412,10 +491,10 @@ Todo va en la rama `driver/gpio`. Cada fase termina en commits del estilo del re
 
 | Fase | Entregable | Gate (lo compruebo yo) |
 | --- | --- | --- |
-| **F0: Base** | Target `_gpio_bm` + alias (G11). Tabla de tamaños de referencia del `.map` (8 builds). Esqueleto del preset `selftest-gpio` (Rev, veredicto global, área SRAM4). `tools/ad2.py` y `gpio_hw_check.py` mínimos. **T0.** **Control de T15 sin driver:** la carrera se reproduce con RMW a mano, antes de tocar `gpio_bm`. **Referencias:** captura de arranque de `prj_04` y regresión T18 (carga ETH + ADC, contadores por SWD) antes de ningún cambio. Mapa de escritores revisado contra el código | 8/8, con binarios del mismo tamaño que en `ca569b6` (opción apagada). T0 en verde. Control de T15 con corrupciones **> 0**. Referencias en `prj_04/docs/` |
-| **F1a: núcleo `gpio_bm`** | Todo el contrato de F1a: G3, G4, G5, G8 (lock, deinit, ReadConfig), G9, G10, G15, C10–C12. Selftest: T1, T2, T3–T10, T15 (con hook, en GPIOF), T16 y B1 | Protocolo A1–A26 en verde. `git diff ca569b6 -- 00_gpio/gpio_bm.h`: solo añade. B1 publicado. **API congelada.** |
+| **F0: Base** | Target `_gpio_bm` + alias (G11). Tabla de tamaños de referencia del `.map` (8 builds). Esqueleto del preset `selftest-gpio` (Rev, veredicto global, área SRAM4). `tools/ad2.py` y `gpio_hw_check.py` mínimos, **con las guardas S2–S8 desde el primer commit**, más `gpio_bench_protocol.h`. **T0a y T0b.** **Control de T15 sin driver:** la carrera se reproduce con RMW a mano, antes de tocar `gpio_bm`. **Referencias:** captura de arranque de `prj_04` y regresión T18 (carga ETH + ADC, contadores por SWD) antes de ningún cambio. Mapa de escritores revisado contra el código | 8/8, con binarios del mismo tamaño que en `ca569b6` (opción apagada). T0a en verde. **T0b en verde, auditado antes que cualquier otra prueba que use el AD2: sin T0b no se ejecuta nada que mueva el bus.** Control de T15 con corrupciones **> 0**. Referencias en `prj_04/docs/` |
+| **F1a: núcleo `gpio_bm`** | Todo el contrato de F1a: G3, G4, G5, G8 (lock, deinit, ReadConfig), G9, G10, G15, C10–C12. Selftest: T1, T2, T3–T10, T15 (con hook, en PF10/PF11), T16 y B1 | Protocolo A1–A27 en verde. `git diff ca569b6 -- 00_gpio/gpio_bm.h`: solo añade. B1 publicado. **API congelada.** |
 | **F1b: cierre de G1** | Hook e instalación en `prj_04` y en la plantilla; `SHARED_GPIO_LOCK_*` salido de B1; migración de los escritores de la tabla; excepción G14 documentada; tabla de IDs de `shared_memory.h` actualizada. T15b, T18 y los selftests UART y ADC | A20 (mapa de escritores) sin excepciones no documentadas. T18 igual que la referencia de F0 y `mX_gpio_lock_fail_count = 0`. `git diff` vacío en `prj_02`, `prj_03` y `prj_eth_lwip_node` |
-| **F2: EXTI + SYSCFG** | Contrato de F2. T11–T14 y T17. Regresión T18 | A1–A26 en verde, más A24 y A25. Ningún handler en el driver (grep) |
+| **F2: EXTI + SYSCFG** | Contrato de F2. T11–T14 y T17. Regresión T18 | A1–A27 en verde, más A24 y A25. Ningún handler en el driver (grep) |
 | **Cierre** | Solo cuando la auditoría de F2 pase, y a petición del auditor. **Implementador:** README de `00_gpio` reescrito desde el código (validado, no ejercitado, limitaciones, mapa de escritores, excepción G14), línea de `00_gpio` en el README del catálogo y `10_hsem/README.md` §13 (TakeTimeout). **Responsable del catálogo, no el implementador:** estado de `00_gpio` en `DRIVER_ROADMAP.md` §1 y §5.2, borrado de `IMPLEMENTATION_PLAN.md`, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md` y `AUDIT.md` (quedan en git, con los hashes en la historia del README), merge y borrado de la rama | Nada documentado sin código detrás. Auditoría de cierre en `AUDIT.md` |
 
 ## Plan de pruebas
@@ -424,24 +503,25 @@ Cada prueba tiene un **control negativo** (R1) y un **oráculo** que no es el dr
 
 | ID | Fase | Qué | Oráculo | Control negativo | Criterio |
 | --- | --- | --- | --- | --- | --- |
-| T0 | F0 | Banco. AD2 en alta impedancia; pull-up y luego pull-down del MCU en PF0–7; walking-1 del MCU | Las DIO del AD2 y el scope | Con el bus en analógico, el AD2 no ve el patrón | IDR 0xFF y luego 0x00; walking-1 en orden en DIO0–7; V<sub>OH</sub> ≥ 2,9 V y V<sub>OL</sub> ≤ 0,4 V |
+| T0a | F0 y al empezar cada sesión | Banco: prueba de sueltas de las 15 líneas (pull-up → AD2 lee 1; pull-down → AD2 lee 0). Después, walking-1 en los dos sentidos **siguiendo S1–S6**: AD2→MCU solo en las líneas "solo AD2" y en el bus, y MCU→AD2 solo en las líneas "solo MCU" y en el bus. Scope 1 y 2 con PF14/PF15 en push-pull alto y bajo | Las DIO del AD2, el `IDR` del MCU y el scope | Con el bus en analógico, el AD2 no ve el patrón | Cada línea aparece solo en su pin; V<sub>OH</sub> ≥ 2,9 V y V<sub>OL</sub> ≤ 0,4 V en el scope. En F0 se puede hacer por SWD, sin firmware (el método de la verificación del 2026-09-26), con las mismas reglas |
+| T0b | F0 | **Las guardas funcionan, sin provocar un cortocircuito.** (a) `ad2_set_oe` con un bit prohibido (DIO9/11/13/14/15, o el bus en un paso "bus = MCU") → excepción y AD2 en S2, **antes** de llamar a la DLL. (b) `bench_claim_output` sobre PE2/PE3/PE4, sobre el bus en un paso "bus = AD2", y sobre PE0/PE1 → rechazo. (c) Control del traspaso S5: el MCU conduce **a propósito** el bus a 0x5A mientras el AD2 está en entrada (no hay contienda); en la prueba de sueltas, el host tiene que abortar. (d) Timeout: el host no manda `HOST_REQ` durante 10 s y el firmware tiene que ir a `bench_safe()` | Mocks de la DLL en (a); fotos de `MODER` en (b); las lecturas del AD2 en (c); una foto de `MODER` tras el timeout en (d) | (c) es el control negativo de S5: si el host **no** aborta con el bus conducido, S5 no protege nada y ninguna prueba con el bus se puede ejecutar | (a)(b) rechazo sin ninguna escritura; (c) `ABORT … contention check` con el AD2 sin llegar a habilitar el bus; (d) todos los pines cableados en entrada |
 | T1 | F1a | Rechazos: `NULL`, `GPIOA+4`, pasado de GPIOK, pin 16, AF 16, pull 3, speed 4, mode 4, level 2, analógico con pull, PA13/PA14 | Foto de `MODER/OTYPER/OSPEEDR/PUPDR/AFR/ODR` de A..K, `RCC_AHB4ENR` y `LCKR` antes y después | Una llamada válida sí cambia la foto: el comparador detecta cambios | Estado exacto por caso (`ERR_PARAM`/`ERR_DEBUG_PIN`) y fotos idénticas |
-| T2 | F1a | Paridad: 4 modos × 2 tipos × 4 velocidades × 3 pulls × AF {0, 7, 15} en PF0–7, más las llamadas legacy de uart y adc | CM7: la imagen de registros que deja `HAL_GPIO_Init` con la misma config. CM4: una tabla de campos RM escrita a mano en el test | Una foto alterada a propósito se detecta | Bits idénticos en todos los casos, y el camino legacy igual que en `ca569b6` |
+| T2 | F1a | Paridad: 4 modos × 2 tipos × 4 velocidades × 3 pulls × AF {0, 7, 15} en PF6–PF11 (sin cablear), más las llamadas legacy de uart y adc | CM7: la imagen de registros que deja `HAL_GPIO_Init` con la misma config. CM4: una tabla de campos RM escrita a mano en el test | Una foto alterada a propósito se detecta | Bits idénticos en todos los casos, y el camino legacy igual que en `ca569b6` |
 | T3 | F1a | Walking-1/0 con Set/Reset/Write/WritePort/Toggle; set + reset del mismo pin en una escritura | Captura LA del AD2 | Paso con un valor equivocado a propósito: el script lo marca | Secuencia exacta; con set y reset a la vez gana el set |
 | T4 | F1a | El AD2 recorre los 256 patrones con estrobo en `HOST_REQ`; el MCU lee con ReadPort y Read(i) | CRC32 calculado por el host | Patrón invertido en una pasada → el CRC no coincide | Cuenta = 256 y CRC igual |
-| T5 | F1a | R<sub>PU</sub>/R<sub>PD</sub> en PF14 con W1 a 0 V / 3,3 V por 47 kΩ | Scope 1 + divisor | Sin pull: el pin sigue a W1 | 30 kΩ ≤ R ≤ 50 kΩ (DS12923 tabla 59) |
-| T6 | F1a | Open-drain en PF14: en bajo; suelto con PU; suelto sin PU con W1 = 1,0 V | Scope 1 | En push-pull alto, el pin **no** sigue a W1 | ≤ 0,4 V; ≈ 3,3 V; sigue a W1 ± 50 mV |
+| T5 | F1a | R<sub>PU</sub> en PF14 (22 kΩ a GND) y R<sub>PD</sub> en PF15 (22 kΩ a 3V3), con R<sub>X</sub> = 22 kΩ y cada tensión promediada en un solo canal:<br>• V<sub>DD</sub>: el pin en push-pull alto.<br>• Carga efectiva del scope, **medida y no supuesta**: R<sub>IN</sub> = R<sub>X</sub> · V<sub>NP15</sub> / (V<sub>DD</sub> − V<sub>NP15</sub>), con PF15 en entrada sin pull.<br>• R<sub>PU</sub> = (R<sub>X</sub> ∥ R<sub>IN</sub>) · (V<sub>DD</sub> / V<sub>PU14</sub> − 1).<br>• R<sub>PD</sub> = 1 / (1/x − 1/R<sub>IN</sub>), con x = R<sub>X</sub> · V<sub>PD15</sub> / (V<sub>DD</sub> − V<sub>PD15</sub>). | Scope 1 y 2 | PF14 sin pull < 0,1 V y PF15 sin pull > 2,9 V: las dos resistencias están. **Si V<sub>PU14</sub> > 2 V, la resistencia de PF14 falta y la medida no vale** (así se detectó el 2026-09-26) | R<sub>PU</sub> y R<sub>PD</sub> en 30–50 kΩ (DS12923 tabla 59). Se escriben la tolerancia de R<sub>X</sub> y el offset del scope (unos 60 mV). **Referencia del auditor (2026-09-26):** V<sub>DD</sub> 3,289 V, V<sub>PU14</sub> 1,104 V, V<sub>NP15</sub> 3,101 V, V<sub>PD15</sub> 2,089 V → R<sub>IN</sub> ≈ 361 kΩ (no el 1 MΩ nominal del AD2: por eso se mide), R<sub>PU</sub> ≈ 41,0 kΩ, R<sub>PD</sub> ≈ 42,8 kΩ |
+| T6 | F1a | Open-drain en las dos topologías: (a) PF15, como una línea I2C con 22 kΩ a 3V3: OD bajo y OD soltado. (b) PF14, con 22 kΩ a GND: OD soltado | Scope 1 y 2 | Push-pull alto en PF14 llega a > 2,9 V: el pin sí puede subir, así que (b) demuestra "OD no conduce en alto" y no un pin muerto | (a) OD bajo ≤ 0,4 V (absorbe 0,15 mA); OD soltado ≈ V<sub>NP15</sub>. (b) < 0,1 V. **Referencia (2026-09-26):** 0,004 V / 3,105 V; PF14 −0,002 V con el control a 3,289 V |
 | T7 | F1a | El AD2 pone 0xFF; en analógico, IDR = 0 | Patrón AD2 | En entrada, IDR = 0xFF | 0x00 en analógico |
 | T8 | F1a | Sin glitch: de entrada con PD a salida alta, y de entrada con PU a salida baja | LA con trigger en cualquier flanco | Orden ingenuo (`MODER` primero, 1 µs de espera y luego `BSRR`) con ODR opuesto: el LA **tiene que** ver el pulso | Driver: exactamente una transición. Control: pulso visto |
-| T9 | F1a | t<sub>r</sub> del 10 al 90 % en PF15 con C, para cada `OSPEEDR`, 10 repeticiones | Scope 2 | Pin en entrada: no hay flanco | Monótono, y LOW − VERY\_HIGH > 5σ. Cifras absolutas solo informativas (suelo de unos 12 ns del AD2) |
+| T9 | F1a | t<sub>r</sub> del 10 al 90 % en PF14 y PF15 (150 pF directos en el pin + scope) para cada `OSPEEDR`, 10 flancos por velocidad, captura con trigger a 100 MS/s | Scope 1 y 2 | Pin en entrada: no hay flanco | **Gate:** t<sub>r</sub>(LOW) − t<sub>r</sub>(VERY\_HIGH) > 5σ en los dos pines. MEDIUM, HIGH y VERY\_HIGH quedan en el suelo del AD2 (unos 14 ns) y solo se registran. **Referencia (2026-09-26, 3 flancos):** LOW 17,1/16,8 ns; MEDIUM 14,6/14,3; HIGH 14,4/14,4; VERY\_HIGH 14,3/14,4 |
 | T10 | F1a | MCO1 = HSI/4 en PA8 (AF0) desde CM7; se restauran `RCC_CFGR` y PA8 | Frecuencia medida por el AD2 | PA8 en AF1: no aparece la señal de 16 MHz | 16 MHz ± 2 % |
-| T15 | F0 (control), F1a, F1b | Carrera: CM7 reconfigura PF0 y CM4 PF1, 500 000 veces cada uno, con salida sincronizada en SRAM4. Después de cada llamada se comprueban los bits propios y que los del otro pin sean uno de los dos valores válidos | Contadores privados por núcleo y fotos | **El mismo bucle con RMW a mano: corrupciones > 0.** Si sale 0, se ensancha la ventana; nunca se da por bueno | Con el hook: 0 corrupciones, y llamadas = suma de las privadas |
+| T15 | F0 (control), F1a, F1b | Carrera: CM7 reconfigura PF10 y CM4 PF11 (sin cablear), 500 000 veces cada uno, con salida sincronizada en SRAM4. Después de cada llamada se comprueban los bits propios y que los del otro pin sean uno de los dos valores válidos | Contadores privados por núcleo y fotos | **El mismo bucle con RMW a mano: corrupciones > 0.** Si sale 0, se ensancha la ventana; nunca se da por bueno | Con el hook: 0 corrupciones, y llamadas = suma de las privadas |
 | T15b | F1b | Igual que T15, pero CM7 con `HAL_GPIO_Init` dentro de `SectionEnter/Exit` (el patrón de eth/uart) | Igual | `HAL_GPIO_Init` sin sección: > 0 | 0 corrupciones |
-| T16 | F1a | `LockPins` en PF5–PF7; luego `ConfigPin` sobre ellos | Foto de registros | Un pin no bloqueado sí cambia | `ERR_LOCKED`, registros sin cambio, `LCKK = 1` |
-| T11 | F2 | 1000 pulsos a 10 kHz en PF8 (CM7) y PF10 (CM4), en RISING, FALLING y BOTH | Cuenta de pulsos del AD2 | Línea enmascarada: 0 IRQ | 1000 / 1000 / 2000 exactos |
-| T12 | F2 | PF8 solo a CM7 y PF10 solo a CM4; luego PF8 a los dos | Cuentas de cada núcleo | Máscara de CM4 borrada: CM4 cuenta 0 | Cada núcleo cuenta solo su línea; compartida, 1000 y 1000 |
+| T16 | F1a | `LockPins` en PF7–PF9 (la última prueba de la imagen); luego `ConfigPin` sobre ellos | Foto de registros | Un pin no bloqueado sí cambia | `ERR_LOCKED`, registros sin cambio, `LCKK = 1` |
+| T11 | F2 | 1000 pulsos a 10 kHz en PE3 (CM7) y PE4 (CM4), en RISING, FALLING y BOTH | Cuenta de pulsos del AD2 | Línea enmascarada: 0 IRQ | 1000 / 1000 / 2000 exactos |
+| T12 | F2 | PE3 solo a CM7 y PE4 solo a CM4; luego PE3 a los dos | Cuentas de cada núcleo | Máscara de CM4 borrada: CM4 cuenta 0 | Cada núcleo cuenta solo su línea; compartida, 1000 y 1000 |
 | T13 | F2 | Latencia de flanco a `BSRR` de la ISR, sobre 1000 eventos | LA del AD2 | EXTI enmascarada: ninguna respuesta | Mín/p50/máx registrados; ningún evento perdido |
-| T14 | F2 | (a) Un flanco con la línea enmascarada no dispara al habilitar. (b) PG8 sobre la línea 8 ocupada → `ERR_CONFLICT`. (c) `ExtiDisable` en CM7 no para a CM4 en la misma línea. (d) SWIER en la línea 12 | Cuentas y fotos | (a) sin limpiar el pending: 1 IRQ espuria. (b) enrutado crudo que desvía la línea. (c) la secuencia de `HAL_GPIO_DeInit` a mano sí para a CM4 | (a) 0 IRQ; (b) sin escritura; (c) CM4 sigue contando; (d) cuenta 1 |
+| T14 | F2 | (a) Un flanco con la línea enmascarada no dispara al habilitar. (b) PD3 sobre la línea 3, ocupada por PE3 → `ERR_CONFLICT`. (c) `ExtiDisable` en CM7 no para a CM4 en la misma línea. (d) SWIER en la línea 0 | Cuentas y fotos | (a) sin limpiar el pending: 1 IRQ espuria. (b) enrutado crudo que desvía la línea. (c) la secuencia de `HAL_GPIO_DeInit` a mano sí para a CM4 | (a) 0 IRQ; (b) sin escritura; (c) CM4 sigue contando; (d) cuenta 1 |
 | T17 | F2 | Celda de compensación sin CSI y con CSI (CM7; se guarda y restaura `CSION` y `CCCSR`) | `CCCSR.READY` leído aparte | Sin CSI: `READY = 0` | Sin CSI: `ERR_NOT_READY`; con CSI: OK dentro de `max_cycles` |
 | T18 | F0 (ref), F1b, F2 | Producción (opción apagada) bajo carga: ETH a 100 Mbps, ADC a 500 kSPS, 300 `WAVE` seguidos; contadores por SWD | La referencia de F0 con el mismo script | — (es regresión frente a la referencia) | 300/300 respuestas (salida cruda de `query_adc.py`), `err`/`ovr`/`adc_ovr` = 0, fallos de HSEM 4 = 0, `mX_gpio_lock_fail_count = 0`, códigos LED de arranque correctos. Además, los selftests UART y ADC en verde |
 | B1 | F1a | Medida. Ciclos de `ConfigPin` con y sin hook; tiempo máximo con PRIMASK y con el lock en cada núcleo; objdump de `Set`/`Reset`/`Write` | DWT de cada núcleo | — | Solo registro. `SHARED_GPIO_LOCK_US` sale de aquí, con el margen escrito. Un `STR` por operación |
@@ -483,24 +563,25 @@ Cada prueba tiene un **control negativo** (R1) y un **oráculo** que no es el dr
 | A19 | R1: controles negativos | Cada control imprime su valor y falla como se espera | Un control que no falla invalida su prueba |
 | A20 | Cierre de G1 (F1b) | `git grep -nE "HAL_GPIO_Init\|->MODER\|->PUPDR\|->OTYPER\|->OSPEEDR\|->AFR" 01_shared_drivers 02_firmware_projects/prj_04_adc_dma_bm_eth 03_firmware_templates` contra el mapa de escritores | Cada escritor posterior a la liberación en un puerto compartido pasa por `gpio_bm`/`SectionEnter`, o es la excepción G14 documentada |
 | A21 | R2: trazabilidad | Cada captura | `Rev` limpio en los dos núcleos y marcas de tiempo |
-| A22 | R4: no destructivas | Lectura + ejecución | Solo GPIOF, PA8 y las líneas 8/10/12. `RCC_CFGR`, `CSION` y `CCCSR` restaurados. `LCKR` solo en PF5–7, que nadie usa después. La aplicación sigue igual tras el selftest |
+| A22 | R4: no destructivas | Lectura + ejecución | Solo los pines de las tablas de "Banco de pruebas" (GPIOE salvo PE1, PF6–PF11, PF14, PF15 y PA8) y las líneas EXTI 0/3/4. PE1 (LD2) intacto. `RCC_CFGR`, `CSION` y `CCCSR` restaurados. `LCKR` solo en PF7–PF9, que nadie usa después. La aplicación sigue igual tras el selftest |
 | A23 | Oráculo independiente | Lectura del selftest y del script | Ninguna prueba compara el driver consigo mismo |
 | A24 | EXTI por núcleo (F2) | Lectura + T12/T14 | `EXTI_D1`/`D2` según `CORE_CM4`; conflicto y deinit según las reglas 2–4 |
 | A25 | Límites medidos (F1b) | `shared_memory.h` contra B1 | El límite sale de una retención medida, con el margen escrito |
 | A26 | Documentación | README y comentarios contra el código | Nada prometido que no exista; lo no ejercitado, escrito |
+| **A27** | **Seguridad eléctrica S1–S10** (en todas las fases, y **antes** de que yo conecte el AD2 a la imagen entregada) | `grep -n "FDwfDigitalIOOutputEnableSet" prj_04/tools/ tools/`: una sola llamada, dentro de `ad2_set_oe`. `grep -nE "MODER\|OTYPER\|AFR" CM*/App/Src/gpio_selftest.c`: toda escritura de un pin cableado pasa por `bench_claim_output`. Las máscaras de S3/S4 coinciden con la tabla "Quién conduce". `DwfParamOnClose ≠ 0`. `try/finally` hacia S2. Cada traspaso del bus sigue S5 (lectura del código del paso). T0b en verde en **mi** ejecución, incluido el control (c) | Todo se cumple. **Cualquier incumplimiento es bloqueante,** aunque todas las demás pruebas pasen, y no conecto el AD2 a esa imagen hasta que esté corregido |
 
 ### Clasificación de lo que encuentre
 
 | Clase | Significado | Efecto |
 | --- | --- | --- |
-| Bloqueante (B) | Incumple un criterio C, una regla R o un gate; o una prueba no se reproduce en mi ejecución; o hay evidencia editada o sin hash | La fase no pasa |
+| Bloqueante (B) | Incumple un criterio C, una regla R, una regla de seguridad S o un gate; o una prueba no se reproduce en mi ejecución; o hay evidencia editada o sin hash | La fase no pasa |
 | Mayor (M) | Defecto real que no invalida la fase | Se corrige antes de empezar la siguiente |
 | Menor (m) | Robustez, estilo o documentación | Puede ir al cierre, apuntado en `AUDIT.md` |
 | Nota | Observación sin acción | Solo registro |
 
 ### Reglas del registro
 
-- **`AUDIT.md` lo escribe solo el auditor**, con un apartado por fase: commit auditado, lo que ejecuté, la tabla A1–A26 y los hallazgos (`B1`, `M1`, `m1`…). En las reauditorías los hallazgos nuevos llevan el prefijo `R-` y se añade un apartado "Reauditoría n".
+- **`AUDIT.md` lo escribe solo el auditor**, con un apartado por fase: commit auditado, lo que ejecuté, la tabla A1–A27 y los hallazgos (`B1`, `M1`, `m1`…). En las reauditorías los hallazgos nuevos llevan el prefijo `R-` y se añade un apartado "Reauditoría n".
 - **Un hallazgo se cierra cuando lo verifico yo,** no cuando un commit dice que lo corrige.
 - **Las capturas no se editan.** Una ejecución nueva es un archivo nuevo o una sección nueva, con su propio hash.
 - **Un resumen escrito a mano no es evidencia.** Por ejemplo, "300/300" tiene que ser la salida cruda de `query_adc.py` (lección de `10_hsem` §12).
@@ -513,8 +594,10 @@ Cada prueba tiene un **control negativo** (R1) y un **oráculo** que no es el dr
 | Que el lock haga fallar un MSP `void` sin que se note | Contador por núcleo, que se lee en T18 por SWD. El límite sale de B1, con margen |
 | Latencia de IRQ por la sección | Un pin por sección; se mide en B1; nunca en Set/Reset/Read |
 | Que el control de T15 no reproduzca la carrera | Ensanchar la ventana. Si sigue en 0, T15 se rediseña; no se rebaja el criterio |
-| Cortocircuito MCU↔AD2 si falla una prueba | 330 Ω en serie; AD2 en alta impedancia entre pruebas |
-| `LCKR` dura hasta el reset | Solo PF5–7, que nadie usa después |
+| **Contienda MCU↔AD2 sin nada que limite la corriente** (no hay resistencias en serie; DS12923: 20 mA por pin) | S1–S10: dirección fija por línea, guardas por máscara a los dos lados, traspaso del bus con prueba eléctrica, estado seguro ante cualquier fallo. T0b demuestra las guardas **sin** provocar la contienda. Nada que mueva el bus se ejecuta sin T0b en verde |
+| **Inyección** con la Nucleo sin alimentar (DS12923: +0 mA) | S8/S9: el AD2 solo habilita salidas con el banner del firmware leído; procedimiento de conexión, con la masa primero y el script parado para cualquier cambio |
+| `LCKR` dura hasta el reset | Solo PF7–PF9, que nadie usa después, y como última prueba de la imagen |
+| Que el bus comparta puerto con LD2 (PE1) | Las pruebas nunca escriben en PE1; A22 lo comprueba en las fotos de GPIOE |
 | Que T10/T17 dejen RCC distinto | Guardar y restaurar; A22 lo comprueba |
 | Confundir el ancho de banda del AD2 con el del MCU | T9 solo exige orden y separación estadística |
 
