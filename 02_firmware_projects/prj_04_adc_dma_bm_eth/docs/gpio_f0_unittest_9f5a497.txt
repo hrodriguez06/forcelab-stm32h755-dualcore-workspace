@@ -1,0 +1,43 @@
+test_b4_t0b_c_negative_control_catches_contention (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_b4_t0b_c_negative_control_catches_contention)
+B4: T0b(c) negative control calls s5_verify_released on driven bus (0x5A) and aborts cleanly. ... ok
+test_s10_reset_mcu_safe_refuses_when_oe_nonzero (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s10_reset_mcu_safe_refuses_when_oe_nonzero)
+S10: reset_mcu_safe raises AD2SafetyViolation when OE != 0 and does NOT invoke CLI. ... ok
+test_s10_reset_mcu_safe_success (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s10_reset_mcu_safe_success)
+S10: reset_mcu_safe succeeds when OE == 0x0000. ... ok
+test_s5a_verify_released_fails_on_down_contention (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s5a_verify_released_fails_on_down_contention)
+S5a: BUSCHK down != 0x00 raises BenchAbort, leaves S2, no OE on bus. ... ok
+test_s5a_verify_released_fails_on_up_contention (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s5a_verify_released_fails_on_up_contention)
+S5a: BUSCHK up != 0xFF raises BenchAbort, leaves S2, no OE on bus. ... ok
+test_s5a_verify_released_success (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s5a_verify_released_success)
+S5: s5_verify_released succeeds when BUSCHK up is 0xFF and down is 0x00. ... ok
+test_s5b_drive_bus_with_consumed_token_raises (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s5b_drive_bus_with_consumed_token_raises)
+S5b: drive_bus with already consumed token raises AD2SafetyViolation. ... ok
+test_s5b_drive_bus_with_wrong_step_token_raises (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s5b_drive_bus_with_wrong_step_token_raises)
+S5b: drive_bus with token from another step raises AD2SafetyViolation. ... ok
+test_s5b_drive_bus_without_token_raises (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s5b_drive_bus_without_token_raises)
+S5b: drive_bus without token raises AD2SafetyViolation before DLL call. ... ok
+test_s7a_step_tracker_out_of_sequence_aborts (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s7a_step_tracker_out_of_sequence_aborts)
+S7a: Step announcement with ID out of sequence aborts and forces S2. ... ok
+test_s7a_step_tracker_protocol_version_mismatch_aborts (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s7a_step_tracker_protocol_version_mismatch_aborts)
+S7a: Protocol version mismatch in step announcement aborts and forces S2. ... ok
+test_s7a_step_tracker_valid_sequence (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s7a_step_tracker_valid_sequence)
+S7a: Valid sequential step announcements advance tracker cleanly. ... ok
+test_s7a_step_tracker_wrong_bus_owner_aborts (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s7a_step_tracker_wrong_bus_owner_aborts)
+S7a: Step announcement with wrong bus owner aborts and forces S2. ... ok
+test_s7b_host_ack_pulse_deasserts_on_timeout (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s7b_host_ack_pulse_deasserts_on_timeout)
+S7b: host_ack_pulse deasserts HOST_REQ and returns False if MCU fails to drop ACK. ... ok
+test_s7b_wait_mcu_ack_timeout_returns_false (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s7b_wait_mcu_ack_timeout_returns_false)
+S7b: wait_mcu_ack returns False when ACK is not asserted within timeout. ... ok
+test_s8a_no_oe_before_valid_banner (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s8a_no_oe_before_valid_banner)
+S8a: Verify that on open and reset, OE is strictly 0x0000. ... ok
+test_s8b_banner_dirty_aborts (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s8b_banner_dirty_aborts)
+S8b: Banner with dirty hash aborts and leaves AD2 in S2. ... ok
+test_s8b_banner_hash_mismatch_aborts (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s8b_banner_hash_mismatch_aborts)
+S8b: Banner with wrong hash aborts and leaves AD2 in S2. ... ok
+test_s8b_banner_version_mismatch_aborts (02_firmware_projects.prj_04_adc_dma_bm_eth.tools.test_gpio_hw_check.TestHostSafetyGuards.test_s8b_banner_version_mismatch_aborts)
+S8b: Protocol version mismatch in banner aborts and leaves AD2 in S2. ... ok
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.026s
+
+OK
