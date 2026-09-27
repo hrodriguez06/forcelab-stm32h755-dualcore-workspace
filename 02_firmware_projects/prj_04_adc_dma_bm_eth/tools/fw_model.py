@@ -196,6 +196,8 @@ class FaultInjectionConfig:
         self.banner_rev: Optional[str] = None     # E13: custom rev in banner
         self.banner_version: Optional[int] = None # E13: custom version
         self.cm4_rev: Optional[str] = None        # E13: custom CM4 rev
+        self.cm4_early_rev: Optional[str] = None  # R2-m2: CM4 rev emitted during boot
+        self.cm4_early_pass: bool = False         # R2-m2: CM4 passes during boot
         self.spurious_line_before_banner: Optional[str] = None  # E14
         self.contention_step9_mcu_drives_bus: bool = False      # R2-M2: MCU drives bus while AD2 drives in Step 9
         self.step8_buschk_up_fail: bool = False                 # E15: MCU fails buschk up in Step 8
@@ -224,9 +226,16 @@ class FirmwareModel:
 
         self.step_id = 0
         self.state = "INIT"
+        self._running = False
         self._step_generator = None
         self.visited_items: list[str] = []
 
+        self.bus.set_mcu_safe()
+
+    def reset(self) -> None:
+        """Simulate hardware reset: boot MCU firmware and enter initial safe state."""
+        self._running = True
+        self._step_generator = self.run_coroutine()
         self.bus.set_mcu_safe()
 
     def log_m7(self, msg: str, item_name: Optional[str] = None) -> None:
@@ -336,6 +345,10 @@ class FirmwareModel:
         yield
 
         # 3. T15 Race
+        if self.faults.cm4_early_rev:
+            self.log_m4(f"[m4_gpio_test] Rev {self.faults.cm4_early_rev}")
+        if self.faults.cm4_early_pass:
+            self.log_m4("[m4_gpio_test] CM4 VERDICT=PASS")
         self._enter_step(STEP_T15_RACE, "NONE")
         self.log_m7("[m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)")
         self.log_m7("[m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)")
@@ -643,6 +656,8 @@ class FirmwareModel:
 
     def step(self) -> None:
         """Advance the firmware state machine by one cooperative step."""
+        if not self._running:
+            return
         if getattr(self, "_stepping", False):
             return
         self._stepping = True

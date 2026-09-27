@@ -296,11 +296,19 @@ class LineReader:
       3. Other: [m4_gpio_test], [ipc], etc. Logged; m4 saved for verdict check.
     """
 
-    def __init__(self, ser, clock=RealClock(), log_fn: Optional[Callable[[str], None]] = None, on_abort_fn: Optional[Callable[[], None]] = None):
+    def __init__(
+        self,
+        ser,
+        clock=RealClock(),
+        log_fn: Optional[Callable[[str], None]] = None,
+        on_abort_fn: Optional[Callable[[], None]] = None,
+        on_m4_line_fn: Optional[Callable[[str], None]] = None,
+    ):
         self.ser = ser
         self.clock = clock
         self.log_fn = log_fn or (lambda msg: None)
         self.on_abort_fn = on_abort_fn
+        self.on_m4_line_fn = on_m4_line_fn
         self._pending_bytes = bytearray()
         self._protocol_queue: list[str] = []
         self.m4_lines: list[str] = []
@@ -327,6 +335,8 @@ class LineReader:
                     self._protocol_queue.append(text)
             elif text.startswith("[m4_gpio_test]"):
                 self.m4_lines.append(text)
+                if self.on_m4_line_fn:
+                    self.on_m4_line_fn(text)
             else:
                 self.other_lines.append(text)
 
@@ -591,14 +601,31 @@ def run_selftest(
     if log_path:
         log_file = open(log_path, "w", encoding="utf-8", buffering=1)
 
+    if expected_rev is None:
+        expected_rev = get_git_rev()
+
     def log(msg: str) -> None:
         stamp = f"[{time.strftime('%H:%M:%S')}] "
         line = stamp + msg
-        print(line, flush=True)
+        try:
+            print(line, flush=True)
+        except (UnicodeEncodeError, UnicodeError):
+            enc = getattr(sys.stdout, "encoding", None) or "ascii"
+            safe_line = line.encode(enc, errors="replace").decode(enc, errors="replace")
+            print(safe_line, flush=True)
+        except Exception:
+            pass
+
         if log_file:
-            log_file.write(line + "\n")
+            try:
+                log_file.write(line + "\n")
+            except Exception:
+                pass
         if log_fn:
-            log_fn(line)
+            try:
+                log_fn(line)
+            except Exception:
+                pass
 
     def rec(item_name: str) -> None:
         if visited_items is not None:
@@ -640,11 +667,21 @@ def run_selftest(
         step_tracker.abort()
         ad2.set_safe_state()
 
-    line_reader = LineReader(serial_port, clock=clock, log_fn=log, on_abort_fn=on_abort)
+    def on_m4_line(text: str) -> None:
+        m_m4_rev = re.match(r"^\[m4_gpio_test\] Rev ([0-9a-f]{7})$", text)
+        if m_m4_rev:
+            m4_rev = m_m4_rev.group(1)
+            if m4_rev != expected_rev:
+                on_abort()
+                raise BenchAbort(f"ABORT: CM4 banner revision mismatch (got {m4_rev}, expected {expected_rev})")
+            checklist_results["cm4_rev_match"] = True
+            log(f"[host] CM4 banner revision verified: {m4_rev}")
+        if "CM4 VERDICT=PASS" in text:
+            checklist_results["cm4_pass"] = True
+
+    line_reader = LineReader(serial_port, clock=clock, log_fn=log, on_abort_fn=on_abort, on_m4_line_fn=on_m4_line)
 
     try:
-        if expected_rev is None:
-            expected_rev = get_git_rev()
         log(f"[host] Expected firmware revision from git: {expected_rev}")
         if "-dirty" in expected_rev:
             log("[host] ERROR: Working tree is dirty. Clean before building and capturing.")
@@ -654,6 +691,19 @@ def run_selftest(
         initial_oe = ad2.get_oe()
         if initial_oe != 0:
             raise AD2SafetyViolation(f"S8 violation: AD2 OE is 0x{initial_oe:04X} on open, expected 0x0000")
+
+        # R2-m1: Drain serial port for at least 100 ms before reset and log discarded bytes
+        drain_start = clock.monotonic()
+        discarded_bytes = 0
+        while clock.monotonic() - drain_start < 0.100:
+            chunk = serial_port.read()
+            if chunk:
+                discarded_bytes += len(chunk)
+            clock.sleep(0.005)
+        chunk = serial_port.read()
+        if chunk:
+            discarded_bytes += len(chunk)
+        log(f"[host] Serial port drained before reset: {discarded_bytes} bytes discarded.")
 
         # S10: Reset MCU with AD2 OE = 0x0000
         if reset_fn:
@@ -1112,6 +1162,16 @@ def run_selftest(
         log(f"ERROR during selftest execution: {e}")
     finally:
         on_abort()
+        try:
+            line_reader.poll()
+        except Exception:
+            pass
+        for l in line_reader.m4_lines:
+            m_m4_rev = re.match(r"^\[m4_gpio_test\] Rev ([0-9a-f]{7})$", l)
+            if m_m4_rev and m_m4_rev.group(1) == expected_rev:
+                checklist_results["cm4_rev_match"] = True
+            if "CM4 VERDICT=PASS" in l:
+                checklist_results["cm4_pass"] = True
 
         # Explicitly print the 15-item checklist (B2)
         log("================================================================================")
@@ -1133,6 +1193,17 @@ def run_selftest(
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(errors="replace")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(errors="replace")
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(description="GPIO Hardware Check for STM32H755 + AD2")
     parser.add_argument("--port", default="COM4", help="Serial port for ST-LINK VCP (default: COM4)")
     parser.add_argument("--baud", type=int, default=115200, help="Baud rate (default: 115200)")

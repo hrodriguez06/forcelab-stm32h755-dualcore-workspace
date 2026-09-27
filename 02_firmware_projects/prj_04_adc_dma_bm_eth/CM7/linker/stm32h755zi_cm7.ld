@@ -43,6 +43,10 @@ MEMORY
   RAM_SHARED(xrw) : ORIGIN = 0x38008000, LENGTH = 32K     /* SRAM4 - IPC   */
 }
 
+/* R2-m6: Verify RAM_SHARED matches SHARED_RAM_BASE and SHARED_RAM_SIZE in Common/Inc/shared_memory.h */
+ASSERT(ORIGIN(RAM_SHARED) == 0x38008000, "RAM_SHARED ORIGIN must match SHARED_RAM_BASE (0x38008000) in shared_memory.h")
+ASSERT(LENGTH(RAM_SHARED) == 32K, "RAM_SHARED LENGTH must match SHARED_RAM_SIZE (32K) in shared_memory.h")
+
 SECTIONS
 {
   /* ---- Vector table ---------------------------------------------------- */

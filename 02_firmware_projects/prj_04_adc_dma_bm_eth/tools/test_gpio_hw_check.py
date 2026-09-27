@@ -282,6 +282,7 @@ class TestHarnessScenarios(BaseSimTest):
             if a.get_oe() != 0:
                 raise AD2SafetyViolation("OE not 0 during reset")
             reset_called.append(True)
+            fw.reset()
 
         return ad2, ser, clock, mock_reset, fw, bus
 
@@ -854,6 +855,105 @@ class TestHarnessScenarios(BaseSimTest):
         self.assertEqual(host_visited, expected_items, "Host did not visit table items in exact order")
         self.assertEqual(fw.visited_items, expected_items, "Firmware model did not visit table items in exact order")
         self.assertEqual(host_visited, fw.visited_items, "Host and model visited items differ")
+
+    # ---- R2-m1: Drenar puerto serie antes de reset -------------------------
+    def test_r2_m1_serial_drain_before_reset(self):
+        """R2-m1: Serial port is drained for at least 100 ms before reset and logs discarded bytes."""
+        ad2, ser, clock, reset_fn, fw, bus = self.create_simulated_bench()
+        leftover = b"[old_session] Garbage bytes\r\n"
+        ser._rx_buffer.extend(leftover)
+
+        logs = []
+        code = run_selftest(
+            serial_port=ser,
+            ad2=ad2,
+            clock=clock,
+            reset_fn=reset_fn,
+            expected_rev="ca569b6",
+            log_fn=logs.append,
+        )
+
+        self.assertEqual(code, 0)
+        self.assertTrue(any(f"Serial port drained before reset: {len(leftover)} bytes discarded." in l for l in logs))
+
+    # ---- R2-m2: CM4 rev comprobado de inmediato y evaluado en aborto -------
+    def test_r2_m2_cm4_rev_mismatch_aborts_immediately(self):
+        """R2-m2: A mismatched CM4 rev causes immediate abort without waiting for session end."""
+        faults = FaultInjectionConfig()
+        faults.cm4_early_rev = "1234567"
+        ad2, ser, clock, reset_fn, fw, bus = self.create_simulated_bench(faults=faults)
+
+        logs = []
+        code = run_selftest(
+            serial_port=ser,
+            ad2=ad2,
+            clock=clock,
+            reset_fn=reset_fn,
+            expected_rev="ca569b6",
+            log_fn=logs.append,
+        )
+
+        self.assertNotEqual(code, 0)
+        self.assertTrue(any("ABORT: CM4 banner revision mismatch (got 1234567, expected ca569b6)" in l for l in logs))
+        self.assertEqual(ad2.get_oe(), 0x0000)
+
+    def test_r2_m2_cm4_state_evaluated_on_abort(self):
+        """R2-m2: When a test aborts, CM4 lines arrived before the abort are evaluated and marked OK."""
+        faults = FaultInjectionConfig()
+        faults.cm4_early_rev = "ca569b6"
+        faults.cm4_early_pass = True
+        faults.step8_buschk_up_fail = True  # Triggers abort at step 8
+        ad2, ser, clock, reset_fn, fw, bus = self.create_simulated_bench(faults=faults)
+
+        logs = []
+        code = run_selftest(
+            serial_port=ser,
+            ad2=ad2,
+            clock=clock,
+            reset_fn=reset_fn,
+            expected_rev="ca569b6",
+            log_fn=logs.append,
+        )
+
+        self.assertNotEqual(code, 0)
+        # Even though session aborted at step 8, CM4 passed and checklist reflects it
+        self.assertTrue(any("[OK] cm4_rev_match" in l for l in logs))
+        self.assertTrue(any("[OK] cm4_pass" in l for l in logs))
+
+    # ---- R2-m3: Protección contra excepciones de codificación --------------
+    def test_r2_m3_log_console_encoding_resilience(self):
+        """R2-m3: Log handles non-encodable characters gracefully without throwing UnicodeEncodeError."""
+        ad2, ser, clock, reset_fn, fw, bus = self.create_simulated_bench()
+        logs = []
+
+        import io
+        # Mock sys.stdout that rejects non-ascii
+        class AsciiOnlyWriter(io.StringIO):
+            def write(self, s: str):
+                for ch in s:
+                    if ord(ch) > 127:
+                        raise UnicodeEncodeError("ascii", ch, 0, 1, "ordinal not in range(128)")
+                return super().write(s)
+
+        old_stdout = sys.stdout
+        sys.stdout = AsciiOnlyWriter()
+        try:
+            def custom_reset(a, log_fn=None):
+                reset_fn(a, log_fn=log_fn)
+                ser.tx_queue.append("[m7_gpio_test] INFO Unicode test: \u2014 \u2603 \ufffd\r\n".encode("utf-8"))
+
+            code = run_selftest(
+                serial_port=ser,
+                ad2=ad2,
+                clock=clock,
+                reset_fn=custom_reset,
+                expected_rev="ca569b6",
+                log_fn=logs.append,
+            )
+            self.assertEqual(code, 0)
+            self.assertTrue(any("Unicode test" in l for l in logs))
+        finally:
+            sys.stdout = old_stdout
 
 
 class TestSafetyGuardsDirect(BaseSimTest):
