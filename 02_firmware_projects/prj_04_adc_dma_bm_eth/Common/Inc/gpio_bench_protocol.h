@@ -62,6 +62,16 @@ extern "C" {
 
 #define AD2_ALLOWED_STATIC_OUTPUTS      (AD2_DIO_EXTI3_CM7 | AD2_DIO_EXTI4_CM4 | AD2_DIO_HOST_REQ)
 
+/* ---- Handshake Primitives (R-B1) ----------------------------------------- */
+#define GPIO_BENCH_PRIM_NONE            0U
+#define GPIO_BENCH_PRIM_HS_MCU          1U /* MCU asserts ACK -> Host asserts REQ -> MCU drops ACK -> Host drops REQ */
+#define GPIO_BENCH_PRIM_HS_HOST         2U /* Host asserts REQ -> MCU asserts ACK -> Host drops REQ -> MCU drops ACK */
+
+/* ---- 13-Line Loose Check Mask (B2) --------------------------------------- */
+#define AD2_DIO_LOOSE_13_MASK           (AD2_DIO_BUS_MASK | AD2_DIO_EXTI3_CM7 | AD2_DIO_CM7_ACK | \
+                                         AD2_DIO_EXTI4_CM4 | AD2_DIO_CM4_ACK | AD2_DIO_MCO1_PA8)
+
+
 /* ---- Dual-Core SRAM4 Communication Structure (m2: defined in shared_memory.h) - */
 _Static_assert(sizeof(SharedMemory_t) <= (GPIO_TEST_SHARED_ADDR - 0x38000000UL),
                "SharedMemory_t overlaps GPIO_TEST_SHARED_ADDR in SRAM4 (m2)");
