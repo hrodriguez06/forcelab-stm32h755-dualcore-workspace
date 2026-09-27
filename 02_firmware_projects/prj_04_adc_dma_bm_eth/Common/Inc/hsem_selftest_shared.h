@@ -83,6 +83,7 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t h3_m4_pass;
     volatile uint32_t h3_m7_pass;
     volatile uint32_t h3_cross_pass;
+    volatile uint32_t h3_m4_raw_rejection_pass;
 
     /* H4 Timeout (including symmetric CM4 timeout on CM7 lock) */
     volatile uint32_t h4_m4_pass;
@@ -115,6 +116,7 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t h9_m7_notifications;
     volatile uint32_t h9_neg1_irqs;
     volatile uint32_t h9_neg2_irqs;
+    volatile uint32_t h9_neg2_stale_isf;
     volatile uint32_t h9_m4_pass;
     volatile uint32_t h9_m7_pass;
 
@@ -125,6 +127,7 @@ typedef struct __attribute__((aligned(32)))
     /* Synchronization completion flags */
     volatile uint32_t cm4_done;
     volatile uint32_t cm7_done;
+    volatile uint32_t cm4_all_passed;
 
     /* DWT CYCCNT verification */
     volatile uint32_t cm4_dwt_ok;

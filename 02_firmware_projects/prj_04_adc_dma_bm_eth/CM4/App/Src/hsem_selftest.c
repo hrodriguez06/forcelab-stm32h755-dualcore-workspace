@@ -263,8 +263,8 @@ void HSEM_SelfTest_CM4_IRQHandler(void)
     {
         s_m4_irq_count++;
         HSEM_TEST_SHARED->h9_m4_notifications = s_m4_irq_count;
-        /* Re-arm for next notification (one-shot per release in hardware) */
-        HSEM_COMMON->IER |= (1UL << HSEM_TEST_ID_NOTIFY);
+        /* Re-arm for next notification without clearing ICR (R-M1) */
+        (void)HSEM_BM_NotifyRearm(1UL << HSEM_TEST_ID_NOTIFY);
     }
 }
 
@@ -352,7 +352,11 @@ void HSEM_SelfTest_CM4_Run(void)
         h0_ok = false;
     }
 
-    /* Parameter rejection tests (C6) */
+    /* Parameter rejection tests with register snapshot verification (C6, R-m4) */
+    uint32_t r_snap_before = HSEM->R[HSEM_TEST_M4_LOCK1];
+    uint32_t ier_snap_before = HSEM_COMMON->IER;
+    uint32_t cr_snap_before = HSEM->CR;
+
     if (HSEM_BM_FastTake(32U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_Take(32U, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_Take(HSEM_TEST_M4_LOCK1, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
@@ -363,6 +367,18 @@ void HSEM_SelfTest_CM4_Run(void)
     if (HSEM_BM_ReleaseAllOfCore(2U, 0xA5C3U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU2, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_NotifyEnable(0U) != false) h0_ok = false;
+    if (HSEM_BM_NotifyRearm(0U) != false) h0_ok = false;
+    if (HSEM_BM_NotifyDisable(0U) != false) h0_ok = false;
+
+    uint32_t r_snap_after = HSEM->R[HSEM_TEST_M4_LOCK1];
+    uint32_t ier_snap_after = HSEM_COMMON->IER;
+    uint32_t cr_snap_after = HSEM->CR;
+    if ((r_snap_before != r_snap_after) ||
+        (ier_snap_before != ier_snap_after) ||
+        (cr_snap_before != cr_snap_after))
+    {
+        h0_ok = false;
+    }
 
     HSEM_TEST_SHARED->h0_m4_pass = h0_ok ? 1U : 0U;
 
@@ -400,7 +416,22 @@ void HSEM_SelfTest_CM4_Run(void)
 
     if (HSEM_TEST_SHARED->phase == 2U)
     {
-        /* Attempt to release CM7's lock from CM4 */
+        /* Case B: Raw hardware write rejection from wrong core (R-m4) */
+        uint32_t isr_before_h3b = HSEM_COMMON->ISR;
+        HSEM->R[HSEM_TEST_M7_LOCK1] = (HSEM_BM_COREID_CPU2 << 8);
+        __DMB();
+        uint32_t r_after_raw = HSEM->R[HSEM_TEST_M7_LOCK1];
+        uint32_t isr_after_h3b = HSEM_COMMON->ISR;
+        bool raw_rej_ok = (((r_after_raw & (1UL << 31)) != 0U) &&
+                           (((r_after_raw >> 8) & 0xFFU) == HSEM_BM_COREID_CPU1) &&
+                           (isr_after_h3b == isr_before_h3b));
+        if (!raw_rej_ok)
+        {
+            h3_ok = false;
+        }
+        HSEM_TEST_SHARED->h3_m4_raw_rejection_pass = raw_rej_ok ? 1U : 0U;
+
+        /* Attempt to release CM7's lock from CM4 via driver API */
         if (HSEM_BM_Release(HSEM_TEST_M7_LOCK1, 0U) != HSEM_BM_ERR_NOT_OWNER)
         {
             h3_ok = false;
@@ -462,7 +493,7 @@ void HSEM_SelfTest_CM4_Run(void)
     }
     HSEM_TEST_SHARED->h7_m4_pass = h7_ok ? 1U : 0U;
 
-    /* 7. H10 Parity on CM4 (BM vs LL across 14 steps) */
+    /* 7. H10 Parity on CM4 (BM vs LL across 13 steps: 0 to 12, R-m5) */
     static H10_StepResult_t bm_res[H10_STEPS];
     static H10_StepResult_t ll_res[H10_STEPS];
     RunSequence_BM_M4(bm_res);
@@ -708,7 +739,14 @@ void HSEM_SelfTest_CM4_Run(void)
         h9_m4_ok = false;
     }
 
-    /* Negative Control 2: Stale flag cleared on enable */
+    /* Negative Control 2: Stale flag cleared on enable (R-m4) */
+    uint32_t stale_isr = HSEM_COMMON->ISR;
+    HSEM_TEST_SHARED->h9_neg2_stale_isf = ((stale_isr & (1UL << HSEM_TEST_ID_NOTIFY)) != 0U) ? 1U : 0U;
+    if (HSEM_TEST_SHARED->h9_neg2_stale_isf == 0U)
+    {
+        h9_m4_ok = false;
+    }
+
     /* Enable notification on ID_NOTIFY: NotifyEnable clears ICR first, then sets IER */
     HSEM_BM_NotifyEnable(1UL << HSEM_TEST_ID_NOTIFY);
     for (volatile uint32_t d = 0U; d < 10000U; d++) { __NOP(); }
@@ -765,16 +803,18 @@ void HSEM_SelfTest_CM4_Run(void)
         }
         HSEM_BM_Release(HSEM_TEST_ID_NOTIFY, 0U);
 
-        uint32_t wait_m7 = 0U;
-        while ((HSEM_TEST_SHARED->h9_m7_notifications <= i) && (wait_m7 < 5000000U))
-        {
-            wait_m7++;
-        }
-        if (wait_m7 >= 5000000U)
-        {
-            h9_m4_ok = false;
-            break;
-        }
+        /* Pacing delay without waiting for CM7 ACK on each release (R-M1 burst test) */
+        for (volatile uint32_t d = 0U; d < 2000U; d++) { __NOP(); }
+    }
+
+    uint32_t wait_m7 = 0U;
+    while ((HSEM_TEST_SHARED->h9_m7_notifications < 100U) && (wait_m7 < 10000000U))
+    {
+        wait_m7++;
+    }
+    if (HSEM_TEST_SHARED->h9_m7_notifications != 100U)
+    {
+        h9_m4_ok = false;
     }
 
     HSEM_TEST_SHARED->h9_m4_pass = h9_m4_ok ? 1U : 0U;
@@ -825,6 +865,10 @@ void HSEM_SelfTest_CM4_Run(void)
     Line_End();
 
     bool cm4_all_ok = h0_ok && h3_ok && h7_ok && h10_all_ok && h4_sym_ok && h9_m4_ok;
+    HSEM_TEST_SHARED->cm4_all_passed = cm4_all_ok ? 1U : 0U;
+    HSEM_TEST_SHARED->cm4_done = 15U;
+    __DMB();
+
     Line_Begin();
     Line_Str("CM4 VERDICT=");
     Line_Str(cm4_all_ok ? "PASS" : "FAIL");

@@ -57,7 +57,7 @@ def main() -> None:
 
         lines: list[str] = []
         buf = bytearray()
-        verdict_seen = False
+        cm4_verdict_seen = False
         post_verdict_lines = 0
 
         while True:
@@ -77,10 +77,10 @@ def main() -> None:
                     print(formatted)
                     lines.append(formatted)
 
-                    if "VERDICT:" in line_str:
-                        verdict_seen = True
+                    if "CM4 VERDICT=" in line_str:
+                        cm4_verdict_seen = True
 
-                    if verdict_seen:
+                    if cm4_verdict_seen:
                         if "(CPU2 alive)" in line_str or "CPU2 NOT RESPONDING" in line_str:
                             post_verdict_lines += 1
                             if post_verdict_lines >= 4:
@@ -88,7 +88,7 @@ def main() -> None:
             else:
                 time.sleep(0.01)
 
-            if verdict_seen and post_verdict_lines >= 4:
+            if cm4_verdict_seen and post_verdict_lines >= 4:
                 break
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

@@ -368,8 +368,8 @@ static void M7_HalCallback(uint32_t sem_mask, void *ctx)
     {
         s_m7_irq_count++;
         HSEM_TEST_SHARED->h9_m7_notifications = s_m7_irq_count;
-        /* Re-arm for next notification (HAL notification is one-shot) */
-        (void)HSEM_HAL_NotifyEnable(1UL << HSEM_TEST_ID_NOTIFY);
+        /* Re-arm for next notification without clearing ICR (R-M1) */
+        (void)HSEM_HAL_NotifyRearm(1UL << HSEM_TEST_ID_NOTIFY);
     }
 }
 
@@ -477,7 +477,11 @@ void HSEM_SelfTest_CM7_Run(void)
         h0_ok = false;
     }
 
-    /* Parameter rejection tests (C6) */
+    /* Parameter rejection tests with register snapshot verification (C6, R-m4) */
+    uint32_t r_snap_before = HSEM->R[HSEM_TEST_M7_LOCK1];
+    uint32_t ier_snap_before = HSEM_COMMON->IER;
+    uint32_t cr_snap_before = HSEM->CR;
+
     if (HSEM_BM_FastTake(32U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_Take(32U, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_Take(HSEM_TEST_M7_LOCK1, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
@@ -488,6 +492,18 @@ void HSEM_SelfTest_CM7_Run(void)
     if (HSEM_BM_ReleaseAllOfCore(2U, 0xA5C3U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_ReleaseAllOfCore(HSEM_BM_COREID_CPU1, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_NotifyEnable(0U) != false) h0_ok = false;
+    if (HSEM_BM_NotifyRearm(0U) != false) h0_ok = false;
+    if (HSEM_BM_NotifyDisable(0U) != false) h0_ok = false;
+
+    uint32_t r_snap_after = HSEM->R[HSEM_TEST_M7_LOCK1];
+    uint32_t ier_snap_after = HSEM_COMMON->IER;
+    uint32_t cr_snap_after = HSEM->CR;
+    if ((r_snap_before != r_snap_after) ||
+        (ier_snap_before != ier_snap_after) ||
+        (cr_snap_before != cr_snap_after))
+    {
+        h0_ok = false;
+    }
 
     HSEM_TEST_SHARED->h0_m7_pass = h0_ok ? 1U : 0U;
     APP_LOG("[m7_hsem_test] H0 Characterization: %s", h0_ok ? "PASS" : "FAIL");
@@ -617,7 +633,7 @@ void HSEM_SelfTest_CM7_Run(void)
     HSEM_TEST_SHARED->h7_m7_pass = h7_ok ? 1U : 0U;
     APP_LOG("[m7_hsem_test] H7 Context Collision (S1 mitigation): %s", h7_ok ? "PASS" : "FAIL");
 
-    /* 7. H10 Parity on CM7 (BM <-> LL <-> HAL across 14 steps, M4) */
+    /* 7. H10 Parity on CM7 (BM <-> LL <-> HAL across 13 steps: 0 to 12, M4, R-m5) */
     static H10_StepResult_t bm_res[H10_STEPS];
     static H10_StepResult_t ll_res[H10_STEPS];
     static H10_StepResult_HAL_t hal_res[H10_STEPS];
@@ -649,7 +665,7 @@ void HSEM_SelfTest_CM7_Run(void)
 
     bool h10_all_ok = h10_bm_ll_ok && h10_bm_hal_ok && neg_detected_ll && neg_detected_hal;
     HSEM_TEST_SHARED->h10_m7_pass = h10_all_ok ? 1U : 0U;
-    APP_LOG("[m7_hsem_test] H10 Parity (BM <-> LL <-> HAL, 14 steps): %s (LL_match=%d, HAL_match=%d, neg_ll=%d, neg_hal=%d)",
+    APP_LOG("[m7_hsem_test] H10 Parity (BM <-> LL <-> HAL, 13 steps): %s (LL_match=%d, HAL_match=%d, neg_ll=%d, neg_hal=%d)",
             h10_all_ok ? "PASS" : "FAIL", h10_bm_ll_ok, h10_bm_hal_ok, neg_detected_ll, neg_detected_hal);
 
     Hsem_ResetTestRegisters_M7();
@@ -1067,16 +1083,19 @@ void HSEM_SelfTest_CM7_Run(void)
     APP_LOG("[m7_hsem_test] H9 negative control 1 (IER disabled): CM4 IRQs=%lu (%s)",
             HSEM_TEST_SHARED->h9_neg1_irqs,
             (HSEM_TEST_SHARED->h9_neg1_irqs == 0U) ? "PASS: 0 IRQs" : "FAIL: unexpected IRQ");
-    APP_LOG("[m7_hsem_test] H9 negative control 2 (stale flag on enable): CM4 spurious IRQs=%lu (%s)",
+    APP_LOG("[m7_hsem_test] H9 negative control 2 (stale flag on enable): CM4 spurious IRQs=%lu (%s), stale flag was=%lu",
             HSEM_TEST_SHARED->h9_neg2_irqs,
-            (HSEM_TEST_SHARED->h9_neg2_irqs == 0U) ? "PASS: 0 spurious" : "FAIL: spurious IRQ fired");
+            (HSEM_TEST_SHARED->h9_neg2_irqs == 0U) ? "PASS: 0 spurious" : "FAIL: spurious IRQ fired",
+            HSEM_TEST_SHARED->h9_neg2_stale_isf);
 
-    if ((HSEM_TEST_SHARED->h9_neg1_irqs != 0U) || (HSEM_TEST_SHARED->h9_neg2_irqs != 0U))
+    if ((HSEM_TEST_SHARED->h9_neg1_irqs != 0U) ||
+        (HSEM_TEST_SHARED->h9_neg2_irqs != 0U) ||
+        (HSEM_TEST_SHARED->h9_neg2_stale_isf == 0U))
     {
         h9_ok = false;
     }
 
-    /* Active 500 notifications CM7 -> CM4 */
+    /* Active 500 notifications CM7 -> CM4 (R-M1 burst without waiting for ACK each release) */
     HSEM_TEST_SHARED->h9_m4_notifications = 0U;
     HSEM_TEST_SHARED->go_signal = 13U;
     __DMB();
@@ -1091,18 +1110,21 @@ void HSEM_SelfTest_CM7_Run(void)
         HSEM_BM_Release(HSEM_TEST_ID_NOTIFY, 0U);
         releases_sent++;
 
-        /* Bounded timeout wait for CM4 to receive and acknowledge IRQ */
-        uint32_t wait_ack = 0U;
-        while ((HSEM_TEST_SHARED->h9_m4_notifications < releases_sent) && (wait_ack < 5000000U))
-        {
-            wait_ack++;
-        }
-        if (wait_ack >= 5000000U)
-        {
-            APP_LOG("[m7_hsem_test] H9 timeout waiting for CM4 IRQ on transfer %lu", releases_sent);
-            h9_ok = false;
-            break;
-        }
+        /* Pacing delay without waiting for CM4 ACK on each release (R-M1 burst test) */
+        for (volatile uint32_t d = 0U; d < 2000U; d++) { __NOP(); }
+    }
+
+    /* Bounded timeout wait for CM4 to receive all notifications */
+    uint32_t wait_ack = 0U;
+    while ((HSEM_TEST_SHARED->h9_m4_notifications < HSEM_TEST_H9_COUNT) && (wait_ack < 10000000U))
+    {
+        wait_ack++;
+    }
+    if (HSEM_TEST_SHARED->h9_m4_notifications != HSEM_TEST_H9_COUNT)
+    {
+        APP_LOG("[m7_hsem_test] H9 timeout waiting for CM4 notifications (got %lu/%u)",
+                HSEM_TEST_SHARED->h9_m4_notifications, HSEM_TEST_H9_COUNT);
+        h9_ok = false;
     }
 
     while (HSEM_TEST_SHARED->cm4_done != 13U)
@@ -1110,9 +1132,16 @@ void HSEM_SelfTest_CM7_Run(void)
         __NOP();
     }
 
+    bool h9_500_exact = (releases_sent == HSEM_TEST_H9_COUNT) &&
+                        (HSEM_TEST_SHARED->h9_m4_notifications == HSEM_TEST_H9_COUNT);
+    if (!h9_500_exact)
+    {
+        h9_ok = false;
+    }
+
     APP_LOG("[m7_hsem_test] H9 CM7->CM4 notifications: sent=%lu, cm4_irqs=%lu (%s)",
             releases_sent, HSEM_TEST_SHARED->h9_m4_notifications,
-            (releases_sent == HSEM_TEST_H9_COUNT && HSEM_TEST_SHARED->h9_m4_notifications == HSEM_TEST_H9_COUNT) ? "PASS" : "FAIL");
+            h9_500_exact ? "PASS" : "FAIL");
 
     /* Reverse Active 100 notifications CM4 -> CM7 via HAL (B3) */
     s_m7_irq_count = 0U;
@@ -1140,13 +1169,15 @@ void HSEM_SelfTest_CM7_Run(void)
     NVIC_DisableIRQ(HSEM1_IRQn);
     NVIC_ClearPendingIRQ(HSEM1_IRQn);
 
-    APP_LOG("[m7_hsem_test] H9 CM4->CM7 HAL notifications: cm7_irqs=%lu/100 (%s)",
-            s_m7_irq_count, (s_m7_irq_count == 100U) ? "PASS" : "FAIL");
-
-    if (s_m7_irq_count != 100U)
+    bool h9_100_exact = (s_m7_irq_count == 100U);
+    if (!h9_100_exact)
     {
         h9_ok = false;
     }
+
+    APP_LOG("[m7_hsem_test] H9 CM4->CM7 HAL notifications: cm7_irqs=%lu/100 (%s)",
+            s_m7_irq_count, h9_100_exact ? "PASS" : "FAIL");
+
     HSEM_TEST_SHARED->h9_m7_pass = h9_ok ? 1U : 0U;
 
     /* ---- H5: Boot Handshake ---- */
@@ -1160,10 +1191,30 @@ void HSEM_SelfTest_CM7_Run(void)
             HSEM_TEST_SHARED->h5_rel_ok,
             h5_ok ? "PASS" : "FAIL");
 
-    /* ---- Final Conditional Verdict (B4) ---- */
+    /* Wait for CM4 to complete its full selftest suite (R-M2) */
+    uint32_t wait_cm4_final = 0U;
+    while ((HSEM_TEST_SHARED->cm4_done != 15U) && (wait_cm4_final < 10000000U))
+    {
+        wait_cm4_final++;
+    }
+
+    bool cm4_tests_passed = (HSEM_TEST_SHARED->cm4_done == 15U) &&
+                            (HSEM_TEST_SHARED->cm4_all_passed == 1U) &&
+                            (HSEM_TEST_SHARED->h0_m4_pass == 1U) &&
+                            (HSEM_TEST_SHARED->h3_m4_pass == 1U) &&
+                            (HSEM_TEST_SHARED->h7_m4_pass == 1U) &&
+                            (HSEM_TEST_SHARED->h10_m4_pass == 1U) &&
+                            (HSEM_TEST_SHARED->h9_m4_pass == 1U);
+
+    APP_LOG("[m7_hsem_test] CM4 sub-verdict: done=%lu all_passed=%lu -> %s",
+            HSEM_TEST_SHARED->cm4_done, HSEM_TEST_SHARED->cm4_all_passed,
+            cm4_tests_passed ? "PASS" : "FAIL");
+
+    /* ---- Final Conditional Verdict (B4, R-M2) ---- */
     bool all_tests_passed = h0_ok && h3_ok && h7_ok && h10_all_ok &&
                             h2_ok && h1_ok && h1_2step_ok && h1b_ok &&
-                            h4_ok && h4_sym_ok && h8_ok && h9_ok && h5_ok;
+                            h4_ok && h4_sym_ok && h8_ok && h9_ok && h5_ok &&
+                            cm4_tests_passed;
 
     HSEM_TEST_SHARED->all_tests_passed = all_tests_passed ? 1U : 0U;
 
