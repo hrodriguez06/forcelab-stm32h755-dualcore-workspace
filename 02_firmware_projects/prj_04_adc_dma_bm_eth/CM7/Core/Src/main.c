@@ -106,14 +106,13 @@ int main(void)
     bool reparked_h5b = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
     bool h5b_ok = woke_h5b && reparked_h5b;
 
-    /* H5c: Spurious EXTI line 15 event to CPU2 via EXTI_SWIER1 (B2) */
+    /* H5c: Spurious EXTI line 15 event to CPU2 via EXTI_SWIER1 (B2, R-m3: C2EMR1 only) */
     RCC->APB4ENR |= RCC_APB4ENR_SYSCFGEN;
     (void)RCC->APB4ENR;
     uint32_t wake_before_h5c = g_shared.cpu2_wake_count;
     EXTI->RTSR1 |= (1UL << 15);
     EXTI->FTSR1 |= (1UL << 15);
     EXTI->C2EMR1 |= (1UL << 15);
-    EXTI->C2IMR1 |= (1UL << 15);
     EXTI->SWIER1 |= (1UL << 15);
     __DSB();
 
@@ -130,7 +129,6 @@ int main(void)
     EXTI->RTSR1 &= ~(1UL << 15);
     EXTI->FTSR1 &= ~(1UL << 15);
     EXTI->C2EMR1 &= ~(1UL << 15);
-    EXTI->C2IMR1 &= ~(1UL << 15);
     EXTI->C2PR1 = (1UL << 15);
     EXTI->PR1 = (1UL << 15);
     __DSB();

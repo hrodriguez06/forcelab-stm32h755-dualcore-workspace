@@ -156,6 +156,7 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
                 g_m7_adc_lock_hold_cycles_last = hold;
                 if (hold > g_m7_adc_lock_hold_cycles_max) { g_m7_adc_lock_hold_cycles_max = hold; }
                 if (hold < g_m7_adc_lock_hold_cycles_min) { g_m7_adc_lock_hold_cycles_min = hold; }
+                if (hold > g_shared.m7_adc_lock_hold_cycles_max) { g_shared.m7_adc_lock_hold_cycles_max = hold; }
 
                 hdr->m4_heartbeat       = g_shared.m4_heartbeat;
 
@@ -200,6 +201,7 @@ static void adc_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     g_m7_adc_lock_hold_cycles_last = hold;
     if (hold > g_m7_adc_lock_hold_cycles_max) { g_m7_adc_lock_hold_cycles_max = hold; }
     if (hold < g_m7_adc_lock_hold_cycles_min) { g_m7_adc_lock_hold_cycles_min = hold; }
+    if (hold > g_shared.m7_adc_lock_hold_cycles_max) { g_shared.m7_adc_lock_hold_cycles_max = hold; }
     m4_hb = g_shared.m4_heartbeat;
 
     if (is_json)

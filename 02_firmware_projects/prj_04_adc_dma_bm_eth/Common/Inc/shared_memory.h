@@ -27,21 +27,25 @@ extern "C" {
 #endif
 
 /* ============================================================================
- * Semaphore Allocation & Ownership Table (RM0399 §11, S1 mitigation, M6)
+ * Semaphore Allocation & Ownership Table (RM0399 §11, S1 mitigation, M6, R-m2)
  * ============================================================================
- * ID  | Name                    | Owner / Master | Description
+ * ID  | Name                    | Owner / Master | Context / Procedure
  * ----+-------------------------+----------------+----------------------------
- *  0  | HSEM_ID_BOOT_SYNC       | CPU1 (CM7)     | M7 -> M4 boot release
- *  1  | HSEM_ID_SHARED_STATE    | Mutex (Dual)   | Guards SharedMemory_t.state
- *  2  | HSEM_ID_M7_TO_M4_MBOX   | CPU1 (CM7)     | Guards m7_to_m4 mailbox
- *  3  | HSEM_ID_M4_TO_M7_MBOX   | CPU2 (CM4)     | Guards m4_to_m7 mailbox
- *  4  | HSEM_ID_ADC_DATA        | CPU2 (CM4)     | Guards ADC telemetry/waveform
- *  5  | BOARD_GPIO_HSEM_ID      | Mutex (Dual)   | Reserved for 00_gpio pin lock
- * 6..23 | Reserved              | —              | Reserved for future drivers
- * 24..26| HSEM_TEST_ID_CM7_*    | CPU1 (CM7)     | Selftest IDs dedicated to CM7
- * 27  | HSEM_TEST_ID_CROSS      | Mutex (Dual)   | Cross-core contention tests
- * 28..30| HSEM_TEST_ID_CM4_*    | CPU2 (CM4)     | Selftest IDs dedicated to CM4
- * 31  | HSEM_TEST_ID_NOTIFY     | Mutex (Dual)   | Notification tests
+ *  0  | HSEM_ID_BOOT_SYNC       | CPU1 (CM7)     | Boot: CM7 1-step Take, CM4 WFE wait
+ *  1  | HSEM_ID_SHARED_STATE    | Mutex (Dual)   | Superloop: Shared_TryLockCycles
+ *  2  | HSEM_ID_M7_TO_M4_MBOX   | CPU1 (CM7)     | Task/Loop: Shared_TryLockCycles
+ *  3  | HSEM_ID_M4_TO_M7_MBOX   | CPU2 (CM4)     | Superloop: Shared_TryLockCycles
+ *  4  | HSEM_ID_ADC_DATA        | CPU2 (CM4)     | CM4 loop / CM7 ETH: Shared_TryLockCycles (100 µs)
+ *  5  | BOARD_GPIO_HSEM_ID      | Mutex (Dual)   | Pin lock: FastTake / Release
+ * 6..23 | Reserved              | —              | Reserved for future shared drivers
+ * 24  | HSEM_TEST_M7_LOCK1      | Dual (Selftest)| Boot H0/H3/H7/H10 (CM7), H1 1-step, H1b; cleared H8
+ * 25  | HSEM_TEST_M7_LOCK2      | Dual (Selftest)| Boot H10 (CM7), H1 2-step; cleared in H8
+ * 26  | HSEM_TEST_ID_NOTIFY     | Dual (Selftest)| H9 cross-core notification (NVIC IRQ); cleared in H8
+ * 27  | HSEM_TEST_ID_TIMEOUT    | Dual (Selftest)| H4 bounded timeout (10 ms) CM7 & CM4; cleared in H8
+ * 28  | HSEM_TEST_M4_LOCK1      | Dual (Selftest)| Boot H0/H3/H7/H10 (CM4); H8 canary held by CM7
+ * 29  | HSEM_TEST_M4_LOCK2      | CPU2 (Selftest)| Boot H10 (CM4); B1 raw timing baseline
+ * 30  | HSEM_TEST_M4_NOTIFY     | CPU2 (Selftest)| H10 notification enable/disable on CM4
+ * 31  | Reserved (Selftest)     | —              | Reserved
  * ============================================================================
  */
 #define HSEM_ID_BOOT_SYNC       0U   /* reserved: M7 -> M4 boot release      */
@@ -96,10 +100,12 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t m4_to_m7_len;
     volatile uint8_t  m4_to_m7[SHARED_MBOX_SIZE];
 
-    volatile uint32_t m7_adc_lock_fail_count; /* Failures in Shared_TryLockCycles on CM7 (m3) */
-    volatile uint32_t m4_adc_lock_fail_count; /* Failures in Shared_TryLockCycles on CM4 (m3) */
-    volatile uint32_t cpu2_wake_count;        /* WFE wakeups during boot handshake (B2) */
-    uint8_t           _pad2[12];              /* Pad struct to 32-byte multiple */
+    volatile uint32_t m7_adc_lock_fail_count;      /* Failures in Shared_TryLockCycles on CM7 (m3) */
+    volatile uint32_t m4_adc_lock_fail_count;      /* Failures in Shared_TryLockCycles on CM4 (m3) */
+    volatile uint32_t cpu2_wake_count;             /* WFE wakeups during boot handshake (B2) */
+    volatile uint32_t m7_adc_lock_hold_cycles_max; /* Peak HSEM 4 hold time (DWT cycles @ 400 MHz) (R-B1) */
+    volatile uint32_t m4_adc_lock_hold_cycles_max; /* Peak HSEM 4 hold time (DWT cycles @ 200 MHz) (R-B1) */
+    uint8_t           _pad2[4];                    /* Pad struct to 32-byte multiple */
 
 } SharedMemory_t;
 
@@ -125,10 +131,14 @@ void Shared_Unlock(uint32_t id);
 #define SHARED_LOCK(id)     Shared_Lock(id)
 #define SHARED_UNLOCK(id)   Shared_Unlock(id)
 
-/* M7: Derived from measured SRAM4 retention under interrupt jitter: 25 µs */
-#define SHARED_ADC_TRYLOCK_US            25U
-#define SHARED_ADC_TRYLOCK_CYCLES_CM7   (SHARED_ADC_TRYLOCK_US * 400U) /* 10,000 cycles @ 400 MHz */
-#define SHARED_ADC_TRYLOCK_CYCLES_CM4   (SHARED_ADC_TRYLOCK_US * 200U) /*  5,000 cycles @ 200 MHz */
+/* R-B1: Derived from measured SRAM4 retention under contention:
+ *   - CM4 holds HSEM 4 up to 7,525 cycles @ 200 MHz (37.6 µs) in ADC_Acquisition_Process.
+ *   - CM7 holds HSEM 4 up to 17,069 cycles @ 400 MHz (42.7 µs) during WAVE serialization.
+ *   - Limit calibrated to 100 µs (>= 2x measured retention margin), eliminating contention drops.
+ */
+#define SHARED_ADC_TRYLOCK_US            100U
+#define SHARED_ADC_TRYLOCK_CYCLES_CM7   (SHARED_ADC_TRYLOCK_US * 400U) /* 40,000 cycles @ 400 MHz */
+#define SHARED_ADC_TRYLOCK_CYCLES_CM4   (SHARED_ADC_TRYLOCK_US * 200U) /* 20,000 cycles @ 200 MHz */
 #if defined(CORE_CM4)
 #define SHARED_ADC_TRYLOCK_CYCLES        SHARED_ADC_TRYLOCK_CYCLES_CM4
 #else

@@ -226,11 +226,12 @@ void ADC_Acquisition_Process(void)
             memcpy((void *)g_shared.adc.waveform, src, sizeof(uint16_t) * SHARED_ADC_WAVEFORM_SAMPLES);
             SHARED_UNLOCK(HSEM_ID_ADC_DATA);
 
-            /* B1d: Record retention cycle duration */
+            /* B1d / R-B1: Record retention cycle duration */
             uint32_t hold_cyc = DWT->CYCCNT - t_hold_start;
             g_adc_lock_hold_cycles_last = hold_cyc;
             if (hold_cyc > g_adc_lock_hold_cycles_max) { g_adc_lock_hold_cycles_max = hold_cyc; }
             if (hold_cyc < g_adc_lock_hold_cycles_min) { g_adc_lock_hold_cycles_min = hold_cyc; }
+            if (hold_cyc > g_shared.m4_adc_lock_hold_cycles_max) { g_shared.m4_adc_lock_hold_cycles_max = hold_cyc; }
         }
         else
         {
