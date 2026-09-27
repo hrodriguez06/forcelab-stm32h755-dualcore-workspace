@@ -164,6 +164,8 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
                 banner_found = False
                 fw_rev = ""
                 finished = False
+                fw_passed = False
+                cm4_received = False
 
                 start_time = time.monotonic()
                 while time.monotonic() - start_time < 90.0:
@@ -346,16 +348,19 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
 
                             elif "VERDICT: ALL GPIO SELF-TESTS PASSED" in text:
                                 log("[host] Firmware announced ALL GPIO SELF-TESTS PASSED.")
-                                finished = True
-                                break
+                                fw_passed = True
 
                             elif "VERDICT: GPIO SELF-TESTS FAILED" in text:
                                 log("[host] Firmware announced GPIO SELF-TESTS FAILED.")
                                 all_passed = False
-                                finished = True
-                                break
+                                fw_passed = True
 
-                        if finished:
+                            elif "CM4 VERDICT=" in text:
+                                log("[host] CM4 logs drained.")
+                                cm4_received = True
+
+                        if fw_passed and cm4_received:
+                            finished = True
                             break
 
                     time.sleep(0.002)
