@@ -68,6 +68,25 @@ def host_handshake(ad2: AD2, timeout_s: float = 10.0) -> bool:
     return True
 
 
+def reset_mcu() -> None:
+    """Reset target MCU via STM32_Programmer_CLI in HOTPLUG mode (S10: AD2 is in safe state S2)."""
+    cli_path = "STM32_Programmer_CLI"
+    cube_paths = [
+        pathlib.Path(r"C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe"),
+    ]
+    for p in cube_paths:
+        if p.is_file():
+            cli_path = str(p)
+            break
+
+    cmd = [cli_path, "-c", "port=SWD", "mode=HOTPLUG", "-rst"]
+    import subprocess
+    try:
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+    except Exception:
+        pass
+
+
 def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Path | None) -> int:
     log_file = None
     if log_path:
@@ -136,7 +155,10 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
             # 3. Connect to Serial Port and Monitor
             log(f"[serial] Connecting to {port_name} at {baud} 8N1...")
             with SerialPort(port_name, baud) as ser:
-                log(f"[serial] Connected. Waiting for banner (S8)...")
+                log(f"[serial] Connected. Resetting MCU under S2 safe state (S10)...")
+                reset_mcu()
+                time.sleep(0.1)
+                log(f"[serial] Waiting for banner (S8)...")
 
                 pending = b""
                 banner_found = False
