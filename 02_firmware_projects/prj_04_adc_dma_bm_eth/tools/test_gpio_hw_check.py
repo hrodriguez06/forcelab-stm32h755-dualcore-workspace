@@ -221,7 +221,26 @@ class MockSerialPort:
             return data
 
 
-class TestHarnessScenarios(unittest.TestCase):
+class BaseSimTest(unittest.TestCase):
+    """Base class for tests using SimBus: enforces invariant checking across all tests (R2-M2)."""
+
+    def setUp(self):
+        super().setUp()
+        SimBus.clear_instances()
+        self._expect_contention = False
+
+    def tearDown(self):
+        super().tearDown()
+        if not getattr(self, "_expect_contention", False):
+            for b in SimBus.get_instances():
+                self.assertEqual(
+                    b.violations, [],
+                    f"R2-M2: Electrical contention detected on SimBus: {b.violations}"
+                )
+        SimBus.clear_instances()
+
+
+class TestHarnessScenarios(BaseSimTest):
     """The 14 mandatory test scenarios (E1..E14) specified in §2.1."""
 
     def create_simulated_bench(
@@ -631,11 +650,42 @@ class TestHarnessScenarios(unittest.TestCase):
         self.assertEqual(code, 0, "Spurious line before banner should be ignored as non-protocol")
         self.assertTrue(any("HOST VERDICT=PASS" in l for l in logs))
 
+    # ---- Control del control de contención (R2-M2) --------------------------
+    def test_control_of_contention_detection(self):
+        """Control of control (R2-M2): Provoke a contention in the model (MCU drives bus
+        during step 9 while AD2 drives it) and verify that bus.violations is NOT empty
+        and that the common assertion detects it."""
+        faults = FaultInjectionConfig()
+        faults.contention_step9_mcu_drives_bus = True
+        ad2, ser, clock, reset_fn, _, bus = self.create_simulated_bench(faults=faults)
 
-class TestSafetyGuardsDirect(unittest.TestCase):
+        code = run_selftest(
+            serial_port=ser,
+            ad2=ad2,
+            clock=clock,
+            reset_fn=reset_fn,
+            expected_rev="ca569b6",
+        )
+
+        self.assertNotEqual(code, 0)
+        self.assertTrue(len(bus.violations) > 0, "SimBus should have recorded at least one electrical contention")
+        first_violation = bus.violations[0]
+        self.assertEqual(first_violation["lines"] & AD2_DIO_BUS_MASK, AD2_DIO_BUS_MASK, "Contention should be on bus lines 0x00FF")
+
+        # Verify that the common assertion WOULD fail if contention was not expected:
+        with self.assertRaises(AssertionError):
+            for b in SimBus.get_instances():
+                self.assertEqual(b.violations, [], "Common check should detect this contention!")
+
+        # Mark that this test deliberately expected contention so tearDown doesn't fail
+        self._expect_contention = True
+
+
+class TestSafetyGuardsDirect(BaseSimTest):
     """Direct component unit tests for S8, S10, S5, S7."""
 
     def setUp(self):
+        super().setUp()
         self.mock_dwf = MockDwfLib()
         self.ad2 = AD2(sn="210321B5D38D", dwf_lib=self.mock_dwf)
         self.ad2.open()
@@ -644,6 +694,7 @@ class TestSafetyGuardsDirect(unittest.TestCase):
 
     def tearDown(self):
         self.ad2.close()
+        super().tearDown()
 
     def test_s5_private_token_constructor_rejected(self):
         """S5: Direct instantiation of BusToken from outside raises AD2SafetyViolation."""

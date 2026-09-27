@@ -11,6 +11,7 @@ at every step, clock tick, and pin transition.
 from __future__ import annotations
 
 import re
+import time
 from typing import Callable, Optional, Sequence
 
 
@@ -50,6 +51,20 @@ STEP_DONE           = 99
 class SimBus:
     """Models the physical wiring between MCU and AD2."""
 
+    _instances: list[SimBus] = []
+
+    @classmethod
+    def register(cls, instance: SimBus) -> None:
+        cls._instances.append(instance)
+
+    @classmethod
+    def clear_instances(cls) -> None:
+        cls._instances.clear()
+
+    @classmethod
+    def get_instances(cls) -> list[SimBus]:
+        return list(cls._instances)
+
     def __init__(self, ad2):
         self.ad2 = ad2
         # MCU pin states
@@ -62,11 +77,22 @@ class SimBus:
         self.pf14_voltage = 0.0
         self.pf15_voltage = 0.0
 
+        # R2-M2: Contention tracking list
+        self.violations: list[dict] = []
+        SimBus.register(self)
+
     def check_electrical_invariant(self) -> None:
         """Enforces: never are both AD2 and MCU driving the same pin at the same time."""
         ad2_oe = self.ad2.get_oe()
         contention = self.mcu_oe & ad2_oe
         if contention != 0:
+            rec = {
+                "timestamp": time.monotonic(),
+                "lines": contention,
+                "mcu_oe": self.mcu_oe,
+                "ad2_oe": ad2_oe,
+            }
+            self.violations.append(rec)
             raise ElectricalContentionError(
                 f"ELECTRICAL INVARIANT VIOLATED! Contention on lines 0x{contention:04X} "
                 f"(MCU OE=0x{self.mcu_oe:04X}, AD2 OE=0x{ad2_oe:04X})"
@@ -166,6 +192,7 @@ class FaultInjectionConfig:
         self.banner_version: Optional[int] = None # E13: custom version
         self.cm4_rev: Optional[str] = None        # E13: custom CM4 rev
         self.spurious_line_before_banner: Optional[str] = None  # E14
+        self.contention_step9_mcu_drives_bus: bool = False      # R2-M2: MCU drives bus while AD2 drives in Step 9
 
 
 class FirmwareModel:
@@ -469,6 +496,10 @@ class FirmwareModel:
         ok = yield from self.hs_mcu("step9_ready")
         if not ok:
             return
+
+        if self.faults.contention_step9_mcu_drives_bus:
+            # Fault injection (R2-M2): MCU drives the bus while AD2 is supposed to drive it
+            self.bus.set_mcu_output(DIO_BUS_MASK, 0xFF)
 
         # Host walks 10 bits: [8, 10, 0, 1, 2, 3, 4, 5, 6, 7]
         ad2_walk_bits = [8, 10, 0, 1, 2, 3, 4, 5, 6, 7]
