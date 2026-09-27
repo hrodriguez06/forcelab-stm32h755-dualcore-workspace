@@ -67,8 +67,12 @@ void app_main(void)
     LED_BootStage(LED_BOOT_APP_ENTERED);
     App_Log_Init();
 
+#ifndef FW_GIT_REV
+#define FW_GIT_REV "unknown"
+#endif
+
     APP_LOG(" ");
-    APP_LOG("=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===");
+    APP_LOG("=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev %s ===", FW_GIT_REV);
     APP_LOG("[sys] sysclk=%lu Hz hclk=%lu Hz",
             (unsigned long)HAL_RCC_GetSysClockFreq(),
             (unsigned long)HAL_RCC_GetHCLKFreq());

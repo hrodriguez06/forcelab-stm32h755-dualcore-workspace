@@ -37,11 +37,18 @@ def run_warm_resets(
     stop_phrase: str = "(CPU2 alive)",
 ) -> None:
     print(f"Opening {port_name}...")
+    git_rev = "unknown"
+    try:
+        git_rev = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=str(REPO_ROOT), text=True).strip()
+    except Exception:
+        pass
+
     with SerialPort(port_name, 115200) as ser:
         records: list[str] = []
         header = (
             "================================================================================\n"
             f"{title}\n"
+            f"Firmware Git Revision: {git_rev}\n"
             "Target: NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK V3)\n"
             "Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst\n"
             "================================================================================\n\n"
