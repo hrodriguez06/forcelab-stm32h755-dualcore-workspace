@@ -252,6 +252,7 @@ class TestHarnessScenarios(BaseSimTest):
     ):
         mock_dwf = MockDwfLib()
         ad2 = AD2(sn="210321B5D38D", dwf_lib=mock_dwf)
+        ad2._mock_dwf = mock_dwf
         ad2.open()
 
         bus = SimBus(ad2)
@@ -679,6 +680,118 @@ class TestHarnessScenarios(BaseSimTest):
 
         # Mark that this test deliberately expected contention so tearDown doesn't fail
         self._expect_contention = True
+
+    # ---- E15: Paso 8, MCU no suelta el bus ----------------------------------
+    def test_e15_step8_mcu_bus_release_failure_aborts_without_bus_oe(self):
+        """E15: In Step 8, MCU fails to release bus (BUSCHK up != 0xFF or down != 0x00).
+        Must abort with FAIL, OE=0 at end, no bus bits ever written to OE, and 0 contentions."""
+        # Case A: BUSCHK up != 0xFF
+        faults_a = FaultInjectionConfig()
+        faults_a.step8_buschk_up_fail = True
+        ad2_a, ser_a, clock_a, reset_a, _, bus_a = self.create_simulated_bench(faults=faults_a)
+        logs_a = []
+        code_a = run_selftest(serial_port=ser_a, ad2=ad2_a, clock=clock_a, reset_fn=reset_a, expected_rev="ca569b6", log_fn=logs_a.append)
+        self.assertNotEqual(code_a, 0)
+        self.assertEqual(ad2_a.get_oe(), 0x0000)
+        self.assertTrue(any("HOST VERDICT=FAIL" in l for l in logs_a))
+        oe_writes_a = [c[2] for c in ad2_a._mock_dwf.calls if c[0] == "FDwfDigitalIOOutputEnableSet"]
+        self.assertTrue(all((oe & AD2_DIO_BUS_MASK) == 0 for oe in oe_writes_a), f"OE with bus bits written: {oe_writes_a}")
+        self.assertEqual(bus_a.violations, [])
+
+        # Case B: BUSCHK down != 0x00
+        faults_b = FaultInjectionConfig()
+        faults_b.step8_buschk_down_fail = True
+        ad2_b, ser_b, clock_b, reset_b, _, bus_b = self.create_simulated_bench(faults=faults_b)
+        logs_b = []
+        code_b = run_selftest(serial_port=ser_b, ad2=ad2_b, clock=clock_b, reset_fn=reset_b, expected_rev="ca569b6", log_fn=logs_b.append)
+        self.assertNotEqual(code_b, 0)
+        self.assertEqual(ad2_b.get_oe(), 0x0000)
+        self.assertTrue(any("HOST VERDICT=FAIL" in l for l in logs_b))
+        oe_writes_b = [c[2] for c in ad2_b._mock_dwf.calls if c[0] == "FDwfDigitalIOOutputEnableSet"]
+        self.assertTrue(all((oe & AD2_DIO_BUS_MASK) == 0 for oe in oe_writes_b), f"OE with bus bits written: {oe_writes_b}")
+        self.assertEqual(bus_b.violations, [])
+
+    # ---- E16: Paso 9, MCU no suelta el bus ----------------------------------
+    def test_e16_step9_mcu_bus_release_failure_aborts_without_bus_oe(self):
+        """E16: In Step 9, MCU fails to release bus (BUSCHK up != 0xFF or down != 0x00).
+        Must abort before any drive_bus, FAIL, OE=0 at end, no bus bits written to OE, and 0 contentions."""
+        # Case A: BUSCHK up != 0xFF
+        faults_a = FaultInjectionConfig()
+        faults_a.step9_buschk_up_fail = True
+        ad2_a, ser_a, clock_a, reset_a, _, bus_a = self.create_simulated_bench(faults=faults_a)
+        logs_a = []
+        code_a = run_selftest(serial_port=ser_a, ad2=ad2_a, clock=clock_a, reset_fn=reset_a, expected_rev="ca569b6", log_fn=logs_a.append)
+        self.assertNotEqual(code_a, 0)
+        self.assertEqual(ad2_a.get_oe(), 0x0000)
+        self.assertTrue(any("HOST VERDICT=FAIL" in l for l in logs_a))
+        oe_writes_a = [c[2] for c in ad2_a._mock_dwf.calls if c[0] == "FDwfDigitalIOOutputEnableSet"]
+        self.assertTrue(all((oe & AD2_DIO_BUS_MASK) == 0 for oe in oe_writes_a), f"OE with bus bits written: {oe_writes_a}")
+        self.assertEqual(bus_a.violations, [])
+
+        # Case B: BUSCHK down != 0x00
+        faults_b = FaultInjectionConfig()
+        faults_b.step9_buschk_down_fail = True
+        ad2_b, ser_b, clock_b, reset_b, _, bus_b = self.create_simulated_bench(faults=faults_b)
+        logs_b = []
+        code_b = run_selftest(serial_port=ser_b, ad2=ad2_b, clock=clock_b, reset_fn=reset_b, expected_rev="ca569b6", log_fn=logs_b.append)
+        self.assertNotEqual(code_b, 0)
+        self.assertEqual(ad2_b.get_oe(), 0x0000)
+        self.assertTrue(any("HOST VERDICT=FAIL" in l for l in logs_b))
+        oe_writes_b = [c[2] for c in ad2_b._mock_dwf.calls if c[0] == "FDwfDigitalIOOutputEnableSet"]
+        self.assertTrue(all((oe & AD2_DIO_BUS_MASK) == 0 for oe in oe_writes_b), f"OE with bus bits written: {oe_writes_b}")
+        self.assertEqual(bus_b.violations, [])
+
+    # ---- E17: Mutación de la guarda pone pruebas en rojo --------------------
+    def test_e17_guard_mutations_break_tests(self):
+        """E17: Mutating s5_verify_released (disabling bus_up or bus_down comparison)
+        on an isolated in-memory copy of the module causes at least one of E6, E15, or E16 to fail."""
+        import importlib.util
+
+        src_path = pathlib.Path(__file__).parent / "gpio_hw_check.py"
+        src_text = src_path.read_text(encoding="utf-8")
+
+        # 1. Mutate bus_up comparison: 'if bus_up != 0xFF:' -> 'if False:'
+        self.assertIn("if bus_up != 0xFF:", src_text)
+        mutated_up = src_text.replace("if bus_up != 0xFF:", "if False:  # MUTATION: disabled bus_up check")
+
+        spec_up = importlib.util.spec_from_loader("gpio_hw_check_mut_up", loader=None)
+        mod_up = importlib.util.module_from_spec(spec_up)
+        mod_up.__file__ = str(src_path)
+        exec(compile(mutated_up, "gpio_hw_check_mut_up.py", "exec"), mod_up.__dict__)
+
+        # Test A: Under mod_up, E15 case A (step 8 bad up) is NOT caught by S5!
+        faults_up = FaultInjectionConfig()
+        faults_up.step8_buschk_up_fail = True
+        ad2_u, ser_u, clock_u, reset_u, _, _ = self.create_simulated_bench(faults=faults_up)
+        logs_u = []
+        mod_up.run_selftest(serial_port=ser_u, ad2=ad2_u, clock=clock_u, reset_fn=reset_u, expected_rev="ca569b6", log_fn=logs_u.append)
+        caught_s5_up = any("bus contention check failed at step 8" in l for l in logs_u)
+        self.assertFalse(caught_s5_up, "Mutated module should fail to catch S5 bus_up contention!")
+
+        # Test B: Under mod_up, T0b(c) (E6 nominal) fails because s5_verify_released did NOT catch contention!
+        ad2_t0b, ser_t0b, clock_t0b, reset_t0b, _, _ = self.create_simulated_bench()
+        logs_t0b = []
+        code_t0b = mod_up.run_selftest(serial_port=ser_t0b, ad2=ad2_t0b, clock=clock_t0b, reset_fn=reset_t0b, expected_rev="ca569b6", log_fn=logs_t0b.append)
+        self.assertNotEqual(code_t0b, 0, "Disabling bus_up check must cause T0b(c) to FAIL")
+        self.assertFalse(any("T0b(c) S5 negative control PASSED" in l for l in logs_t0b), "T0b(c) must not pass when bus_up check is disabled")
+
+        # 2. Mutate bus_down comparison: 'if bus_down != 0x00:' -> 'if False:'
+        self.assertIn("if bus_down != 0x00:", src_text)
+        mutated_down = src_text.replace("if bus_down != 0x00:", "if False:  # MUTATION: disabled bus_down check")
+
+        spec_down = importlib.util.spec_from_loader("gpio_hw_check_mut_down", loader=None)
+        mod_down = importlib.util.module_from_spec(spec_down)
+        mod_down.__file__ = str(src_path)
+        exec(compile(mutated_down, "gpio_hw_check_mut_down.py", "exec"), mod_down.__dict__)
+
+        # Test C: Under mod_down, E15 case B (step 8 bad down) is NOT caught by S5!
+        faults_down = FaultInjectionConfig()
+        faults_down.step8_buschk_down_fail = True
+        ad2_d, ser_d, clock_d, reset_d, _, _ = self.create_simulated_bench(faults=faults_down)
+        logs_d = []
+        mod_down.run_selftest(serial_port=ser_d, ad2=ad2_d, clock=clock_d, reset_fn=reset_d, expected_rev="ca569b6", log_fn=logs_d.append)
+        caught_s5_down = any("BUSCHK down gave 0xFF, expected 0x00" in l for l in logs_d)
+        self.assertFalse(caught_s5_down, "Mutated module should fail to catch S5 bus_down contention!")
 
 
 class TestSafetyGuardsDirect(BaseSimTest):

@@ -596,9 +596,12 @@ static bool test_t0b_s5_neg(void)
     if (!all_inputs)
     {
         pass = false;
+        APP_LOG("[m7_gpio_test] T0b_c safe state verification FAILED: pins not input");
     }
-
-    APP_LOG("[m7_gpio_test] T0b_c safe state verified: all wired pins input");
+    else
+    {
+        APP_LOG("[m7_gpio_test] T0b_c safe state verified: all wired pins input");
+    }
 
     return pass;
 }

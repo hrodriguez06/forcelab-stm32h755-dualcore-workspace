@@ -109,8 +109,16 @@ class BenchAbort(Exception):
 
 class BusContention(BenchAbort):
     """Raised specifically when bus contention is detected during S5 check."""
-    def __init__(self, value: int, msg: str = ""):
+    def __init__(
+        self,
+        value: int,
+        msg: str = "",
+        announced: Optional[int] = None,
+        oe_checks: Optional[tuple[int, int, int]] = None,
+    ):
         self.value = value
+        self.announced = announced
+        self.oe_checks = oe_checks
         super().__init__(msg or f"Bus contention detected: read 0x{value:02X}")
 
 
@@ -150,6 +158,11 @@ class StepTracker:
 
     def abort(self) -> None:
         self._aborted = True
+        if self.current_token:
+            self.current_token.invalidate()
+            self.current_token = None
+
+    def invalidate_token(self) -> None:
         if self.current_token:
             self.current_token.invalidate()
             self.current_token = None
@@ -434,20 +447,20 @@ def s5_verify_released(
 ) -> BusToken:
     """S5: Break-before-make electrical verification of bus release.
     1. Read-back OE & 0x00FF == 0 (Point 1: step start).
-    2. Wait for BUSCHK up line.
+    2. Wait for BUSCHK up line (capturing optional drive=0x.. pattern).
     3. Read-back OE & 0x00FF == 0 (Point 2: pre-read).
     4. Read bus DIO0..DIO7. If != 0xFF:
-       Force S2, log OE values, and raise BusContention(bus_up) or BenchAbort.
+       Force S2, record OE values, and raise BusContention(bus_up, msg, announced, oe_checks).
     5. Handshake HS_MCU.
     6. Wait for BUSCHK down line.
     7. Read bus DIO0..DIO7. If != 0x00:
-       Force S2, log OE values, and raise BenchAbort.
+       Force S2, record OE values, and raise BenchAbort(msg).
     8. Handshake HS_MCU.
     9. Creates and installs valid BusToken in tracker.
     """
     oe_start = ad2.get_oe() & AD2_DIO_BUS_MASK
     if oe_start != 0:
-        tracker.abort()
+        tracker.invalidate_token()
         ad2.set_safe_state()
         msg = f"ABORT: S5 contention check failed at step {step_id}: AD2 OE has bus bits enabled at start (0x{oe_start:04X})"
         if log_fn:
@@ -455,14 +468,15 @@ def s5_verify_released(
         raise BenchAbort(msg)
 
     # 1. Wait for BUSCHK up line
-    line_reader.expect(r"BUSCHK up", timeout_s=10.0)
+    m_up = line_reader.expect(r"^\[m7_gpio_test\] BUSCHK up(?: drive=(0x[0-9a-fA-F]+))?", timeout_s=10.0)
+    announced = int(m_up.group(1), 16) if m_up.group(1) else None
 
     oe_pre = ad2.get_oe() & AD2_DIO_BUS_MASK
     dio_up = ad2.digital_io_read()
     bus_up = dio_up & AD2_DIO_BUS_MASK
 
     if bus_up != 0xFF:
-        tracker.abort()
+        tracker.invalidate_token()
         ad2.set_safe_state()
         oe_post = ad2.get_oe() & AD2_DIO_BUS_MASK
         msg = (
@@ -471,23 +485,24 @@ def s5_verify_released(
         )
         if log_fn:
             log_fn(f"[ad2] {msg}")
-        raise BusContention(bus_up, msg)
+        raise BusContention(bus_up, msg, announced=announced, oe_checks=(oe_start, oe_pre, oe_post))
 
     hs_mcu(ad2, clock, log_fn=log_fn, timeout_s=10.0)
 
     # 2. Wait for BUSCHK down line
-    line_reader.expect(r"BUSCHK down", timeout_s=10.0)
+    line_reader.expect(r"^\[m7_gpio_test\] BUSCHK down", timeout_s=10.0)
 
+    oe_pre_down = ad2.get_oe() & AD2_DIO_BUS_MASK
     dio_down = ad2.digital_io_read()
     bus_down = dio_down & AD2_DIO_BUS_MASK
 
     if bus_down != 0x00:
-        tracker.abort()
+        tracker.invalidate_token()
         ad2.set_safe_state()
         oe_post = ad2.get_oe() & AD2_DIO_BUS_MASK
         msg = (
             f"ABORT: bus contention check failed at step {step_id}: "
-            f"BUSCHK down gave 0x{bus_down:02X}, expected 0x00 (OE start=0x{oe_start:02X}, pre=0x{oe_pre:02X}, post=0x{oe_post:02X})"
+            f"BUSCHK down gave 0x{bus_down:02X}, expected 0x00 (OE start=0x{oe_start:02X}, pre=0x{oe_pre_down:02X}, post=0x{oe_post:02X})"
         )
         if log_fn:
             log_fn(f"[ad2] {msg}")
@@ -673,33 +688,34 @@ def run_selftest(
         m_step4 = line_reader.expect(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)", timeout_s=10.0)
         step_tracker.validate_announcement(m_step4.group(0), ad2, log_fn=log)
 
-        log("[ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...")
-        oe_p1 = ad2.get_oe() & AD2_DIO_BUS_MASK
-
-        # Read announced driving pattern
-        m_drive = line_reader.expect(r"^\[m7_gpio_test\] BUSCHK up drive=(0x[0-9a-fA-F]+)", timeout_s=10.0)
-        announced_pattern = int(m_drive.group(1), 16)
-        log(f"[ad2] MCU announced drive pattern: 0x{announced_pattern:02X}")
-
-        oe_p2 = ad2.get_oe() & AD2_DIO_BUS_MASK
-        dio_read = ad2.digital_io_read()
-        bus_read = dio_read & AD2_DIO_BUS_MASK
-
+        log("[ad2] Step T0b(c): Calling s5_verify_released to verify S5 guard stops contention...")
         t0b_c_contention_caught = False
-        if bus_read != 0xFF:
-            t0b_c_contention_caught = True
-            log(f"[ad2] Contention verified on BUSCHK up: read 0x{bus_read:02X} (announced=0x{announced_pattern:02X})")
+        try:
+            s5_verify_released(ad2, step_tracker, STEP_T0B_S5_NEG, line_reader, clock=clock, log_fn=log)
+            log("[ad2] T0b(c) S5 negative control FAILED: s5_verify_released did not detect contention!")
+        except BusContention as bc:
+            oe_p1, oe_p2, oe_p3 = bc.oe_checks if bc.oe_checks else (1, 1, 1)
+            log(f"[ad2] MCU announced drive pattern: 0x{bc.announced:02X}" if bc.announced is not None else "[ad2] MCU announced drive pattern: None")
+            log(f"[ad2] Contention verified on BUSCHK up: read 0x{bc.value:02X} (announced=0x{bc.announced:02X})")
+            log(f"[ad2] T0b(c) OE checks: Point 1 (start)=0x{oe_p1:02X}, Point 2 (pre-read)=0x{oe_p2:02X}, Point 3 (post-check)=0x{oe_p3:02X}")
+            if bc.announced is not None and bc.value == bc.announced and oe_p1 == 0 and oe_p2 == 0 and oe_p3 == 0:
+                t0b_c_contention_caught = True
+                checklist_results["t0b_c_contention"] = True
+                log("[ad2] T0b(c) S5 negative control PASSED.")
+            else:
+                log(f"[ad2] T0b(c) S5 negative control FAILED (read=0x{bc.value:02X}, exp=0x{bc.announced:02X}, OE=({oe_p1},{oe_p2},{oe_p3}))")
+        except Exception as e:
+            log(f"[ad2] T0b(c) S5 negative control FAILED with unexpected exception: {e}")
+            step_tracker.abort()
+            raise
 
-        oe_p3 = ad2.get_oe() & AD2_DIO_BUS_MASK
-        log(f"[ad2] T0b(c) OE checks: Point 1 (start)=0x{oe_p1:02X}, Point 2 (pre-read)=0x{oe_p2:02X}, Point 3 (post-check)=0x{oe_p3:02X}")
-
-        if t0b_c_contention_caught and (bus_read == announced_pattern) and (oe_p1 == 0 and oe_p2 == 0 and oe_p3 == 0):
-            checklist_results["t0b_c_contention"] = True
-            log("[ad2] T0b(c) S5 negative control PASSED.")
-        else:
-            log(f"[ad2] T0b(c) S5 negative control FAILED (caught={t0b_c_contention_caught}, bus=0x{bus_read:02X}, exp=0x{announced_pattern:02X})")
+        if not t0b_c_contention_caught:
+            step_tracker.abort()
+            raise BenchAbort("T0b(c) S5 negative control failed")
 
         # Handshake for contention check (single handshake in T0b(c))
+        # Restore HOST_REQ as output static (since S2 set it to input)
+        ad2.set_oe(AD2_DIO_HOST_REQ, GPIO_BENCH_BUS_NONE)
         hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0)
 
         # MCU releases bus and announces safe state

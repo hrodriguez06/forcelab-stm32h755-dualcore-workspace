@@ -193,6 +193,11 @@ class FaultInjectionConfig:
         self.cm4_rev: Optional[str] = None        # E13: custom CM4 rev
         self.spurious_line_before_banner: Optional[str] = None  # E14
         self.contention_step9_mcu_drives_bus: bool = False      # R2-M2: MCU drives bus while AD2 drives in Step 9
+        self.step8_buschk_up_fail: bool = False                 # E15: MCU fails buschk up in Step 8
+        self.step8_buschk_down_fail: bool = False               # E15: MCU fails buschk down in Step 8
+        self.step9_buschk_up_fail: bool = False                 # E16: MCU fails buschk up in Step 9
+        self.step9_buschk_down_fail: bool = False               # E16: MCU fails buschk down in Step 9
+        self.t0b_c_safe_fail: bool = False                      # R2-m5: T0b(c) safe state check fails
 
 
 class FirmwareModel:
@@ -364,7 +369,10 @@ class FirmwareModel:
 
         # Release bus
         self.bus.clear_mcu_output(DIO_BUS_MASK)
-        self.log_m7("[m7_gpio_test] T0b_c safe state verified: all wired pins input")
+        if self.faults.t0b_c_safe_fail:
+            self.log_m7("[m7_gpio_test] T0b_c safe state verification FAILED: pins not input")
+        else:
+            self.log_m7("[m7_gpio_test] T0b_c safe state verified: all wired pins input")
         yield
 
         # 7. Step 5: T0b(d) 10-second Timeout Test
@@ -431,13 +439,19 @@ class FirmwareModel:
         # 10. Step 8: T0a Walking-1 MCU -> AD2 (11 lines)
         self._enter_step(STEP_T0A_MCU_TO_AD2, "MCU")
         # S5 break-before-make
-        self.bus.mcu_pupdr = 0x5555  # Bus pull-up
+        if self.faults.step8_buschk_up_fail:
+            self.bus.mcu_pupdr = 0xAAAA  # Pulled down -> bus reads 0x00 != 0xFF
+        else:
+            self.bus.mcu_pupdr = 0x5555  # Bus pull-up
         self.log_m7("[m7_gpio_test] BUSCHK up")
         yield
         ok = yield from self.hs_mcu("step8_up")
         if not ok:
             return
-        self.bus.mcu_pupdr = 0xAAAA  # Bus pull-down
+        if self.faults.step8_buschk_down_fail:
+            self.bus.mcu_pupdr = 0x5555  # Pulled up -> bus reads 0xFF != 0x00
+        else:
+            self.bus.mcu_pupdr = 0xAAAA  # Bus pull-down
         self.log_m7("[m7_gpio_test] BUSCHK down")
         yield
         ok = yield from self.hs_mcu("step8_down")
@@ -477,13 +491,19 @@ class FirmwareModel:
         # 11. Step 9: T0a Walking-1 AD2 -> MCU (10 lines)
         self._enter_step(STEP_T0A_AD2_TO_MCU, "AD2")
         # S5 break-before-make
-        self.bus.mcu_pupdr = 0x5555  # Bus pull-up
+        if self.faults.step9_buschk_up_fail:
+            self.bus.mcu_pupdr = 0xAAAA  # Pulled down -> bus reads 0x00 != 0xFF
+        else:
+            self.bus.mcu_pupdr = 0x5555  # Bus pull-up
         self.log_m7("[m7_gpio_test] BUSCHK up")
         yield
         ok = yield from self.hs_mcu("step9_up")
         if not ok:
             return
-        self.bus.mcu_pupdr = 0xAAAA  # Bus pull-down
+        if self.faults.step9_buschk_down_fail:
+            self.bus.mcu_pupdr = 0x5555  # Pulled up -> bus reads 0xFF != 0x00
+        else:
+            self.bus.mcu_pupdr = 0xAAAA  # Bus pull-down
         self.log_m7("[m7_gpio_test] BUSCHK down")
         yield
         ok = yield from self.hs_mcu("step9_down")
