@@ -177,7 +177,7 @@ class AD2:
 
     # ---- Analog In (Scope) --------------------------------------------------
 
-    def analog_in_setup_dc(self, channel: int = 0, voltage_range: float = 5.0) -> None:
+    def analog_in_setup_dc(self, channel: int = 0, voltage_range: float = 10.0) -> None:
         """Configure scope channel for DC measurement."""
         self._dwf.FDwfAnalogInChannelEnableSet(self._hdwf, ctypes.c_int(channel), ctypes.c_int(1))
         self._dwf.FDwfAnalogInChannelRangeSet(self._hdwf, ctypes.c_int(channel), ctypes.c_double(voltage_range))

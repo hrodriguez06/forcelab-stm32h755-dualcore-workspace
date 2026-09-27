@@ -163,6 +163,7 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
                 pending = b""
                 banner_found = False
                 fw_rev = ""
+                finished = False
 
                 start_time = time.monotonic()
                 while time.monotonic() - start_time < 90.0:
@@ -313,8 +314,8 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
 
                             elif "T0a_scope ready bus=NONE" in text:
                                 log("[ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...")
-                                ad2.analog_in_setup_dc(channel=0, voltage_range=5.0)
-                                ad2.analog_in_setup_dc(channel=1, voltage_range=5.0)
+                                ad2.analog_in_setup_dc(channel=0, voltage_range=10.0)
+                                ad2.analog_in_setup_dc(channel=1, voltage_range=10.0)
                                 time.sleep(0.05)
 
                                 # 1. LOW measurement
@@ -345,12 +346,17 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
 
                             elif "VERDICT: ALL GPIO SELF-TESTS PASSED" in text:
                                 log("[host] Firmware announced ALL GPIO SELF-TESTS PASSED.")
+                                finished = True
                                 break
 
                             elif "VERDICT: GPIO SELF-TESTS FAILED" in text:
                                 log("[host] Firmware announced GPIO SELF-TESTS FAILED.")
                                 all_passed = False
+                                finished = True
                                 break
+
+                        if finished:
+                            break
 
                     time.sleep(0.002)
 
