@@ -1,0 +1,388 @@
+================================================================================
+STM32H755 Shared Drivers Library: GPIO Driver (00_gpio)
+Test T18: Full Regression & Baseline Performance Capture (F0 Reference)
+Platform: NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK/V3 COM4)
+Configuration: prj_04_adc_dma_bm_eth [debug preset], GPIO_DRIVER_SELFTEST=OFF
+Firmware Git Revision: 60b1ac9
+Date: 2026-09-26
+================================================================================
+
+1. System Boot Log (ST-LINK VCP COM4 @ 115200 8N1):
+---------------------------------------------------
+[+ 0.000s]  
+[+ 0.000s] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 60b1ac9 ===
+[+ 0.000s] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[+ 0.000s] [sys] silicon revision id=0x2003
+[+ 0.000s] [ipc] shared block at 0x38008000, magic=0x48375353
+[+ 0.000s] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[+ 0.011s] [net] starting TCP/IP stack
+[+ 0.011s] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[+ 0.021s] [net] mac=02:00:00:00:00:01 phy_addr=0
+[+ 0.021s] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[+ 0.021s] [phy] partner advertised:
+[+ 0.032s] [net] udp echo listening on port 7
+[+ 0.032s] [adc_srv] listening on UDP port 5001
+[+ 0.032s] [ipc] m7=1 m4=0  (CPU2 starting)
+[+ 1.609s] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[+ 1.619s] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[+ 1.619s] [net] link up: 100 Mbps full duplex
+[+ 2.010s] [ipc] m7=4 m4=20  (CPU2 alive)
+[+ 3.983s] [ipc] m7=8 m4=40  (CPU2 alive)
+[+ 4.977s] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=2 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[+ 5.956s] [ipc] m7=12 m4=60  (CPU2 alive)
+
+Result: PASS
+- CPU2 handshake via HSEM_BM_BootWaitForCpu1 and HSEM_BM_BootReleaseCpu2 completed.
+- Dual-core heartbeat ratio m4/m7 = 60 / 12 = 5.0 (stable).
+
+2. Network Stress Test (tools/net_check.py against 192.168.1.150):
+------------------------------------------------------------------
+Board    : 192.168.1.150
+UDP echo : port 7
+
+  OK    ICMP  4/4 replies
+  OK    UDP     1 B  rtt= 6.05 ms
+  OK    UDP    25 B  rtt= 8.52 ms
+  OK    UDP   512 B  rtt= 2.64 ms
+  OK    UDP  1024 B  rtt= 1.14 ms
+  OK    UDP  1472 B  rtt= 2.20 ms
+  OK    burst  100/100 returned  (0.2 s)
+
+PASS  3/3 checks
+Now confirm the board agrees: rx_nobuf, tx_nobuf and dma_err
+should all still read 0 in  py tools/monitor.py --timeout 15
+
+Result: PASS (0 rx_nobuf, 0 tx_nobuf, 0 dma_err, 0 acl_drop)
+
+3. ADC Telemetry Streaming (300 queries via tools/query_adc.py):
+-----------------------------------------------------------------
+[*] Querying ADC telemetry from 192.168.1.150:5001 (Mode: TEXT)...
+[0001] ADC1_CH5 [PB1 [A3]]: raw=1405, avg=1447 (0.072 V), min=1175, max=1642, rate=500000, seq=205373, samples=105150976, dma_tc=102686, dma_ht=102687, err=0, ovr=0, adc_ovr=0, m4_hb=2103
+[0002] ADC1_CH5 [PB1 [A3]]: raw=1318, avg=1426 (0.071 V), min=1162, max=1654, rate=500000, seq=205473, samples=105202176, dma_tc=102736, dma_ht=102737, err=0, ovr=0, adc_ovr=0, m4_hb=2104
+[0003] ADC1_CH5 [PB1 [A3]]: raw=1383, avg=1447 (0.072 V), min=1215, max=1650, rate=500000, seq=205574, samples=105253888, dma_tc=102787, dma_ht=102787, err=0, ovr=0, adc_ovr=0, m4_hb=2105
+[0004] ADC1_CH5 [PB1 [A3]]: raw=1439, avg=1427 (0.071 V), min=1176, max=1639, rate=500000, seq=205677, samples=105306624, dma_tc=102838, dma_ht=102839, err=0, ovr=0, adc_ovr=0, m4_hb=2106
+[0005] ADC1_CH5 [PB1 [A3]]: raw=1244, avg=1375 (0.069 V), min=1170, max=1622, rate=500000, seq=205779, samples=105358848, dma_tc=102889, dma_ht=102890, err=0, ovr=0, adc_ovr=0, m4_hb=2107
+[0006] ADC1_CH5 [PB1 [A3]]: raw=1373, avg=1455 (0.073 V), min=1159, max=1672, rate=500000, seq=205883, samples=105412096, dma_tc=102941, dma_ht=102942, err=0, ovr=0, adc_ovr=0, m4_hb=2108
+[0007] ADC1_CH5 [PB1 [A3]]: raw=1467, avg=1454 (0.073 V), min=1214, max=1674, rate=500000, seq=205984, samples=105463808, dma_tc=102992, dma_ht=102992, err=0, ovr=0, adc_ovr=0, m4_hb=2109
+[0008] ADC1_CH5 [PB1 [A3]]: raw=1495, avg=1400 (0.070 V), min=1170, max=1644, rate=500000, seq=206085, samples=105515520, dma_tc=103042, dma_ht=103043, err=0, ovr=0, adc_ovr=0, m4_hb=2110
+[0009] ADC1_CH5 [PB1 [A3]]: raw=1404, avg=1376 (0.069 V), min=1119, max=1652, rate=500000, seq=206188, samples=105568256, dma_tc=103094, dma_ht=103094, err=0, ovr=0, adc_ovr=0, m4_hb=2111
+[0010] ADC1_CH5 [PB1 [A3]]: raw=1408, avg=1393 (0.070 V), min=1163, max=1652, rate=500000, seq=206289, samples=105619968, dma_tc=103144, dma_ht=103145, err=0, ovr=0, adc_ovr=0, m4_hb=2112
+[0011] ADC1_CH5 [PB1 [A3]]: raw=1209, avg=1378 (0.069 V), min=1157, max=1650, rate=500000, seq=206390, samples=105671680, dma_tc=103195, dma_ht=103195, err=0, ovr=0, adc_ovr=0, m4_hb=2113
+[0012] ADC1_CH5 [PB1 [A3]]: raw=1383, avg=1381 (0.069 V), min=1139, max=1647, rate=500000, seq=206496, samples=105725952, dma_tc=103248, dma_ht=103248, err=0, ovr=0, adc_ovr=0, m4_hb=2114
+[0013] ADC1_CH5 [PB1 [A3]]: raw=1349, avg=1396 (0.070 V), min=1181, max=1657, rate=500000, seq=206601, samples=105779712, dma_tc=103300, dma_ht=103301, err=0, ovr=0, adc_ovr=0, m4_hb=2115
+[0014] ADC1_CH5 [PB1 [A3]]: raw=1461, avg=1418 (0.071 V), min=1151, max=1663, rate=500000, seq=206711, samples=105836032, dma_tc=103355, dma_ht=103356, err=0, ovr=0, adc_ovr=0, m4_hb=2116
+[0015] ADC1_CH5 [PB1 [A3]]: raw=1529, avg=1435 (0.072 V), min=1102, max=1672, rate=500000, seq=206836, samples=105900032, dma_tc=103418, dma_ht=103418, err=0, ovr=0, adc_ovr=0, m4_hb=2118
+[0016] ADC1_CH5 [PB1 [A3]]: raw=1600, avg=1384 (0.069 V), min=1141, max=1660, rate=500000, seq=207059, samples=106014208, dma_tc=103529, dma_ht=103530, err=0, ovr=0, adc_ovr=0, m4_hb=2120
+[0017] ADC1_CH5 [PB1 [A3]]: raw=1387, avg=1399 (0.070 V), min=1194, max=1673, rate=500000, seq=207184, samples=106078208, dma_tc=103592, dma_ht=103592, err=0, ovr=0, adc_ovr=0, m4_hb=2121
+[0018] ADC1_CH5 [PB1 [A3]]: raw=1456, avg=1376 (0.069 V), min=1170, max=1658, rate=500000, seq=207286, samples=106130432, dma_tc=103643, dma_ht=103643, err=0, ovr=0, adc_ovr=0, m4_hb=2122
+[0019] ADC1_CH5 [PB1 [A3]]: raw=1399, avg=1402 (0.070 V), min=1171, max=1660, rate=500000, seq=207432, samples=106205184, dma_tc=103716, dma_ht=103716, err=0, ovr=0, adc_ovr=0, m4_hb=2124
+[0020] ADC1_CH5 [PB1 [A3]]: raw=1409, avg=1361 (0.068 V), min=1159, max=1664, rate=500000, seq=207548, samples=106264576, dma_tc=103774, dma_ht=103774, err=0, ovr=0, adc_ovr=0, m4_hb=2125
+[0021] ADC1_CH5 [PB1 [A3]]: raw=1499, avg=1400 (0.070 V), min=1167, max=1656, rate=500000, seq=207663, samples=106323456, dma_tc=103831, dma_ht=103832, err=0, ovr=0, adc_ovr=0, m4_hb=2126
+[0022] ADC1_CH5 [PB1 [A3]]: raw=1327, avg=1405 (0.070 V), min=1210, max=1653, rate=500000, seq=207771, samples=106378752, dma_tc=103885, dma_ht=103886, err=0, ovr=0, adc_ovr=0, m4_hb=2127
+[0023] ADC1_CH5 [PB1 [A3]]: raw=1598, avg=1431 (0.072 V), min=1158, max=1647, rate=500000, seq=207897, samples=106443264, dma_tc=103948, dma_ht=103949, err=0, ovr=0, adc_ovr=0, m4_hb=2129
+[0024] ADC1_CH5 [PB1 [A3]]: raw=1370, avg=1408 (0.070 V), min=1162, max=1656, rate=500000, seq=208005, samples=106498560, dma_tc=104002, dma_ht=104003, err=0, ovr=0, adc_ovr=0, m4_hb=2130
+[0025] ADC1_CH5 [PB1 [A3]]: raw=1294, avg=1406 (0.070 V), min=1182, max=1665, rate=500000, seq=208119, samples=106556928, dma_tc=104059, dma_ht=104060, err=0, ovr=0, adc_ovr=0, m4_hb=2131
+[0026] ADC1_CH5 [PB1 [A3]]: raw=1273, avg=1408 (0.070 V), min=1149, max=1650, rate=500000, seq=208269, samples=106633728, dma_tc=104134, dma_ht=104135, err=0, ovr=0, adc_ovr=0, m4_hb=2132
+[0027] ADC1_CH5 [PB1 [A3]]: raw=1311, avg=1359 (0.068 V), min=1146, max=1657, rate=500000, seq=208375, samples=106688000, dma_tc=104187, dma_ht=104188, err=0, ovr=0, adc_ovr=0, m4_hb=2133
+[0028] ADC1_CH5 [PB1 [A3]]: raw=1477, avg=1383 (0.069 V), min=1173, max=1638, rate=500000, seq=208478, samples=106740736, dma_tc=104239, dma_ht=104239, err=0, ovr=0, adc_ovr=0, m4_hb=2134
+[0029] ADC1_CH5 [PB1 [A3]]: raw=1476, avg=1391 (0.070 V), min=1167, max=1648, rate=500000, seq=208589, samples=106797568, dma_tc=104294, dma_ht=104295, err=0, ovr=0, adc_ovr=0, m4_hb=2136
+[0030] ADC1_CH5 [PB1 [A3]]: raw=1278, avg=1392 (0.070 V), min=1165, max=1640, rate=500000, seq=208691, samples=106849792, dma_tc=104345, dma_ht=104346, err=0, ovr=0, adc_ovr=0, m4_hb=2137
+[0031] ADC1_CH5 [PB1 [A3]]: raw=1400, avg=1381 (0.069 V), min=1139, max=1656, rate=500000, seq=208793, samples=106902016, dma_tc=104396, dma_ht=104397, err=0, ovr=0, adc_ovr=0, m4_hb=2138
+[0032] ADC1_CH5 [PB1 [A3]]: raw=1439, avg=1330 (0.066 V), min=1159, max=1625, rate=500000, seq=208895, samples=106954240, dma_tc=104447, dma_ht=104448, err=0, ovr=0, adc_ovr=0, m4_hb=2139
+[0033] ADC1_CH5 [PB1 [A3]]: raw=1296, avg=1371 (0.069 V), min=1165, max=1644, rate=500000, seq=208996, samples=107005952, dma_tc=104498, dma_ht=104498, err=0, ovr=0, adc_ovr=0, m4_hb=2140
+[0034] ADC1_CH5 [PB1 [A3]]: raw=1600, avg=1414 (0.071 V), min=1203, max=1658, rate=500000, seq=209098, samples=107058176, dma_tc=104549, dma_ht=104549, err=0, ovr=0, adc_ovr=0, m4_hb=2141
+[0035] ADC1_CH5 [PB1 [A3]]: raw=1476, avg=1391 (0.070 V), min=1178, max=1657, rate=500000, seq=209199, samples=107109888, dma_tc=104599, dma_ht=104600, err=0, ovr=0, adc_ovr=0, m4_hb=2142
+[0036] ADC1_CH5 [PB1 [A3]]: raw=1491, avg=1417 (0.071 V), min=1170, max=1670, rate=500000, seq=209299, samples=107161088, dma_tc=104649, dma_ht=104650, err=0, ovr=0, adc_ovr=0, m4_hb=2143
+[0037] ADC1_CH5 [PB1 [A3]]: raw=1328, avg=1433 (0.072 V), min=1203, max=1649, rate=500000, seq=209401, samples=107213312, dma_tc=104700, dma_ht=104701, err=0, ovr=0, adc_ovr=0, m4_hb=2144
+[0038] ADC1_CH5 [PB1 [A3]]: raw=1263, avg=1381 (0.069 V), min=1159, max=1653, rate=500000, seq=209503, samples=107265536, dma_tc=104751, dma_ht=104752, err=0, ovr=0, adc_ovr=0, m4_hb=2145
+[0039] ADC1_CH5 [PB1 [A3]]: raw=1514, avg=1421 (0.071 V), min=1166, max=1643, rate=500000, seq=209604, samples=107317248, dma_tc=104802, dma_ht=104802, err=0, ovr=0, adc_ovr=0, m4_hb=2146
+[0040] ADC1_CH5 [PB1 [A3]]: raw=1465, avg=1433 (0.072 V), min=1202, max=1648, rate=500000, seq=209708, samples=107370496, dma_tc=104854, dma_ht=104854, err=0, ovr=0, adc_ovr=0, m4_hb=2147
+[0041] ADC1_CH5 [PB1 [A3]]: raw=1497, avg=1432 (0.072 V), min=1183, max=1648, rate=500000, seq=209810, samples=107422720, dma_tc=104905, dma_ht=104905, err=0, ovr=0, adc_ovr=0, m4_hb=2148
+[0042] ADC1_CH5 [PB1 [A3]]: raw=1481, avg=1455 (0.073 V), min=1161, max=1667, rate=500000, seq=209911, samples=107474432, dma_tc=104955, dma_ht=104956, err=0, ovr=0, adc_ovr=0, m4_hb=2149
+[0043] ADC1_CH5 [PB1 [A3]]: raw=1395, avg=1410 (0.071 V), min=1128, max=1656, rate=500000, seq=210014, samples=107527168, dma_tc=105007, dma_ht=105007, err=0, ovr=0, adc_ovr=0, m4_hb=2150
+[0044] ADC1_CH5 [PB1 [A3]]: raw=1476, avg=1402 (0.070 V), min=1146, max=1650, rate=500000, seq=210116, samples=107579392, dma_tc=105058, dma_ht=105058, err=0, ovr=0, adc_ovr=0, m4_hb=2151
+[0045] ADC1_CH5 [PB1 [A3]]: raw=1441, avg=1440 (0.072 V), min=1173, max=1650, rate=500000, seq=210217, samples=107631104, dma_tc=105108, dma_ht=105109, err=0, ovr=0, adc_ovr=0, m4_hb=2152
+[0046] ADC1_CH5 [PB1 [A3]]: raw=1392, avg=1397 (0.070 V), min=1163, max=1655, rate=500000, seq=210319, samples=107683328, dma_tc=105159, dma_ht=105160, err=0, ovr=0, adc_ovr=0, m4_hb=2153
+[0047] ADC1_CH5 [PB1 [A3]]: raw=1304, avg=1354 (0.068 V), min=1143, max=1616, rate=500000, seq=210419, samples=107734528, dma_tc=105209, dma_ht=105210, err=0, ovr=0, adc_ovr=0, m4_hb=2154
+[0048] ADC1_CH5 [PB1 [A3]]: raw=1379, avg=1427 (0.071 V), min=1169, max=1666, rate=500000, seq=210519, samples=107785728, dma_tc=105259, dma_ht=105260, err=0, ovr=0, adc_ovr=0, m4_hb=2155
+[0049] ADC1_CH5 [PB1 [A3]]: raw=1464, avg=1418 (0.071 V), min=1166, max=1626, rate=500000, seq=210620, samples=107837440, dma_tc=105310, dma_ht=105310, err=0, ovr=0, adc_ovr=0, m4_hb=2156
+[0050] ADC1_CH5 [PB1 [A3]]: raw=1535, avg=1400 (0.070 V), min=1190, max=1664, rate=500000, seq=210722, samples=107889664, dma_tc=105361, dma_ht=105361, err=0, ovr=0, adc_ovr=0, m4_hb=2157
+[0051] ADC1_CH5 [PB1 [A3]]: raw=1420, avg=1423 (0.071 V), min=1185, max=1657, rate=500000, seq=210826, samples=107942912, dma_tc=105413, dma_ht=105413, err=0, ovr=0, adc_ovr=0, m4_hb=2159
+[0052] ADC1_CH5 [PB1 [A3]]: raw=1504, avg=1381 (0.069 V), min=1167, max=1634, rate=500000, seq=210928, samples=107995136, dma_tc=105464, dma_ht=105464, err=0, ovr=0, adc_ovr=0, m4_hb=2160
+[0053] ADC1_CH5 [PB1 [A3]]: raw=1515, avg=1415 (0.071 V), min=1158, max=1642, rate=500000, seq=211030, samples=108047360, dma_tc=105515, dma_ht=105515, err=0, ovr=0, adc_ovr=0, m4_hb=2161
+[0054] ADC1_CH5 [PB1 [A3]]: raw=1224, avg=1400 (0.070 V), min=1196, max=1632, rate=500000, seq=211131, samples=108099072, dma_tc=105565, dma_ht=105566, err=0, ovr=0, adc_ovr=0, m4_hb=2162
+[0055] ADC1_CH5 [PB1 [A3]]: raw=1229, avg=1419 (0.071 V), min=1163, max=1651, rate=500000, seq=211231, samples=108150272, dma_tc=105615, dma_ht=105616, err=0, ovr=0, adc_ovr=0, m4_hb=2163
+[0056] ADC1_CH5 [PB1 [A3]]: raw=1564, avg=1427 (0.071 V), min=1190, max=1663, rate=500000, seq=211333, samples=108202496, dma_tc=105666, dma_ht=105667, err=0, ovr=0, adc_ovr=0, m4_hb=2164
+[0057] ADC1_CH5 [PB1 [A3]]: raw=1524, avg=1394 (0.070 V), min=1142, max=1664, rate=500000, seq=211434, samples=108254208, dma_tc=105717, dma_ht=105717, err=0, ovr=0, adc_ovr=0, m4_hb=2165
+[0058] ADC1_CH5 [PB1 [A3]]: raw=1293, avg=1444 (0.072 V), min=1182, max=1658, rate=500000, seq=211537, samples=108306944, dma_tc=105768, dma_ht=105769, err=0, ovr=0, adc_ovr=0, m4_hb=2166
+[0059] ADC1_CH5 [PB1 [A3]]: raw=1604, avg=1413 (0.071 V), min=1170, max=1663, rate=500000, seq=211639, samples=108359168, dma_tc=105819, dma_ht=105820, err=0, ovr=0, adc_ovr=0, m4_hb=2167
+[0060] ADC1_CH5 [PB1 [A3]]: raw=1352, avg=1423 (0.071 V), min=1175, max=1662, rate=500000, seq=211739, samples=108410368, dma_tc=105869, dma_ht=105870, err=0, ovr=0, adc_ovr=0, m4_hb=2168
+[0061] ADC1_CH5 [PB1 [A3]]: raw=1567, avg=1422 (0.071 V), min=1174, max=1659, rate=500000, seq=211840, samples=108462080, dma_tc=105920, dma_ht=105920, err=0, ovr=0, adc_ovr=0, m4_hb=2169
+[0062] ADC1_CH5 [PB1 [A3]]: raw=1482, avg=1353 (0.068 V), min=1141, max=1613, rate=500000, seq=211941, samples=108513792, dma_tc=105970, dma_ht=105971, err=0, ovr=0, adc_ovr=0, m4_hb=2170
+[0063] ADC1_CH5 [PB1 [A3]]: raw=1435, avg=1464 (0.073 V), min=1223, max=1656, rate=500000, seq=212042, samples=108565504, dma_tc=106021, dma_ht=106021, err=0, ovr=0, adc_ovr=0, m4_hb=2171
+[0064] ADC1_CH5 [PB1 [A3]]: raw=1381, avg=1379 (0.069 V), min=1162, max=1652, rate=500000, seq=212144, samples=108617728, dma_tc=106072, dma_ht=106072, err=0, ovr=0, adc_ovr=0, m4_hb=2172
+[0065] ADC1_CH5 [PB1 [A3]]: raw=1531, avg=1403 (0.070 V), min=1170, max=1647, rate=500000, seq=212261, samples=108677632, dma_tc=106130, dma_ht=106131, err=0, ovr=0, adc_ovr=0, m4_hb=2173
+[0066] ADC1_CH5 [PB1 [A3]]: raw=1355, avg=1429 (0.071 V), min=1166, max=1647, rate=500000, seq=212364, samples=108730368, dma_tc=106182, dma_ht=106182, err=0, ovr=0, adc_ovr=0, m4_hb=2174
+[0067] ADC1_CH5 [PB1 [A3]]: raw=1422, avg=1406 (0.070 V), min=1163, max=1671, rate=500000, seq=212525, samples=108812800, dma_tc=106262, dma_ht=106263, err=0, ovr=0, adc_ovr=0, m4_hb=2176
+[0068] ADC1_CH5 [PB1 [A3]]: raw=1431, avg=1409 (0.070 V), min=1199, max=1645, rate=500000, seq=212634, samples=108868608, dma_tc=106317, dma_ht=106317, err=0, ovr=0, adc_ovr=0, m4_hb=2177
+[0069] ADC1_CH5 [PB1 [A3]]: raw=1295, avg=1402 (0.070 V), min=1163, max=1648, rate=500000, seq=212755, samples=108930560, dma_tc=106377, dma_ht=106378, err=0, ovr=0, adc_ovr=0, m4_hb=2178
+[0070] ADC1_CH5 [PB1 [A3]]: raw=1512, avg=1407 (0.070 V), min=1175, max=1651, rate=500000, seq=212875, samples=108992000, dma_tc=106437, dma_ht=106438, err=0, ovr=0, adc_ovr=0, m4_hb=2179
+[0071] ADC1_CH5 [PB1 [A3]]: raw=1568, avg=1418 (0.071 V), min=1215, max=1646, rate=500000, seq=212979, samples=109045248, dma_tc=106489, dma_ht=106490, err=0, ovr=0, adc_ovr=0, m4_hb=2181
+[0072] ADC1_CH5 [PB1 [A3]]: raw=1559, avg=1398 (0.070 V), min=1167, max=1635, rate=500000, seq=213091, samples=109102592, dma_tc=106545, dma_ht=106546, err=0, ovr=0, adc_ovr=0, m4_hb=2182
+[0073] ADC1_CH5 [PB1 [A3]]: raw=1524, avg=1431 (0.072 V), min=1203, max=1647, rate=500000, seq=213196, samples=109156352, dma_tc=106598, dma_ht=106598, err=0, ovr=0, adc_ovr=0, m4_hb=2183
+[0074] ADC1_CH5 [PB1 [A3]]: raw=1402, avg=1377 (0.069 V), min=1168, max=1612, rate=500000, seq=213308, samples=109213696, dma_tc=106654, dma_ht=106654, err=0, ovr=0, adc_ovr=0, m4_hb=2184
+[0075] ADC1_CH5 [PB1 [A3]]: raw=1374, avg=1419 (0.071 V), min=1156, max=1655, rate=500000, seq=213417, samples=109269504, dma_tc=106708, dma_ht=106709, err=0, ovr=0, adc_ovr=0, m4_hb=2185
+[0076] ADC1_CH5 [PB1 [A3]]: raw=1313, avg=1430 (0.072 V), min=1166, max=1659, rate=500000, seq=213523, samples=109323776, dma_tc=106761, dma_ht=106762, err=0, ovr=0, adc_ovr=0, m4_hb=2186
+[0077] ADC1_CH5 [PB1 [A3]]: raw=1379, avg=1400 (0.070 V), min=1164, max=1654, rate=500000, seq=213628, samples=109377536, dma_tc=106814, dma_ht=106814, err=0, ovr=0, adc_ovr=0, m4_hb=2187
+[0078] ADC1_CH5 [PB1 [A3]]: raw=1495, avg=1345 (0.067 V), min=1111, max=1657, rate=500000, seq=213732, samples=109430784, dma_tc=106866, dma_ht=106866, err=0, ovr=0, adc_ovr=0, m4_hb=2188
+[0079] ADC1_CH5 [PB1 [A3]]: raw=1321, avg=1409 (0.070 V), min=1178, max=1664, rate=500000, seq=213836, samples=109484032, dma_tc=106918, dma_ht=106918, err=0, ovr=0, adc_ovr=0, m4_hb=2189
+[0080] ADC1_CH5 [PB1 [A3]]: raw=1393, avg=1417 (0.071 V), min=1197, max=1660, rate=500000, seq=213938, samples=109536256, dma_tc=106969, dma_ht=106969, err=0, ovr=0, adc_ovr=0, m4_hb=2190
+[0081] ADC1_CH5 [PB1 [A3]]: raw=1497, avg=1434 (0.072 V), min=1174, max=1652, rate=500000, seq=214039, samples=109587968, dma_tc=107019, dma_ht=107020, err=0, ovr=0, adc_ovr=0, m4_hb=2191
+[0082] ADC1_CH5 [PB1 [A3]]: raw=1452, avg=1412 (0.071 V), min=1166, max=1647, rate=500000, seq=214141, samples=109640192, dma_tc=107070, dma_ht=107071, err=0, ovr=0, adc_ovr=0, m4_hb=2192
+[0083] ADC1_CH5 [PB1 [A3]]: raw=1360, avg=1448 (0.072 V), min=1164, max=1655, rate=500000, seq=214243, samples=109692416, dma_tc=107121, dma_ht=107122, err=0, ovr=0, adc_ovr=0, m4_hb=2193
+[0084] ADC1_CH5 [PB1 [A3]]: raw=1231, avg=1437 (0.072 V), min=1164, max=1653, rate=500000, seq=214344, samples=109744128, dma_tc=107172, dma_ht=107172, err=0, ovr=0, adc_ovr=0, m4_hb=2195
+[0085] ADC1_CH5 [PB1 [A3]]: raw=1298, avg=1441 (0.072 V), min=1166, max=1653, rate=500000, seq=214447, samples=109796864, dma_tc=107223, dma_ht=107224, err=0, ovr=0, adc_ovr=0, m4_hb=2196
+[0086] ADC1_CH5 [PB1 [A3]]: raw=1416, avg=1375 (0.069 V), min=1169, max=1652, rate=500000, seq=214556, samples=109852672, dma_tc=107278, dma_ht=107278, err=0, ovr=0, adc_ovr=0, m4_hb=2197
+[0087] ADC1_CH5 [PB1 [A3]]: raw=1442, avg=1433 (0.072 V), min=1163, max=1664, rate=500000, seq=214657, samples=109904384, dma_tc=107328, dma_ht=107329, err=0, ovr=0, adc_ovr=0, m4_hb=2198
+[0088] ADC1_CH5 [PB1 [A3]]: raw=1335, avg=1425 (0.071 V), min=1213, max=1655, rate=500000, seq=214760, samples=109957120, dma_tc=107380, dma_ht=107380, err=0, ovr=0, adc_ovr=0, m4_hb=2199
+[0089] ADC1_CH5 [PB1 [A3]]: raw=1422, avg=1420 (0.071 V), min=1170, max=1655, rate=500000, seq=214862, samples=110009344, dma_tc=107431, dma_ht=107431, err=0, ovr=0, adc_ovr=0, m4_hb=2200
+[0090] ADC1_CH5 [PB1 [A3]]: raw=1392, avg=1476 (0.074 V), min=1237, max=1666, rate=500000, seq=214963, samples=110061056, dma_tc=107481, dma_ht=107482, err=0, ovr=0, adc_ovr=0, m4_hb=2201
+[0091] ADC1_CH5 [PB1 [A3]]: raw=1292, avg=1413 (0.071 V), min=1173, max=1656, rate=500000, seq=215065, samples=110113280, dma_tc=107532, dma_ht=107533, err=0, ovr=0, adc_ovr=0, m4_hb=2202
+[0092] ADC1_CH5 [PB1 [A3]]: raw=1292, avg=1375 (0.069 V), min=1114, max=1655, rate=500000, seq=215166, samples=110164992, dma_tc=107583, dma_ht=107583, err=0, ovr=0, adc_ovr=0, m4_hb=2203
+[0093] ADC1_CH5 [PB1 [A3]]: raw=1348, avg=1392 (0.070 V), min=1149, max=1656, rate=500000, seq=215272, samples=110219264, dma_tc=107636, dma_ht=107636, err=0, ovr=0, adc_ovr=0, m4_hb=2204
+[0094] ADC1_CH5 [PB1 [A3]]: raw=1448, avg=1369 (0.068 V), min=1130, max=1642, rate=500000, seq=215381, samples=110275072, dma_tc=107690, dma_ht=107691, err=0, ovr=0, adc_ovr=0, m4_hb=2205
+[0095] ADC1_CH5 [PB1 [A3]]: raw=1338, avg=1401 (0.070 V), min=1180, max=1658, rate=500000, seq=215482, samples=110326784, dma_tc=107741, dma_ht=107741, err=0, ovr=0, adc_ovr=0, m4_hb=2206
+[0096] ADC1_CH5 [PB1 [A3]]: raw=1489, avg=1456 (0.073 V), min=1170, max=1648, rate=500000, seq=215583, samples=110378496, dma_tc=107791, dma_ht=107792, err=0, ovr=0, adc_ovr=0, m4_hb=2207
+[0097] ADC1_CH5 [PB1 [A3]]: raw=1468, avg=1440 (0.072 V), min=1200, max=1648, rate=500000, seq=215686, samples=110431232, dma_tc=107843, dma_ht=107843, err=0, ovr=0, adc_ovr=0, m4_hb=2208
+[0098] ADC1_CH5 [PB1 [A3]]: raw=1362, avg=1423 (0.071 V), min=1221, max=1649, rate=500000, seq=215787, samples=110482944, dma_tc=107893, dma_ht=107894, err=0, ovr=0, adc_ovr=0, m4_hb=2209
+[0099] ADC1_CH5 [PB1 [A3]]: raw=1573, avg=1408 (0.070 V), min=1182, max=1642, rate=500000, seq=215888, samples=110534656, dma_tc=107944, dma_ht=107944, err=0, ovr=0, adc_ovr=0, m4_hb=2210
+[0100] ADC1_CH5 [PB1 [A3]]: raw=1347, avg=1369 (0.068 V), min=1158, max=1649, rate=500000, seq=215990, samples=110586880, dma_tc=107995, dma_ht=107995, err=0, ovr=0, adc_ovr=0, m4_hb=2211
+[0101] ADC1_CH5 [PB1 [A3]]: raw=1611, avg=1413 (0.071 V), min=1155, max=1652, rate=500000, seq=216090, samples=110638080, dma_tc=108045, dma_ht=108045, err=0, ovr=0, adc_ovr=0, m4_hb=2212
+[0102] ADC1_CH5 [PB1 [A3]]: raw=1510, avg=1366 (0.068 V), min=1148, max=1600, rate=500000, seq=216192, samples=110690304, dma_tc=108096, dma_ht=108096, err=0, ovr=0, adc_ovr=0, m4_hb=2213
+[0103] ADC1_CH5 [PB1 [A3]]: raw=1515, avg=1427 (0.071 V), min=1191, max=1668, rate=500000, seq=216293, samples=110742016, dma_tc=108146, dma_ht=108147, err=0, ovr=0, adc_ovr=0, m4_hb=2214
+[0104] ADC1_CH5 [PB1 [A3]]: raw=1325, avg=1412 (0.071 V), min=1211, max=1654, rate=500000, seq=216394, samples=110793728, dma_tc=108197, dma_ht=108197, err=0, ovr=0, adc_ovr=0, m4_hb=2216
+[0105] ADC1_CH5 [PB1 [A3]]: raw=1469, avg=1444 (0.072 V), min=1174, max=1680, rate=500000, seq=216495, samples=110845440, dma_tc=108247, dma_ht=108248, err=0, ovr=0, adc_ovr=0, m4_hb=2217
+[0106] ADC1_CH5 [PB1 [A3]]: raw=1318, avg=1376 (0.069 V), min=1173, max=1628, rate=500000, seq=216595, samples=110896640, dma_tc=108297, dma_ht=108298, err=0, ovr=0, adc_ovr=0, m4_hb=2218
+[0107] ADC1_CH5 [PB1 [A3]]: raw=1433, avg=1405 (0.070 V), min=1178, max=1664, rate=500000, seq=216696, samples=110948352, dma_tc=108348, dma_ht=108348, err=0, ovr=0, adc_ovr=0, m4_hb=2219
+[0108] ADC1_CH5 [PB1 [A3]]: raw=1323, avg=1426 (0.071 V), min=1179, max=1647, rate=500000, seq=216799, samples=111001088, dma_tc=108399, dma_ht=108400, err=0, ovr=0, adc_ovr=0, m4_hb=2220
+[0109] ADC1_CH5 [PB1 [A3]]: raw=1514, avg=1423 (0.071 V), min=1172, max=1642, rate=500000, seq=216901, samples=111053312, dma_tc=108450, dma_ht=108451, err=0, ovr=0, adc_ovr=0, m4_hb=2221
+[0110] ADC1_CH5 [PB1 [A3]]: raw=1403, avg=1417 (0.071 V), min=1173, max=1625, rate=500000, seq=217002, samples=111105024, dma_tc=108501, dma_ht=108501, err=0, ovr=0, adc_ovr=0, m4_hb=2222
+[0111] ADC1_CH5 [PB1 [A3]]: raw=1412, avg=1405 (0.070 V), min=1171, max=1623, rate=500000, seq=217109, samples=111159808, dma_tc=108554, dma_ht=108555, err=0, ovr=0, adc_ovr=0, m4_hb=2223
+[0112] ADC1_CH5 [PB1 [A3]]: raw=1453, avg=1369 (0.068 V), min=1166, max=1623, rate=500000, seq=217210, samples=111211520, dma_tc=108605, dma_ht=108605, err=0, ovr=0, adc_ovr=0, m4_hb=2224
+[0113] ADC1_CH5 [PB1 [A3]]: raw=1543, avg=1437 (0.072 V), min=1178, max=1664, rate=500000, seq=217311, samples=111263232, dma_tc=108655, dma_ht=108656, err=0, ovr=0, adc_ovr=0, m4_hb=2225
+[0114] ADC1_CH5 [PB1 [A3]]: raw=1338, avg=1395 (0.070 V), min=1210, max=1646, rate=500000, seq=217412, samples=111314944, dma_tc=108706, dma_ht=108706, err=0, ovr=0, adc_ovr=0, m4_hb=2226
+[0115] ADC1_CH5 [PB1 [A3]]: raw=1280, avg=1416 (0.071 V), min=1166, max=1656, rate=500000, seq=217513, samples=111366656, dma_tc=108756, dma_ht=108757, err=0, ovr=0, adc_ovr=0, m4_hb=2227
+[0116] ADC1_CH5 [PB1 [A3]]: raw=1432, avg=1430 (0.072 V), min=1170, max=1668, rate=500000, seq=217614, samples=111418368, dma_tc=108807, dma_ht=108807, err=0, ovr=0, adc_ovr=0, m4_hb=2228
+[0117] ADC1_CH5 [PB1 [A3]]: raw=1461, avg=1414 (0.071 V), min=1173, max=1656, rate=500000, seq=217717, samples=111471104, dma_tc=108858, dma_ht=108859, err=0, ovr=0, adc_ovr=0, m4_hb=2229
+[0118] ADC1_CH5 [PB1 [A3]]: raw=1466, avg=1402 (0.070 V), min=1132, max=1650, rate=500000, seq=217818, samples=111522816, dma_tc=108909, dma_ht=108909, err=0, ovr=0, adc_ovr=0, m4_hb=2230
+[0119] ADC1_CH5 [PB1 [A3]]: raw=1319, avg=1426 (0.071 V), min=1206, max=1645, rate=500000, seq=217919, samples=111574528, dma_tc=108959, dma_ht=108960, err=0, ovr=0, adc_ovr=0, m4_hb=2231
+[0120] ADC1_CH5 [PB1 [A3]]: raw=1482, avg=1345 (0.067 V), min=1158, max=1611, rate=500000, seq=218020, samples=111626240, dma_tc=109010, dma_ht=109010, err=0, ovr=0, adc_ovr=0, m4_hb=2232
+[0121] ADC1_CH5 [PB1 [A3]]: raw=1532, avg=1412 (0.071 V), min=1164, max=1656, rate=500000, seq=218122, samples=111678464, dma_tc=109061, dma_ht=109061, err=0, ovr=0, adc_ovr=0, m4_hb=2233
+[0122] ADC1_CH5 [PB1 [A3]]: raw=1607, avg=1428 (0.071 V), min=1163, max=1661, rate=500000, seq=218224, samples=111730688, dma_tc=109112, dma_ht=109112, err=0, ovr=0, adc_ovr=0, m4_hb=2234
+[0123] ADC1_CH5 [PB1 [A3]]: raw=1312, avg=1415 (0.071 V), min=1159, max=1649, rate=500000, seq=218325, samples=111782400, dma_tc=109162, dma_ht=109163, err=0, ovr=0, adc_ovr=0, m4_hb=2235
+[0124] ADC1_CH5 [PB1 [A3]]: raw=1252, avg=1346 (0.067 V), min=1167, max=1647, rate=500000, seq=218430, samples=111836160, dma_tc=109215, dma_ht=109215, err=0, ovr=0, adc_ovr=0, m4_hb=2236
+[0125] ADC1_CH5 [PB1 [A3]]: raw=1569, avg=1393 (0.070 V), min=1168, max=1645, rate=500000, seq=218530, samples=111887360, dma_tc=109265, dma_ht=109265, err=0, ovr=0, adc_ovr=0, m4_hb=2237
+[0126] ADC1_CH5 [PB1 [A3]]: raw=1214, avg=1361 (0.068 V), min=1175, max=1650, rate=500000, seq=218632, samples=111939584, dma_tc=109316, dma_ht=109316, err=0, ovr=0, adc_ovr=0, m4_hb=2238
+[0127] ADC1_CH5 [PB1 [A3]]: raw=1462, avg=1451 (0.073 V), min=1151, max=1660, rate=500000, seq=218736, samples=111992832, dma_tc=109368, dma_ht=109368, err=0, ovr=0, adc_ovr=0, m4_hb=2239
+[0128] ADC1_CH5 [PB1 [A3]]: raw=1393, avg=1443 (0.072 V), min=1183, max=1641, rate=500000, seq=218840, samples=112046080, dma_tc=109420, dma_ht=109420, err=0, ovr=0, adc_ovr=0, m4_hb=2241
+[0129] ADC1_CH5 [PB1 [A3]]: raw=1510, avg=1390 (0.069 V), min=1167, max=1654, rate=500000, seq=218944, samples=112099328, dma_tc=109472, dma_ht=109472, err=0, ovr=0, adc_ovr=0, m4_hb=2242
+[0130] ADC1_CH5 [PB1 [A3]]: raw=1372, avg=1415 (0.071 V), min=1197, max=1650, rate=500000, seq=219051, samples=112154112, dma_tc=109525, dma_ht=109526, err=0, ovr=0, adc_ovr=0, m4_hb=2243
+[0131] ADC1_CH5 [PB1 [A3]]: raw=1461, avg=1374 (0.069 V), min=1159, max=1658, rate=500000, seq=219158, samples=112208896, dma_tc=109579, dma_ht=109579, err=0, ovr=0, adc_ovr=0, m4_hb=2244
+[0132] ADC1_CH5 [PB1 [A3]]: raw=1333, avg=1470 (0.074 V), min=1179, max=1663, rate=500000, seq=219267, samples=112264704, dma_tc=109633, dma_ht=109634, err=0, ovr=0, adc_ovr=0, m4_hb=2245
+[0133] ADC1_CH5 [PB1 [A3]]: raw=1365, avg=1378 (0.069 V), min=1150, max=1654, rate=500000, seq=219389, samples=112327168, dma_tc=109694, dma_ht=109695, err=0, ovr=0, adc_ovr=0, m4_hb=2246
+[0134] ADC1_CH5 [PB1 [A3]]: raw=1421, avg=1439 (0.072 V), min=1150, max=1674, rate=500000, seq=219499, samples=112383488, dma_tc=109749, dma_ht=109750, err=0, ovr=0, adc_ovr=0, m4_hb=2247
+[0135] ADC1_CH5 [PB1 [A3]]: raw=1473, avg=1380 (0.069 V), min=1166, max=1647, rate=500000, seq=219606, samples=112438272, dma_tc=109803, dma_ht=109803, err=0, ovr=0, adc_ovr=0, m4_hb=2248
+[0136] ADC1_CH5 [PB1 [A3]]: raw=1357, avg=1437 (0.072 V), min=1206, max=1654, rate=500000, seq=219728, samples=112500736, dma_tc=109864, dma_ht=109864, err=0, ovr=0, adc_ovr=0, m4_hb=2250
+[0137] ADC1_CH5 [PB1 [A3]]: raw=1440, avg=1409 (0.070 V), min=1186, max=1652, rate=500000, seq=219832, samples=112553984, dma_tc=109916, dma_ht=109916, err=0, ovr=0, adc_ovr=0, m4_hb=2251
+[0138] ADC1_CH5 [PB1 [A3]]: raw=1449, avg=1418 (0.071 V), min=1173, max=1647, rate=500000, seq=219936, samples=112607232, dma_tc=109968, dma_ht=109968, err=0, ovr=0, adc_ovr=0, m4_hb=2252
+[0139] ADC1_CH5 [PB1 [A3]]: raw=1372, avg=1371 (0.069 V), min=1191, max=1616, rate=500000, seq=220040, samples=112660480, dma_tc=110020, dma_ht=110020, err=0, ovr=0, adc_ovr=0, m4_hb=2253
+[0140] ADC1_CH5 [PB1 [A3]]: raw=1271, avg=1384 (0.069 V), min=1158, max=1638, rate=500000, seq=220143, samples=112713216, dma_tc=110071, dma_ht=110072, err=0, ovr=0, adc_ovr=0, m4_hb=2254
+[0141] ADC1_CH5 [PB1 [A3]]: raw=1431, avg=1427 (0.071 V), min=1193, max=1656, rate=500000, seq=220248, samples=112766976, dma_tc=110124, dma_ht=110124, err=0, ovr=0, adc_ovr=0, m4_hb=2255
+[0142] ADC1_CH5 [PB1 [A3]]: raw=1407, avg=1419 (0.071 V), min=1187, max=1636, rate=500000, seq=220352, samples=112820224, dma_tc=110176, dma_ht=110176, err=0, ovr=0, adc_ovr=0, m4_hb=2256
+[0143] ADC1_CH5 [PB1 [A3]]: raw=1555, avg=1409 (0.070 V), min=1109, max=1658, rate=500000, seq=220465, samples=112878080, dma_tc=110232, dma_ht=110233, err=0, ovr=0, adc_ovr=0, m4_hb=2257
+[0144] ADC1_CH5 [PB1 [A3]]: raw=1496, avg=1475 (0.074 V), min=1211, max=1654, rate=500000, seq=220568, samples=112930816, dma_tc=110284, dma_ht=110284, err=0, ovr=0, adc_ovr=0, m4_hb=2258
+[0145] ADC1_CH5 [PB1 [A3]]: raw=1323, avg=1399 (0.070 V), min=1172, max=1640, rate=500000, seq=220671, samples=112983552, dma_tc=110335, dma_ht=110336, err=0, ovr=0, adc_ovr=0, m4_hb=2259
+[0146] ADC1_CH5 [PB1 [A3]]: raw=1499, avg=1389 (0.069 V), min=1155, max=1656, rate=500000, seq=220774, samples=113036288, dma_tc=110387, dma_ht=110387, err=0, ovr=0, adc_ovr=0, m4_hb=2260
+[0147] ADC1_CH5 [PB1 [A3]]: raw=1305, avg=1363 (0.068 V), min=1131, max=1661, rate=500000, seq=220877, samples=113089024, dma_tc=110438, dma_ht=110439, err=0, ovr=0, adc_ovr=0, m4_hb=2261
+[0148] ADC1_CH5 [PB1 [A3]]: raw=1358, avg=1440 (0.072 V), min=1210, max=1644, rate=500000, seq=220980, samples=113141760, dma_tc=110490, dma_ht=110490, err=0, ovr=0, adc_ovr=0, m4_hb=2262
+[0149] ADC1_CH5 [PB1 [A3]]: raw=1512, avg=1393 (0.070 V), min=1158, max=1650, rate=500000, seq=221086, samples=113196032, dma_tc=110543, dma_ht=110543, err=0, ovr=0, adc_ovr=0, m4_hb=2264
+[0150] ADC1_CH5 [PB1 [A3]]: raw=1225, avg=1366 (0.068 V), min=1180, max=1648, rate=500000, seq=221190, samples=113249280, dma_tc=110595, dma_ht=110595, err=0, ovr=0, adc_ovr=0, m4_hb=2265
+[0151] ADC1_CH5 [PB1 [A3]]: raw=1406, avg=1426 (0.071 V), min=1209, max=1664, rate=500000, seq=221294, samples=113302528, dma_tc=110647, dma_ht=110647, err=0, ovr=0, adc_ovr=0, m4_hb=2266
+[0152] ADC1_CH5 [PB1 [A3]]: raw=1552, avg=1459 (0.073 V), min=1215, max=1655, rate=500000, seq=221395, samples=113354240, dma_tc=110697, dma_ht=110698, err=0, ovr=0, adc_ovr=0, m4_hb=2267
+[0153] ADC1_CH5 [PB1 [A3]]: raw=1483, avg=1436 (0.072 V), min=1192, max=1630, rate=500000, seq=221496, samples=113405952, dma_tc=110748, dma_ht=110748, err=0, ovr=0, adc_ovr=0, m4_hb=2268
+[0154] ADC1_CH5 [PB1 [A3]]: raw=1400, avg=1385 (0.069 V), min=1177, max=1651, rate=500000, seq=221597, samples=113457664, dma_tc=110798, dma_ht=110799, err=0, ovr=0, adc_ovr=0, m4_hb=2269
+[0155] ADC1_CH5 [PB1 [A3]]: raw=1392, avg=1422 (0.071 V), min=1202, max=1642, rate=500000, seq=221701, samples=113510912, dma_tc=110850, dma_ht=110851, err=0, ovr=0, adc_ovr=0, m4_hb=2270
+[0156] ADC1_CH5 [PB1 [A3]]: raw=1482, avg=1407 (0.070 V), min=1200, max=1652, rate=500000, seq=221801, samples=113562112, dma_tc=110900, dma_ht=110901, err=0, ovr=0, adc_ovr=0, m4_hb=2271
+[0157] ADC1_CH5 [PB1 [A3]]: raw=1577, avg=1426 (0.071 V), min=1165, max=1654, rate=500000, seq=221902, samples=113613824, dma_tc=110951, dma_ht=110951, err=0, ovr=0, adc_ovr=0, m4_hb=2272
+[0158] ADC1_CH5 [PB1 [A3]]: raw=1336, avg=1423 (0.071 V), min=1175, max=1648, rate=500000, seq=222002, samples=113665024, dma_tc=111001, dma_ht=111001, err=0, ovr=0, adc_ovr=0, m4_hb=2273
+[0159] ADC1_CH5 [PB1 [A3]]: raw=1495, avg=1404 (0.070 V), min=1174, max=1653, rate=500000, seq=222103, samples=113716736, dma_tc=111051, dma_ht=111052, err=0, ovr=0, adc_ovr=0, m4_hb=2274
+[0160] ADC1_CH5 [PB1 [A3]]: raw=1340, avg=1438 (0.072 V), min=1203, max=2228, rate=500000, seq=222204, samples=113768448, dma_tc=111102, dma_ht=111102, err=0, ovr=0, adc_ovr=0, m4_hb=2275
+[0161] ADC1_CH5 [PB1 [A3]]: raw=1342, avg=1390 (0.069 V), min=1147, max=1652, rate=500000, seq=222304, samples=113819648, dma_tc=111152, dma_ht=111152, err=0, ovr=0, adc_ovr=0, m4_hb=2276
+[0162] ADC1_CH5 [PB1 [A3]]: raw=1392, avg=1414 (0.071 V), min=1171, max=1646, rate=500000, seq=222404, samples=113870848, dma_tc=111202, dma_ht=111202, err=0, ovr=0, adc_ovr=0, m4_hb=2277
+[0163] ADC1_CH5 [PB1 [A3]]: raw=1285, avg=1378 (0.069 V), min=1134, max=1626, rate=500000, seq=222505, samples=113922560, dma_tc=111252, dma_ht=111253, err=0, ovr=0, adc_ovr=0, m4_hb=2278
+[0164] ADC1_CH5 [PB1 [A3]]: raw=1354, avg=1409 (0.070 V), min=724, max=1642, rate=500000, seq=222606, samples=113974272, dma_tc=111303, dma_ht=111303, err=0, ovr=0, adc_ovr=0, m4_hb=2279
+[0165] ADC1_CH5 [PB1 [A3]]: raw=1478, avg=1439 (0.072 V), min=1173, max=1655, rate=500000, seq=222707, samples=114025984, dma_tc=111353, dma_ht=111354, err=0, ovr=0, adc_ovr=0, m4_hb=2280
+[0166] ADC1_CH5 [PB1 [A3]]: raw=1216, avg=1438 (0.072 V), min=1175, max=1653, rate=500000, seq=222808, samples=114077696, dma_tc=111404, dma_ht=111404, err=0, ovr=0, adc_ovr=0, m4_hb=2281
+[0167] ADC1_CH5 [PB1 [A3]]: raw=1417, avg=1418 (0.071 V), min=1151, max=1643, rate=500000, seq=222909, samples=114129408, dma_tc=111454, dma_ht=111455, err=0, ovr=0, adc_ovr=0, m4_hb=2282
+[0168] ADC1_CH5 [PB1 [A3]]: raw=1511, avg=1451 (0.073 V), min=1209, max=1655, rate=500000, seq=223010, samples=114181120, dma_tc=111505, dma_ht=111505, err=0, ovr=0, adc_ovr=0, m4_hb=2283
+[0169] ADC1_CH5 [PB1 [A3]]: raw=1407, avg=1460 (0.073 V), min=1196, max=1667, rate=500000, seq=223112, samples=114233344, dma_tc=111556, dma_ht=111556, err=0, ovr=0, adc_ovr=0, m4_hb=2284
+[0170] ADC1_CH5 [PB1 [A3]]: raw=1445, avg=1377 (0.069 V), min=1158, max=1636, rate=500000, seq=223213, samples=114285056, dma_tc=111606, dma_ht=111607, err=0, ovr=0, adc_ovr=0, m4_hb=2285
+[0171] ADC1_CH5 [PB1 [A3]]: raw=1457, avg=1404 (0.070 V), min=1194, max=1651, rate=500000, seq=223313, samples=114336256, dma_tc=111656, dma_ht=111657, err=0, ovr=0, adc_ovr=0, m4_hb=2286
+[0172] ADC1_CH5 [PB1 [A3]]: raw=1528, avg=1442 (0.072 V), min=1199, max=1654, rate=500000, seq=223413, samples=114387456, dma_tc=111706, dma_ht=111707, err=0, ovr=0, adc_ovr=0, m4_hb=2287
+[0173] ADC1_CH5 [PB1 [A3]]: raw=1371, avg=1326 (0.066 V), min=1178, max=1615, rate=500000, seq=223514, samples=114439168, dma_tc=111757, dma_ht=111757, err=0, ovr=0, adc_ovr=0, m4_hb=2288
+[0174] ADC1_CH5 [PB1 [A3]]: raw=1255, avg=1432 (0.072 V), min=1181, max=1651, rate=500000, seq=223614, samples=114490368, dma_tc=111807, dma_ht=111807, err=0, ovr=0, adc_ovr=0, m4_hb=2289
+[0175] ADC1_CH5 [PB1 [A3]]: raw=1550, avg=1348 (0.067 V), min=1169, max=1634, rate=500000, seq=223715, samples=114542080, dma_tc=111857, dma_ht=111858, err=0, ovr=0, adc_ovr=0, m4_hb=2290
+[0176] ADC1_CH5 [PB1 [A3]]: raw=1452, avg=1408 (0.070 V), min=1143, max=1653, rate=500000, seq=223816, samples=114593792, dma_tc=111908, dma_ht=111908, err=0, ovr=0, adc_ovr=0, m4_hb=2292
+[0177] ADC1_CH5 [PB1 [A3]]: raw=1328, avg=1425 (0.071 V), min=1191, max=1664, rate=500000, seq=223917, samples=114645504, dma_tc=111958, dma_ht=111959, err=0, ovr=0, adc_ovr=0, m4_hb=2293
+[0178] ADC1_CH5 [PB1 [A3]]: raw=1286, avg=1434 (0.072 V), min=1163, max=1666, rate=500000, seq=224017, samples=114696704, dma_tc=112008, dma_ht=112009, err=0, ovr=0, adc_ovr=0, m4_hb=2294
+[0179] ADC1_CH5 [PB1 [A3]]: raw=1331, avg=1377 (0.069 V), min=1159, max=1644, rate=500000, seq=224118, samples=114748416, dma_tc=112059, dma_ht=112059, err=0, ovr=0, adc_ovr=0, m4_hb=2295
+[0180] ADC1_CH5 [PB1 [A3]]: raw=1376, avg=1427 (0.071 V), min=1170, max=1647, rate=500000, seq=224218, samples=114799616, dma_tc=112109, dma_ht=112109, err=0, ovr=0, adc_ovr=0, m4_hb=2296
+[0181] ADC1_CH5 [PB1 [A3]]: raw=1589, avg=1428 (0.071 V), min=1176, max=1658, rate=500000, seq=224319, samples=114851328, dma_tc=112159, dma_ht=112160, err=0, ovr=0, adc_ovr=0, m4_hb=2297
+[0182] ADC1_CH5 [PB1 [A3]]: raw=1388, avg=1443 (0.072 V), min=1182, max=1663, rate=500000, seq=224419, samples=114902528, dma_tc=112209, dma_ht=112210, err=0, ovr=0, adc_ovr=0, m4_hb=2298
+[0183] ADC1_CH5 [PB1 [A3]]: raw=1504, avg=1409 (0.070 V), min=1181, max=1647, rate=500000, seq=224519, samples=114953728, dma_tc=112259, dma_ht=112260, err=0, ovr=0, adc_ovr=0, m4_hb=2299
+[0184] ADC1_CH5 [PB1 [A3]]: raw=1268, avg=1414 (0.071 V), min=1189, max=1655, rate=500000, seq=224620, samples=115005440, dma_tc=112310, dma_ht=112310, err=0, ovr=0, adc_ovr=0, m4_hb=2300
+[0185] ADC1_CH5 [PB1 [A3]]: raw=1426, avg=1424 (0.071 V), min=1202, max=1658, rate=500000, seq=224720, samples=115056640, dma_tc=112360, dma_ht=112360, err=0, ovr=0, adc_ovr=0, m4_hb=2301
+[0186] ADC1_CH5 [PB1 [A3]]: raw=1432, avg=1369 (0.068 V), min=1161, max=1627, rate=500000, seq=224821, samples=115108352, dma_tc=112410, dma_ht=112411, err=0, ovr=0, adc_ovr=0, m4_hb=2302
+[0187] ADC1_CH5 [PB1 [A3]]: raw=1427, avg=1404 (0.070 V), min=1176, max=1680, rate=500000, seq=224923, samples=115160576, dma_tc=112461, dma_ht=112462, err=0, ovr=0, adc_ovr=0, m4_hb=2303
+[0188] ADC1_CH5 [PB1 [A3]]: raw=1552, avg=1430 (0.072 V), min=1183, max=1661, rate=500000, seq=225025, samples=115212800, dma_tc=112512, dma_ht=112513, err=0, ovr=0, adc_ovr=0, m4_hb=2304
+[0189] ADC1_CH5 [PB1 [A3]]: raw=1462, avg=1453 (0.073 V), min=1202, max=1664, rate=500000, seq=225125, samples=115264000, dma_tc=112562, dma_ht=112563, err=0, ovr=0, adc_ovr=0, m4_hb=2305
+[0190] ADC1_CH5 [PB1 [A3]]: raw=1466, avg=1411 (0.071 V), min=1165, max=1646, rate=500000, seq=225226, samples=115315712, dma_tc=112613, dma_ht=112613, err=0, ovr=0, adc_ovr=0, m4_hb=2306
+[0191] ADC1_CH5 [PB1 [A3]]: raw=1484, avg=1404 (0.070 V), min=1162, max=1644, rate=500000, seq=225326, samples=115366912, dma_tc=112663, dma_ht=112663, err=0, ovr=0, adc_ovr=0, m4_hb=2307
+[0192] ADC1_CH5 [PB1 [A3]]: raw=1437, avg=1395 (0.070 V), min=1180, max=1648, rate=500000, seq=225426, samples=115418112, dma_tc=112713, dma_ht=112713, err=0, ovr=0, adc_ovr=0, m4_hb=2308
+[0193] ADC1_CH5 [PB1 [A3]]: raw=1459, avg=1441 (0.072 V), min=1202, max=1666, rate=500000, seq=225529, samples=115470848, dma_tc=112764, dma_ht=112765, err=0, ovr=0, adc_ovr=0, m4_hb=2309
+[0194] ADC1_CH5 [PB1 [A3]]: raw=1359, avg=1423 (0.071 V), min=1171, max=1643, rate=500000, seq=225640, samples=115527680, dma_tc=112820, dma_ht=112820, err=0, ovr=0, adc_ovr=0, m4_hb=2310
+[0195] ADC1_CH5 [PB1 [A3]]: raw=1439, avg=1423 (0.071 V), min=1176, max=1669, rate=500000, seq=225748, samples=115582976, dma_tc=112874, dma_ht=112874, err=0, ovr=0, adc_ovr=0, m4_hb=2311
+[0196] ADC1_CH5 [PB1 [A3]]: raw=1436, avg=1433 (0.072 V), min=1167, max=1645, rate=500000, seq=225852, samples=115636224, dma_tc=112926, dma_ht=112926, err=0, ovr=0, adc_ovr=0, m4_hb=2312
+[0197] ADC1_CH5 [PB1 [A3]]: raw=1519, avg=1435 (0.072 V), min=1172, max=1648, rate=500000, seq=225960, samples=115691520, dma_tc=112980, dma_ht=112980, err=0, ovr=0, adc_ovr=0, m4_hb=2313
+[0198] ADC1_CH5 [PB1 [A3]]: raw=1277, avg=1385 (0.069 V), min=1166, max=1680, rate=500000, seq=226065, samples=115745280, dma_tc=113032, dma_ht=113033, err=0, ovr=0, adc_ovr=0, m4_hb=2315
+[0199] ADC1_CH5 [PB1 [A3]]: raw=1530, avg=1433 (0.072 V), min=1166, max=1652, rate=500000, seq=226180, samples=115804160, dma_tc=113090, dma_ht=113090, err=0, ovr=0, adc_ovr=0, m4_hb=2316
+[0200] ADC1_CH5 [PB1 [A3]]: raw=1392, avg=1413 (0.071 V), min=1178, max=1658, rate=500000, seq=226316, samples=115873792, dma_tc=113158, dma_ht=113158, err=0, ovr=0, adc_ovr=0, m4_hb=2317
+[0201] ADC1_CH5 [PB1 [A3]]: raw=1400, avg=1399 (0.070 V), min=1199, max=1652, rate=500000, seq=226522, samples=115979264, dma_tc=113261, dma_ht=113261, err=0, ovr=0, adc_ovr=0, m4_hb=2319
+[0202] ADC1_CH5 [PB1 [A3]]: raw=1438, avg=1428 (0.071 V), min=1201, max=1656, rate=500000, seq=226653, samples=116046336, dma_tc=113326, dma_ht=113327, err=0, ovr=0, adc_ovr=0, m4_hb=2321
+[0203] ADC1_CH5 [PB1 [A3]]: raw=1323, avg=1403 (0.070 V), min=1173, max=1664, rate=500000, seq=226789, samples=116115968, dma_tc=113394, dma_ht=113395, err=0, ovr=0, adc_ovr=0, m4_hb=2322
+[0204] ADC1_CH5 [PB1 [A3]]: raw=1432, avg=1426 (0.071 V), min=1198, max=1638, rate=500000, seq=226917, samples=116181504, dma_tc=113458, dma_ht=113459, err=0, ovr=0, adc_ovr=0, m4_hb=2323
+[0205] ADC1_CH5 [PB1 [A3]]: raw=1439, avg=1394 (0.070 V), min=1167, max=1664, rate=500000, seq=227059, samples=116254208, dma_tc=113529, dma_ht=113530, err=0, ovr=0, adc_ovr=0, m4_hb=2325
+[0206] ADC1_CH5 [PB1 [A3]]: raw=1539, avg=1445 (0.072 V), min=1194, max=1657, rate=500000, seq=227174, samples=116313088, dma_tc=113587, dma_ht=113587, err=0, ovr=0, adc_ovr=0, m4_hb=2326
+[0207] ADC1_CH5 [PB1 [A3]]: raw=1466, avg=1443 (0.072 V), min=1181, max=1668, rate=500000, seq=227283, samples=116368896, dma_tc=113641, dma_ht=113642, err=0, ovr=0, adc_ovr=0, m4_hb=2327
+[0208] ADC1_CH5 [PB1 [A3]]: raw=1503, avg=1443 (0.072 V), min=1171, max=1686, rate=500000, seq=227467, samples=116463104, dma_tc=113733, dma_ht=113734, err=0, ovr=0, adc_ovr=0, m4_hb=2329
+[0209] ADC1_CH5 [PB1 [A3]]: raw=1472, avg=1412 (0.071 V), min=1165, max=1686, rate=500000, seq=227581, samples=116521472, dma_tc=113790, dma_ht=113791, err=0, ovr=0, adc_ovr=0, m4_hb=2330
+[0210] ADC1_CH5 [PB1 [A3]]: raw=1293, avg=1411 (0.071 V), min=1163, max=1659, rate=500000, seq=227683, samples=116573696, dma_tc=113841, dma_ht=113842, err=0, ovr=0, adc_ovr=0, m4_hb=2331
+[0211] ADC1_CH5 [PB1 [A3]]: raw=1360, avg=1457 (0.073 V), min=1167, max=1666, rate=500000, seq=227786, samples=116626432, dma_tc=113893, dma_ht=113893, err=0, ovr=0, adc_ovr=0, m4_hb=2332
+[0212] ADC1_CH5 [PB1 [A3]]: raw=1436, avg=1422 (0.071 V), min=1178, max=1658, rate=500000, seq=227890, samples=116679680, dma_tc=113945, dma_ht=113945, err=0, ovr=0, adc_ovr=0, m4_hb=2333
+[0213] ADC1_CH5 [PB1 [A3]]: raw=1256, avg=1408 (0.070 V), min=1163, max=1688, rate=500000, seq=227999, samples=116735488, dma_tc=113999, dma_ht=114000, err=0, ovr=0, adc_ovr=0, m4_hb=2334
+[0214] ADC1_CH5 [PB1 [A3]]: raw=1405, avg=1442 (0.072 V), min=1169, max=1657, rate=500000, seq=228102, samples=116788224, dma_tc=114051, dma_ht=114051, err=0, ovr=0, adc_ovr=0, m4_hb=2335
+[0215] ADC1_CH5 [PB1 [A3]]: raw=1344, avg=1413 (0.071 V), min=1206, max=1660, rate=500000, seq=228204, samples=116840448, dma_tc=114102, dma_ht=114102, err=0, ovr=0, adc_ovr=0, m4_hb=2336
+[0216] ADC1_CH5 [PB1 [A3]]: raw=1470, avg=1461 (0.073 V), min=1173, max=1663, rate=500000, seq=228308, samples=116893696, dma_tc=114154, dma_ht=114154, err=0, ovr=0, adc_ovr=0, m4_hb=2338
+[0217] ADC1_CH5 [PB1 [A3]]: raw=1526, avg=1436 (0.072 V), min=1205, max=1656, rate=500000, seq=228409, samples=116945408, dma_tc=114204, dma_ht=114205, err=0, ovr=0, adc_ovr=0, m4_hb=2339
+[0218] ADC1_CH5 [PB1 [A3]]: raw=1497, avg=1407 (0.070 V), min=1198, max=1656, rate=500000, seq=228509, samples=116996608, dma_tc=114254, dma_ht=114255, err=0, ovr=0, adc_ovr=0, m4_hb=2340
+[0219] ADC1_CH5 [PB1 [A3]]: raw=1566, avg=1452 (0.073 V), min=1183, max=1655, rate=500000, seq=228611, samples=117048832, dma_tc=114305, dma_ht=114306, err=0, ovr=0, adc_ovr=0, m4_hb=2341
+[0220] ADC1_CH5 [PB1 [A3]]: raw=1398, avg=1461 (0.073 V), min=1211, max=1656, rate=500000, seq=228712, samples=117100544, dma_tc=114356, dma_ht=114356, err=0, ovr=0, adc_ovr=0, m4_hb=2342
+[0221] ADC1_CH5 [PB1 [A3]]: raw=1343, avg=1477 (0.074 V), min=1221, max=1644, rate=500000, seq=228813, samples=117152256, dma_tc=114406, dma_ht=114407, err=0, ovr=0, adc_ovr=0, m4_hb=2343
+[0222] ADC1_CH5 [PB1 [A3]]: raw=1460, avg=1454 (0.073 V), min=1195, max=1652, rate=500000, seq=228916, samples=117204992, dma_tc=114458, dma_ht=114458, err=0, ovr=0, adc_ovr=0, m4_hb=2344
+[0223] ADC1_CH5 [PB1 [A3]]: raw=1371, avg=1396 (0.070 V), min=1215, max=1662, rate=500000, seq=229030, samples=117263360, dma_tc=114515, dma_ht=114515, err=0, ovr=0, adc_ovr=0, m4_hb=2345
+[0224] ADC1_CH5 [PB1 [A3]]: raw=1487, avg=1426 (0.071 V), min=1199, max=1679, rate=500000, seq=229132, samples=117315584, dma_tc=114566, dma_ht=114566, err=0, ovr=0, adc_ovr=0, m4_hb=2346
+[0225] ADC1_CH5 [PB1 [A3]]: raw=1590, avg=1447 (0.072 V), min=1172, max=1664, rate=500000, seq=229233, samples=117367296, dma_tc=114616, dma_ht=114617, err=0, ovr=0, adc_ovr=0, m4_hb=2347
+[0226] ADC1_CH5 [PB1 [A3]]: raw=1246, avg=1380 (0.069 V), min=1174, max=1672, rate=500000, seq=229334, samples=117419008, dma_tc=114667, dma_ht=114667, err=0, ovr=0, adc_ovr=0, m4_hb=2348
+[0227] ADC1_CH5 [PB1 [A3]]: raw=1507, avg=1462 (0.073 V), min=1215, max=1654, rate=500000, seq=229435, samples=117470720, dma_tc=114717, dma_ht=114718, err=0, ovr=0, adc_ovr=0, m4_hb=2349
+[0228] ADC1_CH5 [PB1 [A3]]: raw=1403, avg=1398 (0.070 V), min=1170, max=1656, rate=500000, seq=229536, samples=117522432, dma_tc=114768, dma_ht=114768, err=0, ovr=0, adc_ovr=0, m4_hb=2350
+[0229] ADC1_CH5 [PB1 [A3]]: raw=1426, avg=1415 (0.071 V), min=1159, max=1655, rate=500000, seq=229636, samples=117573632, dma_tc=114818, dma_ht=114818, err=0, ovr=0, adc_ovr=0, m4_hb=2351
+[0230] ADC1_CH5 [PB1 [A3]]: raw=1235, avg=1407 (0.070 V), min=1204, max=1646, rate=500000, seq=229737, samples=117625344, dma_tc=114868, dma_ht=114869, err=0, ovr=0, adc_ovr=0, m4_hb=2352
+[0231] ADC1_CH5 [PB1 [A3]]: raw=1456, avg=1443 (0.072 V), min=1171, max=1655, rate=500000, seq=229838, samples=117677056, dma_tc=114919, dma_ht=114919, err=0, ovr=0, adc_ovr=0, m4_hb=2353
+[0232] ADC1_CH5 [PB1 [A3]]: raw=1390, avg=1387 (0.069 V), min=823, max=1667, rate=500000, seq=229939, samples=117728768, dma_tc=114969, dma_ht=114970, err=0, ovr=0, adc_ovr=0, m4_hb=2354
+[0233] ADC1_CH5 [PB1 [A3]]: raw=1294, avg=1433 (0.072 V), min=1211, max=1664, rate=500000, seq=230039, samples=117779968, dma_tc=115019, dma_ht=115020, err=0, ovr=0, adc_ovr=0, m4_hb=2355
+[0234] ADC1_CH5 [PB1 [A3]]: raw=1263, avg=1379 (0.069 V), min=1173, max=1642, rate=500000, seq=230140, samples=117831680, dma_tc=115070, dma_ht=115070, err=0, ovr=0, adc_ovr=0, m4_hb=2356
+[0235] ADC1_CH5 [PB1 [A3]]: raw=1334, avg=1455 (0.073 V), min=1158, max=1672, rate=500000, seq=230242, samples=117883904, dma_tc=115121, dma_ht=115121, err=0, ovr=0, adc_ovr=0, m4_hb=2357
+[0236] ADC1_CH5 [PB1 [A3]]: raw=1405, avg=1440 (0.072 V), min=1199, max=1648, rate=500000, seq=230344, samples=117936128, dma_tc=115172, dma_ht=115172, err=0, ovr=0, adc_ovr=0, m4_hb=2358
+[0237] ADC1_CH5 [PB1 [A3]]: raw=1465, avg=1476 (0.074 V), min=1203, max=1662, rate=500000, seq=230445, samples=117987840, dma_tc=115222, dma_ht=115223, err=0, ovr=0, adc_ovr=0, m4_hb=2359
+[0238] ADC1_CH5 [PB1 [A3]]: raw=1574, avg=1464 (0.073 V), min=1183, max=1644, rate=500000, seq=230548, samples=118040576, dma_tc=115274, dma_ht=115274, err=0, ovr=0, adc_ovr=0, m4_hb=2360
+[0239] ADC1_CH5 [PB1 [A3]]: raw=1384, avg=1378 (0.069 V), min=1155, max=1646, rate=500000, seq=230652, samples=118093824, dma_tc=115326, dma_ht=115326, err=0, ovr=0, adc_ovr=0, m4_hb=2362
+[0240] ADC1_CH5 [PB1 [A3]]: raw=1287, avg=1430 (0.072 V), min=1178, max=1649, rate=500000, seq=230756, samples=118147072, dma_tc=115378, dma_ht=115378, err=0, ovr=0, adc_ovr=0, m4_hb=2363
+[0241] ADC1_CH5 [PB1 [A3]]: raw=1490, avg=1413 (0.071 V), min=1199, max=1663, rate=500000, seq=230863, samples=118201856, dma_tc=115431, dma_ht=115432, err=0, ovr=0, adc_ovr=0, m4_hb=2364
+[0242] ADC1_CH5 [PB1 [A3]]: raw=1351, avg=1430 (0.072 V), min=1159, max=1658, rate=500000, seq=230971, samples=118257152, dma_tc=115485, dma_ht=115486, err=0, ovr=0, adc_ovr=0, m4_hb=2365
+[0243] ADC1_CH5 [PB1 [A3]]: raw=1310, avg=1403 (0.070 V), min=1170, max=1645, rate=500000, seq=231075, samples=118310400, dma_tc=115537, dma_ht=115538, err=0, ovr=0, adc_ovr=0, m4_hb=2366
+[0244] ADC1_CH5 [PB1 [A3]]: raw=1264, avg=1406 (0.070 V), min=1175, max=1768, rate=500000, seq=231177, samples=118362624, dma_tc=115588, dma_ht=115589, err=0, ovr=0, adc_ovr=0, m4_hb=2367
+[0245] ADC1_CH5 [PB1 [A3]]: raw=1507, avg=1429 (0.071 V), min=1174, max=1656, rate=500000, seq=231279, samples=118414848, dma_tc=115639, dma_ht=115640, err=0, ovr=0, adc_ovr=0, m4_hb=2368
+[0246] ADC1_CH5 [PB1 [A3]]: raw=1423, avg=1387 (0.069 V), min=1173, max=1644, rate=500000, seq=231386, samples=118469632, dma_tc=115693, dma_ht=115693, err=0, ovr=0, adc_ovr=0, m4_hb=2369
+[0247] ADC1_CH5 [PB1 [A3]]: raw=1310, avg=1410 (0.071 V), min=1181, max=1658, rate=500000, seq=231488, samples=118521856, dma_tc=115744, dma_ht=115744, err=0, ovr=0, adc_ovr=0, m4_hb=2370
+[0248] ADC1_CH5 [PB1 [A3]]: raw=1343, avg=1466 (0.073 V), min=1192, max=1658, rate=500000, seq=231593, samples=118575616, dma_tc=115796, dma_ht=115797, err=0, ovr=0, adc_ovr=0, m4_hb=2371
+[0249] ADC1_CH5 [PB1 [A3]]: raw=1565, avg=1445 (0.072 V), min=1204, max=1659, rate=500000, seq=231699, samples=118629888, dma_tc=115849, dma_ht=115850, err=0, ovr=0, adc_ovr=0, m4_hb=2372
+[0250] ADC1_CH5 [PB1 [A3]]: raw=1472, avg=1391 (0.070 V), min=1170, max=1643, rate=500000, seq=231809, samples=118686208, dma_tc=115904, dma_ht=115905, err=0, ovr=0, adc_ovr=0, m4_hb=2373
+[0251] ADC1_CH5 [PB1 [A3]]: raw=1341, avg=1415 (0.071 V), min=1169, max=1658, rate=500000, seq=231913, samples=118739456, dma_tc=115956, dma_ht=115957, err=0, ovr=0, adc_ovr=0, m4_hb=2374
+[0252] ADC1_CH5 [PB1 [A3]]: raw=1360, avg=1374 (0.069 V), min=1183, max=1661, rate=500000, seq=232022, samples=118795264, dma_tc=116011, dma_ht=116011, err=0, ovr=0, adc_ovr=0, m4_hb=2376
+[0253] ADC1_CH5 [PB1 [A3]]: raw=1411, avg=1431 (0.072 V), min=1179, max=1657, rate=500000, seq=232123, samples=118846976, dma_tc=116061, dma_ht=116062, err=0, ovr=0, adc_ovr=0, m4_hb=2377
+[0254] ADC1_CH5 [PB1 [A3]]: raw=1562, avg=1382 (0.069 V), min=1167, max=1635, rate=500000, seq=232225, samples=118899200, dma_tc=116112, dma_ht=116113, err=0, ovr=0, adc_ovr=0, m4_hb=2378
+[0255] ADC1_CH5 [PB1 [A3]]: raw=1369, avg=1429 (0.071 V), min=1194, max=1660, rate=500000, seq=232328, samples=118951936, dma_tc=116164, dma_ht=116164, err=0, ovr=0, adc_ovr=0, m4_hb=2379
+[0256] ADC1_CH5 [PB1 [A3]]: raw=1490, avg=1426 (0.071 V), min=1215, max=1654, rate=500000, seq=232429, samples=119003648, dma_tc=116214, dma_ht=116215, err=0, ovr=0, adc_ovr=0, m4_hb=2380
+[0257] ADC1_CH5 [PB1 [A3]]: raw=1526, avg=1408 (0.070 V), min=1171, max=1669, rate=500000, seq=232531, samples=119055872, dma_tc=116265, dma_ht=116266, err=0, ovr=0, adc_ovr=0, m4_hb=2381
+[0258] ADC1_CH5 [PB1 [A3]]: raw=1408, avg=1361 (0.068 V), min=1151, max=1600, rate=500000, seq=232635, samples=119109120, dma_tc=116317, dma_ht=116318, err=0, ovr=0, adc_ovr=0, m4_hb=2382
+[0259] ADC1_CH5 [PB1 [A3]]: raw=1401, avg=1434 (0.072 V), min=1199, max=1643, rate=500000, seq=232738, samples=119161856, dma_tc=116369, dma_ht=116369, err=0, ovr=0, adc_ovr=0, m4_hb=2383
+[0260] ADC1_CH5 [PB1 [A3]]: raw=1597, avg=1451 (0.073 V), min=1238, max=1653, rate=500000, seq=232841, samples=119214592, dma_tc=116420, dma_ht=116421, err=0, ovr=0, adc_ovr=0, m4_hb=2384
+[0261] ADC1_CH5 [PB1 [A3]]: raw=1446, avg=1416 (0.071 V), min=1192, max=1647, rate=500000, seq=232944, samples=119267328, dma_tc=116472, dma_ht=116472, err=0, ovr=0, adc_ovr=0, m4_hb=2385
+[0262] ADC1_CH5 [PB1 [A3]]: raw=1546, avg=1435 (0.072 V), min=1156, max=1658, rate=500000, seq=233044, samples=119318528, dma_tc=116522, dma_ht=116522, err=0, ovr=0, adc_ovr=0, m4_hb=2386
+[0263] ADC1_CH5 [PB1 [A3]]: raw=1539, avg=1460 (0.073 V), min=1210, max=1648, rate=500000, seq=233145, samples=119370240, dma_tc=116572, dma_ht=116573, err=0, ovr=0, adc_ovr=0, m4_hb=2387
+[0264] ADC1_CH5 [PB1 [A3]]: raw=1557, avg=1425 (0.071 V), min=1187, max=1644, rate=500000, seq=233248, samples=119422976, dma_tc=116624, dma_ht=116624, err=0, ovr=0, adc_ovr=0, m4_hb=2388
+[0265] ADC1_CH5 [PB1 [A3]]: raw=1303, avg=1431 (0.072 V), min=1210, max=1658, rate=500000, seq=233351, samples=119475712, dma_tc=116675, dma_ht=116676, err=0, ovr=0, adc_ovr=0, m4_hb=2389
+[0266] ADC1_CH5 [PB1 [A3]]: raw=1486, avg=1460 (0.073 V), min=1215, max=1643, rate=500000, seq=233453, samples=119527936, dma_tc=116726, dma_ht=116727, err=0, ovr=0, adc_ovr=0, m4_hb=2390
+[0267] ADC1_CH5 [PB1 [A3]]: raw=1570, avg=1428 (0.071 V), min=1170, max=1651, rate=500000, seq=233555, samples=119580160, dma_tc=116777, dma_ht=116778, err=0, ovr=0, adc_ovr=0, m4_hb=2391
+[0268] ADC1_CH5 [PB1 [A3]]: raw=1340, avg=1433 (0.072 V), min=1183, max=1619, rate=500000, seq=233656, samples=119631872, dma_tc=116828, dma_ht=116828, err=0, ovr=0, adc_ovr=0, m4_hb=2392
+[0269] ADC1_CH5 [PB1 [A3]]: raw=1256, avg=1415 (0.071 V), min=1176, max=1656, rate=500000, seq=233756, samples=119683072, dma_tc=116878, dma_ht=116878, err=0, ovr=0, adc_ovr=0, m4_hb=2393
+[0270] ADC1_CH5 [PB1 [A3]]: raw=1528, avg=1438 (0.072 V), min=1162, max=1656, rate=500000, seq=233857, samples=119734784, dma_tc=116928, dma_ht=116929, err=0, ovr=0, adc_ovr=0, m4_hb=2394
+[0271] ADC1_CH5 [PB1 [A3]]: raw=1404, avg=1473 (0.074 V), min=1214, max=1671, rate=500000, seq=233959, samples=119787008, dma_tc=116979, dma_ht=116980, err=0, ovr=0, adc_ovr=0, m4_hb=2395
+[0272] ADC1_CH5 [PB1 [A3]]: raw=1508, avg=1461 (0.073 V), min=1200, max=1654, rate=500000, seq=234060, samples=119838720, dma_tc=117030, dma_ht=117030, err=0, ovr=0, adc_ovr=0, m4_hb=2396
+[0273] ADC1_CH5 [PB1 [A3]]: raw=1654, avg=1434 (0.072 V), min=1149, max=1664, rate=500000, seq=234160, samples=119889920, dma_tc=117080, dma_ht=117080, err=0, ovr=0, adc_ovr=0, m4_hb=2397
+[0274] ADC1_CH5 [PB1 [A3]]: raw=1573, avg=1438 (0.072 V), min=1205, max=1632, rate=500000, seq=234260, samples=119941120, dma_tc=117130, dma_ht=117130, err=0, ovr=0, adc_ovr=0, m4_hb=2398
+[0275] ADC1_CH5 [PB1 [A3]]: raw=1357, avg=1413 (0.071 V), min=1197, max=1641, rate=500000, seq=234362, samples=119993344, dma_tc=117181, dma_ht=117181, err=0, ovr=0, adc_ovr=0, m4_hb=2400
+[0276] ADC1_CH5 [PB1 [A3]]: raw=1250, avg=1420 (0.071 V), min=1191, max=1648, rate=500000, seq=234462, samples=120044544, dma_tc=117231, dma_ht=117231, err=0, ovr=0, adc_ovr=0, m4_hb=2401
+[0277] ADC1_CH5 [PB1 [A3]]: raw=1230, avg=1397 (0.070 V), min=1156, max=1660, rate=500000, seq=234563, samples=120096256, dma_tc=117281, dma_ht=117282, err=0, ovr=0, adc_ovr=0, m4_hb=2402
+[0278] ADC1_CH5 [PB1 [A3]]: raw=1329, avg=1407 (0.070 V), min=1178, max=1655, rate=500000, seq=234663, samples=120147456, dma_tc=117331, dma_ht=117332, err=0, ovr=0, adc_ovr=0, m4_hb=2403
+[0279] ADC1_CH5 [PB1 [A3]]: raw=1538, avg=1389 (0.069 V), min=1179, max=1651, rate=500000, seq=234763, samples=120198656, dma_tc=117381, dma_ht=117382, err=0, ovr=0, adc_ovr=0, m4_hb=2404
+[0280] ADC1_CH5 [PB1 [A3]]: raw=1496, avg=1443 (0.072 V), min=1207, max=1665, rate=500000, seq=234863, samples=120249856, dma_tc=117431, dma_ht=117432, err=0, ovr=0, adc_ovr=0, m4_hb=2405
+[0281] ADC1_CH5 [PB1 [A3]]: raw=1280, avg=1417 (0.071 V), min=1170, max=1644, rate=500000, seq=234964, samples=120301568, dma_tc=117482, dma_ht=117482, err=0, ovr=0, adc_ovr=0, m4_hb=2406
+[0282] ADC1_CH5 [PB1 [A3]]: raw=1379, avg=1420 (0.071 V), min=1190, max=1649, rate=500000, seq=235065, samples=120353280, dma_tc=117532, dma_ht=117533, err=0, ovr=0, adc_ovr=0, m4_hb=2407
+[0283] ADC1_CH5 [PB1 [A3]]: raw=1544, avg=1419 (0.071 V), min=1166, max=1641, rate=500000, seq=235167, samples=120405504, dma_tc=117583, dma_ht=117584, err=0, ovr=0, adc_ovr=0, m4_hb=2408
+[0284] ADC1_CH5 [PB1 [A3]]: raw=1268, avg=1425 (0.071 V), min=1171, max=1655, rate=500000, seq=235269, samples=120457728, dma_tc=117634, dma_ht=117635, err=0, ovr=0, adc_ovr=0, m4_hb=2409
+[0285] ADC1_CH5 [PB1 [A3]]: raw=1492, avg=1447 (0.072 V), min=1167, max=1663, rate=500000, seq=235371, samples=120509952, dma_tc=117685, dma_ht=117686, err=0, ovr=0, adc_ovr=0, m4_hb=2410
+[0286] ADC1_CH5 [PB1 [A3]]: raw=1408, avg=1470 (0.074 V), min=1219, max=1648, rate=500000, seq=235471, samples=120561152, dma_tc=117735, dma_ht=117736, err=0, ovr=0, adc_ovr=0, m4_hb=2411
+[0287] ADC1_CH5 [PB1 [A3]]: raw=1426, avg=1494 (0.075 V), min=1310, max=1664, rate=500000, seq=235572, samples=120612864, dma_tc=117786, dma_ht=117786, err=0, ovr=0, adc_ovr=0, m4_hb=2412
+[0288] ADC1_CH5 [PB1 [A3]]: raw=1530, avg=1423 (0.071 V), min=1151, max=1632, rate=500000, seq=235672, samples=120664064, dma_tc=117836, dma_ht=117836, err=0, ovr=0, adc_ovr=0, m4_hb=2413
+[0289] ADC1_CH5 [PB1 [A3]]: raw=1458, avg=1437 (0.072 V), min=1199, max=1648, rate=500000, seq=235773, samples=120715776, dma_tc=117886, dma_ht=117887, err=0, ovr=0, adc_ovr=0, m4_hb=2414
+[0290] ADC1_CH5 [PB1 [A3]]: raw=1471, avg=1416 (0.071 V), min=1169, max=1640, rate=500000, seq=235873, samples=120766976, dma_tc=117936, dma_ht=117937, err=0, ovr=0, adc_ovr=0, m4_hb=2415
+[0291] ADC1_CH5 [PB1 [A3]]: raw=1471, avg=1427 (0.071 V), min=1208, max=1658, rate=500000, seq=235974, samples=120818688, dma_tc=117987, dma_ht=117987, err=0, ovr=0, adc_ovr=0, m4_hb=2416
+[0292] ADC1_CH5 [PB1 [A3]]: raw=1419, avg=1428 (0.071 V), min=1167, max=1642, rate=500000, seq=236074, samples=120869888, dma_tc=118037, dma_ht=118037, err=0, ovr=0, adc_ovr=0, m4_hb=2417
+[0293] ADC1_CH5 [PB1 [A3]]: raw=1277, avg=1362 (0.068 V), min=1151, max=1640, rate=500000, seq=236174, samples=120921088, dma_tc=118087, dma_ht=118087, err=0, ovr=0, adc_ovr=0, m4_hb=2418
+[0294] ADC1_CH5 [PB1 [A3]]: raw=1341, avg=1372 (0.069 V), min=1177, max=1638, rate=500000, seq=236276, samples=120973312, dma_tc=118138, dma_ht=118138, err=0, ovr=0, adc_ovr=0, m4_hb=2419
+[0295] ADC1_CH5 [PB1 [A3]]: raw=1519, avg=1422 (0.071 V), min=1165, max=1648, rate=500000, seq=236377, samples=121025024, dma_tc=118188, dma_ht=118189, err=0, ovr=0, adc_ovr=0, m4_hb=2420
+[0296] ADC1_CH5 [PB1 [A3]]: raw=1497, avg=1454 (0.073 V), min=1179, max=1657, rate=500000, seq=236477, samples=121076224, dma_tc=118238, dma_ht=118239, err=0, ovr=0, adc_ovr=0, m4_hb=2421
+[0297] ADC1_CH5 [PB1 [A3]]: raw=1440, avg=1421 (0.071 V), min=1162, max=1654, rate=500000, seq=236579, samples=121128448, dma_tc=118289, dma_ht=118290, err=0, ovr=0, adc_ovr=0, m4_hb=2422
+[0298] ADC1_CH5 [PB1 [A3]]: raw=1552, avg=1453 (0.073 V), min=1178, max=1646, rate=500000, seq=236681, samples=121180672, dma_tc=118340, dma_ht=118341, err=0, ovr=0, adc_ovr=0, m4_hb=2423
+[0299] ADC1_CH5 [PB1 [A3]]: raw=1559, avg=1405 (0.070 V), min=1149, max=1669, rate=500000, seq=236782, samples=121232384, dma_tc=118391, dma_ht=118391, err=0, ovr=0, adc_ovr=0, m4_hb=2424
+[0300] ADC1_CH5 [PB1 [A3]]: raw=1513, avg=1419 (0.071 V), min=1158, max=1648, rate=500000, seq=236883, samples=121284096, dma_tc=118441, dma_ht=118442, err=0, ovr=0, adc_ovr=0, m4_hb=2425
+
+4. Memory inspection of g_shared fail counters and retention peaks at 0x380084E0:
+---------------------------------------------------------------------------------
+-------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Hot Plug
+Reset mode  : Software reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+Reading 32-bit memory content
+  Size          : 32 Bytes
+  Address:      : 0x380084E0
+0x380084E0 : 00000000 00000000 00000000 00000000
+0x380084F0 : 00000001 00000147 00001D58 00000000
+

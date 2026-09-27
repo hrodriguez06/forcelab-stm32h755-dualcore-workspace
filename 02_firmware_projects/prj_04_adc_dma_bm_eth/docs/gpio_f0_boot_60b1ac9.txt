@@ -1,0 +1,21 @@
+[+ 0.000s]  
+[+ 0.000s] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 60b1ac9 ===
+[+ 0.000s] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[+ 0.000s] [sys] silicon revision id=0x2003
+[+ 0.000s] [ipc] shared block at 0x38008000, magic=0x48375353
+[+ 0.000s] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[+ 0.011s] [net] starting TCP/IP stack
+[+ 0.011s] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[+ 0.021s] [net] mac=02:00:00:00:00:01 phy_addr=0
+[+ 0.021s] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[+ 0.021s] [phy] partner advertised:
+[+ 0.032s] [net] udp echo listening on port 7
+[+ 0.032s] [adc_srv] listening on UDP port 5001
+[+ 0.032s] [ipc] m7=1 m4=0  (CPU2 starting)
+[+ 1.609s] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[+ 1.619s] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[+ 1.619s] [net] link up: 100 Mbps full duplex
+[+ 2.010s] [ipc] m7=4 m4=20  (CPU2 alive)
+[+ 3.983s] [ipc] m7=8 m4=40  (CPU2 alive)
+[+ 4.977s] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=2 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[+ 5.956s] [ipc] m7=12 m4=60  (CPU2 alive)
