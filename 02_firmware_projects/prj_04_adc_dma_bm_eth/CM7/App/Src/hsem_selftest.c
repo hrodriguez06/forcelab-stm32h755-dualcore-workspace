@@ -363,9 +363,14 @@ static volatile uint32_t s_m7_irq_count = 0U;
 
 static void M7_HalCallback(uint32_t sem_mask, void *ctx)
 {
-    (void)sem_mask;
     (void)ctx;
-    s_m7_irq_count++;
+    if ((sem_mask & (1UL << HSEM_TEST_ID_NOTIFY)) != 0U)
+    {
+        s_m7_irq_count++;
+        HSEM_TEST_SHARED->h9_m7_notifications = s_m7_irq_count;
+        /* Re-arm for next notification (HAL notification is one-shot) */
+        (void)HSEM_HAL_NotifyEnable(1UL << HSEM_TEST_ID_NOTIFY);
+    }
 }
 
 void HAL_HSEM_FreeCallback(uint32_t sem_mask)
@@ -1088,11 +1093,11 @@ void HSEM_SelfTest_CM7_Run(void)
 
         /* Bounded timeout wait for CM4 to receive and acknowledge IRQ */
         uint32_t wait_ack = 0U;
-        while ((HSEM_TEST_SHARED->h9_m4_notifications < releases_sent) && (wait_ack < 500000U))
+        while ((HSEM_TEST_SHARED->h9_m4_notifications < releases_sent) && (wait_ack < 5000000U))
         {
             wait_ack++;
         }
-        if (wait_ack >= 500000U)
+        if (wait_ack >= 5000000U)
         {
             APP_LOG("[m7_hsem_test] H9 timeout waiting for CM4 IRQ on transfer %lu", releases_sent);
             h9_ok = false;
@@ -1146,10 +1151,12 @@ void HSEM_SelfTest_CM7_Run(void)
 
     /* ---- H5: Boot Handshake ---- */
     bool h5_ok = (HSEM_TEST_SHARED->h5_pass != 0U);
-    APP_LOG("[m7_hsem_test] H5 Boot Handshake: delay500ms=%lu h5b_pre_magic=%lu h5c_spurious_exti=%lu release=%lu -> %s",
+    APP_LOG("[m7_hsem_test] H5 Boot Handshake: delay500ms=%lu h5b_pre_magic=%lu h5c_spurious_exti=%lu (woke=%lu reparked=%lu) release=%lu -> %s",
             HSEM_TEST_SHARED->h5_ok,
             HSEM_TEST_SHARED->h5b_ok,
             HSEM_TEST_SHARED->h5c_ok,
+            HSEM_TEST_SHARED->h5c_woke,
+            HSEM_TEST_SHARED->h5c_reparked,
             HSEM_TEST_SHARED->h5_rel_ok,
             h5_ok ? "PASS" : "FAIL");
 

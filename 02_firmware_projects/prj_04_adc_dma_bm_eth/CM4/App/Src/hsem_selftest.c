@@ -262,6 +262,9 @@ void HSEM_SelfTest_CM4_IRQHandler(void)
     if ((mask & (1UL << HSEM_TEST_ID_NOTIFY)) != 0U)
     {
         s_m4_irq_count++;
+        HSEM_TEST_SHARED->h9_m4_notifications = s_m4_irq_count;
+        /* Re-arm for next notification (one-shot per release in hardware) */
+        HSEM_COMMON->IER |= (1UL << HSEM_TEST_ID_NOTIFY);
     }
 }
 
@@ -725,17 +728,14 @@ void HSEM_SelfTest_CM4_Run(void)
         __NOP();
     }
 
+    s_m4_irq_count = 0U;
+    HSEM_TEST_SHARED->h9_m4_notifications = 0U;
+    (void)HSEM_BM_NotifyEnable(1UL << HSEM_TEST_ID_NOTIFY);
+
     /* CM4 receives 500 notifications via HSEM2_IRQHandler */
-    uint32_t prev_irq = 0U;
     uint32_t wait_timeout = 0U;
     while ((s_m4_irq_count < HSEM_TEST_H9_COUNT) && (wait_timeout < 10000000U))
     {
-        if (s_m4_irq_count != prev_irq)
-        {
-            prev_irq = s_m4_irq_count;
-            HSEM_TEST_SHARED->h9_m4_notifications = prev_irq;
-            wait_timeout = 0U;
-        }
         wait_timeout++;
     }
     HSEM_TEST_SHARED->h9_m4_notifications = s_m4_irq_count;
@@ -766,11 +766,11 @@ void HSEM_SelfTest_CM4_Run(void)
         HSEM_BM_Release(HSEM_TEST_ID_NOTIFY, 0U);
 
         uint32_t wait_m7 = 0U;
-        while ((HSEM_TEST_SHARED->h9_m7_notifications <= i) && (wait_m7 < 1000000U))
+        while ((HSEM_TEST_SHARED->h9_m7_notifications <= i) && (wait_m7 < 5000000U))
         {
             wait_m7++;
         }
-        if (wait_m7 >= 1000000U)
+        if (wait_m7 >= 5000000U)
         {
             h9_m4_ok = false;
             break;

@@ -106,6 +106,8 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t h5_ok;
     volatile uint32_t h5b_ok;
     volatile uint32_t h5c_ok;
+    volatile uint32_t h5c_woke;
+    volatile uint32_t h5c_reparked;
     volatile uint32_t h5_rel_ok;
 
     /* H9 Notification (NVIC interrupt-driven) */

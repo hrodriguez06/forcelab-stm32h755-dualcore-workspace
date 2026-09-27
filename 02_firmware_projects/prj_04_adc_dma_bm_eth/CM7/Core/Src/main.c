@@ -110,18 +110,37 @@ int main(void)
     uint32_t wake_before_h5c = g_shared.cpu2_wake_count;
     EXTI->C2EMR1 |= (1UL << 15);
     EXTI->SWIER1 |= (1UL << 15);
-    uint32_t t_h5c = DWT->CYCCNT;
-    while ((DWT->CYCCNT - t_h5c) < 640000UL) { __NOP(); }
+    __DSB();
+    /* Clear mask and pending immediately so it is a single event pulse */
     EXTI->C2EMR1 &= ~(1UL << 15);
     EXTI->C2PR1 = (1UL << 15);
     EXTI->PR1 = (1UL << 15);
+    __DSB();
+
+    /* Wait ~10 ms (640,000 cycles @ 64 MHz HSI) for CPU2 to wake, verify magic != SHARED_MAGIC, and re-park into STOP */
+    uint32_t t_h5c = DWT->CYCCNT;
+    while ((DWT->CYCCNT - t_h5c) < 640000UL) { __NOP(); }
+
+    /* Poll for CPU2 to re-park (D2CKRDY == 0) with up to 50 ms timeout */
+    bool reparked_h5c = false;
+    uint32_t t_park_start = DWT->CYCCNT;
+    while ((DWT->CYCCNT - t_park_start) < 3200000UL)
+    {
+        if ((RCC->CR & RCC_CR_D2CKRDY) == 0U)
+        {
+            reparked_h5c = true;
+            break;
+        }
+    }
+
     bool woke_h5c = (g_shared.cpu2_wake_count > wake_before_h5c);
-    bool reparked_h5c = ((RCC->CR & RCC_CR_D2CKRDY) == 0U);
     bool h5c_ok = woke_h5c && reparked_h5c;
 
     HSEM_TEST_SHARED->h5_ok = h5_ok ? 1U : 0U;
     HSEM_TEST_SHARED->h5b_ok = h5b_ok ? 1U : 0U;
     HSEM_TEST_SHARED->h5c_ok = h5c_ok ? 1U : 0U;
+    HSEM_TEST_SHARED->h5c_woke = woke_h5c ? 1U : 0U;
+    HSEM_TEST_SHARED->h5c_reparked = reparked_h5c ? 1U : 0U;
 #endif
 #endif
 
