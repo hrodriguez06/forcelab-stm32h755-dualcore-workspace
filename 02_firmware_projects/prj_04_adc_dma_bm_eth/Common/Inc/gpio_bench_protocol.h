@@ -24,6 +24,8 @@
 extern "C" {
 #endif
 
+#include "shared_memory.h"
+
 #define GPIO_BENCH_PROTOCOL_VERSION     1U
 
 /* ---- Bus Ownership (S1, S5) ---------------------------------------------- */
@@ -32,16 +34,17 @@ extern "C" {
 #define GPIO_BENCH_BUS_AD2              2U  /*!< AD2 drives DIO0..DIO7, MCU in input */
 
 /* ---- Protocol Test Steps (S7) -------------------------------------------- */
-#define GPIO_BENCH_STEP_IDLE            0U  /*!< Safe state S2: all pins input */
-#define GPIO_BENCH_STEP_T0B_GUARDS      1U  /*!< T0b(b): guards verification without real collision */
-#define GPIO_BENCH_STEP_T0B_S5_NEG      2U  /*!< T0b(c): negative control for S5 handover */
-#define GPIO_BENCH_STEP_T0B_TIMEOUT     3U  /*!< T0b(d): 10-second timeout test */
-#define GPIO_BENCH_STEP_T0A_LOOSE       4U  /*!< T0a: bus loose check (pullup/pulldown/analog) */
-#define GPIO_BENCH_STEP_T0A_MCU_TO_AD2  5U  /*!< T0a: walking-1 MCU -> AD2 (Solo MCU + bus) */
-#define GPIO_BENCH_STEP_T0A_AD2_TO_MCU  6U  /*!< T0a: walking-1 AD2 -> MCU (Solo AD2 + bus) */
-#define GPIO_BENCH_STEP_T0A_SCOPE       7U  /*!< T0a: Scope 1/2 DC levels on PF14/PF15 */
-#define GPIO_BENCH_STEP_T15_RACE        15U /*!< T15: dual-core race on PF10/PF11 (unwired) */
-#define GPIO_BENCH_STEP_DONE            99U /*!< All tests completed */
+#define GPIO_BENCH_STEP_T15_RACE        1U  /*!< T15: dual-core race PF10/PF11 (unwired, bus=NONE) */
+#define GPIO_BENCH_STEP_IDLE            2U  /*!< Ready for host session (bus=NONE) */
+#define GPIO_BENCH_STEP_T0B_GUARDS      3U  /*!< T0b(b): guards verification (bus=NONE) */
+#define GPIO_BENCH_STEP_T0B_S5_NEG      4U  /*!< T0b(c): S5 negative control (bus=MCU) */
+#define GPIO_BENCH_STEP_T0B_TIMEOUT     5U  /*!< T0b(d): timeout test (bus=NONE) */
+#define GPIO_BENCH_STEP_T0A_LOOSE       6U  /*!< T0a: loose line check 13 lines (bus=NONE) */
+#define GPIO_BENCH_STEP_T0A_HANDSHAKE   7U  /*!< T0a: PE2/PE7 handshake lines test (bus=NONE) */
+#define GPIO_BENCH_STEP_T0A_MCU_TO_AD2  8U  /*!< T0a: walking-1 MCU -> AD2 11 lines (bus=MCU) */
+#define GPIO_BENCH_STEP_T0A_AD2_TO_MCU  9U  /*!< T0a: walking-1 AD2 -> MCU 10 lines (bus=AD2) */
+#define GPIO_BENCH_STEP_T0A_SCOPE       10U /*!< T0a: Scope 1/2 DC levels (bus=NONE) */
+#define GPIO_BENCH_STEP_DONE            99U /*!< All tests completed (bus=NONE) */
 
 /* ---- Handshake timing ---------------------------------------------------- */
 #define GPIO_BENCH_DEADTIME_MS          1U     /*!< S6: minimum deadtime between release and drive */
@@ -59,21 +62,36 @@ extern "C" {
 
 #define AD2_ALLOWED_STATIC_OUTPUTS      (AD2_DIO_EXTI3_CM7 | AD2_DIO_EXTI4_CM4 | AD2_DIO_HOST_REQ)
 
-/* ---- Dual-Core SRAM4 Communication Structure (0x3800A000) ---------------- */
-#ifndef GPIO_TEST_SHARED_ADDR
-#define GPIO_TEST_SHARED_ADDR           (0x3800A000UL)
-#endif
+/* ---- Dual-Core SRAM4 Communication Structure (m2: defined in shared_memory.h) - */
+_Static_assert(sizeof(SharedMemory_t) <= (GPIO_TEST_SHARED_ADDR - 0x38000000UL),
+               "SharedMemory_t overlaps GPIO_TEST_SHARED_ADDR in SRAM4 (m2)");
 
 typedef struct __attribute__((aligned(32)))
 {
-    volatile uint32_t cm7_ready;
-    volatile uint32_t cm4_ready;
-    volatile uint32_t go_signal;
-    volatile uint32_t current_step;
-    volatile uint32_t bus_owner;
+    volatile uint32_t session_id;          /*!< Unique session ID set by CM7 on cold boot */
+    volatile uint32_t cm7_ready;           /*!< Set to session_id when CM7 is ready */
+    volatile uint32_t cm4_ready;           /*!< Set to session_id when CM4 is ready */
+    volatile uint32_t go_signal;           /*!< Set to session_id to release execution */
+    volatile uint32_t current_step;        /*!< Step ID currently being executed */
+    volatile uint32_t bus_owner;           /*!< GPIO_BENCH_BUS_NONE, MCU, or AD2 */
+
+    /* T15 synchronization and loop markers */
+    volatile uint32_t t15_phase;           /*!< 1: CM7 solo, 2: CM4 solo, 3: concurrent */
+    volatile uint32_t in_loop_cm7;         /*!< 1 while CM7 is inside the loop */
+    volatile uint32_t in_loop_cm4;         /*!< 1 while CM4 is inside the loop */
+    volatile uint32_t t15_cm7_overlap_cnt; /*!< CM7 loop count seeing in_loop_cm4 == 1 */
+    volatile uint32_t t15_cm4_overlap_cnt; /*!< CM4 loop count seeing in_loop_cm7 == 1 */
+
+    /* T15 results */
+    volatile uint32_t t15_corruptions_phase_a; /*!< CM7 solo: expected 0 */
+    volatile uint32_t t15_corruptions_phase_b; /*!< CM4 solo: expected 0 */
+    volatile uint32_t t15_corruptions_phase_c; /*!< Concurrent: expected > 0 */
+    volatile uint32_t t15_total_calls_cm7;
+    volatile uint32_t t15_total_calls_cm4;
 
     /* T0a results */
     volatile uint32_t t0a_loose_pass;
+    volatile uint32_t t0a_hs_pass;
     volatile uint32_t t0a_mcu_pass;
     volatile uint32_t t0a_ad2_pass;
     volatile uint32_t t0a_scope_pass;
@@ -82,15 +100,6 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t t0b_claim_pass;     /*!< (b) bench_claim_output rejections */
     volatile uint32_t t0b_s5_neg_pass;    /*!< (c) S5 negative control */
     volatile uint32_t t0b_timeout_pass;   /*!< (d) 10s timeout to bench_safe */
-
-    /* T15 race negative control results (PF10 CM7, PF11 CM4) */
-    volatile uint32_t t15_cm7_count;
-    volatile uint32_t t15_cm4_count;
-    volatile uint32_t t15_corruptions_cm7;
-    volatile uint32_t t15_corruptions_cm4;
-    volatile uint32_t t15_total_corruptions;
-    volatile uint32_t t15_done_cm7;
-    volatile uint32_t t15_done_cm4;
 
     /* Global verdict */
     volatile uint32_t cm4_done;
