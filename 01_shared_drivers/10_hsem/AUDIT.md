@@ -125,3 +125,129 @@ Para no repetir B1 y B6:
 - **Un hallazgo se cierra cuando lo verifico yo,** en un apartado nuevo, "Reauditoría", con el commit y lo que ejecuté. Hasta entonces sigue abierto, aunque haya un commit que diga que lo corrige.
 - **Las capturas no se editan.** Cada una es la salida de una sola ejecución, con `FW_GIT_REV` sin `-dirty` y con marcas de tiempo (`monitor.py --timestamps`). Si hace falta otra, se añade como archivo nuevo o como sección nueva con su propio hash.
 - **Cada control negativo imprime su valor.** Si no reproduce el peligro, su prueba se da por fallida, no por pasada.
+
+---
+
+## Reauditoría 1
+
+Sep 26, 2026 · auditor: Claude · commit auditado: `afa410d` (13 commits desde `4f5b04e`, todos citan los IDs que corrigen)
+
+**Veredicto: sigue sin pasar, pero queda mucho menos.** La entrega cierra la mayoría de los hallazgos y lo he comprobado en la placa. Queda un bloqueante nuevo: la corrección de M7 fijó un límite por debajo de la retención que yo he medido, y en mi ejecución se pierden respuestas UDP y publicaciones del ADC. H11 ("0 fallos") no se reproduce. Quedan además dos mayores nuevos y el informe del implementador, que sigue declarándose "auditado y cerrado".
+
+### Qué ejecuté
+
+| # | Qué | Resultado |
+| --- | --- | --- |
+| 1 | `tools/build_all.ps1 -Clean` en `afa410d` | 8/8 PASS. `prj_02` y `prj_03` con el mismo tamaño que antes |
+| 2 | Build de `selftest-hsem` | Limpio |
+| 3 | `AUDIT.md` en `4ac6bac` | Es mi texto; el implementador solo lo commiteó. La hoja de ruta tiene la fila que pedí |
+| 4 | Diff de `hsem_bm.h` desde `4f5b04e` | Solo añade: `HSEM_BM_CheckInit()` y el campo `wake_count` al final de `HsemBm_BootWait_t` (NULL = comportamiento anterior). C2 se respeta |
+| 5 | README contra las cabeceras, en los dos sentidos (script) | Ninguna función del README falta en los `.h`, y ninguna de los `.h` falta en el README |
+| 6 | Selftest en la placa, capturado yo con `monitor.py --timestamps` durante 40 s | `Rev afa410d` en los dos núcleos. CM7: `VERDICT: ALL HSEM SELF-TESTS PASSED`. CM4: todas sus líneas, incluidas `H9 irqs=500 neg1=0 neg2=0` y `CM4 VERDICT=PASS`. H2: `lost=45217`, `torn_reads=6206`. H7: `raw HAL_HSEM_FastTake=0` (peligro reproducido). H5c: `woke=1 reparked=1` |
+| 7 | H6: 20 resets en caliente con la imagen de producción | 20/20, `Rev afa410d` en cada arranque, primera muestra `m7=4 m4=20` |
+| 8 | Producción en marcha: 150 consultas de texto y 150 `WAVE` al puerto 5001, y lectura por SWD de los contadores de retención y de fallo | Ver R-B1. 148/150 respuestas `WAVE` |
+
+La placa quedó con `prj_04` debug, como estaba.
+
+### Estado de cada hallazgo
+
+| ID | Estado | Comprobación |
+| --- | --- | --- |
+| B1 | **Cerrado en parte** | (a)(b)(c) cerrados: captura nueva sin editar, con marcas de tiempo, y hash limpio en el selftest, H6 y H11. (d) pasa a R-B1: el código de medida existe, pero ningún valor se registra y el límite no sale de él. Nuevo residuo en R-M2: `capture_hsem_run.py` corta en el `VERDICT` de CM7, y la captura del repo pierde la línea H9 y el `CM4 VERDICT` de CM4 |
+| B2 | Cerrado | Línea configurable 15 con `RTSR1`/`FTSR1`/`C2EMR1`/`SWIER1`, y contador de despertares escrito por CPU2. H5b y H5c exigen "despertó **y** volvió a aparcar". Residuo menor en R-m3 |
+| B3 | Cerrado | IRQ por NVIC en los dos núcleos (`HSEM2_IRQn` con BM en CM4, `HSEM1_IRQn` con `HSEM_HAL_IRQService` en CM7). Cuentas independientes con timeout y FAIL. Los dos controles existen. Residuos en R-M1 y R-m4 |
+| B4 | Cerrado en parte | El veredicto de CM7 se calcula y los controles se comprueban e imprimen. Pero ese veredicto "ALL" no incluye los resultados de CM4 (R-M2) |
+| B5 | Cerrado | §1.1, §2.3 y §2.4 coinciden con el código. Residuos de documentación en R-m5 |
+| B6 | **Abierto** | El implementador no tocó los veredictos de este archivo. Pero `HSEM_IMPLEMENTATION_REPORT.md` sigue diciendo que hubo "un riguroso protocolo de auditoría independiente", conserva la tabla A1–A20 toda en PASS y termina en "concluido, auditado, validado en hardware y cerrado al 100%". Contradice este archivo. Hay que corregirlo, o marcarlo como sustituido por `AUDIT.md` |
+| M1 | Cerrado | LL sale en todo lo que no sea `BUSY`, y HAL comprueba `BUSY_SELF` antes y durante la espera. H10 lo cubre (paso 2) |
+| M2 | Cerrado en LL/HAL | `HSEM_BM_CheckInit()` en todas las funciones de LL y HAL, y `TRCENA` + `CYCCNTENA`. Pero las funciones de notificación de BM siguen sin comprobarlo (R-m1) |
+| M3 | Cerrado | `TakeOrNotify` devuelve `BUSY_SELF` sin armar nada. Sigue sin prueba (R-m5) |
+| M4 | Cerrado | H10 con 13 pasos por tier: reentrada, `TakeTimeoutEx` sobre `BUSY_SELF`, errores de parámetro y notificación. No cubre `ReleaseAllOfCore` (queda en H8) |
+| M5 | Cerrado en parte | H1 en 2 pasos, H2 en la imagen final y H4 simétrico, hechos y reproducidos. H7 en secuencia **se acepta**: para el hardware, una segunda lectura de `R`/`RLR` desde el mismo núcleo es idéntica venga del contexto que venga, y la detección del driver no depende del contexto. Siguen pendientes H3(b) con escritura cruda e ISF, y las fotos de H0 (R-m4) |
+| M6 | Cerrado en parte | `BOARD_HSEM_CLEAR_KEY` en `board_def.h`, fijada por CPU1 en todas las builds, en `prj_04` y en la plantilla. La tabla de IDs existe pero no coincide con el selftest (R-m2) |
+| M7 | **Abierto → R-B1** | Ver abajo |
+| m1 | Cerrado | `BootWaitForCpu1` ya no limpia `C2ICR` al entrar |
+| m2 | Cerrado | `NVIC_ClearPendingIRQ(HSEM2_IRQn)` después de bajar la línea |
+| m3 | Cerrado | Un contador por núcleo |
+| m4 | Cerrado | `shared_memory.h` solo incluye `<stdint.h>` y `<stdbool.h>`; `SHARED_LOCK` pasa a funciones en `shared_memory.c` |
+| m5 | Cerrado | 32 000 000 ciclos a 64 MHz y `Error_Handler` en los dos proyectos. H6 20/20 |
+| m6 | Cerrado | Producción ya no llama a `ReleaseAllOfCore` al arrancar |
+| m7 | **Cerrado en parte** | El callback HAL se registra con PRIMASK. `ReleaseAllOfCore` **no cambió** (`hsem_bm.c` sin diff en esa función), aunque la entrega dice que sí |
+| m8 | Cerrado | `.gitkeep` eliminado, documentación de `hsem_ll.h` corregida, delta real de DWT |
+
+### Hallazgos nuevos
+
+| ID | Clase | Dónde | Hallazgo | Qué hace falta |
+| --- | --- | --- | --- | --- |
+| R-B1 | **Bloqueante** | `shared_memory.h` (`SHARED_ADC_TRYLOCK_US = 25`) | **El límite es menor que la retención medida.** Leí por SWD los contadores que añadió la propia entrega, tras 30 s de producción con 300 consultas: CM4 retiene HSEM 4 hasta **7 525 ciclos a 200 MHz (37,6 µs)** en `adc_acquisition.c`, y CM7 hasta **17 069 ciclos a 400 MHz (42,7 µs)** en la respuesta `WAVE`. Con 25 µs, cada núcleo agota el tiempo mientras el otro copia: `m7_adc_lock_fail_count = 5` y `m4_adc_lock_fail_count = 1` (offsets `0x4E8` y `0x4EC` de `g_shared`), y 2 de 150 `WAVE` sin respuesta. Es exactamente S4, reintroducido: antes, con 50 000 ciclos, no pasaba. El comentario "derived from measured SRAM4 retention" no tiene medida detrás, y H11 ("0 fallos") no se reproduce. | Límite ≥ retención máxima medida con margen escrito (p. ej. 100 µs), convertido por núcleo. Registrar los máximos de retención en la captura de H11, junto con los contadores de fallo, con una carga `WAVE` definida |
+| R-M1 | Mayor | `hsem_bm.c`, `hsem_hal.c`; ISR del selftest de CM4 | **El driver no puede re-armar una notificación sin perder releases.** `NotifyTake` es one-shot (quita el bit de `IER`), y la única manera de volver a armar es `NotifyEnable`, que primero limpia `ICR`. Un release que llegue entre las dos se borra. El selftest lo esquiva: la ISR de CM4 escribe `HSEM_COMMON->IER` a mano, y el callback HAL de CM7 usa `NotifyEnable` (con pérdida), tapado porque las dos pruebas van al paso: el emisor espera cada acuse. | Añadir un re-armado que solo ponga `IER` (p. ej. `HSEM_BM_NotifyRearm`, y lo mismo en LL y HAL), usarlo en las pruebas, y añadir una ráfaga de releases sin esperar al acuse |
+| R-M2 | Mayor | `CM7 hsem_selftest.c:1164-1166`; `tools/capture_hsem_run.py` | **El veredicto global no es global.** `ALL HSEM SELF-TESTS PASSED` no incluye `h0/h3/h7/h10/h9_m4_pass`, y se imprime antes de que CM4 termine. La comparación "exactamente 500" solo decide el texto de la línea, no `h9_ok`: 501 IRQ no hacen fallar el veredicto de CM7. El script de captura corta en el primer `VERDICT:`, y por eso la captura del repo no tiene el resultado H9 ni el veredicto de CM4. | CM7 espera a CM4 e incluye sus flags. Cuenta exacta dentro de `h9_ok`. Capturar hasta `CM4 VERDICT=` |
+| R-m1 | Menor | `hsem_bm.c` | `NotifyEnable/Disable/Take`, `IsLocked`, `GetOwner` y `GetLockedMask` de BM no llaman a `CheckInit`, y los de LL sí. Con `HSEMEN` apagado, `HSEM_BM_NotifyEnable` devuelve `true` y `HSEM_LL_NotifyEnable`, `false`: la paridad se rompe en el camino de error |
+| R-m2 | Menor | `shared_memory.h` (tabla de IDs) | La tabla no coincide con el selftest. Dice 27 "cross" y 31 "notify"; el selftest usa 26 para H9, 27 para H4, 24 y 25 desde los dos núcleos en H1, 28 como `M4_LOCK1` y como canario de CM7, y CM4 toma 24–27 en H8. Tampoco dice qué contextos usan cada ID ni con qué procedimiento, que es lo que mitiga S1 |
+| R-m3 | Menor | `prj_04 CM7 main.c` (H5c) | H5c pone `C2IMR1[15]` además de `C2EMR1[15]`. La IRQ `EXTI15_10` de CM4 queda pendiente en su NVIC, y nadie la limpia. En la build de selftest, el primer `NVIC_EnableIRQ(EXTI15_10_IRQn)` de CM4 entraría en la ISR sin motivo. Con el evento basta: `C2IMR1` sobra |
+| R-m4 | Menor | Selftests | El control 2 de H9 no demuestra que existiera un ISF viejo: habría que registrar `C2ISR[26]` antes del `NotifyEnable`. H3(b) desde CM4 usa `HSEM_BM_Release`, que ni escribe (lo para la comprobación del driver), así que no prueba la protección del hardware frente al otro núcleo, y no se mira el ISF. H0 sigue sin fotos de registros antes y después de los rechazos |
+| R-m5 | Menor | `README.md` | No hay lista de lo no ejercitado: `TakeOrNotify`, `ReleaseAllOfCore` con re-toma concurrente, BM sin `Init`. El log del selftest dice "14 steps" y el código tiene 13 (pasos 0 a 12), como dice §9. El pitfall 2 recomienda `ReleaseAllOfCore` tras un reset en caliente, pero el HSEM se resetea con el sistema. §9.1 dice que las retenciones se midieron, y no da ningún valor |
+| R-N1 | Nota | `hsem_bm.h` | El campo nuevo de `HsemBm_BootWait_t` es compatible (al final y NULL por defecto), pero es un cambio de estructura después de congelar F1. Queda registrado |
+
+### Para cerrar
+
+1. **R-B1:** límite derivado de la medida, y H11 regrabado con carga `WAVE`, máximos de retención y contadores de fallo en la captura.
+2. **R-M2:** veredicto global con CM4 y captura hasta `CM4 VERDICT=`.
+3. **R-M1:** re-armado sin pérdida, y prueba en ráfaga.
+4. **B6:** corregir o marcar como sustituido `HSEM_IMPLEMENTATION_REPORT.md`.
+5. Los menores (R-m1 a R-m5 y la parte pendiente de m7) pueden ir en la misma entrega o quedar apuntados para después; ninguno bloquea.
+
+Después repetiré el selftest, H6 y la carga de producción con lectura por SWD de los contadores.
+
+---
+
+## Reauditoría 2 — cierre
+
+Sep 26, 2026 · auditor: Claude · commit auditado: `b6d0b26` (6 commits desde `afa410d`, todos con IDs)
+
+**Veredicto: el cierre pasa.** No queda ningún bloqueante ni ningún mayor. Todo lo que dependía del hardware lo he reproducido yo en la placa. Quedan cinco menores y notas, que según el protocolo pueden quedar apuntados sin bloquear. `10_hsem` queda **hecho y auditado**.
+
+### Qué ejecuté
+
+| # | Qué | Resultado |
+| --- | --- | --- |
+| 1 | `tools/build_all.ps1 -Clean` | 8/8 PASS. `prj_02` y `prj_03` sin cambio de tamaño |
+| 2 | Build de `selftest-hsem` | Limpio. El hash sale `b6d0b26-dirty`: la única diferencia con `HEAD` es este archivo, sin commitear (`git status`) |
+| 3 | Selftest en la placa, capturado yo 40 s | Todo PASS en los dos núcleos, incluidos `CM4 sub-verdict: done=15 all_passed=1` antes del `VERDICT` global y `CM4 VERDICT=PASS`. Controles: H2 `lost=39907`, `torn_reads=19232`; H7 `raw HAL_HSEM_FastTake=0`; H9 control 2 con `stale flag was=1`; H5c `woke=1 reparked=1` |
+| 4 | Producción: 150 consultas de texto a 50 Hz y **300 `WAVE` seguidos sin pausa** (más duro que los 10 Hz del H11 entregado), y lectura por SWD de `g_shared` + `0x4E0` | 300/300 respuestas de 1080 B. `m7_adc_lock_fail_count = 0`, `m4_adc_lock_fail_count = 0`. Picos: CM7 `0x428E` = 17 038 ciclos (42,6 µs), CM4 `0x1D56` = 7 510 ciclos (37,5 µs), frente a un límite de 100 µs |
+| 5 | H6: 20 resets en caliente | 20/20, primera muestra `m7=4 m4=20` en todos |
+| 6 | Diff del driver y de los selftests | Ver la tabla |
+
+La placa quedó con `prj_04` debug.
+
+### Estado de lo que seguía abierto
+
+| ID | Estado | Comprobación |
+| --- | --- | --- |
+| R-B1 | Cerrado | Límite de 100 µs convertido por núcleo, sacado de retenciones medidas y ahora publicadas en `g_shared` (`0x4F4`, `0x4F8`). Mi carga sin pausa da 0 fallos |
+| R-M1 | Cerrado (driver) | `NotifyRearm` en BM, LL y HAL solo pone `IER`, no toca `ICR`, y con PRIMASK. Las pruebas lo usan en lugar de escribir el registro a mano. Residuo de prueba en R2-m1 |
+| R-M2 | Cerrado | CM7 espera `cm4_done == 15` e incluye `cm4_all_passed` y `h0/h3/h7/h10/h9_m4_pass` en el veredicto. Cuentas exactas (500 y 100) dentro de `h9_ok`. La captura llega hasta `CM4 VERDICT=` |
+| B6 | Cerrado | `HSEM_IMPLEMENTATION_REPORT.md` empieza con un aviso de que lo sustituye `AUDIT.md` y ya no se declara cerrado |
+| R-m1 | Cerrado | `CheckInit` en todas las funciones de BM |
+| R-m2 | **Cerrado en parte** | Los IDs de selftest coinciden con el código. Los de aplicación no: R2-m2 |
+| R-m3 | Cerrado | H5c solo usa `C2EMR1` |
+| R-m4 | Cerrado | H9 registra y exige el ISF viejo. H3(b) hace la escritura cruda desde CM4 y comprueba que el ISF no cambia. H0 compara registros antes y después (R2-m3) |
+| R-m5 | Cerrado | §9.2 con lo no ejercitado, 13 pasos en el log y en el README, pitfall 2 corregido, retenciones con valores |
+| m7 | Cerrado | `ReleaseAllOfCore` solo mira los IDs que tenía el núcleo antes (`mask_after & mask_before`) |
+
+### Menores que quedan apuntados
+
+No bloquean el cierre. Se pueden corregir cuando se vuelva a tocar el driver o `prj_04`.
+
+| ID | Dónde | Hallazgo |
+| --- | --- | --- |
+| R2-m1 | Selftests (H9) | La "ráfaga" separa cada release por unos 2000 NOP, así que la ISR termina antes del siguiente y ningún release cae entre `NotifyTake` y `NotifyRearm`. La prueba también pasaría con el re-armado antiguo, que perdía releases, y no demuestra R-M1. La corrección del driver es correcta por construcción. Una prueba determinista: la ISR de CM4, después de `NotifyTake`, espera a que CM7 haga otro release y solo entonces re-arma; con `NotifyRearm` tiene que llegar una IRQ más, y con `NotifyEnable` no (ese es el control) |
+| R2-m2 | `shared_memory.h` (tabla de IDs) | Las filas de aplicación no coinciden con el código. HSEM 3 se toma con `SHARED_LOCK` (1 paso, sin límite) en los dos núcleos, y la tabla dice "CPU2 · `Shared_TryLockCycles`". Los IDs 1 y 2 no los usa nadie, y la tabla les asigna contexto |
+| R2-m3 | Selftests (H0) | La foto de registros incluye `HSEM->CR`, que siempre se lee como 0 (RM0399 §11.4.7): esa parte de la comparación no mide nada. Serviría `R[0..31]` y `KEYR` |
+| R2-m4 | `README.md` | La fila de §5 dice que `ReleaseAllOfCore` escribe `KEYR`; solo escribe `HSEM_CR` (`KEYR` lo escribe `SetClearKey`). §9.2 punto 3 justifica no probar BM con `HSEMEN = 0` "para evitar bus faults", pero `CheckInit` devuelve antes de tocar el periférico |
+| R2-m5 | `docs/hsem_regression_capture.txt`, `HSEM_IMPLEMENTATION_REPORT.md` | La línea "Received: 300 / 300" del H11 es un resumen escrito, no la salida de `query_adc.py`. Lo reproduje, así que no invalida nada, pero la próxima vez tiene que ir la salida cruda. El enlace del aviso del informe (`file:///01_shared_drivers/…`) no funciona en el repo |
+
+### Notas
+
+- R-N1 sigue registrado: el campo `wake_count` se añadió a `HsemBm_BootWait_t` después de congelar F1. Es compatible.
+- Se acepta H7 en secuencia (ver la reauditoría 1).
