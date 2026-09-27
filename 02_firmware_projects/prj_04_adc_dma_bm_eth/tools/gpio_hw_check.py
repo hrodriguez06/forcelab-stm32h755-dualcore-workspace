@@ -656,13 +656,14 @@ def run_selftest(
                                 for b in ad2_test_bits:
                                     if b < 8:
                                         drive_bus(ad2, token, 1 << b, STEP_T0A_AD2_TO_MCU)
-                                        # Refresh token for next bus bit if needed
                                         token = BusToken(STEP_T0A_AD2_TO_MCU)
                                     else:
                                         ad2.set_oe(AD2_DIO_HOST_REQ | (1 << b), GPIO_BENCH_BUS_NONE)
-                                        ad2.digital_io_write((1 << b), (1 << b))
+                                        ad2.digital_io_write(1 << b, 1 << b)
 
-                                    time.sleep(0.001)
+                                    # Assert HOST_REQ to signal MCU data is valid on line
+                                    ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+
                                     # Wait for MCU announcement with bit result
                                     bit_res_line = wait_for_line(f"T0a_ad2 bit={b}", 10.0)
                                     if bit_res_line and "OK" in bit_res_line:
@@ -671,17 +672,33 @@ def run_selftest(
                                         log(f"[ad2] Walking-1 AD2->MCU DIO{b}: FAIL (line: {bit_res_line})")
                                         all_passed = False
 
+                                    # Wait for MCU to ACK read of bit
+                                    wait_mcu_ack(ad2, True, 5.0)
+
+                                    # Lower HOST_REQ
+                                    ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
+
+                                    # Wait for MCU to lower ACK
+                                    wait_mcu_ack(ad2, False, 5.0)
+
                                     # Release bit
-                                    ad2.digital_io_write(0, 1 << b)
+                                    if b < 8:
+                                        drive_bus(ad2, token, 0, STEP_T0A_AD2_TO_MCU)
+                                        token = BusToken(STEP_T0A_AD2_TO_MCU)
+                                    else:
+                                        ad2.digital_io_write(0, 1 << b)
+
                                     ad2.set_safe_state()
                                     ad2.set_oe(AD2_DIO_HOST_REQ, GPIO_BENCH_BUS_NONE)
-                                    pulse_host_req()
 
                                 # AD2->MCU negative control: AD2 drives 0xFF, MCU bus in analog
                                 wait_for_line("T0a_ad2 analog control ready", 5.0)
                                 token = BusToken(STEP_T0A_AD2_TO_MCU)
                                 drive_bus(ad2, token, 0xFF, STEP_T0A_AD2_TO_MCU)
-                                time.sleep(0.001)
+
+                                # Assert HOST_REQ to tell MCU to read analog IDR
+                                ad2.digital_io_write(AD2_DIO_HOST_REQ, AD2_DIO_HOST_REQ)
+
                                 ctrl_res = wait_for_line("T0a_ad2 analog control result:", 5.0)
                                 if ctrl_res and "OK" in ctrl_res:
                                     log("[ad2] Walking-1 AD2->MCU analog control: OK (MCU IDR=0x00)")
@@ -689,9 +706,12 @@ def run_selftest(
                                     log(f"[ad2] Walking-1 AD2->MCU analog control: FAIL ({ctrl_res})")
                                     all_passed = False
 
+                                wait_mcu_ack(ad2, True, 5.0)
+                                ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
+                                wait_mcu_ack(ad2, False, 5.0)
+
                                 ad2.set_safe_state()
                                 ad2.set_oe(AD2_DIO_HOST_REQ, GPIO_BENCH_BUS_NONE)
-                                pulse_host_req()
 
                             elif step_id == STEP_T0A_SCOPE:
                                 # Step 10: T0a Scope 1 (PF14) and Scope 2 (PF15) DC levels
