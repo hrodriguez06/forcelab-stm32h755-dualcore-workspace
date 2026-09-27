@@ -21,8 +21,6 @@ static uint32_t s_line_count = 0U;
 static uint32_t s_line_len = 0U;
 static uint32_t s_line_next = 0U;
 
-static uint8_t s_current_step_id = GPIO_BENCH_STEP_T15_RACE;
-
 static void Line_Begin(void)
 {
     s_line_len = 0U;
@@ -72,12 +70,32 @@ static void Line_U32(uint32_t v)
     }
 }
 
-/**
- * @brief Safety guard S4: Bench claim check for Cortex-M4 (M1).
- *        No step parameter accepted; reads s_current_step_id.
- */
-static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin)
+typedef struct {
+    uint8_t  step_id;
+    uint16_t gpiof_allowed_mask; /* bit 11 = PF11 */
+} BenchStepPermCM4_t;
+
+static const BenchStepPermCM4_t k_step_perms_cm4[] = {
+    { GPIO_BENCH_STEP_T15_RACE, (1U << 11) },
+};
+
+static uint8_t s_current_step_id = GPIO_BENCH_STEP_T15_RACE;
+
+static void bench_enter_step(uint8_t step_id)
 {
+    s_current_step_id = step_id;
+}
+
+/**
+ * @brief Pure permission check for a given step, port and pin (M1).
+ *        PE6 is removed in F0: solo MCU is driven by CM7.
+ */
+static bool bench_step_allows(uint8_t step_id, GPIO_TypeDef *port, uint32_t pin)
+{
+    if (pin > 15U)
+    {
+        return false;
+    }
     /* PE0 and PE1 (LD2) NEVER allowed */
     if (port == GPIOE && (pin == 0U || pin == 1U))
     {
@@ -88,20 +106,26 @@ static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin)
     {
         return false;
     }
-    /* Unwired pin PF11 allowed ONLY during T15 race */
-    if (s_current_step_id == GPIO_BENCH_STEP_T15_RACE)
+    for (size_t i = 0; i < sizeof(k_step_perms_cm4) / sizeof(k_step_perms_cm4[0]); i++)
     {
-        if (port == GPIOF && pin == 11U)
+        if (k_step_perms_cm4[i].step_id == step_id)
         {
-            return true;
+            if (port == GPIOF)
+            {
+                return (k_step_perms_cm4[i].gpiof_allowed_mask & (1U << pin)) != 0U;
+            }
         }
     }
-    /* PE6 is Solo MCU (CM4 ACK) */
-    if (port == GPIOE && pin == 6U)
-    {
-        return true;
-    }
     return false;
+}
+
+/**
+ * @brief Safety guard S4: Bench claim check for Cortex-M4 (M1).
+ *        No step parameter accepted; reads s_current_step_id.
+ */
+static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin)
+{
+    return bench_step_allows(s_current_step_id, port, pin);
 }
 
 static bool wait_var_cycles(volatile uint32_t *var, uint32_t expected, uint32_t timeout_cycles)
@@ -129,7 +153,7 @@ void GPIO_SelfTest_CM4_Run(void)
     RCC->AHB4ENR |= RCC_AHB4ENR_GPIOFEN;
     __DSB();
 
-    s_current_step_id = GPIO_BENCH_STEP_T15_RACE;
+    bench_enter_step(GPIO_BENCH_STEP_T15_RACE);
 
     /* Safety guard S4 check on unwired test pin PF11 (M1) */
     if (!bench_claim_output(GPIOF, 11U))
@@ -260,19 +284,28 @@ void GPIO_SelfTest_CM4_Run(void)
 
     /* Restore PF11 to input mode (00) */
     GPIOF->MODER &= ~(3UL << (11U * 2U));
-    GPIO_TEST_SHARED->in_loop_cm4 = 0U;
+
+    /* Publish results, DMB, then set in_loop_cm4 = 0 (R-m1) */
     GPIO_TEST_SHARED->t15_cm4_overlap_cnt = overlap_c;
     GPIO_TEST_SHARED->t15_total_calls_cm4 = 500000U;
     GPIO_TEST_SHARED->t15_cm4_corruptions_c = corruptions_c;
     __DMB();
+    GPIO_TEST_SHARED->in_loop_cm4 = 0U;
+    __DMB();
 
-    /* Wait for CM7 to complete Phase (c) */
-    wait_var_cycles(&GPIO_TEST_SHARED->in_loop_cm7, 0U, 1000000000UL);
+    /* Wait for CM7 to complete Phase (c) with timeout check */
+    bool wait_m7_ok = wait_var_cycles(&GPIO_TEST_SHARED->in_loop_cm7, 0U, 1000000000UL);
+    if (!wait_m7_ok)
+    {
+        Line_Begin();
+        Line_Str("T15 FAIL: TIMEOUT waiting for CM7 in_loop=0");
+        Line_End();
+    }
 
     uint32_t total = corruptions_c + GPIO_TEST_SHARED->t15_cm7_corruptions_c;
 
     /* B2: Calculated verdict for CM4 */
-    bool cm4_ok = (corruptions_b == 0U) && (overlap_c > 0U) && (total > 0U);
+    bool cm4_ok = wait_m7_ok && (corruptions_b == 0U) && (overlap_c > 0U) && (total > 0U);
     GPIO_TEST_SHARED->cm4_all_passed = cm4_ok ? 1U : 0U;
     GPIO_TEST_SHARED->cm4_done = 1U;
     __DMB();

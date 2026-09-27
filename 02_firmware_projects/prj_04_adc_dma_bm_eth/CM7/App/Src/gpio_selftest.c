@@ -43,11 +43,11 @@ static const BenchStepPerm_t k_step_perms[] = {
 
 static uint8_t s_current_step_id = GPIO_BENCH_STEP_T15_RACE;
 
-static const BenchStepPerm_t *bench_get_current_perm(void)
+static const BenchStepPerm_t *bench_get_perm_for_step(uint8_t step_id)
 {
     for (size_t i = 0; i < sizeof(k_step_perms) / sizeof(k_step_perms[0]); i++)
     {
-        if (k_step_perms[i].step_id == s_current_step_id)
+        if (k_step_perms[i].step_id == step_id)
         {
             return &k_step_perms[i];
         }
@@ -58,7 +58,7 @@ static const BenchStepPerm_t *bench_get_current_perm(void)
 static void bench_enter_step(uint8_t step_id)
 {
     s_current_step_id = step_id;
-    const BenchStepPerm_t *perm = bench_get_current_perm();
+    const BenchStepPerm_t *perm = bench_get_perm_for_step(step_id);
     const char *bus_str = (perm != NULL) ? perm->bus_name : "NONE";
     APP_LOG("[m7_gpio_test] STEP id=%u bus=%s v=%u",
             (unsigned int)step_id, bus_str, (unsigned int)GPIO_BENCH_PROTOCOL_VERSION);
@@ -70,10 +70,9 @@ static void bench_enter_step(uint8_t step_id)
 }
 
 /**
- * @brief Safety guard S4: Bench claim check for Cortex-M7 (M1).
- *        No step parameter accepted; reads s_current_step_id.
+ * @brief Pure permission check for a given step, port and pin (M1).
  */
-static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin)
+static bool bench_step_allows(uint8_t step_id, GPIO_TypeDef *port, uint32_t pin)
 {
     if (pin > 15U)
     {
@@ -92,7 +91,7 @@ static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin)
         return false;
     }
 
-    const BenchStepPerm_t *perm = bench_get_current_perm();
+    const BenchStepPerm_t *perm = bench_get_perm_for_step(step_id);
     if (perm == NULL)
     {
         return false;
@@ -113,6 +112,15 @@ static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin)
     }
 
     return false;
+}
+
+/**
+ * @brief Safety guard S4: Bench claim check for Cortex-M7 (M1).
+ *        No step parameter accepted; reads s_current_step_id.
+ */
+static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin)
+{
+    return bench_step_allows(s_current_step_id, port, pin);
 }
 
 /**
@@ -442,14 +450,20 @@ static bool test_t15_race_control(void)
         }
     }
 
-    GPIO_TEST_SHARED->in_loop_cm7 = 0U;
     GPIO_TEST_SHARED->t15_cm7_corruptions_c = corruptions_c;
     GPIO_TEST_SHARED->t15_cm7_overlap_cnt = overlap_cm7;
     GPIO_TEST_SHARED->t15_total_calls_cm7 = 500000U;
     __DMB();
+    GPIO_TEST_SHARED->in_loop_cm7 = 0U;
+    __DMB();
 
     /* Wait for CM4 to complete phase (c) */
-    wait_var_cycles(&GPIO_TEST_SHARED->in_loop_cm4, 0U, 2000000000UL);
+    if (!wait_var_cycles(&GPIO_TEST_SHARED->in_loop_cm4, 0U, 2000000000UL))
+    {
+        APP_LOG("[m7_gpio_test] T15 FAIL: TIMEOUT waiting for CM4 phase (c) in_loop=0");
+        pass = false;
+        goto exit;
+    }
 
     /* Restore PF10 and PF11 to input mode (00) */
     GPIOF->MODER &= ~((3UL << (10U * 2U)) | (3UL << (11U * 2U)));
@@ -506,15 +520,11 @@ static bool test_t0b_claim_guards(void)
     /* (4) PA8 rejection in T0B_GUARDS step */
     if (bench_claim_output(GPIOA, 8U)) pass = false;
 
-    /* (5) Bus rejection when step has bus_owner=AD2 */
-    s_current_step_id = GPIO_BENCH_STEP_T0A_AD2_TO_MCU;
-    if (bench_claim_output(GPIOE, 8U)) pass = false;
-    s_current_step_id = GPIO_BENCH_STEP_T0B_GUARDS;
+    /* (5) Bus rejection when step has bus_owner=AD2 (queried via pure bench_step_allows) */
+    if (bench_step_allows(GPIO_BENCH_STEP_T0A_AD2_TO_MCU, GPIOE, 8U)) pass = false;
 
-    /* (6) PA8 accepted in T0A_MCU_TO_AD2 step */
-    s_current_step_id = GPIO_BENCH_STEP_T0A_MCU_TO_AD2;
-    if (!bench_claim_output(GPIOA, 8U)) pass = false;
-    s_current_step_id = GPIO_BENCH_STEP_T0B_GUARDS;
+    /* (6) PA8 accepted in T0A_MCU_TO_AD2 step (queried via pure bench_step_allows) */
+    if (!bench_step_allows(GPIO_BENCH_STEP_T0A_MCU_TO_AD2, GPIOA, 8U)) pass = false;
 
     /* (7) All-or-nothing check in bench_claim_pins (M2, m1) */
     uint32_t moder_snap = GPIOE->MODER;
@@ -522,9 +532,8 @@ static bool test_t0b_claim_guards(void)
     uint32_t afr0_snap = GPIOE->AFR[0];
     uint32_t afr1_snap = GPIOE->AFR[1];
 
-    /* Mask with PE5 (allowed in step 8) and PE4 (forbidden): must fail and touch nothing */
-    s_current_step_id = GPIO_BENCH_STEP_T0A_MCU_TO_AD2;
-    uint32_t test_mask = (1U << 5U) | (1U << 4U);
+    /* Mask with PE7 (allowed in current step T0B_GUARDS) and PE4 (forbidden): must fail and touch nothing */
+    uint32_t test_mask = (1U << 7U) | (1U << 4U);
     if (bench_claim_pins(GPIOE, test_mask, 1U, 0U))
     {
         pass = false; /* Must fail */
@@ -534,7 +543,6 @@ static bool test_t0b_claim_guards(void)
     {
         pass = false; /* Registers were modified despite rejection! */
     }
-    s_current_step_id = GPIO_BENCH_STEP_T0B_GUARDS;
 
     /* Verify GPIOE->MODER was untouched overall */
     if (GPIOE->MODER != moder_before)
@@ -773,9 +781,9 @@ static bool test_t0a_mcu_to_ad2(void)
     }
     GPIOA->BSRR = (1UL << (8U + 16U));
 
-    /* MCU->AD2 Negative Control: ODR set with pins in input with pull-down */
-    GPIOE->MODER &= ~0xFFFF3FE0UL; /* PE5..PE15 input */
-    GPIOE->PUPDR = (GPIOE->PUPDR & ~0xFFFF3FE0UL) | 0xAAAA2A80UL; /* pull-down */
+    /* MCU->AD2 Negative Control: ODR set with pins in input with pull-down (R-m3) */
+    GPIOE->MODER &= ~0xFFFF3FC0UL; /* PE3..PE6, PE8..PE15 input (preserves PE2 and PE7) */
+    GPIOE->PUPDR = (GPIOE->PUPDR & ~0xFFFF3FC0UL) | 0xAAAA2A80UL; /* pull-down (preserves PE2 pull-down) */
     GPIOA->MODER &= ~(3UL << 16U);
     GPIOA->PUPDR = (GPIOA->PUPDR & ~(3UL << 16U)) | (2UL << 16U);
 

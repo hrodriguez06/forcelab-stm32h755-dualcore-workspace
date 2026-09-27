@@ -37,10 +37,17 @@ void App_Log(const char *format, ...)
        run. Before the scheduler starts there is only one context. */
     if ((g_log_mutex != NULL) && (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING))
     {
+#if defined(GPIO_DRIVER_SELFTEST) && GPIO_DRIVER_SELFTEST
+        if (xSemaphoreTake(g_log_mutex, portMAX_DELAY) != pdTRUE)
+        {
+            return;
+        }
+#else
         if (xSemaphoreTake(g_log_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             return;
         }
+#endif
         locked = 1;
     }
 

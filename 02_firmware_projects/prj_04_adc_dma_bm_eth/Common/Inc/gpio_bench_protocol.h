@@ -25,6 +25,7 @@ extern "C" {
 #endif
 
 #include "shared_memory.h"
+#include "hsem_selftest_shared.h"
 
 #define GPIO_BENCH_PROTOCOL_VERSION     1U
 
@@ -73,13 +74,15 @@ extern "C" {
 
 
 /* ---- Dual-Core SRAM4 Communication Structure (m2: defined in shared_memory.h) - */
-_Static_assert(sizeof(SharedMemory_t) <= (GPIO_TEST_SHARED_ADDR - 0x38000000UL),
-               "SharedMemory_t overlaps GPIO_TEST_SHARED_ADDR in SRAM4 (m2)");
+_Static_assert((SHARED_RAM_BASE + sizeof(SharedMemory_t)) <= HSEM_TEST_SHARED_ADDR,
+               "SharedMemory_t overlaps HSEM_TEST_SHARED_ADDR in SRAM4 (m2)");
+
+_Static_assert((HSEM_TEST_SHARED_ADDR + sizeof(HsemTestShared_t)) <= GPIO_TEST_SHARED_ADDR,
+               "HsemTestShared_t overlaps GPIO_TEST_SHARED_ADDR in SRAM4 (m2)");
 
 typedef struct __attribute__((aligned(32)))
 {
     volatile uint32_t session_id;          /*!< Unique session ID set by CM7 on cold boot */
-    volatile uint32_t cm7_ready;           /*!< Set to session_id when CM7 is ready */
     volatile uint32_t cm4_ready;           /*!< Set to session_id when CM4 is ready */
     volatile uint32_t go_signal;           /*!< Set to session_id to release execution */
     volatile uint32_t current_step;        /*!< Step ID currently being executed */
@@ -117,6 +120,9 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t cm4_done;
     volatile uint32_t cm4_all_passed;
 } GpioSelfTestShared_t;
+
+_Static_assert((GPIO_TEST_SHARED_ADDR + sizeof(GpioSelfTestShared_t)) <= SHARED_RAM_END,
+               "GpioSelfTestShared_t exceeds SHARED_RAM_END in SRAM4 (m2)");
 
 #define GPIO_TEST_SHARED  ((GpioSelfTestShared_t *)GPIO_TEST_SHARED_ADDR)
 

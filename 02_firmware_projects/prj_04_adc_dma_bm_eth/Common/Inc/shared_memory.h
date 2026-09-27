@@ -54,6 +54,10 @@ extern "C" {
 #define HSEM_ID_M4_TO_M7_MBOX   3U   /* guards m4_to_m7                      */
 #define HSEM_ID_ADC_DATA        4U   /* guards adc telemetry data            */
 #define BOARD_GPIO_HSEM_ID      5U   /* reserved for 00_gpio shared pin lock */
+#define SHARED_RAM_BASE         0x38008000UL /* SRAM4 base address (D3 domain) */
+#define SHARED_RAM_SIZE         0x00008000UL /* 32 KB (RM0399 §2.3.2) */
+#define SHARED_RAM_END          (SHARED_RAM_BASE + SHARED_RAM_SIZE)
+
 #ifndef GPIO_TEST_SHARED_ADDR
 #define GPIO_TEST_SHARED_ADDR   0x3800A000UL /* 00_gpio dual-core selftest SRAM4 area */
 #endif
