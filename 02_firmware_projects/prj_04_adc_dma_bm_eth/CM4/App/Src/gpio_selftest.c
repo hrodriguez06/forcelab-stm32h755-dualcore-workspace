@@ -197,7 +197,7 @@ void GPIO_SelfTest_CM4_Run(void)
     Line_U32(corruptions);
     Line_End();
 
-    bool cm4_ok = true;
+    bool cm4_ok = (corruptions > 0U);
     GPIO_TEST_SHARED->cm4_all_passed = cm4_ok ? 1U : 0U;
     GPIO_TEST_SHARED->cm4_done = 1U;
     __DMB();

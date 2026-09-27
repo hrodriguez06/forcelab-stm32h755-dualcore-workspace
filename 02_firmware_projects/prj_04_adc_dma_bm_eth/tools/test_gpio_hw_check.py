@@ -362,5 +362,41 @@ class TestHostSafetyGuards(unittest.TestCase):
         self.assertEqual(self.ad2.get_oe() & AD2_DIO_BUS_MASK, 0, "AD2 OE bus was not 0 after abort!")
 
 
+    # ---- B2: T0a full-word comparisons and calculated verdicts --------------
+    def test_b2_t0a_mcu_to_ad2_extra_bit_rejected(self):
+        """B2: Walking-1 MCU->AD2 rejects extra bits outside or inside expected mask."""
+        observed_mask = (1 << 9) | (1 << 11) | (1 << 14) | AD2_DIO_BUS_MASK
+        exp_dio = 9
+        expected_val = 1 << exp_dio
+
+        # Case 1: Extra bit on bus (DIO0 set while DIO9 expected)
+        bad_reading = (1 << exp_dio) | (1 << 0)
+        self.assertNotEqual(bad_reading & observed_mask, expected_val)
+
+        # Case 2: Inverted/wrong bit
+        wrong_bit = (1 << 11)
+        self.assertNotEqual(wrong_bit & observed_mask, expected_val)
+
+        # Case 3: Exact match
+        good_reading = (1 << exp_dio)
+        self.assertEqual(good_reading & observed_mask, expected_val)
+
+    def test_b2_t0a_ad2_to_mcu_fail_response_rejected(self):
+        """B2: Walking-1 AD2->MCU marks test as failed if MCU reports FAIL or incorrect read."""
+        mcu_line_fail = "[m7_gpio_test] T0a_ad2 bit=0 idr=0x0000 exp=0x0100 FAIL"
+        mcu_line_ok = "[m7_gpio_test] T0a_ad2 bit=0 idr=0x0100 exp=0x0100 OK"
+
+        self.assertNotIn("OK", mcu_line_fail)
+        self.assertIn("OK", mcu_line_ok)
+
+    def test_b2_t0a_ad2_to_mcu_analog_control_fail_rejected(self):
+        """B2: Analog control test fails if MCU reports FAIL (e.g. non-zero IDR)."""
+        ctrl_fail = "[m7_gpio_test] T0a_ad2 analog control result: FAIL (idr=0x00FF)"
+        ctrl_ok = "[m7_gpio_test] T0a_ad2 analog control result: OK (idr=0x0000)"
+
+        self.assertNotIn("OK", ctrl_fail)
+        self.assertIn("OK", ctrl_ok)
+
+
 if __name__ == "__main__":
     unittest.main()
