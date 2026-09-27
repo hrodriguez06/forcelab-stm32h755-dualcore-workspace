@@ -6,7 +6,7 @@ Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (re
 
 Este documento dice qué te toca, qué no te toca y qué tienes que entregar.
 
-> **F0 está en su segunda corrección.** Ni la auditoría de F0 ni la reauditoría 1 (`AUDIT.md`) pasaron. Lo que falta, y en qué orden, está en [`F0_CORRECTION_2_INSTRUCTIONS.md`](F0_CORRECTION_2_INSTRUCTIONS.md). [`F0_CORRECTION_INSTRUCTIONS.md`](F0_CORRECTION_INSTRUCTIONS.md) sigue vigente donde el segundo documento no diga otra cosa. No empieces F1a hasta que la reauditoría de F0 pase. Si algo de aquí choca con el plan, manda el plan. Una excepción: lo que este documento te **prohíbe** sigue prohibido aunque el plan lo mencione.
+> **F0 está en su tercera corrección.** Ni la auditoría de F0 ni las reauditorías 1 y 2 (`AUDIT.md`) pasaron. Lo que falta, y en qué orden, está en [`F0_CORRECTION_3_INSTRUCTIONS.md`](F0_CORRECTION_3_INSTRUCTIONS.md). [`F0_CORRECTION_INSTRUCTIONS.md`](F0_CORRECTION_INSTRUCTIONS.md) y [`F0_CORRECTION_2_INSTRUCTIONS.md`](F0_CORRECTION_2_INSTRUCTIONS.md) siguen vigentes donde el tercero no diga otra cosa. No empieces F1a hasta que la reauditoría de F0 pase. Si algo de aquí choca con el plan, manda el plan. Una excepción: lo que este documento te **prohíbe** sigue prohibido aunque el plan lo mencione.
 
 ---
 
