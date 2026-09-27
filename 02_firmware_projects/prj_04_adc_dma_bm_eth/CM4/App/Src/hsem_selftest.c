@@ -322,8 +322,10 @@ void HSEM_SelfTest_CM4_Run(void)
 
     /* 4. H0 Characterization on CM4 */
     bool h0_ok = true;
+    (void)HSEM_BM_Release(HSEM_TEST_M4_LOCK1, 0U);
     uint32_t rlr = HSEM->RLR[HSEM_TEST_M4_LOCK1];
-    if ((rlr & (1UL << 31)) == 0U)
+    uint32_t expected_rlr = (1UL << 31) | (HSEM_BM_COREID_CPU2 << 8);
+    if (rlr == expected_rlr)
     {
         uint32_t r = HSEM->R[HSEM_TEST_M4_LOCK1];
         if ((((r >> 8) & 0xFFU) != HSEM_BM_COREID_CPU2) || (HSEM_BM_Release(HSEM_TEST_M4_LOCK1, 0U) != HSEM_BM_OK))
@@ -334,6 +336,7 @@ void HSEM_SelfTest_CM4_Run(void)
     else
     {
         h0_ok = false;
+        (void)HSEM_BM_Release(HSEM_TEST_M4_LOCK1, 0U);
     }
 
     HsemBm_Owner_t owner = { 0 };
@@ -348,6 +351,7 @@ void HSEM_SelfTest_CM4_Run(void)
 
     /* Parameter rejection tests (C6) */
     if (HSEM_BM_FastTake(32U) != HSEM_BM_ERR_PARAM) h0_ok = false;
+    if (HSEM_BM_Take(32U, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_Take(HSEM_TEST_M4_LOCK1, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_Take(HSEM_TEST_M4_LOCK1, 256U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_Release(32U, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
@@ -380,11 +384,39 @@ void HSEM_SelfTest_CM4_Run(void)
     }
 
     /* Case B: Attempt release of CM7-held lock HSEM_TEST_M7_LOCK1 */
-    while (HSEM_TEST_SHARED->phase < 1U) { __NOP(); }
-    if (HSEM_BM_Release(HSEM_TEST_M7_LOCK1, 0U) != HSEM_BM_ERR_NOT_OWNER)
+    /* Signal CM7 that CM4 is ready for Case B (phase == 1) */
+    HSEM_TEST_SHARED->phase = 1U;
+    __DMB();
+
+    /* Wait for CM7 to hold the lock (phase == 2) */
+    uint32_t w_cm7 = 0U;
+    while ((HSEM_TEST_SHARED->phase != 2U) && (w_cm7++ < 20000000U))
+    {
+        __NOP();
+    }
+
+    if (HSEM_TEST_SHARED->phase == 2U)
+    {
+        /* Attempt to release CM7's lock from CM4 */
+        if (HSEM_BM_Release(HSEM_TEST_M7_LOCK1, 0U) != HSEM_BM_ERR_NOT_OWNER)
+        {
+            h3_ok = false;
+        }
+        HSEM_TEST_SHARED->phase = 3U;
+        __DMB();
+
+        /* Wait for CM7 to finish and release (phase == 4) */
+        uint32_t w_fin = 0U;
+        while ((HSEM_TEST_SHARED->phase != 4U) && (w_fin++ < 10000000U))
+        {
+            __NOP();
+        }
+    }
+    else
     {
         h3_ok = false;
     }
+
     HSEM_TEST_SHARED->h3_m4_pass = h3_ok ? 1U : 0U;
 
     /* 6. H7 Same-Core Context Collision on CM4 (S1) */

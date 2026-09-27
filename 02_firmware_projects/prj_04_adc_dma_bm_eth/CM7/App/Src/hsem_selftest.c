@@ -445,8 +445,10 @@ void HSEM_SelfTest_CM7_Run(void)
 
     /* 4. H0 Characterization on CM7 */
     bool h0_ok = true;
+    (void)HSEM_BM_Release(HSEM_TEST_M7_LOCK1, 0U);
     uint32_t rlr = HSEM->RLR[HSEM_TEST_M7_LOCK1];
-    if ((rlr & (1UL << 31)) == 0U)
+    uint32_t expected_rlr = (1UL << 31) | (HSEM_BM_COREID_CPU1 << 8);
+    if (rlr == expected_rlr)
     {
         uint32_t r = HSEM->R[HSEM_TEST_M7_LOCK1];
         if ((((r >> 8) & 0xFFU) != HSEM_BM_COREID_CPU1) || (HSEM_BM_Release(HSEM_TEST_M7_LOCK1, 0U) != HSEM_BM_OK))
@@ -457,6 +459,7 @@ void HSEM_SelfTest_CM7_Run(void)
     else
     {
         h0_ok = false;
+        (void)HSEM_BM_Release(HSEM_TEST_M7_LOCK1, 0U);
     }
 
     HsemBm_Owner_t owner = { 0 };
@@ -471,6 +474,7 @@ void HSEM_SelfTest_CM7_Run(void)
 
     /* Parameter rejection tests (C6) */
     if (HSEM_BM_FastTake(32U) != HSEM_BM_ERR_PARAM) h0_ok = false;
+    if (HSEM_BM_Take(32U, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_Take(HSEM_TEST_M7_LOCK1, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_Take(HSEM_TEST_M7_LOCK1, 256U) != HSEM_BM_ERR_PARAM) h0_ok = false;
     if (HSEM_BM_Release(32U, 0U) != HSEM_BM_ERR_PARAM) h0_ok = false;
@@ -502,12 +506,31 @@ void HSEM_SelfTest_CM7_Run(void)
             h3_ok = false;
         }
 
-        /* Signal CM4 to attempt release from other core (Case B, M5) */
-        HSEM_TEST_SHARED->phase = 1U;
+        /* Wait for CM4 to be ready to test H3 Case B */
+        uint32_t wait_m4_h3 = 0U;
+        while ((HSEM_TEST_SHARED->phase != 1U) && (wait_m4_h3++ < 10000000U))
+        {
+            __NOP();
+        }
+        if (HSEM_TEST_SHARED->phase != 1U)
+        {
+            h3_ok = false;
+        }
+
+        /* Signal CM4 that CM7 holds lock (phase == 2) */
+        HSEM_TEST_SHARED->phase = 2U;
         __DMB();
 
-        /* Give CM4 time to attempt release */
-        for (volatile uint32_t d = 0U; d < 50000U; d++) { __NOP(); }
+        /* Wait for CM4 to acknowledge attempt (phase == 3) */
+        uint32_t wait_ack = 0U;
+        while ((HSEM_TEST_SHARED->phase != 3U) && (wait_ack++ < 10000000U))
+        {
+            __NOP();
+        }
+        if (HSEM_TEST_SHARED->phase != 3U)
+        {
+            h3_ok = false;
+        }
 
         /* Verify lock is STILL held by CM7 proc 7 */
         r = HSEM->R[HSEM_TEST_M7_LOCK1];
@@ -520,6 +543,9 @@ void HSEM_SelfTest_CM7_Run(void)
         {
             h3_ok = false;
         }
+
+        HSEM_TEST_SHARED->phase = 4U;
+        __DMB();
     }
     else
     {
