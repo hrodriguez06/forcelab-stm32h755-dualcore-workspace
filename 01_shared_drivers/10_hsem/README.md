@@ -119,6 +119,7 @@ HsemBm_Status_t HSEM_BM_ReleaseAllOfCore(uint32_t core_id, uint16_t key);
 
 /* Notifications */
 bool            HSEM_BM_NotifyEnable(uint32_t sem_mask);
+bool            HSEM_BM_NotifyRearm(uint32_t sem_mask);
 bool            HSEM_BM_NotifyDisable(uint32_t sem_mask);
 uint32_t        HSEM_BM_NotifyTake(void);
 uint32_t        HSEM_BM_GetRawStatus(void);
@@ -144,6 +145,7 @@ HsemBm_Status_t HSEM_LL_TakeTimeoutEx(uint32_t id, uint32_t proc_id, uint32_t ma
                                       void (*relax)(void *ctx), void *ctx);
 HsemBm_Status_t HSEM_LL_Release(uint32_t id, uint32_t proc_id);
 bool            HSEM_LL_NotifyEnable(uint32_t sem_mask);
+bool            HSEM_LL_NotifyRearm(uint32_t sem_mask);
 bool            HSEM_LL_NotifyDisable(uint32_t sem_mask);
 uint32_t        HSEM_LL_NotifyTake(void);
 ```
@@ -164,6 +166,7 @@ HAL_StatusTypeDef HSEM_HAL_TakeTimeoutEx(uint32_t id, uint32_t proc_id, uint32_t
                                         void (*relax)(void *ctx), void *ctx);
 HAL_StatusTypeDef HSEM_HAL_Release(uint32_t id, uint32_t proc_id);
 HAL_StatusTypeDef HSEM_HAL_NotifyEnable(uint32_t sem_mask);
+HAL_StatusTypeDef HSEM_HAL_NotifyRearm(uint32_t sem_mask);
 HAL_StatusTypeDef HSEM_HAL_NotifyDisable(uint32_t sem_mask);
 HAL_StatusTypeDef HSEM_HAL_RegisterCallback(HsemHal_FreeCallback_t cb, void *ctx);
 void              HSEM_HAL_IRQService(void);
@@ -397,8 +400,17 @@ Direct measurements using DWT `CYCCNT`:
 - **Raw Peripheral Access Latency (AHB4 via D3 domain):**
   - Cortex-M7 (CPU1 @ 400 MHz): `FastTake` = 16 cycles (40.0 ns), `Take` = 30 cycles (75.0 ns), `Release` = 3 cycles (7.5 ns).
   - Cortex-M4 (CPU2 @ 200 MHz): `FastTake` = 8 cycles (40.0 ns), `Take` = 24 cycles (120.0 ns), `Release` = 6 cycles (30.0 ns).
-- **Application Retention Times:**
-  - Measured empirically in `adc_acquisition.c` and `adc_server.c` using DWT cycle counters (`g_adc_lock_hold_cycles_*` and `g_m7_adc_lock_hold_cycles_*`).
+- **Application Retention Times (HSEM 4 / `HSEM_ID_ADC_DATA`):**
+  - Measured empirically via DWT cycle counters in `adc_acquisition.c` and `adc_server.c`, exposed in `g_shared`:
+    - **CM4 Peak Retention:** Up to **7,525 cycles @ 200 MHz (37.6 µs)** during `ADC_Acquisition_Process` (integer statistics computation + telemetry copy + 1024-byte waveform `memcpy`).
+    - **CM7 Peak Retention:** Up to **17,069 cycles @ 400 MHz (42.7 µs)** during UDP `WAVE` serialization (56-byte header + 1024-byte waveform payload) in FreeRTOS ethernet task.
+    - **Calibrated Trylock Timeout:** **100 µs** (`SHARED_ADC_TRYLOCK_US = 100U`), giving 40,000 cycles on CM7 and 20,000 cycles on CM4. This provides a $>2\times$ safety margin over the maximum measured retention, completely eliminating contention timeouts and UDP packet drops under continuous load (R-B1).
+
+### 9.2 Unexercised Features & Scope Exclusions (R-m5)
+The following functions or scenarios are implemented in the driver codebase but are not exercised within the automated selftest suite:
+1. **`TakeOrNotify`:** Atomic take-or-notify primitive is implemented in `hsem_bm.c` (remediating M3 by returning `BUSY_SELF` immediately if locked by the same core without arming spurious notifications). The selftest exercises separate take and NVIC interrupt notification paths instead.
+2. **`ReleaseAllOfCore` concurrent re-take:** Recovery under idle conditions is verified in H8 with security key. The edge case where the target core concurrently re-takes a semaphore between hardware clear and status readback is protected in driver logic via `(mask_after & mask_before) == 0U`, but is not artificially forced in selftest.
+3. **BM calls with uninitialized peripheral clock (`HSEMEN = 0`):** LL and HAL tiers verify rejection via `HSEM_BM_CheckInit()`; calling raw BM functions with RCC clock disabled is unexercised in selftest to avoid triggering bus faults on the test harness.
 
 ---
 
@@ -410,9 +422,11 @@ Direct measurements using DWT `CYCCNT`:
    must strictly restrict inspection to `0x58026400..0x5802647C` (`HSEM_Rx`), which
    is non-destructive.
 2. **SRAM4 Warm Reset Persistence:**
-   On soft reset, SRAM4 (`0x38008000`) is not cleared by hardware. CPU1 must
-   explicitly zero `g_shared.magic` at the very beginning of `main()` and clear stale
-   locks via `HSEM_BM_ReleaseAllOfCore()`.
+   On warm reset, SRAM4 (`0x38008000`) is not cleared by hardware, whereas HSEM
+   peripheral registers are fully reset to 0 by system reset. CPU1 must explicitly
+   re-initialize `g_shared` (zeroing `magic` until structures are valid) in `Shared_Init()`
+   at the start of `main()`. Explicit `ReleaseAllOfCore()` is not required at boot
+   because hardware semaphores are already cleared on reset.
 3. **No HSEM Locks in ISR Context:**
    Never attempt to lock an HSEM inside an Interrupt Service Routine. If the ISR
    preempts the thread holding that same HSEM, the core deadlocks permanently.

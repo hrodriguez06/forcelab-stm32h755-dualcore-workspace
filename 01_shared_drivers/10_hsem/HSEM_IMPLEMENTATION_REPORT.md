@@ -1,6 +1,11 @@
-# Informe Técnico Detallado: Implementación, Auditoría y Validación en Silicio del Driver HSEM (`10_hsem`) para STM32H755ZI
+# Informe Técnico Detallado: Implementación y Registro del Driver HSEM (`10_hsem`) para STM32H755ZI
 
-**Fecha de finalización:** 26 de septiembre de 2026  
+> [!IMPORTANT]
+> **Aviso de Estado y Jerarquía Documental (B6)**  
+> Este documento recoge el registro de trabajo técnico y diseño por parte del implementador. **La auditoría técnica formal, independiente y vinculante sobre el cierre del driver se encuentra exclusivamente en [`AUDIT.md`](file:///01_shared_drivers/10_hsem/AUDIT.md).**  
+> Cualquier veredicto previo de cierre registrado en este informe queda formalmente supeditado y sustituido por las evaluaciones, verificaciones en silicio y estados de hallazgos documentados en `AUDIT.md`.
+
+**Fecha de finalización de implementación:** 26 de septiembre de 2026  
 **Autor:** Antigravity (Google DeepMind Pair Programmer) para Hector Rodriguez (@Hector)  
 **Plataforma de prueba:** STMicroelectronics NUCLEO-H755ZI-Q  
 - Microcontrolador: STM32H755ZI (Dual-Core Asimétrico: Cortex-M7 @ 400 MHz, Cortex-M4 @ 200 MHz)  
@@ -21,7 +26,7 @@ El periférico **Hardware Semaphore (HSEM)** del STM32H755 proporciona 32 canale
 Antes de este trabajo, la carpeta `01_shared_drivers/10_hsem/` se encontraba vacía (solo contenía un archivo `.gitkeep`). El uso del HSEM estaba disperso en implementaciones manuales duplicadas en cada proyecto de firmware (`prj_01_template_dualcore`, `prj_02_eth_lwip_dualcore`, `prj_03_adc_dma_eth`, `prj_04_adc_dma_bm_eth`), las cuales habían divergido notablemente, arrastrando defectos de diseño graves.
 
 ### Plan de Acción
-Se ejecutó de forma estricta un plan de ingeniería dividido en seis fases (**F0 a F5**), aplicando un riguroso protocolo de auditoría independiente que requirió pruebas físicas en hardware con controles negativos verificados para cada una de las afirmaciones.
+Se ejecutó de forma estricta un plan de ingeniería dividido en seis fases (**F0 a F5**), preparando evidencia de silicio y controles negativos para someter el driver al protocolo de auditoría independiente formalizado en `AUDIT.md`.
 
 ---
 
@@ -275,4 +280,4 @@ a8ec2a2 feat(hsem): implement hsem_bm bare-metal driver core
 └── warm_resets_f2.txt             # 20 warm resets tras la migración de arranque (F2)
 ```
 
-El driver HSEM se encuentra formalmente **concluido, auditado, validado en hardware y cerrado al 100%**, listo para servir de base a los siguientes desarrollos del catálogo (`00_gpio` F1/F2, `03_tim` y `06_spi`).
+El driver HSEM ha completado su implementación y remediación de hallazgos por parte del implementador, y su estado formal de evaluación, verificación en hardware y cierre se encuentra regido de forma vinculante por la auditoría independiente en [`AUDIT.md`](file:///01_shared_drivers/10_hsem/AUDIT.md).
