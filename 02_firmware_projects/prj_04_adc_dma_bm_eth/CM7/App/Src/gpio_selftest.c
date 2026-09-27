@@ -415,14 +415,14 @@ static bool test_t0a_loose(void)
 
 static bool test_t0a_mcu_to_ad2(void)
 {
-    APP_LOG("[m7_gpio_test] T0a_mcu ready bus=MCU");
-
     /* Step S5 check before bus driving */
     if (!s5_check_bus_loose())
     {
         APP_LOG("[m7_gpio_test] ABORT: S5 pre-check failed before MCU walking-1");
         return false;
     }
+
+    APP_LOG("[m7_gpio_test] T0a_mcu ready bus=MCU");
 
     /* Configure Solo MCU lines as push-pull output: PE5, PE6, PE7, PA8 */
     bench_set_pin_mode(GPIOE, 5U, 1U, 0U, GPIO_BENCH_STEP_T0A_MCU_TO_AD2);
@@ -466,8 +466,6 @@ static bool test_t0a_mcu_to_ad2(void)
 
 static bool test_t0a_ad2_to_mcu(void)
 {
-    APP_LOG("[m7_gpio_test] T0a_ad2 ready bus=AD2");
-
     /* Pre-check bus loose */
     if (!s5_check_bus_loose())
     {
@@ -475,9 +473,11 @@ static bool test_t0a_ad2_to_mcu(void)
         return false;
     }
 
+    APP_LOG("[m7_gpio_test] T0a_ad2 ready bus=AD2");
+
     /* Configure input pull-down on PE3 (EXTI3), PE4 (EXTI4), PE8..PE15 */
     uint32_t pupdr = GPIOE->PUPDR;
-    pupdr &= ~0xFFFF0030UL;
+    pupdr &= ~0xFFFF03C0UL;
     pupdr |= (0xAAAA0000UL | (2UL << (3U * 2U)) | (2UL << (4U * 2U)));
     GPIOE->PUPDR = pupdr;
 

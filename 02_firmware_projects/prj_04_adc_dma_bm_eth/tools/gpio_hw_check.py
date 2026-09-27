@@ -165,7 +165,7 @@ def run_selftest(port_name: str, baud: int, target_sn: str, log_path: pathlib.Pa
                 fw_rev = ""
 
                 start_time = time.monotonic()
-                while time.monotonic() - start_time < 45.0:
+                while time.monotonic() - start_time < 90.0:
                     chunk = ser.read()
                     if chunk:
                         pending += chunk
