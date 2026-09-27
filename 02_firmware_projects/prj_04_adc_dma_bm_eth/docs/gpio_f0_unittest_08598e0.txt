@@ -1,0 +1,3176 @@
+[10:09:27] ================================================================================
+[10:09:27] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:27] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:27] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:27] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:27] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:27] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:27] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:27] ================================================================================
+[10:09:27] [host] Expected firmware revision from git: ca569b6
+[10:09:27] [m7_gpio_test] Rev ca569b6
+[10:09:27] [host] CM7 banner revision verified: ca569b6
+[10:09:27] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:27] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:27] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:27] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:27] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:27] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:27] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:27] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:27] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:27] [host] T15 dual-core race PASSED.
+[10:09:27] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:27] [ad2] Running T0b(a) host OE guards verification...
+[10:09:27] [ad2] T0b(a) host OE guards PASSED.
+[10:09:27] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:28] [ad2] ABORT: Timeout in HS_HOST Phase 2 (waiting for MCU_ACK=1)
+[10:09:28] ERROR during selftest execution: ABORT: Timeout in HS_HOST Phase 2 (waiting for MCU_ACK=1)
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT CHECKLIST (B2):
+[10:09:28]   [FAIL] sequence_complete
+[10:09:28]   [OK] t15_pass
+[10:09:28]   [FAIL] cm4_rev_match
+[10:09:28]   [FAIL] cm4_pass
+[10:09:28]   [FAIL] fw_all_passed
+[10:09:28]   [OK] t0b_a_oe_guards
+[10:09:28]   [FAIL] t0b_b_claim_guards
+[10:09:28]   [FAIL] t0b_c_contention
+[10:09:28]   [FAIL] t0b_d_timeout
+[10:09:28]   [FAIL] t0a_loose
+[10:09:28]   [FAIL] t0a_handshake
+[10:09:28]   [FAIL] t0a_mcu_to_ad2
+[10:09:28]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:28]   [FAIL] t0a_ad2_to_mcu
+[10:09:28]   [FAIL] t0a_scope
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT=FAIL
+[10:09:28] ================================================================================
+[10:09:28] ================================================================================
+[10:09:28] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:28] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:28] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:28] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:28] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:28] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:28] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:28] ================================================================================
+[10:09:28] [host] Expected firmware revision from git: ca569b6
+[10:09:28] [m7_gpio_test] Rev ca569b6
+[10:09:28] [host] CM7 banner revision verified: ca569b6
+[10:09:28] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:28] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:28] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:28] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:28] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:28] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:28] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:28] [host] T15 dual-core race PASSED.
+[10:09:28] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Running T0b(a) host OE guards verification...
+[10:09:28] [ad2] T0b(a) host OE guards PASSED.
+[10:09:28] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:28] [host] Session start synchronized.
+[10:09:28] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:28] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:28] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:28] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:28] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:28] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:28] [ad2] MCU announced drive pattern: 0x5A
+[10:09:28] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:28] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:28] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:28] [ad2] ABORT: Timeout in HS_MCU Phase 1 (waiting for MCU_ACK=1)
+[10:09:28] ERROR during selftest execution: ABORT: Timeout in HS_MCU Phase 1 (waiting for MCU_ACK=1)
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT CHECKLIST (B2):
+[10:09:28]   [FAIL] sequence_complete
+[10:09:28]   [OK] t15_pass
+[10:09:28]   [FAIL] cm4_rev_match
+[10:09:28]   [FAIL] cm4_pass
+[10:09:28]   [FAIL] fw_all_passed
+[10:09:28]   [OK] t0b_a_oe_guards
+[10:09:28]   [OK] t0b_b_claim_guards
+[10:09:28]   [OK] t0b_c_contention
+[10:09:28]   [FAIL] t0b_d_timeout
+[10:09:28]   [FAIL] t0a_loose
+[10:09:28]   [FAIL] t0a_handshake
+[10:09:28]   [FAIL] t0a_mcu_to_ad2
+[10:09:28]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:28]   [FAIL] t0a_ad2_to_mcu
+[10:09:28]   [FAIL] t0a_scope
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT=FAIL
+[10:09:28] ================================================================================
+[10:09:28] ================================================================================
+[10:09:28] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:28] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:28] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:28] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:28] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:28] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:28] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:28] ================================================================================
+[10:09:28] [host] Expected firmware revision from git: ca569b6
+[10:09:28] [m7_gpio_test] Rev ca569b6
+[10:09:28] [host] CM7 banner revision verified: ca569b6
+[10:09:28] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:28] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:28] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:28] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:28] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:28] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:28] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:28] [host] T15 dual-core race PASSED.
+[10:09:28] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Running T0b(a) host OE guards verification...
+[10:09:28] [ad2] T0b(a) host OE guards PASSED.
+[10:09:28] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:28] [host] Session start synchronized.
+[10:09:28] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:28] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:28] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:28] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:28] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:28] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:28] [ad2] MCU announced drive pattern: 0x5A
+[10:09:28] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:28] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:28] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:28] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:28] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:28] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:28] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:28] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [ad2] T0b(d) timeout test PASSED.
+[10:09:28] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:28] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:28] [ad2] ABORT: Timeout in HS_MCU Phase 1 (waiting for MCU_ACK=1)
+[10:09:28] ERROR during selftest execution: ABORT: Timeout in HS_MCU Phase 1 (waiting for MCU_ACK=1)
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT CHECKLIST (B2):
+[10:09:28]   [FAIL] sequence_complete
+[10:09:28]   [OK] t15_pass
+[10:09:28]   [FAIL] cm4_rev_match
+[10:09:28]   [FAIL] cm4_pass
+[10:09:28]   [FAIL] fw_all_passed
+[10:09:28]   [OK] t0b_a_oe_guards
+[10:09:28]   [OK] t0b_b_claim_guards
+[10:09:28]   [OK] t0b_c_contention
+[10:09:28]   [OK] t0b_d_timeout
+[10:09:28]   [FAIL] t0a_loose
+[10:09:28]   [FAIL] t0a_handshake
+[10:09:28]   [FAIL] t0a_mcu_to_ad2
+[10:09:28]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:28]   [FAIL] t0a_ad2_to_mcu
+[10:09:28]   [FAIL] t0a_scope
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT=FAIL
+[10:09:28] ================================================================================
+[10:09:28] ================================================================================
+[10:09:28] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:28] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:28] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:28] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:28] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:28] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:28] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:28] ================================================================================
+[10:09:28] [host] Expected firmware revision from git: ca569b6
+[10:09:28] [m7_gpio_test] Rev ca569b6
+[10:09:28] [host] CM7 banner revision verified: ca569b6
+[10:09:28] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:28] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:28] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:28] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:28] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:28] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:28] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:28] [host] T15 dual-core race PASSED.
+[10:09:28] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Running T0b(a) host OE guards verification...
+[10:09:28] [ad2] T0b(a) host OE guards PASSED.
+[10:09:28] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:28] [host] Session start synchronized.
+[10:09:28] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:28] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:28] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:28] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:28] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:28] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:28] [ad2] MCU announced drive pattern: 0x5A
+[10:09:28] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:28] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:28] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:28] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:28] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:28] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:28] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:28] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [ad2] T0b(d) timeout test PASSED.
+[10:09:28] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:28] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:28] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:28] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:28] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:28] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:28] [ad2] ABORT: Timeout in HS_HOST Phase 2 (waiting for MCU_ACK=1)
+[10:09:28] ERROR during selftest execution: ABORT: Timeout in HS_HOST Phase 2 (waiting for MCU_ACK=1)
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT CHECKLIST (B2):
+[10:09:28]   [FAIL] sequence_complete
+[10:09:28]   [OK] t15_pass
+[10:09:28]   [FAIL] cm4_rev_match
+[10:09:28]   [FAIL] cm4_pass
+[10:09:28]   [FAIL] fw_all_passed
+[10:09:28]   [OK] t0b_a_oe_guards
+[10:09:28]   [OK] t0b_b_claim_guards
+[10:09:28]   [OK] t0b_c_contention
+[10:09:28]   [OK] t0b_d_timeout
+[10:09:28]   [OK] t0a_loose
+[10:09:28]   [FAIL] t0a_handshake
+[10:09:28]   [FAIL] t0a_mcu_to_ad2
+[10:09:28]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:28]   [FAIL] t0a_ad2_to_mcu
+[10:09:28]   [FAIL] t0a_scope
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT=FAIL
+[10:09:28] ================================================================================
+[10:09:28] ================================================================================
+[10:09:28] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:28] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:28] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:28] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:28] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:28] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:28] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:28] ================================================================================
+[10:09:28] [host] Expected firmware revision from git: ca569b6
+[10:09:28] [m7_gpio_test] Rev ca569b6
+[10:09:28] [host] CM7 banner revision verified: ca569b6
+[10:09:28] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:28] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:28] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:28] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:28] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:28] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:28] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:28] [host] T15 dual-core race PASSED.
+[10:09:28] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Running T0b(a) host OE guards verification...
+[10:09:28] [ad2] T0b(a) host OE guards PASSED.
+[10:09:28] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:28] [host] Session start synchronized.
+[10:09:28] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:28] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:28] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:28] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:28] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:28] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:28] [ad2] MCU announced drive pattern: 0x5A
+[10:09:28] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:28] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:28] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:28] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:28] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:28] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:28] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:28] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [ad2] T0b(d) timeout test PASSED.
+[10:09:28] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:28] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:28] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:28] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:28] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:28] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:28] [m7_gpio_test] Handshake PE2: OK
+[10:09:28] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:28] [ad2] T0a handshake lines PASSED.
+[10:09:28] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:28] [ad2] ABORT: Timeout in HS_MCU Phase 1 (waiting for MCU_ACK=1)
+[10:09:28] ERROR during selftest execution: ABORT: Timeout in HS_MCU Phase 1 (waiting for MCU_ACK=1)
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT CHECKLIST (B2):
+[10:09:28]   [FAIL] sequence_complete
+[10:09:28]   [OK] t15_pass
+[10:09:28]   [FAIL] cm4_rev_match
+[10:09:28]   [FAIL] cm4_pass
+[10:09:28]   [FAIL] fw_all_passed
+[10:09:28]   [OK] t0b_a_oe_guards
+[10:09:28]   [OK] t0b_b_claim_guards
+[10:09:28]   [OK] t0b_c_contention
+[10:09:28]   [OK] t0b_d_timeout
+[10:09:28]   [OK] t0a_loose
+[10:09:28]   [OK] t0a_handshake
+[10:09:28]   [FAIL] t0a_mcu_to_ad2
+[10:09:28]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:28]   [FAIL] t0a_ad2_to_mcu
+[10:09:28]   [FAIL] t0a_scope
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT=FAIL
+[10:09:28] ================================================================================
+[10:09:28] ================================================================================
+[10:09:28] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:28] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:28] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:28] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:28] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:28] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:28] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:28] ================================================================================
+[10:09:28] [host] Expected firmware revision from git: ca569b6
+[10:09:28] [m7_gpio_test] Rev ca569b6
+[10:09:28] [host] CM7 banner revision verified: ca569b6
+[10:09:28] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:28] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:28] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:28] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:28] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:28] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:28] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:28] [host] T15 dual-core race PASSED.
+[10:09:28] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Running T0b(a) host OE guards verification...
+[10:09:28] [ad2] T0b(a) host OE guards PASSED.
+[10:09:28] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:28] [host] Session start synchronized.
+[10:09:28] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:28] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:28] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:28] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:28] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:28] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:28] [ad2] MCU announced drive pattern: 0x5A
+[10:09:28] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:28] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:28] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:28] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:28] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:28] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:28] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:28] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [ad2] T0b(d) timeout test PASSED.
+[10:09:28] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:28] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:28] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:28] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:28] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:28] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:28] [m7_gpio_test] Handshake PE2: OK
+[10:09:28] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:28] [ad2] T0a handshake lines PASSED.
+[10:09:28] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:28] [m7_gpio_test] T0a_mcu control ready
+[10:09:28] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:28] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:28] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:28] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:28] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [m7_gpio_test] T0a_ad2 ready
+[10:09:28] [ad2] ABORT: Timeout in HS_MCU Phase 1 (waiting for MCU_ACK=1)
+[10:09:28] ERROR during selftest execution: ABORT: Timeout in HS_MCU Phase 1 (waiting for MCU_ACK=1)
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT CHECKLIST (B2):
+[10:09:28]   [FAIL] sequence_complete
+[10:09:28]   [OK] t15_pass
+[10:09:28]   [FAIL] cm4_rev_match
+[10:09:28]   [FAIL] cm4_pass
+[10:09:28]   [FAIL] fw_all_passed
+[10:09:28]   [OK] t0b_a_oe_guards
+[10:09:28]   [OK] t0b_b_claim_guards
+[10:09:28]   [OK] t0b_c_contention
+[10:09:28]   [OK] t0b_d_timeout
+[10:09:28]   [OK] t0a_loose
+[10:09:28]   [OK] t0a_handshake
+[10:09:28]   [OK] t0a_mcu_to_ad2
+[10:09:28]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:28]   [FAIL] t0a_ad2_to_mcu
+[10:09:28]   [FAIL] t0a_scope
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT=FAIL
+[10:09:28] ================================================================================
+[10:09:28] ================================================================================
+[10:09:28] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:28] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:28] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:28] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:28] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:28] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:28] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:28] ================================================================================
+[10:09:28] [host] Expected firmware revision from git: ca569b6
+[10:09:28] [m7_gpio_test] Rev ca569b6
+[10:09:28] [host] CM7 banner revision verified: ca569b6
+[10:09:28] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:28] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:28] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:28] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:28] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:28] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:28] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:28] [host] T15 dual-core race PASSED.
+[10:09:28] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Running T0b(a) host OE guards verification...
+[10:09:28] [ad2] T0b(a) host OE guards PASSED.
+[10:09:28] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:28] [host] Session start synchronized.
+[10:09:28] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:28] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:28] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:28] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:28] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:28] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:28] [ad2] MCU announced drive pattern: 0x5A
+[10:09:28] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:28] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:28] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:28] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:28] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:28] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:28] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:28] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [ad2] T0b(d) timeout test PASSED.
+[10:09:28] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:28] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:28] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:28] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:28] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:28] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:28] [m7_gpio_test] Handshake PE2: OK
+[10:09:28] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:28] [ad2] T0a handshake lines PASSED.
+[10:09:28] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:28] [m7_gpio_test] T0a_mcu control ready
+[10:09:28] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:28] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:28] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:28] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:28] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [m7_gpio_test] T0a_ad2 ready
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:28] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:28] [m7_gpio_test] T0a_ad2: PASS
+[10:09:28] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:28] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:28] [m7_gpio_test] Scope LOW ready
+[10:09:28] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:28] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:28] [ad2] ABORT: Timeout in HS_MCU Phase 1 (waiting for MCU_ACK=1)
+[10:09:28] ERROR during selftest execution: ABORT: Timeout in HS_MCU Phase 1 (waiting for MCU_ACK=1)
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT CHECKLIST (B2):
+[10:09:28]   [FAIL] sequence_complete
+[10:09:28]   [OK] t15_pass
+[10:09:28]   [FAIL] cm4_rev_match
+[10:09:28]   [FAIL] cm4_pass
+[10:09:28]   [FAIL] fw_all_passed
+[10:09:28]   [OK] t0b_a_oe_guards
+[10:09:28]   [OK] t0b_b_claim_guards
+[10:09:28]   [OK] t0b_c_contention
+[10:09:28]   [OK] t0b_d_timeout
+[10:09:28]   [OK] t0a_loose
+[10:09:28]   [OK] t0a_handshake
+[10:09:28]   [OK] t0a_mcu_to_ad2
+[10:09:28]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:28]   [OK] t0a_ad2_to_mcu
+[10:09:28]   [FAIL] t0a_scope
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT=FAIL
+[10:09:28] ================================================================================
+.[10:09:28] ================================================================================
+[10:09:28] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:28] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:28] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:28] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:28] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:28] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:28] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:28] ================================================================================
+[10:09:28] [host] Expected firmware revision from git: ca569b6
+[10:09:28] [m7_gpio_test] Rev ca569b6
+[10:09:28] [host] CM7 banner revision verified: ca569b6
+[10:09:28] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:28] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:28] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:28] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:28] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:28] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:28] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:28] [host] T15 dual-core race PASSED.
+[10:09:28] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Running T0b(a) host OE guards verification...
+[10:09:28] [ad2] T0b(a) host OE guards PASSED.
+[10:09:28] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:28] [host] Session start synchronized.
+[10:09:28] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:28] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:28] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:28] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:28] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:28] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:28] [ad2] MCU announced drive pattern: 0x5A
+[10:09:28] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:28] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:28] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:28] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:28] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:28] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:28] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:28] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [ad2] T0b(d) timeout test PASSED.
+[10:09:28] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:28] [ad2] Loose check pull-up read: 0x4FF7 (expected 0x4FFF)
+[10:09:28] [ad2] Loose check pull-up FAILED on DIO3 (observed=0, expected=1)
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:28] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:28] [ad2] T0a loose check FAILED!
+[10:09:28] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:28] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:28] [m7_gpio_test] Handshake PE2: OK
+[10:09:28] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:28] [ad2] T0a handshake lines PASSED.
+[10:09:28] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:28] [m7_gpio_test] T0a_mcu control ready
+[10:09:28] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:28] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:28] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:28] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:28] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [m7_gpio_test] T0a_ad2 ready
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:28] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:28] [m7_gpio_test] T0a_ad2: PASS
+[10:09:28] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:28] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:28] [m7_gpio_test] Scope LOW ready
+[10:09:28] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:28] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:28] [m7_gpio_test] Scope HIGH ready
+[10:09:28] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:28] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:28] [ad2] Scope check PASSED.
+[10:09:28] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:28] [m4_gpio_test] Rev ca569b6
+[10:09:28] [m4_gpio_test] INFO CM4 selftest started
+[10:09:28] [m4_gpio_test] CM4 VERDICT=PASS
+[10:09:28] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[10:09:28] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT CHECKLIST (B2):
+[10:09:28]   [OK] sequence_complete
+[10:09:28]   [OK] t15_pass
+[10:09:28]   [OK] cm4_rev_match
+[10:09:28]   [OK] cm4_pass
+[10:09:28]   [OK] fw_all_passed
+[10:09:28]   [OK] t0b_a_oe_guards
+[10:09:28]   [OK] t0b_b_claim_guards
+[10:09:28]   [OK] t0b_c_contention
+[10:09:28]   [OK] t0b_d_timeout
+[10:09:28]   [FAIL] t0a_loose
+[10:09:28]   [OK] t0a_handshake
+[10:09:28]   [OK] t0a_mcu_to_ad2
+[10:09:28]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:28]   [OK] t0a_ad2_to_mcu
+[10:09:28]   [OK] t0a_scope
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT=FAIL
+[10:09:28] ================================================================================
+[10:09:28] ================================================================================
+[10:09:28] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:28] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:28] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:28] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:28] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:28] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:28] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:28] ================================================================================
+[10:09:28] [host] Expected firmware revision from git: ca569b6
+[10:09:28] [m7_gpio_test] Rev ca569b6
+[10:09:28] [host] CM7 banner revision verified: ca569b6
+[10:09:28] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:28] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:28] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:28] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:28] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:28] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:28] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:28] [host] T15 dual-core race PASSED.
+[10:09:28] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Running T0b(a) host OE guards verification...
+[10:09:28] [ad2] T0b(a) host OE guards PASSED.
+[10:09:28] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:28] [host] Session start synchronized.
+[10:09:28] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:28] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:28] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:28] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:28] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:28] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:28] [ad2] MCU announced drive pattern: 0x5A
+[10:09:28] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:28] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:28] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:28] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:28] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:28] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:28] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:28] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [ad2] T0b(d) timeout test PASSED.
+[10:09:28] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:28] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:28] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:28] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:28] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:28] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:28] [m7_gpio_test] Handshake PE2: OK
+[10:09:28] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:28] [ad2] T0a handshake lines PASSED.
+[10:09:28] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO9 FAILED! Observed=0x0001, Expected=0x0200
+[10:09:28] [ad2]   Bit mismatch on DIO0: observed=1, expected=0
+[10:09:28] [ad2]   Bit mismatch on DIO9: observed=0, expected=1
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:28] [m7_gpio_test] T0a_mcu control ready
+[10:09:28] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:28] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:28] [ad2] Walking-1 MCU->AD2 FAILED!
+[10:09:28] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:28] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [m7_gpio_test] T0a_ad2 ready
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:28] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:28] [m7_gpio_test] T0a_ad2: PASS
+[10:09:28] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:28] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:28] [m7_gpio_test] Scope LOW ready
+[10:09:28] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:28] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:28] [m7_gpio_test] Scope HIGH ready
+[10:09:28] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:28] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:28] [ad2] Scope check PASSED.
+[10:09:28] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:28] [m4_gpio_test] Rev ca569b6
+[10:09:28] [m4_gpio_test] INFO CM4 selftest started
+[10:09:28] [m4_gpio_test] CM4 VERDICT=PASS
+[10:09:28] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[10:09:28] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT CHECKLIST (B2):
+[10:09:28]   [OK] sequence_complete
+[10:09:28]   [OK] t15_pass
+[10:09:28]   [OK] cm4_rev_match
+[10:09:28]   [OK] cm4_pass
+[10:09:28]   [OK] fw_all_passed
+[10:09:28]   [OK] t0b_a_oe_guards
+[10:09:28]   [OK] t0b_b_claim_guards
+[10:09:28]   [OK] t0b_c_contention
+[10:09:28]   [OK] t0b_d_timeout
+[10:09:28]   [OK] t0a_loose
+[10:09:28]   [OK] t0a_handshake
+[10:09:28]   [FAIL] t0a_mcu_to_ad2
+[10:09:28]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:28]   [OK] t0a_ad2_to_mcu
+[10:09:28]   [OK] t0a_scope
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT=FAIL
+[10:09:28] ================================================================================
+[10:09:28] ================================================================================
+[10:09:28] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:28] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:28] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:28] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:28] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:28] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:28] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:28] ================================================================================
+[10:09:28] [host] Expected firmware revision from git: ca569b6
+[10:09:28] [m7_gpio_test] Rev ca569b6
+[10:09:28] [host] CM7 banner revision verified: ca569b6
+[10:09:28] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:28] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:28] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:28] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:28] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:28] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:28] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:28] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:28] [host] T15 dual-core race PASSED.
+[10:09:28] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Running T0b(a) host OE guards verification...
+[10:09:28] [ad2] T0b(a) host OE guards PASSED.
+[10:09:28] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:28] [host] Session start synchronized.
+[10:09:28] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:28] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:28] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:28] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:28] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:28] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:28] [ad2] MCU announced drive pattern: 0x5A
+[10:09:28] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:28] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:28] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:28] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:28] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:28] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:28] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:28] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [ad2] T0b(d) timeout test PASSED.
+[10:09:28] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:28] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:28] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:28] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:28] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:28] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:28] [m7_gpio_test] Handshake PE2: OK
+[10:09:28] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:28] [ad2] T0a handshake lines PASSED.
+[10:09:28] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:28] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:28] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:28] [m7_gpio_test] T0a_mcu control ready
+[10:09:28] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:28] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:28] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:28] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:28] [m7_gpio_test] BUSCHK up
+[10:09:28] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:28] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:28] [m7_gpio_test] BUSCHK down
+[10:09:28] [m7_gpio_test] T0a_ad2 ready
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:28] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:28] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:28] [m7_gpio_test] T0a_ad2: PASS
+[10:09:28] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:28] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:28] [m7_gpio_test] Scope LOW ready
+[10:09:28] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:28] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:28] [ad2] Scope LOW: PF14=1.500V, PF15=0.000V (expected <= 0.4V)
+[10:09:28] [ad2]   Scope 1 (PF14) VOL out of range: 1.500V > 0.4V
+[10:09:28] [m7_gpio_test] Scope HIGH ready
+[10:09:28] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:28] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:28] [ad2] Scope check FAILED!
+[10:09:28] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:28] [m4_gpio_test] Rev ca569b6
+[10:09:28] [m4_gpio_test] INFO CM4 selftest started
+[10:09:28] [m4_gpio_test] CM4 VERDICT=PASS
+[10:09:28] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[10:09:28] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT CHECKLIST (B2):
+[10:09:28]   [OK] sequence_complete
+[10:09:28]   [OK] t15_pass
+[10:09:28]   [OK] cm4_rev_match
+[10:09:28]   [OK] cm4_pass
+[10:09:28]   [OK] fw_all_passed
+[10:09:28]   [OK] t0b_a_oe_guards
+[10:09:28]   [OK] t0b_b_claim_guards
+[10:09:28]   [OK] t0b_c_contention
+[10:09:28]   [OK] t0b_d_timeout
+[10:09:28]   [OK] t0a_loose
+[10:09:28]   [OK] t0a_handshake
+[10:09:28]   [OK] t0a_mcu_to_ad2
+[10:09:28]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:28]   [OK] t0a_ad2_to_mcu
+[10:09:28]   [FAIL] t0a_scope
+[10:09:28] ================================================================================
+[10:09:28] HOST VERDICT=FAIL
+[10:09:28] ================================================================================
+.[10:09:28] ================================================================================
+[10:09:28] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:28] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:28] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:28] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:28] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:28] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:28] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:28] ================================================================================
+[10:09:28] [host] Expected firmware revision from git: ca569b6
+[10:09:28] [m7_gpio_test] Rev ca569b6
+[10:09:28] [host] CM7 banner revision verified: ca569b6
+[10:09:28] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:28] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:29] [m7_gpio_test] T0a_mcu control ready
+[10:09:29] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:29] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:29] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:29] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [m7_gpio_test] T0a_ad2 ready
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 FAIL
+[10:09:29] [ad2] Walking-1 AD2->MCU DIO0 reported FAIL by MCU!
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:29] [m7_gpio_test] T0a_ad2: FAIL
+[10:09:29] [ad2] Walking-1 AD2->MCU FAILED!
+[10:09:29] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:29] [m7_gpio_test] Scope LOW ready
+[10:09:29] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:29] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:29] [m7_gpio_test] Scope HIGH ready
+[10:09:29] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:29] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:29] [ad2] Scope check PASSED.
+[10:09:29] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:29] [m4_gpio_test] Rev ca569b6
+[10:09:29] [m4_gpio_test] INFO CM4 selftest started
+[10:09:29] [m4_gpio_test] CM4 VERDICT=PASS
+[10:09:29] [m7_gpio_test] VERDICT: GPIO SELF-TESTS FAILED
+[10:09:29] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [OK] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [OK] cm4_rev_match
+[10:09:29]   [OK] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [OK] t0a_mcu_to_ad2
+[10:09:29]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [OK] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+.[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev 9f9f9f9
+[10:09:29] ERROR during selftest execution: ABORT: Banner revision mismatch (got 9f9f9f9, expected ca569b6)
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [FAIL] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [FAIL] t0b_a_oe_guards
+[10:09:29]   [FAIL] t0b_b_claim_guards
+[10:09:29]   [FAIL] t0b_c_contention
+[10:09:29]   [FAIL] t0b_d_timeout
+[10:09:29]   [FAIL] t0a_loose
+[10:09:29]   [FAIL] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6-dirty
+[10:09:29] ERROR during selftest execution: ABORT: Unexpected protocol line received: '[m7_gpio_test] Rev ca569b6-dirty' (expected pattern: '^\[m7_gpio_test\] Rev ([0-9a-f]{7})$')
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [FAIL] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [FAIL] t0b_a_oe_guards
+[10:09:29]   [FAIL] t0b_b_claim_guards
+[10:09:29]   [FAIL] t0b_c_contention
+[10:09:29]   [FAIL] t0b_d_timeout
+[10:09:29]   [FAIL] t0a_loose
+[10:09:29]   [FAIL] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v99 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] ERROR during selftest execution: ABORT: Protocol version mismatch in banner (got v=99, expected v=1)
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [FAIL] t0b_a_oe_guards
+[10:09:29]   [FAIL] t0b_b_claim_guards
+[10:09:29]   [FAIL] t0b_c_contention
+[10:09:29]   [FAIL] t0b_d_timeout
+[10:09:29]   [FAIL] t0a_loose
+[10:09:29]   [FAIL] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:29] [m7_gpio_test] T0a_mcu control ready
+[10:09:29] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:29] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:29] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:29] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [m7_gpio_test] T0a_ad2 ready
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:29] [m7_gpio_test] T0a_ad2: PASS
+[10:09:29] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:29] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:29] [m7_gpio_test] Scope LOW ready
+[10:09:29] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:29] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:29] [m7_gpio_test] Scope HIGH ready
+[10:09:29] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:29] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:29] [ad2] Scope check PASSED.
+[10:09:29] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:29] [m4_gpio_test] Rev 1111111
+[10:09:29] [m4_gpio_test] INFO CM4 selftest started
+[10:09:29] [m4_gpio_test] CM4 VERDICT=PASS
+[10:09:29] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[10:09:29] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:29] [host] CM4 revision mismatch! Got 1111111, expected ca569b6
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [OK] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [OK] cm4_pass
+[10:09:29]   [OK] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [OK] t0a_mcu_to_ad2
+[10:09:29]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [OK] t0a_ad2_to_mcu
+[10:09:29]   [OK] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+.[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] === STM32H755 Bench Boot Rev 9999999 ===
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:29] [m7_gpio_test] T0a_mcu control ready
+[10:09:29] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:29] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:29] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:29] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [m7_gpio_test] T0a_ad2 ready
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:29] [m7_gpio_test] T0a_ad2: PASS
+[10:09:29] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:29] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:29] [m7_gpio_test] Scope LOW ready
+[10:09:29] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:29] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:29] [m7_gpio_test] Scope HIGH ready
+[10:09:29] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:29] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:29] [ad2] Scope check PASSED.
+[10:09:29] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:29] [m4_gpio_test] Rev ca569b6
+[10:09:29] [m4_gpio_test] INFO CM4 selftest started
+[10:09:29] [m4_gpio_test] CM4 VERDICT=PASS
+[10:09:29] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[10:09:29] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [OK] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [OK] cm4_rev_match
+[10:09:29]   [OK] cm4_pass
+[10:09:29]   [OK] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [OK] t0a_mcu_to_ad2
+[10:09:29]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [OK] t0a_ad2_to_mcu
+[10:09:29]   [OK] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=PASS
+[10:09:29] ================================================================================
+.[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:29] [m7_gpio_test] T0a_mcu control ready
+[10:09:29] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:29] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:29] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:29] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [m7_gpio_test] T0a_ad2 ready
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:29] [m7_gpio_test] T0a_ad2: PASS
+[10:09:29] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:29] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:29] [m7_gpio_test] Scope LOW ready
+[10:09:29] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:29] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:29] [m7_gpio_test] Scope HIGH ready
+[10:09:29] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:29] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:29] [ad2] Scope check PASSED.
+[10:09:29] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:29] [m4_gpio_test] Rev ca569b6
+[10:09:29] [m4_gpio_test] INFO CM4 selftest started
+[10:09:29] [m4_gpio_test] CM4 VERDICT=PASS
+[10:09:29] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[10:09:29] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [OK] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [OK] cm4_rev_match
+[10:09:29]   [OK] cm4_pass
+[10:09:29]   [OK] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [OK] t0a_mcu_to_ad2
+[10:09:29]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [OK] t0a_ad2_to_mcu
+[10:09:29]   [OK] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=PASS
+[10:09:29] ================================================================================
+.[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:29] [m7_gpio_test] T0a_mcu control ready
+[10:09:29] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:29] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:29] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:29] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [m7_gpio_test] T0a_ad2 ready
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:29] [m7_gpio_test] T0a_ad2: PASS
+[10:09:29] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:29] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:29] [m7_gpio_test] Scope LOW ready
+[10:09:29] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:29] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:29] [m7_gpio_test] Scope HIGH ready
+[10:09:29] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:29] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:29] [ad2] Scope check PASSED.
+[10:09:29] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:29] [m4_gpio_test] Rev ca569b6
+[10:09:29] [m4_gpio_test] INFO CM4 selftest started
+[10:09:29] [m4_gpio_test] CM4 VERDICT=PASS
+[10:09:29] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[10:09:29] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [OK] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [OK] cm4_rev_match
+[10:09:29]   [OK] cm4_pass
+[10:09:29]   [OK] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [OK] t0a_mcu_to_ad2
+[10:09:29]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [OK] t0a_ad2_to_mcu
+[10:09:29]   [OK] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=PASS
+[10:09:29] ================================================================================
+[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:29] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:29] [m7_gpio_test] T0a_mcu control ready
+[10:09:29] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:29] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:29] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:29] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:29] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [m7_gpio_test] T0a_ad2 ready
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:29] [m7_gpio_test] T0a_ad2: PASS
+[10:09:29] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:29] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:29] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:29] [m7_gpio_test] Scope LOW ready
+[10:09:29] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:29] [m7_gpio_test] Scope HIGH ready
+[10:09:29] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:29] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:29] [ad2] Scope check PASSED.
+[10:09:29] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:29] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:29] [m4_gpio_test] Rev ca569b6
+[10:09:29] [m4_gpio_test] INFO CM4 selftest started
+[10:09:29] [m4_gpio_test] CM4 VERDICT=PASS
+[10:09:29] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [OK] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [OK] cm4_rev_match
+[10:09:29]   [OK] cm4_pass
+[10:09:29]   [OK] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [OK] t0a_mcu_to_ad2
+[10:09:29]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [OK] t0a_ad2_to_mcu
+[10:09:29]   [OK] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=PASS
+[10:09:29] ================================================================================
+.[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] ERROR during selftest execution: ABORT: Timeout waiting for protocol line matching '^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)'
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [FAIL] t0b_b_claim_guards
+[10:09:29]   [FAIL] t0b_c_contention
+[10:09:29]   [FAIL] t0b_d_timeout
+[10:09:29]   [FAIL] t0a_loose
+[10:09:29]   [FAIL] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+.[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: FAIL
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race FAILED!
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:29] [m7_gpio_test] T0a_mcu control ready
+[10:09:29] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:29] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:29] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:29] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [m7_gpio_test] T0a_ad2 ready
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:29] [m7_gpio_test] T0a_ad2: PASS
+[10:09:29] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:29] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:29] [m7_gpio_test] Scope LOW ready
+[10:09:29] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:29] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:29] [m7_gpio_test] Scope HIGH ready
+[10:09:29] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:29] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:29] [ad2] Scope check PASSED.
+[10:09:29] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:29] [m4_gpio_test] Rev ca569b6
+[10:09:29] [m4_gpio_test] INFO CM4 selftest started
+[10:09:29] [m4_gpio_test] CM4 VERDICT=PASS
+[10:09:29] [m7_gpio_test] VERDICT: GPIO SELF-TESTS FAILED
+[10:09:29] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [OK] sequence_complete
+[10:09:29]   [FAIL] t15_pass
+[10:09:29]   [OK] cm4_rev_match
+[10:09:29]   [OK] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [OK] t0a_mcu_to_ad2
+[10:09:29]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [OK] t0a_ad2_to_mcu
+[10:09:29]   [OK] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+.[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:29] [m7_gpio_test] T0a_mcu control ready
+[10:09:29] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:29] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:29] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:29] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [m7_gpio_test] T0a_ad2 ready
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:29] [m7_gpio_test] T0a_ad2: PASS
+[10:09:29] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:29] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:29] [m7_gpio_test] Scope LOW ready
+[10:09:29] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:29] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:29] [m7_gpio_test] Scope HIGH ready
+[10:09:29] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:29] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:29] [ad2] Scope check PASSED.
+[10:09:29] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:29] [m4_gpio_test] Rev ca569b6
+[10:09:29] [m4_gpio_test] INFO CM4 selftest started
+[10:09:29] [m4_gpio_test] CM4 VERDICT=FAIL
+[10:09:29] [m7_gpio_test] VERDICT: GPIO SELF-TESTS FAILED
+[10:09:29] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [OK] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [OK] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [OK] t0a_mcu_to_ad2
+[10:09:29]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [OK] t0a_ad2_to_mcu
+[10:09:29]   [OK] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:29] [m7_gpio_test] T0a_mcu control ready
+[10:09:29] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:29] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:29] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:29] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [m7_gpio_test] T0a_ad2 ready
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:29] [m7_gpio_test] T0a_ad2: PASS
+[10:09:29] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:29] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:29] [m7_gpio_test] Scope LOW ready
+[10:09:29] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:29] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:29] [m7_gpio_test] Scope HIGH ready
+[10:09:29] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:29] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:29] [ad2] Scope check PASSED.
+[10:09:29] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:29] [m4_gpio_test] Rev ca569b6
+[10:09:29] [m4_gpio_test] INFO CM4 selftest started
+[10:09:29] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[10:09:29] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [OK] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [OK] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [OK] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [OK] t0a_mcu_to_ad2
+[10:09:29]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [OK] t0a_ad2_to_mcu
+[10:09:29]   [OK] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+.[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x00 (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control FAILED (caught=True, bus=0x00, exp=0x5A)
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:29] [m7_gpio_test] T0a_mcu control ready
+[10:09:29] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:29] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:29] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:29] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [m7_gpio_test] T0a_ad2 ready
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:29] [m7_gpio_test] T0a_ad2: PASS
+[10:09:29] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:29] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:29] [m7_gpio_test] Scope LOW ready
+[10:09:29] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:29] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:29] [m7_gpio_test] Scope HIGH ready
+[10:09:29] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:29] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[10:09:29] [ad2] Scope check PASSED.
+[10:09:29] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:29] [m4_gpio_test] Rev ca569b6
+[10:09:29] [m4_gpio_test] INFO CM4 selftest started
+[10:09:29] [m4_gpio_test] CM4 VERDICT=PASS
+[10:09:29] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[10:09:29] [host] Step 99 validated (bus=NONE, v=1).
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [OK] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [OK] cm4_rev_match
+[10:09:29]   [OK] cm4_pass
+[10:09:29]   [OK] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [FAIL] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [OK] t0a_mcu_to_ad2
+[10:09:29]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [OK] t0a_ad2_to_mcu
+[10:09:29]   [OK] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+.[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] ERROR during selftest execution: ABORT: Timeout waiting for protocol line matching '^\[m7_gpio_test\] BUSCHK up drive=(0x[0-9a-fA-F]+)'
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [FAIL] t0b_c_contention
+[10:09:29]   [FAIL] t0b_d_timeout
+[10:09:29]   [FAIL] t0a_loose
+[10:09:29]   [FAIL] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+.[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] ERROR during selftest execution: ABORT: Unexpected protocol line received: '[m7_gpio_test] STEP id=1 bus=NONE v=1' (expected pattern: '^\[m7_gpio_test\] Rev ([0-9a-f]{7})$')
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [FAIL] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [FAIL] t0b_a_oe_guards
+[10:09:29]   [FAIL] t0b_b_claim_guards
+[10:09:29]   [FAIL] t0b_c_contention
+[10:09:29]   [FAIL] t0b_d_timeout
+[10:09:29]   [FAIL] t0a_loose
+[10:09:29]   [FAIL] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] ERROR during selftest execution: ABORT: Unexpected protocol line received: '[m7_gpio_test] STEP id=2 bus=NONE v=1' (expected pattern: '^\[m7_gpio_test\] T15 VERDICT: (PASS|FAIL)')
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [FAIL] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [FAIL] t0b_a_oe_guards
+[10:09:29]   [FAIL] t0b_b_claim_guards
+[10:09:29]   [FAIL] t0b_c_contention
+[10:09:29]   [FAIL] t0b_d_timeout
+[10:09:29]   [FAIL] t0a_loose
+[10:09:29]   [FAIL] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] ERROR during selftest execution: ABORT: Timeout waiting for protocol line matching '^\[m7_gpio_test\] GPIO_BENCH v(\d+) idle$'
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [FAIL] t0b_a_oe_guards
+[10:09:29]   [FAIL] t0b_b_claim_guards
+[10:09:29]   [FAIL] t0b_c_contention
+[10:09:29]   [FAIL] t0b_d_timeout
+[10:09:29]   [FAIL] t0a_loose
+[10:09:29]   [FAIL] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] ERROR during selftest execution: ABORT: Unexpected protocol line received: '[m7_gpio_test] STEP id=4 bus=MCU v=1' (expected pattern: '^\[m7_gpio_test\] T0b_b guards verification: (PASS|FAIL)')
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [FAIL] t0b_b_claim_guards
+[10:09:29]   [FAIL] t0b_c_contention
+[10:09:29]   [FAIL] t0b_d_timeout
+[10:09:29]   [FAIL] t0a_loose
+[10:09:29]   [FAIL] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] ERROR during selftest execution: ABORT: Timeout waiting for protocol line matching '^\[m7_gpio_test\] Handshake PE2: OK'
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [FAIL] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:29] [m7_gpio_test] T0a_mcu control ready
+[10:09:29] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:29] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] ERROR during selftest execution: ABORT: Unexpected protocol line received: '[m7_gpio_test] STEP id=9 bus=AD2 v=1' (expected pattern: '^\[m7_gpio_test\] T0a_mcu: DONE \(host verdict\)')
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 8 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[10:09:29] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[10:09:29] [m7_gpio_test] T0a_mcu control ready
+[10:09:29] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[10:09:29] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[10:09:29] [ad2] Walking-1 MCU->AD2 PASSED.
+[10:09:29] [m7_gpio_test] STEP id=9 bus=AD2 v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] Step 9 validated (bus=AD2, v=1).
+[10:09:29] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [m7_gpio_test] T0a_ad2 ready
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0100 exp=0x0100 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0400 exp=0x0400 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0001 exp=0x0001 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0002 exp=0x0002 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0004 exp=0x0004 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0008 exp=0x0008 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=4 idr=0x0010 exp=0x0010 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=5 idr=0x0020 exp=0x0020 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=6 idr=0x0040 exp=0x0040 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 bit=7 idr=0x0080 exp=0x0080 OK
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control ready
+[10:09:29] [m7_gpio_test] T0a_ad2 analog control result: OK
+[10:09:29] [m7_gpio_test] T0a_ad2: PASS
+[10:09:29] [ad2] Walking-1 AD2->MCU PASSED.
+[10:09:29] [m7_gpio_test] STEP id=10 bus=NONE v=1
+[10:09:29] [m7_gpio_test] Scope LOW ready
+[10:09:29] [host] Step 10 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[10:09:29] [ad2] Scope LOW: PF14=0.000V, PF15=0.000V (expected <= 0.4V)
+[10:09:29] [m7_gpio_test] Scope HIGH ready
+[10:09:29] [ad2] Scope HIGH: PF14=3.300V, PF15=3.300V (expected >= 2.9V)
+[10:09:29] [m7_gpio_test] STEP id=99 bus=NONE v=1
+[10:09:29] [m4_gpio_test] Rev ca569b6
+[10:09:29] [m4_gpio_test] INFO CM4 selftest started
+[10:09:29] [m4_gpio_test] CM4 VERDICT=PASS
+[10:09:29] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[10:09:29] ERROR during selftest execution: ABORT: Unexpected protocol line received: '[m7_gpio_test] STEP id=99 bus=NONE v=1' (expected pattern: '^\[m7_gpio_test\] T0a_scope: DONE \(host verdict\)')
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [OK] t0a_mcu_to_ad2
+[10:09:29]   [OK] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [OK] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+.[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] ABORT: Step sequence error: got STEP id=5 bus=NONE, expected id=3 bus=NONE
+[10:09:29] ERROR during selftest execution: ABORT: Step sequence error: got STEP id=5 bus=NONE, expected id=3 bus=NONE
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [FAIL] t0b_b_claim_guards
+[10:09:29]   [FAIL] t0b_c_contention
+[10:09:29]   [FAIL] t0b_d_timeout
+[10:09:29]   [FAIL] t0a_loose
+[10:09:29]   [FAIL] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+[10:09:29] ================================================================================
+[10:09:29] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[10:09:29] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[10:09:29] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[10:09:29] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[10:09:29] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[10:09:29] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[10:09:29] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[10:09:29] ================================================================================
+[10:09:29] [host] Expected firmware revision from git: ca569b6
+[10:09:29] [m7_gpio_test] Rev ca569b6
+[10:09:29] [host] CM7 banner revision verified: ca569b6
+[10:09:29] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[10:09:29] [m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)
+[10:09:29] [m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)
+[10:09:29] [host] Step 1 validated (bus=NONE, v=1).
+[10:09:29] [m7_gpio_test] T15 VERDICT: PASS
+[10:09:29] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[10:09:29] [m7_gpio_test] GPIO_BENCH v1 idle
+[10:09:29] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[10:09:29] [host] T15 dual-core race PASSED.
+[10:09:29] [host] Step 2 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Running T0b(a) host OE guards verification...
+[10:09:29] [ad2] T0b(a) host OE guards PASSED.
+[10:09:29] [host] Handshaking session start with MCU via HS_HOST...
+[10:09:29] [host] Session start synchronized.
+[10:09:29] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[10:09:29] [m7_gpio_test] T0b_b guards verification: PASS
+[10:09:29] [host] Step 3 validated (bus=NONE, v=1).
+[10:09:29] [ad2] T0b(b) firmware claim guards PASSED.
+[10:09:29] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[10:09:29] [m7_gpio_test] BUSCHK up drive=0x5A
+[10:09:29] [host] Step 4 validated (bus=MCU, v=1).
+[10:09:29] [ad2] Step T0b(c): Testing S5 negative control via s5_verify_released()...
+[10:09:29] [ad2] MCU announced drive pattern: 0x5A
+[10:09:29] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[10:09:29] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[10:09:29] [ad2] T0b(c) S5 negative control PASSED.
+[10:09:29] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[10:09:29] [m7_gpio_test] STEP id=5 bus=NONE v=1
+[10:09:29] [host] Step 5 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[10:09:29] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[10:09:29] [m7_gpio_test] STEP id=6 bus=NONE v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [ad2] T0b(d) timeout test PASSED.
+[10:09:29] [host] Step 6 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing loose lines (13 lines)...
+[10:09:29] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[10:09:29] [m7_gpio_test] BUSCHK down
+[10:09:29] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[10:09:29] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[10:09:29] [ad2] T0a loose check PASSED (all 13 lines).
+[10:09:29] [m7_gpio_test] STEP id=7 bus=NONE v=1
+[10:09:29] [host] Step 7 validated (bus=NONE, v=1).
+[10:09:29] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[10:09:29] [m7_gpio_test] Handshake PE2: OK
+[10:09:29] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[10:09:29] [ad2] T0a handshake lines PASSED.
+[10:09:29] [m7_gpio_test] STEP id=8 bus=AD2 v=1
+[10:09:29] [m7_gpio_test] BUSCHK up
+[10:09:29] [host] ABORT: Step sequence error: got STEP id=8 bus=AD2, expected id=8 bus=MCU
+[10:09:29] ERROR during selftest execution: ABORT: Step sequence error: got STEP id=8 bus=AD2, expected id=8 bus=MCU
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT CHECKLIST (B2):
+[10:09:29]   [FAIL] sequence_complete
+[10:09:29]   [OK] t15_pass
+[10:09:29]   [FAIL] cm4_rev_match
+[10:09:29]   [FAIL] cm4_pass
+[10:09:29]   [FAIL] fw_all_passed
+[10:09:29]   [OK] t0b_a_oe_guards
+[10:09:29]   [OK] t0b_b_claim_guards
+[10:09:29]   [OK] t0b_c_contention
+[10:09:29]   [OK] t0b_d_timeout
+[10:09:29]   [OK] t0a_loose
+[10:09:29]   [OK] t0a_handshake
+[10:09:29]   [FAIL] t0a_mcu_to_ad2
+[10:09:29]   [FAIL] t0a_mcu_to_ad2_ctrl
+[10:09:29]   [FAIL] t0a_ad2_to_mcu
+[10:09:29]   [FAIL] t0a_scope
+[10:09:29] ================================================================================
+[10:09:29] HOST VERDICT=FAIL
+[10:09:29] ================================================================================
+....
+----------------------------------------------------------------------
+Ran 17 tests in 1.434s
+
+OK

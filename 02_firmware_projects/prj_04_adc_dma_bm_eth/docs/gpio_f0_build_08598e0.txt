@@ -1,0 +1,21 @@
+﻿
+Project                    Preset    Core   Status        Text (B)   Data (B)    Bss (B)  Total (B)     Time
+-------                    ------    ----   ------        --------   --------    -------  ---------     ----
+prj_01_template_dualcore   debug     CM7    PASS             28428        132      55604      84164    26.0s
+prj_01_template_dualcore   debug     CM4    PASS              2576         24      12488      15088    26.0s
+prj_01_template_dualcore   release   CM7    PASS             27292        132      55608      83032    17.6s
+prj_01_template_dualcore   release   CM4    PASS              2364         24      12488      14876    17.6s
+prj_02_eth_lwip_dualcore   debug     CM7    PASS             85748        152     120080     205980    32.5s
+prj_02_eth_lwip_dualcore   debug     CM4    PASS              2580         24      12488      15092    32.5s
+prj_02_eth_lwip_dualcore   release   CM7    PASS             81772        152     120080     202004    25.0s
+prj_02_eth_lwip_dualcore   release   CM4    PASS              2332         24      12488      14844    25.0s
+prj_03_adc_dma_eth         debug     CM7    PASS             87164        152     121200     208516    34.5s
+prj_03_adc_dma_eth         debug     CM4    PASS             20164         24      16176      36364    34.5s
+prj_03_adc_dma_eth         release   CM7    PASS             83124        152     121200     204476    26.7s
+prj_03_adc_dma_eth         release   CM4    PASS             18008         24      16176      34208    26.7s
+prj_04_adc_dma_bm_eth      debug     CM7    PASS             88948        156     121212     210316    34.1s
+prj_04_adc_dma_bm_eth      debug     CM4    PASS              8908         28      15880      24816    34.1s
+prj_04_adc_dma_bm_eth      release   CM7    PASS             85036        156     121216     206408    25.3s
+prj_04_adc_dma_bm_eth      release   CM4    PASS              8476         28      15880      24384    25.3s
+
+
