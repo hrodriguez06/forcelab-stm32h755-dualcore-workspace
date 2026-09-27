@@ -48,8 +48,7 @@ compile_commands.json
 *.pdf
 
 # --- Editor / OS -----------------------------------------------------------
-.vscode/ipch/
-.vscode/.cortex-debug.*
+.vscode/
 __pycache__/
 *.pyc
 Thumbs.db
