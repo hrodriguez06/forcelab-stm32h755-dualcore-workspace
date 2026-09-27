@@ -108,15 +108,6 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t cm4_all_passed;
 } GpioSelfTestShared_t;
 
-/* Compatibility aliases for T15 legacy access during step transitions */
-#define t15_cm7_count           t15_total_calls_cm7
-#define t15_cm4_count           t15_total_calls_cm4
-#define t15_corruptions_cm7     t15_corruptions_phase_a
-#define t15_corruptions_cm4     t15_corruptions_phase_b
-#define t15_done_cm7            in_loop_cm7
-#define t15_done_cm4            in_loop_cm4
-#define t15_total_corruptions   t15_corruptions_phase_c
-
 #define GPIO_TEST_SHARED  ((GpioSelfTestShared_t *)GPIO_TEST_SHARED_ADDR)
 
 #ifdef __cplusplus

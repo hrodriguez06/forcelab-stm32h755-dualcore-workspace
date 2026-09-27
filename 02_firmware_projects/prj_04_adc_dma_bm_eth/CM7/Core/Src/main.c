@@ -28,6 +28,10 @@
 #if defined(HSEM_DRIVER_SELFTEST) && HSEM_DRIVER_SELFTEST
 #include "hsem_selftest_shared.h"
 #endif
+#if defined(GPIO_DRIVER_SELFTEST) && GPIO_DRIVER_SELFTEST
+#include "gpio_bench_protocol.h"
+#include <string.h>
+#endif
 #if defined(UART_DRIVER_SELFTEST) && UART_DRIVER_SELFTEST
 #include "uart_bm.h"
 
@@ -204,6 +208,16 @@ int main(void)
 
     /* Initialise shared RAM and publish SHARED_MAGIC before CPU2 can read it. */
     Shared_Init();
+
+#if defined(GPIO_DRIVER_SELFTEST) && GPIO_DRIVER_SELFTEST
+    /* B1: Initialize GPIO selftest SRAM4 block on every cold boot before releasing CPU2 */
+    memset(GPIO_TEST_SHARED, 0, sizeof(GpioSelfTestShared_t));
+    uint32_t session = DWT->CYCCNT;
+    if (session == 0U) { session = 1U; }
+    GPIO_TEST_SHARED->session_id = session;
+    GPIO_TEST_SHARED->current_step = GPIO_BENCH_STEP_T15_RACE;
+    GPIO_TEST_SHARED->bus_owner = GPIO_BENCH_BUS_NONE;
+#endif
 
     /* The clock tree is up and shared memory is ready: release CPU2. */
     bool h5_release_ok = (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) == HSEM_BM_OK);

@@ -65,6 +65,11 @@
 
 static void Heartbeat_Task(void *arg);
 static void Status_Task(void *arg);
+#if defined(GPIO_DRIVER_SELFTEST) && GPIO_DRIVER_SELFTEST
+#define GPIO_TEST_TASK_STACK_WORDS   2048U
+#define GPIO_TEST_TASK_PRIO          (tskIDLE_PRIORITY + 1U)
+static void GPIO_SelfTest_Task(void *arg);
+#endif
 
 void app_main(void)
 {
@@ -97,12 +102,18 @@ void app_main(void)
     APP_LOG("[ipc] CPU2 boot handshake: %s",
             CM4_BOOT_ENABLED ? "enabled (HSEM 0)" : "DISABLED - CPU2 not started");
 
+
     if (xTaskCreate(Heartbeat_Task, "hb", HEARTBEAT_TASK_STACK_WORDS, NULL,
                     HEARTBEAT_TASK_PRIO, NULL) != pdPASS ||
         xTaskCreate(Status_Task, "status", STATUS_TASK_STACK_WORDS, NULL,
                     STATUS_TASK_PRIO, NULL) != pdPASS ||
         xTaskCreate(Net_TaskEntry, "net", NET_APP_THREAD_STACK_WORDS, NULL,
-                    NET_APP_THREAD_PRIO, NULL) != pdPASS)
+                    NET_APP_THREAD_PRIO, NULL) != pdPASS
+#if defined(GPIO_DRIVER_SELFTEST) && GPIO_DRIVER_SELFTEST
+        || xTaskCreate(GPIO_SelfTest_Task, "gpio_test", GPIO_TEST_TASK_STACK_WORDS, NULL,
+                       GPIO_TEST_TASK_PRIO, NULL) != pdPASS
+#endif
+       )
     {
         APP_LOG("[sys] FATAL: could not create the application tasks");
         Error_Handler();
@@ -337,13 +348,6 @@ static void Status_Task(void *arg)
         {
             APP_LOG("[m4_gpio_test] %s", mbox_gpio);
         }
-
-        static bool s_m7_gpio_tested = false;
-        if (!s_m7_gpio_tested)
-        {
-            s_m7_gpio_tested = true;
-            GPIO_SelfTest_CM7_Run();
-        }
 #endif
 
         APP_LOG("[ipc] m7=%lu m4=%lu  (CPU2 %s)",
@@ -355,6 +359,15 @@ static void Status_Task(void *arg)
         vTaskDelayUntil(&last, pdMS_TO_TICKS(STATUS_PERIOD_MS));
     }
 }
+
+#if defined(GPIO_DRIVER_SELFTEST) && GPIO_DRIVER_SELFTEST
+static void GPIO_SelfTest_Task(void *arg)
+{
+    (void)arg;
+    GPIO_SelfTest_CM7_Run();
+    vTaskDelete(NULL);
+}
+#endif
 
 /* ---- FreeRTOS hooks ----------------------------------------------------- */
 

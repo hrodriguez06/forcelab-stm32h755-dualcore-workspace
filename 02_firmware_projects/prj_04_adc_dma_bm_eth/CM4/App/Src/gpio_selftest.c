@@ -104,7 +104,18 @@ static bool bench_claim_output(GPIO_TypeDef *port, uint32_t pin)
     return false;
 }
 
-
+static bool wait_var_cycles(volatile uint32_t *var, uint32_t expected, uint32_t timeout_cycles)
+{
+    uint32_t start = DWT->CYCCNT;
+    while (*var != expected)
+    {
+        if ((DWT->CYCCNT - start) >= timeout_cycles)
+        {
+            return false;
+        }
+    }
+    return true;
+}
 
 void GPIO_SelfTest_CM4_Run(void)
 {
@@ -131,76 +142,152 @@ void GPIO_SelfTest_CM4_Run(void)
         return;
     }
 
-    /* Signal CM4 ready to CM7 */
-    GPIO_TEST_SHARED->cm4_ready = 1U;
-    __DMB();
-
-    /* Wait for CM7 go_signal */
-    uint32_t wait_timeout = 0U;
-    while ((GPIO_TEST_SHARED->go_signal == 0U) && (wait_timeout < 10000000U))
+    /* Wait for CM7 to initialize SRAM4 block and write non-zero session_id (B1) */
+    uint32_t start_cyc = DWT->CYCCNT;
+    while (GPIO_TEST_SHARED->session_id == 0U)
     {
-        wait_timeout++;
-        __asm__ volatile("nop;");
+        /* 5 seconds @ 200 MHz = 1,000,000,000 cycles */
+        if ((DWT->CYCCNT - start_cyc) >= 1000000000UL)
+        {
+            Line_Begin();
+            Line_Str("TIMEOUT waiting for session_id from CM7");
+            Line_End();
+            GPIO_TEST_SHARED->cm4_all_passed = 0U;
+            GPIO_TEST_SHARED->cm4_done = 1U;
+            return;
+        }
     }
 
-    if (GPIO_TEST_SHARED->go_signal == 0U)
+    uint32_t session = GPIO_TEST_SHARED->session_id;
+
+    /* Signal CM4 ready to CM7 with session_id */
+    GPIO_TEST_SHARED->cm4_ready = session;
+    __DMB();
+
+    /* ---- Phase (a): Wait for CM7 solo run to finish ----------------------- */
+    /* CM7 will set t15_phase = 2 and go_signal = session to start phase (b) */
+    if (!wait_var_cycles(&GPIO_TEST_SHARED->t15_phase, 2U, 1000000000UL) ||
+        !wait_var_cycles(&GPIO_TEST_SHARED->go_signal, session, 1000000000UL))
     {
         Line_Begin();
-        Line_Str("TIMEOUT waiting for go_signal from CM7");
+        Line_Str("TIMEOUT waiting for T15 phase (b) start");
         Line_End();
         GPIO_TEST_SHARED->cm4_all_passed = 0U;
         GPIO_TEST_SHARED->cm4_done = 1U;
         return;
     }
 
-    /* T15: 500,000 hand-written RMW iterations on GPIOF->MODER for PF11 without lock */
-    uint32_t corruptions = 0U;
+    /* ---- Phase (b): CM4 solo run (50,000 iterations) ---------------------- */
+    GPIO_TEST_SHARED->in_loop_cm4 = 1U;
+    __DMB();
+
+    uint32_t corruptions_b = 0U;
+    for (uint32_t i = 0U; i < 50000U; i++)
+    {
+        uint32_t val = (i & 1U);
+        uint32_t m = GPIOF->MODER;
+        m &= ~(3UL << (11U * 2U));
+        m |= (val << (11U * 2U));
+        GPIOF->MODER = m;
+
+        /* Verify own bits */
+        uint32_t readback = (GPIOF->MODER >> (11U * 2U)) & 3U;
+        if (readback != val)
+        {
+            corruptions_b++;
+        }
+        /* Verify CM7 bits (PF10: 21:20) are 0 or 1 */
+        uint32_t m7_bits = (GPIOF->MODER >> (10U * 2U)) & 3U;
+        if (m7_bits > 1U)
+        {
+            corruptions_b++;
+        }
+    }
+
+    GPIO_TEST_SHARED->in_loop_cm4 = 0U;
+    GPIO_TEST_SHARED->t15_corruptions_phase_b = corruptions_b;
+    /* Signal Phase (b) done */
+    GPIO_TEST_SHARED->cm4_ready = session + 1U;
+    __DMB();
+
+    /* ---- Phase (c): Concurrent run (500,000 iterations) -------------------- */
+    /* Wait for CM7 to signal phase 3 with go_signal = session + 1 */
+    if (!wait_var_cycles(&GPIO_TEST_SHARED->t15_phase, 3U, 1000000000UL) ||
+        !wait_var_cycles(&GPIO_TEST_SHARED->go_signal, session + 1U, 1000000000UL))
+    {
+        Line_Begin();
+        Line_Str("TIMEOUT waiting for T15 phase (c) start");
+        Line_End();
+        GPIO_TEST_SHARED->cm4_all_passed = 0U;
+        GPIO_TEST_SHARED->cm4_done = 1U;
+        return;
+    }
+
+    GPIO_TEST_SHARED->in_loop_cm4 = 1U;
+    __DMB();
+
+    uint32_t corruptions_c = 0U;
+    uint32_t overlap_c = 0U;
+
     for (uint32_t i = 0U; i < 500000U; i++)
     {
-        uint32_t val = (i & 1U); /* 0 = input, 1 = output */
+        if (GPIO_TEST_SHARED->in_loop_cm7 != 0U)
+        {
+            overlap_c++;
+        }
 
-        /* Hand-written RMW without lock on GPIOF->MODER (bits 23:22 for PF11) */
+        uint32_t val = (i & 1U);
         uint32_t m = GPIOF->MODER;
         m &= ~(3UL << (11U * 2U));
         m |= (val << (11U * 2U));
 
-        /* Window to allow race interleaving with CM7 */
         __asm__ volatile("nop; nop; nop; nop;");
         GPIOF->MODER = m;
         __asm__ volatile("nop; nop;");
 
-        /* Check if our write was overwritten by CM7's RMW */
         uint32_t readback = (GPIOF->MODER >> (11U * 2U)) & 3U;
         if (readback != val)
         {
-            corruptions++;
+            corruptions_c++;
         }
 
-        /* Check CM7 pin bits (PF10: bits 21:20): must be 0 or 1 */
         uint32_t m7_bits = (GPIOF->MODER >> (10U * 2U)) & 3U;
         if (m7_bits > 1U)
         {
-            corruptions++;
+            corruptions_c++;
         }
     }
 
-    /* Restore PF11 to input mode (MODER = 00) */
+    /* Restore PF11 to input mode (00) */
     GPIOF->MODER &= ~(3UL << (11U * 2U));
-
-    GPIO_TEST_SHARED->t15_cm4_count = 500000U;
-    GPIO_TEST_SHARED->t15_corruptions_cm4 = corruptions;
-    GPIO_TEST_SHARED->t15_done_cm4 = 1U;
+    GPIO_TEST_SHARED->in_loop_cm4 = 0U;
+    GPIO_TEST_SHARED->t15_cm4_overlap_cnt = overlap_c;
+    GPIO_TEST_SHARED->t15_total_calls_cm4 = 500000U;
+    GPIO_TEST_SHARED->t15_cm4_corruptions_c = corruptions_c;
     __DMB();
 
-    Line_Begin();
-    Line_Str("T15 race count=500000 corruptions=");
-    Line_U32(corruptions);
-    Line_End();
+    /* Wait for CM7 to complete Phase (c) */
+    wait_var_cycles(&GPIO_TEST_SHARED->in_loop_cm7, 0U, 1000000000UL);
 
-    bool cm4_ok = (corruptions > 0U);
+    uint32_t total = corruptions_c + GPIO_TEST_SHARED->t15_cm7_corruptions_c;
+
+    /* B2: Calculated verdict for CM4 */
+    bool cm4_ok = (corruptions_b == 0U) && (overlap_c > 0U) && (total > 0U);
     GPIO_TEST_SHARED->cm4_all_passed = cm4_ok ? 1U : 0U;
     GPIO_TEST_SHARED->cm4_done = 1U;
     __DMB();
+
+    Line_Begin();
+    Line_Str("T15 phase (b) CM4 solo: corruptions=");
+    Line_U32(corruptions_b);
+    Line_End();
+
+    Line_Begin();
+    Line_Str("T15 phase (c) CM4 corruptions=");
+    Line_U32(corruptions_c);
+    Line_Str(" overlap=");
+    Line_U32(overlap_c);
+    Line_End();
 
     Line_Begin();
     Line_Str("CM4 VERDICT=");
