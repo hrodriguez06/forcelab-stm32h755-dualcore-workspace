@@ -350,11 +350,20 @@ Ningún archivo tiene activado `assume-unchanged` ni `skip-worktree`, y no exist
 
 ---
 
+### Índice de capturas de la reauditoría 2 (Paso 6)
+
+| Archivo | Comando ejecutado | Commit base | Propósito |
+| --- | --- | --- | --- |
+| `docs/gpio_f0_build_09d6c76.txt` | `powershell -File tools/build_all.ps1 -Clean` | `09d6c76` | Salida cruda y completa de compilación de la matriz CI (8/8 builds en PASS, con `-Werror` sin advertencias) |
+| `docs/gpio_f0_unittest_09d6c76.txt` | `py -m unittest tools/test_gpio_hw_check.py` | `09d6c76` | Salida cruda de las 27 pruebas unitarias del arnés de pruebas (E1..E17 y comprobaciones de seguridad, todas en OK) |
+| `docs/gpio_f0_selftest_09d6c76.txt` | `py tools/gpio_hw_check.py --checklist-confirmed --log docs/gpio_f0_selftest_09d6c76.txt` | `09d6c76` | Primera ejecución física en hardware con AD2 activo; finaliza en `HOST VERDICT=PASS` con 15/15 ítems en `[OK]` |
+| `docs/gpio_f0_selftest_09d6c76_2.txt` | `py tools/gpio_hw_check.py --checklist-confirmed --log docs/gpio_f0_selftest_09d6c76_2.txt` | `09d6c76` | Segunda ejecución física consecutiva tras reset en caliente sin alterar SRAM4; finaliza en `HOST VERDICT=PASS` (15/15 `[OK]`) |
+
+---
+
 ### Alcance no ejecutado (explícitamente declarado)
 
-1. **Ejecución física en placa con hardware real (Paso 6):**
-   - La ejecución sobre placa Nucleo-H755ZI-Q con el Analog Discovery 2 conduciendo señales se encuentra programada para el Paso 6, inmediatamente después de este commit de documentación.
-2. **Fases F1, F1b y F2 del controlador GPIO:**
-   - La migración de drivers periféricos a `gpio_bm` (F1), la eliminación de accesos directos concurrentes a registros GPIO (F1b) y la gestión de interrupciones EXTI con caracterización de tiempos (F2) permanecen fuera del alcance de la línea base F0.
+1. **Fases F1, F1b y F2 del controlador GPIO:**
+   - La migración de drivers periféricos a `gpio_bm` (F1), la eliminación de accesos directos concurrentes a registros GPIO (F1b) y la gestión de interrupciones EXTI con caracterización de tiempos (F2) permanecen fuera del alcance de la línea base F0 y se abordarán en fases posteriores del roadmap.
 
 
