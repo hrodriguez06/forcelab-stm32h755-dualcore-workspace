@@ -1,0 +1,103 @@
+# auditor mutation commit 9c6b004 (throwaway, detached worktree over e59baec)
+
+
+diff --git a/02_firmware_projects/prj_04_adc_dma_bm_eth/tools/gpio_hw_check.py b/02_firmware_projects/prj_04_adc_dma_bm_eth/tools/gpio_hw_check.py
+index 51a5cd8..32c4486 100644
+--- a/02_firmware_projects/prj_04_adc_dma_bm_eth/tools/gpio_hw_check.py
++++ b/02_firmware_projects/prj_04_adc_dma_bm_eth/tools/gpio_hw_check.py
+@@ -535,7 +535,7 @@ def s5_verify_released(
+     dio_up = ad2.digital_io_read()
+     bus_up = dio_up & AD2_DIO_BUS_MASK
+ 
+-    if bus_up != 0xFF:
++    if False:  # AUDIT MUTATION R3-a: BUSCHK up comparison disabled
+         tracker.invalidate_token()
+         ad2.set_safe_state()
+         oe_post = ad2.get_oe() & AD2_DIO_BUS_MASK
+[probe 20:10:17] ad2_set_oe(mask=0x0000, owner=0)
+[20:10:17] ================================================================================
+[20:10:17] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[20:10:17] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[20:10:17] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[20:10:17] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[20:10:17] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[20:10:17] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[20:10:17] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[20:10:17] ================================================================================
+[20:10:17] [host] Expected firmware revision from git: 9c6b004
+[20:10:17] [host] Serial port drained before reset: 0 bytes discarded.
+[20:10:17] [host] S10: Confirmed AD2 in S2 safe state (OE=0x0000). Resetting target MCU...
+[probe 20:10:17] subprocess -c port=SWD mode=HOTPLUG -rst  (OE read-back now: 0x0000)
+[20:10:17] [host] S10: Target MCU reset via C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe (exit code 0).
+[20:10:17]  
+[20:10:17] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 9c6b004 ===
+[20:10:17] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[20:10:17] [sys] silicon revision id=0x2003
+[20:10:17] [ipc] shared block at 0x38008000, magic=0x48375353
+[20:10:17] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[20:10:17] [net] starting TCP/IP stack
+[20:10:17] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[20:10:17] [net] mac=02:00:00:00:00:01 phy_addr=0
+[20:10:17] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[20:10:17] [phy] partner advertised:
+[20:10:17] [net] udp echo listening on port 7
+[20:10:17] [adc_srv] listening on UDP port 5001
+[20:10:17] [ipc] m7=1 m4=0  (CPU2 starting)
+[20:10:17] [m7_gpio_test] Rev 9c6b004
+[20:10:17] [host] CM7 banner revision verified: 9c6b004
+[20:10:17] [m7_gpio_test] STEP id=1 bus=NONE v=1
+[20:10:17] [host] Step 1 validated (bus=NONE, v=1).
+[20:10:18] [m7_gpio_test] INFO T15 phase (a) CM7 solo: corruptions=0 (expected 0)
+[20:10:18] [m7_gpio_test] INFO T15 phase (b) CM4 solo: corruptions=0 (expected 0)
+[20:10:18] [m7_gpio_test] INFO T15 phase (c) concurrent: total_corruptions=35706 (CM7=35706, CM4=0, overlap CM7=499999, CM4=464669)
+[20:10:18] [m7_gpio_test] T15 VERDICT: PASS
+[20:10:18] [host] T15 dual-core race PASSED.
+[20:10:18] [m7_gpio_test] STEP id=2 bus=NONE v=1
+[20:10:18] [host] Step 2 validated (bus=NONE, v=1).
+[20:10:18] [m7_gpio_test] GPIO_BENCH v1 idle
+[probe 20:10:18] ad2_set_oe(mask=0x1000, owner=0)
+[20:10:18] [ad2] Running T0b(a) host OE guards verification...
+[probe 20:10:18] ad2_set_oe(mask=0x0200, owner=0)
+[probe 20:10:18] ad2_set_oe(mask=0x00FF, owner=0)
+[probe 20:10:18] ad2_set_oe(mask=0x00FF, owner=1)
+[probe 20:10:18] ad2_set_oe(mask=0x0000, owner=0)
+[probe 20:10:18] ad2_set_oe(mask=0x1000, owner=0)
+[20:10:18] [ad2] T0b(a) host OE guards PASSED.
+[20:10:18] [host] Handshaking session start with MCU via HS_HOST...
+[20:10:18] [host] Session start synchronized.
+[20:10:18] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[20:10:18] [m7_gpio_test] STEP id=3 bus=NONE v=1
+[20:10:18] [host] Step 3 validated (bus=NONE, v=1).
+[20:10:18] [m7_gpio_test] T0b_b guards verification: PASS
+[20:10:18] [ad2] T0b(b) firmware claim guards PASSED.
+[20:10:18] [m7_gpio_test] STEP id=4 bus=MCU v=1
+[20:10:18] [host] Step 4 validated (bus=MCU, v=1).
+[20:10:18] [ad2] Step T0b(c): Calling s5_verify_released to verify S5 guard stops contention...
+[20:10:18] [m7_gpio_test] BUSCHK up drive=0x5A
+[20:10:18] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[probe 20:10:18] ad2_set_oe(mask=0x0000, owner=0)
+[20:10:18] [ad2] T0b(c) S5 negative control FAILED with unexpected exception: ABORT: Unexpected protocol line received: '[m7_gpio_test] T0b_c safe state verified: all wired pins input' (expected pattern: '^\[m7_gpio_test\] BUSCHK down')
+[20:10:18] ERROR during selftest execution: ABORT: Unexpected protocol line received: '[m7_gpio_test] T0b_c safe state verified: all wired pins input' (expected pattern: '^\[m7_gpio_test\] BUSCHK down')
+[probe 20:10:18] ad2_set_oe(mask=0x0000, owner=0)
+[20:10:18] ================================================================================
+[20:10:18] HOST VERDICT CHECKLIST (B2):
+[20:10:18]   [FAIL] sequence_complete
+[20:10:18]   [OK] t15_pass
+[20:10:18]   [FAIL] cm4_rev_match
+[20:10:18]   [FAIL] cm4_pass
+[20:10:18]   [FAIL] fw_all_passed
+[20:10:18]   [OK] t0b_a_oe_guards
+[20:10:18]   [OK] t0b_b_claim_guards
+[20:10:18]   [FAIL] t0b_c_contention
+[20:10:18]   [FAIL] t0b_d_timeout
+[20:10:18]   [FAIL] t0a_loose
+[20:10:18]   [FAIL] t0a_handshake
+[20:10:18]   [FAIL] t0a_mcu_to_ad2
+[20:10:18]   [FAIL] t0a_mcu_to_ad2_ctrl
+[20:10:18]   [FAIL] t0a_ad2_to_mcu
+[20:10:18]   [FAIL] t0a_scope
+[20:10:18] ================================================================================
+[20:10:18] HOST VERDICT=FAIL
+[20:10:18] ================================================================================
+[probe 20:10:18] ad2_set_oe(mask=0x0000, owner=0)
+[probe 20:10:18] gpio_hw_check exit code 1

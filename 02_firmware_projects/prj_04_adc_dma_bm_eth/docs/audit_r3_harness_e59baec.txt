@@ -1,0 +1,63 @@
+# auditor, re-audit 3: harness checks on e59baec (sources restored after each step)
+
+## A-both: s5_verify_released comparison(s) replaced by 'if False' on disk, delivered suite
+-    if bus_up != 0xFF:
++    if False:  # AUDIT
+-    if bus_down != 0x00:
++    if False:  # AUDIT
+FAIL: test_control_of_contention_detection (test_gpio_hw_check.TestHarnessScenarios.test_control_of_contention_detection)
+FAIL: test_e11_host_comparison_bit_mismatches_identified (test_gpio_hw_check.TestHarnessScenarios.test_e11_host_comparison_bit_mismatches_identified)
+FAIL: test_e14_spurious_rev_line_before_banner_ignored (test_gpio_hw_check.TestHarnessScenarios.test_e14_spurious_rev_line_before_banner_ignored)
+FAIL: test_e17_guard_mutations_break_tests (test_gpio_hw_check.TestHarnessScenarios.test_e17_guard_mutations_break_tests)
+FAIL: test_e1_correct_model_passes (test_gpio_hw_check.TestHarnessScenarios.test_e1_correct_model_passes)
+FAIL: test_e2_queued_line_reader_chunk_and_byte_by_byte (test_gpio_hw_check.TestHarnessScenarios.test_e2_queued_line_reader_chunk_and_byte_by_byte)
+FAIL: test_host_and_model_traverse_identical_table (test_gpio_hw_check.TestHarnessScenarios.test_host_and_model_traverse_identical_table)
+FAIL: test_r2_m1_serial_drain_before_reset (test_gpio_hw_check.TestHarnessScenarios.test_r2_m1_serial_drain_before_reset)
+FAIL: test_r2_m3_log_console_encoding_resilience (test_gpio_hw_check.TestHarnessScenarios.test_r2_m3_log_console_encoding_resilience)
+Ran 27 tests in 0.596s
+FAILED (failures=9)
+
+## A-up: s5_verify_released comparison(s) replaced by 'if False' on disk, delivered suite
+-    if bus_up != 0xFF:
++    if False:  # AUDIT
+FAIL: test_control_of_contention_detection (test_gpio_hw_check.TestHarnessScenarios.test_control_of_contention_detection)
+FAIL: test_e11_host_comparison_bit_mismatches_identified (test_gpio_hw_check.TestHarnessScenarios.test_e11_host_comparison_bit_mismatches_identified)
+FAIL: test_e14_spurious_rev_line_before_banner_ignored (test_gpio_hw_check.TestHarnessScenarios.test_e14_spurious_rev_line_before_banner_ignored)
+FAIL: test_e17_guard_mutations_break_tests (test_gpio_hw_check.TestHarnessScenarios.test_e17_guard_mutations_break_tests)
+FAIL: test_e1_correct_model_passes (test_gpio_hw_check.TestHarnessScenarios.test_e1_correct_model_passes)
+FAIL: test_e2_queued_line_reader_chunk_and_byte_by_byte (test_gpio_hw_check.TestHarnessScenarios.test_e2_queued_line_reader_chunk_and_byte_by_byte)
+FAIL: test_host_and_model_traverse_identical_table (test_gpio_hw_check.TestHarnessScenarios.test_host_and_model_traverse_identical_table)
+FAIL: test_r2_m1_serial_drain_before_reset (test_gpio_hw_check.TestHarnessScenarios.test_r2_m1_serial_drain_before_reset)
+FAIL: test_r2_m3_log_console_encoding_resilience (test_gpio_hw_check.TestHarnessScenarios.test_r2_m3_log_console_encoding_resilience)
+Ran 27 tests in 0.553s
+FAILED (failures=9)
+
+## A-down: s5_verify_released comparison(s) replaced by 'if False' on disk, delivered suite
+-    if bus_down != 0x00:
++    if False:  # AUDIT
+FAIL: test_e15_step8_mcu_bus_release_failure_aborts_without_bus_oe (test_gpio_hw_check.TestHarnessScenarios.test_e15_step8_mcu_bus_release_failure_aborts_without_bus_oe)
+FAIL: test_e16_step9_mcu_bus_release_failure_aborts_without_bus_oe (test_gpio_hw_check.TestHarnessScenarios.test_e16_step9_mcu_bus_release_failure_aborts_without_bus_oe)
+FAIL: test_e17_guard_mutations_break_tests (test_gpio_hw_check.TestHarnessScenarios.test_e17_guard_mutations_break_tests)
+Ran 27 tests in 6.530s
+FAILED (failures=3)
+
+## B: my contention injection inside a FAIL-scenario test that only asserts exit code != 0
+test_probe_contention_in_fail_scenario (__main__.AuditorContentionProbe.test_probe_contention_in_fail_scenario) ... [20:14:47] ================================================================================
+FAIL: test_probe_contention_in_fail_scenario (__main__.AuditorContentionProbe.test_probe_contention_in_fail_scenario)
+        f"R2-M2: Electrical contention detected on SimBus: {b.violations}"
+-  {'ad2_oe': 4351, 'lines': 255, 'mcu_oe': 8447, 'timestamp': 124129.0465577}] : R2-M2: Electrical contention detected on SimBus: [{'timestamp': 124129.0465512, 'lines': 255, 'mcu_oe': 8447, 'ad2_oe': 4351}, {'timestamp': 124129.0465577, 'lines': 255, 'mcu_oe': 8447, 'ad2_oe': 4351}]
+Ran 1 test in 0.005s
+FAILED (failures=1)
+
+## C: table step 7 first primitive HS_HOST -> HS_MCU in gpio_bench_protocol.h, delivered suite
+warning: in the working copy of '02_firmware_projects/prj_04_adc_dma_bm_eth/Common/Inc/gpio_bench_protocol.h', LF will be replaced by CRLF the next time Git touches it
+-    X(7, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_HOST,"step7_pe2",          "", 0xFF) \
++    X(7, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step7_pe2",          "", 0xFF) \
+Ran 27 tests in 6.528s
+OK
+
+## D: do the table LINE patterns match the real firmware lines?
+step1_announcement: pattern '^[m7_gpio_test] STEP id=1 bus=NONE v=1$' matches '[m7_gpio_test] STEP id=1 bus=NONE v=1': False
+step6_buschk_up: pattern '^[m7_gpio_test] BUSCHK up$' matches '[m7_gpio_test] BUSCHK up': False
+step9_ad2_8_res: pattern '^\\\\[m7_gpio_test\\\\] T0a_ad2 bit=8 idr=0x[0-9a-fA-F]+ exp=0x[0-9a-fA-F]+ OK$' matches '[m7_gpio_test] T0a_ad2 bit=8 idr=0x0008 exp=0x0008 OK': False
+36 of 46 LINE patterns start with the unescaped character class [m7_gpio_test]

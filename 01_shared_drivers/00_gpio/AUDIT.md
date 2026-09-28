@@ -395,3 +395,119 @@ La placa quedó con `prj_04` **debug** de `74984a5` flasheado y el AD2 cerrado (
 4. **R2-M1:** nada oculto a git.
 5. **M3 y R2-m1–R2-m6.**
 6. **En la placa:** las dos ejecuciones completas otra vez, y cualquier ejecución abortada commiteada. Yo repetiré T0b(c) y una mutación mía que desactive la guarda en la imagen del host: T0b(c) tiene que dar FAIL.
+
+---
+
+## Reauditoría 3 de F0
+
+Sep 27, 2026 · auditor: Claude (el mismo del plan) · commit auditado: `e59baec` (rama `driver/gpio`, rango `9379351..e59baec` sobre `924731d`) · instrucciones: `F0_CORRECTION_3_INSTRUCTIONS.md`
+
+**Veredicto: no queda ningún bloqueante, así que F0 pasa en lo técnico, pero todavía no se cierra.** Quedan dos mayores (R2-M3 y M3), que según el protocolo se corrigen antes de seguir: F1a no empieza hasta que los verifique. Lo que hace falta es pequeño y no necesita tocar el hardware.
+
+Lo que sí queda demostrado:
+
+- **B4, la guarda del bus:** T0b(c) pasa por `s5_verify_released`. Si desactivo cualquiera de sus dos comparaciones, las pruebas se ponen en rojo. Y en la placa, un host con la guarda desactivada da T0b(c) FAIL sin tocar el bus.
+- **R2-M2, el arnés:** una contención inyectada por mí pone en rojo una prueba escrita como las del implementador, que solo pide FAIL.
+- **R2-M1, git:** el índice no oculta nada.
+- **A18:** mis dos ejecuciones completas con el AD2 dan `HOST VERDICT=PASS` con 15/15, igual que las del implementador.
+- **Producción:** sigue idéntica a `ca569b6` salvo el hash, también con el `ASSERT` nuevo del linker.
+
+Lo que queda:
+
+- **R2-M3:** la tabla solo la cumple el firmware. El host y el modelo siguen escritos a mano y solo anotan los *nombres* de los ítems. Si cambio una primitiva en la tabla, las 27 pruebas siguen en verde. Además, la columna de líneas de la tabla no sirve como expresión regular y nadie la usa.
+- **M3:** el informe vuelve a decir que el host y el modelo "derivan sus secuencias" de la tabla, y cita seis nombres de macros, pruebas, funciones y variables que no existen.
+
+Guía usada: `IMPLEMENTATION_PLAN.md`, `F0_CORRECTION_3_INSTRUCTIONS.md` (commiteado en `924731d`), el mensaje de entrega, `IMPLEMENTATION_REPORT.md` en `e59baec`, el código y la placa.
+
+### Qué ejecuté yo (reauditoría 3)
+
+Capturas en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/audit_r3_*_e59baec.txt`. El hardware lo ejecuté desde un worktree limpio en `e59baec` (ya borrado), con mis propias compilaciones. Las mutaciones van en commits desechables de ese worktree.
+
+| # | Qué | Resultado |
+| --- | --- | --- |
+| 1 | `git status --short`, `git ls-files -v \| grep -E '^[a-zS]'`, `git diff --stat 09d6c76 e59baec` | Las dos primeras salidas, vacías. Entre el código capturado y la entrega solo cambian el informe y las capturas |
+| 2 | Lectura de `git diff 924731d..e59baec`: tabla, host, modelo, pruebas, CM7 y los dos `.ld` | Hallazgos abajo |
+| 3 | Las comparaciones de `s5_verify_released` cambiadas por `if False` en el archivo: las dos, solo `BUSCHK up`, solo `BUSCHK down`. Después, la batería entregada | 9, 9 y 3 pruebas en rojo. Con `BUSCHK up` desactivado cae T0b(c), y con él E1; con `BUSCHK down`, E15 y E16. Fuente restaurado. Captura: `audit_r3_harness`, apartado A |
+| 4 | Mi contención del apartado D de la reauditoría 2, dentro de una prueba que hereda de `TestHarnessScenarios` y solo comprueba el código de salida ≠ 0 | **FAIL** en el `tearDown` común: `R2-M2: Electrical contention detected on SimBus`. Apartado B |
+| 5 | En la tabla, la primera primitiva del paso 7 pasa de `HS_HOST` a `HS_MCU`; batería entregada | **27/27 OK.** Ninguna prueba se entera (R2-M3). Apartado C |
+| 6 | ¿Los patrones `LINE` de la tabla casan con las líneas reales? | Ninguno de los probados. 36 de 46 empiezan por `^[m7_gpio_test]` sin escapar, que es una clase de caracteres. Los otros 10 quedan con `\\[` al leerlos del `.h`. Apartado D |
+| 7 | `selftest-gpio` compilada por mí en `e59baec`, con el bloque de SRAM4 a cero, y dos ejecuciones completas con el AD2 dentro de mi envoltorio de `OE` | Las dos dan `HOST VERDICT=PASS` con 15/15. T0b(c) muestra `ABORT: bus contention check failed at step 4: BUSCHK up gave 0x5A`, con los tres `OE` en 0x00. Las 17 escrituras del bus caen en el paso 9. Se drenan 0 bytes y se verifica el `Rev` de CM4. Capturas: `audit_r3_selftest_1` y `_2` |
+| 8 | Mutación R3-a: el host con la comparación de `BUSCHK up` desactivada, y el firmware del mismo commit. Antes comprobé por lectura que en el paso 4 el host no puede conducir el bus (dueño MCU, `drive_bus` lo rechaza) | T0b(c) FAIL; aborto al llegar una línea inesperada; `HOST VERDICT=FAIL`. Las únicas `OE` con bits del bus son los intentos de T0b(a), que se rechazan antes de la DLL. Captura: `audit_r3_b4_guard_disabled` |
+| 9 | Mutación R3-b: la tabla del apartado C, y el firmware recompilado sin tocar el código de sus pasos | El firmware aborta en la placa con `ABORT step=7 reason=protocol` y `VERDICT: GPIO SELF-TESTS FAILED`. El host se entera cuando expira su propio timeout de `HS_HOST`, 10 s después (R3-m1). Captura: `audit_r3_m3_table_primitive` |
+| 10 | Producción (`debug`) de `e59baec` y `ca569b6`, en la misma ruta, comparadas byte a byte | CM4 idéntica; en CM7, 7 bytes distintos: el hash. El `ASSERT` del linker no genera código |
+| 11 | Las capturas del implementador | `gpio_f0_build_09d6c76.txt` es la salida completa (ASCII, 8/8, "All 8 builds PASSED"). El `-Werror` está en `cmake/common_flags.cmake:20`; la captura no lo muestra, porque no imprime la línea de compilación. Las dos del selftest son coherentes con las mías |
+
+La placa quedó con `prj_04` **debug** de `e59baec` flasheado y el AD2 cerrado (S2).
+
+### Estado de los hallazgos abiertos
+
+| ID | Estado | Por qué |
+| --- | --- | --- |
+| B4 | **Cerrado** | T0b(c) llama a la guarda y solo pasa con `BusContention` y el patrón anunciado (`gpio_hw_check.py`, paso 4). La guarda ya tiene pruebas negativas que fallan cuando deben (#3). En la placa, pasa con la guarda buena (#7) y falla con la guarda rota (#8) |
+| R2-M1 | **Cerrado** | #1 |
+| R2-M2 | **Cerrado** | #4. El control del control también existe (`test_control_of_contention_detection`) |
+| R2-M3 | **Abierto (mayor), con menos alcance** | Hecho: la tabla existe en la cabecera, y el firmware comprueba cada primitiva contra ella en ejecución (#9). No hecho: el host y el modelo no recorren la tabla, sino que siguen su código escrito a mano con llamadas `rec("nombre")`. `test_host_and_model_traverse_identical_table` compara nombres, no tipos de primitiva ni patrones, así que #5 pasa en verde. Los patrones `LINE` de la tabla no son expresiones regulares válidas para esas líneas (#6), y el host usa las suyas. `GPIO_BENCH_STEPS_TABLE` no la usa el firmware: el dueño del bus que imprime sale de `k_step_perms` (`CM7 gpio_selftest.c:30`), así que hay dos fuentes para el mismo dato. Hoy un desacuerdo entre host y tabla solo aparece en la placa |
+| M3 | **Abierto** | Ver abajo |
+| R2-m1 | **Cerrado** | Drenaje de 100 ms antes del reset, con su log (#7) |
+| R2-m2 | **Cerrado** | `on_m4_line` aborta en cuanto llega un `Rev` distinto; las líneas de CM4 se evalúan también en `finally` |
+| R2-m3 | **Cerrado** | `reconfigure(errors="replace")` en `main()` y `try` en `log()`, más su prueba. Mis ejecuciones usaron `PYTHONIOENCODING=utf-8`, así que esto lo cierro por lectura |
+| R2-m4 | **Cerrado** | E8 y E10 salen de la tabla (46 líneas, 36 primitivas). E11 nombra el bit. Hay prueba del testigo de un paso anterior. Que salgan de nombres es R2-M3 |
+| R2-m5 | **Cerrado** | La línea de "safe state verified" solo se imprime si la comprobación pasa |
+| R2-m6 | **Cerrado** | `ASSERT` en los dos `.ld` y paridad byte a byte (#10) |
+
+### Protocolo A1–A27 (reauditoría 3)
+
+| # | Punto | Resultado | Nota |
+| --- | --- | --- | --- |
+| A1–A3, A5, A7 | Catálogo, literales, API, targets, estado | Pasa | `gpio_bm.[ch]` sin cambios |
+| A16 | Build | Pasa | Captura completa del implementador, 8/8; mis compilaciones de `selftest-gpio` y `debug` en `e59baec`, sin avisos. La matriz no la repetí: desde la reauditoría 2 solo cambian `prj_04` y sus `.ld` |
+| A17 | R3: binario | **Pasa** | #10 |
+| A18 | Pruebas de la fase, repetidas por mí | **Pasa** | #7 |
+| A19 | R1: controles negativos | **Pasa** | T0b(c) con la guarda rota falla (#8); T15, sueltas y controles de los walking-1 fallan cuando deben (reauditorías 1 y 2) |
+| A21 | R2: trazabilidad | Pasa | #1; la ejecución de `b3c7e2d` se declara perdida |
+| A22 | R4: no destructivas | Pasa | |
+| A23 | Oráculo independiente | Pasa | |
+| A26 | Documentación | **Falla** | M3 |
+| A27 | Seguridad eléctrica S1–S10 | **Pasa** | Criterios de código comprobados antes de conectar; T0b en verde en mi ejecución, incluido (c), y (c) falla cuando la guarda falla |
+
+### Hallazgos
+
+#### Mayores
+
+| ID | Dónde | Hallazgo | Qué hace falta |
+| --- | --- | --- | --- |
+| R2-M3 | Ver la fila de arriba | El host y el modelo no están atados a la tabla | Cualquiera de estas dos formas me vale (errata E7): **(a)** la que pedí, con el host y el modelo recorriendo la tabla; o **(b)** que `hs_mcu`, `hs_host` y `LineReader.expect` se registren **solos** (tipo de primitiva y patrón usado, no un nombre puesto a mano), y que una prueba compare esa traza completa con la tabla en tipo, primitiva y patrón. En los dos casos: los patrones `LINE` de la tabla son expresiones válidas e iguales a las que usa el host, y el dueño del bus del firmware sale de `GPIO_BENCH_STEPS_TABLE`, o se comprueba en compilación que coincide con `k_step_perms`. Mis dos comprobaciones: con #5 (cambiar una primitiva) y cambiando el patrón de una línea en la tabla, al menos una prueba en rojo |
+| M3 | `IMPLEMENTATION_REPORT.md`, "Respuesta a la reauditoría 2" | **El informe sigue describiendo código que no existe.** (a) R2-M3: "Firmware, host y modelo derivan sus secuencias de esta única fuente" e "imposibilitando discrepancias de handshake entre los extremos": falso para el host y el modelo (#5). (b) Nombres inexistentes en el código: `GPIO_BENCH_ITEM_TABLE` y `GPIO_BENCH_STEP_TABLE` (son `GPIO_BENCH_PROTOCOL_TABLE` y `GPIO_BENCH_STEPS_TABLE`); `test_e6_t0b_c_contention_caught_by_s5`; `test_t0b_s5_negative_control()`; `all_safe`; y el mensaje "FAIL: wired pins not in safe input state" (el real es "T0b_c safe state verification FAILED: pins not input"). (c) R2-M1 se atribuye a `aa30222` y al "commit actual", pero la marca la quité yo (reauditoría 2, #1); en el código no hubo nada que corregir | Una sección nueva, "Respuesta a la reauditoría 3", que corrija (a)–(c). **Antes de entregar, cada identificador que cite el informe se busca con `git grep`**, y la lista de esas búsquedas va en la sección |
+
+#### Menores
+
+| ID | Dónde | Hallazgo |
+| --- | --- | --- |
+| R3-m1 | `gpio_hw_check.py:383-450` | Mientras espera en `hs_mcu`/`hs_host`, el host no lee el puerto. Un `ABORT step=… reason=…` del firmware solo se ve cuando expira su propio timeout, 10 s después (#9). El fallo es seguro, pero el diagnóstico llega tarde y el log queda desordenado. Basta con que las esperas de las primitivas vayan leyendo el puerto y aborten al ver una línea `ABORT` |
+
+#### Notas
+
+- **N15:** El `.text` de CM7 en `selftest-gpio` crece unos 6 KB, por las cadenas de la tabla. No afecta a la producción (#10).
+- **N16:** Mis ejecuciones #7 dan 35 721 y 35 708 corrupciones en T15 (c), la misma familia que en la reauditoría 2 (N12): el código de T15 no cambió de sitio.
+
+### Errata (mía)
+
+- **E7:** en `F0_CORRECTION_3_INSTRUCTIONS.md` §2.3 pedí que el host y el modelo "recorrieran" la tabla. Lo que importa es que un desacuerdo entre la tabla y cualquiera de los tres lados se vea en las pruebas, no solo en la placa. Por eso acepto también la forma (b) de R2-M3, que no obliga a reescribir el host como un intérprete de tablas.
+
+### Lo que sí queda confirmado
+
+- **La guarda del bus** para lo que tiene que parar: en el arnés, cada comparación tiene una prueba que cae sin ella, y en la placa, T0b(c) falla con la guarda rota.
+- **El invariante eléctrico del arnés** pone en rojo cualquier prueba con contención.
+- **El firmware sigue la tabla** y aborta en la placa si no coincide.
+- **La sesión completa con el AD2:** dos veces más, igual que la entrega. El bus solo se habilita en el paso 9, siempre después de su S5.
+- **Producción idéntica** a `ca569b6`, así que la referencia T18 de `90327d1` sigue valiendo.
+- **Todo lo cerrado en las reauditorías 1 y 2** sigue cerrado.
+
+### Para cerrar F0
+
+1. **R2-M3**, en la forma (a) o (b) de E7, con los patrones de la tabla válidos y el dueño del bus desde una sola fuente.
+2. **M3:** la sección "Respuesta a la reauditoría 3", con cada identificador comprobado con `git grep`.
+3. **R3-m1** (puede ir aquí o al cierre).
+4. **Si cambia el firmware** (por ejemplo, el dueño del bus desde la tabla): una ejecución completa con el AD2 y su captura. Si solo cambian el host, las pruebas y el informe, basta con las pruebas.
+
+La reauditoría 4 será corta: código, pruebas, mis dos comprobaciones de R2-M3 y, si cambia el firmware, una ejecución mía en la placa. Si pasa, F0 se cierra y `driver/gpio` puede ir a `main`.
