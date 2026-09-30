@@ -26,6 +26,7 @@
 
 #include "app_main.h"
 #include "app_log.h"
+#include "fw_build_id.h"
 #include "main.h"
 #include "led_bm.h"
 #include "shared_memory.h"
@@ -60,6 +61,7 @@ void app_main(void)
 
     APP_LOG(" ");
     APP_LOG("=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===");
+    APP_LOG("[sys] build rev=%s id=%s", FW_GIT_REV, FW_BUILD_ID);   /* R3-c */
     APP_LOG("[sys] sysclk=%lu Hz hclk=%lu Hz",
             (unsigned long)HAL_RCC_GetSysClockFreq(),
             (unsigned long)HAL_RCC_GetHCLKFreq());
@@ -120,6 +122,7 @@ static void Status_Task(void *arg)
     TickType_t last = xTaskGetTickCount();
     uint32_t   previous_m4 = 0U;
     bool       have_previous = false;
+    bool       cpu2_build_shown = false;
 
     (void)arg;
 
@@ -153,6 +156,27 @@ static void Status_Task(void *arg)
         else
         {
             state = "NOT RESPONDING";
+        }
+
+        /* R3-c: CPU2 published its image before its first heartbeat, so
+           once it is alive its fields are final. Printed before the alive
+           line, which the warm-reset tool reads as the end of a boot. */
+        if ((m4 != previous_m4) && !cpu2_build_shown)
+        {
+            char rev4[sizeof(g_shared.m4_fw_rev)];
+            char id4[sizeof(g_shared.m4_fw_build_id)];
+            for (uint32_t i = 0U; i < sizeof(rev4); i++)
+            {
+                rev4[i] = g_shared.m4_fw_rev[i];
+            }
+            for (uint32_t i = 0U; i < sizeof(id4); i++)
+            {
+                id4[i] = g_shared.m4_fw_build_id[i];
+            }
+            rev4[sizeof(rev4) - 1U] = '\0';
+            id4[sizeof(id4) - 1U]   = '\0';
+            APP_LOG("[sys] cpu2 build rev=%s id=%s", rev4, id4);
+            cpu2_build_shown = true;
         }
 
         APP_LOG("[ipc] m7=%lu m4=%lu  (CPU2 %s)",

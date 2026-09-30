@@ -69,6 +69,14 @@ typedef struct
     volatile uint32_t m7_gpio_lock_fail_count;
     volatile uint32_t m4_gpio_lock_fail_count;
 
+    /* R3-c, appended (offsets 0xA0 and 0xB8; the block grows from 0xA0 to
+       0xD0 bytes, no field moves): FW_GIT_REV and FW_BUILD_ID of the CPU2
+       image (generated/fw_build_id.h), NUL-terminated. Written only by CPU2,
+       before its first m4_heartbeat increment; CPU1 prints them once it sees
+       CPU2 alive.                                                          */
+    volatile char     m4_fw_rev[24];
+    volatile char     m4_fw_build_id[24];
+
 } SharedMemory_t;
 
 /* One instance in memory, but shared_memory.c is compiled into BOTH images.

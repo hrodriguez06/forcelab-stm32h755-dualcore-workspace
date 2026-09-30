@@ -25,6 +25,7 @@
   */
 
 #include "main.h"
+#include "fw_build_id.h"
 #include "shared_memory.h"
 #if defined(GPIO_DRIVER_SELFTEST)
 #include "gpio_selftest.h"
@@ -41,6 +42,7 @@ volatile uint32_t cpu2_woke  = 0UL;
 volatile uint32_t cpu2_loops = 0UL;
 
 static void CPU2_WaitForCPU1(void);
+static void CPU2_PublishBuild(void);
 
 int main(void)
 {
@@ -60,6 +62,10 @@ int main(void)
     /* Before this core's first pin configuration: CPU1 may be configuring
        pins of the same port from now on (Common/Inc/shared_memory.h). */
     Shared_GpioLockInstall();
+
+    /* R3-c: which image this core runs, before it declares itself alive (its
+       first m4_heartbeat increment, below or after the selftest). */
+    CPU2_PublishBuild();
 
     /* Deliberately not calling Shared_Init(): the block belongs to CPU1 and is
        already initialised by the time this core is released. Zeroing it here
@@ -88,6 +94,27 @@ int main(void)
         {
         }
     }
+}
+
+/* Copies FW_GIT_REV and FW_BUILD_ID into this core's fields of g_shared. */
+static void copy_str(volatile char *dst, uint32_t size, const char *src)
+{
+    uint32_t i = 0U;
+    for (; (i + 1U < size) && (src[i] != '\0'); i++)
+    {
+        dst[i] = src[i];
+    }
+    for (; i < size; i++)
+    {
+        dst[i] = '\0';
+    }
+}
+
+static void CPU2_PublishBuild(void)
+{
+    copy_str(g_shared.m4_fw_rev, (uint32_t)sizeof(g_shared.m4_fw_rev), FW_GIT_REV);
+    copy_str(g_shared.m4_fw_build_id, (uint32_t)sizeof(g_shared.m4_fw_build_id), FW_BUILD_ID);
+    __DMB();
 }
 
 static bool Shared_MagicReady(void *ctx)
