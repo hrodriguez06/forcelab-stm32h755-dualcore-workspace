@@ -211,6 +211,7 @@ class FaultInjectionConfig:
         self.step9_buschk_up_fail: bool = False                 # E16: MCU fails buschk up in Step 9
         self.step9_buschk_down_fail: bool = False               # E16: MCU fails buschk down in Step 9
         self.t0b_c_safe_fail: bool = False                      # R2-m5: T0b(c) safe state check fails
+        self.inject_step7_protocol_abort: bool = False          # R3-m1: MCU aborts during Step 7 handshake
 
 
 class FirmwareModel:
@@ -321,6 +322,11 @@ class FirmwareModel:
                 self.bus.set_mcu_safe()
                 return False
             yield
+
+        if self.faults.inject_step7_protocol_abort and step_name == "step7_pe2":
+            self.log_m7("[m7_gpio_test] ABORT step=7 reason=protocol")
+            self.bus.set_mcu_safe()
+            return False
 
         # Phase 2: MCU asserts MCU_ACK = 1
         self.bus.set_mcu_output(DIO_MCU_ACK, DIO_MCU_ACK)

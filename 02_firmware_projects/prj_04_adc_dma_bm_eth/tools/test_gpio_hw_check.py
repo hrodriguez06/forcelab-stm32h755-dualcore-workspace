@@ -900,6 +900,38 @@ class TestHarnessScenarios(BaseSimTest):
                 f"Mismatch at index {idx} ({tbl_item.name}): pattern '{tbl_item.line_pattern}' does not match '{actual_line}'",
             )
 
+    def test_r3_m1_host_aborts_immediately_on_firmware_abort(self):
+        """R3-m1: Host aborts immediately (< 1.0s simulated) when firmware emits ABORT during handshake."""
+        faults = FaultInjectionConfig()
+        faults.inject_step7_protocol_abort = True
+        ad2, ser, clock, reset_fn, fw, bus = self.create_simulated_bench(faults=faults)
+        logs = []
+        step7_time = None
+
+        def step7_timer_log(msg: str):
+            nonlocal step7_time
+            logs.append(msg)
+            if "Step 7 validated" in msg:
+                step7_time = clock.monotonic()
+
+        code = run_selftest(
+            serial_port=ser,
+            ad2=ad2,
+            clock=clock,
+            reset_fn=reset_fn,
+            expected_rev="ca569b6",
+            log_fn=step7_timer_log,
+        )
+        end_time = clock.monotonic()
+
+        self.assertNotEqual(code, 0, "Expected non-zero exit code on protocol abort")
+        self.assertIsNotNone(step7_time, "Step 7 was never reached")
+        elapsed_in_step7 = end_time - step7_time
+        self.assertLess(elapsed_in_step7, 1.0, f"Host took {elapsed_in_step7}s simulated to abort in step 7, expected < 1.0s")
+        self.assertEqual(ad2.get_oe(), 0x0000, "AD2 OE not 0 after protocol abort")
+        self.assertEqual(len(bus.violations), 0, "Electrical invariant violated during abort")
+        self.assertTrue(any("ABORT step=7 reason=protocol" in l for l in logs), "Abort line not cited in log")
+
     # ---- R2-m1: Drenar puerto serie antes de reset -------------------------
     def test_r2_m1_serial_drain_before_reset(self):
         """R2-m1: Serial port is drained for at least 100 ms before reset and logs discarded bytes."""

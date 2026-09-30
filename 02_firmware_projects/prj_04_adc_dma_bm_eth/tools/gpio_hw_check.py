@@ -430,6 +430,8 @@ def hs_mcu(
     # Phase 1: Wait for MCU_ACK == 1
     start = clock.monotonic()
     while not bool(ad2.digital_io_read() & AD2_DIO_MCU_ACK):
+        if line_reader is not None:
+            line_reader.poll()
         if clock.monotonic() - start >= timeout_s:
             ad2.set_safe_state()
             msg = "ABORT: Timeout in HS_MCU Phase 1 (waiting for MCU_ACK=1)"
@@ -447,6 +449,8 @@ def hs_mcu(
     # Phase 3: Wait for MCU_ACK == 0
     start = clock.monotonic()
     while bool(ad2.digital_io_read() & AD2_DIO_MCU_ACK):
+        if line_reader is not None:
+            line_reader.poll()
         if clock.monotonic() - start >= timeout_s:
             ad2.set_safe_state()
             msg = "ABORT: Timeout in HS_MCU Phase 3 (waiting for MCU_ACK=0)"
@@ -469,6 +473,7 @@ def hs_host(
 ) -> None:
     """R-B1 HS_HOST (Host signals):
     Host asserts HOST_REQ=1 -> MCU asserts MCU_ACK=1 -> Host drops HOST_REQ=0 -> MCU drops MCU_ACK=0.
+    Polls line_reader during wait states to detect immediate firmware ABORT (R3-m1).
     Automatically records ("PRIM", "HS_HOST") into trace (R2-M3 Form b).
     Enforces timeout_s on each phase. On timeout: aborts to S2 and raises BenchAbort.
     """
@@ -482,6 +487,8 @@ def hs_host(
     # Phase 2: Wait for MCU_ACK == 1
     start = clock.monotonic()
     while not bool(ad2.digital_io_read() & AD2_DIO_MCU_ACK):
+        if line_reader is not None:
+            line_reader.poll()
         if clock.monotonic() - start >= timeout_s:
             ad2.set_safe_state()
             msg = "ABORT: Timeout in HS_HOST Phase 2 (waiting for MCU_ACK=1)"
@@ -496,6 +503,8 @@ def hs_host(
     # Phase 4: Wait for MCU_ACK == 0
     start = clock.monotonic()
     while bool(ad2.digital_io_read() & AD2_DIO_MCU_ACK):
+        if line_reader is not None:
+            line_reader.poll()
         if clock.monotonic() - start >= timeout_s:
             ad2.set_safe_state()
             msg = "ABORT: Timeout in HS_HOST Phase 4 (waiting for MCU_ACK=0)"
