@@ -12,6 +12,7 @@
   */
 
 #include "gpio_selftest.h"
+#include "fw_build_id.h"
 #include "shared_memory.h"
 #include "stm32h7xx_hal.h"
 
@@ -42,6 +43,15 @@ void GPIO_Selftest_CM4_Run(void)
     for (uint32_t i = 0U; (i + 1U < sizeof(a->m4_rev)) && (rev[i] != '\0'); i++)
     {
         a->m4_rev[i] = rev[i];
+    }
+    for (uint32_t i = 0U; i < sizeof(a->m4_build_id); i++)
+    {
+        a->m4_build_id[i] = '\0';
+    }
+    const char *id = FW_BUILD_ID;
+    for (uint32_t i = 0U; (i + 1U < sizeof(a->m4_build_id)) && (id[i] != '\0'); i++)
+    {
+        a->m4_build_id[i] = id[i];
     }
 
     last_seq = a->cmd_seq;

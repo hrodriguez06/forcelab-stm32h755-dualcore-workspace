@@ -8,7 +8,7 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/debug",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "FW_PRESET": "debug" }
     },
     {
       "name": "release",
@@ -16,7 +16,7 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/release",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "FW_PRESET": "release" }
     },
     {
       "name": "selftest-gpio",
@@ -24,7 +24,7 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/selftest-gpio",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "GPIO_DRIVER_SELFTEST": "ON" }
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "GPIO_DRIVER_SELFTEST": "ON", "FW_PRESET": "selftest-gpio" }
     }
   ],
   "buildPresets": [

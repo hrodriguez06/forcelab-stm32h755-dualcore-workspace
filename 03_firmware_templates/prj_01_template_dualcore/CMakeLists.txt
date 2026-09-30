@@ -29,29 +29,18 @@ option(GPIO_DRIVER_SELFTEST "Build the 00_gpio selftest (needs the AD2 bench)" O
 
 # Every selftest capture starts with the revision it was built from, and says
 # -dirty when tracked files differ from it, so a capture can be traced to a
-# commit (and one from an uncommitted tree cannot pass for one).
-execute_process(
-    COMMAND git rev-parse --short HEAD
-    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-    OUTPUT_VARIABLE GIT_REV
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
+# commit (and one from an uncommitted tree cannot pass for one). Both, and a
+# build id over the diff, the C flags and the preset (R3-a), are computed at
+# BUILD time into generated/fw_build_id.h: computed at configure time, an edit
+# made after `cmake --preset` compiled with the old revision and no -dirty.
+set(FW_PRESET "" CACHE STRING "Configure preset name, hashed into FW_BUILD_ID (set by CMakePresets.json)")
+add_custom_target(fw_build_id ALL
+    COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${CMAKE_CURRENT_LIST_DIR} -DBIN_DIR=${CMAKE_BINARY_DIR}
+            -P ${CMAKE_CURRENT_LIST_DIR}/cmake/fw_build_id.cmake
+    BYPRODUCTS ${CMAKE_BINARY_DIR}/generated/fw_build_id.h
+    COMMENT "fw_build_id.h (FW_GIT_REV, FW_BUILD_ID)"
+    VERBATIM
 )
-if(NOT GIT_REV)
-    set(GIT_REV "unknown")
-else()
-    execute_process(
-        COMMAND git status --porcelain -uno
-        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-        OUTPUT_VARIABLE GIT_STATUS_OUT
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-    )
-    if(GIT_STATUS_OUT)
-        set(GIT_REV "${GIT_REV}-dirty")
-    endif()
-endif()
-add_compile_definitions(FW_GIT_REV="${GIT_REV}")
 
 # ---- External dependencies -------------------------------------------------
 # The Cube package is a submodule of the workspace, shared by every project
@@ -109,3 +98,9 @@ add_subdirectory("${SHARED_DRIVERS_DIR}" "${CMAKE_BINARY_DIR}/shared_drivers")
 # ---- The two cores ---------------------------------------------------------
 add_subdirectory(CM7)
 add_subdirectory(CM4)
+
+# Both images include generated/fw_build_id.h, written before they compile.
+foreach(fw_target cm7_firmware cm4_firmware)
+    add_dependencies(${fw_target} fw_build_id)
+    target_include_directories(${fw_target} PRIVATE ${CMAKE_BINARY_DIR}/generated)
+endforeach()

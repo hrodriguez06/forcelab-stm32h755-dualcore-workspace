@@ -11,6 +11,12 @@ file: every console line and every host measurement, with timestamps, until
     py tools/gpio_hw_check.py                   # resets the board through SWD and runs
     py tools/gpio_hw_check.py --allow-dirty     # development only: accept a -dirty Rev
                                                 # (the capture then carries the git diff)
+    py tools/gpio_hw_check.py --preset selftest-gpio   # build dir whose flags the build id uses
+
+The image must be the one this checkout builds (R3-a): the host computes the
+build id of generated/fw_build_id.h over its own checkout and build/<preset>,
+and aborts before any output is enabled when CM7 or CM4 prints another one
+(--allow-dirty notes it and goes on).
 
 Electrical safety (no series resistors on the bench):
   S2  the AD2 opens and closes with every DIO in input (tools/ad2.py), and goes
@@ -627,12 +633,37 @@ def tree_record(stamp: Callable[[str], None]) -> bool:
     return True
 
 
+def host_build_id(preset: str) -> str:
+    """R3-a: FW_BUILD_ID as cmake/fw_build_id.cmake computes it, over this
+    checkout: the first 16 hex digits of the SHA-256 of the bytes of
+    `git diff --no-color HEAD`, then "CMAKE_C_FLAGS=" <CMAKE_C_FLAGS of
+    build/<preset>/CMakeCache.txt> " PRESET=" <preset>, no newline added.
+    "unknown" when git or the cache cannot be read; never an invented value."""
+    try:
+        diff = subprocess.run(["git", "diff", "--no-color", "HEAD"], cwd=str(PROJECT),
+                              capture_output=True, check=True).stdout
+        cache = (PROJECT / "build" / preset / "CMakeCache.txt").read_bytes()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    flags = None
+    for line in cache.splitlines():
+        m = re.match(rb"^CMAKE_C_FLAGS:[A-Z]+=(.*)$", line)
+        if m:
+            flags = m.group(1)
+            break
+    if flags is None:
+        return "unknown"
+    payload = diff + b"CMAKE_C_FLAGS=" + flags + b" PRESET=" + preset.encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()[:16]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", help="ST-LINK VCP (default: autodetect)")
     ap.add_argument("--out", type=pathlib.Path, help="capture file (default: docs/gpio_selftest_<rev>.txt)")
     ap.add_argument("--allow-dirty", action="store_true", help="accept a -dirty Rev (development runs)")
     ap.add_argument("--no-reset", action="store_true", help="do not reset the board; wait for the banner")
+    ap.add_argument("--preset", default="selftest-gpio", help="configure preset of the image (build id)")
     args = ap.parse_args()
 
     lines: list[str] = []
@@ -649,6 +680,8 @@ def main() -> int:
     stamp("[host] checklist: GND first, DIO per README table, nothing on W1/W2/V+/V-; WaveForms GUI closed; "
           "image selftest-gpio flashed with this script stopped")
     tree_record(stamp)
+    build_id = host_build_id(args.preset)
+    stamp(f"[host] build id of this checkout and build/{args.preset}: {build_id}")
     guard_ok = t0b_guard_selftest(stamp)
 
     port = args.port or autodetect()
@@ -669,13 +702,23 @@ def main() -> int:
                 subprocess.run([cube_programmer(), "-c", "port=SWD", "mode=HOTPLUG", "-rst"],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
             revs["cm7"] = con.expect(r"\[gpio\] CM7 Rev (\S+)", 20.0).group(1)
+            ids = {"cm7": con.expect(r"\[gpio\] CM7 Build id (\S+)", 10.0).group(1)}
             revs["cm4"] = con.expect(r"\[gpio\] CM4 Rev (\S+)", 10.0).group(1)
+            ids["cm4"] = con.expect(r"\[gpio\] CM4 Build id (.+?)\s*$", 10.0).group(1)
             ver = int(con.expect(r"\[gpio\] GPIO_BENCH v(\d+) idle", 10.0).group(1))
             clean = revs["cm7"] == revs["cm4"] and "-dirty" not in revs["cm7"] and revs["cm7"] != "unknown"
             if ver != BENCH_VERSION:
                 raise BenchAbort(f"S8: firmware protocol v{ver}, host v{BENCH_VERSION}")
             if not clean and not args.allow_dirty:
                 raise BenchAbort(f"R2: Rev cm7={revs['cm7']} cm4={revs['cm4']} is not one clean commit")
+            # R3-a, in the S8 phase: nothing is enabled yet. "unknown" never matches.
+            stamp(f"[host] build id host={build_id} cm7={ids['cm7']} cm4={ids['cm4']}")
+            same = build_id != "unknown" and ids["cm7"] == build_id and ids["cm4"] == build_id
+            if not same:
+                if not args.allow_dirty:
+                    raise BenchAbort(f"R3-a: the image is not the one this checkout builds "
+                                     f"(host={build_id} cm7={ids['cm7']} cm4={ids['cm4']})")
+                stamp("[host] R3-a: build ids differ; --allow-dirty given, going on")
             stamp(f"[host] S8: banner v{ver}, Rev cm7={revs['cm7']} cm4={revs['cm4']}")
             session = Session(ad2, con, stamp)
             session.set_oe(DIO_REQ)          # HOST_REQ output, low

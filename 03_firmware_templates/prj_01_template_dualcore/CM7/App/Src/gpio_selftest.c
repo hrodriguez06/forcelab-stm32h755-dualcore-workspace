@@ -25,6 +25,7 @@
   */
 
 #include "gpio_selftest.h"
+#include "fw_build_id.h"
 #include "gpio_bm.h"
 #include "gpio_ll.h"
 #include "gpio_hal.h"
@@ -1600,8 +1601,8 @@ static void run_t16_a1(void)
     GpioLL_PinConfig_t cl, cl_ref;
     (void)memset(&cb, 0xA5, sizeof cb);
     (void)memset(&cl, 0xA5, sizeof cl);
-    cb_ref = cb;
-    cl_ref = cl;
+    (void)memcpy(&cb_ref, &cb, sizeof cb);
+    (void)memcpy(&cl_ref, &cl, sizeof cl);
     const bool            clk_c    = GPIO_BM_IsPortClocked(GPIOK);
     const bool            raw_c    = gpiok_clocked_raw();
     const GpioBm_Status_t sb       = GPIO_BM_ReadConfig(GPIOK, 3U, &cb);
@@ -1776,6 +1777,7 @@ void GPIO_Selftest_CM7_Run(void)
     bench_safe();
 
     LOG("CM7 Rev %s", FW_GIT_REV);
+    LOG("CM7 Build id %s", FW_BUILD_ID);
     const uint32_t t0 = HAL_GetTick();
     while ((a->m4_ready != a->session) && ((HAL_GetTick() - t0) < 5000U))
     {
@@ -1787,6 +1789,13 @@ void GPIO_Selftest_CM7_Run(void)
     }
     rev4[sizeof(rev4) - 1U] = '\0';
     LOG("CM4 Rev %s", (a->m4_ready == a->session) ? rev4 : "(CPU2 not ready)");
+    char id4[sizeof(a->m4_build_id)];
+    for (uint32_t i = 0U; i < sizeof(id4); i++)
+    {
+        id4[i] = a->m4_build_id[i];
+    }
+    id4[sizeof(id4) - 1U] = '\0';
+    LOG("CM4 Build id %s", (a->m4_ready == a->session) ? id4 : "(CPU2 not ready)");
     if (a->m4_ready != a->session)
     {
         s_fail++;

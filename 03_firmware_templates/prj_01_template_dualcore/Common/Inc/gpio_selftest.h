@@ -148,6 +148,10 @@ typedef struct
        phase. CPU1 writes it before GST_CMD_RACE_ARM; both loops seed their
        jitter from it (gst_race_run). */
     volatile uint32_t race_seed;
+
+    /* R3-a, appended: FW_BUILD_ID of the CPU2 image (generated/fw_build_id.h),
+       written with m4_rev before m4_ready. */
+    volatile char     m4_build_id[24];
 } GstArea_t;
 
 _Static_assert(sizeof(GstArea_t) <= 0x1000U, "GstArea_t no longer fits its 4 KB slot");
