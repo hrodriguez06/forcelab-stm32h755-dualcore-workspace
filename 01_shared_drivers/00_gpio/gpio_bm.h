@@ -85,6 +85,20 @@ bool GPIO_BM_ConfigAlternate(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af, 
   */
 bool GPIO_BM_ConfigAnalog(GPIO_TypeDef *port, uint32_t pin_idx);
 
+/* ==========================================================================
+ * F1a additions. Everything above this line is the pre-F1a API and keeps its
+ * signatures and constants (catalog criterion C2). Two notes above are
+ * superseded by what follows:
+ *   - GPIO_BM_ConfigAlternate() and GPIO_BM_ConfigAnalog() now also reject
+ *     pull > 2 and speed > 3 and misaligned port pointers, run inside the
+ *     section below, and return false when the pin is locked by LCKR or the
+ *     read-back differs from what was written.
+ *   - They no longer read-modify-write without a lock: every configuration
+ *     write of this driver happens inside GPIO_BM_SectionEnter/Exit, which
+ *     masks interrupts on the calling core and, when a project installed a
+ *     cross-core hook with GPIO_BM_SetSharedLock(), also takes that lock.
+ * ========================================================================== */
+
 /* ---- Status ------------------------------------------------------------------ */
 typedef enum
 {

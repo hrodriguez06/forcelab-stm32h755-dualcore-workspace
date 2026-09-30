@@ -155,62 +155,30 @@ bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port)
     return true;
 }
 
+/* G3, C2: both keep their signature and their bool, and every call the
+   consumers make today (uart: AF7, PULL_UP, VERY_HIGH; adc: analog) is still
+   accepted and leaves the same bits. They are wrappers of GPIO_BM_ConfigPin;
+   they set allow_debug_pins because G9 applies to the new API only - the
+   legacy calls accepted PA13/PA14 before and still do. */
 bool GPIO_BM_ConfigAlternate(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af, uint32_t pull, uint32_t speed)
 {
-    if ((port == NULL) || (pin_idx > 15U) || (af > 15U))
-    {
-        return false;
-    }
-
-    if (!GPIO_BM_EnablePortClock(port))
-    {
-        return false;
-    }
-
-    /* 1. Alternate Function selection: AFR[0] for pins 0..7, AFR[1] for pins 8..15 */
-    uint32_t afr_idx   = pin_idx >> 3U;
-    uint32_t afr_shift = (pin_idx & 7U) * 4U;
-    port->AFR[afr_idx] = (port->AFR[afr_idx] & ~(0xFU << afr_shift)) | ((af & 0xFU) << afr_shift);
-
-    /* 2. Output type: Push-Pull (0) */
-    port->OTYPER &= ~(1UL << pin_idx);
-
-    /* 3. Output speed: 2 bits per pin */
-    uint32_t pos2 = pin_idx * 2U;
-    port->OSPEEDR = (port->OSPEEDR & ~(0x3UL << pos2)) | ((speed & 0x3UL) << pos2);
-
-    /* 4. Pull-up / Pull-down: 2 bits per pin */
-    port->PUPDR = (port->PUPDR & ~(0x3UL << pos2)) | ((pull & 0x3UL) << pos2);
-
-    /* 5. Mode: Alternate Function (0b10 = 2) */
-    port->MODER = (port->MODER & ~(0x3UL << pos2)) | (0x2UL << pos2);
-
-    return true;
+    const GpioBm_PinConfig_t cfg = {
+        .port = port, .pin_idx = pin_idx, .mode = GPIO_BM_MODE_AF,
+        .otype = GPIO_BM_OTYPE_PP, .speed = speed, .pull = pull, .af = af,
+        .initial_level = 0U, .allow_debug_pins = true,
+    };
+    return GPIO_BM_ConfigPin(&cfg) == GPIO_BM_OK;
 }
 
 bool GPIO_BM_ConfigAnalog(GPIO_TypeDef *port, uint32_t pin_idx)
 {
-    if ((port == NULL) || (pin_idx > 15U))
-    {
-        return false;
-    }
-
-    if (!GPIO_BM_EnablePortClock(port))
-    {
-        return false;
-    }
-
-    uint32_t pos2 = pin_idx * 2U;
-
-    /* 1. Mode: Analog (0b11) */
-    port->MODER |= (0x3UL << pos2);
-
-    /* 2. Pull-up / Pull-down: None (0b00) */
-    port->PUPDR &= ~(0x3UL << pos2);
-
-    return true;
+    const GpioBm_PinConfig_t cfg = {
+        .port = port, .pin_idx = pin_idx, .mode = GPIO_BM_MODE_ANALOG,
+        .otype = GPIO_BM_OTYPE_PP, .speed = GPIO_BM_SPEED_LOW, .pull = GPIO_BM_PULL_NONE,
+        .af = 0U, .initial_level = 0U, .allow_debug_pins = true,
+    };
+    return GPIO_BM_ConfigPin(&cfg) == GPIO_BM_OK;
 }
-
 
 /* ---- Section and hook (C10, rule 2) ------------------------------------------- */
 
