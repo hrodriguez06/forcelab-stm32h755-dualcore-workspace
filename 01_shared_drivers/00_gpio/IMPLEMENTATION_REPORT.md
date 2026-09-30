@@ -485,3 +485,307 @@ Se compiló la matriz multi-proyecto completa (`gpio_f0_build_9209955.txt`, 8/8 
 
 
 
+
+---
+
+## F1a
+
+Estado: **en curso**. No se entrega para auditoría: la puerta de T9 falla en PF14 en la única ejecución completa del código actual (`gpio_f1a_selftest_ededa84.txt`), y la segunda ejecución de §2.5 no se hizo porque F1A §6 pide parar ante un valor de T9 fuera de rango. Todo lo demás de la lista del host está en `[OK]` en esa captura. Rama `driver/gpio`, creada desde `82d5c9c`.
+
+### 5.1 Commits
+
+| Commit | Asunto |
+| --- | --- |
+| `86524fd` | test(prj_04): choose the real capture from git log, not file mtime (R4-m1) |
+| `ea8dfce` | refactor(prj_04): take bus permission only from the steps table (R4-m2) |
+| `a94c89c` | feat(gpio): add GpioBm_Status_t and the canonical pin types (G15, G10) |
+| `a204b8a` | fix(gpio): accept only exact port base addresses (G4) |
+| `42608b1` | feat(gpio): add the configuration section and cross-core lock hook (C10) |
+| `dd7dae4` | feat(gpio): add GPIO_BM_ConfigPin with pre-access validation (G5, C6) |
+| `5f095f5` | feat(gpio): add single-store pin operations (G5) |
+| `a239d35` | feat(gpio): add LCKR lock with LCKK read-back (G8, C12) |
+| `a9712c5` | feat(gpio): add GPIO_BM_DeinitPin and GPIO_BM_ReadConfig (G8) |
+| `b52ffec` | fix(gpio): reject reserved pull and speed in legacy calls (G3, C2) |
+| `4803718` | test(prj_04): add T15 gpio_bm phases, T1, T2, B1 and T16 (protocol v2) |
+| `2d4bf19` | feat(tools): add logic analyzer and scope captures to ad2.py (F1a) |
+| `f88925f` | test(prj_04): add the AD2 bench steps T3-T10 to selftest-gpio (F1a) |
+| `9edb58e` | test(prj_04): record the four table changes on the F1a steps |
+| `adf40f0` | test(prj_04): add a per-object .map diff for the production check (E8) |
+| `429c49e` | test(prj_04): record the F1a T18 production regression (E8) |
+| `52359ee` | test(prj_04): record the ADC selftest on the F1a driver (T18 row) |
+| `0629b03` | test(prj_04): record F1a selftest-gpio run 1 (HOST VERDICT=FAIL, T9 gate) |
+| `ededa84` | fix(prj_04): measure T9 rise time on a sinc reconstruction of the edge |
+| `c77a68a` | test(prj_04): record F1a selftest-gpio run on ededa84 (T9 gate FAIL on PF14) |
+| `f44af1a` | test(prj_04): record the UART selftest on the F1a driver (T18 row) |
+| `b5641d7` | test(prj_04): record the F1a clean build and a harness run at f44af1a |
+| `04dd971` | fix(prj_04): pick only gpio_hw_check captures as the table reference (R4-m1) |
+| `631b472` | test(prj_04): record the F1a per-object map diff and pin-op objdump |
+| `257af46` | test(prj_04): record three development runs on uncommitted trees |
+| `b546225` | test(prj_04): record the F1a harness run at 257af46 |
+
+El driver está en los ocho commits `a94c89c`–`b52ffec`, uno por preocupación. Cada paso intermedio se compiló con `selftest-gpio` antes de commitearlo.
+
+### 5.2 Build y tamaños
+
+- `tools/build_all.ps1 -Clean` en `f44af1a`: 8/8 PASS, con `-Werror` (`cmake/common_flags.cmake:20`). Salida completa en `docs/gpio_f1a_build_f44af1a.txt` (ASCII).
+- Tamaños de `arm-none-eabi-size` de esa salida, frente a F0 (`docs/gpio_f0_build_9209955.txt`):
+
+| Imagen | .text | .data | .bss | Δ .text / .bss frente a F0 |
+| --- | --- | --- | --- | --- |
+| prj_04 debug CM7 | 88976 | 156 | 121212 | +28 / 0 |
+| prj_04 debug CM4 | 9692 | 28 | 15888 | +784 / +8 |
+| prj_04 release CM7 | 85040 | 156 | 121216 | +4 / 0 |
+| prj_04 release CM4 | 9016 | 28 | 15888 | +540 / +8 |
+
+- Los otros proyectos de la matriz también enlazan `gpio_bm.c` y también cambian de tamaño, sin que se toque ninguna de sus fuentes: `prj_01` CM7 debug +28 y release +4; `prj_02` CM7 debug +28 y release +4; `prj_03` CM7 debug +28 y release +4, y `prj_03` CM4 debug +784/+8 y release +532/+8 (.text/.bss). CM4 no cambia en `prj_01` ni en `prj_02`. En `prj_03` cambia porque su CM4 enlaza `stm32h7_driver_adc` (`CM4/CMakeLists.txt:95`), cuyos `adc_*` llaman a `GPIO_BM_ConfigAnalog`.
+- `gpio_bm.c.obj`, del `.map` de producción (método en `tools/map_diff.py`; salida en `docs/gpio_f1a_mapdiff_04dd971.txt`):
+
+| Imagen | .text F0 → F1a | .data | .bss F0 → F1a |
+| --- | --- | --- | --- |
+| debug CM7 | 64 → 92 | 0 | 0 → 0 |
+| debug CM4 | 114 → 896 | 0 | 0 → 8 |
+| release CM7 | 68 → 72 | 0 | 0 → 0 |
+| release CM4 | 148 → 688 | 0 | 0 → 8 |
+
+  En CM7 de producción solo queda `GPIO_BM_EnablePortClock` (lo llama `led_bm.c`); el resto lo descarta `--gc-sections`. En CM4, `.bss` son `s_section_depth` y `s_shared_lock`, 4 B cada uno (`.bss.s_section_depth` y `.bss.s_shared_lock` en `build/release/cm4_firmware.map`).
+- Diff del `.map` por objeto (E8), producción F0 (`c1653c6`) frente a F1a (build limpio de `f44af1a`), debug y release, los dos núcleos: en las cuatro imágenes el único objeto que cambia es `gpio_bm.c.obj` (`docs/gpio_f1a_mapdiff_04dd971.txt`, "objects changed: 1" en las cuatro). Método: los mapas de F0 salen de un checkout limpio de `c1653c6` compilado con el mismo toolchain, y se comparan con `py tools/map_diff.py <F0 map> <F1a map>`. La herramienta suma por objeto las secciones colocadas (`.text*`, `.rodata*` y demás asignadas como text; `.data*`; `.bss*`/`COMMON`), sin "Discarded input sections" y sin las de depuración. Sus totales no coinciden con los de `arm-none-eabi-size` porque cuentan de otra forma las secciones generadas por el linker; solo se usan para comparar F0 con F1a.
+- `git diff ca569b6 -- 01_shared_drivers/00_gpio/gpio_bm.h` (C2):
+
+```text
+ 01_shared_drivers/00_gpio/gpio_bm.h | 158 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 158 insertions(+)
+```
+
+  Líneas que empiezan por `-` (salvo la cabecera `---`): 0.
+
+- Greps de C1, C8 y A10 sobre `gpio_bm.[ch]` (`grep -nE "GPIO[A-K]\b|BOARD_|HSEM|hsem|shared_memory|board_def|5U|__enable_irq|#include"`): solo `#include "gpio_bm.h"`, `<stddef.h>`, `<stdbool.h>` y `"stm32h7xx.h"`, y las apariciones de `GPIOA..GPIOK` en comentarios y en la comprobación de rango. El `_Static_assert` antiguo con `GPIOB` se sustituyó por dos: `GPIOK_BASE - GPIOA_BASE == 10 × 0x400` y `GPIOAEN..GPIOKEN` en los bits 0..10.
+
+### 5.3 Pruebas
+
+Capturas de la placa: `docs/gpio_f1a_selftest_ededa84.txt` (código actual del firmware y del host, salvo el selector del arnés de `04dd971`) y `docs/gpio_f1a_selftest_52359ee.txt` (ejecución anterior al cambio de T9). Las dos tienen `Rev` limpio en los dos núcleos y llegan hasta `HOST VERDICT=`.
+
+| ID | Resultado | Valor medido (ededa84) | Control negativo: valor | Oráculo |
+| --- | --- | --- | --- | --- |
+| T15 | PASS | (a) 0; (b) 0; (e) 0 corrupciones, busy 0, hook_fail 0, locked 400000 = 200000 + 200000; (g) 0 corrupciones con 5599 entradas de la ISR durante el bucle | (c) 124934 corrupciones, ovl 499999 / 375285; (d) 45696 (CM7 field 27777 + verify 6305, CM4 field 11614), ovl 200000 / 120205; (f) 352 corrupciones, 2429 entradas de ISR | Contadores privados por núcleo, `t15_locked_calls` incrementado dentro del lock, comprobación de PF6 en la ISR |
+| T1 | PASS | CM7 30 casos, 0 fallos; CM4 30 casos, 0 fallos; foto sin cambios en cada rechazo | ConfigOutput(PF9) válida: la foto cambia en los dos núcleos | Foto de MODER/OTYPER/OSPEEDR/PUPDR/AFR/ODR/LCKR de los puertos con reloj, más los dos bancos de `RCC_AHB4ENR` |
+| T2 | PASS | CM7: 960 comparaciones contra `HAL_GPIO_Init`, 0 diferencias, odr_bad 0, legacy_bad 0; 192 combinaciones analógico+pull rechazadas con ERR_PARAM. CM4: 288 combinaciones contra la tabla RM, 0 diferencias | Imagen alterada (OSPEEDR en CM7, PUPDR en CM4): detectada | `HAL_GPIO_Init` en el pin vecino (CM7); `k_rm_fields` (CM4); cuerpos de `ca569b6` para las llamadas legacy |
+| T3 | PASS | 47 valores estables capturados, 0 diferencias con `T3_EXPECTED` | Ráfaga con 0x54 en lugar de 0x55: diferencia exactamente en el índice 33 | Analizador lógico del AD2 a 25 MHz, disparado por el flanco de HOST_REQ |
+| T4 | PASS | count=256, crc_port = crc_bits = 0x29058C73 = CRC32 del host | Pasada invertida: 0xDA3BA10A, distinto de 0x29058C73 e igual al CRC32 de los patrones invertidos | CRC32 calculado por el host (`zlib.crc32`) |
+| T7 | PASS | IDR en analógico = 0x00 con el AD2 conduciendo 0xFF | En entrada, IDR = 0xFF | Patrón del AD2 |
+| T8 | PASS | A 1, B 1, C 0, D 0 transiciones en DIO9 | E (orden ingenuo): 2 transiciones, pulso visto | Analizador lógico a 100 MHz, disparado por HOST_REQ |
+| T5 | PASS | V_DD 3,302 V; V_NP14 0,086; V_NP15 3,235; V_PU14 1,170; V_PD15 2,148 V → R_IN 1054,4k, R_PU 39,3k, R_PD 42,6k (30–50k) | V_NP14 < 0,1 V sí; V_NP15 > 2,9 V sí; V_PU14 ≤ 2,0 V sí | Scope, media de 8192 muestras a 100 kS/s por canal |
+| T6 | PASS | (a) PF15 OD bajo 0,023 V, OD soltado 3,234 V (V_NP15 3,235); (b) PF14 OD soltado 0,087 V | PF14 push-pull alto: 3,302 V | Scope DC |
+| T9 | **FAIL** | PF14: LOW 15,10 ns (sd 1,02), VERY_HIGH 12,74 ns (sd 1,42): diferencia 2,36 ns < 5σ 2,76 ns. PF15: LOW 16,94 (sd 0,73), VERY_HIGH 14,47 (sd 0,74): 2,48 ns > 5σ 1,65 ns | Pines en entrada: sin flanco (el scope no dispara en 0,5 s) | Scope a 100 MS/s, 10 flancos por velocidad, reconstrucción sinc |
+| T10 | PASS | 16,055 MHz con 657 flancos de subida en DIO14; HSIRDY = 1 | PA8 en AF1: 0 flancos | Analizador lógico a 100 MHz, sin disparo |
+| T16 | PASS | `LockPins` = OK, LCKR = 0x00010380; en PF7–PF9, `ConfigOutput` y `DeinitPin` devuelven 3 (ERR_LOCKED), `ConfigAnalog` false, `IsLocked` true, foto sin cambios; LCKR limpio al arrancar (0x00000000) | PF6 sin bloquear: ConfigOutput = OK y la foto cambia | Foto de registros |
+| B1 | medida | 5.4 | — | DWT de cada núcleo |
+| Arnés | PASS | 37 pruebas OK, ninguna omitida (`docs/gpio_f1a_unittest_257af46.txt`); la comparación con la captura real usa `gpio_f1a_selftest_ededa84.txt` | Cambios de tabla sobre los pasos nuevos: 2, 7, 11 y 2 pruebas en rojo (`docs/gpio_f1a_table_checks_f88925f.txt`) | — |
+| T18 | medida | `debug` en `adf40f0`: 300 `WAVE` (`gpio_f1a_t18_adf40f0_wave.txt`); `net_check` 3/3, ráfaga 100/100 (`_net.txt`); rx_nobuf/tx_nobuf/dma_err = 0 en la consola (`_console.txt`); SWD: fallos de lock HSEM 4 = 0 en los dos núcleos, `cpu2_wake_count` = 1 (`_swd.txt`) | — (regresión) | Referencia `90327d1` |
+| Selftest ADC | PASS | `HW RESULT PASS mask=2047/2047` (`gpio_f1a_selftest_adc_429c49e.txt`) | — | Propio del selftest |
+| Selftest UART | PASS | `jumper=1 bm_init=1,1,1 bm_loop=1,1,1 ll=1,1 ore=1`, con el puente PD5–PD6 puesto por el operador (`gpio_f1a_selftest_uart_c77a68a.txt`) | — | Propio del selftest |
+
+Lectura del volcado SWD de T18 (`0x380084E0`–`0x380084FF`, desplazamientos de `ptype /o SharedMemory_t` en `build/debug/CM7/cm7_firmware.elf`): 0x4E0–0x4E7 son el final de `m4_to_m7`; 0x4E8 `m7_adc_lock_fail_count` = 0; 0x4EC `m4_adc_lock_fail_count` = 0; 0x4F0 `cpu2_wake_count` = 1; 0x4F4 `m7_adc_lock_hold_cycles_max` = 0xE0FF; 0x4F8 `m4_adc_lock_hold_cycles_max` = 0x1D61. En `90327d1` eran 0, 0, 1, 0x427B y 0x1D57.
+
+Comprobaciones mías con mutaciones del driver, en árboles sin commitear sobre `b52ffec` (capturas `docs/gpio_f1a_dev_*_b52ffec-dirty.txt`; el driver se restauró con `git checkout` después de cada una):
+- sin `__disable_irq()` en `GPIO_BM_SectionEnter`: T15 (g) da 485 corrupciones y T15 falla (`gpio_f1a_dev_mutation_no_primask_b52ffec-dirty.txt`);
+- `GPIO_BM_EnablePortClock` antes de validar en `GPIO_BM_ConfigPin`: el caso "pin 16" de T1 ve cambiar la foto (el reloj de GPIOK) y T1 falla en los dos núcleos (`gpio_f1a_dev_mutation_clock_first_b52ffec-dirty.txt`).
+
+### 5.4 Medidas (B1)
+
+De `docs/gpio_f1a_selftest_ededa84.txt`. En el aislado, cada llamada se mide con PRIMASK activado alrededor. "Con contención" es T15 (e), dentro del hook de prueba.
+
+| Núcleo | ConfigPin sin hook (mín/máx) | ConfigPin con hook (mín/máx) | Lock retenido, máx (contención) | Entrada de lock() a unlock, máx (contención) |
+| --- | --- | --- | --- | --- |
+| CM7 (400 MHz) | 442 / 576 ciclos (1,10 / 1,44 µs) | 901 / 1018 (2,25 / 2,54 µs) | 383 ciclos (0,95 µs) | 1389 ciclos (3,47 µs) |
+| CM4 (200 MHz) | 391 / 574 ciclos (1,95 / 2,87 µs) | 749 / 898 (3,74 / 4,49 µs) | 273 ciclos (1,36 µs) | 782 ciclos (3,91 µs) |
+
+- "Entrada de lock() a unlock" incluye la espera al otro núcleo. Es una cota inferior del tiempo con PRIMASK: le faltan el prólogo de `SectionEnter` y el epílogo de `SectionExit`, que en aislado caben en los 576 / 574 ciclos de una llamada sin hook.
+- Objdump (`docs/gpio_f1a_objdump_04dd971.txt`, `t3_burst` y `t4_sample` de la imagen `selftest-gpio` de CM7):
+  - `Set`, `Reset`, `Write` y `WritePort` son un solo `str` al desplazamiento 24 (`BSRR`), también dentro de los bucles.
+  - `Toggle` es un `ldr` del desplazamiento 20 (`ODR`) y un `str` al 24.
+  - `Read` y `ReadPort` son un `ldr` del desplazamiento 16 (`IDR`).
+- Propuesta para F1b: `SHARED_GPIO_LOCK_US` = 20 µs. La retención máxima medida es 1,36 µs (CM4) y 20 µs le da un margen de 14,7×. Son 8000 ciclos en CM7 y 4000 en CM4. El hook de prueba de F1a usó 100 µs (`T15_HOOK_LIMIT_CYCLES` 40000 / 20000, con la justificación escrita en los dos `gpio_selftest.c`), y no hubo ningún TIMEOUT en 400 000 llamadas.
+
+### 5.5 Desviaciones del plan
+
+| Qué dice el plan / F1A | Qué hice | Por qué | ¿Consultado? |
+| --- | --- | --- | --- |
+| `ConfigAlternate` es "envoltura de `ConfigAlternateEx(…, OTYPE_PP, …)`"; G9: "la legacy no cambia" | Las dos legacy llaman a `GPIO_BM_ConfigPin` con `allow_debug_pins = true` | `ConfigAlternateEx` rechaza PA13/PA14, y como envoltura suya la legacy dejaría de aceptarlos, en contra de G9 y C2 | No; anotado en 5.7 |
+| T8: dos transiciones con cambio de nivel y un control "orden ingenuo con ODR opuesto" | Casos A/B (un flanco), C/D (mismo nivel con ODR viejo: cero flancos) y E (C en orden ingenuo: pulso) | Con los casos que lista el plan, el orden ingenuo da un solo flanco y el control no puede fallar | Sí, con el responsable, 2026-09-29 |
+| T9: medida del t<sub>r</sub> 10–90 % | Cada flanco se reconstruye con sinc (Lanczos a=6, ×20) antes de medir; mismo umbral y mismos 10 flancos | Con interpolación lineal, el resultado depende de la fase de muestreo (sesión `52359ee`) | Sí, con el responsable, 2026-09-29 |
+| §2.4: la versión del protocolo pasa a 2 en la extensión del banco | Pasó a 2 en `4803718`, el primer commit que cambia la tabla (pasos sin AD2) | Un cambio de tabla con la misma versión es lo que dejó capturas v1 incompatibles en F0 | No |
+| La tabla de protocolo lista cada ítem | Nueva columna `repeat`: T4 son 2 × 256 estrobos y T9 4 × 10 flancos. El host y el modelo la expanden; `bench_get_expected_primitive` la cuenta | Evitar ~600 filas idénticas | No |
+| S5 punto 2: "pone OE = 0 con read-back y da un pulso en HOST_REQ" | T4 y T7 terminan con un HS_HOST (`step31_released`, `step32_released`) después de `OE = 0` | Hace explícito en la tabla ese pulso final | No |
+| S5 punto 1: el MCU lee también su IDR | Los pasos 30–32 usan `bench_buschk()`, que aborta si IDR no da 0xFF/0x00 | Lo pide el plan; los pasos 8 y 9 de F0 no lo hacían | No |
+| T15 de F1A: fases (a)–(g) | CM4 ejecuta trabajos (`GPIO_ST_CMD_*`) que CM7 le pide por `cmd`/`ack` en SRAM4. En (f)/(g), TIM17 de CM7 a 20 kHz reconfigura PF6 | CM4 necesita varias fases coordinadas; TIM17 no lo usa ninguna otra prueba ni la producción | No |
+| T1 en los dos núcleos | Mientras CM4 hace T1 y T2, CM7 queda aparcado con PRIMASK | La foto de CM4 abarca todos los puertos, y el LED y la red de CM7 escriben GPIO | No |
+| T18: "códigos LED de arranque correctos" | No ejercitado | No hay evidencia cruda posible por consola, y la referencia de F0 tampoco la tiene (hallazgo B5 de F0) | No |
+
+### 5.6 Respuesta a la auditoría n
+
+No aplica: F1a no ha tenido auditoría.
+
+### 5.7 Erratas del plan encontradas
+
+| Sección del plan | Qué dice | Qué es correcto | Fuente |
+| --- | --- | --- | --- |
+| T8, columna Control | "Orden ingenuo (MODER primero, 1 µs y luego BSRR) con ODR opuesto: el LA tiene que ver el pulso", para PD→alta y PU→baja | En esos dos casos el orden ingenuo da un solo flanco. Solo hay pulso cuando el nivel de partida es igual al de destino y el ODR es opuesto; hacen falta los casos C/D/E | Razonamiento sobre MODER/ODR; sesión `ededa84`: E da 2 transiciones y A/B, 1 |
+| Contrato F1a, `ConfigAlternate` | "Envoltura de `ConfigAlternateEx(…, OTYPE_PP, …)`" | Choca con G9 ("la legacy no cambia"), porque `ConfigAlternateEx` rechaza PA13/PA14 | `gpio_bm.c`, `GPIO_BM_ConfigAlternate` |
+| T9, puerta | tr(LOW) − tr(VERY_HIGH) > 5σ con 10 flancos | Con el ancho de banda del AD2 (~30 MHz) la diferencia es de 2–3 ns y la dispersión por flanco de 0,7–1,4 ns. Con 10 flancos, 5σ queda en 1,6–2,8 ns: PF15 pasa y PF14 no. No lo resuelvo yo: cambiaría un criterio | `gpio_f1a_selftest_ededa84.txt` |
+| T5, referencia | R<sub>IN</sub> ≈ 361 kΩ ("no el 1 MΩ nominal del AD2") | En mis dos sesiones R<sub>IN</sub> sale 1058,6k y 1054,4k (V_NP15 3,235 V frente a 3,101 V de la referencia). R_PU y R_PD quedan dentro de 30–50k. La diferencia puede venir del rango del scope (uso 10 V en DC); no lo he comprobado | `gpio_f1a_selftest_52359ee.txt`, `_ededa84.txt` |
+| Gate de F1a (E8) | El `.map` de producción solo cambia en `gpio_bm.c.obj` (prj_04) | Se cumple en prj_04. `prj_01`, `prj_02` y `prj_03` también enlazan `gpio_bm.c` y crecen (5.2), sin cambios en sus fuentes | `docs/gpio_f1a_build_f44af1a.txt` |
+
+### 5.8 Problemas abiertos y no ejercitado
+
+- **T9 PF14 no pasa la puerta** (2,36 ns frente a 5σ = 2,76 ns). Está parado, a la espera de decisión (F1A §6).
+- **Falta la segunda ejecución completa** de §2.5 (`_2`), también por la parada de T9.
+- Sin prueba propia en la placa: `GPIO_BM_ReadConfig`; la ruta ERR_BUSY (el hook no falló nunca); `GPIO_BM_LockPins` sobre un puerto ya bloqueado; el orden "MODER analógico primero" de `GPIO_BM_DeinitPin` (no hay captura de LA); `SectionEnter`/`SectionExit` llamadas directamente (solo a través de `ConfigPin`).
+- ERR_VERIFY sí aparece en la placa: en T15 (d), CM7 devolvió 6305 ERR_VERIFY por escrituras que pisó CM4.
+- Mutaciones de §5 que no probé: C10 "hook sin llamar", C11 "MODER antes que BSRR" (solo en el modelo, `bench_fault = "t8_glitch"`) y las dos de C12.
+- La captura del arnés `gpio_f1a_unittest_f44af1a.txt` tiene una omisión por un defecto del selector (corregido en `04dd971`). La vigente es `gpio_f1a_unittest_257af46.txt`.
+- Las capturas `gpio_f1a_selftest_adc_*` y `gpio_f1a_selftest_uart_*` comparten prefijo con las del banco. El selector ya las distingue por el banner, pero el nombre induce a error.
+
+### Salida de §0 (árbol limpio), antes de este commit del informe
+
+```text
+$ git status --short
+<salida vacía>
+$ git ls-files -v | grep -E '^[a-zS]'
+<salida vacía>
+```
+
+### Decisiones abiertas usadas (F1a)
+
+| # | Opción usada | Consultada |
+| --- | --- | --- |
+| 1 | `GpioBm_Status_t` en la API nueva | Por defecto (F1A §0.3) |
+| 2 | Hook sobre `HSEM_BM_TakeTimeout` con límite medido | Por defecto (F1A §0.3) |
+| 5 | PA13/PA14 rechazados sin `allow_debug_pins` | Por defecto (F1A §0.3) |
+
+### Identificadores citados en esta sección
+
+Cada nombre entre comillas invertidas de la sección F1a, salvo los hashes de commit (comprobados con `git cat-file -e`: todos existen) y el término genérico .map. Los nombres de código se comprueban con `git grep -c -F` (suma de coincidencias), los archivos con `git ls-files`, la rama con `git branch --list`, y los artefactos de build, que no se versionan, en disco y en `build/release/cm4_firmware.map`. Ninguno da 0.
+
+| Identificador | Comprobaci�n | Resultado |
+| --- | --- | --- |
+| `gpio_f1a_selftest_ededa84.txt` | archivo (git ls-files) | 1 |
+| `[OK]` | git grep -c | 14216 |
+| `driver/gpio` | rama (git branch --list) | 2 |
+| `selftest-gpio` | git grep -c | 946 |
+| `cmake/common_flags.cmake:20` | archivo (git ls-files) | 5 |
+| `docs/gpio_f1a_build_f44af1a.txt` | archivo (git ls-files) | 1 |
+| `arm-none-eabi-size` | git grep -c | 5 |
+| `docs/gpio_f0_build_9209955.txt` | archivo (git ls-files) | 1 |
+| `gpio_bm.c` | archivo (git ls-files) | 1 |
+| `prj_01` | git grep -c | 55 |
+| `prj_02` | git grep -c | 58 |
+| `prj_03` | git grep -c | 59 |
+| `stm32h7_driver_adc` | git grep -c | 24 |
+| `CM4/CMakeLists.txt:95` | archivo (git ls-files) | 4 |
+| `adc_*` | archivos (git ls-files, patrón) | 250 |
+| `GPIO_BM_ConfigAnalog` | git grep -c | 25 |
+| `gpio_bm.c.obj` | git grep -c | 16 |
+| `tools/map_diff.py` | archivo (git ls-files) | 1 |
+| `docs/gpio_f1a_mapdiff_04dd971.txt` | archivo (git ls-files) | 1 |
+| `GPIO_BM_EnablePortClock` | git grep -c | 29 |
+| `led_bm.c` | archivo (git ls-files) | 2 |
+| `.bss` | git grep -c | 568 |
+| `s_section_depth` | git grep -c | 6 |
+| `s_shared_lock` | git grep -c | 4 |
+| `.bss.s_section_depth` | secci�n en build/release/cm4_firmware.map | 1 |
+| `.bss.s_shared_lock` | secci�n en build/release/cm4_firmware.map | 1 |
+| `build/release/cm4_firmware.map` | artefacto de build, no versionado (existe en disco en prj_04) | 1 |
+| `.text*` | prefijo de sección en build/release/cm4_firmware.map | 822 |
+| `.rodata*` | prefijo de sección en build/release/cm4_firmware.map | 16 |
+| `.data*` | prefijo de sección en build/release/cm4_firmware.map | 163 |
+| `.bss*` | prefijo de sección en build/release/cm4_firmware.map | 180 |
+| `COMMON` | git grep -c | 411 |
+| `gpio_bm.[ch]` | git grep -c | 11 |
+| `"stm32h7xx.h"` | git grep -c | 58 |
+| `GPIOA..GPIOK` | git grep -c | 13 |
+| `_Static_assert` | git grep -c | 43 |
+| `GPIOB` | git grep -c | 206 |
+| `GPIOAEN..GPIOKEN` | git grep -c | 4 |
+| `docs/gpio_f1a_selftest_ededa84.txt` | archivo (git ls-files) | 1 |
+| `docs/gpio_f1a_selftest_52359ee.txt` | archivo (git ls-files) | 1 |
+| `Rev` | git grep -c | 3706 |
+| `t15_locked_calls` | git grep -c | 6 |
+| `RCC_AHB4ENR` | git grep -c | 34 |
+| `HAL_GPIO_Init` | git grep -c | 154 |
+| `k_rm_fields` | git grep -c | 2 |
+| `T3_EXPECTED` | git grep -c | 6 |
+| `zlib.crc32` | git grep -c | 2 |
+| `LockPins` | git grep -c | 28 |
+| `ConfigOutput` | git grep -c | 81 |
+| `DeinitPin` | git grep -c | 37 |
+| `ConfigAnalog` | git grep -c | 46 |
+| `IsLocked` | git grep -c | 30 |
+| `docs/gpio_f1a_unittest_257af46.txt` | archivo (git ls-files) | 1 |
+| `docs/gpio_f1a_table_checks_f88925f.txt` | archivo (git ls-files) | 1 |
+| `debug` | git grep -c | 3612 |
+| `WAVE` | git grep -c | 213 |
+| `gpio_f1a_t18_adf40f0_wave.txt` | archivo (git ls-files) | 1 |
+| `net_check` | git grep -c | 36 |
+| `_net.txt` | archivo (git ls-files) | 2 |
+| `_console.txt` | archivo (git ls-files) | 2 |
+| `cpu2_wake_count` | git grep -c | 9 |
+| `_swd.txt` | archivo (git ls-files) | 2 |
+| `gpio_f1a_selftest_adc_429c49e.txt` | archivo (git ls-files) | 1 |
+| `gpio_f1a_selftest_uart_c77a68a.txt` | archivo (git ls-files) | 1 |
+| `build/debug/CM7/cm7_firmware.elf` | artefacto de build, no versionado (existe en disco en prj_04) | 1 |
+| `m4_to_m7` | git grep -c | 55 |
+| `m7_adc_lock_fail_count` | git grep -c | 6 |
+| `m4_adc_lock_fail_count` | git grep -c | 6 |
+| `m7_adc_lock_hold_cycles_max` | git grep -c | 8 |
+| `m4_adc_lock_hold_cycles_max` | git grep -c | 4 |
+| `docs/gpio_f1a_dev_*_b52ffec-dirty.txt` | archivos (git ls-files, patrón) | 3 |
+| `__disable_irq()` | git grep -c | 52 |
+| `GPIO_BM_SectionEnter` | git grep -c | 8 |
+| `gpio_f1a_dev_mutation_no_primask_b52ffec-dirty.txt` | archivo (git ls-files) | 1 |
+| `GPIO_BM_ConfigPin` | git grep -c | 46 |
+| `gpio_f1a_dev_mutation_clock_first_b52ffec-dirty.txt` | archivo (git ls-files) | 1 |
+| `SectionEnter` | git grep -c | 18 |
+| `SectionExit` | git grep -c | 14 |
+| `docs/gpio_f1a_objdump_04dd971.txt` | archivo (git ls-files) | 1 |
+| `t3_burst` | git grep -c | 21 |
+| `t4_sample` | git grep -c | 11 |
+| `Set` | git grep -c | 12055 |
+| `Reset` | git grep -c | 7873 |
+| `Write` | git grep -c | 1912 |
+| `WritePort` | git grep -c | 340 |
+| `str` | git grep -c | 17996 |
+| `BSRR` | git grep -c | 302 |
+| `Toggle` | git grep -c | 405 |
+| `ldr` | git grep -c | 1853 |
+| `ODR` | git grep -c | 538 |
+| `Read` | git grep -c | 3290 |
+| `ReadPort` | git grep -c | 304 |
+| `IDR` | git grep -c | 1558 |
+| `SHARED_GPIO_LOCK_US` | git grep -c | 6 |
+| `T15_HOOK_LIMIT_CYCLES` | git grep -c | 4 |
+| `gpio_selftest.c` | archivo (git ls-files) | 2 |
+| `ConfigAlternate` | git grep -c | 48 |
+| `ConfigAlternateEx` | git grep -c | 9 |
+| `repeat` | git grep -c | 857 |
+| `bench_get_expected_primitive` | git grep -c | 3 |
+| `step31_released` | git grep -c | 2 |
+| `step32_released` | git grep -c | 2 |
+| `bench_buschk()` | git grep -c | 3 |
+| `GPIO_ST_CMD_*` | git grep -c del prefijo `GPIO_ST_CMD_` | 36 |
+| `cmd` | git grep -c | 171 |
+| `ack` | git grep -c | 18436 |
+| `GPIO_BM_ConfigAlternate` | git grep -c | 40 |
+| `gpio_f1a_selftest_52359ee.txt` | archivo (git ls-files) | 1 |
+| `_ededa84.txt` | archivo (git ls-files) | 1 |
+| `_2` | git grep -c | 3153 |
+| `GPIO_BM_ReadConfig` | git grep -c | 5 |
+| `GPIO_BM_LockPins` | git grep -c | 10 |
+| `GPIO_BM_DeinitPin` | git grep -c | 15 |
+| `ConfigPin` | git grep -c | 90 |
+| `gpio_f1a_unittest_f44af1a.txt` | archivo (git ls-files) | 1 |
+| `gpio_f1a_unittest_257af46.txt` | archivo (git ls-files) | 1 |
+| `gpio_f1a_selftest_adc_*` | archivos (git ls-files, patrón) | 1 |
+| `gpio_f1a_selftest_uart_*` | archivos (git ls-files, patrón) | 1 |
+| `GpioBm_Status_t` | git grep -c | 49 |
+| `HSEM_BM_TakeTimeout` | git grep -c | 27 |
+| `allow_debug_pins` | git grep -c | 20 |
