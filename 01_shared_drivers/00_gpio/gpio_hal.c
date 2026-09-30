@@ -223,14 +223,17 @@ HAL_StatusTypeDef GPIO_HAL_LockPins(GPIO_TypeDef *port, uint32_t mask)
     }
 
     lckr = port->LCKR;
-    if ((lckr & GPIO_LCKR_LCKK) != 0UL)
+    const bool already = (lckr & GPIO_LCKR_LCKK) != 0UL;
+    if (already && ((lckr & mask) == mask))
     {
-        /* Frozen until reset. HAL_GPIO_LockPin would "succeed" here for any mask. */
-        GPIO_BM_SectionExit(&section);
-        return ((lckr & mask) == mask) ? HAL_OK : HAL_ERROR;
+        GPIO_BM_SectionExit(&section);   /* nothing to add */
+        return HAL_OK;
     }
 
-    const HAL_StatusTypeDef hs = HAL_GPIO_LockPin(port, (uint16_t)mask);
+    /* As GPIO_BM_LockPins: the locked pins stay in the sequence, the
+       read-back decides (HAL_GPIO_LockPin itself only looks at LCKK). */
+    const uint32_t pins = (already ? (lckr & 0xFFFFUL) : 0UL) | mask;
+    const HAL_StatusTypeDef hs = HAL_GPIO_LockPin(port, (uint16_t)pins);
     lckr = port->LCKR;
 
     GPIO_BM_SectionExit(&section);

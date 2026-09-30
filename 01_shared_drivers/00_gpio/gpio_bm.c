@@ -488,19 +488,24 @@ GpioBm_Status_t GPIO_BM_LockPins(GPIO_TypeDef *port, uint32_t mask)
     }
 
     uint32_t lckr = port->LCKR;
-    if ((lckr & GPIO_LCKR_LCKK) != 0UL)
+    const bool     already = (lckr & GPIO_LCKR_LCKK) != 0UL;
+    if (already && ((lckr & mask) == mask))
     {
-        /* Already locked: LCKR is frozen until reset and the sequence would
-           be ignored. Either the pins are among the locked ones or not. */
-        GPIO_BM_SectionExit(&section);
-        return ((lckr & mask) == mask) ? GPIO_BM_OK : GPIO_BM_ERR_LOCKED;
+        GPIO_BM_SectionExit(&section);   /* nothing to add */
+        return GPIO_BM_OK;
     }
 
-    /* RM0399 12.4.8: the write sequence must not be interrupted and every
-       access is a 32-bit word (LCKR is declared as a 32-bit volatile). */
-    const uint32_t key = GPIO_LCKR_LCKK | mask;
+    /* On a port already locked the sequence is run again with the pins
+       already locked kept in it. RM0399 12.4.8 says LCKy can only be written
+       while LCKK = 0; on Rev V silicon a second sequence does add pins
+       (measured: PF7|PF8, then PF6 -> LCKR 0x000101C0). Either way the
+       read-back below decides, so the result is honest on any revision (C12).
+       RM0399 12.4.8: the sequence must not be interrupted and every access is
+       a 32-bit word (LCKR is declared as a 32-bit volatile). */
+    const uint32_t pins = (already ? (lckr & 0xFFFFUL) : 0UL) | mask;
+    const uint32_t key  = GPIO_LCKR_LCKK | pins;
     port->LCKR = key;
-    port->LCKR = mask;
+    port->LCKR = pins;
     port->LCKR = key;
     lckr = port->LCKR;
     (void)lckr;

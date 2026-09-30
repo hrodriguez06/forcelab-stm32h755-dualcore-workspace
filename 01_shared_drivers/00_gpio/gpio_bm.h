@@ -215,9 +215,13 @@ static inline uint32_t GPIO_BM_ReadPort(const GPIO_TypeDef *p)
   *         (RM0399 12.3.6 and 12.4.8): LCKK=1|mask, mask, LCKK=1|mask, read,
   *         and a read of LCKK, all as 32-bit accesses inside the section.
   * @retval GPIO_BM_OK when LCKK reads 1 and every pin of `mask` reads locked;
-  *         GPIO_BM_ERR_VERIFY when not; GPIO_BM_ERR_LOCKED when the port was
-  *         already locked without every pin of `mask` (LCKR is frozen until
-  *         reset); GPIO_BM_ERR_PARAM for a bad port or a mask of 0 or > 16 bits.
+  *         GPIO_BM_ERR_VERIFY when not; GPIO_BM_ERR_PARAM for a bad port or a
+  *         mask of 0 or > 16 bits; GPIO_BM_ERR_BUSY from the cross-core hook.
+  * @note   On a port that is already locked, the pins already locked are kept
+  *         in the sequence and the result is judged by the read-back only.
+  *         RM0399 12.4.8 says LCKy can only be written while LCKK = 0, but on
+  *         Rev V silicon a second sequence adds pins (00_gpio/README.md, T16).
+  *         When every pin of `mask` is already locked, nothing is written.
   */
 GpioBm_Status_t GPIO_BM_LockPins(GPIO_TypeDef *port, uint32_t mask);  /* LCKK sequence, word accesses, LCKK read back */
 bool            GPIO_BM_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);

@@ -103,9 +103,10 @@ HAL_StatusTypeDef GPIO_HAL_DeinitPin(GPIO_TypeDef *port, uint32_t pin_idx);
 
 /**
   * @brief  HAL_GPIO_LockPin() inside the section. HAL_OK only when LCKK reads 1
-  *         and every pin of `mask` reads locked; on a port that was already
-  *         locked, HAL_OK only when those pins are among the locked ones
-  *         (HAL_GPIO_LockPin alone returns HAL_OK there regardless).
+  *         and every pin of `mask` reads locked. HAL_GPIO_LockPin alone checks
+  *         only LCKK, which any earlier lock of the port already set, so its
+  *         HAL_OK says nothing about the pins asked for. On a locked port the
+  *         locked pins are kept in the sequence, as in GPIO_BM_LockPins().
   */
 HAL_StatusTypeDef GPIO_HAL_LockPins(GPIO_TypeDef *port, uint32_t mask);
 

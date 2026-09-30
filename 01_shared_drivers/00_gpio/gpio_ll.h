@@ -81,8 +81,9 @@ GpioBm_Status_t GPIO_LL_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, G
 
 /**
   * @brief  LCKK sequence with LL_GPIO_LockPin() inside the section, then a read of LCKK.
-  *         Same statuses as GPIO_BM_LockPins(): OK, ERR_VERIFY, ERR_LOCKED (the port
-  *         was already locked without every pin of `mask`), ERR_PARAM, ERR_BUSY.
+  *         Same behaviour and statuses as GPIO_BM_LockPins(): OK, ERR_VERIFY,
+  *         ERR_PARAM, ERR_BUSY; on a locked port the locked pins are kept in the
+  *         sequence and the read-back decides.
   */
 GpioBm_Status_t GPIO_LL_LockPins(GPIO_TypeDef *port, uint32_t mask);
 

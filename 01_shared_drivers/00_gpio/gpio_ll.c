@@ -288,16 +288,17 @@ GpioBm_Status_t GPIO_LL_LockPins(GPIO_TypeDef *port, uint32_t mask)
         return st;
     }
 
-    if (LL_GPIO_IsAnyPinLocked(port) != 0UL)
+    const bool already = LL_GPIO_IsAnyPinLocked(port) != 0UL;
+    if (already && (LL_GPIO_IsPinLocked(port, mask) != 0UL))
     {
-        /* LCKR is frozen until reset: the sequence would be ignored. */
-        const bool covered = LL_GPIO_IsPinLocked(port, mask) != 0UL;
-        GPIO_BM_SectionExit(&section);
-        return covered ? GPIO_BM_OK : GPIO_BM_ERR_LOCKED;
+        GPIO_BM_SectionExit(&section);   /* nothing to add */
+        return GPIO_BM_OK;
     }
 
-    /* RM0399 12.4.8: three word writes and a read, uninterrupted (the section). */
-    LL_GPIO_LockPin(port, mask);
+    /* As GPIO_BM_LockPins: on a locked port the locked pins stay in the
+       sequence and the read-back decides. Three word writes and a read,
+       uninterrupted (the section), RM0399 12.4.8. */
+    LL_GPIO_LockPin(port, (already ? (READ_REG(port->LCKR) & 0xFFFFUL) : 0UL) | mask);
     lckr = READ_REG(port->LCKR);
 
     GPIO_BM_SectionExit(&section);
