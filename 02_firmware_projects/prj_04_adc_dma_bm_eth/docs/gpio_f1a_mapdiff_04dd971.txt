@@ -1,0 +1,37 @@
+# implementer, F1a (E8): per-object .map diff, production F0 (c1653c6) vs F1a
+# F0 maps: build/<preset>/cm{7,4}_firmware.map built at c1653c6 (clean checkout, same toolchain), kept aside
+# F1a maps: build/<preset>/cm{7,4}_firmware.map from tools/build_all.ps1 -Clean at f44af1a (gpio_bm.[ch] unchanged since b52ffec)
+# command: py tools/map_diff.py <F0 map> <F1a map>   (method in the tool's docstring)
+
+######## debug cm7
+old: C:\Users\hrodriguez\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\0a406649-a308-402a-bb19-3556f31e2b5a\scratchpad\maps\c1653c6_debug_cm7.map
+new: build\debug\cm7_firmware.map
+object                                                                            text          data           bss
+CM7/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c.obj                           64->92             0             0
+TOTAL                                                                  122452-> 122480 145->  145 76693->76693
+objects changed: 1
+
+######## debug cm4
+old: C:\Users\hrodriguez\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\0a406649-a308-402a-bb19-3556f31e2b5a\scratchpad\maps\c1653c6_debug_cm4.map
+new: build\debug\cm4_firmware.map
+object                                                                            text          data           bss
+CM4/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c.obj                         114->896             0          0->8
+TOTAL                                                                  10182->  10964 17->   17 2296-> 2304
+objects changed: 1
+
+######## release cm7
+old: C:\Users\hrodriguez\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\0a406649-a308-402a-bb19-3556f31e2b5a\scratchpad\maps\c1653c6_release_cm7.map
+new: build\release\cm7_firmware.map
+object                                                                            text          data           bss
+CM7/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c.obj                           68->72             0             0
+TOTAL                                                                  117450-> 117454 145->  145 76693->76693
+objects changed: 1
+
+######## release cm4
+old: C:\Users\hrodriguez\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\0a406649-a308-402a-bb19-3556f31e2b5a\scratchpad\maps\c1653c6_release_cm4.map
+new: build\release\cm4_firmware.map
+object                                                                            text          data           bss
+CM4/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c.obj                         148->688             0          0->8
+TOTAL                                                                  9760->  10300 17->   17 2296-> 2304
+objects changed: 1
+
