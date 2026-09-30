@@ -1,0 +1,17 @@
+R2-a binary compare: prj_01 selftest-gpio built in two clean worktrees, C:\wt_a at 25b6a45 (before R2-a) and C:\wt_b at 88b0cba (R2-a), both configured with 'cmake -C init.cmake --preset selftest-gpio', init.cmake setting CMAKE_C_FLAGS to the value below, so that FW_GIT_REV is the same string in both images.
+wt_a HEAD: 25b6a45, tree: 0 modified tracked files
+CMAKE_C_FLAGS:STRING=-UFW_GIT_REV -DFW_GIT_REV=\"r2acmp0\"
+wt_b HEAD: 88b0cba, tree: 0 modified tracked files
+CMAKE_C_FLAGS:STRING=-UFW_GIT_REV -DFW_GIT_REV=\"r2acmp0\"
+--- CM7/cm7_firmware.bin: sizes 58976 / 58976, sha256:
+07c4b3f9960ccf8cc8561573f3c07bb85a9ca26d58043e21307409bc93db4ed3 *a/03_firmware_templates/prj_01_template_dualcore/build/selftest-gpio/CM7/cm7_firmware.bin
+07c4b3f9960ccf8cc8561573f3c07bb85a9ca26d58043e21307409bc93db4ed3 *b/03_firmware_templates/prj_01_template_dualcore/build/selftest-gpio/CM7/cm7_firmware.bin
+cmp:
+identical
+images containing 'r2acmp0': 1 / 1; containing '25b6a45' or '88b0cba': 0 / 0
+--- CM4/cm4_firmware.bin: sizes 17956 / 17956, sha256:
+6f0e303a9155cdbdfcec6e7f80850907f60e06399d6c4157f07732f568476c20 *a/03_firmware_templates/prj_01_template_dualcore/build/selftest-gpio/CM4/cm4_firmware.bin
+6f0e303a9155cdbdfcec6e7f80850907f60e06399d6c4157f07732f568476c20 *b/03_firmware_templates/prj_01_template_dualcore/build/selftest-gpio/CM4/cm4_firmware.bin
+cmp:
+identical
+images containing 'r2acmp0': 1 / 1; containing '25b6a45' or '88b0cba': 0 / 0
