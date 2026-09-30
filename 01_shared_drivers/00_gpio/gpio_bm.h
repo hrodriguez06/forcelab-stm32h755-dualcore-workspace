@@ -144,6 +144,49 @@ GpioBm_Status_t GPIO_BM_ConfigOutput(GPIO_TypeDef *port, uint32_t pin_idx, uint3
 GpioBm_Status_t GPIO_BM_ConfigInput(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t pull);
 GpioBm_Status_t GPIO_BM_ConfigAlternateEx(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af,
                                           uint32_t otype, uint32_t pull, uint32_t speed);
+/* ---- Pin operations: static inline, no validation --------------------------------
+ * Set, Reset, Write and WritePort are one store to BSRR, which is atomic
+ * (RM0399 12.3.5): no section, safe from both cores and from any ISR.
+ * Toggle is one ODR read and one BSRR store: atomic per store, but two
+ * concurrent togglers of the same pin can both read the same ODR.
+ * Read and ReadPort are one IDR read. Masks above bit 15 are ignored.
+ * ---------------------------------------------------------------------------------- */
+static inline void GPIO_BM_Set(GPIO_TypeDef *p, uint32_t mask)
+{
+    p->BSRR = mask & 0xFFFFUL;
+}
+
+static inline void GPIO_BM_Reset(GPIO_TypeDef *p, uint32_t mask)
+{
+    p->BSRR = (mask & 0xFFFFUL) << 16U;
+}
+
+static inline void GPIO_BM_Toggle(GPIO_TypeDef *p, uint32_t mask)        /* ODR read + one BSRR write */
+{
+    uint32_t odr = p->ODR;
+    p->BSRR = ((odr & mask & 0xFFFFUL) << 16U) | (~odr & mask & 0xFFFFUL);
+}
+
+static inline void GPIO_BM_Write(GPIO_TypeDef *p, uint32_t pin_idx, uint32_t level)
+{
+    p->BSRR = (1UL << (pin_idx & 0xFU)) << ((level != 0U) ? 0U : 16U);
+}
+
+static inline void GPIO_BM_WritePort(GPIO_TypeDef *p, uint32_t mask, uint32_t value)
+{
+    p->BSRR = ((mask & ~value & 0xFFFFUL) << 16U) | (mask & value & 0xFFFFUL);
+}
+
+static inline bool GPIO_BM_Read(const GPIO_TypeDef *p, uint32_t pin_idx)
+{
+    return ((p->IDR >> (pin_idx & 0xFU)) & 1UL) != 0UL;
+}
+
+static inline uint32_t GPIO_BM_ReadPort(const GPIO_TypeDef *p)
+{
+    return p->IDR & 0xFFFFUL;
+}
+
 /* ---- Section and cross-core hook ------------------------------------------------ */
 /* The section covers one pin. PRIMASK is saved and interrupts are masked on
  * the calling core first; only then, at nesting level 1 and when a hook is
