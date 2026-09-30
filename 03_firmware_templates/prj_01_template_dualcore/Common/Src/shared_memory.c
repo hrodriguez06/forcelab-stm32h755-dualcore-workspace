@@ -45,3 +45,41 @@ void Shared_Init(void)
     g_shared.magic = SHARED_MAGIC;
     __DSB();
 }
+
+/* ---- 00_gpio cross-core lock hook ------------------------------------------ */
+
+#if defined(CORE_CM4)
+#define SHARED_GPIO_LOCK_CYCLES   SHARED_GPIO_LOCK_CYCLES_CM4
+#define SHARED_GPIO_FAIL_COUNT    g_shared.m4_gpio_lock_fail_count
+#else
+#define SHARED_GPIO_LOCK_CYCLES   SHARED_GPIO_LOCK_CYCLES_CM7
+#define SHARED_GPIO_FAIL_COUNT    g_shared.m7_gpio_lock_fail_count
+#endif
+
+/* Called by gpio_bm with this core's interrupts already masked, at nesting
+   level 1 only, so this core never holds the 1-step lock twice and
+   TakeTimeout never sees BUSY_SELF because of the driver. CYCCNT keeps
+   counting with PRIMASK set, so the bound holds inside the section. */
+static bool shared_gpio_lock(void *ctx)
+{
+    (void)ctx;
+    if (HSEM_BM_TakeTimeout(BOARD_GPIO_HSEM_ID, 0U, SHARED_GPIO_LOCK_CYCLES) == HSEM_BM_OK)
+    {
+        return true;
+    }
+    SHARED_GPIO_FAIL_COUNT++;   /* this core's own counter: no cross-core RMW */
+    return false;
+}
+
+static void shared_gpio_unlock(void *ctx)
+{
+    (void)ctx;
+    (void)HSEM_BM_Release(BOARD_GPIO_HSEM_ID, 0U);
+}
+
+const GpioBm_SharedLock_t g_shared_gpio_lock = { shared_gpio_lock, shared_gpio_unlock, NULL };
+
+void Shared_GpioLockInstall(void)
+{
+    GPIO_BM_SetSharedLock(&g_shared_gpio_lock);
+}

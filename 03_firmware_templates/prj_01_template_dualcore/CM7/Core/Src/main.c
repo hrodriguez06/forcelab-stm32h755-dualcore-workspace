@@ -95,6 +95,13 @@ int main(void)
     Shared_Init();
 
 #if CM4_BOOT_ENABLED
+    /* From the release on, both cores can configure pins, and the GPIO
+       configuration registers have one copy for both: every write of
+       gpio_bm/_ll/_hal on this core takes the cross-core lock from here on.
+       HSEM_BM_Init() and the DWT timebase are already running, and the cycle
+       limit assumes the 400 MHz clock set just above. */
+    Shared_GpioLockInstall();
+
     /* The clock tree is up and shared memory is ready: release CPU2. */
     if (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) != HSEM_BM_OK)
     {

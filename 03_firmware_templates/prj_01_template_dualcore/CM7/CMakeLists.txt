@@ -99,6 +99,7 @@ target_link_libraries(${TARGET} PRIVATE
     stm32h7_driver_led
     stm32h7_driver_uart
     stm32h7_driver_hsem_bm
+    stm32h7_driver_gpio_bm      # the cross-core GPIO lock hook in shared_memory.c
 )
 
 set_target_properties(${TARGET} PROPERTIES
