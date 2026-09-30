@@ -17,7 +17,8 @@ Status: phase F1 of the implementation plan (removed, see
 deferred (F3–F4). Validated on a
 NUCLEO-H755ZI-Q (silicon Rev V, `REV_ID = 0x2003`) on 2026-09-30, in
 `prj_01_template_dualcore` only, with an Analog Discovery 2. Two complete runs
-at `7456494` pass: see [section 9](#9-validation). **EXTI and the compensation
+at `7456494` pass, and one at `b45120e`, where only the host tools changed: see
+[section 9](#9-validation). **EXTI and the compensation
 cell (F2) are not implemented.** A code audit on 2026-09-30 (of `cc1ee88`) found
 no blocking defect; its findings A1–A7 and their fixes are in
 [section 12](#12-findings). The fixes were then run on the bench, where the
@@ -38,10 +39,13 @@ which `run_warm_resets.py` checks in every reset. Which captures carry a build
 id: the `selftest-gpio` captures from `663ae65` on, and the production
 warm-reset captures from `7456494` on; every earlier capture identifies its
 image only by `Rev` or by the host's `HEAD` (§9.3). A fourth re-audit at
-`7fc7ad2` confirmed them and left two low, non-blocking findings on
+`7fc7ad2` confirmed them and found two low, non-blocking findings on
 development runs, R4-a and R4-b
-([section 12.6](#126-re-audit-4-r4-a-r4-b-2026-09-30-at-7fc7ad2)). This
-driver has had no independent bench audit.
+([section 12.6](#126-re-audit-4-r4-a-r4-b-2026-09-30-at-7fc7ad2)), both closed
+at `b45120e` in the host tools only: under `--allow-dirty` both cores must
+still be one build of the host's commit, and the host tools record their
+arguments (the captures from `674e8ad` on). No finding is open. This driver
+has had no independent bench audit.
 
 ---
 
@@ -496,6 +500,17 @@ counts.
 
 ### 9.1 Tests (runs at `7456494`; one value means both runs gave it)
 
+**At `b45120e` (R4-a, R4-b), one run.** After `08627cf` only
+`tools/gpio_hw_check.py` and `tools/run_warm_resets.py` changed (`git diff
+--stat 08627cf b45120e`): nothing under `CM7/`, `CM4/`, `Common/`, `cmake/` or
+`01_shared_drivers/*.c|h`. The firmware source is therefore the one of
+`7456494`, validated by the two runs below, and one clean run at `b45120e`
+(`gpio_selftest_b45120e.txt`) is enough to check the new host checks on it:
+FW and HOST VERDICT=PASS (38/38), `[host] argv:` and `[host] options:` lines,
+host = CM7 = CM4 = `4ad009a847fe1d89`, seed `0xC4F59360`, `c_raw_both`
+58 959, B1 12.15×. For the same reason `build_all` and the warm resets were
+not repeated.
+
 | Test | What it proves | Negative control | Result |
 | :--- | :--- | :--- | :--- |
 | T1 | Refusals of each tier on both cores: exact status; snapshot of every clocked port and both `RCC_AHB4ENR` banks unchanged. Includes a batch with a bad third entry and a mask with PA0 next to PA13 | A valid call of the same tier changes the snapshot | 45 BM / 32 LL / 35 HAL refusals per core, 0 failures |
@@ -517,6 +532,7 @@ counts.
 | T16 | Locked pins refuse every tier (config, deinit, legacy) with `MODER` unchanged; a locked port gets more pins from each tier; LL on GPIOJ, HAL on GPIOK | PF6, then PF3, stay free and configurable | `LCKR` `0x00010180` → `0x000101F0`; GPIOJ/GPIOK `0x00010003` |
 | T16 A1 | GPIOK unclocked in both banks, PK5 locked next to PK0/PK1 (`LCKR = 0x00010023`), PK3 in analog. (C, R1) `GPIO_BM_IsPortClocked` false; BM and LL `ReadConfig` of PK3 → `GPIO_BM_ERR_NO_CLOCK`, with their 0xA5-filled structs unchanged byte for byte. (A) `GPIO_HAL_Init(PK3\|PK5)` → `HAL_ERROR`, `MODER` and `LCKR` unchanged, and the port clocked after the call (reset `MODER` = `0xFFFFFFFF` = the unclocked read). (B) PK3 alone → `HAL_OK`, PK3 an output. The unclocked read is printed: the code before A1 fails (A) if it reads 0 and (B) if it reads all ones. Oracle of `IsPortClocked`: a raw read of both RCC banks | (C) control, clocked after (A): `IsPortClocked` true, both `ReadConfig` OK, PK3 analog and no pull. Mutation M-A1 (no clock before the `LCKR` check): (B) `HAL_ERROR`, PK3 not written. Mutation M-R1 (no clock check in BM `ReadConfig`, at `fa44386`): (C) fails, BM returns OK and overwrites its sentinel | Unclocked `LCKR` reads `0xFFFFFFFF`, `IsLocked` PK3 = PK5 = 1; (A), (B) and (C) pass; M-R1: the only failure of its run. At `8b8919a` the step still required a 0 read and failed on that premise only |
 | Build id (R3-a, R3-b) | The image is the one this checkout and `build/selftest-gpio` build: the host computes the id of `generated/fw_build_id.h` (its payload starts with the full `HEAD`), CM7 and CM4 print theirs, and the `Rev` of CM7 without `-dirty` must equal the host's `HEAD`, all before S8. Oracle: the id recomputed with `git`, `printf` and `sha256sum` | (1) An image built with `-DGST_RACE_SEED` against a build dir back to clean flags (at `663ae65`). (2) An edit after `cmake --preset`, built without reconfiguring (at `663ae65`). (3) The image of `HEAD~1` (`a97973c`) run from `HEAD`, with and without `--allow-dirty` | `991971a381ccb862` on host, CM7 and CM4 in both runs, equal to the recomputed id; (1) aborted, `3c889d2e7e66805d` against `dbcf810508d80301`; (2) `663ae65-dirty`, `f37405fc05564ac0`; (3) aborted by R3-b before S8 both times, `OE=0x0000` throughout |
+| `--allow-dirty` (R4-a, at `b45120e`) | Under `--allow-dirty` the two cores are still one build of the host's commit: the same `Rev`, the same id (never `unknown`), and base = `HEAD` for each, all before S8. The flag waives only a `-dirty` `Rev` and a host id that differs from the image's | (5) CM7 of `b45120e` with CM4 of `674e8ad` (`HEAD~1`), `--allow-dirty`. Positive control: a comment edited in `Common/`, both cores flashed, `--allow-dirty` | (5) aborted before S8 by R4-a, naming `cm7=b45120e` and `cm4=674e8ad`; `options: allow_dirty=True`; `OE=0x0000` throughout. Positive: both cores `b45120e-dirty`, id `b19f7cef96d5086e`, S8 passed, PASS |
 | Production (R3-c) | 20 warm resets of `debug` and of `release` with the 60 µs limit, `run_warm_resets.py --project --preset`: each reset must show CPU1 and CPU2 with the host's `rev` and id; lock-fail counters by SWD | (4) `release` flashed, checked against `--preset debug`: fails at reset 1. Without the new options the tool keeps its old output | 20/20 "CPU2 alive" and identity PASS in each (`b761febaca21c7b7` debug, `8c71cc7386c89b16` release, both `7456494`); (4) identity FAIL at reset 1, exit 1; `m7/m4_gpio_lock_fail_count` = 0 |
 
 ### 9.2 Measurements (B1)
@@ -560,13 +576,23 @@ host, CM7 and CM4, and since R3-b (`f005eda`) that id covers the commit and the
 host checks `Rev` against its `HEAD` (§9.4). Since R3-c (`7456494`), a
 production warm-reset capture made with `--project --preset` shows both cores'
 `rev` and id in every reset, and the SWD-counter capture names the image of
-each block.
+each block. Since R4-b (`674e8ad`), a `gpio_hw_check.py` capture starts with
+`[host] argv:` and `[host] options:`, and a `run_warm_resets.py` capture with
+`[host] argv:` (plus `[host] options:` with `--project --preset`). **Every
+capture before `674e8ad` has no record of its arguments**: in the two of
+control (3) (`gpio_dev_build_id_old_commit_7456494.txt`, `_allow_dirty.txt`)
+the difference of flag rests on the code, not on the capture.
 Earlier captures identify the image only by `Rev` and the host's tree:
 `gpio_dev_replay_seed_d9d40bdd_fa44386.txt` says `Rev fa44386` and
 `tree clean`, although its image was built with `-DGST_RACE_SEED`.
 
 | File | Content |
 | :--- | :--- |
+| `gpio_selftest_b45120e.txt` | The one run at `b45120e` (§9.1): `argv`/`options` lines, `tree clean`, host = CM7 = CM4 = `4ad009a847fe1d89`, PASS |
+| `gpio_dev_cm4_other_build_allow_dirty_b45120e.txt` | R4-a control (5): CM7 of `b45120e`, CM4 of `674e8ad`, `--allow-dirty` (`allow_dirty=True`): abort before S8 naming both cores' `Rev`, `OE=0x0000` from open to close |
+| `gpio_dev_allow_dirty_positive_b45120e-dirty.txt` | R4-a positive control: a comment edited in `Common/Src/gpio_selftest_common.c` (patch in the capture), both cores `b45120e-dirty` with one id, `--allow-dirty`: S8 passed, PASS |
+| `gpio_dev_flash_cm4_elf_outside_project_b45120e.txt` | Step 2 of control (5) as the instructions gave it: `flash.py --core cm4 --elf <other worktree>` fails in `flash.py` before programming (it prints the ELF relative to its own project root). The same flash state was reached with `flash.py --core cm4` run from the `HEAD~1` worktree |
+| `gpio_warm_resets_compat_no_options_b45120e.txt` | `run_warm_resets.py` without the new options, `--count 2`, `debug` image: the old format plus the `[host] argv:` line |
 | `gpio_selftest_7456494.txt`, `_2.txt` | The two runs of §9.1, built from a clean worktree (`Rev 7456494` = host `HEAD`, `[host] tree clean`, build id `991971a381ccb862` on host, CM7 and CM4) |
 | `gpio_build_id_recompute_7456494.txt` | R3-b: the payload and its SHA-256 recomputed with `git`, `printf` and `sha256sum` for `selftest-gpio`, `debug` and `release`, each equal to `generated/fw_build_id.h` |
 | `gpio_dev_build_id_old_commit_7456494.txt`, `_allow_dirty.txt` | R3-b control (3): the `selftest-gpio` image of `a97973c` (`HEAD~1`) run from `7456494`: abort before S8 by the `Rev` check, with and without `--allow-dirty`; AD2 at `OE=0x0000` from open to close |
@@ -618,14 +644,24 @@ build (R3-a, R3-b; `--preset` picks the build dir):
   (`cmake/fw_build_id.cmake`; `host_build_id()` in `tools/gpio_hw_check.py`
   computes the same). It changes with the commit, the tracked diff, the flags
   and the preset;
-- the `Rev` of CM7 without `-dirty` must equal `git rev-parse --short HEAD`.
-  `--allow-dirty` does not waive this: a `-dirty` run is an edit on the same
-  commit, not an image of another one.
+- always, with or without `--allow-dirty` (R4-a): `Rev(cm7) == Rev(cm4)`,
+  `-dirty` included; `id(cm7) == id(cm4)`, neither `unknown`; and each core's
+  `Rev` without `-dirty` equal to `git rev-parse --short HEAD`. Every abort
+  names `cm7` and `cm4` and their values;
+- `--allow-dirty` waives only two things: a `-dirty` `Rev`, and an image id
+  that differs from the one the host computes. A `-dirty` run is an edit on
+  the same commit, built once for both cores, not an image of another one.
+
+Every `gpio_hw_check.py` capture starts with `[host] argv: <arguments,
+shell-quoted>` and `[host] options: allow_dirty=<bool> preset=<...>
+no_reset=<bool>` as `argparse` resolved them (R4-b).
 
 Production images print `[sys] build rev=<...> id=<...>` (CPU1) and
 `[sys] cpu2 build rev=<...> id=<...>` (CPU2, through `g_shared`). The warm
-resets check them in every reset when given the project and the preset;
-without these options the tool behaves as before:
+resets check them in every reset when given the project and the preset.
+Without these options the tool behaves as before, except that its capture
+starts with `[host] argv: ...` (R4-b); `--count` (default 20) sets the number
+of resets:
 
 ```powershell
 py tools/flash.py --preset release
@@ -877,12 +913,13 @@ Checked without discrepancy:
   capture.
 
 Both new findings are low and not blocking: they concern only
-development (`-dirty`) runs. Corrections: `REAUDIT_4_INSTRUCTIONS.md`.
+development (`-dirty`) runs. Corrections: `REAUDIT_4_INSTRUCTIONS.md`, removed
+once closed (section 15 shows how to read it).
 
 | ID | Finding | State |
 | :--- | :--- | :--- |
-| R4-a | Under `--allow-dirty` the CM4 image is bound to nothing. `--allow-dirty` waives `clean`, which holds `Rev(cm7) == Rev(cm4)`, turns a build-id mismatch into a note, and the R3-b check derives its base from the CM7 `Rev` only. A `-dirty` run, such as every mutation run, would pass with a CM4 flashed from another commit or build | **Open**: always require `Rev(cm7) == Rev(cm4)`, `id(cm7) == id(cm4)` and base = `HEAD` for both; `--allow-dirty` waives only `-dirty` and the host-vs-image id. Control (5): CM4 alone flashed from `HEAD~1`, `--allow-dirty` → abort before S8 |
-| R4-b | The host tools do not record their arguments. `gpio_dev_build_id_old_commit_7456494_allow_dirty.txt` cannot be told from the run without the flag, because the R3-b abort comes before the only line that depends on it; "with and without `--allow-dirty`" (§9.1, §9.3) rests on the code, not on the capture (C9) | **Open**: `[host] argv:` and `[host] options:` as the first lines of `gpio_hw_check.py` and `run_warm_resets.py` captures |
+| R4-a | Under `--allow-dirty` the CM4 image is bound to nothing. `--allow-dirty` waives `clean`, which holds `Rev(cm7) == Rev(cm4)`, turns a build-id mismatch into a note, and the R3-b check derives its base from the CM7 `Rev` only. A `-dirty` run, such as every mutation run, would pass with a CM4 flashed from another commit or build | **Closed** (`b45120e`): the three checks run always, before S8, and every abort names both cores; `--allow-dirty` waives only a `-dirty` `Rev` and the host-vs-image id (docstring, §9.4). Control (5), CM4 alone from `674e8ad` under `--allow-dirty`: aborted before S8, `cm7=b45120e cm4=674e8ad`, `OE=0x0000` throughout. Positive control: both cores `b45120e-dirty`, one id, S8 passed. The instructions' `flash.py --core cm4 --elf <other worktree>` fails in `flash.py`; the same state came from `flash.py --core cm4` in the `HEAD~1` worktree (§9.3) |
+| R4-b | The host tools do not record their arguments. `gpio_dev_build_id_old_commit_7456494_allow_dirty.txt` cannot be told from the run without the flag, because the R3-b abort comes before the only line that depends on it; "with and without `--allow-dirty`" (§9.1, §9.3) rests on the code, not on the capture (C9) | **Closed** (`674e8ad`): `[host] argv:` and `[host] options:` (resolved values) are the first lines of every `gpio_hw_check.py` capture; `run_warm_resets.py` writes `argv` in both modes and `options` with `--project --preset`, so without them `argv` is the only line added to the old format (`gpio_warm_resets_compat_no_options_b45120e.txt`). §9.3 marks every earlier capture as having no record of its arguments. Owner's decision at step 0, quoted in `674e8ad`: "Corregirlos ahora (Recommended)" |
 
 ---
 
@@ -1006,6 +1043,8 @@ Before changing it:
 | R2-a comments; R3-a build id; R2-b layout pad (premise not confirmed) and the 60 µs limit | `88b0cba`, `663ae65`, `1ff10c8`; evidence `78e2bfd`, `d01a30b`, `164fdfd`, `3f743a7` |
 | Re-audit 3 at `5a5deeb` (R3-b, R3-c) and its instructions | `8310303` |
 | R3-b build id bound to the commit, `Rev` = `HEAD` in the host; R3-c identity in the production images and in `run_warm_resets.py` | `f005eda`, `7456494`; evidence `a97973c`, `dbb44a3` |
+| Re-audit 4 at `7fc7ad2` (R4-a, R4-b) and its instructions | `08627cf` |
+| R4-b arguments in the host tools' captures; R4-a both cores bound under `--allow-dirty` (host tools only) | `674e8ad`, `b45120e`; evidence `e41769c` |
 
 The implementation plan, the implementer's instructions, the F0 correction and
 F1a instructions, the implementation report and the audit record were removed
@@ -1013,8 +1052,8 @@ once what a user of the driver needs was folded into this README. The audit
 closed F0 at `51a29b7`. F1 and the LL/HAL tiers had a code audit at `cc1ee88`
 (§12.1); its fixes passed the bench at `0cd803f`. The re-audit at `1a635d8`
 (§12.3) was closed at `fa44386`, and the re-audit at `7b01a10` (§12.4) at
-`1ff10c8`, and the re-audit at `5a5deeb` (§12.5) at `7456494`; their
-instructions were removed the same way. The documents stay in git history:
+`1ff10c8`, the re-audit at `5a5deeb` (§12.5) at `7456494`, and the re-audit at
+`7fc7ad2` (§12.6) at `b45120e`; their instructions were removed the same way. The documents stay in git history:
 
 ```bash
 git show 33f4afa:01_shared_drivers/00_gpio/IMPLEMENTATION_PLAN.md
@@ -1027,4 +1066,5 @@ git show 5f97e2e:01_shared_drivers/00_gpio/IMPLEMENTATION_PLAN.md          # rev
 git show 31406fa:01_shared_drivers/00_gpio/REAUDIT_1_INSTRUCTIONS.md
 git show 25b6a45:01_shared_drivers/00_gpio/REAUDIT_2_INSTRUCTIONS.md
 git show 8310303:01_shared_drivers/00_gpio/REAUDIT_3_INSTRUCTIONS.md
+git show 08627cf:01_shared_drivers/00_gpio/REAUDIT_4_INSTRUCTIONS.md
 ```
