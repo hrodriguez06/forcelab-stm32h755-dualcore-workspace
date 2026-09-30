@@ -17,7 +17,7 @@ no lo sustituye.
 
 | Carpeta | Estado | Notas |
 | :--- | :--- | :--- |
-| `00_gpio` | Parcial | Solo `gpio_bm`: reloj de puerto, AF push-pull, analógico. Plan de F1–F2 (revisión 2, 2026-09-26) en `00_gpio/IMPLEMENTATION_PLAN.md`. F0 (banco, protocolo y base) cerrado el 2026-09-29 (`00_gpio/AUDIT.md`); F1a pendiente. |
+| `00_gpio` | Hecho (F1), sin auditar | BM, LL, HAL. Validado en `prj_01` con el AD2 (`00_gpio/README.md` §9). F0 auditado (`51a29b7`). Pendiente: F1b en `prj_04` y F2 (EXTI, celda de compensación), `00_gpio/README.md` §13. |
 | `01_led` | Hecho | `led_bm`. Sin README. |
 | `02_dma` | Hecho y auditado | BM, LL, HAL. BDMA solo validado en M2M. |
 | `03_tim` | **Vacío** | |
@@ -144,7 +144,7 @@ para el arranque; `tools/build_all.ps1 -Clean` 8/8.
 
 ### 5.2 `00_gpio` F1–F2 — núcleo BM completo y EXTI
 
-El plan ya existe (`00_gpio/IMPLEMENTATION_PLAN.md`); aquí solo el porqué del
+El plan se retiró al cerrar F1 (`00_gpio/README.md` §15 dice cómo recuperarlo); aquí solo el porqué del
 orden.
 
 **Por qué segundo**

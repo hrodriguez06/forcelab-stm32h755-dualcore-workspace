@@ -2,7 +2,7 @@
 """Analog Discovery 2 (AD2) ctypes wrapper over dwf.dll with S1-S10 Safety Guards.
 
 Pure standard library wrapper for Digilent WaveForms SDK (dwf.dll).
-Enforces electrical safety rules S1-S10 (IMPLEMENTATION_PLAN.md):
+Enforces electrical safety rules S1-S10 (01_shared_drivers/00_gpio/README.md section 8):
   - S2: Safe state S2 (all DIO in input, DwfParamOnClose = 1)
   - S3: Single guarded path to FDwfDigitalIOOutputEnableSet via ad2_set_oe()
 """

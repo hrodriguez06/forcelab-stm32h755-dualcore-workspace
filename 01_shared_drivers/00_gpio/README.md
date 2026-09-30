@@ -12,8 +12,9 @@ other's changes. `00_gpio` is the bottom of the driver stack: `01_led`, `04_uart
 `07_adc` and `08_eth` link it, and the BM tier works before the clock tree,
 the MPU and `HAL_Init()`.
 
-Status: phase F1 of [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) plus the
-LL and HAL tiers, which the plan had deferred (F3–F4). Validated on a
+Status: phase F1 of the implementation plan (removed, see
+[section 15](#15-history)) plus the LL and HAL tiers, which the plan had
+deferred (F3–F4). Validated on a
 NUCLEO-H755ZI-Q (silicon Rev V, `REV_ID = 0x2003`) on 2026-09-30, in
 `prj_01_template_dualcore` only, with an Analog Discovery 2. Two complete runs
 at `2b9bf21` pass: see [section 9](#9-validation). **EXTI and the compensation
@@ -400,25 +401,26 @@ The pins used unwired are PF3..PF11 (T1, T2, TB, B1, T15, T16), GPIOJ and GPIOK
 (LD2) are never touched.
 
 **Electrical safety.** There are no series resistors, so nothing limits the
-current in a contention (DS12923: 20 mA per pin, +0 mA injection). The rules
-S1–S10 of `IMPLEMENTATION_PLAN.md` are implemented as follows:
+current in a contention (DS12923 table 11: 20 mA per pin, +0 mA injection on FT
+pins). A contention or an injection can damage a pin with no immediate symptom.
+These rules cannot be relaxed:
 
-- **S2, safe state.** `bench_safe()` puts every wired pin in input with
-  `MCU_ACK` low. It runs at start, on any abort or timeout, and at the end. The
-  AD2 opens and closes with every DIO in input, and returns there on any
-  exception.
-- **S3, host guard.** `ad2_set_oe()` is the only path to
-  `FDwfDigitalIOOutputEnableSet`, and it checks each mask against the bus owner
-  of the current step.
-- **S4, firmware guard.** `bench_claim()` is the only way a wired pin becomes an
-  output, open-drain or AF. It reads its permission from the current step,
-  which only `step_begin()` sets; a caller cannot pass a step.
-- **S5, bus handover.** Before either side drives the bus, the bus must follow
-  both MCU pulls: 0xFF with pull-up and 0x00 with pull-down.
-- **S7, step sync.** Each step is announced and matched against the host's copy
-  of the table. 10 s without the other side sends both to the safe state.
-- **S8, image check.** The host enables no output before it has read the banner
-  of a clean `Rev`.
+| # | Rule | Where it is enforced |
+| :--- | :--- | :--- |
+| S1 | At most one driver per line, always. Only the bus changes direction, and only through S5 | Fixed masks on both sides (S3, S4) |
+| S2 | Safe state by default: the AD2 with every DIO in input; the MCU with every wired pin in input except `MCU_ACK` (low). At open/close, between steps, on any exception, timeout or abort | `tools/ad2.py` (`FDwfDigitalIOReset`, OE read-back, `DwfParamOnClose = 1`, never 0), `try/finally`; `bench_safe()` |
+| S3 | Host guard: every `OutputEnable` write goes through `ad2_set_oe(mask, bus_owner)`, which raises, after going to S2, on any bit outside {DIO8, DIO10, DIO12} plus the bus only in a "bus = AD2" step | `tools/ad2.py`; T0b(a) on a mock DLL |
+| S4 | Firmware guard: every configuration of a wired pin as output, OD or AF goes through `bench_claim()`. PE0–PE4 and PE7 are always refused, the bus only in a "bus = MCU" step. The permission comes from the current step, which only `step_begin()` sets | `CM7/App/Src/gpio_selftest.c`; T0b(b) |
+| S5 | Break-before-make: the bus must follow both MCU pulls (0xFF, 0x00), with the OE of the bus read back as 0, in the same step, before either side drives it | `buschk()` / `s5_released()`; T0b(c) drives it on purpose |
+| S6 | At least 1 ms between one side releasing and the other driving | Explicit waits on both sides |
+| S7 | The host acts only on an announced step that matches its own table; 10 s without the other side → S2 and abort, on both sides | `step_begin()` / `Session.step()`; T0b(d) |
+| S8 | No output enabled before the banner `GPIO_BENCH v1 idle` of a clean `Rev` has been read | `gpio_hw_check.py` |
+| S9 | AD2 on USB whenever the Nucleo is powered; GND first on, last off; never unplug or reset the Nucleo with the script running | Procedure below |
+| S10 | Flash or reset only with the AD2 in S2 (the MCU puts every pin in analog meanwhile) | The script resets the board itself, with the AD2 in S2 |
+
+Never connected to the board: W1, W2, V+, V−; any DIO to 3V3, 5V, VIN, NRST,
+BOOT0 or a pin not in the table above; any component other than the four of
+PF14/PF15.
 
 **Procedure:**
 1. Connect GND first, then the DIO lines.
@@ -569,7 +571,110 @@ py tools/gpio_hw_check.py                  # writes docs/gpio_selftest_<rev>.txt
 
 ---
 
-## 12. Changing this driver
+## 12. Findings (G1–G15)
+
+The audit of the pre-F1 code found these. Their state at this commit:
+
+| ID | Finding | State |
+| :--- | :--- | :--- |
+| G1 | The configuration registers have one copy for both cores; unprotected RMW from CM7 (PB13, ETH) and CM4 (PB1, ADC) on `GPIOB_MODER` in `prj_04` can put PB13 back to analog, with the link still up and TX dead | **Closed in the driver** (section + hook, T15). **Open in `prj_04`**, which does not install the hook (§13.1) |
+| G2 | Wrong dual-core note in `gpio_bm.h` about `RCC_AHB4ENR` | Closed (`a2096d2`) |
+| G3 | `pull = 3` programmed `PUPDR = 11` and `speed = 4` became LOW, both returning `true` | Closed (`b52ffec`), T1 |
+| G4 | Misaligned port pointers (`GPIOA + 4`) accepted | Closed (`a204b8a`), T1 |
+| G5 | No output or input API | Closed: `ConfigOutput/Input/Pin` in all tiers, T2–T4 |
+| G6 | No EXTI; `HAL_GPIO_Init` rewrites `EXTICR` blindly and `HAL_GPIO_DeInit` clears the shared `RTSR1/FTSR1` | **Open (F2, §13.2).** The HAL tier refuses EXTI modes and never calls `HAL_GPIO_DeInit` |
+| G7 | `HAL_GPIO_Init` analog + `PULLUP` does not write `PUPDR` | Closed in the HAL tier (refused); shown on raw HAL in T2 |
+| G8 | No `LCKR`, deinit, `ReadConfig`, compensation cell | Closed except the compensation cell (F2) |
+| G9 | Reconfiguring PA13/PA14 silently kills SWD | Closed: `ERR_DEBUG_PIN` in the new API; the legacy calls still accept them |
+| G10 | Five pin types across consumers; `board_def.h` uses masks, `gpio_bm` indices | `GpioBm_Pin_t`, `GPIO_BM_PIN_MASK/INDEX`; the existing types are untouched |
+| G11 | Target without tier suffix | Closed in F0: `_gpio_bm` + alias |
+| G12 | Output, OD, pulls, input, lock and the race never exercised in hardware | Closed for F1 (§9); EXTI pending |
+| G13 | Writers outside `gpio_bm` on shared ports: `HAL_GPIO_Init` in the `eth_hal`/`uart_hal` MSPs, hand RMW in `prj_04` | `GPIO_HAL_Init` and the section exist (§3.3, T15 `g`/`h`); **the migration in `prj_04` is open** (§13.1) |
+| G14 | `LED_PanicRed` writes `MODER` from a fault handler without the lock | Accepted exception: the fault path is terminal and cannot wait |
+| G15 | `bool` cannot tell "lock busy" from "bad parameter" | Closed: `GpioBm_Status_t` |
+| — | `LockPins` refused to add pins to a locked port (`ERR_LOCKED`) although the silicon accepts them | Closed (`bbb7f40`), T16 |
+
+---
+
+## 13. Open work
+
+### 13.1 F1b in `prj_04` (not done: outside the scope of this delivery)
+
+`prj_04` has its own F1a selftest (preset `selftest-gpio`,
+`CM4/CM7/App/Src/gpio_selftest.c`, `tools/gpio_hw_check.py`, protocol table in
+`Common/Inc/gpio_bench_protocol.h`, captures `docs/gpio_f1a_*`). Its last
+complete run (`gpio_f1a_selftest_ededa84.txt`) passed every item except the T9
+gate on PF14, measured with 10 edges. The 40-edge interleaved procedure (errata
+E9, used by the `prj_01` bench) was never applied there.
+
+To close G1/G13 in `prj_04`, every writer that runs after CPU1 releases CPU2 on
+a port both cores use must go through the driver or the section:
+
+| Core | Writer | Port / pins | Change |
+| :--- | :--- | :--- | :--- |
+| CM7 | `eth_hal.c` MSP (`net_task`) | GPIOA, **GPIOB PB13**, GPIOC, GPIOG | `GPIO_HAL_Init` (a commit of its own, coordinated with `08_eth` E1/E2) |
+| CM7 | `uart_hal.c` MSP (`App_Log_Init`) | GPIOD PD8/PD9 | `GPIO_HAL_Init` |
+| CM4 | `adc_acquisition.c` `GPIO_Analog_Init` | **GPIOB PB1** | `GPIO_BM_ConfigAnalog(BOARD_ADC_PORT, GPIO_BM_PIN_INDEX(BOARD_ADC_PIN))` |
+| CM4 | `main.c` (`selftest-uart`), `dma_selftest.c` | GPIOD PD5/PD6 | `gpio_bm` calls |
+| CM7 | `LED_Init` (before the release), `LED_PanicRed` | GPIOB, GPIOE | None (safe by contract / G14) |
+| CM7 | H5c of `10_hsem` (EXTI line 15, `selftest-hsem`) | EXTI | None (outside this driver) |
+
+It also needs `Shared_GpioLockInstall()` on both cores, as in `prj_01` (§3),
+and the production regression repeated with `mX_gpio_lock_fail_count = 0`.
+
+### 13.2 F2: EXTI 0–15 and the compensation cell (not implemented)
+
+The contract the plan fixed, to be taken up when a consumer needs it:
+
+```c
+GpioBm_Status_t GPIO_BM_ExtiConfig(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t trigger,
+                                   bool interrupt, bool event);        /* calling core's masks only */
+GpioBm_Status_t GPIO_BM_ExtiDisable(GPIO_TypeDef *port, uint32_t pin_idx);
+uint32_t        GPIO_BM_ExtiTakePending(uint32_t line_mask);          /* this core's PR1, then DSB */
+GpioBm_Status_t GPIO_BM_ExtiSoftwareTrigger(uint32_t pin_idx);
+IRQn_Type       GPIO_BM_ExtiGetIRQn(uint32_t pin_idx);
+GpioBm_Status_t GPIO_BM_EnableCompensationCell(uint32_t max_cycles);  /* needs CSI; never writes RCC_CR or HSLV */
+```
+
+Rules:
+- `EXTI_D2` with `CORE_CM4`, `EXTI_D1` otherwise.
+- `RTSR1`, `FTSR1`, `SWIER1` and `SYSCFG_EXTICR` are shared, so they are
+  written inside the section.
+- A line routed to another port that any core has unmasked returns
+  `ERR_CONFLICT`, without writing.
+- The pending bit is cleared before unmasking.
+- Deinit clears only this core's masks, and touches `RTSR1`/`FTSR1`/`EXTICR`
+  only when the other core's masks are 0.
+- No handler in the driver.
+
+Planned tests: T11–T14 on PE3 (CM7) and PE4 (CM4), which are already wired
+(§8): pulse counts, per-core routing, latency, and conflict/pending/deinit.
+T17 covers the compensation cell.
+
+---
+
+## 14. Changing this driver
+
+Catalog criteria every change is audited against:
+
+| # | Criterion |
+| :--- | :--- |
+| C1 | No pins or instances: no port, pin, HSEM ID or time limit of a project; no `board_def.h`, `shared_memory.h` or `hsem_*.h`. Only silicon facts (stride 0x400, GPIOA..GPIOK, `GPIOxEN` = port index, PA13/PA14 = SWD) |
+| C2 | Frozen API: the legacy signatures and constants and the F1 API never change; only additions. A behaviour change only where the old one was wrong, still accepting every existing call |
+| C3 | Tier suffix on every file; no numeric prefix in any `#include` |
+| C4 | Targets: `_gpio_bm` with its source; `stm32h7_driver_gpio` an alias without sources; `_ll` and `_hal` link `_bm` |
+| C5 | Errata applied in the driver when possible, otherwise listed here (§6) |
+| C6 | Validate before the first access, including the port clock |
+| C7 | Minimal state: `gpio_bm` ≤ 8 B of `.bss` and `.data = 0`; none in LL and HAL |
+| C8 | `gpio_bm` depends on CMSIS only and works before the clock tree, the MPU, `HAL_Init()` and the HSEM clock |
+| C9 | Evidence: build matrix, captures with `FW_GIT_REV`, sizes from the linked `.map` |
+| C10 | Every RMW of a shared configuration register inside the section |
+| C11 | Glitch-free write order (§4.3) |
+| C12 | Honesty: never `OK` for a write the hardware ignored; read-back after every write |
+| C13 | Every wait bounded by a limit the caller gives |
+| C14 | The driver defines no project symbol (`EXTIx_IRQHandler`, `HAL_GPIO_EXTI_Callback`) |
+
+Before changing it:
 
 1. **Signatures and existing struct fields are frozen**
    (`01_shared_drivers/README.md` rule 2). Add new functions, or new fields at
@@ -589,19 +694,31 @@ py tools/gpio_hw_check.py                  # writes docs/gpio_selftest_<rev>.txt
 
 ---
 
-## 13. History
+## 15. History
 
 | Milestone | Commits |
 | :--- | :--- |
 | Port-clock helper, `ConfigAlternate`, `ConfigAnalog` | `784febb`, `dcd9230`, `be31f3c` |
-| Plan (revision 2), F0 bench and audit | `5f97e2e` … `d713e75` (`AUDIT.md`) |
+| Plan (revisions 1 and 2), F0 bench; audit closed F0 at `51a29b7` | `5f97e2e` … `51a29b7` |
 | F1a: `gpio_bm` core, section and hook, `LCKR`, `ReadConfig` (prj_04 selftest) | `a94c89c` … `b52ffec` |
 | LL and HAL tiers, shared validation | `6c864c8`, `de138ba`, `b9c1a76` |
 | `prj_01`: hook on both cores; limit sized from B1 (50 µs) | `5c6f849`, `35b5e4e` |
 | `LockPins` adds pins to a locked port (silicon finding) | `bbb7f40` |
 | `prj_01` selftest, host bench, evidence | `e3feb02`, `780dddd`, `d11fb8d`, `2b9bf21`, `778fcbb` |
+| README; auditor's errata E9–E11 committed; process documents removed | `7d421d1`, `33f4afa`, and the commit that removes them |
 
-The process documents (`IMPLEMENTATION_PLAN.md`, `IMPLEMENTER_INSTRUCTIONS.md`,
-`F0_CORRECTION*_INSTRUCTIONS.md`, `F1A_INSTRUCTIONS.md`,
-`IMPLEMENTATION_REPORT.md`, `AUDIT.md`) are still in this folder. The plan
-leaves their removal to the catalog owner, after the closing audit.
+The implementation plan, the implementer's instructions, the F0 correction and
+F1a instructions, the implementation report and the audit record were removed
+once what a user of the driver needs was folded into this README. The audit
+closed F0 at `51a29b7`; F1 and the LL/HAL tiers have not been audited. The
+documents stay in git history:
+
+```bash
+git show 33f4afa:01_shared_drivers/00_gpio/IMPLEMENTATION_PLAN.md
+git show 33f4afa:01_shared_drivers/00_gpio/AUDIT.md
+git show 33f4afa:01_shared_drivers/00_gpio/IMPLEMENTATION_REPORT.md
+git show 33f4afa:01_shared_drivers/00_gpio/IMPLEMENTER_INSTRUCTIONS.md
+git show 33f4afa:01_shared_drivers/00_gpio/F1A_INSTRUCTIONS.md
+git show 33f4afa:01_shared_drivers/00_gpio/F0_CORRECTION_INSTRUCTIONS.md   # also _2, _3, _4
+git show 5f97e2e:01_shared_drivers/00_gpio/IMPLEMENTATION_PLAN.md          # revision 1: full LL/HAL contracts
+```
