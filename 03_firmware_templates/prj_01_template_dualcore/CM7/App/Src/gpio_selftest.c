@@ -662,6 +662,70 @@ static void tim17_stop(void)
 
 static uint32_t s_hold_max_cm7;
 static uint32_t s_hold_max_cm4;
+static uint32_t s_race_seed;       /* this run's T15 seed; phase k runs with seed ^ k */
+static uint32_t s_race_phase;
+
+/* R2: one 32-bit word from the RNG (HSI48 kernel clock, RNGSEL = 0 at reset).
+   CPU1 only: RCC_CR is CPU1's by the boot contract. Leaves HSI48, the RNG
+   and its clock as it found them. Returns false with the reason on a timeout,
+   a seed or clock error, or RNGSEL not on HSI48. */
+static bool race_seed_from_rng(uint32_t *seed, const char **why)
+{
+    if ((RCC->D2CCIP2R & RCC_D2CCIP2R_RNGSEL) != 0UL)
+    {
+        *why = "RNGSEL not HSI48";
+        return false;
+    }
+
+    const bool hsi48_was_on = (RCC->CR & RCC_CR_HSI48ON) != 0UL;
+    bool       ok = false;
+
+    *why = "HSI48RDY timeout";
+    RCC->CR |= RCC_CR_HSI48ON;
+    uint32_t t0 = DWT->CYCCNT;
+    while (((RCC->CR & RCC_CR_HSI48RDY) == 0UL) && ((DWT->CYCCNT - t0) <= CYC_PER_MS))
+    {
+    }
+    if ((RCC->CR & RCC_CR_HSI48RDY) != 0UL)
+    {
+        RCC->AHB2ENR |= RCC_AHB2ENR_RNGEN;
+        (void)RCC->AHB2ENR;
+        RNG->CR = RNG_CR_RNGEN;
+        *why = "DRDY timeout";
+        t0 = DWT->CYCCNT;
+        while ((DWT->CYCCNT - t0) <= CYC_PER_MS)
+        {
+            const uint32_t sr = RNG->SR;
+            if ((sr & (RNG_SR_SECS | RNG_SR_CECS)) != 0UL)
+            {
+                *why = ((sr & RNG_SR_SECS) != 0UL) ? "RNG SECS" : "RNG CECS";
+                break;
+            }
+            if ((sr & RNG_SR_DRDY) != 0UL)
+            {
+                *seed = RNG->DR;
+                *why  = "ok";
+                ok    = true;
+                break;
+            }
+        }
+        RNG->CR = 0U;
+        RCC->AHB2ENR &= ~RCC_AHB2ENR_RNGEN;
+    }
+    if (!hsi48_was_on)
+    {
+        RCC->CR &= ~RCC_CR_HSI48ON;
+    }
+    return ok;
+}
+
+/* Seed of the next phase, published to CPU2 before GST_CMD_RACE_ARM. */
+static void race_seed_next(void)
+{
+    GST_AREA->race_seed = s_race_seed ^ s_race_phase;
+    s_race_phase++;
+    __DMB();
+}
 
 /* Sections a race loop opens: one per call, except the methods that bypass the driver. */
 static uint32_t expected_locks(int m, uint32_t iters)
@@ -689,7 +753,7 @@ static void race_phase(const char *name, int cm7, int cm4, uint32_t iters, bool 
     a->in_loop[0] = 0U;
     a->in_loop[1] = 0U;
     a->locked_calls = 0U;
-    __DMB();
+    race_seed_next();
 
     if (shim)
     {
@@ -760,6 +824,7 @@ static void isr_phase(const char *name, GstRace_t main_m, uint32_t isr_method, u
     GstRaceResult_t r;
     gst_race_prepare();
     GST_AREA->in_loop[1] = 0U;
+    race_seed_next();
     tim17_start(isr_method);
     gst_race_run(main_m, iters, &r);
     tim17_stop();
@@ -778,6 +843,19 @@ static void run_race_tests(void)
 {
     const uint32_t f7 = g_shared.m7_gpio_lock_fail_count;
     const uint32_t f4 = g_shared.m4_gpio_lock_fail_count;
+
+    /* R2: a new seed per run, so a second run samples other interleavings.
+       -DGST_RACE_SEED=0x... replays one run. */
+#if defined(GST_RACE_SEED)
+    s_race_seed = (uint32_t)(GST_RACE_SEED);
+    LOG("T15 seed=0x%08lX (fixed by GST_RACE_SEED; phase k uses seed^k)", (unsigned long)s_race_seed);
+#else
+    const char *why;
+    const bool  rng_ok = race_seed_from_rng(&s_race_seed, &why);
+    LOG("T15 seed=0x%08lX (RNG; phase k uses seed^k)", (unsigned long)s_race_seed);
+    verdict(rng_ok, "T15 seed from the RNG: %s", why);
+#endif
+    s_race_phase = 0U;
 
     /* Controls first: without protection the race must be reproduced, and the
        detector must count nothing when only one core runs. */

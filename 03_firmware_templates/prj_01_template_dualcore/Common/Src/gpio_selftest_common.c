@@ -961,16 +961,45 @@ void gst_shim_install(bool on)
     }
 }
 
+/* R2: jitter, so each run of one image tests another interleaving. A local
+   xorshift32 seeded from GST_AREA->race_seed (random per run, printed by CPU1),
+   and a busy wait on this core's CYCCNT: delay_cycles() is CPU1's and static. */
+static uint32_t race_rand(uint32_t *x)
+{
+    uint32_t v = *x;
+    v ^= v << 13;
+    v ^= v >> 17;
+    v ^= v << 5;
+    *x = v;
+    return v;
+}
+
+static void race_wait(uint32_t cyc)
+{
+    const uint32_t t0 = DWT->CYCCNT;
+    while ((DWT->CYCCNT - t0) < cyc)
+    {
+    }
+}
+
 void gst_race_run(GstRace_t m, uint32_t iters, GstRaceResult_t *r)
 {
     const uint32_t me    = gst_core_index();
     const uint32_t other = me ^ 1U;
     const uint32_t pin   = own_pin();
     const uint32_t opin  = other_pin();
+    uint32_t       x     = GST_AREA->race_seed ^ (me + 1U);
+
+    if (x == 0U)
+    {
+        x = 0x9E3779B9UL;            /* xorshift32 never leaves 0 */
+    }
 
     memset(r, 0, sizeof(*r));
     s_shim_ok = 0U;
     s_shim_hold_max = 0U;
+
+    race_wait(race_rand(&x) & 0x3FFU);   /* after go: 0..1023 cycles */
 
     GST_AREA->in_loop[me] = 1U;
     __DSB();
@@ -980,6 +1009,8 @@ void gst_race_run(GstRace_t m, uint32_t iters, GstRaceResult_t *r)
     {
         const GstPinReq_t c = gst_race_cfg(pin, i & 1U);
         uint32_t st = (uint32_t)GPIO_BM_OK;
+
+        race_wait(race_rand(&x) & 0x3FU);    /* 0..63 cycles, outside any section */
 
         switch (m)
         {

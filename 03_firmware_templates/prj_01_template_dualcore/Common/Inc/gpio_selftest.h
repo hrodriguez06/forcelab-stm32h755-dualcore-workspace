@@ -143,6 +143,11 @@ typedef struct
     GstTbResult_t     m4_tb;
     GstB1Result_t     m4_b1;
     GstRaceResult_t   m4_race;
+
+    /* T15 (R2), appended so no existing field moves: the seed of the current
+       phase. CPU1 writes it before GST_CMD_RACE_ARM; both loops seed their
+       jitter from it (gst_race_run). */
+    volatile uint32_t race_seed;
 } GstArea_t;
 
 _Static_assert(sizeof(GstArea_t) <= 0x1000U, "GstArea_t no longer fits its 4 KB slot");
