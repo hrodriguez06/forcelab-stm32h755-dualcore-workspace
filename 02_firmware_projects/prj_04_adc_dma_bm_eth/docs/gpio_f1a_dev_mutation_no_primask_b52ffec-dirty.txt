@@ -1,0 +1,48 @@
+[   0.165] [ipc] m7=212 m4=1037  (CPU2 alive)
+[   2.137] [ipc] m7=216 m4=1057  (CPU2 alive)
+[   4.572]  
+[   4.579] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev b52ffec-dirty ===
+[   4.583] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[   4.586] [sys] silicon revision id=0x2003
+[   4.590] [ipc] shared block at 0x38008000, magic=0x48375353
+[   4.594] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[   4.597] [net] starting TCP/IP stack
+[   4.604] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[   4.607] [net] mac=02:00:00:00:00:01 phy_addr=0
+[   4.613] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[   4.615] [phy] partner advertised:
+[   4.618] [net] udp echo listening on port 7
+[   4.621] [adc_srv] listening on UDP port 5001
+[   4.624] [ipc] m7=1 m4=0  (CPU2 starting)
+[   4.627] [m7_gpio_test] Rev b52ffec-dirty
+[   4.631] [m7_gpio_test] STEP id=1 bus=NONE v=2
+[   4.635] [m7_gpio_test] LCKR at boot: GPIOF=0x00000000 CLEAN
+[   6.197] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[   6.204] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[   6.207] [net] link up: 100 Mbps full duplex
+[   6.599] [ipc] m7=4 m4=0  (CPU2 NOT RESPONDING)
+[   6.654] [m7_gpio_test] INFO T15 (a) CM7 solo, hand RMW: corruptions=0 (expected 0)
+[   6.661] [m7_gpio_test] INFO T15 (b) CM4 solo, hand RMW: corruptions=0 (expected 0)
+[   6.671] [m7_gpio_test] INFO T15 (c) both, hand RMW: corr=124910 (CM7=124609 CM4=301) ovl CM7=499999 CM4=375286 (expect >0)
+[   6.679] [m7_gpio_test] INFO T15 (d) both, gpio_bm no hook: corr=37328 ovl CM7=200000 CM4=122041 (expect >0)
+[   6.688] [m7_gpio_test] INFO T15 (d) detail: CM7 field=22348 verify=2213 other=0, CM4 field=12767 verify=0
+[   6.698] [m7_gpio_test] INFO T15 (e) both, gpio_bm + hook: corr=1 busy=1 hook_fail CM7=1 CM4=0 ovl CM7=197103 CM4=200000 (expect 0)
+[   6.708] [m7_gpio_test] INFO T15 (e) calls: locked=399999 ok CM7=199999 + CM4=200000 = 399999 (iters CM7=200000 CM4=200000)
+[   6.718] [m7_gpio_test] INFO T15 (f) CM7 hand RMW vs TIM17 ISR at 20000 Hz: corr=473 ISR in loop=2125 of 2125 (expect >0)
+[   6.723] [m7_gpio_test] INFO T15 (f) detail: main=0 ISR=473 ISR err=0
+[   6.732] [m7_gpio_test] INFO T15 (g) CM7 gpio_bm vs TIM17 ISR: corr=485 ISR in loop=6442 of 6442 (expect 0)
+[   6.739] [m7_gpio_test] INFO T15 (g) detail: main=0 verify=0 other=0 ISR=485 ISR err=0
+[   6.742] [m7_gpio_test] T15 VERDICT: FAIL
+[   6.746] [m7_gpio_test] VERDICT: GPIO SELF-TESTS FAILED
+[   8.568] [ipc] m7=8 m4=0  (CPU2 NOT RESPONDING)
+[   9.567] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  10.540] [ipc] m7=12 m4=0  (CPU2 NOT RESPONDING)
+[  12.512] [ipc] m7=16 m4=0  (CPU2 NOT RESPONDING)
+[  14.484] [ipc] m7=20 m4=0  (CPU2 NOT RESPONDING)
+[  14.506] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  16.456] [ipc] m7=24 m4=0  (CPU2 NOT RESPONDING)
+[  18.428] [ipc] m7=28 m4=0  (CPU2 NOT RESPONDING)
+[  19.444] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  20.400] [ipc] m7=32 m4=0  (CPU2 NOT RESPONDING)
+[  22.373] [ipc] m7=36 m4=0  (CPU2 NOT RESPONDING)
+[  24.345] [ipc] m7=40 m4=0  (CPU2 NOT RESPONDING)

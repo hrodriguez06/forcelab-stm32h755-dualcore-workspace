@@ -1,0 +1,73 @@
+[   4.506] x48375353
+[   4.510] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[   4.512] [net] starting TCP/IP stack
+[   4.519] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[   4.523] [net] mac=02:00:00:00:00:01 phy_addr=0
+[   4.528] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[   4.530] [phy] partner advertised:
+[   4.533] [net] udp echo listening on port 7
+[   4.537] [adc_srv] listening on UDP port 5001
+[   4.540] [ipc] m7=1 m4=0  (CPU2 starting)
+[   4.543] [m7_gpio_test] Rev b52ffec-dirty
+[   4.546] [m7_gpio_test] STEP id=1 bus=NONE v=2
+[   4.550] [m7_gpio_test] LCKR at boot: GPIOF=0x00000000 CLEAN
+[   6.113] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[   6.120] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[   6.123] [net] link up: 100 Mbps full duplex
+[   6.515] [ipc] m7=4 m4=0  (CPU2 NOT RESPONDING)
+[   6.584] [m7_gpio_test] INFO T15 (a) CM7 solo, hand RMW: corruptions=0 (expected 0)
+[   6.590] [m7_gpio_test] INFO T15 (b) CM4 solo, hand RMW: corruptions=0 (expected 0)
+[   6.600] [m7_gpio_test] INFO T15 (c) both, hand RMW: corr=124924 (CM7=124589 CM4=335) ovl CM7=499999 CM4=375286 (expect >0)
+[   6.609] [m7_gpio_test] INFO T15 (d) both, gpio_bm no hook: corr=36454 ovl CM7=200000 CM4=122340 (expect >0)
+[   6.617] [m7_gpio_test] INFO T15 (d) detail: CM7 field=22773 verify=1865 other=0, CM4 field=11816 verify=0
+[   6.628] [m7_gpio_test] INFO T15 (e) both, gpio_bm + hook: corr=0 busy=0 hook_fail CM7=0 CM4=0 ovl CM7=197084 CM4=200000 (expect 0)
+[   6.638] [m7_gpio_test] INFO T15 (e) calls: locked=400000 ok CM7=200000 + CM4=200000 = 400000 (iters CM7=200000 CM4=200000)
+[   6.647] [m7_gpio_test] INFO T15 (f) CM7 hand RMW vs TIM17 ISR at 20000 Hz: corr=526 ISR in loop=2127 of 2127 (expect >0)
+[   6.653] [m7_gpio_test] INFO T15 (f) detail: main=0 ISR=526 ISR err=0
+[   6.661] [m7_gpio_test] INFO T15 (g) CM7 gpio_bm vs TIM17 ISR: corr=0 ISR in loop=6633 of 6633 (expect 0)
+[   6.668] [m7_gpio_test] INFO T15 (g) detail: main=0 verify=0 other=0 ISR=0 ISR err=0
+[   6.671] [m7_gpio_test] T15 VERDICT: PASS
+[   6.674] [m7_gpio_test] STEP id=11 bus=NONE v=2
+[   6.680] [m7_gpio_test] INFO T1 unclocked port used for field cases: GPIOK
+[   6.686] [m7_gpio_test] INFO T1 ConfigPin(NULL)        got=1 exp=1 photo=same OK
+[   6.692] [m7_gpio_test] INFO T1 port NULL              got=1 exp=1 photo=same OK
+[   6.699] [m7_gpio_test] INFO T1 GPIOA+4                got=1 exp=1 photo=same OK
+[   6.705] [m7_gpio_test] INFO T1 past GPIOK             got=1 exp=1 photo=same OK
+[   6.712] [m7_gpio_test] INFO T1 pin 16                 got=1 exp=1 photo=CHANGED FAIL
+[   6.718] [m7_gpio_test] INFO T1 AF 16                  got=1 exp=1 photo=same OK
+[   6.724] [m7_gpio_test] INFO T1 pull 3                 got=1 exp=1 photo=same OK
+[   6.730] [m7_gpio_test] INFO T1 speed 4                got=1 exp=1 photo=same OK
+[   6.737] [m7_gpio_test] INFO T1 mode 4                 got=1 exp=1 photo=same OK
+[   6.743] [m7_gpio_test] INFO T1 level 2                got=1 exp=1 photo=same OK
+[   6.749] [m7_gpio_test] INFO T1 analog + pull          got=1 exp=1 photo=same OK
+[   6.756] [m7_gpio_test] INFO T1 otype 2                got=1 exp=1 photo=same OK
+[   6.762] [m7_gpio_test] INFO T1 PA13                   got=2 exp=2 photo=same OK
+[   6.768] [m7_gpio_test] INFO T1 PA14                   got=2 exp=2 photo=same OK
+[   6.774] [m7_gpio_test] INFO T1 ConfigOutput speed 4   got=1 exp=1 photo=same OK
+[   6.781] [m7_gpio_test] INFO T1 ConfigInput pull 3     got=1 exp=1 photo=same OK
+[   6.787] [m7_gpio_test] INFO T1 AlternateEx af 16      got=1 exp=1 photo=same OK
+[   6.793] [m7_gpio_test] INFO T1 DeinitPin GPIOA+4      got=1 exp=1 photo=same OK
+[   6.799] [m7_gpio_test] INFO T1 DeinitPin pin 16       got=1 exp=1 photo=same OK
+[   6.806] [m7_gpio_test] INFO T1 DeinitPin PA13         got=2 exp=2 photo=same OK
+[   6.812] [m7_gpio_test] INFO T1 LockPins mask 0        got=1 exp=1 photo=same OK
+[   6.819] [m7_gpio_test] INFO T1 LockPins mask 1<<16    got=1 exp=1 photo=same OK
+[   6.824] [m7_gpio_test] INFO T1 LockPins past GPIOK    got=1 exp=1 photo=same OK
+[   6.831] [m7_gpio_test] INFO T1 ReadConfig out NULL    got=1 exp=1 photo=same OK
+[   6.837] [m7_gpio_test] INFO T1 legacy AF pull 3       got=0 exp=0 photo=same OK
+[   6.843] [m7_gpio_test] INFO T1 legacy AF speed 4      got=0 exp=0 photo=same OK
+[   6.850] [m7_gpio_test] INFO T1 legacy AF af 16        got=0 exp=0 photo=same OK
+[   6.856] [m7_gpio_test] INFO T1 legacy analog +4       got=0 exp=0 photo=same OK
+[   6.862] [m7_gpio_test] INFO T1 EnableClock GPIOA+4    got=0 exp=0 photo=same OK
+[   6.868] [m7_gpio_test] INFO T1 EnableClock past K     got=0 exp=0 photo=same OK
+[   6.875] [m7_gpio_test] INFO T1 control: valid ConfigOutput(PF9) changed the photo: yes
+[   6.881] [m7_gpio_test] INFO T1 CM7: cases=30 failed=1 control=changed -> FAIL
+[   6.888] [m7_gpio_test] INFO T1 CM4: cases=30 failed=2 control=changed -> FAIL
+[   6.891] [m7_gpio_test] T1 VERDICT: FAIL
+[   6.895] [m7_gpio_test] VERDICT: GPIO SELF-TESTS FAILED
+[   8.484] [ipc] m7=8 m4=0  (CPU2 NOT RESPONDING)
+[   9.484] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  10.457] [ipc] m7=12 m4=0  (CPU2 NOT RESPONDING)
+[  12.430] [ipc] m7=16 m4=0  (CPU2 NOT RESPONDING)
+[  14.402] [ipc] m7=20 m4=0  (CPU2 NOT RESPONDING)
+[  14.424] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  16.374] [ipc] m7=24 m4=0  (CPU2 NOT RESPONDING)

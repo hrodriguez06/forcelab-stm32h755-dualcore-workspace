@@ -1,0 +1,115 @@
+[   0.240] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=238 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[   1.490] [ipc] m7=6404 m4=32020  (CPU2 alive)
+[   4.568]  
+[   4.576] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev b52ffec-dirty ===
+[   4.580] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[   4.582] [sys] silicon revision id=0x2003
+[   4.587] [ipc] shared block at 0x38008000, magic=0x48375353
+[   4.591] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[   4.593] [net] starting TCP/IP stack
+[   4.600] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[   4.604] [net] mac=02:00:00:00:00:01 phy_addr=0
+[   4.609] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[   4.611] [phy] partner advertised:
+[   4.615] [net] udp echo listening on port 7
+[   4.618] [adc_srv] listening on UDP port 5001
+[   4.621] [ipc] m7=1 m4=0  (CPU2 starting)
+[   4.624] [m7_gpio_test] Rev b52ffec-dirty
+[   4.627] [m7_gpio_test] STEP id=1 bus=NONE v=2
+[   4.632] [m7_gpio_test] LCKR at boot: GPIOF=0x00000000 CLEAN
+[   6.194] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[   6.200] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[   6.204] [net] link up: 100 Mbps full duplex
+[   6.505] [m7_gpio_test] INFO T15 (a) CM7 solo, hand RMW: corruptions=0 (expected 0)
+[   6.512] [m7_gpio_test] INFO T15 (b) CM4 solo, hand RMW: corruptions=0 (expected 0)
+[   6.523] [m7_gpio_test] INFO T15 (c) both, hand RMW: corruptions=124909 (CM7=124579 CM4=330) overlap CM7=499999 CM4=375286 (expected >0)
+[   6.536] [m7_gpio_test] INFO T15 (d) both, gpio_bm no hook: corruptions=44199 (CM7 field=27360 verify=4062, CM4 field=12777 verify=0) overlap CM7=199999 CM4=120189 (e
+[   6.549] [m7_gpio_test] INFO T15 (e) both, gpio_bm + test hook: corruptions=0 busy=0 hook_fail CM7=0 CM4=0 overlap CM7=199999 CM4=199300 (expected 0)
+[   6.559] [m7_gpio_test] INFO T15 (e) calls: locked=400000 ok CM7=200000 + CM4=200000 = 400000 (iterations CM7=200000 CM4=200000)
+[   6.572] [m7_gpio_test] INFO T15 (f) CM7, hand RMW vs TIM17 ISR at 20000 Hz: corruptions=302 (main=0 ISR=302 ISR err=0) ISR entries=2427 in loop=2427 (expected >0)
+[   6.585] [m7_gpio_test] INFO T15 (g) CM7, gpio_bm vs TIM17 ISR: corruptions=0 (main=0 verify=0 ISR=0 ISR err=0) ISR entries=5598 in loop=5598 (expected 0)
+[   6.588] [m7_gpio_test] T15 VERDICT: PASS
+[   6.591] [m7_gpio_test] STEP id=11 bus=NONE v=2
+[   6.597] [m7_gpio_test] INFO T1 unclocked port used for field cases: GPIOK
+[   6.603] [m7_gpio_test] INFO T1 ConfigPin(NULL)        got=1 exp=1 photo=same OK
+[   6.609] [m7_gpio_test] INFO T1 port NULL              got=1 exp=1 photo=same OK
+[   6.616] [m7_gpio_test] INFO T1 GPIOA+4                got=1 exp=1 photo=same OK
+[   6.622] [m7_gpio_test] INFO T1 past GPIOK             got=1 exp=1 photo=same OK
+[   6.628] [m7_gpio_test] INFO T1 pin 16                 got=1 exp=1 photo=same OK
+[   6.635] [m7_gpio_test] INFO T1 AF 16                  got=1 exp=1 photo=same OK
+[   6.641] [m7_gpio_test] INFO T1 pull 3                 got=1 exp=1 photo=same OK
+[   6.647] [m7_gpio_test] INFO T1 speed 4                got=1 exp=1 photo=same OK
+[   6.653] [m7_gpio_test] INFO T1 mode 4                 got=1 exp=1 photo=same OK
+[   6.660] [m7_gpio_test] INFO T1 level 2                got=1 exp=1 photo=same OK
+[   6.666] [m7_gpio_test] INFO T1 analog + pull          got=1 exp=1 photo=same OK
+[   6.672] [m7_gpio_test] INFO T1 otype 2                got=1 exp=1 photo=same OK
+[   6.678] [m7_gpio_test] INFO T1 PA13                   got=2 exp=2 photo=same OK
+[   6.685] [m7_gpio_test] INFO T1 PA14                   got=2 exp=2 photo=same OK
+[   6.691] [m7_gpio_test] INFO T1 ConfigOutput speed 4   got=1 exp=1 photo=same OK
+[   6.697] [m7_gpio_test] INFO T1 ConfigInput pull 3     got=1 exp=1 photo=same OK
+[   6.704] [m7_gpio_test] INFO T1 AlternateEx af 16      got=1 exp=1 photo=same OK
+[   6.710] [m7_gpio_test] INFO T1 DeinitPin GPIOA+4      got=1 exp=1 photo=same OK
+[   6.716] [m7_gpio_test] INFO T1 DeinitPin pin 16       got=1 exp=1 photo=same OK
+[   6.722] [m7_gpio_test] INFO T1 DeinitPin PA13         got=2 exp=2 photo=same OK
+[   6.729] [m7_gpio_test] INFO T1 LockPins mask 0        got=1 exp=1 photo=same OK
+[   6.735] [m7_gpio_test] INFO T1 LockPins mask 1<<16    got=1 exp=1 photo=same OK
+[   6.741] [m7_gpio_test] INFO T1 LockPins past GPIOK    got=1 exp=1 photo=same OK
+[   6.747] [m7_gpio_test] INFO T1 ReadConfig out NULL    got=1 exp=1 photo=same OK
+[   6.754] [m7_gpio_test] INFO T1 legacy AF pull 3       got=0 exp=0 photo=same OK
+[   6.760] [m7_gpio_test] INFO T1 legacy AF speed 4      got=0 exp=0 photo=same OK
+[   6.766] [m7_gpio_test] INFO T1 legacy AF af 16        got=0 exp=0 photo=same OK
+[   6.773] [m7_gpio_test] INFO T1 legacy analog +4       got=0 exp=0 photo=same OK
+[   6.779] [m7_gpio_test] INFO T1 EnableClock GPIOA+4    got=0 exp=0 photo=same OK
+[   6.785] [m7_gpio_test] INFO T1 EnableClock past K     got=0 exp=0 photo=same OK
+[   6.792] [m7_gpio_test] INFO T1 control: valid ConfigOutput(PF9) changed the photo: yes
+[   6.798] [m7_gpio_test] INFO T1 CM7: cases=30 failed=0 control=changed -> PASS
+[   6.802] [ipc] m7=4 m4=0  (CPU2 NOT RESPONDING)
+[   6.808] [m7_gpio_test] INFO T1 CM4: cases=30 failed=0 control=changed -> PASS
+[   6.811] [m7_gpio_test] T1 VERDICT: PASS
+[   6.815] [m7_gpio_test] STEP id=12 bus=NONE v=2
+[   6.832] [m7_gpio_test] INFO T2 CM7 vs HAL_GPIO_Init: combos=288 compared=960 refused(analog+pull)=192 mismatches=0 odr_bad=0 legacy_bad=0 control=detected -> PASS
+[   6.843] [m7_gpio_test] INFO T2 CM4 vs RM table: combos=288 mismatches=0 control=detected -> PASS
+[   6.846] [m7_gpio_test] T2 VERDICT: PASS
+[   6.850] [m7_gpio_test] STEP id=13 bus=NONE v=2
+[   6.866] [m7_gpio_test] INFO B1 CM7 ConfigPin cycles (1000 calls, PRIMASK set around each): no hook min=442 max=593 (1.48 us); hook min=901 max=1084 (2.71 us)
+[   6.878] [m7_gpio_test] INFO B1 CM7 under contention, T15 (e): lock hold max=413 cycles (1.03 us); lock() entry to unlock max=1417 cycles (3.54 us)
+[   6.894] [m7_gpio_test] INFO B1 CM4 ConfigPin cycles: no hook min=391 max=553 (2.76 us); hook min=749 max=915 (4.57 us)
+[   6.906] [m7_gpio_test] INFO B1 CM4 under contention, T15 (e): lock hold max=284 cycles (1.42 us); lock() entry to unlock max=781 cycles (3.90 us)
+[   6.909] [m7_gpio_test] B1 DONE: COMPLETE
+[   6.912] [m7_gpio_test] STEP id=2 bus=NONE v=2
+[   6.915] [m7_gpio_test] GPIO_BENCH v2 idle
+[   6.921] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[   8.575] [m4_gpio_test] Rev b52ffec-dirty
+[   8.588] [m4_gpio_test] T15 CM4: b_corr=0 c_corr=330 c_ovl=375286 d_corr=12777 d_verify
+[   8.599] [m4_gpio_test] T15 CM4 (e): corr=0 verify=0 busy=0 hook_fail=0 ok=200000 calls
+[   8.612] [m4_gpio_test] T1 CM4: unclocked_port_index=10 cases=30 failed=0 first_failed=
+[   8.624] [m4_gpio_test] T2 CM4 vs RM table: combos=288 mismatches=0 control=detected PA
+[   8.636] [m4_gpio_test] B1 CM4 cycles: nohook_min=391 nohook_max=553 hook_min=749 hook_
+[   8.641] [m4_gpio_test] CM4 VERDICT=PASS
+[   8.646] [ipc] m7=9 m4=17  (CPU2 alive)
+[   9.574] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  10.548] [ipc] m7=12 m4=37  (CPU2 alive)
+[  12.521] [ipc] m7=16 m4=57  (CPU2 alive)
+[  14.493] [ipc] m7=20 m4=77  (CPU2 alive)
+[  14.514] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  16.466] [ipc] m7=24 m4=97  (CPU2 alive)
+[  18.440] [ipc] m7=28 m4=117  (CPU2 alive)
+[  19.455] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  20.413] [ipc] m7=32 m4=137  (CPU2 alive)
+[  22.386] [ipc] m7=36 m4=157  (CPU2 alive)
+[  24.359] [ipc] m7=40 m4=177  (CPU2 alive)
+[  24.396] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  26.332] [ipc] m7=44 m4=197  (CPU2 alive)
+[  28.304] [ipc] m7=48 m4=217  (CPU2 alive)
+[  29.336] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  30.277] [ipc] m7=52 m4=237  (CPU2 alive)
+[  32.249] [ipc] m7=56 m4=257  (CPU2 alive)
+[  34.222] [ipc] m7=60 m4=277  (CPU2 alive)
+[  34.274] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=4 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  36.195] [ipc] m7=64 m4=297  (CPU2 alive)
+[  38.167] [ipc] m7=68 m4=317  (CPU2 alive)
+[  39.213] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=4 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  40.139] [ipc] m7=72 m4=337  (CPU2 alive)
+[  42.112] [ipc] m7=76 m4=357  (CPU2 alive)
+[  44.085] [ipc] m7=80 m4=377  (CPU2 alive)
+[  44.153] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=4 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
