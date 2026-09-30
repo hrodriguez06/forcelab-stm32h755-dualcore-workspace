@@ -1,0 +1,15 @@
+﻿prj_01 at 0cd803f, production images. g_shared at 0x38008000 (size 0xA0): +0x00 magic, +0x04 m7_heartbeat, +0x08 m4_heartbeat, +0x98 m7_gpio_lock_fail_count, +0x9C m4_gpio_lock_fail_count. Read ~10 s after an SWD reset, after the 20 warm resets, raw CLI output below.
+=== debug (build\debug, 0cd803f, clean: True)
+  Address:      : 0x38008000
+0x38008000 : 48375353
+  Address:      : 0x38008004
+0x38008004 : 00000015 00000051
+  Address:      : 0x38008098
+0x38008098 : 00000000 00000000
+=== release (build\release, 0cd803f, clean: True)
+  Address:      : 0x38008000
+0x38008000 : 48375353
+  Address:      : 0x38008004
+0x38008004 : 00000015 0000006A
+  Address:      : 0x38008098
+0x38008098 : 00000000 00000000
