@@ -405,6 +405,86 @@ GpioBm_Status_t GPIO_BM_ConfigAlternateEx(GPIO_TypeDef *port, uint32_t pin_idx, 
     return GPIO_BM_ConfigPin(&cfg);
 }
 
+GpioBm_Status_t GPIO_BM_DeinitPin(GPIO_TypeDef *port, uint32_t pin_idx)
+{
+    GpioBm_Section_t section;
+    GpioBm_Status_t  st;
+    uint32_t         idx;
+
+    if (!port_index(port, &idx) || (pin_idx >= GPIO_BM_PIN_COUNT))
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+    if (is_swd_pin(port, pin_idx))
+    {
+        return GPIO_BM_ERR_DEBUG_PIN;
+    }
+
+    const uint32_t pos2  = pin_idx * 2U;
+    const uint32_t afr_i = pin_idx >> 3U;
+    const uint32_t pos4  = (pin_idx & 7U) * 4U;
+
+    (void)GPIO_BM_EnablePortClock(port);
+
+    st = GPIO_BM_SectionEnter(&section);
+    if (st != GPIO_BM_OK)
+    {
+        return st;
+    }
+
+    if (pin_locked(port, pin_idx))
+    {
+        GPIO_BM_SectionExit(&section);
+        return GPIO_BM_ERR_LOCKED;
+    }
+
+    /* C11: MODER = analog first, so the pin stops driving before anything
+       else changes; then the reset values of the other fields. */
+    port->MODER    = port->MODER | (3UL << pos2);
+    port->OTYPER   = port->OTYPER & ~(1UL << pin_idx);
+    port->OSPEEDR  = port->OSPEEDR & ~(3UL << pos2);
+    port->PUPDR    = port->PUPDR & ~(3UL << pos2);
+    port->AFR[afr_i] = port->AFR[afr_i] & ~(0xFUL << pos4);
+    port->BSRR     = 1UL << (pin_idx + 16U);
+
+    const bool ok =
+        (((port->MODER   >> pos2) & 3UL)   == 3UL) &&
+        (((port->OTYPER  >> pin_idx) & 1UL) == 0UL) &&
+        (((port->OSPEEDR >> pos2) & 3UL)   == 0UL) &&
+        (((port->PUPDR   >> pos2) & 3UL)   == 0UL) &&
+        (((port->AFR[afr_i] >> pos4) & 0xFUL) == 0UL);
+
+    GPIO_BM_SectionExit(&section);
+    return ok ? GPIO_BM_OK : GPIO_BM_ERR_VERIFY;
+}
+
+GpioBm_Status_t GPIO_BM_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, GpioBm_PinConfig_t *out)
+{
+    uint32_t idx;
+
+    if (out == NULL)
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+    if (!port_index(port, &idx) || (pin_idx >= GPIO_BM_PIN_COUNT))
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+
+    const uint32_t pos2 = pin_idx * 2U;
+
+    out->port             = (GPIO_TypeDef *)port;
+    out->pin_idx          = pin_idx;
+    out->mode             = (port->MODER   >> pos2) & 3UL;
+    out->otype            = (port->OTYPER  >> pin_idx) & 1UL;
+    out->speed            = (port->OSPEEDR >> pos2) & 3UL;
+    out->pull             = (port->PUPDR   >> pos2) & 3UL;
+    out->af               = (port->AFR[pin_idx >> 3U] >> ((pin_idx & 7U) * 4U)) & 0xFUL;
+    out->initial_level    = (port->ODR     >> pin_idx) & 1UL;
+    out->allow_debug_pins = false;
+    return GPIO_BM_OK;
+}
+
 /* ---- LCKR (rule 5) ------------------------------------------------------------ */
 
 GpioBm_Status_t GPIO_BM_LockPins(GPIO_TypeDef *port, uint32_t mask)

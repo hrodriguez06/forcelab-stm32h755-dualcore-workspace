@@ -144,6 +144,14 @@ GpioBm_Status_t GPIO_BM_ConfigOutput(GPIO_TypeDef *port, uint32_t pin_idx, uint3
 GpioBm_Status_t GPIO_BM_ConfigInput(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t pull);
 GpioBm_Status_t GPIO_BM_ConfigAlternateEx(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af,
                                           uint32_t otype, uint32_t pull, uint32_t speed);
+GpioBm_Status_t GPIO_BM_DeinitPin(GPIO_TypeDef *port, uint32_t pin_idx);  /* analog, AF0, PP, LOW, no pull */
+
+/**
+  * @brief  Reads the five configuration fields and the ODR bit of one pin.
+  *         No section: it only reads. The port clock must already be on.
+  */
+GpioBm_Status_t GPIO_BM_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, GpioBm_PinConfig_t *out);
+
 /* ---- Pin operations: static inline, no validation --------------------------------
  * Set, Reset, Write and WritePort are one store to BSRR, which is atomic
  * (RM0399 12.3.5): no section, safe from both cores and from any ISR.
