@@ -1,0 +1,17 @@
+R3-b binary compare of the production images of prj_01: debug and release built in a clean worktree (C:\wt_base) at 8310303 (before R3-b) and at f005eda (R3-b), each from an empty build directory, 'cmake --preset <p> -DCUBE_DIR=<main checkout Cube>'. Only the selftest sources include fw_build_id.h, so the images must be identical.
+--- debug_cm7.bin: sizes 29068 / 29068
+20dd5ab81669c3c76813eea696d5861932546177a4612b771daae39b5042d669 *before/debug_cm7.bin
+20dd5ab81669c3c76813eea696d5861932546177a4612b771daae39b5042d669 *after/debug_cm7.bin
+cmp: identical
+--- debug_cm4.bin: sizes 3344 / 3344
+959fcb7fd134cf5fe61368101e71b42c32770b0e12f3ea9cf88d2bfacc2a617a *before/debug_cm4.bin
+959fcb7fd134cf5fe61368101e71b42c32770b0e12f3ea9cf88d2bfacc2a617a *after/debug_cm4.bin
+cmp: identical
+--- release_cm7.bin: sizes 28120 / 28120
+91b8c5ef41319ed5566558b20de2eecdea2c5304458466e54b68f8f0cb8c0170 *before/release_cm7.bin
+91b8c5ef41319ed5566558b20de2eecdea2c5304458466e54b68f8f0cb8c0170 *after/release_cm7.bin
+cmp: identical
+--- release_cm4.bin: sizes 3028 / 3028
+6c3ce56d5c40e8aef23c0cc473b70852bf3f34a8596f288066fd95c3de0c3987 *before/release_cm4.bin
+6c3ce56d5c40e8aef23c0cc473b70852bf3f34a8596f288066fd95c3de0c3987 *after/release_cm4.bin
+cmp: identical
