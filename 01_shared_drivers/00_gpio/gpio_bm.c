@@ -405,3 +405,62 @@ GpioBm_Status_t GPIO_BM_ConfigAlternateEx(GPIO_TypeDef *port, uint32_t pin_idx, 
     return GPIO_BM_ConfigPin(&cfg);
 }
 
+/* ---- LCKR (rule 5) ------------------------------------------------------------ */
+
+GpioBm_Status_t GPIO_BM_LockPins(GPIO_TypeDef *port, uint32_t mask)
+{
+    GpioBm_Section_t section;
+    GpioBm_Status_t  st;
+    uint32_t         idx;
+
+    if (!port_index(port, &idx) || (mask == 0UL) || ((mask & ~0xFFFFUL) != 0UL))
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+
+    (void)GPIO_BM_EnablePortClock(port);
+
+    st = GPIO_BM_SectionEnter(&section);
+    if (st != GPIO_BM_OK)
+    {
+        return st;
+    }
+
+    uint32_t lckr = port->LCKR;
+    if ((lckr & GPIO_LCKR_LCKK) != 0UL)
+    {
+        /* Already locked: LCKR is frozen until reset and the sequence would
+           be ignored. Either the pins are among the locked ones or not. */
+        GPIO_BM_SectionExit(&section);
+        return ((lckr & mask) == mask) ? GPIO_BM_OK : GPIO_BM_ERR_LOCKED;
+    }
+
+    /* RM0399 12.4.8: the write sequence must not be interrupted and every
+       access is a 32-bit word (LCKR is declared as a 32-bit volatile). */
+    const uint32_t key = GPIO_LCKR_LCKK | mask;
+    port->LCKR = key;
+    port->LCKR = mask;
+    port->LCKR = key;
+    lckr = port->LCKR;
+    (void)lckr;
+    lckr = port->LCKR;
+
+    GPIO_BM_SectionExit(&section);
+
+    if (((lckr & GPIO_LCKR_LCKK) == 0UL) || ((lckr & mask) != mask))
+    {
+        return GPIO_BM_ERR_VERIFY;
+    }
+    return GPIO_BM_OK;
+}
+
+bool GPIO_BM_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx)
+{
+    uint32_t idx;
+
+    if (!port_index(port, &idx) || (pin_idx >= GPIO_BM_PIN_COUNT))
+    {
+        return false;
+    }
+    return pin_locked(port, pin_idx);
+}

@@ -187,6 +187,19 @@ static inline uint32_t GPIO_BM_ReadPort(const GPIO_TypeDef *p)
     return p->IDR & 0xFFFFUL;
 }
 
+/* ---- LCKR -------------------------------------------------------------------- */
+/**
+  * @brief  Locks the configuration of the pins in `mask` until the next reset
+  *         (RM0399 12.3.6 and 12.4.8): LCKK=1|mask, mask, LCKK=1|mask, read,
+  *         and a read of LCKK, all as 32-bit accesses inside the section.
+  * @retval GPIO_BM_OK when LCKK reads 1 and every pin of `mask` reads locked;
+  *         GPIO_BM_ERR_VERIFY when not; GPIO_BM_ERR_LOCKED when the port was
+  *         already locked without every pin of `mask` (LCKR is frozen until
+  *         reset); GPIO_BM_ERR_PARAM for a bad port or a mask of 0 or > 16 bits.
+  */
+GpioBm_Status_t GPIO_BM_LockPins(GPIO_TypeDef *port, uint32_t mask);  /* LCKK sequence, word accesses, LCKK read back */
+bool            GPIO_BM_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);
+
 /* ---- Section and cross-core hook ------------------------------------------------ */
 /* The section covers one pin. PRIMASK is saved and interrupts are masked on
  * the calling core first; only then, at nesting level 1 and when a hook is
