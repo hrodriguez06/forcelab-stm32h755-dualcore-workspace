@@ -570,62 +570,95 @@ excluded):
 
 ### 9.3 Evidence
 
-All of these are in `prj_01_template_dualcore/docs/`. Each file is the unedited
-output of one run. Since R3 (`a087d91`), every capture starts with the state of
-the tree: `[host] tree clean`, or the whole `git diff` of a `-dirty` tree. Since
-R3-a (`663ae65`), a `selftest-gpio` capture also prints the build id of the
-host, CM7 and CM4, and since R3-b (`f005eda`) that id covers the commit and the
-host checks `Rev` against its `HEAD` (§9.4). Since R3-c (`7456494`), a
-production warm-reset capture made with `--project --preset` shows both cores'
-`rev` and id in every reset, and the SWD-counter capture names the image of
-each block. Since R4-b (`674e8ad`), a `gpio_hw_check.py` capture starts with
-`[host] argv:` and `[host] options:`, and a `run_warm_resets.py` capture with
-`[host] argv:` (plus `[host] options:` with `--project --preset`). **Every
-capture before `674e8ad` has no record of its arguments**: in the two of
-control (3) (`gpio_dev_build_id_old_commit_7456494.txt`, `_allow_dirty.txt`)
-the difference of flag rests on the code, not on the capture.
-Earlier captures identify the image only by `Rev` and the host's tree:
+The captures in `prj_01_template_dualcore/docs/` are the ones that back a
+claim of this README: the validation of the current code, the negative
+controls and mutations that show the current tests catch their defects, and
+the evidence of the limitations in §10. Each file is the unedited output of
+one run. The captures of superseded revisions were removed from the tree
+after re-audit 5; §9.3.2 keeps their results and says how to read them.
+
+What a capture records depends on when it was made:
+- since R3 (`a087d91`), the state of the tree: `[host] tree clean`, or the
+  whole `git diff` of a `-dirty` tree, with its sha256;
+- since R3-a (`663ae65`), in a `selftest-gpio` capture, the build id of the
+  host, CM7 and CM4; since R3-b (`f005eda`) that id covers the commit, and the
+  host checks `Rev` against its `HEAD` (§9.4);
+- since R3-c (`7456494`), in a production warm-reset capture made with
+  `--project --preset`, both cores' `rev` and id in every reset, and in the
+  SWD-counter capture, the image of each block;
+- since R4-b (`674e8ad`), the arguments: `[host] argv:` and `[host] options:`
+  first in a `gpio_hw_check.py` capture, `[host] argv:` (plus `options` with
+  `--project --preset`) in a `run_warm_resets.py` capture.
+
+**Before `674e8ad` no capture records its arguments.** In the two of control (3)
+(`gpio_dev_build_id_old_commit_7456494.txt`, `_allow_dirty.txt`) the
+difference of flag rests on the code, not on the capture. Before `663ae65` a
+capture identifies its image only by `Rev` and the host's tree:
 `gpio_dev_replay_seed_d9d40bdd_fa44386.txt` says `Rev fa44386` and
 `tree clean`, although its image was built with `-DGST_RACE_SEED`.
 
+#### 9.3.1 Captures in the tree
+
 | File | Content |
 | :--- | :--- |
-| `gpio_selftest_b45120e.txt` | The one run at `b45120e` (§9.1): `argv`/`options` lines, `tree clean`, host = CM7 = CM4 = `4ad009a847fe1d89`, PASS |
-| `gpio_dev_cm4_other_build_allow_dirty_b45120e.txt` | R4-a control (5): CM7 of `b45120e`, CM4 of `674e8ad`, `--allow-dirty` (`allow_dirty=True`): abort before S8 naming both cores' `Rev`, `OE=0x0000` from open to close |
-| `gpio_dev_allow_dirty_positive_b45120e-dirty.txt` | R4-a positive control: a comment edited in `Common/Src/gpio_selftest_common.c` (patch in the capture), both cores `b45120e-dirty` with one id, `--allow-dirty`: S8 passed, PASS |
-| `gpio_dev_flash_cm4_elf_outside_project_b45120e.txt` | Step 2 of control (5) as the instructions gave it: `flash.py --core cm4 --elf <other worktree>` fails in `flash.py` before programming (it prints the ELF relative to its own project root). The same flash state was reached with `flash.py --core cm4` run from the `HEAD~1` worktree |
-| `gpio_warm_resets_compat_no_options_b45120e.txt` | `run_warm_resets.py` without the new options, `--count 2`, `debug` image: the old format plus the `[host] argv:` line |
-| `gpio_selftest_7456494.txt`, `_2.txt` | The two runs of §9.1, built from a clean worktree (`Rev 7456494` = host `HEAD`, `[host] tree clean`, build id `991971a381ccb862` on host, CM7 and CM4) |
-| `gpio_build_id_recompute_7456494.txt` | R3-b: the payload and its SHA-256 recomputed with `git`, `printf` and `sha256sum` for `selftest-gpio`, `debug` and `release`, each equal to `generated/fw_build_id.h` |
-| `gpio_dev_build_id_old_commit_7456494.txt`, `_allow_dirty.txt` | R3-b control (3): the `selftest-gpio` image of `a97973c` (`HEAD~1`) run from `7456494`: abort before S8 by the `Rev` check, with and without `--allow-dirty`; AD2 at `OE=0x0000` from open to close |
-| `gpio_r3b_bin_cmp_f005eda.txt` | R3-b left production alone: `debug` and `release` at `8310303` and `f005eda`, from empty build dirs: the four `.bin` identical |
-| `gpio_warm_resets_{debug,release}_7456494.txt` | Production regression (R3-c): 20/20 each, both cores' `rev` and id equal to the host's in every reset; header composed from the host's `rev` and id, with the tree state |
+| **Validation of the current code** | |
+| `gpio_selftest_b45120e.txt` | The one run at `b45120e`, host tools only (§9.1): `argv`/`options` lines, `tree clean`, host = CM7 = CM4 = `4ad009a847fe1d89`, PASS |
+| `gpio_selftest_7456494.txt`, `_2.txt` | The two runs at `7456494`, the last firmware change, from a clean worktree (`Rev 7456494` = host `HEAD`, `tree clean`, build id `991971a381ccb862` on host, CM7 and CM4) |
+| `gpio_warm_resets_{debug,release}_7456494.txt` | Production regression: 20/20 each, both cores' `rev` and id equal to the host's in every reset; header composed from the host's `rev` and id, with the tree state |
 | `gpio_swd_counters_7456494.txt` | Lock-fail counters 0 in both images; each block names its image (`rev`, id of both cores) from the warm-reset capture of the same flash |
-| `gpio_dev_warm_resets_id_mismatch_7456494.txt` | R3-c control (4): `release` flashed, `--preset debug`: identity FAIL at reset 1, exit 1 |
-| `gpio_warm_resets_compat_no_options_7456494.txt` | `run_warm_resets.py` without the new options, as `10_hsem` runs it: the old header ("Firmware Git Revision" = host `HEAD`), 20/20 |
-| `gpio_map_sizes_7456494.txt`, `gpio_wextra_7456494.txt` | Driver sizes (as at `fa44386`); 0 warnings in the driver files with `-Wextra -Wconversion -Wsign-conversion -Wshadow -Wcast-qual`, CM7 and CM4 (the CM7 build prints 16 more, all in CMSIS `cachel1_armv7.h`) |
-| `gpio_build_all_7456494.txt`, `gpio_prj04_selftest_build_7456494.txt` | `build_all.ps1 -Clean` 8/8 with the new `prj_01` sizes, and `prj_04` `selftest-gpio` with 0 warnings; compile only, main checkout at `7456494` |
-| `gpio_selftest_1ff10c8.txt`, `_2.txt`, `gpio_{warm_resets_debug,warm_resets_release,swd_counters,map_sizes,wextra,build_all,prj04_selftest_build}_1ff10c8.txt` | Validation of R2-a, R2-b and R3-a; superseded. Their build id does not cover the commit (before R3-b) |
-| `gpio_r2a_bin_cmp_88b0cba.txt` | R2-a: `selftest-gpio` at `25b6a45` and at `88b0cba`, both with the same `FW_GIT_REV`: identical `.bin` for CM7 and CM4 |
-| `gpio_selftest_663ae65.txt` | R3-a: the first clean run with the build id (host = CM7 = CM4) |
-| `gpio_dev_build_id_mismatch_663ae65.txt` | R3-a control (1): the `-DGST_RACE_SEED` image against a build dir back to clean flags: abort before S8, AD2 at `OE=0x0000` from open to close |
-| `gpio_build_id_edit_after_configure_663ae65.txt`, `gpio_dev_build_id_edit_after_configure_663ae65-dirty.txt` | R3-a control (2): an edit after `cmake --preset`, built without reconfiguring: both `.bin` carry `663ae65-dirty` and `f37405fc05564ac0`, not the old id; on the bench (`--allow-dirty`, patch in the capture) host = CM7 = CM4 |
-| Warm-reset captures before `7456494` (`gpio_warm_resets_*_{780dddd,0cd803f,6f3ee2b,fa44386,1ff10c8}.txt`) and SWD-counter captures before it | They do not identify the image: "Firmware Git Revision" is the host's `HEAD`, read without a `-dirty` check, and nothing is read from the board. The titles of `gpio_warm_resets_*_fa44386.txt` and `_1ff10c8.txt` are wrong: both say "after re-audit 1, R1-R4", and the `1ff10c8` ones belong to re-audit 2. The captures are left as they are |
-| `gpio_dev_layout_pad_663ae65-dirty.txt` | R2-b: 62 B appended to `gpio_bm` (patch in the capture; `gpio_bm` 1780 B, HAL/LL code moved 60 B): B1 maxima barely move (CM4 HAL with hook 1983 → 1987), T15 CM4 hold 980. The layout cause is not confirmed |
-| `gpio_selftest_fa44386.txt`, `_2.txt`, `gpio_{warm_resets_debug,warm_resets_release,swd_counters,map_sizes,wextra,build_all,prj04_selftest_build}_fa44386.txt` | Validation of R1–R4 with the 50 µs limit, before the build id; superseded |
+| `gpio_map_sizes_7456494.txt`, `gpio_wextra_7456494.txt` | Driver sizes (unchanged since `fa44386`); 0 warnings in the driver files with `-Wextra -Wconversion -Wsign-conversion -Wshadow -Wcast-qual`, CM7 and CM4 (the CM7 build prints 16 more, all in CMSIS `cachel1_armv7.h`) |
+| `gpio_build_all_7456494.txt`, `gpio_prj04_selftest_build_7456494.txt` | `build_all.ps1 -Clean` 8/8 with the `prj_01` sizes of §9.2, and `prj_04` `selftest-gpio` with 0 warnings; compile only |
+| `gpio_warm_resets_compat_no_options_b45120e.txt` | `run_warm_resets.py` without the new options, as `10_hsem` runs it (`--count 2`, `debug` image): the old format plus the `[host] argv:` line |
+| **Image identity (R3-a, R3-b, R3-c, R4-a)** | |
+| `gpio_build_id_recompute_7456494.txt` | The build-id payload and its SHA-256 recomputed with `git`, `printf` and `sha256sum` for `selftest-gpio`, `debug` and `release`, each equal to `generated/fw_build_id.h` |
+| `gpio_selftest_663ae65.txt` | The first clean run with the build id (host = CM7 = CM4); also the baseline of the layout pad run |
+| `gpio_dev_build_id_mismatch_663ae65.txt` | Control (1): the `-DGST_RACE_SEED` image against a build dir back to clean flags: abort before S8, `OE=0x0000` from open to close |
+| `gpio_build_id_edit_after_configure_663ae65.txt`, `gpio_dev_build_id_edit_after_configure_663ae65-dirty.txt` | Control (2): an edit after `cmake --preset`, built without reconfiguring: both `.bin` carry `663ae65-dirty` and `f37405fc05564ac0`; on the bench (`--allow-dirty`, patch in the capture) host = CM7 = CM4 |
+| `gpio_dev_build_id_old_commit_7456494.txt`, `_allow_dirty.txt` | Control (3): the image of `a97973c` (`HEAD~1`) run from `7456494`: abort before S8 by the `Rev` check, with and without `--allow-dirty`; `OE=0x0000` from open to close |
+| `gpio_dev_warm_resets_id_mismatch_7456494.txt` | Control (4): `release` flashed, `--preset debug`: identity FAIL at reset 1, exit 1 |
+| `gpio_dev_cm4_other_build_allow_dirty_b45120e.txt` | Control (5): CM7 of `b45120e`, CM4 of `674e8ad`, `--allow-dirty` (`allow_dirty=True`): abort before S8 naming both cores' `Rev`, `OE=0x0000` from open to close |
+| `gpio_dev_allow_dirty_positive_b45120e-dirty.txt` | Positive control of (5): a comment edited in `Common/Src/gpio_selftest_common.c` (patch in the capture), both cores `b45120e-dirty` with one id, `--allow-dirty`: S8 passed, PASS |
+| `gpio_dev_flash_cm4_elf_outside_project_b45120e.txt` | `flash.py --core cm4 --elf <other worktree>` fails in `flash.py` before programming (it prints the ELF relative to its own project root), a workspace-tool defect tracked outside this driver. Control (5) used `flash.py --core cm4` run from the `HEAD~1` worktree instead |
+| `gpio_r2a_bin_cmp_88b0cba.txt` | R2-a: `selftest-gpio` at `25b6a45` and at `88b0cba`, both with the same `FW_GIT_REV`: identical `.bin` for CM7 and CM4 (a comment-only change) |
+| `gpio_r3b_bin_cmp_f005eda.txt` | R3-b left production alone: `debug` and `release` at `8310303` and `f005eda`, from empty build dirs: the four `.bin` identical |
+| **Mutations: the current tests catch their defects** | |
 | `gpio_dev_mutation_readconfig_no_clock_fa44386-dirty.txt` | M-R1, patch in the capture: `T16 A1` case (C) fails, its only failure |
-| `gpio_dev_mutation_ll_no_section_fa44386-dirty.txt`, `_2.txt` | M-R2, patch in the capture: T15 `d` 12 897 / 13 253 and `e` 6 790 / 6 624 corruptions (seeds `0x4FD2A52E` / `0x5FEFE375`); TB 12 failures per core |
-| `gpio_seed_replay_bin_cmp_fa44386.txt`, `gpio_dev_replay_seed_d9d40bdd_fa44386.txt` | The `GST_RACE_SEED=0xD9D40BDD` image differs from the default one in the 4 bytes of the seed word (CM4 identical); its replay of run 1 passes, with other T15 counts (section 10) |
-| `gpio_dev_eqlen_*_fa44386-dirty.txt`, `gpio_dev_cacheinv_*_fa44386-dirty.txt` | Two attempts at an exact replay (a seed line of equal length in both builds; caches invalidated before the start): neither replays the counts |
-| `*_7cedf36*`, `*_9ccc971*` | R2 development. At `9ccc971` a define that selected code did not replay. At `7cedf36` the same replay image differed between two runs; with a fixed start (`gpio_dev_deadline_*_7cedf36-dirty`) it repeated itself (37 of 38 T15/B1 lines equal, the 38th prints the RNG word) |
-| `*_6f3ee2b*` | First delivery of R1–R4, before the replay work; superseded |
-| `gpio_selftest_0cd803f.txt`, `_2.txt` and the other `*_0cd803f.txt` | Audit fixes A1–A7; superseded. T15 there is one interleaving per image (before R2) |
+| `gpio_dev_mutation_ll_no_section_fa44386-dirty.txt`, `_2.txt` | M-R2 (`gpio_ll` without its section), patch in the capture: T15 `d` 12 897 / 13 253 and `e` 6 790 / 6 624 corruptions (seeds `0x4FD2A52E` / `0x5FEFE375`); TB 12 failures per core |
 | `gpio_dev_mutation_hal_init_no_clock_0cd803f-dirty.txt` | M-A1: `GPIO_HAL_Init` without `EnablePortClock` before the `LCKR` check (patch described in `6d1ef62`, not recorded in the capture, which predates R3): `T16 A1` case (B) refused |
 | `gpio_dev_mutation_exit_installed_hook_0cd803f-dirty.txt` | M-A4: `SectionExit` releasing the installed hook instead of the one taken (described in `6d1ef62`, not recorded in the capture): TB fails on both cores (6 each) |
-| `gpio_dev_mutation_ll_no_section_780dddd-dirty.txt` | `gpio_ll` without its section (described in `d11fb8d`, not recorded in the capture): TB fails on both cores; T15 `d`/`e` 15 708 and 8 507 corruptions, one interleaving per image |
 | `gpio_dev_mutation_hal_no_level_780dddd-dirty.txt` | `gpio_hal` without the `BSRR` level (described in `d11fb8d`, not recorded in the capture): T2 `odr_bad` 432 per core; T6_HAL and T8_HAL A–D fail |
-| `gpio_selftest_8b8919a.txt` | The first run of the audit tests: all pass except `T16 A1`, whose premise (unclocked `LCKR` = 0) the silicon refuted |
-| `gpio_selftest_2b9bf21*.txt`, `gpio_selftest_780dddd*.txt`, `*_780dddd.txt` | Earlier evidence (before the audit fixes); superseded. T15 there is one interleaving per image |
+| **Evidence of §10 and of the findings** | |
+| `gpio_selftest_8b8919a.txt` | The first run of the A1/A4 tests: all pass except `T16 A1`, whose premise (unclocked `LCKR` = 0) the silicon refuted: an unclocked port reads `0xFFFFFFFF` (§6) |
+| `gpio_dev_layout_pad_663ae65-dirty.txt` | R2-b: 62 B appended to `gpio_bm` (patch in the capture; `gpio_bm` 1780 B, HAL/LL code moved 60 B): B1 maxima barely move (CM4 HAL with hook 1983 → 1987), T15 CM4 hold 980. The layout cause is not confirmed |
+| `gpio_seed_replay_bin_cmp_fa44386.txt`, `gpio_dev_replay_seed_d9d40bdd_fa44386.txt` | The `GST_RACE_SEED=0xD9D40BDD` image differs from the default one in the 4 bytes of the seed word (CM4 identical); its replay of run 1 at `fa44386` passes, with other T15 counts (59 668 against 59 141) |
+| `gpio_dev_eqlen_*_fa44386-dirty.txt`, `gpio_dev_cacheinv_*_fa44386-dirty.txt` | Two attempts at an exact replay (a seed line of equal length in both builds; caches invalidated before the start): neither replays the counts |
+| `gpio_dev_replay_seed_6f6841b8_9ccc971.txt` | At `9ccc971` a define that selected code changed the timing, and the replay did not replay (cited in `CM7/App/Src/gpio_selftest.c`) |
+| `gpio_dev_replay_seed_3f9a7bfb_7cedf36.txt`, `_2.txt` | At `7cedf36`, with a data-only seed, two runs of the same replay image still differed: the variable start of HSI48/RNG (cited in the selftest) |
+| `gpio_dev_deadline_seed_3f9a7bfb_7cedf36-dirty.txt`, `_2.txt` | With a fixed T15 start the same image repeated itself: 37 of 38 T15/B1 lines equal, the 38th prints the RNG word (cited in the selftest) |
+
+#### 9.3.2 Captures removed from the tree
+
+Every one of them passed. They stay in git history; read one with
+`git show 6c0e792:03_firmware_templates/prj_01_template_dualcore/docs/<file>`
+and list them with
+`git ls-tree --name-only 6c0e792 03_firmware_templates/prj_01_template_dualcore/docs/`.
+
+| Revision | What it validated | Result | Files |
+| :--- | :--- | :--- | :--- |
+| `780dddd`, `2b9bf21` | F1 and the LL/HAL tiers, before the audit (`2b9bf21` changed only the host script) | 4 runs FW/HOST PASS; T15 `c_raw_both` 315 897 in all four (one interleaving per image, before R2); B1 hold CM7 743 / CM4 851 cycles, 11.7× at 50 µs; warm resets 20/20 ×2, counters 0; `build_all` 8/8 | `gpio_selftest_{780dddd,2b9bf21}*`, `*_780dddd.txt` |
+| `0cd803f` | Audit fixes A1–A7, the A1 premise corrected | 2 runs PASS; `c_raw_both` 320 906 in both (one interleaving); B1 hold 801 / 841 cycles, 11.9×; warm resets 20/20 ×2, counters 0; `build_all` 8/8 | `gpio_selftest_0cd803f*`, `*_0cd803f.txt` |
+| `6f3ee2b` | First delivery of R1–R4 (seed, jitter, `ERR_NO_CLOCK`) | 2 runs PASS, seeds `0x925D8873` / `0x0FDA18D5`, `c_raw_both` 58 577 / 59 139; B1 hold CM4 991, 10.09×; warm resets 20/20 ×2, counters 0; `build_all` 8/8; its M-R1 and M-R2 runs are superseded by those at `fa44386` | `*_6f3ee2b*` |
+| `9ccc971`, `7cedf36` | R2 replay development | 4 runs PASS; the replay evidence of those revisions stays in §9.3.1 | `gpio_selftest_{9ccc971,7cedf36}*`, `gpio_seed_replay_bin_cmp_7cedf36.txt` |
+| `fa44386` | R1–R4 closed, 50 µs limit | 2 runs PASS, seeds `0xD9D40BDD` / `0xB96D7FEF`, `c_raw_both` 59 141 / 59 159; B1 hold CM4 992, 10.08×; warm resets 20/20 ×2, counters 0; `build_all` 8/8 | `gpio_selftest_fa44386*`, `gpio_{warm_resets_*,swd_counters,map_sizes,wextra,build_all,prj04_selftest_build}_fa44386.txt` |
+| `1ff10c8` | R2-a, R2-b (60 µs), R3-a | 2 runs PASS, seeds `0xDA4D6E4C` / `0xD1629B52`, `c_raw_both` 58 972 / 59 031; B1 hold CM4 991, 12.10×; warm resets 20/20 ×2, counters 0; `build_all` 8/8 | `gpio_selftest_1ff10c8*`, `*_1ff10c8.txt` |
+| `780dddd` | The first `gpio_ll`-without-section mutation | Superseded by M-R2 at `fa44386` (§9.3.1) | `gpio_dev_mutation_ll_no_section_780dddd-dirty.txt` |
+| `7456494` | `run_warm_resets.py` without options, before R4-b | 20/20; superseded by the `b45120e` capture | `gpio_warm_resets_compat_no_options_7456494.txt` |
+
+The warm-reset and SWD-counter captures before `7456494` do not identify the
+image: their "Firmware Git Revision" is the host's `HEAD`, read without a
+`-dirty` check, and nothing was read from the board. The titles of the
+`fa44386` and `1ff10c8` warm-reset captures are wrong: both say "after
+re-audit 1, R1-R4", and the `1ff10c8` ones belong to re-audit 2.
 
 ### 9.4 Reproducing it
 
@@ -785,6 +818,10 @@ cmake --preset selftest-gpio -DCMAKE_C_FLAGS=
 ---
 
 ## 12. Findings
+
+The findings below are the audit record. A capture they name that is no longer
+in `docs/` was removed with the superseded evidence; §9.3.2 says what it
+showed and how to read it from git history.
 
 ### 12.1 Audit of F1 and the LL/HAL tiers (A1–A7, 2026-09-30)
 
@@ -1061,10 +1098,20 @@ Before changing it:
    `HAL_Init()`.
 4. **Every test needs a negative control that prints its value**, and an oracle
    that is not the driver.
-5. **Captures are the output of one run** from a clean commit, and are never
-   edited.
+5. **Captures are the output of one run** and are never edited. Validation
+   runs come from a clean commit; a development or mutation run is `-dirty`,
+   run with `--allow-dirty`, and carries its patch in the capture (§9.3).
 6. **Before merging:** run `.\tools\build_all.ps1 -Clean` (8/8), two complete
-   `gpio_hw_check.py` runs on the bench, and the production warm resets.
+   `gpio_hw_check.py` runs on the bench, and the production warm resets. When
+   only the host tools change and `git diff --stat` shows no change under
+   `CM7/`, `CM4/`, `Common/`, `cmake/` or the driver sources, one clean run is
+   enough (as at `b45120e`), and `build_all` and the warm resets stand.
+7. **Keep in `docs/` only the captures that back a current claim** of this
+   README: the validation of the current code, the negative controls and
+   mutations of the current tests, and the evidence of §10. When a revision
+   supersedes them, remove the old captures and add their results to §9.3.2,
+   with the commit they can be read from. Never remove a capture that code or
+   another README cites.
 
 ---
 
@@ -1092,6 +1139,7 @@ Before changing it:
 | R3-b build id bound to the commit, `Rev` = `HEAD` in the host; R3-c identity in the production images and in `run_warm_resets.py` | `f005eda`, `7456494`; evidence `a97973c`, `dbb44a3` |
 | Re-audit 4 at `7fc7ad2` (R4-a, R4-b) and its instructions | `08627cf` |
 | R4-b arguments in the host tools' captures; R4-a both cores bound under `--allow-dirty` (host tools only) | `674e8ad`, `b45120e`; evidence `e41769c` |
+| Re-audit 5 and merge verdict; 53 superseded captures removed from `docs/` (§9.3.2 keeps their results) | `6c0e792`, the commit after it |
 
 The implementation plan, the implementer's instructions, the F0 correction and
 F1a instructions, the implementation report and the audit record were removed

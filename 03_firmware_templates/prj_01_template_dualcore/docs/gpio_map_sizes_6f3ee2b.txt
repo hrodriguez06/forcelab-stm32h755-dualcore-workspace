@@ -1,8 +1,0 @@
-﻿Per-object sizes of gpio_*.c.obj from the linked .map files of a clean worktree at 6f3ee2b (C:\wt_gpio), counted after 'Linker script and memory map' (Discarded input sections excluded). text = .text* + .rodata*.
-build/release/cm7_firmware.map {'gpio_bm.c.obj': {'text': 92, 'data': 0, 'bss': 4}}
-build/release/cm4_firmware.map {'gpio_bm.c.obj': {'text': 20, 'data': 0, 'bss': 4}}
-build/debug/cm7_firmware.map {'gpio_bm.c.obj': {'text': 112, 'data': 0, 'bss': 4}}
-build/debug/cm4_firmware.map {'gpio_bm.c.obj': {'text': 20, 'data': 0, 'bss': 4}}
-build/selftest-gpio/cm7_firmware.map {'gpio_bm.c.obj': {'text': 1718, 'data': 0, 'bss': 8}, 'gpio_hal.c.obj': {'text': 926, 'data': 0, 'bss': 0}, 'gpio_ll.c.obj': {'text': 1258, 'data': 0, 'bss': 0}}
-build/selftest-gpio/cm4_firmware.map {'gpio_bm.c.obj': {'text': 1718, 'data': 0, 'bss': 8}, 'gpio_hal.c.obj': {'text': 928, 'data': 0, 'bss': 0}, 'gpio_ll.c.obj': {'text': 1268, 'data': 0, 'bss': 0}}
-
