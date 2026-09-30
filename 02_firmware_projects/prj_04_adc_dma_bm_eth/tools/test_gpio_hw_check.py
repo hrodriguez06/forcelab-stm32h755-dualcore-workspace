@@ -106,16 +106,26 @@ def select_real_captures() -> list[pathlib.Path]:
     except (OSError, subprocess.CalledProcessError) as e:
         raise unittest.SkipTest(f"git log unavailable, cannot choose a capture: {e}")
 
+    repo_root = pathlib.Path(subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], cwd=PROJECT_ROOT,
+        capture_output=True, text=True, check=True).stdout.strip())
+
+    def is_bench_capture(path: pathlib.Path) -> bool:
+        # Other selftests (UART, ADC) share the gpio_<phase>_selftest_ prefix;
+        # only a gpio_hw_check.py run has the CM7 GPIO banner.
+        try:
+            return "[m7_gpio_test] Rev " in path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return False
+
     for block in res.stdout.split("\x00"):
         # Aborted runs are committed too, as gpio_<phase>_selftest_aborted_*;
         # they stop mid-table by definition and are not a table reference.
         names = [n.strip() for n in block.splitlines()[1:]
                  if n.strip() and "_aborted_" not in n]
-        if names:
-            repo_root = pathlib.Path(subprocess.run(
-                ["git", "rev-parse", "--show-toplevel"], cwd=PROJECT_ROOT,
-                capture_output=True, text=True, check=True).stdout.strip())
-            return sorted(repo_root / n for n in names)
+        paths = [repo_root / n for n in names if is_bench_capture(repo_root / n)]
+        if paths:
+            return sorted(paths)
     raise unittest.SkipTest(f"No committed capture matches {CAPTURE_GLOB}")
 
 
