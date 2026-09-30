@@ -76,6 +76,49 @@ from fw_model import (
 )
 
 
+CAPTURE_ENV_VAR = "GPIO_SELFTEST_CAPTURE"
+CAPTURE_GLOB = "docs/gpio_*_selftest_*.txt"
+
+
+def select_real_captures() -> list[pathlib.Path]:
+    """R4-m1: Selftest captures to compare against the protocol table.
+
+    GPIO_SELFTEST_CAPTURE (a path, absolute or relative to the project) wins.
+    Otherwise: the captures added by the newest commit that added any file
+    matching docs/gpio_*_selftest_*.txt, from `git log --diff-filter=A`.
+    Raises unittest.SkipTest when neither source gives a file.
+    """
+    explicit = os.environ.get(CAPTURE_ENV_VAR)
+    if explicit:
+        path = pathlib.Path(explicit)
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        if not path.is_file():
+            raise unittest.SkipTest(f"{CAPTURE_ENV_VAR}={explicit} does not name a file")
+        return [path]
+
+    import subprocess
+    try:
+        res = subprocess.run(
+            ["git", "log", "--diff-filter=A", "--name-only", "--format=%x00%H", "--", CAPTURE_GLOB],
+            cwd=PROJECT_ROOT, capture_output=True, text=True, check=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as e:
+        raise unittest.SkipTest(f"git log unavailable, cannot choose a capture: {e}")
+
+    for block in res.stdout.split("\x00"):
+        # Aborted runs are committed too, as gpio_<phase>_selftest_aborted_*;
+        # they stop mid-table by definition and are not a table reference.
+        names = [n.strip() for n in block.splitlines()[1:]
+                 if n.strip() and "_aborted_" not in n]
+        if names:
+            repo_root = pathlib.Path(subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"], cwd=PROJECT_ROOT,
+                capture_output=True, text=True, check=True).stdout.strip())
+            return sorted(repo_root / n for n in names)
+    raise unittest.SkipTest(f"No committed capture matches {CAPTURE_GLOB}")
+
+
 class MockDwfLib:
     """Mock of DWF library connected to SimBus."""
 
@@ -871,13 +914,28 @@ class TestHarnessScenarios(BaseSimTest):
     test_host_and_model_traverse_identical_table = test_host_and_model_trace_matches_protocol_table
 
     def test_real_capture_matches_protocol_table(self):
-        """R2-M3: Hardware capture non-INFO m7 lines match protocol table LINE patterns in exact order."""
-        docs_dir = PROJECT_ROOT / "docs"
-        capture_files = list(docs_dir.glob("gpio_f0_selftest_*.txt"))
-        self.assertTrue(len(capture_files) > 0, "No hardware capture files found in docs/")
-        latest_capture = max(capture_files, key=os.path.getmtime)
-        with open(latest_capture, "r", encoding="utf-8") as f:
+        """R2-M3, R4-m1: Hardware capture non-INFO m7 lines match protocol table LINE patterns in exact order.
+
+        The capture is never chosen by file mtime (a fresh clone gives every file
+        about the same date). It comes from GPIO_SELFTEST_CAPTURE when that is
+        set, or else it is every selftest capture added by the most recent commit
+        that added one, according to git log. A capture of another protocol
+        version is not compared: the test says so and is skipped.
+        """
+        for capture in select_real_captures():
+            with self.subTest(capture=capture.name):
+                self._check_capture_against_table(capture)
+
+    def _check_capture_against_table(self, capture: pathlib.Path) -> None:
+        with open(capture, "r", encoding="utf-8") as f:
             raw_lines = f.readlines()
+
+        banner = f"GPIO_BENCH v{GPIO_BENCH_PROTOCOL_VERSION} idle"
+        if not any(banner in l for l in raw_lines):
+            self.skipTest(
+                f"{capture.name} is not a capture of protocol v{GPIO_BENCH_PROTOCOL_VERSION} "
+                f"(no '{banner}' line); no capture of the current protocol to compare"
+            )
 
         lines = [re.sub(r"^\[\d\d:\d\d:\d\d\]\s*", "", l).strip() for l in raw_lines]
         m7_lines = [
