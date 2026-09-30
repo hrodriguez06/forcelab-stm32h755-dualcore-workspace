@@ -17,14 +17,16 @@ Status: phase F1 of the implementation plan (removed, see
 deferred (F3–F4). Validated on a
 NUCLEO-H755ZI-Q (silicon Rev V, `REV_ID = 0x2003`) on 2026-09-30, in
 `prj_01_template_dualcore` only, with an Analog Discovery 2. Two complete runs
-at `0cd803f` pass: see [section 9](#9-validation). **EXTI and the compensation
+at `fa44386` pass: see [section 9](#9-validation). **EXTI and the compensation
 cell (F2) are not implemented.** A code audit on 2026-09-30 (of `cc1ee88`) found
 no blocking defect; its findings A1–A7 and their fixes are in
 [section 12](#12-findings). The fixes were then run on the bench, where the
 premise of A1 turned out wrong (an unclocked port reads all ones, not zero), and
-its description was corrected. A re-audit at `1a635d8` left four open findings
-(R1–R4, [section 12.3](#123-re-audit-1-r1r4-2026-09-30-at-1a635d8)), none
-blocking. This driver has had no independent bench audit.
+its description was corrected. A re-audit at `1a635d8` found R1–R4
+([section 12.3](#123-re-audit-1-r1r4-2026-09-30-at-1a635d8)), none blocking.
+All four are closed at `fa44386`, with one criterion not met: a
+`GST_RACE_SEED` replay of T15 is close but not exact (section 10). This driver
+has had no independent bench audit.
 
 ---
 
@@ -467,27 +469,37 @@ new session there before it releases CPU2. The global verdict needs
 tier with itself: the oracles are register snapshots, a field table written from
 RM0399, ST's `HAL_GPIO_Init`, private counters, and the AD2.
 
-### 9.1 Tests (runs at `0cd803f`, identical in both unless two values are given)
+**What a second run adds.** Before R2, every run of one image gave the same
+digital results, T15 included: after an SWD reset both cores start with the
+same timing, so each protected T15 phase tested one interleaving per image and
+a second run only added new analog measurements (T5, T6, T9, T10). Since R2,
+CPU1 seeds T15 from the RNG in every run (`T15 seed=0x…`), and both race loops
+wait a seeded 0–1023 cycles after the start and 0–63 cycles before each call,
+outside the section. The two runs below have different seeds and different T15
+counts.
+
+### 9.1 Tests (runs at `fa44386`; one value means both runs gave it)
 
 | Test | What it proves | Negative control | Result |
 | :--- | :--- | :--- | :--- |
 | T1 | Refusals of each tier on both cores: exact status; snapshot of every clocked port and both `RCC_AHB4ENR` banks unchanged. Includes a batch with a bad third entry and a mask with PA0 next to PA13 | A valid call of the same tier changes the snapshot | 45 BM / 32 LL / 35 HAL refusals per core, 0 failures |
 | T2 | 1440 configurations per tier (PF6–PF11, 4 modes × 2 types × 4 speeds × 3 pulls × AF 0/7/15), from a state with every field different, match the RM0399 field table; BM and LL also match raw `HAL_GPIO_Init`; `ODR` = initial level; BM/LL `ReadConfig` = registers; legacy calls give the `ca569b6` bits | A deliberately altered expected image is detected | 0 differences in 4320 configurations per core (1440 per tier) and in 2880 comparisons with raw `HAL_GPIO_Init`; 288 analog+pull refusals per tier; G7 shown on raw HAL 6/6 |
 | TB | A refusing hook: 16 calls × PRIMASK 0/1 all return busy, nothing written, PRIMASK restored, `lock()` called once, nesting counter back to 0. Nesting: one lock for an outer section. **A4**: `SetSharedLock` to a second hook and to `NULL` inside an open section, PRIMASK 0/1: the exit releases the hook that was taken, the new hook is never released without a lock, and the next section uses the new hook (32 checks) | The same hook allowing writes; A4: swapped *before* the section, the call is locked and released on the second hook only (`swap_control=1`) | 274 checks, 0 failures, 32/32 busy, `swap_control=1`, both cores. Mutation M-A4 (exit releases the installed hook): 6 failures on each core |
-| T15 | Race PF10 (CPU1) against PF11 (CPU2), same registers | Raw RMW on both cores: **320 906** corruptions, with overlap on both. Each core alone: 0 | Through the production hook (counting shim), 0 corruptions and `locked_calls` = sum of both cores in: HAL/LL, LL/HAL, BM/BM and `HAL_GPIO_Init`-in-section/BM, 200 000 calls per core each |
-| T15 `h` | One writer without the section defeats the lock | - | Raw `HAL_GPIO_Init` on CPU1 against BM on CPU2: 9 944 corruptions |
-| T15 `i`/`j` | A TIM17 ISR (about 20 kHz) reconfigures PF6 while the thread reconfigures PF10 | Raw RMW in both: 1 589 corruptions in 12 821 ISR entries | Thread HAL + ISR LL: 0 in 20 503 entries |
+| T15 seed | A seed per run from the RNG (HSI48, `DRDY` without `SECS`/`CECS`, bounded waits; a failure is a FAIL). T15 starts at a fixed 40 ms after the RNG read begins | Two runs, two seeds; the start line prints the time used and fails above 30 ms | Seeds `0xD9D40BDD` / `0xB96D7FEF`; 10 265 µs of 40 ms used in both |
+| T15 | Race PF10 (CPU1) against PF11 (CPU2), same registers, seeded jitter outside the section | Raw RMW on both cores: **59 141** / **59 159** corruptions, with overlap on both. Each core alone: 0 | Through the production hook (counting shim), 0 corruptions and `locked_calls` = sum of both cores in: HAL/LL, LL/HAL, BM/BM and `HAL_GPIO_Init`-in-section/BM, 200 000 calls per core each. Mutation M-R2 (`gpio_ll` without its section), two runs: `d` 12 897 / 13 253, `e` 6 790 / 6 624 corruptions |
+| T15 `h` | One writer without the section defeats the lock | - | Raw `HAL_GPIO_Init` on CPU1 against BM on CPU2: 14 055 / 14 095 corruptions |
+| T15 `i`/`j` | A TIM17 ISR (about 20 kHz) reconfigures PF6 while the thread reconfigures PF10 | Raw RMW in both: 1 519 / 1 499 corruptions in 14 674 / 14 672 ISR entries | Thread HAL + ISR LL: 0 in 23 186 entries |
 | T0a | 13 lines follow both MCU pulls; REQ/ACK work | - | 0x4FFF / 0x0000 on the AD2; `IDR` 0xFF78 / 0x0000 |
 | T0b | (a) host guard refuses 8 masks before the DLL (mock); (b) `bench_claim` refuses PE0–PE4, PE7, bus, PA8, PF14; (c) the released-bus check catches a driven bus; (d) no `HOST_REQ` → MCU safe state | (a) allowed masks pass; (b) PE5 accepted; (c) the MCU drives 0x5A on purpose | All pass; (c) `False` twice at `0x5A`; (d) GPIOE `MODER[31:4]` = `0x00004000` |
 | T3 | Pin operations of each tier (`WritePort`, `Set`, `Reset`, `Write`, `Toggle`) read by the AD2 | A deliberate 0x54 where the host expects 0x55 | 24 values per tier (26 for BM), 0 differences; set+reset → `0x3F`; control detected at index 25 only |
 | T4 / T7 | 256 patterns driven by the AD2, read per tier by port and by bit; then analog `IDR` = 0 | Inverted pass (BM): CRC differs and equals the inverted CRC; input mode reads 0xFF | CRC32 `0x29058C73` = host for all tiers; T7 0xFF → 0x00 after `DeinitPin` |
-| T5 | Pull resistances set by each tier; the scope load R<sub>IN</sub> is measured, not assumed | PF14 no pull < 0.1 V; PF15 no pull > 2.9 V; V<sub>DD</sub> agrees on both channels within 50 mV | R<sub>PU</sub> 39.1–39.4 kΩ, R<sub>PD</sub> 42.6 kΩ (30–50 kΩ, DS12923 table 59); R<sub>IN</sub> 1053.0 / 1049.2 kΩ |
-| T6 | Open-drain of each tier: PF15 as an I2C line (22 kΩ to 3V3), PF14 released | PF14 push-pull high: 3.303–3.304 V | PF15 OD low 0.026–0.027 V, released 3.234–3.235 V; PF14 released 0.085–0.089 V |
+| T5 | Pull resistances set by each tier; the scope load R<sub>IN</sub> is measured, not assumed | PF14 no pull < 0.1 V; PF15 no pull > 2.9 V; V<sub>DD</sub> agrees on both channels within 50 mV | R<sub>PU</sub> 39.2–39.4 kΩ, R<sub>PD</sub> 42.6 kΩ (30–50 kΩ, DS12923 table 59); R<sub>IN</sub> 1044.9 / 1060.3 kΩ |
+| T6 | Open-drain of each tier: PF15 as an I2C line (22 kΩ to 3V3), PF14 released | PF14 push-pull high: 3.303–3.304 V | PF15 OD low 0.026–0.027 V, released 3.234–3.235 V; PF14 released 0.084–0.090 V |
 | T8 | Input → output on PE5 through each tier: A, B one transition; C, D (stale `ODR`) none | Naive order (`MODER`, 1 µs, `BSRR`): a pulse | A=1 B=1 C=0 D=0 on all tiers; control 2 transitions |
-| T9 | t<sub>r</sub> 10–90 % per `OSPEEDR`, 40 edges per speed and pin, 4 interleaved rounds (BM, LL, HAL, BM), Lanczos reconstruction (errata E9) | Pins in input: no edge in 0.5 s | Gate t<sub>r</sub>(LOW) − t<sub>r</sub>(VERY_HIGH) > 5σ: PF14 1.67 > 1.22 ns and 2.06 > 1.20 ns; PF15 2.53 > 0.77 ns and 2.15 > 0.83 ns |
-| T10 | PA8 in AF0 through each tier outputs MCO1 = HSE/2 | PA8 in AF1: 0 edges | 4.048–4.058 MHz (4 MHz ± 2 %); `RCC_CFGR` restored |
+| T9 | t<sub>r</sub> 10–90 % per `OSPEEDR`, 40 edges per speed and pin, 4 interleaved rounds (BM, LL, HAL, BM), Lanczos reconstruction (errata E9) | Pins in input: no edge in 0.5 s | Gate t<sub>r</sub>(LOW) − t<sub>r</sub>(VERY_HIGH) > 5σ: PF14 1.93 > 1.28 ns and 2.17 > 1.22 ns; PF15 2.41 > 0.86 ns and 2.56 > 0.92 ns |
+| T10 | PA8 in AF0 through each tier outputs MCO1 = HSE/2 | PA8 in AF1: 0 edges | 4.055–4.060 MHz (4 MHz ± 2 %); `RCC_CFGR` restored |
 | T16 | Locked pins refuse every tier (config, deinit, legacy) with `MODER` unchanged; a locked port gets more pins from each tier; LL on GPIOJ, HAL on GPIOK | PF6, then PF3, stay free and configurable | `LCKR` `0x00010180` → `0x000101F0`; GPIOJ/GPIOK `0x00010003` |
-| T16 A1 | `GPIO_HAL_Init` on GPIOK unclocked in both banks, PK5 locked next to PK0/PK1 (`LCKR = 0x00010023`), PK3 in analog. (A) `PK3\|PK5` → `HAL_ERROR`, `MODER` and `LCKR` unchanged; (B) PK3 alone → `HAL_OK`, PK3 an output. The unclocked read is printed: the code before A1 fails (A) if it reads 0 and (B) if it reads all ones | Mutation M-A1 (no clock before the `LCKR` check): (B) `HAL_ERROR`, PK3 not written | Unclocked `LCKR` reads `0xFFFFFFFF`, `IsLocked` PK3 = PK5 = 1; (A) and (B) pass. At `8b8919a` the step still required a 0 read and failed on that premise only |
+| T16 A1 | GPIOK unclocked in both banks, PK5 locked next to PK0/PK1 (`LCKR = 0x00010023`), PK3 in analog. (C, R1) `GPIO_BM_IsPortClocked` false; BM and LL `ReadConfig` of PK3 → `GPIO_BM_ERR_NO_CLOCK`, with their 0xA5-filled structs unchanged byte for byte. (A) `GPIO_HAL_Init(PK3\|PK5)` → `HAL_ERROR`, `MODER` and `LCKR` unchanged, and the port clocked after the call (reset `MODER` = `0xFFFFFFFF` = the unclocked read). (B) PK3 alone → `HAL_OK`, PK3 an output. The unclocked read is printed: the code before A1 fails (A) if it reads 0 and (B) if it reads all ones. Oracle of `IsPortClocked`: a raw read of both RCC banks | (C) control, clocked after (A): `IsPortClocked` true, both `ReadConfig` OK, PK3 analog and no pull. Mutation M-A1 (no clock before the `LCKR` check): (B) `HAL_ERROR`, PK3 not written. Mutation M-R1 (no clock check in BM `ReadConfig`): (C) fails, BM returns OK and overwrites its sentinel | Unclocked `LCKR` reads `0xFFFFFFFF`, `IsLocked` PK3 = PK5 = 1; (A), (B) and (C) pass; M-R1: the only failure of its run. At `8b8919a` the step still required a 0 read and failed on that premise only |
 | Production | 20 warm resets of `debug` and of `release`; lock-fail counters by SWD | - | 20/20 "CPU2 alive" in each; `m7/m4_gpio_lock_fail_count` = 0 |
 
 ### 9.2 Measurements (B1)
@@ -497,37 +509,48 @@ contention (min/max):
 
 | Tier | CM7, no hook | CM7, hook | CM4, no hook | CM4, hook |
 | :--- | :--- | :--- | :--- | :--- |
-| BM | 551 / 739 | 954 / 989 (2.47 µs) | 475 / 647 | 767 / 985 (4.92 µs) |
-| LL | 744 / 823 | 1118 / 1141 (2.85 µs) | 622 / 749 | 1113 / 1192 (5.96 µs) |
-| HAL | 1164 / 1264 | 1496 / 1559 (3.89 µs) | 1191 / 1364 | 1827 / 1875 (9.37 µs) |
+| BM | 546 / 676 | 977 / 1062 (2.65 µs) | 475 / 667 | 767 / 977 (4.88 µs) |
+| LL | 784 / 887 | 1168 / 1273 (3.18 µs) | 622 / 740 | 1023 / 1154 (5.77 µs) |
+| HAL | 1303 / 1347 | 1651 / 1739 (4.34 µs) | 1393 / 1468 | 1929 / 1983 (9.91 µs) |
 
-The longest lock hold under contention in T15 was **801 cycles on CM7 (2.00 µs)**
-and **841 cycles on CM4 (4.21 µs, HAL tier)**. `SHARED_GPIO_LOCK_US = 50` is 11.9×
-the longer of the two, and the selftest fails below 10×. The first value, 20 µs,
-left only 4.7×.
+The longest lock hold under contention in T15 was **902 / 904 cycles on CM7
+(2.26 µs)** and **992 cycles on CM4 (4.96 µs, HAL tier, phase `e`)**.
+`SHARED_GPIO_LOCK_US = 50` is 10.08× the longer of the two (the log rounds it
+down to `10x`), and the selftest fails below 10×. At `0cd803f` the CM4 hold was
+841 cycles (11.9×): see section 10. The first value of the limit, 20 µs, left
+only 4.7×.
 
 Flash (`.text` + `.rodata`, from the `.map`, "Discarded input sections"
 excluded):
 - `prj_01` release (production): `gpio_bm` 92 B on CM7 and 20 B on CM4.
-- Selftest image (debug, `-Og`): `gpio_bm` 1656 B, `gpio_ll` 1246/1256 B,
+- Selftest image (debug, `-Og`): `gpio_bm` 1718 B, `gpio_ll` 1258/1268 B,
   `gpio_hal` 926/928 B (CM7/CM4).
 
 ### 9.3 Evidence
 
 All of these are in `prj_01_template_dualcore/docs/`. Each file is the unedited
-output of one run.
+output of one run. Since R3 (`a087d91`), every capture starts with the state of
+the tree: `[host] tree clean`, or the whole `git diff` of a `-dirty` tree.
 
 | File | Content |
 | :--- | :--- |
-| `gpio_selftest_0cd803f.txt`, `_2.txt` | The two runs of §9.1, built from a clean worktree (`Rev 0cd803f` on both cores) |
-| `gpio_warm_resets_{debug,release}_0cd803f.txt`, `gpio_swd_counters_0cd803f.txt` | Production regression: 20/20 each, lock-fail counters 0 |
-| `gpio_map_sizes_0cd803f.txt`, `gpio_build_all_0cd803f.txt` | Sizes; `build_all.ps1 -Clean` 8/8 (compile only) |
-| `gpio_dev_mutation_hal_init_no_clock_0cd803f-dirty.txt` | M-A1, `GPIO_HAL_Init` without the clock before the `LCKR` check: `T16 A1` case (B) refused |
-| `gpio_dev_mutation_exit_installed_hook_0cd803f-dirty.txt` | M-A4, `SectionExit` releasing the installed hook: TB fails on both cores (6 each) |
-| `gpio_dev_mutation_ll_no_section_780dddd-dirty.txt` | `gpio_ll` without its section: TB fails on both cores; T15 `d`/`e` 15 708 and 8 507 corruptions |
-| `gpio_dev_mutation_hal_no_level_780dddd-dirty.txt` | `gpio_hal` without the `BSRR` level: T2 `odr_bad` 432 per core; T6_HAL and T8_HAL A–D fail |
+| `gpio_selftest_fa44386.txt`, `_2.txt` | The two runs of §9.1, built from a clean worktree (`Rev fa44386` on both cores, `[host] tree clean`) |
+| `gpio_warm_resets_{debug,release}_fa44386.txt`, `gpio_swd_counters_fa44386.txt` | Production regression: 20/20 each, lock-fail counters 0 |
+| `gpio_map_sizes_fa44386.txt`, `gpio_wextra_fa44386.txt` | Sizes; 0 warnings in the driver files with `-Wextra -Wconversion -Wsign-conversion -Wshadow -Wcast-qual`, CM7 and CM4 (the CM7 build prints 16 more, all in CMSIS `cachel1_armv7.h`) |
+| `gpio_build_all_fa44386.txt`, `gpio_prj04_selftest_build_fa44386.txt` | `build_all.ps1 -Clean` 8/8, and `prj_04` `selftest-gpio` with 0 warnings; compile only, main checkout at `1ba0f65`, whose code equals `fa44386` |
+| `gpio_dev_mutation_readconfig_no_clock_fa44386-dirty.txt` | M-R1, patch in the capture: `T16 A1` case (C) fails, its only failure |
+| `gpio_dev_mutation_ll_no_section_fa44386-dirty.txt`, `_2.txt` | M-R2, patch in the capture: T15 `d` 12 897 / 13 253 and `e` 6 790 / 6 624 corruptions (seeds `0x4FD2A52E` / `0x5FEFE375`); TB 12 failures per core |
+| `gpio_seed_replay_bin_cmp_fa44386.txt`, `gpio_dev_replay_seed_d9d40bdd_fa44386.txt` | The `GST_RACE_SEED=0xD9D40BDD` image differs from the default one in the 4 bytes of the seed word (CM4 identical); its replay of run 1 passes, with other T15 counts (section 10) |
+| `gpio_dev_eqlen_*_fa44386-dirty.txt`, `gpio_dev_cacheinv_*_fa44386-dirty.txt` | Two attempts at an exact replay (a seed line of equal length in both builds; caches invalidated before the start): neither replays the counts |
+| `*_7cedf36*`, `*_9ccc971*` | R2 development. At `9ccc971` a define that selected code did not replay. At `7cedf36` the same replay image differed between two runs; with a fixed start (`gpio_dev_deadline_*_7cedf36-dirty`) it repeated itself (37 of 38 T15/B1 lines equal, the 38th prints the RNG word) |
+| `*_6f3ee2b*` | First delivery of R1–R4, before the replay work; superseded |
+| `gpio_selftest_0cd803f.txt`, `_2.txt` and the other `*_0cd803f.txt` | Audit fixes A1–A7; superseded. T15 there is one interleaving per image (before R2) |
+| `gpio_dev_mutation_hal_init_no_clock_0cd803f-dirty.txt` | M-A1: `GPIO_HAL_Init` without `EnablePortClock` before the `LCKR` check (patch described in `6d1ef62`, not recorded in the capture, which predates R3): `T16 A1` case (B) refused |
+| `gpio_dev_mutation_exit_installed_hook_0cd803f-dirty.txt` | M-A4: `SectionExit` releasing the installed hook instead of the one taken (described in `6d1ef62`, not recorded in the capture): TB fails on both cores (6 each) |
+| `gpio_dev_mutation_ll_no_section_780dddd-dirty.txt` | `gpio_ll` without its section (described in `d11fb8d`, not recorded in the capture): TB fails on both cores; T15 `d`/`e` 15 708 and 8 507 corruptions, one interleaving per image |
+| `gpio_dev_mutation_hal_no_level_780dddd-dirty.txt` | `gpio_hal` without the `BSRR` level (described in `d11fb8d`, not recorded in the capture): T2 `odr_bad` 432 per core; T6_HAL and T8_HAL A–D fail |
 | `gpio_selftest_8b8919a.txt` | The first run of the audit tests: all pass except `T16 A1`, whose premise (unclocked `LCKR` = 0) the silicon refuted |
-| `gpio_selftest_2b9bf21*.txt`, `gpio_selftest_780dddd*.txt`, `*_780dddd.txt` | Earlier evidence (before the audit fixes); superseded |
+| `gpio_selftest_2b9bf21*.txt`, `gpio_selftest_780dddd*.txt`, `*_780dddd.txt` | Earlier evidence (before the audit fixes); superseded. T15 there is one interleaving per image |
 
 ### 9.4 Reproducing it
 
@@ -537,6 +560,15 @@ cd 03_firmware_templates\prj_01_template_dualcore
 cmake --preset selftest-gpio; cmake --build --preset selftest-gpio
 py tools/flash.py --preset selftest-gpio
 py tools/gpio_hw_check.py                  # writes docs/gpio_selftest_<rev>.txt; refuses a -dirty Rev
+py tools/gpio_hw_check.py --allow-dirty    # development: the capture starts with the tree's git diff
+```
+
+To run T15 with the seed of an earlier run (section 10 says what that
+reproduces), configure with it and go back with an empty value:
+
+```powershell
+cmake --preset selftest-gpio -DCMAKE_C_FLAGS=-DGST_RACE_SEED=0xD9D40BDDUL
+cmake --preset selftest-gpio -DCMAKE_C_FLAGS=
 ```
 
 ### 9.5 Not exercised
@@ -561,18 +593,33 @@ py tools/gpio_hw_check.py                  # writes docs/gpio_selftest_<rev>.txt
 
 - **One writer outside the driver breaks the lock for a port** (T15 `h`). §3.3
   lists the writers.
-- **T9 is close to its gate on PF14:** 1.67 and 2.06 ns of separation against a
-  5σ of 1.22 and 1.20 ns. At 30 MHz of bandwidth, the AD2 cannot resolve MEDIUM,
-  HIGH and VERY_HIGH from each other (12.6–13.1 ns on PF14, 14.6–14.9 ns on PF15).
+- **T9 is close to its gate on PF14:** 1.93 and 2.17 ns of separation against a
+  5σ of 1.28 and 1.22 ns. At 30 MHz of bandwidth, the AD2 cannot resolve MEDIUM,
+  HIGH and VERY_HIGH from each other (12.5–13.1 ns on PF14, 14.5–14.8 ns on PF15).
+- **B1 is at its gate: 10.08×.** The longest CM4 hold rose from 841 cycles at
+  `0cd803f` to 992 at `fa44386`. `gpio_hal.c` did not change in between (R1
+  only added code to `gpio_bm.c` and `gpio_ll.c`, and R2 added the jitter); the
+  cause was not isolated. A build that drops below 10× fails B1. The remedy is
+  a larger `SHARED_GPIO_LOCK_US`, which lengthens the masked time (A2, below),
+  not a lower gate.
+- **A `GST_RACE_SEED` replay is close, not exact (R2).** It reproduces the seed,
+  and so the sequence of delays, but not the interleaving: the replay of run 1
+  at `fa44386` passes with `c_raw_both` 59 668 against 59 141. The two images
+  differ only in the 4 bytes of the seed word. One image with one seed repeated
+  itself once the start was fixed (`7cedf36`, `-dirty`). Neither a seed line of
+  equal length nor invalidating the caches made the two images agree, and the
+  remaining source was not isolated. A failure of a protected phase under an
+  RNG seed is therefore expected to reappear under its seed as a tendency, not
+  with the same count.
 - **R<sub>IN</sub> of the scope once read 20.8 MΩ** in a development run, with
   V<sub>DD</sub> 66 mV low on PF15. The cause was not found. The cross-channel
   check added in `2b9bf21` fails such a run.
 - **Toggle is not atomic** between two togglers of the same pin (one `ODR` read,
   then one `BSRR` store).
 - **The section masks interrupts for one pin configuration.** The longest
-  uncontended call measured is 9.37 µs (CM4, HAL tier, §9.2). Under contention
-  it grows by the other core's hold: at most 2.00 µs measured on CM7 (so about
-  11 µs on CM4), and 4.21 µs measured on CM4 (about 8 µs on CM7).
+  uncontended call measured is 9.91 µs (CM4, HAL tier, §9.2). Under contention
+  it grows by the other core's hold: at most 2.26 µs measured on CM7 (so about
+  12 µs on CM4), and 4.96 µs measured on CM4 (about 9 µs on CM7).
   Configure one pin per section; never loop inside one.
 - **The bound on masked time is the hook's limit, not the measurements (A2).**
   `lock()` waits with interrupts masked, so the worst case is
@@ -678,10 +725,10 @@ measurements differ). Corrections: `REAUDIT_1_INSTRUCTIONS.md`.
 
 | ID | Finding | State |
 | :--- | :--- | :--- |
-| R1 | `GPIO_BM_ReadConfig`/`GPIO_LL_ReadConfig` return `GPIO_BM_OK` on a port unclocked in both banks, with the all-ones read turned into fields: analog, OD, VERY_HIGH, `pull = 3` (reserved), AF15, level 1. An `OK` that does not describe the hardware (C12) | **Open**: `GPIO_BM_ERR_NO_CLOCK` and `GPIO_BM_IsPortClocked`; case C of `T16 A1` |
-| R2 | T15 is deterministic per image: every run of one image gives the same race counts (`c_raw_both` 315 897 ×4 at `780dddd`/`2b9bf21`, 320 906 ×2 at `0cd803f`; ISR 1 589 in 12 821 both times). Each protected phase has been tested on one interleaving, and the second run adds no race sample | **Open**: RNG seed per run, jitter outside the section |
-| R3 | The mutation captures do not record their patch; only the file name and `6d1ef62` say what was mutated (C9) | **Open**: `gpio_hw_check.py` writes the `git diff` of a `-dirty` Rev into the capture |
-| R4 | The measured silicon fact (an unclocked port reads `0xFFFFFFFF`) is missing from §6 | **Open**: one row in §6 |
+| R1 | `GPIO_BM_ReadConfig`/`GPIO_LL_ReadConfig` return `GPIO_BM_OK` on a port unclocked in both banks, with the all-ones read turned into fields: analog, OD, VERY_HIGH, `pull = 3` (reserved), AF15, level 1. An `OK` that does not describe the hardware (C12) | **Closed** (`cadf310`): `GPIO_BM_ERR_NO_CLOCK` (last in the enum) and `GPIO_BM_IsPortClocked`; `T16 A1` case (C) passes in both runs at `fa44386`, and M-R1 fails it |
+| R2 | T15 is deterministic per image: every run of one image gives the same race counts (`c_raw_both` 315 897 ×4 at `780dddd`/`2b9bf21`, 320 906 ×2 at `0cd803f`; ISR 1 589 in 12 821 both times). Each protected phase has been tested on one interleaving, and the second run adds no race sample | **Closed, one criterion not met** (`b65677e`, `9ccc971`, `7cedf36`, `fa44386`): RNG seed per run, jitter outside the section, fixed start. The two runs differ in seed and in `c_raw_both` (59 141 / 59 159), `h` (14 055 / 14 095) and `i` (1 519 / 1 499); protected phases 0 with exact `locked_calls`; B1 10.08×; M-R2 gives different `d`/`e` in two runs. Not met: a `GST_RACE_SEED` replay does not give the same counts (section 10); accepted as is by the owner on 2026-09-30 |
+| R3 | The mutation captures do not record their patch; only the file name and `6d1ef62` say what was mutated (C9) | **Closed** (`a087d91`): clean runs print `[host] tree clean`; every `-dirty` capture since carries its `git diff` (sha256, line count, each line). §9.3 says what the earlier ones mutated |
+| R4 | The measured silicon fact (an unclocked port reads `0xFFFFFFFF`) is missing from §6 | **Closed** (`6f3ee2b`): one row in §6 |
 
 ---
 
@@ -798,13 +845,17 @@ Before changing it:
 | Code audit of F1 and the LL/HAL tiers at `cc1ee88`; fixes A1, A4, A6, A7 | `eab46d1` |
 | Selftest steps for the audit: TB A4, T16 A1 | `8b8919a` |
 | Bench: the A1 premise refuted (unclocked port reads all ones); A1/A5 corrected; runs, regression, mutations | `cdbb914`, `0cd803f`, `6d1ef62` |
+| Re-audit 1 at `1a635d8` (R1–R4) and its instructions | `31406fa` |
+| R3 diff in `-dirty` captures; R1 `ERR_NO_CLOCK`; R2 seed and jitter; R4 §6 row | `a087d91`, `cadf310`, `b65677e`, `6f3ee2b` |
+| R2 replay: the RNG read in every build, a data-only seed, a fixed start; the two replay premises refuted on the bench | `9ccc971`, `7cedf36`, `fa44386`; evidence `fe59b0b`, `1874440`, `800d81f`, `1ba0f65`, `4fb99e0` |
 
 The implementation plan, the implementer's instructions, the F0 correction and
 F1a instructions, the implementation report and the audit record were removed
 once what a user of the driver needs was folded into this README. The audit
 closed F0 at `51a29b7`. F1 and the LL/HAL tiers had a code audit at `cc1ee88`
-(§12.1); its fixes passed the bench at `0cd803f`. The documents stay in git
-history:
+(§12.1); its fixes passed the bench at `0cd803f`. The re-audit at `1a635d8`
+(§12.3) was closed at `fa44386`, and its instructions were removed the same
+way. The documents stay in git history:
 
 ```bash
 git show 33f4afa:01_shared_drivers/00_gpio/IMPLEMENTATION_PLAN.md
@@ -814,4 +865,5 @@ git show 33f4afa:01_shared_drivers/00_gpio/IMPLEMENTER_INSTRUCTIONS.md
 git show 33f4afa:01_shared_drivers/00_gpio/F1A_INSTRUCTIONS.md
 git show 33f4afa:01_shared_drivers/00_gpio/F0_CORRECTION_INSTRUCTIONS.md   # also _2, _3, _4
 git show 5f97e2e:01_shared_drivers/00_gpio/IMPLEMENTATION_PLAN.md          # revision 1: full LL/HAL contracts
+git show 31406fa:01_shared_drivers/00_gpio/REAUDIT_1_INSTRUCTIONS.md
 ```
