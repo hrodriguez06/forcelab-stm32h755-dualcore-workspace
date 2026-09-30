@@ -106,56 +106,56 @@ typedef struct {
 
 #define GPIO_BENCH_PROTOCOL_TABLE(X) \
     /* Step 1: T15 Race Control (bus=NONE) */ \
-    X(1, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step1_announcement", "^[m7_gpio_test] STEP id=1 bus=NONE v=1$", 0xFF) \
-    X(1, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step1_verdict",      "^[m7_gpio_test] T15 VERDICT: PASS$", 0xFF) \
+    X(1, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step1_announcement", "^\\[m7_gpio_test\\] STEP id=1 bus=NONE v=1$", 0xFF) \
+    X(1, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step1_verdict",      "^\\[m7_gpio_test\\] T15 VERDICT: PASS$", 0xFF) \
     X(1, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_CHECK t15_pass", "", 0xFF) \
     \
     /* Step 2: Idle & Host Session Start (bus=NONE) */ \
-    X(2, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step2_announcement", "^[m7_gpio_test] STEP id=2 bus=NONE v=1$", 0xFF) \
-    X(2, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step2_idle",         "^[m7_gpio_test] GPIO_BENCH v1 idle$", 0xFF) \
+    X(2, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step2_announcement", "^\\[m7_gpio_test\\] STEP id=2 bus=NONE v=1$", 0xFF) \
+    X(2, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step2_idle",         "^\\[m7_gpio_test\\] GPIO_BENCH v1 idle$", 0xFF) \
     X(2, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_CHECK t0b_a_oe_guards", "", 0xFF) \
     X(2, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_HOST,"session_start",      "", 0xFF) \
     \
     /* Step 3: T0b(b) Firmware Claim Guards (bus=NONE) */ \
-    X(3, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step3_announcement", "^[m7_gpio_test] STEP id=3 bus=NONE v=1$", 0xFF) \
-    X(3, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step3_guards_pass",  "^[m7_gpio_test] T0b_b guards verification: PASS$", 0xFF) \
+    X(3, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step3_announcement", "^\\[m7_gpio_test\\] STEP id=3 bus=NONE v=1$", 0xFF) \
+    X(3, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step3_guards_pass",  "^\\[m7_gpio_test\\] T0b_b guards verification: PASS$", 0xFF) \
     X(3, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_CHECK t0b_b_claim_guards", "", 0xFF) \
     \
     /* Step 4: T0b(c) S5 Negative Control (bus=MCU) */ \
-    X(4, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step4_announcement", "^[m7_gpio_test] STEP id=4 bus=MCU v=1$", 0xFF) \
-    X(4, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step4_buschk_drive", "^[m7_gpio_test] BUSCHK up drive=0x5A$", 0xFF) \
+    X(4, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step4_announcement", "^\\[m7_gpio_test\\] STEP id=4 bus=MCU v=1$", 0xFF) \
+    X(4, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step4_buschk_drive", "^\\[m7_gpio_test\\] BUSCHK up drive=0x5A$", 0xFF) \
     X(4, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_CHECK t0b_c_contention", "", 0xFF) \
     X(4, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "t0b_c_sync",         "", 0xFF) \
-    X(4, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step4_safe_verified","^[m7_gpio_test] T0b_c safe state verified: all wired pins input$", 0xFF) \
+    X(4, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step4_safe_verified","^\\[m7_gpio_test\\] T0b_c safe state verified: all wired pins input$", 0xFF) \
     \
     /* Step 5: T0b(d) 10s Timeout Test (bus=NONE) */ \
-    X(5, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step5_announcement", "^[m7_gpio_test] STEP id=5 bus=NONE v=1$", 0xFF) \
+    X(5, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step5_announcement", "^\\[m7_gpio_test\\] STEP id=5 bus=NONE v=1$", 0xFF) \
     X(5, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_WAIT t0b_d_timeout", "", 0xFF) \
-    X(5, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step5_timeout_pass", "^[m7_gpio_test] timeout expired -> bench_safe\\(\\) invoked \\(PASS\\)$", 0xFF) \
+    X(5, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step5_timeout_pass", "^\\[m7_gpio_test\\] timeout expired -> bench_safe\\(\\) invoked \\(PASS\\)$", 0xFF) \
     X(5, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_CHECK t0b_d_timeout", "", 0xFF) \
     \
     /* Step 6: T0a Loose Lines Check (bus=NONE) */ \
-    X(6, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step6_announcement", "^[m7_gpio_test] STEP id=6 bus=NONE v=1$", 0xFF) \
-    X(6, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step6_buschk_up",    "^[m7_gpio_test] BUSCHK up$", 0xFF) \
+    X(6, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step6_announcement", "^\\[m7_gpio_test\\] STEP id=6 bus=NONE v=1$", 0xFF) \
+    X(6, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step6_buschk_up",    "^\\[m7_gpio_test\\] BUSCHK up$", 0xFF) \
     X(6, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_READ loose_up", "", 0xFF) \
     X(6, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step6_up",           "", 0xFF) \
-    X(6, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step6_buschk_down",  "^[m7_gpio_test] BUSCHK down$", 0xFF) \
+    X(6, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step6_buschk_down",  "^\\[m7_gpio_test\\] BUSCHK down$", 0xFF) \
     X(6, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_READ loose_down", "", 0xFF) \
     X(6, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step6_down",         "", 0xFF) \
-    X(6, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step6_loose_done",   "^[m7_gpio_test] T0a_loose: DONE \\(host verdict\\)$", 0xFF) \
+    X(6, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step6_loose_done",   "^\\[m7_gpio_test\\] T0a_loose: DONE \\(host verdict\\)$", 0xFF) \
     \
     /* Step 7: T0a Handshake Lines PE2/PE7 (bus=NONE) */ \
-    X(7, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step7_announcement", "^[m7_gpio_test] STEP id=7 bus=NONE v=1$", 0xFF) \
+    X(7, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step7_announcement", "^\\[m7_gpio_test\\] STEP id=7 bus=NONE v=1$", 0xFF) \
     X(7, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_HOST,"step7_pe2",          "", 0xFF) \
-    X(7, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step7_handshake_pe2","^[m7_gpio_test] Handshake PE2: OK$", 0xFF) \
+    X(7, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step7_handshake_pe2","^\\[m7_gpio_test\\] Handshake PE2: OK$", 0xFF) \
     X(7, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step7_pe7",          "", 0xFF) \
-    X(7, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step7_handshake_done","^[m7_gpio_test] T0a_handshake: DONE \\(host verdict\\)$", 0xFF) \
+    X(7, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step7_handshake_done","^\\[m7_gpio_test\\] T0a_handshake: DONE \\(host verdict\\)$", 0xFF) \
     \
     /* Step 8: T0a Walking-1 MCU->AD2 11 lines (bus=MCU) */ \
-    X(8, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step8_announcement", "^[m7_gpio_test] STEP id=8 bus=MCU v=1$", 0xFF) \
-    X(8, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step8_buschk_up",    "^[m7_gpio_test] BUSCHK up$", 0xFF) \
+    X(8, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step8_announcement", "^\\[m7_gpio_test\\] STEP id=8 bus=MCU v=1$", 0xFF) \
+    X(8, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step8_buschk_up",    "^\\[m7_gpio_test\\] BUSCHK up$", 0xFF) \
     X(8, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step8_up",           "", 0xFF) \
-    X(8, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step8_buschk_down",  "^[m7_gpio_test] BUSCHK down$", 0xFF) \
+    X(8, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step8_buschk_down",  "^\\[m7_gpio_test\\] BUSCHK down$", 0xFF) \
     X(8, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step8_down",         "", 0xFF) \
     X(8, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_READ mcu_bit",  "", 9) \
     X(8, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step8_mcu_9",        "", 9) \
@@ -179,18 +179,18 @@ typedef struct {
     X(8, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step8_mcu_7",        "", 7) \
     X(8, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_READ mcu_bit",  "", 14) \
     X(8, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step8_mcu_14",       "", 14) \
-    X(8, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step8_control_ready","^[m7_gpio_test] T0a_mcu control ready$", 0xFF) \
+    X(8, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step8_control_ready","^\\[m7_gpio_test\\] T0a_mcu control ready$", 0xFF) \
     X(8, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_READ mcu_ctrl", "", 0xFF) \
     X(8, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step8_ctrl",         "", 0xFF) \
-    X(8, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step8_mcu_done",     "^[m7_gpio_test] T0a_mcu: DONE \\(host verdict\\)$", 0xFF) \
+    X(8, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step8_mcu_done",     "^\\[m7_gpio_test\\] T0a_mcu: DONE \\(host verdict\\)$", 0xFF) \
     \
     /* Step 9: T0a Walking-1 AD2->MCU 10 lines (bus=AD2) */ \
-    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_announcement", "^[m7_gpio_test] STEP id=9 bus=AD2 v=1$", 0xFF) \
-    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_buschk_up",    "^[m7_gpio_test] BUSCHK up$", 0xFF) \
+    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_announcement", "^\\[m7_gpio_test\\] STEP id=9 bus=AD2 v=1$", 0xFF) \
+    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_buschk_up",    "^\\[m7_gpio_test\\] BUSCHK up$", 0xFF) \
     X(9, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step9_up",           "", 0xFF) \
-    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_buschk_down",  "^[m7_gpio_test] BUSCHK down$", 0xFF) \
+    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_buschk_down",  "^\\[m7_gpio_test\\] BUSCHK down$", 0xFF) \
     X(9, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step9_down",         "", 0xFF) \
-    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_ad2_ready",    "^[m7_gpio_test] T0a_ad2 ready$", 0xFF) \
+    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_ad2_ready",    "^\\[m7_gpio_test\\] T0a_ad2 ready$", 0xFF) \
     X(9, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step9_ready",        "", 0xFF) \
     X(9, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_DRIVE ad2_bit", "", 8) \
     X(9, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_HOST,"step9_ad2_8",        "", 8) \
@@ -222,25 +222,25 @@ typedef struct {
     X(9, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_DRIVE ad2_bit", "", 7) \
     X(9, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_HOST,"step9_ad2_7",        "", 7) \
     X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_ad2_7_res",    "^\\[m7_gpio_test\\] T0a_ad2 bit=7 idr=0x[0-9a-fA-F]+ exp=0x[0-9a-fA-F]+ OK$", 7) \
-    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_analog_ready", "^[m7_gpio_test] T0a_ad2 analog control ready$", 0xFF) \
+    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_analog_ready", "^\\[m7_gpio_test\\] T0a_ad2 analog control ready$", 0xFF) \
     X(9, BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_DRIVE ad2_analog","", 0xFF) \
     X(9, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_HOST,"step9_analog",       "", 0xFF) \
-    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_analog_res",   "^[m7_gpio_test] T0a_ad2 analog control result: OK$", 0xFF) \
-    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_verdict",      "^[m7_gpio_test] T0a_ad2: PASS$", 0xFF) \
+    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_analog_res",   "^\\[m7_gpio_test\\] T0a_ad2 analog control result: OK$", 0xFF) \
+    X(9, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step9_verdict",      "^\\[m7_gpio_test\\] T0a_ad2: PASS$", 0xFF) \
     \
     /* Step 10: T0a Scope Measurements (bus=NONE) */ \
-    X(10,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step10_announcement","^[m7_gpio_test] STEP id=10 bus=NONE v=1$", 0xFF) \
-    X(10,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step10_low_ready",   "^[m7_gpio_test] Scope LOW ready$", 0xFF) \
+    X(10,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step10_announcement","^\\[m7_gpio_test\\] STEP id=10 bus=NONE v=1$", 0xFF) \
+    X(10,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step10_low_ready",   "^\\[m7_gpio_test\\] Scope LOW ready$", 0xFF) \
     X(10,BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_MEASURE scope_low","", 0xFF) \
     X(10,BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step10_low",         "", 0xFF) \
-    X(10,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step10_high_ready",  "^[m7_gpio_test] Scope HIGH ready$", 0xFF) \
+    X(10,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step10_high_ready",  "^\\[m7_gpio_test\\] Scope HIGH ready$", 0xFF) \
     X(10,BENCH_ITEM_MEASURE, GPIO_BENCH_PRIM_NONE,   "HOST_MEASURE scope_high","", 0xFF) \
     X(10,BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step10_high",        "", 0xFF) \
-    X(10,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step10_scope_done",  "^[m7_gpio_test] T0a_scope: DONE \\(host verdict\\)$", 0xFF) \
+    X(10,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step10_scope_done",  "^\\[m7_gpio_test\\] T0a_scope: DONE \\(host verdict\\)$", 0xFF) \
     \
     /* Step 99: All Done (bus=NONE) */ \
-    X(99,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step99_announcement","^[m7_gpio_test] STEP id=99 bus=NONE v=1$", 0xFF) \
-    X(99,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step99_verdict",     "^[m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED$", 0xFF)
+    X(99,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step99_announcement","^\\[m7_gpio_test\\] STEP id=99 bus=NONE v=1$", 0xFF) \
+    X(99,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step99_verdict",     "^\\[m7_gpio_test\\] VERDICT: ALL GPIO SELF-TESTS PASSED$", 0xFF)
 
 extern const BenchProtocolItem_t g_bench_protocol_items[];
 extern const size_t g_bench_protocol_item_count;
@@ -261,6 +261,28 @@ static inline uint8_t bench_get_expected_primitive(uint32_t step_id, uint32_t pr
         }
     }
     return GPIO_BENCH_PRIM_NONE;
+}
+
+static inline uint8_t bench_get_step_bus_owner(uint8_t step_id)
+{
+    switch (step_id)
+    {
+#define EXPAND_STEP_BUS_CASE(id, name, bus) case (id): return (bus);
+        GPIO_BENCH_STEPS_TABLE(EXPAND_STEP_BUS_CASE)
+#undef EXPAND_STEP_BUS_CASE
+        default: return GPIO_BENCH_BUS_NONE;
+    }
+}
+
+static inline const char *bench_get_step_bus_name(uint8_t step_id)
+{
+    uint8_t bus = bench_get_step_bus_owner(step_id);
+    switch (bus)
+    {
+        case GPIO_BENCH_BUS_MCU: return "MCU";
+        case GPIO_BENCH_BUS_AD2: return "AD2";
+        default:                 return "NONE";
+    }
 }
 
 

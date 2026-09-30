@@ -15,9 +15,15 @@ import time
 from typing import Callable, Optional, Sequence
 
 try:
-    from tools.gpio_hw_check import PROTOCOL_STEPS, PROTOCOL_ITEMS, BenchItem, StepDef
+    from tools.gpio_hw_check import (
+        PROTOCOL_STEPS, PROTOCOL_ITEMS, BenchItem, StepDef,
+        table_pattern, table_item
+    )
 except ImportError:
-    from gpio_hw_check import PROTOCOL_STEPS, PROTOCOL_ITEMS, BenchItem, StepDef
+    from gpio_hw_check import (
+        PROTOCOL_STEPS, PROTOCOL_ITEMS, BenchItem, StepDef,
+        table_pattern, table_item
+    )
 
 
 class ElectricalContentionError(Exception):
@@ -229,6 +235,7 @@ class FirmwareModel:
         self._running = False
         self._step_generator = None
         self.visited_items: list[str] = []
+        self.trace: list[tuple[str, str]] = []
 
         self.bus.set_mcu_safe()
 
@@ -245,6 +252,12 @@ class FirmwareModel:
         if self.faults.drop_protocol_line:
             if (item_name and self.faults.drop_protocol_line == item_name) or (self.faults.drop_protocol_line in msg):
                 return
+        if item_name:
+            try:
+                pat = table_pattern(item_name)
+            except KeyError:
+                pat = msg
+            self.trace.append(("LINE", pat))
         line = f"{msg}\r\n".encode("utf-8")
         self.tx_queue.append(line)
 
@@ -256,10 +269,12 @@ class FirmwareModel:
     def record_item(self, item_name: str) -> None:
         """Record a non-serial protocol item (e.g. host measurement point) (R2-M3)."""
         self.visited_items.append(item_name)
+        self.trace.append(("MEASURE", item_name))
 
     def hs_mcu(self, step_name: str) -> bool:
         """Firmware executes HS_MCU primitive: MCU asserts ACK -> waits REQ -> drops ACK -> waits REQ drop."""
         self.visited_items.append(step_name)
+        self.trace.append(("PRIM", "HS_MCU"))
         if self.faults.handshake_timeout_step == step_name:
             # Deliberately stall without asserting ACK
             return False
@@ -294,6 +309,7 @@ class FirmwareModel:
     def hs_host(self, step_name: str) -> bool:
         """Firmware executes HS_HOST primitive: waits REQ -> asserts ACK -> waits REQ drop -> drops ACK."""
         self.visited_items.append(step_name)
+        self.trace.append(("PRIM", "HS_HOST"))
         if self.faults.handshake_timeout_step == step_name:
             return False
 

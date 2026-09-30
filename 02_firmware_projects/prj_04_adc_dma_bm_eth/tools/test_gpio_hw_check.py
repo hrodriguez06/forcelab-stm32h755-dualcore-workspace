@@ -9,6 +9,7 @@ Standard library unittest suite implementing:
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import sys
@@ -836,10 +837,10 @@ class TestHarnessScenarios(BaseSimTest):
             sys.modules.pop("gpio_hw_check_mut_down", None)
 
     # ---- Recorrido idéntico de la tabla (R2-M3) -----------------------------
-    def test_host_and_model_traverse_identical_table(self):
-        """R2-M3: Host and model read protocol items from header and traverse them identically."""
+    def test_host_and_model_trace_matches_protocol_table(self):
+        """R2-M3: Host and model traces match protocol table character-by-character."""
         ad2, ser, clock, reset_fn, fw, bus = self.create_simulated_bench()
-        host_visited: list[str] = []
+        host_trace: list[tuple[str, str]] = []
 
         code = run_selftest(
             serial_port=ser,
@@ -847,14 +848,57 @@ class TestHarnessScenarios(BaseSimTest):
             clock=clock,
             reset_fn=reset_fn,
             expected_rev="ca569b6",
-            visited_items=host_visited,
+            trace=host_trace,
         )
 
         self.assertEqual(code, 0)
-        expected_items = [it.name for it in PROTOCOL_ITEMS]
-        self.assertEqual(host_visited, expected_items, "Host did not visit table items in exact order")
-        self.assertEqual(fw.visited_items, expected_items, "Firmware model did not visit table items in exact order")
-        self.assertEqual(host_visited, fw.visited_items, "Host and model visited items differ")
+        expected_table_trace = []
+        for it in PROTOCOL_ITEMS:
+            if it.item_type == "LINE":
+                expected_table_trace.append(("LINE", it.line_pattern))
+            elif it.item_type == "PRIM":
+                expected_table_trace.append(("PRIM", it.primitive))
+            elif it.item_type == "MEASURE":
+                expected_table_trace.append(("MEASURE", it.name))
+
+        self.assertEqual(len(host_trace), len(PROTOCOL_ITEMS), "Host trace length does not match protocol table")
+        self.assertEqual(len(fw.trace), len(PROTOCOL_ITEMS), "Model trace length does not match protocol table")
+        self.assertEqual(host_trace, expected_table_trace, "Host trace differs from protocol table")
+        self.assertEqual(fw.trace, expected_table_trace, "Model trace differs from protocol table")
+        self.assertEqual(host_trace, fw.trace, "Host and model traces differ")
+
+    # Alias to preserve backward compatibility with previous audit name
+    test_host_and_model_traverse_identical_table = test_host_and_model_trace_matches_protocol_table
+
+    def test_real_capture_matches_protocol_table(self):
+        """R2-M3: Hardware capture non-INFO m7 lines match protocol table LINE patterns in exact order."""
+        docs_dir = PROJECT_ROOT / "docs"
+        capture_files = list(docs_dir.glob("gpio_f0_selftest_*.txt"))
+        self.assertTrue(len(capture_files) > 0, "No hardware capture files found in docs/")
+        latest_capture = max(capture_files, key=os.path.getmtime)
+        with open(latest_capture, "r", encoding="utf-8") as f:
+            raw_lines = f.readlines()
+
+        lines = [re.sub(r"^\[\d\d:\d\d:\d\d\]\s*", "", l).strip() for l in raw_lines]
+        m7_lines = [
+            l for l in lines
+            if l.startswith("[m7_gpio_test]")
+            and not l.startswith("[m7_gpio_test] INFO")
+            and not l.startswith("[m7_gpio_test] Rev ")
+        ]
+        table_lines = [it for it in PROTOCOL_ITEMS if it.item_type == "LINE"]
+
+        self.assertEqual(
+            len(m7_lines),
+            len(table_lines),
+            f"Capture line count ({len(m7_lines)}) does not match table LINE item count ({len(table_lines)})",
+        )
+
+        for idx, (tbl_item, actual_line) in enumerate(zip(table_lines, m7_lines)):
+            self.assertTrue(
+                re.match(tbl_item.line_pattern, actual_line),
+                f"Mismatch at index {idx} ({tbl_item.name}): pattern '{tbl_item.line_pattern}' does not match '{actual_line}'",
+            )
 
     # ---- R2-m1: Drenar puerto serie antes de reset -------------------------
     def test_r2_m1_serial_drain_before_reset(self):
