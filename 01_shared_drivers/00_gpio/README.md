@@ -25,8 +25,11 @@ premise of A1 turned out wrong (an unclocked port reads all ones, not zero), and
 its description was corrected. A re-audit at `1a635d8` found R1–R4
 ([section 12.3](#123-re-audit-1-r1r4-2026-09-30-at-1a635d8)), none blocking.
 All four are closed at `fa44386`, with one criterion not met: a
-`GST_RACE_SEED` replay of T15 is close but not exact (section 10). This driver
-has had no independent bench audit.
+`GST_RACE_SEED` replay of T15 is close but not exact (section 10). A second
+re-audit at `7b01a10` accepted that criterion and left three open findings,
+none a driver defect: R2-a, R2-b and R3-a
+([section 12.4](#124-re-audit-2-r2-a-r2-b-r3-a-2026-09-30-at-7b01a10)). This
+driver has had no independent bench audit.
 
 ---
 
@@ -730,6 +733,29 @@ closed (section 15 shows how to read it).
 | R2 | T15 is deterministic per image: every run of one image gives the same race counts (`c_raw_both` 315 897 ×4 at `780dddd`/`2b9bf21`, 320 906 ×2 at `0cd803f`; ISR 1 589 in 12 821 both times). Each protected phase has been tested on one interleaving, and the second run adds no race sample | **Closed, one criterion not met** (`b65677e`, `9ccc971`, `7cedf36`, `fa44386`): RNG seed per run, jitter outside the section, fixed start. The two runs differ in seed and in `c_raw_both` (59 141 / 59 159), `h` (14 055 / 14 095) and `i` (1 519 / 1 499); protected phases 0 with exact `locked_calls`; B1 10.08×; M-R2 gives different `d`/`e` in two runs. Not met: a `GST_RACE_SEED` replay does not give the same counts (section 10); accepted as is by the owner on 2026-09-30 |
 | R3 | The mutation captures do not record their patch; only the file name and `6d1ef62` say what was mutated (C9) | **Closed** (`a087d91`): clean runs print `[host] tree clean`; every `-dirty` capture since carries its `git diff` (sha256, line count, each line). §9.3 says what the earlier ones mutated |
 | R4 | The measured silicon fact (an unclocked port reads `0xFFFFFFFF`) is missing from §6 | **Closed** (`6f3ee2b`): one row in §6 |
+
+### 12.4 Re-audit 2 (R2-a, R2-b, R3-a, 2026-09-30, at `7b01a10`)
+
+A verification of the R1–R4 corrections (`31406fa` … `7b01a10`, validated
+revision `fa44386`). R1, R3 and R4 are closed. R2 is closed, and its replay
+criterion is accepted: the aim of R2, a different interleaving per run, is
+met, and the replay was a debugging aid.
+
+Checked without discrepancy:
+- the header freeze against `1a635d8`, and C8;
+- the new tests and their mutations;
+- the sha256 of all seven `-dirty` captures at `fa44386`, recomputed from
+  their content;
+- every figure of §2, §6, §9.1–§9.4, §10, §12.3 and §15 against its capture;
+- `1ba0f65` code identical to `fa44386`.
+
+Corrections: `REAUDIT_2_INSTRUCTIONS.md`.
+
+| ID | Finding | State |
+| :--- | :--- | :--- |
+| R2-a | Two comments in `CM7/App/Src/gpio_selftest.c` (lines 670 and 870) claim an exact replay ("a replay replays"), which `gpio_dev_replay_seed_d9d40bdd_fa44386.txt` refutes and §10 states correctly | **Open**: reword; proven by a binary compare, no bench |
+| R2-b | B1 is at its gate: 992 cycles on CM4 leave 80 cycles to 10×. The rise from `0cd803f` also shows in B1 itself, which has no contention and no jitter (CM7 HAL with hook 1559 → 1739, CM4 1875 → 1983; `gpio_hal.c` unchanged, `gpio_bm` +62 B). That points to the link layout rather than to R2, so an unrelated code change can fail B1 | **Open**: confirm the layout cause with a padding run, then the owner chooses a 60 µs limit (12.1×, +10 µs on the A2 bound) or documents the layout dependence |
+| R3-a | The capture identifies the host checkout, not the image. `tree clean` and the diff describe where the script runs; build flags are not recorded (the `GST_RACE_SEED` replay says `Rev fa44386`, `tree clean`); and `FW_GIT_REV` is computed at configure time, so an edit without reconfiguring builds with the old revision and no `-dirty` | **Open**: a build id computed at build time (diff + flags + preset), printed by both cores and checked by the host before S8 |
 
 ---
 
