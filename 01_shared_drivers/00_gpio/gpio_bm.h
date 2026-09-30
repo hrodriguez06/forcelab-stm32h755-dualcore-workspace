@@ -85,6 +85,44 @@ bool GPIO_BM_ConfigAlternate(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af, 
   */
 bool GPIO_BM_ConfigAnalog(GPIO_TypeDef *port, uint32_t pin_idx);
 
+/* ---- Status ------------------------------------------------------------------ */
+typedef enum
+{
+    GPIO_BM_OK = 0,
+    GPIO_BM_ERR_PARAM,       /*!< refused before any peripheral access                 */
+    GPIO_BM_ERR_DEBUG_PIN,   /*!< PA13/PA14 without allow_debug_pins                   */
+    GPIO_BM_ERR_LOCKED,      /*!< LCKR freezes this pin: the write would be ignored    */
+    GPIO_BM_ERR_BUSY,        /*!< the cross-core hook did not get the lock in its limit */
+    GPIO_BM_ERR_VERIFY,      /*!< read-back differs from what was written              */
+    GPIO_BM_ERR_CONFLICT,    /*!< EXTI line already routed to another port (F2)        */
+    GPIO_BM_ERR_NOT_READY    /*!< compensation cell: CSI off or READY not set (F2)      */
+} GpioBm_Status_t;
+
+/* ---- Canonical pin -------------------------------------------------------------- */
+typedef struct { GPIO_TypeDef *port; uint8_t pin_idx; } GpioBm_Pin_t;
+#define GPIO_BM_PIN_MASK(idx)    (1UL << (idx))
+#define GPIO_BM_PIN_INDEX(mask)  ((uint32_t)__builtin_ctz((uint32_t)(mask)))   /* single-bit masks only */
+
+#define GPIO_BM_MODE_INPUT   0U   /* MODER field values, RM0399 12.4.1 */
+#define GPIO_BM_MODE_OUTPUT  1U
+#define GPIO_BM_MODE_AF      2U
+#define GPIO_BM_MODE_ANALOG  3U
+#define GPIO_BM_OTYPE_PP     0U
+#define GPIO_BM_OTYPE_OD     1U
+
+typedef struct
+{
+    GPIO_TypeDef *port;
+    uint32_t pin_idx;          /*!< 0..15                                             */
+    uint32_t mode;             /*!< GPIO_BM_MODE_*                                    */
+    uint32_t otype;            /*!< GPIO_BM_OTYPE_*; ignored for INPUT/ANALOG          */
+    uint32_t speed;            /*!< GPIO_BM_SPEED_*; ignored for INPUT/ANALOG          */
+    uint32_t pull;             /*!< GPIO_BM_PULL_*; must be NONE for ANALOG            */
+    uint32_t af;               /*!< 0..15, MODE_AF only                                */
+    uint32_t initial_level;    /*!< 0/1, MODE_OUTPUT only: BSRR before MODER           */
+    bool     allow_debug_pins; /*!< false: PA13/PA14 refused                          */
+} GpioBm_PinConfig_t;
+
 #ifdef __cplusplus
 }
 #endif
