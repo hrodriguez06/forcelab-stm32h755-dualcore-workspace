@@ -13,10 +13,12 @@ file: every console line and every host measurement, with timestamps, until
                                                 # (the capture then carries the git diff)
     py tools/gpio_hw_check.py --preset selftest-gpio   # build dir whose flags the build id uses
 
-The image must be the one this checkout builds (R3-a): the host computes the
-build id of generated/fw_build_id.h over its own checkout and build/<preset>,
-and aborts before any output is enabled when CM7 or CM4 prints another one
-(--allow-dirty notes it and goes on).
+The image must be the one this checkout builds (R3-a, R3-b): the host computes
+the build id of generated/fw_build_id.h over its own checkout (its commit
+included) and build/<preset>, and aborts before any output is enabled when CM7
+or CM4 prints another one (--allow-dirty notes it and goes on), or when the Rev
+of CM7 without -dirty is not this checkout's HEAD (--allow-dirty does not
+waive that one).
 
 Electrical safety (no series resistors on the bench):
   S2  the AD2 opens and closes with every DIO in input (tools/ad2.py), and goes
@@ -633,17 +635,23 @@ def tree_record(stamp: Callable[[str], None]) -> bool:
     return True
 
 
-def host_build_id(preset: str) -> str:
-    """R3-a: FW_BUILD_ID as cmake/fw_build_id.cmake computes it, over this
-    checkout: the first 16 hex digits of the SHA-256 of the bytes of
-    `git diff --no-color HEAD`, then "CMAKE_C_FLAGS=" <CMAKE_C_FLAGS of
-    build/<preset>/CMakeCache.txt> " PRESET=" <preset>, no newline added.
-    "unknown" when git or the cache cannot be read; never an invented value."""
+def host_build_id(preset: str, project: pathlib.Path = PROJECT) -> str:
+    """R3-a/R3-b: FW_BUILD_ID as cmake/fw_build_id.cmake computes it, over the
+    checkout of `project`: the first 16 hex digits of the SHA-256 of
+    "HEAD=" <git rev-parse HEAD, 40 hex>, the bytes of `git diff --no-color
+    HEAD`, "CMAKE_C_FLAGS=" <CMAKE_C_FLAGS of build/<preset>/CMakeCache.txt>
+    and " PRESET=" <preset>, no newline added. "unknown" when git or the cache
+    cannot be read; never an invented value. tools/run_warm_resets.py imports
+    this function (--project, --preset): one definition for both tools."""
     try:
-        diff = subprocess.run(["git", "diff", "--no-color", "HEAD"], cwd=str(PROJECT),
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(project),
+                              capture_output=True, check=True).stdout.strip()
+        diff = subprocess.run(["git", "diff", "--no-color", "HEAD"], cwd=str(project),
                               capture_output=True, check=True).stdout
-        cache = (PROJECT / "build" / preset / "CMakeCache.txt").read_bytes()
+        cache = (project / "build" / preset / "CMakeCache.txt").read_bytes()
     except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    if not re.fullmatch(rb"[0-9a-f]{40}", head):
         return "unknown"
     flags = None
     for line in cache.splitlines():
@@ -653,7 +661,7 @@ def host_build_id(preset: str) -> str:
             break
     if flags is None:
         return "unknown"
-    payload = diff + b"CMAKE_C_FLAGS=" + flags + b" PRESET=" + preset.encode("utf-8")
+    payload = b"HEAD=" + head + diff + b"CMAKE_C_FLAGS=" + flags + b" PRESET=" + preset.encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:16]
 
 
@@ -711,6 +719,14 @@ def main() -> int:
                 raise BenchAbort(f"S8: firmware protocol v{ver}, host v{BENCH_VERSION}")
             if not clean and not args.allow_dirty:
                 raise BenchAbort(f"R2: Rev cm7={revs['cm7']} cm4={revs['cm4']} is not one clean commit")
+            # R3-b: the image must come from this checkout's commit. --allow-dirty
+            # does not waive it: a -dirty run is an edit on the same commit, not
+            # an image of another one.
+            head = git_rev()
+            base = revs["cm7"][:-len("-dirty")] if revs["cm7"].endswith("-dirty") else revs["cm7"]
+            stamp(f"[host] R3-b: image Rev {revs['cm7']} (commit {base}), host HEAD {head}")
+            if head == "unknown" or base != head:
+                raise BenchAbort(f"R3-b: the image was built at {base}, this checkout is at {head}")
             # R3-a, in the S8 phase: nothing is enabled yet. "unknown" never matches.
             stamp(f"[host] build id host={build_id} cm7={ids['cm7']} cm4={ids['cm4']}")
             same = build_id != "unknown" and ids["cm7"] == build_id and ids["cm4"] == build_id

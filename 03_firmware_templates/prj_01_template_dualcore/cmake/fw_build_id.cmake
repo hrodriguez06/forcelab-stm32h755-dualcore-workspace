@@ -5,12 +5,14 @@
 # FW_GIT_REV   git rev-parse --short HEAD, "-dirty" when git status
 #              --porcelain -uno lists anything (tracked files only).
 # FW_BUILD_ID  first 16 hex digits of the SHA-256 of, byte for byte:
+#                "HEAD=" <git rev-parse HEAD, all 40 hex digits>      (R3-b)
 #                <stdout of git diff --no-color HEAD>
 #                "CMAKE_C_FLAGS=" <CMAKE_C_FLAGS of CMakeCache.txt>
 #                " PRESET=" <FW_PRESET of CMakeCache.txt>
-#              with no newline added: file(APPEND) writes "\n" as CR LF on
-#              Windows. tools/gpio_hw_check.py computes the same over its
-#              checkout.
+#              with no newline added anywhere: file(APPEND) writes "\n" as
+#              CR LF on Windows. The id therefore changes with the commit too.
+#              tools/gpio_hw_check.py (host_build_id) computes the same over
+#              its checkout; tools/run_warm_resets.py reuses that function.
 # Either is "unknown" when git fails: never an invented value.
 #
 # The header is rewritten only when its content changes, so an unchanged tree
@@ -19,6 +21,9 @@
 set(out_dir "${BIN_DIR}/generated")
 set(out     "${out_dir}/fw_build_id.h")
 set(payload "${out_dir}/fw_build_id.payload")
+set(part_head "${out_dir}/fw_build_id.head")
+set(part_diff "${out_dir}/fw_build_id.diff")
+set(part_tail "${out_dir}/fw_build_id.tail")
 file(MAKE_DIRECTORY "${out_dir}")
 
 function(cache_value name result)
@@ -43,6 +48,14 @@ execute_process(
     ERROR_QUIET
 )
 execute_process(
+    COMMAND git rev-parse HEAD
+    WORKING_DIRECTORY "${SRC_DIR}"
+    OUTPUT_VARIABLE head_full
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE head_full_rc
+    ERROR_QUIET
+)
+execute_process(
     COMMAND git status --porcelain -uno
     WORKING_DIRECTORY "${SRC_DIR}"
     OUTPUT_VARIABLE status
@@ -55,12 +68,13 @@ execute_process(
 execute_process(
     COMMAND git diff --no-color HEAD
     WORKING_DIRECTORY "${SRC_DIR}"
-    OUTPUT_FILE "${payload}"
+    OUTPUT_FILE "${part_diff}"
     RESULT_VARIABLE diff_rc
     ERROR_QUIET
 )
 
-if((head_rc EQUAL 0) AND head AND (status_rc EQUAL 0) AND (diff_rc EQUAL 0))
+if((head_rc EQUAL 0) AND head AND (head_full_rc EQUAL 0) AND head_full AND
+   (status_rc EQUAL 0) AND (diff_rc EQUAL 0))
     if(status)
         set(rev "${head}-dirty")
     else()
@@ -68,11 +82,20 @@ if((head_rc EQUAL 0) AND head AND (status_rc EQUAL 0) AND (diff_rc EQUAL 0))
     endif()
     cache_value(CMAKE_C_FLAGS flags)
     cache_value(FW_PRESET preset)
-    file(APPEND "${payload}" "CMAKE_C_FLAGS=${flags} PRESET=${preset}")
-    file(SHA256 "${payload}" digest)
-    string(SUBSTRING "${digest}" 0 16 build_id)
+    file(WRITE "${part_head}" "HEAD=${head_full}")
+    file(WRITE "${part_tail}" "CMAKE_C_FLAGS=${flags} PRESET=${preset}")
+    # cmake -E cat copies the three files byte for byte into one.
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E cat "${part_head}" "${part_diff}" "${part_tail}"
+        OUTPUT_FILE "${payload}"
+        RESULT_VARIABLE cat_rc
+    )
+    if(cat_rc EQUAL 0)
+        file(SHA256 "${payload}" digest)
+        string(SUBSTRING "${digest}" 0 16 build_id)
+    endif()
 endif()
-file(REMOVE "${payload}")
+file(REMOVE "${payload}" "${part_head}" "${part_diff}" "${part_tail}")
 
 set(content "/* Generated at build time by cmake/fw_build_id.cmake: do not edit. */
 #ifndef FW_BUILD_ID_H
