@@ -1,0 +1,110 @@
+[+   0.053s] [host] gpio_hw_check.py, host checkout 663ae65, protocol v1
+[+   0.053s] [host] checklist: GND first, DIO per README table, nothing on W1/W2/V+/V-; WaveForms GUI closed; image selftest-gpio flashed with this script stopped
+[+   0.154s] [host] tree clean
+[+   0.248s] [host] build id of this checkout and build/selftest-gpio: 3c889d2e7e66805d
+[+   0.248s] [ad2] T0B(a) ad2_set_oe(0x0200, bus=NONE): refused before the DLL
+[+   0.248s] [ad2] T0B(a) ad2_set_oe(0x0800, bus=NONE): refused before the DLL
+[+   0.249s] [ad2] T0B(a) ad2_set_oe(0x2000, bus=NONE): refused before the DLL
+[+   0.249s] [ad2] T0B(a) ad2_set_oe(0x4000, bus=NONE): refused before the DLL
+[+   0.249s] [ad2] T0B(a) ad2_set_oe(0x8000, bus=NONE): refused before the DLL
+[+   0.249s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=NONE): refused before the DLL
+[+   0.249s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=MCU): refused before the DLL
+[+   0.249s] [ad2] T0B(a) ad2_set_oe(0x10FF, bus=MCU): refused before the DLL
+[+   0.249s] [ad2] T0B(a) control ad2_set_oe(0x1000, bus=NONE): passed to the DLL
+[+   0.249s] [ad2] T0B(a) control ad2_set_oe(0x10FF, bus=AD2): passed to the DLL
+[+   0.610s] [ad2] opened in S2: OE=0x0000 DIO=0x0000
+[+   0.610s] [host] reset through SWD (STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst), AD2 in S2
+[+   0.764s]  
+[+   0.769s] === STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[+   0.773s] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[+   0.776s] [sys] silicon revision id=0x2003
+[+   0.781s] [ipc] shared block at 0x38008000, magic=0x48375353
+[+   0.785s] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[+   0.787s] [gpio] CM7 Rev 663ae65
+[+   0.790s] [gpio] CM7 Build id dbcf810508d80301
+[+   0.792s] [gpio] CM4 Rev 663ae65
+[+   0.795s] [gpio] CM4 Build id dbcf810508d80301
+[+   0.798s] [gpio] GPIO_BENCH v1 idle
+[+   0.798s] [host] build id host=3c889d2e7e66805d cm7=dbcf810508d80301 cm4=dbcf810508d80301
+[+   0.798s] [ad2] ABORT: R3-a: the image is not the one this checkout builds (host=3c889d2e7e66805d cm7=dbcf810508d80301 cm4=dbcf810508d80301); AD2 back in S2 (OE=0x0000)
+[+   0.804s] [gpio] silicon REV_ID=0x2003, lock limit 50 us, test block at 0x3800A000
+[+   0.810s] [gpio] T1 cm7 BM  refusals=45 fail=0 control_wrote=1 -> PASS
+[+   0.816s] [gpio] T1 cm7 LL  refusals=32 fail=0 control_wrote=1 -> PASS
+[+   0.822s] [gpio] T1 cm7 HAL refusals=35 fail=0 control_wrote=1 -> PASS
+[+   0.833s] [gpio] T1 cm4 BM  refusals=45 fail=0 control_wrote=1 -> PASS
+[+   0.838s] [gpio] T1 cm4 LL  refusals=32 fail=0 control_wrote=1 -> PASS
+[+   0.843s] [gpio] T1 cm4 HAL refusals=35 fail=0 control_wrote=1 -> PASS
+[+   0.881s] [gpio] T2 cm7 BM  configs=1440 analog+pull refused=288 diff_rm=0 diff_hal=0 odr_bad=0
+[+   0.888s] [gpio] T2 cm7 LL  configs=1440 analog+pull refused=288 diff_rm=0 diff_hal=0 odr_bad=0
+[+   0.896s] [gpio] T2 cm7 HAL configs=1440 analog+pull refused=288 diff_rm=0 diff_hal=0 odr_bad=0
+[+   0.904s] [gpio] T2 cm7 readconfig_bad=0 legacy_bad=0 comparator_control=1 raw_hal_g7_kept=6/6 -> PASS
+[+   0.975s] [gpio] T2 cm4 BM  configs=1440 analog+pull refused=288 diff_rm=0 diff_hal=0 odr_bad=0
+[+   0.982s] [gpio] T2 cm4 LL  configs=1440 analog+pull refused=288 diff_rm=0 diff_hal=0 odr_bad=0
+[+   0.990s] [gpio] T2 cm4 HAL configs=1440 analog+pull refused=288 diff_rm=0 diff_hal=0 odr_bad=0
+[+   0.998s] [gpio] T2 cm4 readconfig_bad=0 legacy_bad=0 comparator_control=1 raw_hal_g7_kept=6/6 -> PASS
+[+   1.006s] [gpio] TB cm7 checks=274 fail=0 busy_calls=32/32 control_wrote=1 swap_control=1 -> PASS
+[+   1.016s] [gpio] TB cm4 checks=274 fail=0 busy_calls=32/32 control_wrote=1 swap_control=1 -> PASS
+[+   1.041s] [gpio] B1 cm7 BM  ConfigPin cycles: no hook 545/729, hook 992/1082 (min/max) = 2.70 us max with hook
+[+   1.050s] [gpio] B1 cm7 LL  ConfigPin cycles: no hook 738/824, hook 1128/1190 (min/max) = 2.97 us max with hook
+[+   1.059s] [gpio] B1 cm7 HAL ConfigPin cycles: no hook 1303/1402, hook 1670/1742 (min/max) = 4.35 us max with hook
+[+   1.100s] [gpio] B1 cm4 BM  ConfigPin cycles: no hook 475/667, hook 767/977 (min/max) = 4.88 us max with hook
+[+   1.109s] [gpio] B1 cm4 LL  ConfigPin cycles: no hook 622/740, hook 1023/1154 (min/max) = 5.77 us max with hook
+[+   1.118s] [gpio] B1 cm4 HAL ConfigPin cycles: no hook 1393/1468, hook 1929/1983 (min/max) = 9.91 us max with hook
+[+   1.126s] [gpio] T15 seed=0x7491B0BB (fixed by GST_RACE_SEED, RNG gave 0x5D562962; phase k uses seed^k)
+[+   1.130s] [gpio] T15 seed from the RNG: ok -> PASS
+[+   1.137s] [gpio] T15 start deadline: 11914 us of 40 ms used before this line -> PASS
+[+   1.865s] [gpio] T15 a_raw_cm7_alone cm7: iters=500000 corrupt=0 err=0 overlap=0 locked=0 hold_max=0 cyc time=708 ms
+[+   1.874s] [gpio] T15 a_raw_cm7_alone cm4: iters=0 corrupt=0 err=0 overlap=0 locked=0 hold_max=0 cyc time=0 ms
+[+   1.880s] [gpio] T15 a_raw_cm7_alone corrupt=0 (expected 0) locked_calls=0 -> PASS
+[+   3.005s] [gpio] T15 b_raw_cm4_alone cm7: iters=0 corrupt=0 err=0 overlap=0 locked=0 hold_max=0 cyc time=0 ms
+[+   3.014s] [gpio] T15 b_raw_cm4_alone cm4: iters=500000 corrupt=0 err=0 overlap=0 locked=0 hold_max=0 cyc time=1132 ms
+[+   3.021s] [gpio] T15 b_raw_cm4_alone corrupt=0 (expected 0) locked_calls=0 -> PASS
+[+   4.143s] [gpio] T15 c_raw_both cm7: iters=500000 corrupt=25254 err=0 overlap=499999 locked=0 hold_max=0 cyc time=713 ms
+[+   4.153s] [gpio] T15 c_raw_both cm4: iters=500000 corrupt=34284 err=0 overlap=316451 locked=0 hold_max=0 cyc time=1129 ms
+[+   4.162s] [gpio] T15 c_raw_both corrupt=59538 (expected >0 with overlap on both cores) locked_calls=0 -> PASS
+[+   6.252s] [gpio] T15 d_hal7_ll4 cm7: iters=200000 corrupt=0 err=0 overlap=200000 locked=200000 hold_max=934 cyc time=1193 ms
+[+   6.261s] [gpio] T15 d_hal7_ll4 cm4: iters=200000 corrupt=0 err=0 overlap=100504 locked=200000 hold_max=398 cyc time=2110 ms
+[+   6.268s] [gpio] T15 d_hal7_ll4 corrupt=0 (expected 0) locked_calls=400000 -> PASS
+[+   8.860s] [gpio] T15 e_ll7_hal4 cm7: iters=200000 corrupt=0 err=0 overlap=200000 locked=200000 hold_max=492 cyc time=1311 ms
+[+   8.870s] [gpio] T15 e_ll7_hal4 cm4: iters=200000 corrupt=0 err=0 overlap=99999 locked=200000 hold_max=991 cyc time=2619 ms
+[+   8.876s] [gpio] T15 e_ll7_hal4 corrupt=0 (expected 0) locked_calls=400000 -> PASS
+[+  10.516s] [gpio] T15 f_bm7_bm4 cm7: iters=200000 corrupt=0 err=0 overlap=200000 locked=200000 hold_max=408 cyc time=835 ms
+[+  10.526s] [gpio] T15 f_bm7_bm4 cm4: iters=200000 corrupt=0 err=0 overlap=100000 locked=200000 hold_max=298 cyc time=1654 ms
+[+  10.533s] [gpio] T15 f_bm7_bm4 corrupt=0 (expected 0) locked_calls=400000 -> PASS
+[+  12.158s] [gpio] T15 g_halsection7_bm4 cm7: iters=200000 corrupt=0 err=0 overlap=200000 locked=200000 hold_max=430 cyc time=820 ms
+[+  12.168s] [gpio] T15 g_halsection7_bm4 cm4: iters=200000 corrupt=0 err=0 overlap=99999 locked=200000 hold_max=298 cyc time=1638 ms
+[+  12.175s] [gpio] T15 g_halsection7_bm4 corrupt=0 (expected 0) locked_calls=400000 -> PASS
+[+  13.797s] [gpio] T15 h_halraw7_bm4 cm7: iters=200000 corrupt=11019 err=0 overlap=199999 locked=0 hold_max=0 cyc time=314 ms
+[+  13.808s] [gpio] T15 h_halraw7_bm4 cm4: iters=200000 corrupt=4369 err=3863 overlap=38532 locked=200000 hold_max=300 cyc time=1635 ms
+[+  13.817s] [gpio] T15 h_halraw7_bm4 corrupt=15388 (expected >0 with overlap on both cores) locked_calls=200000 -> PASS
+[+  14.550s] [gpio] T15 i_isr_raw thread: iters=500000 corrupt=0 err=0; isr: entries=14699 corrupt=1533 err=0
+[+  14.555s] [gpio] T15 i_isr_raw corrupt=1533 (expected >0) -> PASS
+[+  15.724s] [gpio] T15 j_isr_tier thread: iters=200000 corrupt=0 err=0; isr: entries=23533 corrupt=0 err=0
+[+  15.728s] [gpio] T15 j_isr_tier corrupt=0 (expected 0) -> PASS
+[+  15.735s] [gpio] T15 production hook timeouts during the race: cm7=0 cm4=0 -> PASS
+[+  15.744s] [gpio] B1 lock hold max: cm7 934 cyc (2335 ns), cm4 991 cyc (4955 ns); limit 50 us = 10x (>=10x) -> PASS
+[+  15.746s] [gpio] STEP T0A bus=NONE v=1
+[+  25.607s] [gpio] ABORT step=T0A reason=host timeout
+[+  25.611s] [gpio] bench completed without abort -> FAIL
+[+  25.618s] [gpio] T16 BM GPIOF: LCKR before=0x00000000, LockPins(PF7|PF8)=0, LCKR after=0x00010180
+[+  25.626s] [gpio] T16 BM GPIOF: PF7 config BM=3 LL=3 HAL=100, deinit BM=3 LL=3 HAL=100, ConfigAnalog=0
+[+  25.635s] [gpio] T16 BM GPIOF: MODER frozen=1, IsLocked PF7/PF8 yes PF6 no=1, control PF6 config=0 moved=1
+[+  25.644s] [gpio] T16 GPIOF relock: PF7 (already)=0 LCKR=0x00010180; add PF6 BM=0, PF5 LL=0, PF4 HAL=0 -> LCKR=0x000101F0
+[+  25.651s] [gpio] T16 GPIOF: PF6 now refused by LL=3; control PF3 free and configurable=1
+[+  25.662s] [gpio] T16 LL GPIOJ: registers real=1, LockPins(pin0|pin1)=0, LCKR=0x00010003, own-tier config=3, BM config=3, MODER frozen=1
+[+  25.673s] [gpio] T16 HAL GPIOK: registers real=1, LockPins(pin0|pin1)=0, LCKR=0x00010003, own-tier config=100, BM config=3, MODER frozen=1
+[+  25.683s] [gpio] T16 LCKR: locked pins refuse every tier with nothing written, relock semantics, control pin free -> PASS
+[+  25.689s] [gpio] T16 A1 GPIOK clocked: add PK5=1 LCKR=0x00010023 MODER=0xFFFFFFFF
+[+  25.697s] [gpio] T16 A1 GPIOK unclocked in both banks=1: LCKR reads 0xFFFFFFFF, IsLocked PK3=1 PK5=1
+[+  25.706s] [gpio] T16 A1 case A GPIO_HAL_Init(PK3|PK5)=1 MODER=0xFFFFFFFF LCKR=0x00010023; case B PK3 alone=0 moved=1
+[+  25.712s] [gpio] T16 A1 case A left the port clocked: IsPortClocked=1 raw RCC=1
+[+  25.722s] [gpio] T16 A1 case C unclocked: IsPortClocked=0 raw RCC=0 ReadConfig BM=8 LL=8 (NO_CLOCK=8) sentinels intact=1
+[+  25.730s] [gpio] T16 A1 case C control clocked: IsPortClocked=1 BM=0 mode=3 pull=0 LL=0 mode=3 pull=0
+[+  25.741s] [gpio] T16 A1: unclocked port: HAL_Init locked pin -> nothing written, free pin -> written; ReadConfig -> NO_CLOCK -> PASS
+[+  25.748s] [gpio] production hook: m7_gpio_lock_fail_count=0 m4_gpio_lock_fail_count=0 -> PASS
+[+  25.751s] [gpio] FW VERDICT=FAIL failures=2
+[+  25.756s] [ipc] m7=1 m4=1  (CPU2 alive)
+[+  26.086s] [ad2] closing in S2: OE=0x0000
+[+  26.104s] [host] T0B(a) host guard: PASS
+[+  26.104s] [host] 0/0 host checks passed, FW VERDICT=FAIL, abort=R3-a: the image is not the one this checkout builds (host=3c889d2e7e66805d cm7=dbcf810508d80301 cm4=dbcf810508d80301)
+[+  26.104s] HOST VERDICT=FAIL

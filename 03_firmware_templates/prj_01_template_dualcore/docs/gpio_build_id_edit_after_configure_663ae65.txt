@@ -1,0 +1,46 @@
+R3-a negative control 2 (edit after configure), worktree C:\wt_gpio at 663ae65, preset selftest-gpio.
+Oracle: the strings inside the linked .bin files (not the header alone).
+
+1. cmake --preset selftest-gpio -DCMAKE_C_FLAGS= ; cmake --build --preset selftest-gpio
+  exit=0; git status --porcelain -uno: ''
+  #define FW_BUILD_ID_H
+  #define FW_GIT_REV  "663ae65"
+  #define FW_BUILD_ID "3c889d2e7e66805d"
+  CM7\cm7_firmware.bin contains '663ae65-dirty': False
+  CM4\cm4_firmware.bin contains '663ae65-dirty': False
+  CM7\cm7_firmware.bin contains '3c889d2e7e66805d': True
+  CM4\cm4_firmware.bin contains '3c889d2e7e66805d': True
+
+2. Edit a comment of CM7/App/Src/gpio_selftest.c (no reconfigure). git diff:
+  | diff --git a/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/gpio_selftest.c b/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/gpio_selftest.c
+  | index 6286d5c..a668234 100644
+  | --- a/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/gpio_selftest.c
+  | +++ b/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/gpio_selftest.c
+  | @@ -1,7 +1,7 @@
+  |  /**
+  |    ******************************************************************************
+  |    * @file    gpio_selftest.c
+  | -  * @brief   00_gpio selftest, CPU1 side (preset selftest-gpio).
+  | +  * @brief   00_gpio selftest, CPU1 side (preset selftest-gpio). R3-a control.
+  |    *
+  |    *          Runs the tests that need no bench on both cores (T1, T2, TB, B1,
+  |    *          T15), then the Analog Discovery 2 bench steps (T0a, T0b, T3-T10),
+
+3. cmake --build --preset selftest-gpio (no cmake --preset in between)
+  exit=0; build steps:
+  [1/5] fw_build_id.h (FW_GIT_REV, FW_BUILD_ID)
+  [2/5] Building C object CM4/CMakeFiles/cm4_firmware.dir/App/Src/gpio_selftest.c.obj
+  [3/5] Building C object CM7/CMakeFiles/cm7_firmware.dir/App/Src/gpio_selftest.c.obj
+  [4/5] Linking C executable CM4\cm4_firmware.elf; Generating cm4_firmware.bin / cm4_firmware.hex and reporting 
+  [5/5] Linking C executable CM7\cm7_firmware.elf; Generating cm7_firmware.bin / cm7_firmware.hex and reporting 
+  #define FW_BUILD_ID_H
+  #define FW_GIT_REV  "663ae65-dirty"
+  #define FW_BUILD_ID "f37405fc05564ac0"
+  CM7\cm7_firmware.bin contains '663ae65-dirty': True
+  CM4\cm4_firmware.bin contains '663ae65-dirty': True
+  CM7\cm7_firmware.bin contains 'f37405fc05564ac0': True
+  CM4\cm4_firmware.bin contains 'f37405fc05564ac0': True
+  CM7\cm7_firmware.bin contains '3c889d2e7e66805d': False
+  CM4\cm4_firmware.bin contains '3c889d2e7e66805d': False
+
+Result: before the edit id=3c889d2e7e66805d, after it id=f37405fc05564ac0; ids differ: True
