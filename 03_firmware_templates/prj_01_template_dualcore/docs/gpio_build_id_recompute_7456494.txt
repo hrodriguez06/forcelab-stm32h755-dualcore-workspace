@@ -1,0 +1,16 @@
+R3-b manual recompute of FW_BUILD_ID in the clean worktree C:\wt_gpio at 7456494, with git, printf, wc and sha256sum only (not cmake/fw_build_id.cmake, not gpio_hw_check.py).
+payload = 'HEAD=' <git rev-parse HEAD> <git diff --no-color HEAD> 'CMAKE_C_FLAGS=' <flags> ' PRESET=' <preset>, no newline added
+git rev-parse HEAD: 7456494897a8e5beebb05390e93d4a1d0ab4784e
+git diff --no-color HEAD: 0 bytes (empty, so the payload below is all of it)
+--- preset selftest-gpio: CMAKE_C_FLAGS='' FW_PRESET(cache)='selftest-gpio'
+  payload (80 bytes, between the quotes): 'HEAD=7456494897a8e5beebb05390e93d4a1d0ab4784eCMAKE_C_FLAGS= PRESET=selftest-gpio'
+  sha256 = 991971a381ccb862ed1aee89922079bea327fd42b75e76843067fbe42ce6ade0
+  first 16 = 991971a381ccb862; generated/fw_build_id.h FW_BUILD_ID = 991971a381ccb862; equal: yes
+--- preset debug: CMAKE_C_FLAGS='' FW_PRESET(cache)='debug'
+  payload (72 bytes, between the quotes): 'HEAD=7456494897a8e5beebb05390e93d4a1d0ab4784eCMAKE_C_FLAGS= PRESET=debug'
+  sha256 = b761febaca21c7b700e85ac90a9b361af9c6c095613224d1830339e80855939f
+  first 16 = b761febaca21c7b7; generated/fw_build_id.h FW_BUILD_ID = b761febaca21c7b7; equal: yes
+--- preset release: CMAKE_C_FLAGS='' FW_PRESET(cache)='release'
+  payload (74 bytes, between the quotes): 'HEAD=7456494897a8e5beebb05390e93d4a1d0ab4784eCMAKE_C_FLAGS= PRESET=release'
+  sha256 = 8c71cc7386c89b167fa404908914216ddea49382bc67408d07f8a1d9b0a7f1f3
+  first 16 = 8c71cc7386c89b16; generated/fw_build_id.h FW_BUILD_ID = 8c71cc7386c89b16; equal: yes

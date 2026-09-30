@@ -1,0 +1,15 @@
+prj_01 at 7456494, production images. g_shared at 0x38008000 (size 0xD0 since R3-c): +0x00 magic, +0x04 m7_heartbeat, +0x08 m4_heartbeat, +0x98 m7_gpio_lock_fail_count, +0x9C m4_gpio_lock_fail_count. Read ~10 s after an SWD reset, after the 20 warm resets, raw CLI output below. The image of each block is identified by the '[sys] build' / '[sys] cpu2 build' lines of the last reset of the warm-reset capture named in the block (same flash, no reflash in between).
+=== debug (build/debug, 7456494, clean: True); image per gpio_warm_resets_debug_7456494.txt: cpu1 rev=7456494 id=b761febaca21c7b7, cpu2 rev=7456494 id=b761febaca21c7b7
+  Address:      : 0x38008000
+0x38008000 : 48375353
+  Address:      : 0x38008004
+0x38008004 : 00000015 00000051
+  Address:      : 0x38008098
+0x38008098 : 00000000 00000000
+=== release (build/release, 7456494, clean: True); image per gpio_warm_resets_release_7456494.txt: cpu1 rev=7456494 id=8c71cc7386c89b16, cpu2 rev=7456494 id=8c71cc7386c89b16
+  Address:      : 0x38008000
+0x38008000 : 48375353
+  Address:      : 0x38008004
+0x38008004 : 00000015 00000069
+  Address:      : 0x38008098
+0x38008098 : 00000000 00000000
