@@ -596,3 +596,7 @@ La placa quedó con `prj_04` **debug** de `51a29b7` flasheado y el AD2 cerrado (
 - **F1a puede empezar**, sobre `driver/gpio` desde este commit, con R4-m1 y R4-m2 en su lista.
 - **Actualizo en el mismo cambio que este informe:** el aviso de `IMPLEMENTER_INSTRUCTIONS.md` y la fila de `00_gpio` en `DRIVER_ROADMAP.md` §1.
 - **Merge a `main`:** el plan lo prevé al cierre de la auditoría. Lo dejo a decisión del responsable.
+
+### Errata del plan (mía, al preparar F1a, 2026-09-29)
+
+- **E8:** El plan ponía T18 en F0 (referencia), F1b y F2, y no en F1a. Pero `gpio_bm.c` se enlaza en producción (lo usan `uart` y `adc`), así que la producción cambia ya en F1a, y la paridad byte a byte con `ca569b6` de F0 deja de valer. Ahora la puerta de F1a exige T18 igual que la referencia de F0 (sin `mX_gpio_lock_fail_count`, que llega en F1b) y un diff del `.map` de producción por objeto, en el que solo cambia `gpio_bm.c.obj`. Corregidas la fila de F1a en "Fases" y la de T18 en "Plan de pruebas"; el detalle está en `F1A_INSTRUCTIONS.md` §2.6.

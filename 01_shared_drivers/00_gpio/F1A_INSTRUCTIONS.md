@@ -24,7 +24,7 @@ F0 está cerrado. El banco, el protocolo host–firmware, la tabla de pasos, el 
 
 ## 0. Antes de empezar
 
-1. **Crea una rama `driver/gpio` nueva desde `main`,** en `b66e63d` o posterior. La de F0 ya está integrada y borrada. No reescribas la historia.
+1. **Crea una rama `driver/gpio` nueva desde `main`,** en el último commit que toca este archivo o posterior (`git log -1 --format=%h -- 01_shared_drivers/00_gpio/F1A_INSTRUCTIONS.md`). La de F0 ya está integrada y borrada. No reescribas la historia.
 2. **Un commit por preocupación, citando el ID** del hallazgo o de la prueba, en el estilo del plan: `feat(gpio): add GPIO_BM_ConfigPin with pre-access validation (G5, C6)`. Mensajes escritos desde bash con heredoc.
 3. **Decisiones abiertas del plan:** valen las opciones por defecto 1, 2 y 5.
    - La API nueva devuelve `GpioBm_Status_t`.
@@ -107,10 +107,10 @@ Implementa el contrato tal como está en el plan: tipos, constantes y firmas **e
   - La secuencia de RM0399 §12.4.8, con accesos de 32 bits y dentro de la sección.
   - Después, se relee `LCKK`: si no vale 1, `ERR_VERIFY`.
   - Ningún bucle sin límite (C13).
-- **Estado (C7).** En el `.map`, `gpio_bm.o` tiene `.data = 0` y `.bss ≤ 8 B`: solo el puntero al hook y el contador de anidamiento, por núcleo.
+- **Estado (C7).** En el `.map`, `gpio_bm.c.obj` tiene `.data = 0` y `.bss ≤ 8 B`: solo el puntero al hook y el contador de anidamiento, por núcleo.
 - **Dependencias (C8).** Solo `stm32h7xx.h`: ni HAL, ni LL, ni FreeRTOS, ni `hsem_*`. Tiene que funcionar antes del árbol de reloj, porque `01_led` depende de eso.
 - **Sin literales del proyecto (C1, regla 7).** Ningún `GPIOB`, `5U` ni `BOARD_` en `gpio_bm.[ch]`. Lo compruebo con `grep`.
-- **Operaciones de pin.** Son `static inline` y cada una es **un solo `STR`** (`Toggle`: una lectura de `ODR` y un `STR`). Lo pruebas con objdump (B1).
+- **Operaciones de pin.** Son `static inline`. `Set`, `Reset`, `Write` y `WritePort` son **un solo `STR`** a `BSRR`; `Toggle`, una lectura de `ODR` y un `STR`; `Read` y `ReadPort`, una sola lectura de `IDR`. Lo pruebas con objdump de las siete (B1).
 - **Commits.** Sepáralos por preocupación: status y tipos; validación; sección y hook; `ConfigPin` y derivadas; LCKR; `DeinitPin` y `ReadConfig`; legacy como envoltura.
 
 ### 2.3 Selftest sin AD2 (paso 3)
@@ -135,15 +135,20 @@ Todo va bajo `GPIO_DRIVER_SELFTEST`, en `CM7/App/Src/gpio_selftest.c` y `CM4/App
     - usa `HSEM_BM_TakeTimeout` sobre `BOARD_GPIO_HSEM_ID` (de `shared_memory.h`), con el límite en ciclos DWT escrito y justificado;
     - se instala con `GPIO_BM_SetSharedLock` solo durante (e) y se desinstala al terminar;
     - no va en `gpio_bm`, ni en `shared_memory.c`, ni en `main.c`.
-  - **Veredicto de T15:** (a) = (b) = 0, (c) > 0, (d) > 0, (e) = 0, y todos los solapamientos > 0.
+  - **(f) y (g): el mismo núcleo.** Prueban el PRIMASK, que (e) no puede probar: con el hook, el HSEM ya ordena a los dos núcleos, y en (a)–(e) no hay ninguna ISR que toque el puerto. CM4 queda parado, como en (a). CM7 reconfigura PF10 en bucle, y una interrupción periódica de CM7 reconfigura PF6 (sin cablear), alternando entre dos configuraciones.
+    - La interrupción es de un timer que no use ninguna otra prueba, con su frecuencia escrita, y se deshabilita al terminar.
+    - Al entrar, la ISR comprueba que PF6 sigue como la dejó la entrada anterior; si no, cuenta una corrupción. También cuenta cuántas veces interrumpió al bucle.
+    - **(f):** el bucle con RMW a mano, sin PRIMASK → más de 0 corrupciones. Es el control: prueba que la ISR cae dentro de la ventana y que el detector la ve.
+    - **(g):** el bucle con `gpio_bm` sin hook → 0 corrupciones.
+  - **Veredicto de T15:** (a) = (b) = 0, (c) > 0, (d) > 0, (e) = 0, (f) > 0, (g) = 0. Solapamiento > 0 en los dos núcleos en (c), (d) y (e), e interrupciones del bucle > 0 en (f) y (g).
 - **T16 (LCKR).**
-  - `LockPins` en PF7–PF9 y, después, `ConfigPin` sobre ellos: `ERR_LOCKED`, registros sin cambio y `LCKK` = 1.
+  - `LockPins` en PF7–PF9 y, después, `ConfigPin` sobre ellos: `ERR_LOCKED`, registros sin cambio y `LCKK` = 1. El estado que devuelve cada llamada se imprime tal cual.
   - **Control:** un pin no bloqueado sí cambia.
   - **Es la última prueba de la imagen,** porque `LCKR` solo se borra con un reset. El siguiente arranque tiene que empezar con los pines sin bloquear: compruébalo y anúncialo al principio del selftest.
 - **B1 (medidas).** Solo se registran, pero van **todas** al informe:
   - ciclos de `ConfigPin` con y sin hook;
   - tiempo máximo con PRIMASK y con el lock, en cada núcleo;
-  - objdump de `Set`, `Reset` y `Write` (un `STR` cada una).
+  - objdump de las siete operaciones de pin de §2.2.
 
   De aquí sale `SHARED_GPIO_LOCK_US` para F1b, con el margen escrito.
 
@@ -161,7 +166,7 @@ Estas pruebas usan el AD2. Van por el **mismo** camino que F0: la tabla de `gpio
   | T5, T6, T9 | MCU: PF14 y PF15 | NONE | Scope 1 y 2 |
   | T7 | AD2: 0xFF en el bus | AD2, con testigo de S5 | Nada: el MCU lee `IDR` en analógico y en entrada |
   | T8 | MCU: una línea "solo MCU" (PE5 o PE6), nunca el bus | NONE | Analizador lógico con trigger en cualquier flanco |
-  | T10 | MCU: PA8 en AF0 (MCO1); PA8 solo se permite en este paso y en el walking-1 de T0a (E1) | NONE | La frecuencia en DIO14 |
+  | T10 | MCU: PA8 en AF0 (MCO1); PA8 solo se permite en este paso y en el walking-1 de T0a (errata E1) | NONE | La frecuencia en DIO14 |
 
 - **`tools/ad2.py`.** Añade lo que haga falta (analizador lógico, frecuencia, scope a 100 MS/s para T9) **sin** ningún camino nuevo hacia `OutputEnableSet`. Toda escritura de `OE` sigue pasando por `ad2_set_oe`.
 - **El control de cada prueba** (columna "Control" del plan) es un paso del protocolo o una variante del mismo paso, y tiene que dar FAIL cuando debe:
@@ -173,8 +178,8 @@ Estas pruebas usan el AD2. Van por el **mismo** camino que F0: la tabla de `gpio
   - T5 y T6: las condiciones de validez de su fila.
 - **El arnés (`fw_model.py` y las pruebas):**
   - cada paso nuevo en el modelo;
-  - E8 y E10 cubren solos las líneas y las primitivas nuevas, porque salen de la tabla;
-  - E15 y E16, las pruebas de un MCU que no suelta el bus, se amplían a T4 y T7;
+  - los escenarios E8 y E10 del arnés cubren solos las líneas y las primitivas nuevas, porque salen de la tabla;
+  - los escenarios E15 y E16 del arnés, los de un MCU que no suelta el bus, se amplían a T4 y T7;
   - un escenario por control, en el que el control falla y el host da FAIL;
   - el invariante eléctrico sigue en todas las pruebas.
 - **Los cuatro cambios de tabla de la reauditoría 4** siguen poniendo pruebas en rojo. Repítelos sobre los pasos nuevos (cambiar una primitiva, un patrón, un dueño del bus y el orden de dos líneas) y pon en el informe qué cae en cada caso.
@@ -191,9 +196,9 @@ Estas pruebas usan el AD2. Van por el **mismo** camino que F0: la tabla de `gpio
 
 A diferencia de F0, **F1a cambia código que se enlaza en producción**: `gpio_bm.c` lo usan `uart` y `adc`. Por eso ya no se exige la paridad byte a byte. En su lugar:
 
-- **Diff del `.map` por objeto,** entre la producción (`debug` y `release`) de F0 (`c1653c6`) y la de F1a: solo pueden cambiar `gpio_bm.c.o` y el total. Cualquier otro objeto que cambie se explica o se corrige. El método va en el informe.
-- **C7 en el `.map`:** `.data` y `.bss` de `gpio_bm.o`, en los dos núcleos.
-- **T18 de regresión,** con la imagen de producción de F1a, grabada como en F0: cuatro archivos crudos (consola con marcas de tiempo, `net_check.py`, `query_adc.py --wave --count 300` y el volcado SWD de contadores). Tiene que dar lo mismo que la referencia de `90327d1`: 300 `WAVE`, burst 100/100 y contadores a 0. **Esta regresión la añado a la puerta de F1a** (errata E8 del plan), porque la producción cambia en esta fase y no en F1b.
+- **Diff del `.map` por objeto,** entre la producción (`debug` y `release`) de F0 (`c1653c6`) y la de F1a: solo pueden cambiar `gpio_bm.c.obj` y el total. Cualquier otro objeto que cambie se explica o se corrige. El método va en el informe.
+- **C7 en el `.map`:** `.data` y `.bss` de `gpio_bm.c.obj`, en los dos núcleos.
+- **T18 de regresión,** con la imagen de producción de F1a, grabada como en F0: cuatro archivos crudos (consola con marcas de tiempo, `net_check.py`, `query_adc.py --wave --count 300` y el volcado SWD de contadores). Tiene que dar lo mismo que la referencia de `90327d1`: 300 `WAVE`, burst 100/100 y contadores a 0. Además, como pide la fila T18 del plan, los códigos LED de arranque correctos y los selftests UART y ADC en verde: son los consumidores de las envolturas legacy. `mX_gpio_lock_fail_count` no existe hasta F1b. **Esta regresión la añado a la puerta de F1a** (errata E8 del plan), porque la producción cambia en esta fase y no en F1b.
 
 ### 2.7 El informe (paso 7)
 
@@ -250,15 +255,17 @@ Además del protocolo A1–A27 del plan entero, haré lo siguiente:
 | C2 | `git diff ca569b6 -- gpio_bm.h` | Solo líneas añadidas |
 | C1, C8 | `grep` de literales del proyecto y de `#include` en `gpio_bm.[ch]` | Nada |
 | C7 | `.map` de producción y de `selftest-gpio` | `.data = 0`, `.bss ≤ 8 B` |
-| C10 | Mutación mía: sin PRIMASK, y otra con el hook sin llamar | T15 (e) con más de 0 corrupciones |
+| C10 | Mutación mía: sin PRIMASK | T15 (g) con más de 0 corrupciones |
+| C10 | Mutación mía: el hook sin llamar | T15 (e) con más de 0 corrupciones |
 | C11 | Mutación mía: `MODER` antes que `BSRR` | T8 ve el pulso |
-| C12 | Mutación mía: sin comprobar `LCKR`, y otra sin read-back | T16 falla; una escritura ignorada deja de devolver OK |
+| C12 | Mutación mía: sin comprobar `LCKR` | T16 falla: da `ERR_VERIFY` en vez de `ERR_LOCKED` (el read-back ve la escritura ignorada) |
+| C12 | Mutación mía: sin comprobar `LCKR` y sin read-back | T16 falla: la escritura ignorada devuelve `OK` |
 | C6 | Mutación mía: validación después del reloj del puerto | T1 ve cambiar `RCC_AHB4ENR` |
 | T2 | Una foto de referencia alterada | T2 falla |
 | Operaciones de pin | objdump de mi build | Un `STR` por operación |
 | Banco | Los cuatro cambios de tabla sobre los pasos nuevos, y una contención inyectada en T4 | Pruebas en rojo |
 | A18 | Dos ejecuciones mías completas con el AD2 | Igual que las tuyas, con el mismo hash |
-| Producción | Mi diff del `.map` por objeto, y T18 con mi imagen | Solo cambia `gpio_bm.o`; T18 igual que la referencia |
+| Producción | Mi diff del `.map` por objeto, y T18 con mi imagen | Solo cambia `gpio_bm.c.obj`; T18 igual que la referencia |
 | Informe | `git grep` de cada identificador, y cada afirmación contra el código | Ninguna afirmación sin fuente |
 
 Si pasa, la API de F1a queda congelada y F1b puede empezar.
@@ -271,7 +278,8 @@ Las situaciones de `IMPLEMENTER_INSTRUCTIONS.md` §7, y además estas:
 
 - Algún tipo o firma del contrato no se puede implementar tal como está escrito.
 - T15 (d) da 0 corrupciones **con** solapamiento. Puede ser que el driver cierre la ventana por casualidad; no lo des por bueno.
+- T15 (f) da 0 corrupciones. Como en (c), se ensancha la ventana o se sube la frecuencia de la ISR; nunca se da por bueno.
 - T2 no encuentra una referencia fiable para algún caso en CM4.
 - Un paso del banco necesita una línea o una dirección que la tabla "Quién conduce" del plan no prevé.
-- El diff del `.map` de producción muestra cambios fuera de `gpio_bm.o`.
+- El diff del `.map` de producción muestra cambios fuera de `gpio_bm.c.obj`.
 - Algún valor de T5, T6 o T9 sale del rango de referencia.
