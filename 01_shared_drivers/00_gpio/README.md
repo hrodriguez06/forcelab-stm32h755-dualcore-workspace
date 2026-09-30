@@ -17,7 +17,7 @@ Status: phase F1 of the implementation plan (removed, see
 deferred (F3–F4). Validated on a
 NUCLEO-H755ZI-Q (silicon Rev V, `REV_ID = 0x2003`) on 2026-09-30, in
 `prj_01_template_dualcore` only, with an Analog Discovery 2. Two complete runs
-at `1ff10c8` pass: see [section 9](#9-validation). **EXTI and the compensation
+at `7456494` pass: see [section 9](#9-validation). **EXTI and the compensation
 cell (F2) are not implemented.** A code audit on 2026-09-30 (of `cc1ee88`) found
 no blocking defect; its findings A1–A7 and their fixes are in
 [section 12](#12-findings). The fixes were then run on the bench, where the
@@ -29,12 +29,16 @@ All four are closed at `fa44386`, with one criterion not met: a
 re-audit at `7b01a10` accepted that criterion and found R2-a, R2-b and R3-a
 ([section 12.4](#124-re-audit-2-r2-a-r2-b-r3-a-2026-09-30-at-7b01a10)), none a
 driver defect. All three are closed at `1ff10c8`, where the cross-core lock
-limit is 60 µs and every `selftest-gpio` capture carries a build id. A third
-re-audit at `5a5deeb` confirmed them and left two open traceability findings,
-R3-b and R3-c
-([section 12.5](#125-re-audit-3-r3-b-r3-c-2026-09-30-at-5a5deeb)): the
-host does not bind the image to its commit, and the production captures do
-not identify their image. This driver has had no independent bench audit.
+limit became 60 µs. A third re-audit at `5a5deeb` confirmed them and found two
+traceability findings, R3-b and R3-c
+([section 12.5](#125-re-audit-3-r3-b-r3-c-2026-09-30-at-5a5deeb)), both closed
+at `7456494`: the build id covers the commit and the host checks the image's
+`Rev` against its `HEAD`, and the production images print their identity,
+which `run_warm_resets.py` checks in every reset. Which captures carry a build
+id: the `selftest-gpio` captures from `663ae65` on, and the production
+warm-reset captures from `7456494` on; every earlier capture identifies its
+image only by `Rev` or by the host's `HEAD` (§9.3). This driver has had no
+independent bench audit.
 
 ---
 
@@ -487,30 +491,30 @@ wait a seeded 0–1023 cycles after the start and 0–63 cycles before each call
 outside the section. The two runs below have different seeds and different T15
 counts.
 
-### 9.1 Tests (runs at `1ff10c8`; one value means both runs gave it)
+### 9.1 Tests (runs at `7456494`; one value means both runs gave it)
 
 | Test | What it proves | Negative control | Result |
 | :--- | :--- | :--- | :--- |
 | T1 | Refusals of each tier on both cores: exact status; snapshot of every clocked port and both `RCC_AHB4ENR` banks unchanged. Includes a batch with a bad third entry and a mask with PA0 next to PA13 | A valid call of the same tier changes the snapshot | 45 BM / 32 LL / 35 HAL refusals per core, 0 failures |
 | T2 | 1440 configurations per tier (PF6–PF11, 4 modes × 2 types × 4 speeds × 3 pulls × AF 0/7/15), from a state with every field different, match the RM0399 field table; BM and LL also match raw `HAL_GPIO_Init`; `ODR` = initial level; BM/LL `ReadConfig` = registers; legacy calls give the `ca569b6` bits | A deliberately altered expected image is detected | 0 differences in 4320 configurations per core (1440 per tier) and in 2880 comparisons with raw `HAL_GPIO_Init`; 288 analog+pull refusals per tier; G7 shown on raw HAL 6/6 |
 | TB | A refusing hook: 16 calls × PRIMASK 0/1 all return busy, nothing written, PRIMASK restored, `lock()` called once, nesting counter back to 0. Nesting: one lock for an outer section. **A4**: `SetSharedLock` to a second hook and to `NULL` inside an open section, PRIMASK 0/1: the exit releases the hook that was taken, the new hook is never released without a lock, and the next section uses the new hook (32 checks) | The same hook allowing writes; A4: swapped *before* the section, the call is locked and released on the second hook only (`swap_control=1`) | 274 checks, 0 failures, 32/32 busy, `swap_control=1`, both cores. Mutation M-A4 (exit releases the installed hook): 6 failures on each core |
-| T15 seed | A seed per run from the RNG (HSI48, `DRDY` without `SECS`/`CECS`, bounded waits; a failure is a FAIL). T15 starts at a fixed 40 ms after the RNG read begins | Two runs, two seeds; the start line prints the time used and fails above 30 ms | Seeds `0xDA4D6E4C` / `0xD1629B52`; 10 265 µs of 40 ms used in both |
-| T15 | Race PF10 (CPU1) against PF11 (CPU2), same registers, seeded jitter outside the section | Raw RMW on both cores: **58 972** / **59 031** corruptions, with overlap on both. Each core alone: 0 | Through the production hook (counting shim), 0 corruptions and `locked_calls` = sum of both cores in: HAL/LL, LL/HAL, BM/BM and `HAL_GPIO_Init`-in-section/BM, 200 000 calls per core each. Mutation M-R2 (`gpio_ll` without its section), two runs at `fa44386`: `d` 12 897 / 13 253, `e` 6 790 / 6 624 corruptions |
-| T15 `h` | One writer without the section defeats the lock | - | Raw `HAL_GPIO_Init` on CPU1 against BM on CPU2: 14 659 / 14 510 corruptions |
-| T15 `i`/`j` | A TIM17 ISR (about 20 kHz) reconfigures PF6 while the thread reconfigures PF10 | Raw RMW in both: 1 506 / 1 530 corruptions in 14 704 / 14 701 ISR entries | Thread HAL + ISR LL: 0 in 23 667 / 23 666 entries |
+| T15 seed | A seed per run from the RNG (HSI48, `DRDY` without `SECS`/`CECS`, bounded waits; a failure is a FAIL). T15 starts at a fixed 40 ms after the RNG read begins | Two runs, two seeds; the start line prints the time used and fails above 30 ms | Seeds `0xB22CE424` / `0x77167D53`; 10 265 µs of 40 ms used in both |
+| T15 | Race PF10 (CPU1) against PF11 (CPU2), same registers, seeded jitter outside the section | Raw RMW on both cores: **59 221** / **59 060** corruptions, with overlap on both. Each core alone: 0 | Through the production hook (counting shim), 0 corruptions and `locked_calls` = sum of both cores in: HAL/LL, LL/HAL, BM/BM and `HAL_GPIO_Init`-in-section/BM, 200 000 calls per core each. Mutation M-R2 (`gpio_ll` without its section), two runs at `fa44386`: `d` 12 897 / 13 253, `e` 6 790 / 6 624 corruptions |
+| T15 `h` | One writer without the section defeats the lock | - | Raw `HAL_GPIO_Init` on CPU1 against BM on CPU2: 14 752 / 14 716 corruptions |
+| T15 `i`/`j` | A TIM17 ISR (about 20 kHz) reconfigures PF6 while the thread reconfigures PF10 | Raw RMW in both: 1 427 / 1 485 corruptions in 14 705 / 14 704 ISR entries | Thread HAL + ISR LL: 0 in 23 661 / 23 660 entries |
 | T0a | 13 lines follow both MCU pulls; REQ/ACK work | - | 0x4FFF / 0x0000 on the AD2; `IDR` 0xFF78 / 0x0000 |
 | T0b | (a) host guard refuses 8 masks before the DLL (mock); (b) `bench_claim` refuses PE0–PE4, PE7, bus, PA8, PF14; (c) the released-bus check catches a driven bus; (d) no `HOST_REQ` → MCU safe state | (a) allowed masks pass; (b) PE5 accepted; (c) the MCU drives 0x5A on purpose | All pass; (c) `False` twice at `0x5A`; (d) GPIOE `MODER[31:4]` = `0x00004000` |
 | T3 | Pin operations of each tier (`WritePort`, `Set`, `Reset`, `Write`, `Toggle`) read by the AD2 | A deliberate 0x54 where the host expects 0x55 | 24 values per tier (26 for BM), 0 differences; set+reset → `0x3F`; control detected at index 25 only |
 | T4 / T7 | 256 patterns driven by the AD2, read per tier by port and by bit; then analog `IDR` = 0 | Inverted pass (BM): CRC differs and equals the inverted CRC; input mode reads 0xFF | CRC32 `0x29058C73` = host for all tiers; T7 0xFF → 0x00 after `DeinitPin` |
-| T5 | Pull resistances set by each tier; the scope load R<sub>IN</sub> is measured, not assumed | PF14 no pull < 0.1 V; PF15 no pull > 2.9 V; V<sub>DD</sub> agrees on both channels within 50 mV | R<sub>PU</sub> 39.1–39.4 kΩ, R<sub>PD</sub> 42.5–42.6 kΩ (30–50 kΩ, DS12923 table 59); R<sub>IN</sub> 1059.8 / 1052.0 kΩ |
-| T6 | Open-drain of each tier: PF15 as an I2C line (22 kΩ to 3V3), PF14 released | PF14 push-pull high: 3.303 V | PF15 OD low 0.026–0.027 V, released 3.234–3.235 V; PF14 released 0.085–0.090 V |
+| T5 | Pull resistances set by each tier; the scope load R<sub>IN</sub> is measured, not assumed | PF14 no pull < 0.1 V; PF15 no pull > 2.9 V; V<sub>DD</sub> agrees on both channels within 50 mV | R<sub>PU</sub> 39.2–39.4 kΩ, R<sub>PD</sub> 42.6–42.7 kΩ (30–50 kΩ, DS12923 table 59); R<sub>IN</sub> 1050.0 / 1047.0 kΩ |
+| T6 | Open-drain of each tier: PF15 as an I2C line (22 kΩ to 3V3), PF14 released | PF14 push-pull high: 3.304 V | PF15 OD low 0.028 V, released 3.235–3.236 V; PF14 released 0.082–0.088 V |
 | T8 | Input → output on PE5 through each tier: A, B one transition; C, D (stale `ODR`) none | Naive order (`MODER`, 1 µs, `BSRR`): a pulse | A=1 B=1 C=0 D=0 on all tiers; control 2 transitions |
-| T9 | t<sub>r</sub> 10–90 % per `OSPEEDR`, 40 edges per speed and pin, 4 interleaved rounds (BM, LL, HAL, BM), Lanczos reconstruction (errata E9) | Pins in input: no edge in 0.5 s | Gate t<sub>r</sub>(LOW) − t<sub>r</sub>(VERY_HIGH) > 5σ: PF14 2.04 > 1.19 ns and 1.70 > 1.15 ns; PF15 2.71 > 0.81 ns and 2.70 > 0.84 ns |
-| T10 | PA8 in AF0 through each tier outputs MCO1 = HSE/2 | PA8 in AF1: 0 edges | 4.056–4.061 MHz (4 MHz ± 2 %); `RCC_CFGR` restored |
+| T9 | t<sub>r</sub> 10–90 % per `OSPEEDR`, 40 edges per speed and pin, 4 interleaved rounds (BM, LL, HAL, BM), Lanczos reconstruction (errata E9) | Pins in input: no edge in 0.5 s | Gate t<sub>r</sub>(LOW) − t<sub>r</sub>(VERY_HIGH) > 5σ: PF14 2.31 > 1.35 ns and 1.79 > 1.29 ns; PF15 2.41 > 0.77 ns and 2.85 > 0.85 ns |
+| T10 | PA8 in AF0 through each tier outputs MCO1 = HSE/2 | PA8 in AF1: 0 edges | 4.061–4.063 MHz (4 MHz ± 2 %); `RCC_CFGR` restored |
 | T16 | Locked pins refuse every tier (config, deinit, legacy) with `MODER` unchanged; a locked port gets more pins from each tier; LL on GPIOJ, HAL on GPIOK | PF6, then PF3, stay free and configurable | `LCKR` `0x00010180` → `0x000101F0`; GPIOJ/GPIOK `0x00010003` |
 | T16 A1 | GPIOK unclocked in both banks, PK5 locked next to PK0/PK1 (`LCKR = 0x00010023`), PK3 in analog. (C, R1) `GPIO_BM_IsPortClocked` false; BM and LL `ReadConfig` of PK3 → `GPIO_BM_ERR_NO_CLOCK`, with their 0xA5-filled structs unchanged byte for byte. (A) `GPIO_HAL_Init(PK3\|PK5)` → `HAL_ERROR`, `MODER` and `LCKR` unchanged, and the port clocked after the call (reset `MODER` = `0xFFFFFFFF` = the unclocked read). (B) PK3 alone → `HAL_OK`, PK3 an output. The unclocked read is printed: the code before A1 fails (A) if it reads 0 and (B) if it reads all ones. Oracle of `IsPortClocked`: a raw read of both RCC banks | (C) control, clocked after (A): `IsPortClocked` true, both `ReadConfig` OK, PK3 analog and no pull. Mutation M-A1 (no clock before the `LCKR` check): (B) `HAL_ERROR`, PK3 not written. Mutation M-R1 (no clock check in BM `ReadConfig`, at `fa44386`): (C) fails, BM returns OK and overwrites its sentinel | Unclocked `LCKR` reads `0xFFFFFFFF`, `IsLocked` PK3 = PK5 = 1; (A), (B) and (C) pass; M-R1: the only failure of its run. At `8b8919a` the step still required a 0 read and failed on that premise only |
-| Build id (R3-a) | The image is the one this checkout and `build/selftest-gpio` build: the host computes the id of `generated/fw_build_id.h`, CM7 and CM4 print theirs, all before S8 | (1) An image built with `-DGST_RACE_SEED` against a build dir back to clean flags: abort before S8, no output enabled. (2) An edit after `cmake --preset`, built without reconfiguring: the image says `-dirty` and has a new id (both at `663ae65`) | `3c889d2e7e66805d` on host, CM7 and CM4 in both runs; (1) aborted, host `3c889d2e7e66805d` against `dbcf810508d80301`; (2) `663ae65-dirty`, `f37405fc05564ac0` |
-| Production | 20 warm resets of `debug` and of `release` with the 60 µs limit; lock-fail counters by SWD | - | 20/20 "CPU2 alive" in each; `m7/m4_gpio_lock_fail_count` = 0 |
+| Build id (R3-a, R3-b) | The image is the one this checkout and `build/selftest-gpio` build: the host computes the id of `generated/fw_build_id.h` (its payload starts with the full `HEAD`), CM7 and CM4 print theirs, and the `Rev` of CM7 without `-dirty` must equal the host's `HEAD`, all before S8. Oracle: the id recomputed with `git`, `printf` and `sha256sum` | (1) An image built with `-DGST_RACE_SEED` against a build dir back to clean flags (at `663ae65`). (2) An edit after `cmake --preset`, built without reconfiguring (at `663ae65`). (3) The image of `HEAD~1` (`a97973c`) run from `HEAD`, with and without `--allow-dirty` | `991971a381ccb862` on host, CM7 and CM4 in both runs, equal to the recomputed id; (1) aborted, `3c889d2e7e66805d` against `dbcf810508d80301`; (2) `663ae65-dirty`, `f37405fc05564ac0`; (3) aborted by R3-b before S8 both times, `OE=0x0000` throughout |
+| Production (R3-c) | 20 warm resets of `debug` and of `release` with the 60 µs limit, `run_warm_resets.py --project --preset`: each reset must show CPU1 and CPU2 with the host's `rev` and id; lock-fail counters by SWD | (4) `release` flashed, checked against `--preset debug`: fails at reset 1. Without the new options the tool keeps its old output | 20/20 "CPU2 alive" and identity PASS in each (`b761febaca21c7b7` debug, `8c71cc7386c89b16` release, both `7456494`); (4) identity FAIL at reset 1, exit 1; `m7/m4_gpio_lock_fail_count` = 0 |
 
 ### 9.2 Measurements (B1)
 
@@ -519,21 +523,27 @@ contention (min/max):
 
 | Tier | CM7, no hook | CM7, hook | CM4, no hook | CM4, hook |
 | :--- | :--- | :--- | :--- | :--- |
-| BM | 546 / 701 | 981 / 1023 (2.55 µs) | 475 / 667 | 767 / 977 (4.88 µs) |
-| LL | 745 / 822 | 1146 / 1196 (2.99 µs) | 622 / 740 | 1023 / 1154 (5.77 µs) |
-| HAL | 1303 / 1363 | 1701 / 1757 (4.39 µs) | 1393 / 1468 | 1929 / 1983 (9.91 µs) |
+| BM | 546 / 716 | 979 / 1029 (2.57 µs) | 475 / 660 | 767 / 1006 (5.03 µs) |
+| LL | 745 / 837 | 1162 / 1229 (3.07 µs) | 622 / 754 | 1188 / 1227 (6.13 µs) |
+| HAL | 1301 / 1395 | 1699 / 1757 (4.39 µs) | 1437 / 1506 | 1982 / 2061 (10.30 µs) |
 
-The longest lock hold under contention in T15 was **922 / 913 cycles on CM7
-(2.31 / 2.28 µs)** and **991 cycles on CM4 (4.96 µs, HAL tier, phase `e`)**.
-`SHARED_GPIO_LOCK_US = 60` is **12.10×** the longer of the two (the log prints
-the margin in hundredths, truncated), and the selftest fails below 10×. With
-50 µs the margin was 10.08× at `fa44386`, with the CM4 hold at 992 cycles; at
-`0cd803f` that hold was 841 cycles (11.9×): see section 10. The first value of
-the limit, 20 µs, left only 4.7×.
+The longest lock hold under contention in T15 was **904 / 903 cycles on CM7
+(2.26 µs)** and **987 cycles on CM4 (4.94 µs, HAL tier, phase `e`)**.
+`SHARED_GPIO_LOCK_US = 60` is **12.15×** the longer of the two (the log prints
+the margin in hundredths, truncated), and the selftest fails below 10×. At
+`1ff10c8` it was 12.10× (991 cycles); with 50 µs the margin was 10.08× at
+`fa44386`, with the CM4 hold at 992 cycles; at `0cd803f` that hold was 841
+cycles (11.9×): see section 10. The first value of the limit, 20 µs, left only
+4.7×.
 
 Flash (`.text` + `.rodata`, from the `.map`, "Discarded input sections"
 excluded):
 - `prj_01` release (production): `gpio_bm` 92 B on CM7 and 20 B on CM4.
+- `prj_01` images (`build_all`, `text` / `bss`), `1ff10c8` → `7456494` (R3-c:
+  the build line of CPU1, CPU2's identity, `g_shared` 0xA0 → 0xD0 bytes):
+  debug CM7 28 928 → 29 144 / 55 604 → 55 668, CM4 3 320 → 3 456 /
+  12 496 → 12 560; release CM7 27 980 → 28 228 / 55 608 → 55 672, CM4
+  3 004 → 3 112 / 12 496 → 12 560. The other projects are unchanged.
 - Selftest image (debug, `-Og`): `gpio_bm` 1718 B, `gpio_ll` 1258/1268 B,
   `gpio_hal` 926/928 B (CM7/CM4).
 
@@ -542,21 +552,34 @@ excluded):
 All of these are in `prj_01_template_dualcore/docs/`. Each file is the unedited
 output of one run. Since R3 (`a087d91`), every capture starts with the state of
 the tree: `[host] tree clean`, or the whole `git diff` of a `-dirty` tree. Since
-R3-a (`663ae65`), it also prints the build id of the host, CM7 and CM4 (§9.4).
+R3-a (`663ae65`), a `selftest-gpio` capture also prints the build id of the
+host, CM7 and CM4, and since R3-b (`f005eda`) that id covers the commit and the
+host checks `Rev` against its `HEAD` (§9.4). Since R3-c (`7456494`), a
+production warm-reset capture made with `--project --preset` shows both cores'
+`rev` and id in every reset, and the SWD-counter capture names the image of
+each block.
 Earlier captures identify the image only by `Rev` and the host's tree:
 `gpio_dev_replay_seed_d9d40bdd_fa44386.txt` says `Rev fa44386` and
 `tree clean`, although its image was built with `-DGST_RACE_SEED`.
 
 | File | Content |
 | :--- | :--- |
-| `gpio_selftest_1ff10c8.txt`, `_2.txt` | The two runs of §9.1, built from a clean worktree (`Rev 1ff10c8` on both cores, `[host] tree clean`, build id `3c889d2e7e66805d` on host, CM7 and CM4) |
-| `gpio_warm_resets_{debug,release}_1ff10c8.txt`, `gpio_swd_counters_1ff10c8.txt` | Production regression with the 60 µs limit: 20/20 each, lock-fail counters 0 |
-| `gpio_map_sizes_1ff10c8.txt`, `gpio_wextra_1ff10c8.txt` | Sizes (as at `fa44386`); 0 warnings in the driver files with `-Wextra -Wconversion -Wsign-conversion -Wshadow -Wcast-qual`, CM7 and CM4 (the CM7 build prints 16 more, all in CMSIS `cachel1_armv7.h`) |
-| `gpio_build_all_1ff10c8.txt`, `gpio_prj04_selftest_build_1ff10c8.txt` | `build_all.ps1 -Clean` 8/8, and `prj_04` `selftest-gpio` with 0 warnings; compile only, main checkout at `1ff10c8` |
+| `gpio_selftest_7456494.txt`, `_2.txt` | The two runs of §9.1, built from a clean worktree (`Rev 7456494` = host `HEAD`, `[host] tree clean`, build id `991971a381ccb862` on host, CM7 and CM4) |
+| `gpio_build_id_recompute_7456494.txt` | R3-b: the payload and its SHA-256 recomputed with `git`, `printf` and `sha256sum` for `selftest-gpio`, `debug` and `release`, each equal to `generated/fw_build_id.h` |
+| `gpio_dev_build_id_old_commit_7456494.txt`, `_allow_dirty.txt` | R3-b control (3): the `selftest-gpio` image of `a97973c` (`HEAD~1`) run from `7456494`: abort before S8 by the `Rev` check, with and without `--allow-dirty`; AD2 at `OE=0x0000` from open to close |
+| `gpio_r3b_bin_cmp_f005eda.txt` | R3-b left production alone: `debug` and `release` at `8310303` and `f005eda`, from empty build dirs: the four `.bin` identical |
+| `gpio_warm_resets_{debug,release}_7456494.txt` | Production regression (R3-c): 20/20 each, both cores' `rev` and id equal to the host's in every reset; header composed from the host's `rev` and id, with the tree state |
+| `gpio_swd_counters_7456494.txt` | Lock-fail counters 0 in both images; each block names its image (`rev`, id of both cores) from the warm-reset capture of the same flash |
+| `gpio_dev_warm_resets_id_mismatch_7456494.txt` | R3-c control (4): `release` flashed, `--preset debug`: identity FAIL at reset 1, exit 1 |
+| `gpio_warm_resets_compat_no_options_7456494.txt` | `run_warm_resets.py` without the new options, as `10_hsem` runs it: the old header ("Firmware Git Revision" = host `HEAD`), 20/20 |
+| `gpio_map_sizes_7456494.txt`, `gpio_wextra_7456494.txt` | Driver sizes (as at `fa44386`); 0 warnings in the driver files with `-Wextra -Wconversion -Wsign-conversion -Wshadow -Wcast-qual`, CM7 and CM4 (the CM7 build prints 16 more, all in CMSIS `cachel1_armv7.h`) |
+| `gpio_build_all_7456494.txt`, `gpio_prj04_selftest_build_7456494.txt` | `build_all.ps1 -Clean` 8/8 with the new `prj_01` sizes, and `prj_04` `selftest-gpio` with 0 warnings; compile only, main checkout at `7456494` |
+| `gpio_selftest_1ff10c8.txt`, `_2.txt`, `gpio_{warm_resets_debug,warm_resets_release,swd_counters,map_sizes,wextra,build_all,prj04_selftest_build}_1ff10c8.txt` | Validation of R2-a, R2-b and R3-a; superseded. Their build id does not cover the commit (before R3-b) |
 | `gpio_r2a_bin_cmp_88b0cba.txt` | R2-a: `selftest-gpio` at `25b6a45` and at `88b0cba`, both with the same `FW_GIT_REV`: identical `.bin` for CM7 and CM4 |
 | `gpio_selftest_663ae65.txt` | R3-a: the first clean run with the build id (host = CM7 = CM4) |
 | `gpio_dev_build_id_mismatch_663ae65.txt` | R3-a control (1): the `-DGST_RACE_SEED` image against a build dir back to clean flags: abort before S8, AD2 at `OE=0x0000` from open to close |
 | `gpio_build_id_edit_after_configure_663ae65.txt`, `gpio_dev_build_id_edit_after_configure_663ae65-dirty.txt` | R3-a control (2): an edit after `cmake --preset`, built without reconfiguring: both `.bin` carry `663ae65-dirty` and `f37405fc05564ac0`, not the old id; on the bench (`--allow-dirty`, patch in the capture) host = CM7 = CM4 |
+| Warm-reset captures before `7456494` (`gpio_warm_resets_*_{780dddd,0cd803f,6f3ee2b,fa44386,1ff10c8}.txt`) and SWD-counter captures before it | They do not identify the image: "Firmware Git Revision" is the host's `HEAD`, read without a `-dirty` check, and nothing is read from the board. The titles of `gpio_warm_resets_*_fa44386.txt` and `_1ff10c8.txt` are wrong: both say "after re-audit 1, R1-R4", and the `1ff10c8` ones belong to re-audit 2. The captures are left as they are |
 | `gpio_dev_layout_pad_663ae65-dirty.txt` | R2-b: 62 B appended to `gpio_bm` (patch in the capture; `gpio_bm` 1780 B, HAL/LL code moved 60 B): B1 maxima barely move (CM4 HAL with hook 1983 → 1987), T15 CM4 hold 980. The layout cause is not confirmed |
 | `gpio_selftest_fa44386.txt`, `_2.txt`, `gpio_{warm_resets_debug,warm_resets_release,swd_counters,map_sizes,wextra,build_all,prj04_selftest_build}_fa44386.txt` | Validation of R1–R4 with the 50 µs limit, before the build id; superseded |
 | `gpio_dev_mutation_readconfig_no_clock_fa44386-dirty.txt` | M-R1, patch in the capture: `T16 A1` case (C) fails, its only failure |
@@ -585,10 +608,26 @@ py tools/gpio_hw_check.py --allow-dirty    # development: the capture starts wit
 ```
 
 The host refuses an image that this checkout and `build/<preset>` would not
-build (R3-a, `--preset` picks the build dir). The build id hashes the tracked
-diff, `CMAKE_C_FLAGS` and the preset name, not the commit: on a clean tree it is
-the same for every commit (`3c889d2e7e66805d` for `selftest-gpio` at `663ae65`
-and at `1ff10c8`), so the image is identified by `Rev` and the id together.
+build (R3-a, R3-b; `--preset` picks the build dir):
+- the build id is the first 16 hex of the SHA-256 of `HEAD=<git rev-parse
+  HEAD, 40 hex>`, the bytes of `git diff --no-color HEAD`,
+  `CMAKE_C_FLAGS=<flags>` and ` PRESET=<preset>`, with no newline added
+  (`cmake/fw_build_id.cmake`; `host_build_id()` in `tools/gpio_hw_check.py`
+  computes the same). It changes with the commit, the tracked diff, the flags
+  and the preset;
+- the `Rev` of CM7 without `-dirty` must equal `git rev-parse --short HEAD`.
+  `--allow-dirty` does not waive this: a `-dirty` run is an edit on the same
+  commit, not an image of another one.
+
+Production images print `[sys] build rev=<...> id=<...>` (CPU1) and
+`[sys] cpu2 build rev=<...> id=<...>` (CPU2, through `g_shared`). The warm
+resets check them in every reset when given the project and the preset;
+without these options the tool behaves as before:
+
+```powershell
+py tools/flash.py --preset release
+py ..\..\tools\run_warm_resets.py --project . --preset release --out docs/gpio_warm_resets_release_<rev>.txt --title "<subtitle>"
+```
 
 To run T15 with the seed of an earlier run (section 10 says what that
 reproduces), configure with it, run the image while the build dir still has
@@ -621,9 +660,9 @@ cmake --preset selftest-gpio -DCMAKE_C_FLAGS=
 
 - **One writer outside the driver breaks the lock for a port** (T15 `h`). §3.3
   lists the writers.
-- **T9 is close to its gate on PF14:** 2.04 and 1.70 ns of separation against a
-  5σ of 1.19 and 1.15 ns. At 30 MHz of bandwidth, the AD2 cannot resolve MEDIUM,
-  HIGH and VERY_HIGH from each other (12.8–13.3 ns on PF14, 14.6–14.8 ns on PF15).
+- **T9 is close to its gate on PF14:** 2.31 and 1.79 ns of separation against a
+  5σ of 1.35 and 1.29 ns. At 30 MHz of bandwidth, the AD2 cannot resolve MEDIUM,
+  HIGH and VERY_HIGH from each other (12.7–13.3 ns on PF14, 14.4–14.9 ns on PF15).
 - **B1 moves with the build; the limit is now 60 µs (R2-b).** The longest CM4
   hold rose from 841 cycles at `0cd803f` to 992 at `fa44386`, and B1 itself,
   measured with no contention and no jitter, rose with it (CM4 HAL with hook
@@ -631,7 +670,10 @@ cmake --preset selftest-gpio -DCMAKE_C_FLAGS=
   moved that maximum by 4 cycles only (`gpio_dev_layout_pad_663ae65-dirty.txt`),
   so the layout cause was not confirmed and the cause is not isolated. With
   50 µs the margin was 10.08× (80 cycles); the owner chose 60 µs, which gives
-  12.10× at `1ff10c8` (about 200 cycles). If a build still falls below 10×,
+  12.10× at `1ff10c8` (about 200 cycles). At `7456494` B1 moved again with
+  code outside the driver (R3-c added CPU2 code in `CM4/Core/Src/main.c`): the
+  CM4 HAL maximum with hook rose 1983 → 2061 cycles, while the T15 hold that
+  sets the gate went 991 → 987 (12.15×). If a build still falls below 10×,
   raise the limit again, knowing it lengthens the masked time (A2, below);
   never lower the gate.
 - **A `GST_RACE_SEED` replay is close, not exact (R2).** It reproduces the seed,
@@ -649,9 +691,9 @@ cmake --preset selftest-gpio -DCMAKE_C_FLAGS=
 - **Toggle is not atomic** between two togglers of the same pin (one `ODR` read,
   then one `BSRR` store).
 - **The section masks interrupts for one pin configuration.** The longest
-  uncontended call measured is 9.91 µs (CM4, HAL tier, §9.2). Under contention
-  it grows by the other core's hold: at most 2.31 µs measured on CM7 (so about
-  12 µs on CM4), and 4.96 µs measured on CM4 (about 9 µs on CM7).
+  uncontended call measured is 10.30 µs (CM4, HAL tier, §9.2). Under contention
+  it grows by the other core's hold: at most 2.26 µs measured on CM7 (so about
+  13 µs on CM4), and 4.94 µs measured on CM4 (about 9 µs on CM7).
   Configure one pin per section; never loop inside one.
 - **The bound on masked time is the hook's limit, not the measurements (A2).**
   `lock()` waits with interrupts masked, so the worst case is
@@ -804,12 +846,13 @@ Checked without discrepancy:
 - every figure of the status line, §3.1, §9.1–§9.4, §10, §12.4 and §15
   against its capture, except the two claims below.
 
-Corrections: `REAUDIT_3_INSTRUCTIONS.md`.
+Corrections: `REAUDIT_3_INSTRUCTIONS.md`, removed once closed (section 15
+shows how to read it).
 
 | ID | Finding | State |
 | :--- | :--- | :--- |
-| R3-b | The host does not bind the image to its commit. On a clean tree the id is the same for every commit (§9.4), and `gpio_hw_check.py` requires the CM7 and CM4 `Rev` to be equal and not `-dirty`, but never compares them with its own `HEAD`. An image built clean at one commit passes the check from a clean checkout at another, against §9.1 ("the image is the one this checkout … builds") and §9.4 ("the host refuses an image that this checkout … would not build") | **Open**: `HEAD` in the id payload, and `Rev` = `HEAD` before S8; control with an image of `HEAD~1` |
-| R3-c | The production captures do not identify their image. The `debug`/`release` images print neither `FW_GIT_REV` nor `FW_BUILD_ID`. `tools/run_warm_resets.py` writes the host's `HEAD` as "Firmware Git Revision", with no `-dirty` check and a free-text title. The `fa44386` and `1ff10c8` warm-reset captures are titled "after re-audit 1, R1-R4". The status line claims "every capture carries a build id" | **Open**: build line in the CPU1 banner and CPU2's identity through `SharedMemory_t`, checked by `run_warm_resets.py` per reset (opt-in options); README corrected |
+| R3-b | The host does not bind the image to its commit. On a clean tree the id is the same for every commit (§9.4), and `gpio_hw_check.py` requires the CM7 and CM4 `Rev` to be equal and not `-dirty`, but never compares them with its own `HEAD`. An image built clean at one commit passes the check from a clean checkout at another, against §9.1 ("the image is the one this checkout … builds") and §9.4 ("the host refuses an image that this checkout … would not build") | **Closed** (`f005eda`): the payload starts with `HEAD=<40 hex>`, the same bytes in `fw_build_id.cmake` and `host_build_id()`; the host requires `Rev` (without `-dirty`) = `HEAD` before S8, not waived by `--allow-dirty`. At `7456494`: host = CM7 = CM4 = `991971a381ccb862`, equal to the id recomputed with `git`/`printf`/`sha256sum` (`gpio_build_id_recompute_7456494.txt`); control (3), the image of `HEAD~1`, aborted before S8 with and without `--allow-dirty`, `OE=0x0000` throughout; the production `.bin` did not change (`gpio_r3b_bin_cmp_f005eda.txt`) |
+| R3-c | The production captures do not identify their image. The `debug`/`release` images print neither `FW_GIT_REV` nor `FW_BUILD_ID`. `tools/run_warm_resets.py` writes the host's `HEAD` as "Firmware Git Revision", with no `-dirty` check and a free-text title. The `fa44386` and `1ff10c8` warm-reset captures are titled "after re-audit 1, R1-R4". The status line claims "every capture carries a build id" | **Closed** (`7456494`): CPU1 prints `[sys] build rev= id=`; CPU2 writes its rev and id into `SharedMemory_t.m4_fw_rev`/`m4_fw_build_id` (appended; `g_shared` 0xA0 → 0xD0, no field moved) before its first heartbeat, and CPU1 prints `[sys] cpu2 build`. `run_warm_resets.py --project --preset` checks both in every reset: 20/20 with identity PASS in `debug` and `release`; control (4) failed at reset 1; without the options the tool keeps its old output (`gpio_warm_resets_compat_no_options_7456494.txt`). The SWD-counter capture names its images. The status line says which captures carry a build id, and §9.3 marks the older warm-reset captures and their wrong titles |
 
 ---
 
@@ -931,6 +974,8 @@ Before changing it:
 | R2 replay: the RNG read in every build, a data-only seed, a fixed start; the two replay premises refuted on the bench | `9ccc971`, `7cedf36`, `fa44386`; evidence `fe59b0b`, `1874440`, `800d81f`, `1ba0f65`, `4fb99e0` |
 | Re-audit 2 at `7b01a10` (R2-a, R2-b, R3-a) and its instructions | `25b6a45` |
 | R2-a comments; R3-a build id; R2-b layout pad (premise not confirmed) and the 60 µs limit | `88b0cba`, `663ae65`, `1ff10c8`; evidence `78e2bfd`, `d01a30b`, `164fdfd`, `3f743a7` |
+| Re-audit 3 at `5a5deeb` (R3-b, R3-c) and its instructions | `8310303` |
+| R3-b build id bound to the commit, `Rev` = `HEAD` in the host; R3-c identity in the production images and in `run_warm_resets.py` | `f005eda`, `7456494`; evidence `a97973c`, `dbb44a3` |
 
 The implementation plan, the implementer's instructions, the F0 correction and
 F1a instructions, the implementation report and the audit record were removed
@@ -938,8 +983,8 @@ once what a user of the driver needs was folded into this README. The audit
 closed F0 at `51a29b7`. F1 and the LL/HAL tiers had a code audit at `cc1ee88`
 (§12.1); its fixes passed the bench at `0cd803f`. The re-audit at `1a635d8`
 (§12.3) was closed at `fa44386`, and the re-audit at `7b01a10` (§12.4) at
-`1ff10c8`; their instructions were removed the same way. The documents stay in
-git history:
+`1ff10c8`, and the re-audit at `5a5deeb` (§12.5) at `7456494`; their
+instructions were removed the same way. The documents stay in git history:
 
 ```bash
 git show 33f4afa:01_shared_drivers/00_gpio/IMPLEMENTATION_PLAN.md
@@ -951,4 +996,5 @@ git show 33f4afa:01_shared_drivers/00_gpio/F0_CORRECTION_INSTRUCTIONS.md   # als
 git show 5f97e2e:01_shared_drivers/00_gpio/IMPLEMENTATION_PLAN.md          # revision 1: full LL/HAL contracts
 git show 31406fa:01_shared_drivers/00_gpio/REAUDIT_1_INSTRUCTIONS.md
 git show 25b6a45:01_shared_drivers/00_gpio/REAUDIT_2_INSTRUCTIONS.md
+git show 8310303:01_shared_drivers/00_gpio/REAUDIT_3_INSTRUCTIONS.md
 ```
