@@ -10,18 +10,28 @@
 
 /* GPIOA..GPIOK are consecutive, 0x400 apart, and RCC_AHB4ENR carries
    GPIOAEN..GPIOKEN in bits 0..10 in the same order. Both facts come from
-   RM0399; the static assertion below fails the build if a future CMSIS header
-   ever breaks the first one. */
+   RM0399; the static assertions below fail the build if a future CMSIS header
+   ever breaks them. */
 #define GPIO_BM_PORT_STRIDE     0x400UL
+#define GPIO_BM_PORT_COUNT      11UL        /* GPIOA..GPIOK */
+#define GPIO_BM_PIN_COUNT       16UL
 
-_Static_assert(((uint32_t)GPIOB - (uint32_t)GPIOA) == GPIO_BM_PORT_STRIDE,
-               "GPIO ports are no longer 0x400 apart: "
+_Static_assert((GPIOK_BASE - GPIOA_BASE) == ((GPIO_BM_PORT_COUNT - 1UL) * GPIO_BM_PORT_STRIDE),
+               "GPIOA..GPIOK no longer span 10 strides of 0x400: "
                "GPIO_BM_EnablePortClock() derives its RCC bit from that stride");
+_Static_assert((RCC_AHB4ENR_GPIOAEN_Pos == 0U) &&
+               (RCC_AHB4ENR_GPIOKEN_Pos == (GPIO_BM_PORT_COUNT - 1UL)),
+               "GPIOAEN..GPIOKEN are no longer bits 0..10 of RCC_AHB4ENR");
 
-bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port)
+/* PA13/PA14 carry SWDIO/SWCLK after reset (RM0399 12.3.2): a fact of the
+   silicon, not of any board. */
+#define GPIO_BM_SWD_PIN_MASK    ((1UL << 13U) | (1UL << 14U))
+
+/* ---- Validation (C6): pure functions, no peripheral access ------------------- */
+
+static bool port_index(const GPIO_TypeDef *port, uint32_t *idx)
 {
     uint32_t address;
-    uint32_t port_idx;
 
     if (port == NULL)
     {
@@ -30,12 +40,31 @@ bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port)
 
     address = (uint32_t)port;
 
-    if ((address < (uint32_t)GPIOA) || (address > (uint32_t)GPIOK))
+    if ((address < GPIOA_BASE) || (address > GPIOK_BASE))
     {
         return false;
     }
 
-    port_idx = (address - (uint32_t)GPIOA) / GPIO_BM_PORT_STRIDE;
+    /* G4: GPIOA + 4 is not port A. Only exact port base addresses count. */
+    if (((address - GPIOA_BASE) % GPIO_BM_PORT_STRIDE) != 0UL)
+    {
+        return false;
+    }
+
+    *idx = (address - GPIOA_BASE) / GPIO_BM_PORT_STRIDE;
+    return true;
+}
+
+/* ---- Existing API ------------------------------------------------------------- */
+
+bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port)
+{
+    uint32_t port_idx;
+
+    if (!port_index(port, &port_idx))
+    {
+        return false;
+    }
 
     /* Reads like a cross-core race and is not one. RCC_AHB4ENR is at offset
        0xE0, inside the bank RM0399 9.7.1 calls "registers mapped at the same
@@ -45,7 +74,8 @@ bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port)
        __HAL_RCC_*_CLK_ENABLE() macros carry no CORE_CM4 variant.
        Only the registers below 0xD0 (RCC_CR, the PLLs, the RSTRs) are shared by
        both cores. Those are CPU1's by the boot contract, and anything both
-       cores must write needs an HSEM - CLAUDE.md rule D. */
+       cores must write needs a hardware semaphore - CLAUDE.md rule D.
+       That is also why this function takes no section (C10, rule 3). */
     RCC->AHB4ENR |= (1UL << port_idx);
 
     /* Read back: the RCC enable takes a couple of cycles to land, and a write
@@ -111,4 +141,5 @@ bool GPIO_BM_ConfigAnalog(GPIO_TypeDef *port, uint32_t pin_idx)
 
     return true;
 }
+
 
