@@ -311,6 +311,7 @@ is the only `HAL_GPIO_Init` left. Neither is migrated.
 | PA13/PA14 carry SWD after reset (RM0399 §12.3.2) | `ERR_DEBUG_PIN` | T1 |
 | **Measured, differs from RM0399 §12.4.8** ("LCKy can only be written when LCKK is 0") | After PF7\|PF8 were locked (`LCKR = 0x00010180`), a second full sequence for PF6 gave `0x000101C0` (SWD read, 2026-09-30). The pins already locked stayed locked. The driver does not rely on either reading: it keeps the locked pins in the sequence and judges by read-back | T16 (`0x000101F0` after BM, LL and HAL each add one pin) |
 | `GPIOJ`/`GPIOK` have no pads on this package, but their registers work | T16 locks pins there, where a lock can reach nothing | T16 |
+| **Measured (Rev V):** a GPIO port unclocked in both RCC banks reads all ones (`LCKR = 0xFFFFFFFF`, real `0x00010023`) | Every configuration or lock call enables the clock before its first read; `ReadConfig` refuses an unclocked port (R1) | T16 A1 |
 
 **Errata (ES0445 rev 6)** that concern pins but not this code:
 
