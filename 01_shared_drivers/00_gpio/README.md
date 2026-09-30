@@ -44,8 +44,10 @@ development runs, R4-a and R4-b
 ([section 12.6](#126-re-audit-4-r4-a-r4-b-2026-09-30-at-7fc7ad2)), both closed
 at `b45120e` in the host tools only: under `--allow-dirty` both cores must
 still be one build of the host's commit, and the host tools record their
-arguments (the captures from `674e8ad` on). No finding is open. This driver
-has had no independent bench audit.
+arguments (the captures from `674e8ad` on). A fifth re-audit at `75d106a`
+confirmed them, found nothing new, and judged the driver **fit to merge into
+`main`** ([section 12.7](#127-re-audit-5-and-merge-verdict-2026-09-30-at-75d106a)).
+No finding is open. This driver has had no independent bench audit.
 
 ---
 
@@ -920,6 +922,51 @@ once closed (section 15 shows how to read it).
 | :--- | :--- | :--- |
 | R4-a | Under `--allow-dirty` the CM4 image is bound to nothing. `--allow-dirty` waives `clean`, which holds `Rev(cm7) == Rev(cm4)`, turns a build-id mismatch into a note, and the R3-b check derives its base from the CM7 `Rev` only. A `-dirty` run, such as every mutation run, would pass with a CM4 flashed from another commit or build | **Closed** (`b45120e`): the three checks run always, before S8, and every abort names both cores; `--allow-dirty` waives only a `-dirty` `Rev` and the host-vs-image id (docstring, §9.4). Control (5), CM4 alone from `674e8ad` under `--allow-dirty`: aborted before S8, `cm7=b45120e cm4=674e8ad`, `OE=0x0000` throughout. Positive control: both cores `b45120e-dirty`, one id, S8 passed. The instructions' `flash.py --core cm4 --elf <other worktree>` fails in `flash.py`; the same state came from `flash.py --core cm4` in the `HEAD~1` worktree (§9.3) |
 | R4-b | The host tools do not record their arguments. `gpio_dev_build_id_old_commit_7456494_allow_dirty.txt` cannot be told from the run without the flag, because the R3-b abort comes before the only line that depends on it; "with and without `--allow-dirty`" (§9.1, §9.3) rests on the code, not on the capture (C9) | **Closed** (`674e8ad`): `[host] argv:` and `[host] options:` (resolved values) are the first lines of every `gpio_hw_check.py` capture; `run_warm_resets.py` writes `argv` in both modes and `options` with `--project --preset`, so without them `argv` is the only line added to the old format (`gpio_warm_resets_compat_no_options_b45120e.txt`). §9.3 marks every earlier capture as having no record of its arguments. Owner's decision at step 0, quoted in `674e8ad`: "Corregirlos ahora (Recommended)" |
+
+### 12.7 Re-audit 5 and merge verdict (2026-09-30, at `75d106a`)
+
+A verification of the R4-a and R4-b corrections (`674e8ad` … `75d106a`,
+validated revision `b45120e`). Both are closed. No new finding in the driver
+or in its evidence.
+
+Checked without discrepancy:
+- no firmware change since `08627cf`: outside `docs/` and this README only
+  `gpio_hw_check.py` and `run_warm_resets.py` changed;
+- the `argv`/`options` lines in every new `gpio_hw_check.py` capture
+  (`allow_dirty=True` in control (5) and in the positive control);
+- control (5) aborted by R4-a before S8, naming both cores, with
+  `OE=0x0000` throughout; the positive control passing S8;
+- what `--allow-dirty` waives, identical in the code, the docstring and §9.4;
+- the no-options format of `run_warm_resets.py`: only the `argv` line and the
+  free-text title differ from the `7456494` compatibility capture;
+- four ids **recomputed by hand** (`4ad009a847fe1d89`, `a9d061acb8895a57`,
+  the patch sha `d2bfffd2`, and `b19f7cef96d5086e`);
+- every figure of the status line, §9.1, §9.3, §9.4, §12.6 and §15 against
+  its capture.
+
+Deviations accepted:
+- the fallback flash of the CM4 from the `HEAD~1` worktree has no capture of
+  its own, but the control (5) capture shows the running CM4 at `674e8ad`;
+- `options` only in the identity mode of `run_warm_resets.py`, which keeps
+  `argv` the only line added to the old format.
+
+Outside the driver: `tools/flash.py --elf` fails for any ELF outside the
+project (`relative_to` in a print;
+`gpio_dev_flash_cm4_elf_outside_project_b45120e.txt`). It is a workspace
+tool defect, tracked separately.
+
+**Merge verdict: the `00_gpio` driver is fit to merge into `main`.** Every
+condition of §14 is met:
+- `build_all -Clean` 8/8, two complete bench runs and the production warm
+  resets at `7456494`, the last revision that changed firmware;
+- one clean run at `b45120e` for the host tools;
+- against `main`, the driver headers lose only comment lines.
+
+Still open, documented and not blocking:
+- F1b in `prj_04` (§13.1): the hook is not installed there, so G1/G13 stay
+  open in that project;
+- F2, EXTI and the compensation cell (§13.2);
+- no independent bench audit: every bench run was made by the implementer.
 
 ---
 
