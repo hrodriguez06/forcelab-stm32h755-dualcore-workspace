@@ -13,12 +13,17 @@ file: every console line and every host measurement, with timestamps, until
                                                 # (the capture then carries the git diff)
     py tools/gpio_hw_check.py --preset selftest-gpio   # build dir whose flags the build id uses
 
-The image must be the one this checkout builds (R3-a, R3-b): the host computes
-the build id of generated/fw_build_id.h over its own checkout (its commit
-included) and build/<preset>, and aborts before any output is enabled when CM7
-or CM4 prints another one (--allow-dirty notes it and goes on), or when the Rev
-of CM7 without -dirty is not this checkout's HEAD (--allow-dirty does not
-waive that one).
+The image must be the one this checkout builds (R3-a, R3-b, R4-a). Before any
+output is enabled (the S8 phase), the host always requires, with or without
+--allow-dirty:
+  - Rev(CM7) == Rev(CM4), -dirty included: both images come from one tree;
+  - id(CM7) == id(CM4), neither "unknown": one build dir, one fw_build_id.h;
+  - the Rev of each core without -dirty == git rev-parse --short HEAD.
+Without --allow-dirty it also requires no -dirty Rev and the image's id equal to
+the id the host computes over its checkout and build/<preset> (its commit
+included). --allow-dirty waives only those two: a -dirty Rev, and a host id
+that differs from the image's. Every abort names cm7 and cm4 and their values.
+Each capture starts with "[host] argv:" and "[host] options:" (R4-b).
 
 Electrical safety (no series resistors on the bench):
   S2  the AD2 opens and closes with every DIO in input (tools/ad2.py), and goes
@@ -719,27 +724,35 @@ def main() -> int:
             revs["cm4"] = con.expect(r"\[gpio\] CM4 Rev (\S+)", 10.0).group(1)
             ids["cm4"] = con.expect(r"\[gpio\] CM4 Build id (.+?)\s*$", 10.0).group(1)
             ver = int(con.expect(r"\[gpio\] GPIO_BENCH v(\d+) idle", 10.0).group(1))
-            clean = revs["cm7"] == revs["cm4"] and "-dirty" not in revs["cm7"] and revs["cm7"] != "unknown"
             if ver != BENCH_VERSION:
                 raise BenchAbort(f"S8: firmware protocol v{ver}, host v{BENCH_VERSION}")
-            if not clean and not args.allow_dirty:
-                raise BenchAbort(f"R2: Rev cm7={revs['cm7']} cm4={revs['cm4']} is not one clean commit")
-            # R3-b: the image must come from this checkout's commit. --allow-dirty
-            # does not waive it: a -dirty run is an edit on the same commit, not
-            # an image of another one.
+            # R4-a, R3-b: the two cores are one build of this checkout's commit.
+            # --allow-dirty waives none of this.
             head = git_rev()
-            base = revs["cm7"][:-len("-dirty")] if revs["cm7"].endswith("-dirty") else revs["cm7"]
-            stamp(f"[host] R3-b: image Rev {revs['cm7']} (commit {base}), host HEAD {head}")
-            if head == "unknown" or base != head:
-                raise BenchAbort(f"R3-b: the image was built at {base}, this checkout is at {head}")
-            # R3-a, in the S8 phase: nothing is enabled yet. "unknown" never matches.
+            base = {c: (r[:-len("-dirty")] if r.endswith("-dirty") else r) for c, r in revs.items()}
+            stamp(f"[host] R4-a: cm7 Rev={revs['cm7']} id={ids['cm7']}; cm4 Rev={revs['cm4']} id={ids['cm4']}; "
+                  f"host HEAD={head} id={build_id}")
+            if revs["cm7"] != revs["cm4"]:
+                raise BenchAbort(f"R4-a: cm7 and cm4 come from different trees "
+                                 f"(Rev cm7={revs['cm7']} cm4={revs['cm4']})")
+            if ids["cm7"] != ids["cm4"] or "unknown" in (ids["cm7"], ids["cm4"]):
+                raise BenchAbort(f"R4-a: cm7 and cm4 are not one build "
+                                 f"(id cm7={ids['cm7']} cm4={ids['cm4']})")
+            for core in ("cm7", "cm4"):
+                if head == "unknown" or base[core] != head:
+                    raise BenchAbort(f"R3-b: {core} was built at {base[core]} (Rev {revs[core]}), "
+                                     f"this checkout is at {head}")
+            # What --allow-dirty may waive: a -dirty Rev (R2), and a host id that
+            # differs from the image's (R3-a). "unknown" never matches.
+            dirty = revs["cm7"].endswith("-dirty")
+            if dirty and not args.allow_dirty:
+                raise BenchAbort(f"R2: Rev cm7={revs['cm7']} cm4={revs['cm4']} is not one clean commit")
             stamp(f"[host] build id host={build_id} cm7={ids['cm7']} cm4={ids['cm4']}")
-            same = build_id != "unknown" and ids["cm7"] == build_id and ids["cm4"] == build_id
-            if not same:
+            if build_id == "unknown" or ids["cm7"] != build_id:
                 if not args.allow_dirty:
                     raise BenchAbort(f"R3-a: the image is not the one this checkout builds "
                                      f"(host={build_id} cm7={ids['cm7']} cm4={ids['cm4']})")
-                stamp("[host] R3-a: build ids differ; --allow-dirty given, going on")
+                stamp("[host] R3-a: build ids differ from the host's; --allow-dirty given, going on")
             stamp(f"[host] S8: banner v{ver}, Rev cm7={revs['cm7']} cm4={revs['cm4']}")
             session = Session(ad2, con, stamp)
             session.set_oe(DIO_REQ)          # HOST_REQ output, low
