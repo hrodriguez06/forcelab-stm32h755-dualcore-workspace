@@ -22,7 +22,9 @@ cell (F2) are not implemented.** A code audit on 2026-09-30 (of `cc1ee88`) found
 no blocking defect; its findings A1–A7 and their fixes are in
 [section 12](#12-findings). The fixes were then run on the bench, where the
 premise of A1 turned out wrong (an unclocked port reads all ones, not zero), and
-its description was corrected. This driver has had no independent bench audit.
+its description was corrected. A re-audit at `1a635d8` left four open findings
+(R1–R4, [section 12.3](#123-re-audit-1-r1r4-2026-09-30-at-1a635d8)), none
+blocking. This driver has had no independent bench audit.
 
 ---
 
@@ -657,6 +659,20 @@ The audit of the pre-F1 code found these. Their state at this commit:
 | G14 | `LED_PanicRed` writes `MODER` from a fault handler without the lock | Accepted exception: the fault path is terminal and cannot wait |
 | G15 | `bool` cannot tell "lock busy" from "bad parameter" | Closed: `GpioBm_Status_t` |
 | — | `LockPins` refused to add pins to a locked port (`ERR_LOCKED`) although the silicon accepts them | Closed (`bbb7f40`), T16 |
+
+### 12.3 Re-audit 1 (R1–R4, 2026-09-30, at `1a635d8`)
+
+A review of everything after the A1–A7 audit (`eab46d1` … `1a635d8`). The
+fix of `0cd803f` and the A4 fix are correct. Every figure of §9.1 and §9.2
+matches its `0cd803f` capture, and the two runs are independent (their analog
+measurements differ). Corrections: `REAUDIT_1_INSTRUCTIONS.md`.
+
+| ID | Finding | State |
+| :--- | :--- | :--- |
+| R1 | `GPIO_BM_ReadConfig`/`GPIO_LL_ReadConfig` return `GPIO_BM_OK` on a port unclocked in both banks, with the all-ones read turned into fields: analog, OD, VERY_HIGH, `pull = 3` (reserved), AF15, level 1. An `OK` that does not describe the hardware (C12) | **Open**: `GPIO_BM_ERR_NO_CLOCK` and `GPIO_BM_IsPortClocked`; case C of `T16 A1` |
+| R2 | T15 is deterministic per image: every run of one image gives the same race counts (`c_raw_both` 315 897 ×4 at `780dddd`/`2b9bf21`, 320 906 ×2 at `0cd803f`; ISR 1 589 in 12 821 both times). Each protected phase has been tested on one interleaving, and the second run adds no race sample | **Open**: RNG seed per run, jitter outside the section |
+| R3 | The mutation captures do not record their patch; only the file name and `6d1ef62` say what was mutated (C9) | **Open**: `gpio_hw_check.py` writes the `git diff` of a `-dirty` Rev into the capture |
+| R4 | The measured silicon fact (an unclocked port reads `0xFFFFFFFF`) is missing from §6 | **Open**: one row in §6 |
 
 ---
 
