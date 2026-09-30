@@ -10,7 +10,8 @@
   *              (and, for BM and LL, against raw HAL_GPIO_Init), ReadConfig,
   *              ODR, the legacy calls.
   *          TB  the section: a hook that refuses (ERR_BUSY, nothing written,
-  *              PRIMASK restored, nesting counter restored) and nesting.
+  *              PRIMASK restored, nesting counter restored), nesting, and a
+  *              hook changed while a section is open (audit A4).
   *          B1  cycles of one pin configuration per tier, with and without the
   *              hook.
   *          T15 the race loop (the orchestration lives in each core's file).
@@ -602,6 +603,23 @@ static bool tb_lock(void *ctx)   { (void)ctx; s_tb_lock_calls++; return s_tb_all
 static void tb_unlock(void *ctx) { (void)ctx; s_tb_unlock_calls++; }
 static const GpioBm_SharedLock_t k_tb_hook = { tb_lock, tb_unlock, NULL };
 
+/* A second hook, always allowing, with its own counters: the one A4 installs
+   while a section taken on k_tb_hook is still open. */
+static volatile uint32_t s_tb2_lock_calls;
+static volatile uint32_t s_tb2_unlock_calls;
+
+static bool tb2_lock(void *ctx)   { (void)ctx; s_tb2_lock_calls++; return true; }
+static void tb2_unlock(void *ctx) { (void)ctx; s_tb2_unlock_calls++; }
+static const GpioBm_SharedLock_t k_tb2_hook = { tb2_lock, tb2_unlock, NULL };
+
+static void tb_counts_clear(void)
+{
+    s_tb_lock_calls    = 0U;
+    s_tb_unlock_calls  = 0U;
+    s_tb2_lock_calls   = 0U;
+    s_tb2_unlock_calls = 0U;
+}
+
 typedef enum
 {
     TB_BM_CONFIG = 0, TB_BM_OUTPUT, TB_BM_INPUT, TB_BM_ALTEX, TB_BM_DEINIT, TB_BM_LOCK,
@@ -732,6 +750,58 @@ void gst_tb_run(GstTbResult_t *r)
         __set_PRIMASK(entry_pm);
         tb_expect(s_tb_unlock_calls == 1U);
         tb_expect(pm_out == pm_in);
+    }
+
+    /* A4: GPIO_BM_SetSharedLock() while a section taken on k_tb_hook is open,
+       to a second hook and to NULL. The exit must release k_tb_hook (not the
+       hook installed now, which never took anything), and the next section
+       must use the new hook. Before the fix the exit released whatever was
+       installed: tb2_unlock() without a tb2_lock(), or nothing at all, which
+       with the production hook leaves the HSEM taken. 8 checks x 4 = 32. */
+    {
+        const GpioBm_SharedLock_t *const swap_to[2] = { &k_tb2_hook, NULL };
+
+        for (uint32_t pm_in = 0U; pm_in < 2U; pm_in++)
+        {
+            for (uint32_t w = 0U; w < 2U; w++)
+            {
+                GpioBm_Section_t s;
+                GPIO_BM_SetSharedLock(&k_tb_hook);
+                s_tb_allow = true;
+                tb_counts_clear();
+                __set_PRIMASK(pm_in);
+                tb_expect(GPIO_BM_SectionEnter(&s) == GPIO_BM_OK);
+                GPIO_BM_SetSharedLock(swap_to[w]);
+                tb_expect(GPIO_BM_ConfigOutput(GPIOF, 9U, 0U, 0U, 0U, 1U) == GPIO_BM_OK);   /* nested */
+                GPIO_BM_SectionExit(&s);
+                const uint32_t pm_out = __get_PRIMASK();
+                __set_PRIMASK(entry_pm);
+                tb_expect(pm_out == pm_in);                                             /* restored     */
+                tb_expect((s_tb_lock_calls == 1U) && (s_tb_unlock_calls == 1U));        /* taken = freed */
+                tb_expect((s_tb2_lock_calls == 0U) && (s_tb2_unlock_calls == 0U));      /* new hook idle */
+
+                /* The next section asks the hook installed now. */
+                tb_counts_clear();
+                tb_expect(GPIO_BM_ConfigOutput(GPIOF, 9U, 0U, 0U, 0U, 0U) == GPIO_BM_OK);
+                tb_expect((s_tb_lock_calls == 0U) && (s_tb_unlock_calls == 0U));
+                tb_expect((w == 0U) ? ((s_tb2_lock_calls == 1U) && (s_tb2_unlock_calls == 1U))
+                                    : ((s_tb2_lock_calls == 0U) && (s_tb2_unlock_calls == 0U)));
+
+                __disable_irq();
+                fields_force(GPIOF, 9U, &analog);
+                __set_PRIMASK(entry_pm);
+            }
+        }
+
+        /* Control: the counters tell the hooks apart. Swapped BEFORE the
+           section, the same call is locked and released on k_tb2_hook only. */
+        GPIO_BM_SetSharedLock(&k_tb_hook);
+        GPIO_BM_SetSharedLock(&k_tb2_hook);
+        tb_counts_clear();
+        const bool c_ok = GPIO_BM_ConfigOutput(GPIOF, 9U, 0U, 0U, 0U, 1U) == GPIO_BM_OK;
+        r->swap_ctrl = (c_ok && (s_tb_lock_calls == 0U) && (s_tb_unlock_calls == 0U) &&
+                        (s_tb2_lock_calls == 1U) && (s_tb2_unlock_calls == 1U)) ? 1U : 0U;
+        GPIO_BM_SetSharedLock(&k_tb_hook);
     }
 
     /* Control: the same hook, allowing, does write. */

@@ -84,6 +84,7 @@ typedef struct
     uint32_t fail;
     uint32_t busy_calls;     /* calls that returned BUSY with the deny hook */
     uint32_t ctrl_wrote;     /* the allow hook control wrote (1 = yes) */
+    uint32_t swap_ctrl;      /* A4 control: the counters tell the two hooks apart (1 = yes) */
 } GstTbResult_t;
 
 typedef struct

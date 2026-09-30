@@ -782,7 +782,8 @@ Before changing it:
 | `LockPins` adds pins to a locked port (silicon finding) | `bbb7f40` |
 | `prj_01` selftest, host bench, evidence | `e3feb02`, `780dddd`, `d11fb8d`, `2b9bf21`, `778fcbb` |
 | README; auditor's errata E9–E11 committed; process documents removed | `7d421d1`, `33f4afa`, `cc1ee88` |
-| Code audit of F1 and the LL/HAL tiers at `cc1ee88`; fixes A1, A4, A6, A7 (not yet on the bench) | the commit after `cc1ee88` |
+| Code audit of F1 and the LL/HAL tiers at `cc1ee88`; fixes A1, A4, A6, A7 (not yet on the bench) | `eab46d1` |
+| Selftest steps for the audit: TB A4, T16 A1 (not yet on the bench) | the commit after `eab46d1` |
 
 The implementation plan, the implementer's instructions, the F0 correction and
 F1a instructions, the implementation report and the audit record were removed
