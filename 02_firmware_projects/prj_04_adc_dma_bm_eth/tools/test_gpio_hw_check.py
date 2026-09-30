@@ -330,13 +330,15 @@ class MockDwfLib:
         n = getattr(n, "value", n)
         bus = self.bus
         if self.ai_trigger and bus is not None and bus.scope_edge is not None:
+            # A Gaussian-filtered step (erf) whose 10-90 % time is tr: smooth and
+            # band-limited like what the scope front end delivers.
+            import math
             tr_s = bus.scope_edge[ch] * 1e-9
-            ramp = tr_s / 0.8                      # 0 -> 100 % takes tr / 0.8
-            start = int(0.1 * n)
+            sigma = tr_s / (2 * 1.2816)
+            start = int(0.1 * n) + 0.37
             for i in range(n):
                 t = (i - start) / self.ai_rate
-                frac = 0.0 if t <= 0 else min(1.0, t / ramp)
-                buf[i] = 3.3 * frac
+                buf[i] = 3.3 * 0.5 * (1.0 + math.erf(t / (sigma * math.sqrt(2.0))))
         else:
             v = (bus.pf14_voltage if ch == 0 else bus.pf15_voltage) if bus else self.analog_dc[ch]
             for i in range(n):
@@ -1324,6 +1326,30 @@ class TestHarnessScenarios(BaseSimTest):
             self.assertTrue(any("Unicode test" in l for l in logs))
         finally:
             sys.stdout = old_stdout
+
+
+class TestT9RiseTimeEstimator(unittest.TestCase):
+    """T9: the 10-90 % estimator on band-limited edges at 100 MS/s does not depend on the sampling phase."""
+
+    def test_sinc_estimate_bias_and_spread(self):
+        import math
+        import random
+        from gpio_hw_check import rise_time_10_90
+        rng = random.Random(7)
+        rate, n = 100e6, 2048
+        for tr_true in (14e-9, 17e-9, 20e-9):
+            sigma = tr_true / (2 * 1.2816)
+            est = []
+            for _ in range(40):
+                t0 = int(0.1 * n) + rng.random()
+                v = [3.3 * 0.5 * (1 + math.erf(((i - t0) / rate) / (sigma * math.sqrt(2)))) + rng.gauss(0, 0.01)
+                     for i in range(n)]
+                est.append(rise_time_10_90(v, rate, 0.1))
+            mean = sum(est) / len(est)
+            sd = (sum((x - mean) ** 2 for x in est) / (len(est) - 1)) ** 0.5
+            with self.subTest(tr_ns=tr_true * 1e9):
+                self.assertLess(abs(mean - tr_true), 0.6e-9, f"bias {(mean - tr_true) * 1e9:.2f} ns")
+                self.assertLess(sd, 0.8e-9, f"spread {sd * 1e9:.2f} ns")
 
 
 class TestSafetyGuardsDirect(BaseSimTest):

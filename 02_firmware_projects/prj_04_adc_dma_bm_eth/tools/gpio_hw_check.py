@@ -266,8 +266,30 @@ def la_frequency(samples: list[int], bit: int, rate_hz: float) -> tuple[float, i
     return (len(rises) - 1) * rate_hz / (rises[-1] - rises[0]), len(rises)
 
 
-def rise_time_10_90(v: list[float], rate_hz: float, pre_fraction: float) -> Optional[float]:
-    """10-90 % rise time in seconds, levels taken from the flat parts of the capture."""
+def _lanczos(x: float, a: int) -> float:
+    import math
+    if x == 0.0:
+        return 1.0
+    if abs(x) >= a:
+        return 0.0
+    px = math.pi * x
+    return a * math.sin(px) * math.sin(px / a) / (px * px)
+
+
+def rise_time_10_90(v: list[float], rate_hz: float, pre_fraction: float,
+                    upsample: int = 20, lanczos_a: int = 6, half_window: int = 24) -> Optional[float]:
+    """10-90 % rise time in seconds.
+
+    Levels come from the flat parts of the capture: the median of the first half
+    of the pre-trigger samples, and of the last 20 % of the buffer. At 100 MS/s a
+    15 ns edge spans under two samples, so a straight line between samples makes
+    the result depend on the sampling phase (a +3 ns bias and 1-2 ns of spread
+    in the first F1a run). The scope front end limits the signal to about 30 MHz,
+    under the 50 MHz Nyquist limit, so the edge is reconstructed from its samples
+    with a Lanczos-windowed sinc (a = 6), upsampled 20x over +-24 samples around
+    the 50 % crossing, and the 10 % and 90 % crossings are taken on that.
+    """
+    import math
     n = len(v)
     pre = max(4, int(n * pre_fraction))
     lo_part = sorted(v[: pre // 2])
@@ -278,22 +300,31 @@ def rise_time_10_90(v: list[float], rate_hz: float, pre_fraction: float) -> Opti
     v_hi = hi_part[len(hi_part) // 2]
     if v_hi - v_lo < 1.0:
         return None
-    t10 = v_lo + 0.1 * (v_hi - v_lo)
-    t90 = v_lo + 0.9 * (v_hi - v_lo)
+    mid = 0.5 * (v_lo + v_hi)
+    c = next((i for i in range(max(1, pre // 2), n) if v[i - 1] < mid <= v[i]), None)
+    if c is None:
+        return None
+    a = lanczos_a
+    i0, i1 = max(a, c - half_window), min(n - a - 1, c + half_window)
+    xs = [i0 + k / upsample for k in range((i1 - i0) * upsample + 1)]
+    ys = []
+    for x in xs:
+        k0 = int(math.floor(x))
+        ys.append(sum(v[k] * _lanczos(x - k, a) for k in range(k0 - a + 1, k0 + a + 1)))
 
-    def crossing(level: float, start: int) -> Optional[float]:
-        for i in range(max(1, start), n):
-            if v[i - 1] < level <= v[i]:
-                return (i - 1) + (level - v[i - 1]) / (v[i] - v[i - 1])
-        return None
+    def crossing(level: float, start: int) -> tuple[Optional[float], int]:
+        for j in range(max(1, start), len(ys)):
+            if ys[j - 1] < level <= ys[j]:
+                return xs[j - 1] + (level - ys[j - 1]) / (ys[j] - ys[j - 1]) * (xs[j] - xs[j - 1]), j
+        return None, 0
 
-    i10 = crossing(t10, pre // 2)
-    if i10 is None:
+    t10, j10 = crossing(v_lo + 0.1 * (v_hi - v_lo), 1)
+    if t10 is None:
         return None
-    i90 = crossing(t90, int(i10))
-    if i90 is None:
+    t90, _ = crossing(v_lo + 0.9 * (v_hi - v_lo), j10)
+    if t90 is None:
         return None
-    return (i90 - i10) / rate_hz
+    return (t90 - t10) / rate_hz
 
 
 def mean_std(xs: list[float]) -> tuple[float, float]:
