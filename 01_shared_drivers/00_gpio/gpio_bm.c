@@ -62,6 +62,68 @@ static bool port_index(const GPIO_TypeDef *port, uint32_t *idx)
     return true;
 }
 
+static bool is_swd_pin(const GPIO_TypeDef *port, uint32_t pin_idx)
+{
+    return ((uint32_t)port == GPIOA_BASE) &&
+           (((1UL << pin_idx) & GPIO_BM_SWD_PIN_MASK) != 0UL);
+}
+
+/* Order fixed by the contract: NULL, port, pin, fields, SWD pin. */
+static GpioBm_Status_t validate_config(const GpioBm_PinConfig_t *cfg)
+{
+    uint32_t idx;
+
+    if (cfg == NULL)
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+    if (!port_index(cfg->port, &idx))
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+    if (cfg->pin_idx >= GPIO_BM_PIN_COUNT)
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+
+    if (cfg->mode > GPIO_BM_MODE_ANALOG)
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+    /* PUPDR = 11 is reserved (RM0399 12.4.4, G3). */
+    if (cfg->pull > GPIO_BM_PULL_DOWN)
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+    if ((cfg->mode == GPIO_BM_MODE_ANALOG) && (cfg->pull != GPIO_BM_PULL_NONE))
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+    if ((cfg->mode == GPIO_BM_MODE_OUTPUT) || (cfg->mode == GPIO_BM_MODE_AF))
+    {
+        if ((cfg->otype > GPIO_BM_OTYPE_OD) || (cfg->speed > GPIO_BM_SPEED_VERY_HIGH))
+        {
+            return GPIO_BM_ERR_PARAM;
+        }
+    }
+    if ((cfg->mode == GPIO_BM_MODE_AF) && (cfg->af > 0xFUL))
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+    if ((cfg->mode == GPIO_BM_MODE_OUTPUT) && (cfg->initial_level > 1UL))
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+
+    /* G9: reconfiguring PA13/PA14 leaves the board without SWD. */
+    if (is_swd_pin(cfg->port, cfg->pin_idx) && !cfg->allow_debug_pins)
+    {
+        return GPIO_BM_ERR_DEBUG_PIN;
+    }
+
+    return GPIO_BM_OK;
+}
+
 /* ---- Existing API ------------------------------------------------------------- */
 
 bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port)
@@ -225,5 +287,121 @@ void GPIO_BM_SectionExit(const GpioBm_Section_t *s)
 
     /* Restore, never force: interrupts masked on entry stay masked. */
     __set_PRIMASK(s->primask);
+}
+
+/* ---- LCKR helpers -------------------------------------------------------------- */
+
+static bool pin_locked(const GPIO_TypeDef *port, uint32_t pin_idx)
+{
+    uint32_t lckr = port->LCKR;
+    /* LCKy only freezes the pin once the LCKK sequence has run (RM0399 12.4.8). */
+    return ((lckr & GPIO_LCKR_LCKK) != 0UL) && ((lckr & (1UL << pin_idx)) != 0UL);
+}
+
+/* ---- Configuration -------------------------------------------------------------- */
+
+GpioBm_Status_t GPIO_BM_ConfigPin(const GpioBm_PinConfig_t *cfg)
+{
+    GpioBm_Section_t section;
+    GpioBm_Status_t  st = validate_config(cfg);
+
+    if (st != GPIO_BM_OK)
+    {
+        return st;
+    }
+
+    GPIO_TypeDef  *port  = cfg->port;
+    const uint32_t pin   = cfg->pin_idx;
+    const uint32_t pos2  = pin * 2U;
+    const uint32_t afr_i = pin >> 3U;
+    const uint32_t pos4  = (pin & 7U) * 4U;
+    const bool     drive = (cfg->mode == GPIO_BM_MODE_OUTPUT) || (cfg->mode == GPIO_BM_MODE_AF);
+
+    (void)GPIO_BM_EnablePortClock(port);   /* validated above: cannot fail */
+
+    st = GPIO_BM_SectionEnter(&section);
+    if (st != GPIO_BM_OK)
+    {
+        return st;
+    }
+
+    /* C12: a locked pin ignores every write; say so instead of writing. */
+    if (pin_locked(port, pin))
+    {
+        GPIO_BM_SectionExit(&section);
+        return GPIO_BM_ERR_LOCKED;
+    }
+
+    uint32_t otyper  = port->OTYPER;
+    uint32_t ospeedr = port->OSPEEDR;
+    uint32_t pupdr   = port->PUPDR;
+    uint32_t afr     = port->AFR[afr_i];
+    uint32_t moder   = port->MODER;
+
+    /* C11, rule 4: level, electrical fields, AF, and MODER last, so the pin
+       never drives a wrong level or a wrong function in between. */
+    if (cfg->mode == GPIO_BM_MODE_OUTPUT)
+    {
+        port->BSRR = (cfg->initial_level != 0UL) ? (1UL << pin) : (1UL << (pin + 16U));
+    }
+    if (drive)
+    {
+        otyper  = (otyper & ~(1UL << pin)) | (cfg->otype << pin);
+        ospeedr = (ospeedr & ~(3UL << pos2)) | (cfg->speed << pos2);
+        port->OTYPER  = otyper;
+        port->OSPEEDR = ospeedr;
+    }
+    pupdr = (pupdr & ~(3UL << pos2)) | (cfg->pull << pos2);
+    port->PUPDR = pupdr;
+    if (cfg->mode == GPIO_BM_MODE_AF)
+    {
+        afr = (afr & ~(0xFUL << pos4)) | (cfg->af << pos4);
+        port->AFR[afr_i] = afr;
+    }
+    moder = (moder & ~(3UL << pos2)) | (cfg->mode << pos2);
+    port->MODER = moder;
+
+    /* C12: read-back of the five fields of this pin. */
+    const bool ok =
+        (((port->MODER   >> pos2) & 3UL)   == ((moder   >> pos2) & 3UL))   &&
+        (((port->OTYPER  >> pin)  & 1UL)   == ((otyper  >> pin)  & 1UL))   &&
+        (((port->OSPEEDR >> pos2) & 3UL)   == ((ospeedr >> pos2) & 3UL))   &&
+        (((port->PUPDR   >> pos2) & 3UL)   == ((pupdr   >> pos2) & 3UL))   &&
+        (((port->AFR[afr_i] >> pos4) & 0xFUL) == ((afr >> pos4) & 0xFUL));
+
+    GPIO_BM_SectionExit(&section);
+    return ok ? GPIO_BM_OK : GPIO_BM_ERR_VERIFY;
+}
+
+GpioBm_Status_t GPIO_BM_ConfigOutput(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t otype,
+                                     uint32_t speed, uint32_t pull, uint32_t initial_level)
+{
+    const GpioBm_PinConfig_t cfg = {
+        .port = port, .pin_idx = pin_idx, .mode = GPIO_BM_MODE_OUTPUT,
+        .otype = otype, .speed = speed, .pull = pull, .af = 0U,
+        .initial_level = initial_level, .allow_debug_pins = false,
+    };
+    return GPIO_BM_ConfigPin(&cfg);
+}
+
+GpioBm_Status_t GPIO_BM_ConfigInput(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t pull)
+{
+    const GpioBm_PinConfig_t cfg = {
+        .port = port, .pin_idx = pin_idx, .mode = GPIO_BM_MODE_INPUT,
+        .otype = GPIO_BM_OTYPE_PP, .speed = GPIO_BM_SPEED_LOW, .pull = pull, .af = 0U,
+        .initial_level = 0U, .allow_debug_pins = false,
+    };
+    return GPIO_BM_ConfigPin(&cfg);
+}
+
+GpioBm_Status_t GPIO_BM_ConfigAlternateEx(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af,
+                                          uint32_t otype, uint32_t pull, uint32_t speed)
+{
+    const GpioBm_PinConfig_t cfg = {
+        .port = port, .pin_idx = pin_idx, .mode = GPIO_BM_MODE_AF,
+        .otype = otype, .speed = speed, .pull = pull, .af = af,
+        .initial_level = 0U, .allow_debug_pins = false,
+    };
+    return GPIO_BM_ConfigPin(&cfg);
 }
 

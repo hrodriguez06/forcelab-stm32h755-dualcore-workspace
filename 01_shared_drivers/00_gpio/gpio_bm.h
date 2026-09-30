@@ -123,6 +123,27 @@ typedef struct
     bool     allow_debug_pins; /*!< false: PA13/PA14 refused                          */
 } GpioBm_PinConfig_t;
 
+/**
+  * @brief  Configures one pin. The only configuration path of the new API.
+  *
+  *         1. Validation before any peripheral access, in this order: NULL,
+  *            port (GPIOA..GPIOK on the 0x400 stride), pin, fields, SWD pin.
+  *            A refusal writes nothing, not even the port clock.
+  *         2. Port clock on (GPIO_BM_EnablePortClock, banked per core).
+  *         3. Inside the section: LCKR check, then BSRR (OUTPUT only), OTYPER
+  *            and OSPEEDR (OUTPUT/AF only), PUPDR, AFR (AF only), MODER last,
+  *            then a read-back of the five fields of the pin.
+  *
+  * @retval GPIO_BM_OK, GPIO_BM_ERR_PARAM, GPIO_BM_ERR_DEBUG_PIN,
+  *         GPIO_BM_ERR_LOCKED (nothing written), GPIO_BM_ERR_BUSY (nothing
+  *         written), GPIO_BM_ERR_VERIFY.
+  */
+GpioBm_Status_t GPIO_BM_ConfigPin(const GpioBm_PinConfig_t *cfg);
+GpioBm_Status_t GPIO_BM_ConfigOutput(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t otype,
+                                     uint32_t speed, uint32_t pull, uint32_t initial_level);
+GpioBm_Status_t GPIO_BM_ConfigInput(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t pull);
+GpioBm_Status_t GPIO_BM_ConfigAlternateEx(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af,
+                                          uint32_t otype, uint32_t pull, uint32_t speed);
 /* ---- Section and cross-core hook ------------------------------------------------ */
 /* The section covers one pin. PRIMASK is saved and interrupts are masked on
  * the calling core first; only then, at nesting level 1 and when a hook is
