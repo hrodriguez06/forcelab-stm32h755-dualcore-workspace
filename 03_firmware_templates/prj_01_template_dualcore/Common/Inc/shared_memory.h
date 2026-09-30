@@ -38,12 +38,15 @@
    written in time and converted per core, because each core's DWT counts its
    own clock (10_hsem/README.md section 3.5). The value comes from the hold
    times measured by the selftest (00_gpio/README.md, B1): the longest hold
-   is 4.3 us (CPU2, gpio_hal, HAL_GPIO_Init at 200 MHz), and the selftest
+   is 992 cycles = 4.96 us (CPU2, gpio_hal, at fa44386), and the selftest
    fails below a 10x margin, so a TIMEOUT means a stuck core, not
-   contention. 20 us, the first value, left only 4.7x.                     */
-#define SHARED_GPIO_LOCK_US            50U
-#define SHARED_GPIO_LOCK_CYCLES_CM7   (SHARED_GPIO_LOCK_US * 400U)   /* 20 000 at 400 MHz */
-#define SHARED_GPIO_LOCK_CYCLES_CM4   (SHARED_GPIO_LOCK_US * 200U)   /* 10 000 at 200 MHz */
+   contention. 20 us, the first value, left only 4.7x; 50 us left 10.08x,
+   with a hold that moved by 151 cycles between builds without a change in
+   gpio_hal.c (R2-b). 60 us gives 12.1x. The cost: interrupts can stay
+   masked up to this limit plus one call (00_gpio/README.md A2).           */
+#define SHARED_GPIO_LOCK_US            60U
+#define SHARED_GPIO_LOCK_CYCLES_CM7   (SHARED_GPIO_LOCK_US * 400U)   /* 24 000 at 400 MHz */
+#define SHARED_GPIO_LOCK_CYCLES_CM4   (SHARED_GPIO_LOCK_US * 200U)   /* 12 000 at 200 MHz */
 
 #define SHARED_MBOX_SIZE        64U  /* multiple of 32 (cache line)          */
 

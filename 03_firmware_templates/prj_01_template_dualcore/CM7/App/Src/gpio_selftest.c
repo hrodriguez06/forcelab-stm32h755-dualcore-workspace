@@ -917,11 +917,14 @@ static void run_race_tests(void)
     const uint32_t hold4_ns = (s_hold_max_cm4 * 1000U) / 200U;
     const uint32_t hold_ns  = (hold7_ns > hold4_ns) ? hold7_ns : hold4_ns;
     const uint32_t limit_ns = SHARED_GPIO_LOCK_US * 1000U;
+    /* The margin in hundredths, truncated: the gate is the comparison, this
+       only prints it (R2-b: an integer print showed 10.08x as "10x"). */
+    const uint32_t margin_x100 = (hold_ns > 0U) ? ((limit_ns * 100U) / hold_ns) : 0U;
     verdict((hold_ns > 0U) && ((hold_ns * 10U) <= limit_ns),
-            "B1 lock hold max: cm7 %lu cyc (%lu ns), cm4 %lu cyc (%lu ns); limit %u us = %lux (>=10x)",
+            "B1 lock hold max: cm7 %lu cyc (%lu ns), cm4 %lu cyc (%lu ns); limit %u us = %lu.%02lux (>=10x)",
             (unsigned long)s_hold_max_cm7, (unsigned long)hold7_ns, (unsigned long)s_hold_max_cm4,
             (unsigned long)hold4_ns, (unsigned)SHARED_GPIO_LOCK_US,
-            (unsigned long)((hold_ns > 0U) ? (limit_ns / hold_ns) : 0U));
+            (unsigned long)(margin_x100 / 100U), (unsigned long)(margin_x100 % 100U));
 }
 
 /* ==========================================================================================
