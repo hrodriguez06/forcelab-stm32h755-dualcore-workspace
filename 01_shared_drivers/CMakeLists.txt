@@ -33,6 +33,11 @@ target_include_directories(stm32h7_driver_gpio_ll INTERFACE ${CMAKE_CURRENT_LIST
 target_sources(stm32h7_driver_gpio_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/00_gpio/gpio_ll.c)
 target_link_libraries(stm32h7_driver_gpio_ll INTERFACE stm32h7_driver_gpio_bm)
 
+add_library(stm32h7_driver_gpio_hal INTERFACE)
+target_include_directories(stm32h7_driver_gpio_hal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/00_gpio)
+target_sources(stm32h7_driver_gpio_hal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/00_gpio/gpio_hal.c)
+target_link_libraries(stm32h7_driver_gpio_hal INTERFACE stm32h7_driver_gpio_bm)
+
 add_library(stm32h7_driver_led INTERFACE)
 target_include_directories(stm32h7_driver_led INTERFACE ${CMAKE_CURRENT_LIST_DIR}/01_led)
 target_sources(stm32h7_driver_led INTERFACE ${CMAKE_CURRENT_LIST_DIR}/01_led/led_bm.c)
