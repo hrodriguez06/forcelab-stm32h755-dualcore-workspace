@@ -1,0 +1,69 @@
+[   0.079] [ipc] m7=480 m4=2400  (CPU2 alive)
+[   0.508] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=429 tx=413 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[   2.052] [ipc] m7=484 m4=2420  (CPU2 alive)
+[   4.639]  
+[   4.646] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 429c49e ===
+[   4.650] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[   4.653] [sys] silicon revision id=0x2003
+[   4.657] [ipc] shared block at 0x38008000, magic=0x48375353
+[   4.661] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[   4.663] [net] starting TCP/IP stack
+[   4.670] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[   4.674] [net] mac=02:00:00:00:00:01 phy_addr=0
+[   4.679] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[   4.681] [phy] partner advertised:
+[   4.685] [net] udp echo listening on port 7
+[   4.688] [adc_srv] listening on UDP port 5001
+[   4.697] [cm7_dcache_test] PASS: 32B alignment=1, dma_dcache_verified=1 (BM: dirty=39321->2048, LL: dirty=34952->2048)
+[   4.703] [m4_adc_test] ADC:B=1 L=1 Rg=1 U=1 C=1 V=1 T=1 Rs=1 O=1 A=1 Vd=3300
+[   4.706] [ipc] m7=1 m4=0  (CPU2 starting)
+[   6.265] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[   6.271] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[   6.274] [net] link up: 100 Mbps full duplex
+[   6.663] [ipc] m7=4 m4=20  (CPU2 alive)
+[   8.637] [m4_adc_test] HW T2 BM:1 LL:1 r8=7/7 v16=24334 v8=95/95
+[   8.640] [ipc] m7=9 m4=40  (CPU2 alive)
+[   9.635] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  10.610] [m4_adc_test] HW T3 BM:1 ht=488.0 tc=487.0 err=0 ovr=0 hovr=0
+[  10.613] [ipc] m7=13 m4=60  (CPU2 alive)
+[  12.583] [m4_adc_test] HW T3 LL:1 ht=488.0 tc=488.0 err=0 ovr=0 hovr=0
+[  12.586] [ipc] m7=17 m4=80  (CPU2 alive)
+[  14.555] [m4_adc_test] HW T3b BM:1 LL:1 vref=24346/24366 ts=12708/12736
+[  14.558] [ipc] m7=21 m4=100  (CPU2 alive)
+[  14.575] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  16.527] [m4_adc_test] HW T4 BM:1 LL:1 ovr=2482/2483 dma=0/0
+[  16.530] [ipc] m7=25 m4=120  (CPU2 alive)
+[  18.501] [m4_adc_test] HW T6 BM:1 LL:1 rej=1/1 ok=1/1 adc2=1/1
+[  18.504] [ipc] m7=29 m4=140  (CPU2 alive)
+[  19.516] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  20.473] [m4_adc_test] HW G5 BM_LL:1 match=1 diff=0
+[  20.476] [ipc] m7=33 m4=160  (CPU2 alive)
+[  22.447] [m4_adc_test] HW RESULT PASS mask=2047/2047
+[  22.450] [ipc] m7=37 m4=180  (CPU2 alive)
+[  24.420] [ipc] m7=40 m4=200  (CPU2 alive)
+[  24.459] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  26.393] [ipc] m7=44 m4=220  (CPU2 alive)
+[  28.367] [ipc] m7=48 m4=240  (CPU2 alive)
+[  29.400] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=4 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  30.340] [ipc] m7=52 m4=260  (CPU2 alive)
+[  32.314] [ipc] m7=56 m4=280  (CPU2 alive)
+[  34.288] [ipc] m7=60 m4=300  (CPU2 alive)
+[  34.342] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=4 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  36.261] [ipc] m7=64 m4=320  (CPU2 alive)
+[  38.234] [ipc] m7=68 m4=340  (CPU2 alive)
+[  39.283] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=4 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  40.207] [ipc] m7=72 m4=360  (CPU2 alive)
+[  42.180] [ipc] m7=76 m4=380  (CPU2 alive)
+[  44.152] [ipc] m7=80 m4=400  (CPU2 alive)
+[  44.222] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=4 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  46.126] [ipc] m7=84 m4=420  (CPU2 alive)
+[  48.099] [ipc] m7=88 m4=440  (CPU2 alive)
+[  49.163] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=5 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  50.072] [ipc] m7=92 m4=460  (CPU2 alive)
+[  52.044] [ipc] m7=96 m4=480  (CPU2 alive)
+[  54.016] [ipc] m7=100 m4=500  (CPU2 alive)
+[  54.102] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=5 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  55.989] [ipc] m7=104 m4=520  (CPU2 alive)
+[  57.961] [ipc] m7=108 m4=540  (CPU2 alive)
+[  59.041] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=5 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  59.934] [ipc] m7=112 m4=560  (CPU2 alive)
