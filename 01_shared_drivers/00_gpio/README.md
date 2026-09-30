@@ -721,7 +721,8 @@ The audit of the pre-F1 code found these. Their state at this commit:
 A review of everything after the A1–A7 audit (`eab46d1` … `1a635d8`). The
 fix of `0cd803f` and the A4 fix are correct. Every figure of §9.1 and §9.2
 matches its `0cd803f` capture, and the two runs are independent (their analog
-measurements differ). Corrections: `REAUDIT_1_INSTRUCTIONS.md`.
+measurements differ). Corrections: `REAUDIT_1_INSTRUCTIONS.md`, removed once
+closed (section 15 shows how to read it).
 
 | ID | Finding | State |
 | :--- | :--- | :--- |
