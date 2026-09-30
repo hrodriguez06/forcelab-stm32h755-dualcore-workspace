@@ -17,12 +17,12 @@ from typing import Callable, Optional, Sequence
 try:
     from tools.gpio_hw_check import (
         PROTOCOL_STEPS, PROTOCOL_ITEMS, BenchItem, StepDef,
-        table_pattern, table_item
+        table_pattern, table_item, GPIO_BENCH_PROTOCOL_VERSION
     )
 except ImportError:
     from gpio_hw_check import (
         PROTOCOL_STEPS, PROTOCOL_ITEMS, BenchItem, StepDef,
-        table_pattern, table_item
+        table_pattern, table_item, GPIO_BENCH_PROTOCOL_VERSION
     )
 
 
@@ -56,6 +56,10 @@ STEP_T0A_HANDSHAKE  = 7
 STEP_T0A_MCU_TO_AD2 = 8
 STEP_T0A_AD2_TO_MCU = 9
 STEP_T0A_SCOPE      = 10
+STEP_T1_REJECT      = 11
+STEP_T2_PARITY      = 12
+STEP_B1_MEASURE     = 13
+STEP_T16_LCKR       = 20
 STEP_DONE           = 99
 
 
@@ -212,6 +216,8 @@ class FaultInjectionConfig:
         self.step9_buschk_down_fail: bool = False               # E16: MCU fails buschk down in Step 9
         self.t0b_c_safe_fail: bool = False                      # R2-m5: T0b(c) safe state check fails
         self.inject_step7_protocol_abort: bool = False          # R3-m1: MCU aborts during Step 7 handshake
+        self.lckr_locked_at_boot: bool = False                  # F1a: GPIOF LCKR not clean at boot
+        self.verdict_fail: Optional[str] = None                 # F1a: 't1', 't2', 'b1' or 't16' reports FAIL
 
 
 class FirmwareModel:
@@ -350,9 +356,9 @@ class FirmwareModel:
         announcement_name = f"step{step_id}_announcement"
         if self.faults.step_out_of_seq and self.faults.step_out_of_seq[0] == step_id:
             _, bad_id, bad_bus = self.faults.step_out_of_seq
-            self.log_m7(f"[m7_gpio_test] STEP id={bad_id} bus={bad_bus} v=1", item_name=announcement_name)
+            self.log_m7(f"[m7_gpio_test] STEP id={bad_id} bus={bad_bus} v={GPIO_BENCH_PROTOCOL_VERSION}", item_name=announcement_name)
             return
-        self.log_m7(f"[m7_gpio_test] STEP id={step_id} bus={bus_owner_str} v=1", item_name=announcement_name)
+        self.log_m7(f"[m7_gpio_test] STEP id={step_id} bus={bus_owner_str} v={GPIO_BENCH_PROTOCOL_VERSION}", item_name=announcement_name)
 
     def run_coroutine(self):
         """Generator that runs the entire firmware flow."""
@@ -372,9 +378,12 @@ class FirmwareModel:
         if self.faults.cm4_early_pass:
             self.log_m4("[m4_gpio_test] CM4 VERDICT=PASS")
         self._enter_step(STEP_T15_RACE, "NONE")
-        self.log_m7("[m7_gpio_test] INFO T15 phase (a): CM7 solo (50000 calls)")
-        self.log_m7("[m7_gpio_test] INFO T15 phase (b): CM4 solo (50000 calls)")
-        self.log_m7("[m7_gpio_test] INFO T15 phase (c): concurrent (50000 calls each)")
+        if self.faults.lckr_locked_at_boot:
+            self.log_m7("[m7_gpio_test] LCKR at boot: GPIOF=0x00010380 LOCKED", item_name="step1_lckr_boot")
+        else:
+            self.log_m7("[m7_gpio_test] LCKR at boot: GPIOF=0x00000000 CLEAN", item_name="step1_lckr_boot")
+        for phase in "abcdefg":
+            self.log_m7(f"[m7_gpio_test] INFO T15 ({phase}) model")
         if self.faults.t15_verdict_fail:
             self.log_m7("[m7_gpio_test] T15 VERDICT: FAIL", item_name="step1_verdict")
         else:
@@ -382,8 +391,21 @@ class FirmwareModel:
         self.record_item("HOST_CHECK t15_pass")
         yield
 
+        # Steps 11-13: T1, T2, B1 (no AD2)
+        for step, key, line_ok, line_bad, verdict_item, measure in (
+            (STEP_T1_REJECT, "t1", "T1 VERDICT: PASS", "T1 VERDICT: FAIL", "step11_verdict", "HOST_CHECK t1_pass"),
+            (STEP_T2_PARITY, "t2", "T2 VERDICT: PASS", "T2 VERDICT: FAIL", "step12_verdict", "HOST_CHECK t2_pass"),
+            (STEP_B1_MEASURE, "b1", "B1 DONE: COMPLETE", "B1 DONE: INCOMPLETE", "step13_done", "HOST_CHECK b1_complete"),
+        ):
+            self._enter_step(step, "NONE")
+            self.log_m7(f"[m7_gpio_test] INFO {key.upper()} model")
+            text = line_bad if self.faults.verdict_fail == key else line_ok
+            self.log_m7(f"[m7_gpio_test] {text}", item_name=verdict_item)
+            self.record_item(measure)
+            yield
+
         # 4. IDLE State
-        proto_v = self.faults.banner_version or 1
+        proto_v = self.faults.banner_version or GPIO_BENCH_PROTOCOL_VERSION
         self._enter_step(STEP_IDLE, "NONE")
         self.log_m7(f"[m7_gpio_test] GPIO_BENCH v{proto_v} idle", item_name="step2_idle")
         self.log_m7("[m7_gpio_test] INFO Waiting for HOST_REQ to start session...")
@@ -659,7 +681,17 @@ class FirmwareModel:
         self.log_m7("[m7_gpio_test] T0a_scope: DONE (host verdict)", item_name="step10_scope_done")
         yield
 
-        # 13. Step 99: Done & CM4 Results
+        # 13. Step 20: T16 LCKR
+        self._enter_step(STEP_T16_LCKR, "NONE")
+        self.log_m7("[m7_gpio_test] INFO T16 model")
+        if self.faults.verdict_fail == "t16":
+            self.log_m7("[m7_gpio_test] T16 VERDICT: FAIL", item_name="step20_verdict")
+        else:
+            self.log_m7("[m7_gpio_test] T16 VERDICT: PASS", item_name="step20_verdict")
+        self.record_item("HOST_CHECK t16_pass")
+        yield
+
+        # 14. Step 99: Done & CM4 Results
         self._enter_step(STEP_DONE, "NONE")
         cm4_rev = self.faults.cm4_rev or self.expected_rev
         self.log_m4(f"[m4_gpio_test] Rev {cm4_rev}")

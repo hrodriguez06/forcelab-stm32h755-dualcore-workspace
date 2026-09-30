@@ -425,6 +425,51 @@ class TestHarnessScenarios(BaseSimTest):
         self.assertTrue(any("HOST VERDICT=FAIL" in l for l in logs))
         self.assertTrue(any("[FAIL] t15_pass" in l for l in logs))
 
+    # ---- F1a: pasos sin AD2 (T1, T2, B1, T16) y LCKR al arrancar -----------
+    def _run_with(self, faults: FaultInjectionConfig) -> tuple[int, list[str], object]:
+        ad2, ser, clock, reset_fn, _, bus = self.create_simulated_bench(faults=faults)
+        logs: list[str] = []
+        code = run_selftest(
+            serial_port=ser,
+            ad2=ad2,
+            clock=clock,
+            reset_fn=reset_fn,
+            expected_rev="ca569b6",
+            log_fn=logs.append,
+        )
+        self.assertEqual(ad2.get_oe(), 0x0000)
+        self.assertEqual(len(bus.violations), 0)
+        return code, logs, ad2
+
+    def test_f1a_lckr_locked_at_boot_fails(self):
+        """F1a: a boot that finds GPIOF LCKR set (T16 not reset away) gives HOST VERDICT=FAIL."""
+        faults = FaultInjectionConfig()
+        faults.lckr_locked_at_boot = True
+        code, logs, _ = self._run_with(faults)
+        self.assertNotEqual(code, 0)
+        self.assertTrue(any("HOST VERDICT=FAIL" in l for l in logs))
+        self.assertTrue(any("[FAIL] lckr_clean_at_boot" in l for l in logs))
+
+    def test_f1a_non_ad2_step_fail_reported(self):
+        """F1a: T1, T2, B1 or T16 reporting FAIL gives HOST VERDICT=FAIL with that item marked."""
+        for key, item in (("t1", "t1_pass"), ("t2", "t2_pass"), ("b1", "b1_complete"), ("t16", "t16_pass")):
+            with self.subTest(step=key):
+                faults = FaultInjectionConfig()
+                faults.verdict_fail = key
+                code, logs, _ = self._run_with(faults)
+                self.assertNotEqual(code, 0)
+                self.assertTrue(any("HOST VERDICT=FAIL" in l for l in logs))
+                self.assertTrue(any(f"[FAIL] {item}" in l for l in logs))
+
+    def test_f1a_host_rejects_protocol_v1(self):
+        """F1a: a firmware announcing protocol v1 is refused before any output is enabled."""
+        faults = FaultInjectionConfig()
+        faults.banner_version = 1
+        code, logs, _ = self._run_with(faults)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(GPIO_BENCH_PROTOCOL_VERSION, 2)
+        self.assertTrue(any("Protocol version mismatch" in l or "Unexpected protocol line" in l for l in logs))
+
     # ---- E5: CM4 VERDICT=FAIL o no llega ------------------------------------
     def test_e5_cm4_verdict_fail_or_missing(self):
         """E5: CM4 VERDICT=FAIL or omitted CM4 verdict causes HOST VERDICT=FAIL."""

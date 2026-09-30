@@ -3,7 +3,8 @@
   * @file    gpio_selftest.c
   * @brief   GPIO driver self-test implementation for Cortex-M7 (prj_04).
   *          Coordinated dual-core tests, bench safety guards S1-S10,
-  *          T0a loose line checks, T0b guard verifications, and T15 race control.
+  *          T0a loose line checks, T0b guard verifications, T15 race
+  *          (F0 control plus the gpio_bm phases of F1a), T1, T2, B1 and T16.
   *          Implements M1 (step-known guard), M2 (bench_safe on error, all-or-nothing),
   *          m1 (checked claims), B2 (calculated verdicts), and B1 (rebuilt T15).
   ******************************************************************************
@@ -14,6 +15,9 @@
 #include "shared_memory.h"
 #include "app_log.h"
 #include "stm32h7xx.h"
+#include "stm32h7xx_hal.h"
+#include "gpio_bm.h"
+#include "hsem_bm.h"
 #include <string.h>
 #include <stdbool.h>
 
@@ -32,7 +36,10 @@ typedef struct {
 #define BENCH_GPIOE_BUS_MASK  0xFF00U
 
 static const BenchStepPerm_t k_step_perms[] = {
-    { GPIO_BENCH_STEP_T15_RACE,       0U,        0U,                                (1U << 10) },
+    { GPIO_BENCH_STEP_T15_RACE,       0U,        0U,                                (1U << 6) | (1U << 10) },
+    { GPIO_BENCH_STEP_T1_REJECT,      0U,        0U,                                (1U << 9) },
+    { GPIO_BENCH_STEP_T2_PARITY,      0U,        0U,                                (0xFU << 6) },
+    { GPIO_BENCH_STEP_B1_MEASURE,     0U,        0U,                                (1U << 10) },
     { GPIO_BENCH_STEP_IDLE,           0U,        (1U << 7),                         0U },
     { GPIO_BENCH_STEP_T0B_GUARDS,     0U,        (1U << 7),                         0U },
     { GPIO_BENCH_STEP_T0B_S5_NEG,     0U,        (1U << 7),                         0U },
@@ -42,6 +49,7 @@ static const BenchStepPerm_t k_step_perms[] = {
     { GPIO_BENCH_STEP_T0A_MCU_TO_AD2, (1U << 8), (1U << 5) | (1U << 6) | (1U << 7), 0U },
     { GPIO_BENCH_STEP_T0A_AD2_TO_MCU, 0U,        (1U << 7),                         0U },
     { GPIO_BENCH_STEP_T0A_SCOPE,      0U,        (1U << 7),                         (1U << 14) | (1U << 15) },
+    { GPIO_BENCH_STEP_T16_LCKR,       0U,        (1U << 7),                         (0xFU << 6) },
     { GPIO_BENCH_STEP_DONE,           0U,        (1U << 7),                         0U },
 };
 
@@ -376,158 +384,1063 @@ static bool wait_var_cycles(volatile uint32_t *var, uint32_t expected, uint32_t 
     return true;
 }
 
-/* ---- T15 Race Control Implementation (B1) -------------------------------- */
+/* ==========================================================================
+ * Tests without the AD2 (F1a): T15, T1, T2, B1 and T16.
+ * ========================================================================== */
 
-static bool test_t15_race_control(void)
+#define CM7_CYCLES_PER_US       400U
+#define XCORE_WAIT_CYCLES       2000000000UL    /* 5 s at 400 MHz */
+
+/* ---- CM7 -> CM4 job channel ---------------------------------------------- */
+
+static void cm4_post(uint32_t cmd)
 {
-    bool pass = true;
+    __DMB();
+    GPIO_TEST_SHARED->cmd = cmd;
+    __DMB();
+}
 
-    /* Ensure GPIOF clock enabled for PF10 and PF11 */
-    RCC->AHB4ENR |= RCC_AHB4ENR_GPIOFEN;
+static bool cm4_wait_ack(uint32_t cmd)
+{
+    return wait_var_cycles(&GPIO_TEST_SHARED->ack, cmd, XCORE_WAIT_CYCLES);
+}
+
+/* CM4 jobs that need CM7 quiet (T1 photographs every port) run with CM7
+   parked here: PRIMASK set, so no CM7 task or ISR writes any GPIO while CM4
+   works. Bounded by XCORE_WAIT_CYCLES. */
+static bool cm4_run_parked(uint32_t cmd)
+{
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    cm4_post(cmd);
+    bool ok = cm4_wait_ack(cmd);
+    __set_PRIMASK(primask);
+    return ok;
+}
+
+/* ---- T15: race on GPIOF_MODER (PF10 CM7, PF11 CM4, PF6 for the ISR) ------ */
+
+#define T15_SOLO_ITERS          50000U
+#define T15_RMW_ITERS           500000U
+#define T15_DRV_ITERS           200000U
+#define T15_ISR_RATE_HZ         20000U
+
+/* Limit of the test hook's HSEM_BM_TakeTimeout. The other core holds the lock
+   only for the read-modify-writes and the read-back of one ConfigPin call,
+   which is a few microseconds at most even at CM4's 200 MHz (B1 measures the
+   real hold). 100 us is more than 20x that: a TIMEOUT then means the other
+   core is stuck, not busy. It is also the longest this core waits with
+   PRIMASK set, which bounds the interrupt latency the test can add.
+   100 us x 400 cycles/us = 40 000 cycles. */
+#define T15_HOOK_LIMIT_CYCLES   40000U
+
+#define PF10_SHIFT              (10U * 2U)
+#define PF11_SHIFT              (11U * 2U)
+#define PF6_SHIFT               (6U * 2U)
+
+static const GpioBm_PinConfig_t k_pf10_in = {
+    .port = GPIOF, .pin_idx = 10U, .mode = GPIO_BM_MODE_INPUT,
+    .otype = GPIO_BM_OTYPE_PP, .speed = GPIO_BM_SPEED_LOW, .pull = GPIO_BM_PULL_NONE,
+};
+static const GpioBm_PinConfig_t k_pf10_out = {
+    .port = GPIOF, .pin_idx = 10U, .mode = GPIO_BM_MODE_OUTPUT,
+    .otype = GPIO_BM_OTYPE_PP, .speed = GPIO_BM_SPEED_LOW, .pull = GPIO_BM_PULL_NONE,
+    .initial_level = 0U,
+};
+static const GpioBm_PinConfig_t k_pf6_cfg[2] = {
+    { .port = GPIOF, .pin_idx = 6U, .mode = GPIO_BM_MODE_INPUT,
+      .otype = GPIO_BM_OTYPE_PP, .speed = GPIO_BM_SPEED_LOW, .pull = GPIO_BM_PULL_NONE },
+    { .port = GPIOF, .pin_idx = 6U, .mode = GPIO_BM_MODE_OUTPUT,
+      .otype = GPIO_BM_OTYPE_PP, .speed = GPIO_BM_SPEED_LOW, .pull = GPIO_BM_PULL_NONE,
+      .initial_level = 0U },
+};
+
+typedef struct
+{
+    uint32_t corr;      /* own field wrong after the call, or the other pin out of {0,1} */
+    uint32_t overlap;   /* iterations that saw the other core (or the ISR) active */
+    uint32_t ok;
+    uint32_t busy;
+    uint32_t verify;
+    uint32_t other;     /* any other status */
+} T15Stats_t;
+
+/* Hand read-modify-write of PF10's MODER field, as in F0. `widen` adds the
+   NOPs F0 used to make the window visible. */
+static void t15_rmw_loop(uint32_t iters, bool widen, volatile const uint32_t *other_flag, T15Stats_t *st)
+{
+    for (uint32_t i = 0U; i < iters; i++)
+    {
+        if ((other_flag != NULL) && (*other_flag != 0U))
+        {
+            st->overlap++;
+        }
+
+        uint32_t val = (i & 1U);
+        uint32_t m = GPIOF->MODER;
+        m &= ~(3UL << PF10_SHIFT);
+        m |= (val << PF10_SHIFT);
+        if (widen)
+        {
+            __asm__ volatile("nop; nop; nop; nop;");
+        }
+        GPIOF->MODER = m;
+        if (widen)
+        {
+            __asm__ volatile("nop; nop;");
+        }
+
+        if (((GPIOF->MODER >> PF10_SHIFT) & 3U) != val)
+        {
+            st->corr++;
+        }
+        if (((GPIOF->MODER >> PF11_SHIFT) & 3U) > 1U)
+        {
+            st->corr++;
+        }
+    }
+}
+
+/* The same work through the driver: PF10 alternates INPUT / OUTPUT. */
+static void t15_drv_loop(uint32_t iters, volatile const uint32_t *other_flag, T15Stats_t *st)
+{
+    for (uint32_t i = 0U; i < iters; i++)
+    {
+        if ((other_flag != NULL) && (*other_flag != 0U))
+        {
+            st->overlap++;
+        }
+
+        const GpioBm_PinConfig_t *cfg = ((i & 1U) != 0U) ? &k_pf10_out : &k_pf10_in;
+        GpioBm_Status_t r = GPIO_BM_ConfigPin(cfg);
+        switch (r)
+        {
+            case GPIO_BM_OK:         st->ok++;     break;
+            case GPIO_BM_ERR_BUSY:   st->busy++;   break;
+            case GPIO_BM_ERR_VERIFY: st->verify++; break;
+            default:                 st->other++;  break;
+        }
+
+        if (((GPIOF->MODER >> PF10_SHIFT) & 3U) != cfg->mode)
+        {
+            st->corr++;
+        }
+        if (((GPIOF->MODER >> PF11_SHIFT) & 3U) > 1U)
+        {
+            st->corr++;
+        }
+    }
+}
+
+/* ---- The T15 (e) test hook: HSEM 5, instrumented for B1 ------------------ */
+/* Lives here and only here (not in gpio_bm, shared_memory.c or main.c), and
+   is installed only for T15 (e) and B1. */
+static volatile uint32_t s_hook_t_enter;
+static volatile uint32_t s_hook_t_acq;
+static uint32_t s_hook_hold_max;
+static uint32_t s_hook_primask_max;
+static uint32_t s_hook_fail;
+static bool     s_hook_count_calls;
+
+static bool t15_hook_lock(void *ctx)
+{
+    (void)ctx;
+    uint32_t t0 = DWT->CYCCNT;
+    if (HSEM_BM_TakeTimeout(BOARD_GPIO_HSEM_ID, 0U, T15_HOOK_LIMIT_CYCLES) != HSEM_BM_OK)
+    {
+        s_hook_fail++;
+        return false;
+    }
+    s_hook_t_enter = t0;
+    s_hook_t_acq   = DWT->CYCCNT;
+    if (s_hook_count_calls)
+    {
+        /* Both cores increment this word only while holding the lock. */
+        GPIO_TEST_SHARED->t15_locked_calls++;
+    }
+    return true;
+}
+
+static void t15_hook_unlock(void *ctx)
+{
+    (void)ctx;
+    uint32_t t = DWT->CYCCNT;
+    uint32_t hold = t - s_hook_t_acq;
+    uint32_t pm   = t - s_hook_t_enter;
+    if (hold > s_hook_hold_max)
+    {
+        s_hook_hold_max = hold;
+    }
+    if (pm > s_hook_primask_max)
+    {
+        s_hook_primask_max = pm;
+    }
+    __DMB();
+    (void)HSEM_BM_Release(BOARD_GPIO_HSEM_ID, 0U);
+}
+
+static const GpioBm_SharedLock_t k_t15_hook = { t15_hook_lock, t15_hook_unlock, NULL };
+
+/* ---- (f) and (g): TIM17 on CM7 reconfigures PF6 --------------------------- */
+
+static volatile uint32_t s_isr_count;
+static volatile uint32_t s_isr_in_loop;   /* ISR entries while the main loop ran */
+static volatile uint32_t s_isr_corr;      /* PF6 not as the previous ISR left it */
+static volatile uint32_t s_isr_err;       /* ConfigPin status != OK inside the ISR */
+static volatile uint32_t s_isr_last;      /* 0 = INPUT, 1 = OUTPUT */
+static volatile uint32_t s_isr_primed;
+static volatile uint32_t s_main_in_loop;
+
+void TIM17_IRQHandler(void)
+{
+    TIM17->SR = ~TIM_SR_UIF;
     __DSB();
 
-    /* B1: Explicitly set PF10 and PF11 to INPUT mode (00), clearing reset analog state (11) */
-    GPIOF->MODER &= ~((3UL << (10U * 2U)) | (3UL << (11U * 2U)));
-    GPIOF->PUPDR &= ~((3UL << (10U * 2U)) | (3UL << (11U * 2U)));
+    s_isr_count++;
+    if (s_main_in_loop != 0U)
+    {
+        s_isr_in_loop++;
+    }
+
+    uint32_t field = (GPIOF->MODER >> PF6_SHIFT) & 3U;
+    if ((s_isr_primed != 0U) && (field != s_isr_last))
+    {
+        s_isr_corr++;
+    }
+
+    uint32_t next = s_isr_last ^ 1U;
+    if (GPIO_BM_ConfigPin(&k_pf6_cfg[next]) != GPIO_BM_OK)
+    {
+        s_isr_err++;
+    }
+    s_isr_last   = next;
+    s_isr_primed = 1U;
+}
+
+static uint32_t tim17_clock_hz(void)
+{
+    uint32_t pclk2 = HAL_RCC_GetPCLK2Freq();
+    /* RM0399 8.5.x: with TIMPRE = 0, the timer kernel clock is 2 x PCLK2
+       whenever the APB2 prescaler divides. */
+    return ((RCC->D2CFGR & RCC_D2CFGR_D2PPRE2) != 0U) ? (2U * pclk2) : pclk2;
+}
+
+static uint32_t s_tim17_was_on;
+
+static uint32_t tim17_start(void)
+{
+    uint32_t clk = tim17_clock_hz();
+    uint32_t arr = (clk / T15_ISR_RATE_HZ) - 1U;
+
+    s_tim17_was_on = RCC->APB2ENR & RCC_APB2ENR_TIM17EN;
+    RCC->APB2ENR |= RCC_APB2ENR_TIM17EN;       /* banked per core (RM0399 9.7.1) */
+    (void)RCC->APB2ENR;
+
+    TIM17->CR1  = 0U;
+    TIM17->PSC  = 0U;
+    TIM17->ARR  = arr;
+    TIM17->CNT  = 0U;
+    TIM17->EGR  = TIM_EGR_UG;
+    TIM17->SR   = 0U;
+    TIM17->DIER = TIM_DIER_UIE;
+    NVIC_ClearPendingIRQ(TIM17_IRQn);
+    NVIC_SetPriority(TIM17_IRQn, 6U);
+    NVIC_EnableIRQ(TIM17_IRQn);
+    TIM17->CR1  = TIM_CR1_CEN;
+    return clk / (arr + 1U);
+}
+
+static void tim17_stop(void)
+{
+    TIM17->CR1  = 0U;
+    TIM17->DIER = 0U;
+    NVIC_DisableIRQ(TIM17_IRQn);
+    TIM17->SR   = 0U;
+    NVIC_ClearPendingIRQ(TIM17_IRQn);
+    __DSB();
+    if (s_tim17_was_on == 0U)
+    {
+        RCC->APB2ENR &= ~RCC_APB2ENR_TIM17EN;
+    }
+}
+
+static void isr_phase_reset(void)
+{
+    s_isr_count = 0U;
+    s_isr_in_loop = 0U;
+    s_isr_corr = 0U;
+    s_isr_err = 0U;
+    s_isr_last = 0U;
+    s_isr_primed = 0U;
+    (void)GPIO_BM_ConfigPin(&k_pf6_cfg[0]);
+}
+
+static uint32_t s_lckr_boot;
+static uint32_t s_b1_hold_max_e;
+static uint32_t s_b1_primask_max_e;
+
+static bool test_t15_race(void)
+{
+    bool pass = true;
+    uint32_t session = GPIO_TEST_SHARED->session_id;
 
     bench_enter_step(GPIO_BENCH_STEP_T15_RACE);
 
-    uint32_t session = GPIO_TEST_SHARED->session_id;
-
-    /* Guard check for PF10 */
-    if (!bench_claim_output(GPIOF, 10U))
+    /* LCKR is cleared only by a reset; T16 locks PF7..PF9 at the end of the
+       previous run. Say what this boot found before anything else. */
+    s_lckr_boot = GPIOF->LCKR;
+    APP_LOG("[m7_gpio_test] LCKR at boot: GPIOF=0x%08lX %s",
+            (unsigned long)s_lckr_boot, (s_lckr_boot == 0U) ? "CLEAN" : "LOCKED");
+    if (s_lckr_boot != 0U)
     {
-        APP_LOG("[m7_gpio_test] T15 FAIL: bench_claim_output rejected PF10");
         pass = false;
-        goto exit;
     }
 
-    /* Wait for CM4 ready with matching session_id (timeout: 5s = 2,000,000,000 cycles @ 400 MHz) */
-    if (!wait_var_cycles(&GPIO_TEST_SHARED->cm4_ready, session, 2000000000UL))
+    if (!bench_claim_output(GPIOF, 10U) || !bench_claim_output(GPIOF, 6U))
+    {
+        APP_LOG("[m7_gpio_test] T15 FAIL: bench_claim_output rejected PF10/PF6");
+        bench_safe();
+        APP_LOG("[m7_gpio_test] T15 VERDICT: FAIL");
+        return false;
+    }
+
+    /* Known start: PF6, PF10 and PF11 in input, not in the reset analog state. */
+    GPIOF->MODER &= ~((3UL << PF6_SHIFT) | (3UL << PF10_SHIFT) | (3UL << PF11_SHIFT));
+    GPIOF->PUPDR &= ~((3UL << PF6_SHIFT) | (3UL << PF10_SHIFT) | (3UL << PF11_SHIFT));
+
+    if (!wait_var_cycles(&GPIO_TEST_SHARED->cm4_ready, session, XCORE_WAIT_CYCLES))
     {
         APP_LOG("[m7_gpio_test] T15 FAIL: TIMEOUT waiting for CM4 ready");
-        pass = false;
-        goto exit;
+        bench_safe();
+        APP_LOG("[m7_gpio_test] T15 VERDICT: FAIL");
+        return false;
     }
 
-    /* ---- Phase (a): CM7 solo (50,000 iterations) -------------------------- */
-    GPIO_TEST_SHARED->t15_phase = 1U;
-    __DMB();
+    T15Stats_t a = {0}, c = {0}, d = {0}, e = {0}, f = {0}, g = {0};
+    bool xcore_ok = true;
 
-    uint32_t corruptions_a = 0U;
-    for (uint32_t i = 0U; i < 50000U; i++)
-    {
-        uint32_t val = (i & 1U);
-        uint32_t m = GPIOF->MODER;
-        m &= ~(3UL << (10U * 2U));
-        m |= (val << (10U * 2U));
-        GPIOF->MODER = m;
+    /* (a) CM7 alone, hand RMW: the control of the control. */
+    t15_rmw_loop(T15_SOLO_ITERS, false, NULL, &a);
 
-        uint32_t readback = (GPIOF->MODER >> (10U * 2U)) & 3U;
-        if (readback != val)
-        {
-            corruptions_a++;
-        }
-        uint32_t m4_bits = (GPIOF->MODER >> (11U * 2U)) & 3U;
-        if (m4_bits > 1U)
-        {
-            corruptions_a++;
-        }
-    }
-    GPIO_TEST_SHARED->t15_corruptions_phase_a = corruptions_a;
+    /* (b) CM4 alone, hand RMW. */
+    cm4_post(GPIO_ST_CMD_T15_B);
+    xcore_ok = xcore_ok && cm4_wait_ack(GPIO_ST_CMD_T15_B);
 
-    /* ---- Phase (b): CM4 solo (50,000 iterations) -------------------------- */
-    GPIO_TEST_SHARED->t15_phase = 2U;
-    GPIO_TEST_SHARED->go_signal = session;
-    __DMB();
-
-    /* Wait for CM4 to complete phase (b) */
-    if (!wait_var_cycles(&GPIO_TEST_SHARED->cm4_ready, session + 1U, 2000000000UL))
-    {
-        APP_LOG("[m7_gpio_test] T15 FAIL: TIMEOUT waiting for CM4 phase (b)");
-        pass = false;
-        goto exit;
-    }
-    uint32_t corruptions_b = GPIO_TEST_SHARED->t15_corruptions_phase_b;
-
-    /* ---- Phase (c): Concurrent run (500,000 iterations) -------------------- */
-    GPIO_TEST_SHARED->t15_phase = 3U;
+    /* (c) both, hand RMW: the control. */
     GPIO_TEST_SHARED->in_loop_cm7 = 1U;
-    GPIO_TEST_SHARED->go_signal = session + 1U;
-    __DMB();
-
-    uint32_t corruptions_c = 0U;
-    uint32_t overlap_cm7 = 0U;
-
-    for (uint32_t i = 0U; i < 500000U; i++)
-    {
-        if (GPIO_TEST_SHARED->in_loop_cm4 != 0U)
-        {
-            overlap_cm7++;
-        }
-
-        uint32_t val = (i & 1U);
-        uint32_t m = GPIOF->MODER;
-        m &= ~(3UL << (10U * 2U));
-        m |= (val << (10U * 2U));
-
-        __asm__ volatile("nop; nop; nop; nop;");
-        GPIOF->MODER = m;
-        __asm__ volatile("nop; nop;");
-
-        uint32_t readback = (GPIOF->MODER >> (10U * 2U)) & 3U;
-        if (readback != val)
-        {
-            corruptions_c++;
-        }
-
-        uint32_t m4_bits = (GPIOF->MODER >> (11U * 2U)) & 3U;
-        if (m4_bits > 1U)
-        {
-            corruptions_c++;
-        }
-    }
-
-    GPIO_TEST_SHARED->t15_cm7_corruptions_c = corruptions_c;
-    GPIO_TEST_SHARED->t15_cm7_overlap_cnt = overlap_cm7;
-    GPIO_TEST_SHARED->t15_total_calls_cm7 = 500000U;
-    __DMB();
+    cm4_post(GPIO_ST_CMD_T15_C);
+    t15_rmw_loop(T15_RMW_ITERS, true, &GPIO_TEST_SHARED->in_loop_cm4, &c);
     GPIO_TEST_SHARED->in_loop_cm7 = 0U;
-    __DMB();
+    xcore_ok = xcore_ok && cm4_wait_ack(GPIO_ST_CMD_T15_C);
 
-    /* Wait for CM4 to complete phase (c) */
-    if (!wait_var_cycles(&GPIO_TEST_SHARED->in_loop_cm4, 0U, 2000000000UL))
+    /* (d) both, gpio_bm without hook: PRIMASK does not protect across cores. */
+    GPIO_TEST_SHARED->in_loop_cm7 = 1U;
+    cm4_post(GPIO_ST_CMD_T15_D);
+    t15_drv_loop(T15_DRV_ITERS, &GPIO_TEST_SHARED->in_loop_cm4, &d);
+    GPIO_TEST_SHARED->in_loop_cm7 = 0U;
+    xcore_ok = xcore_ok && cm4_wait_ack(GPIO_ST_CMD_T15_D);
+
+    /* (e) both, gpio_bm with the test hook. */
+    GPIO_TEST_SHARED->t15_locked_calls = 0U;
+    s_hook_hold_max = 0U;
+    s_hook_primask_max = 0U;
+    s_hook_fail = 0U;
+    s_hook_count_calls = true;
+    GPIO_BM_SetSharedLock(&k_t15_hook);
+    GPIO_TEST_SHARED->in_loop_cm7 = 1U;
+    cm4_post(GPIO_ST_CMD_T15_E);
+    t15_drv_loop(T15_DRV_ITERS, &GPIO_TEST_SHARED->in_loop_cm4, &e);
+    GPIO_TEST_SHARED->in_loop_cm7 = 0U;
+    GPIO_BM_SetSharedLock(NULL);
+    s_hook_count_calls = false;
+    xcore_ok = xcore_ok && cm4_wait_ack(GPIO_ST_CMD_T15_E);
+    s_b1_hold_max_e    = s_hook_hold_max;
+    s_b1_primask_max_e = s_hook_primask_max;
+    uint32_t hook_fail_e = s_hook_fail;
+
+    /* (f) and (g): same core. CM4 waits for its next job (parked, no GPIO).
+       A TIM17 ISR on CM7 reconfigures PF6 while the loop works on PF10. */
+    isr_phase_reset();
+    uint32_t isr_rate = tim17_start();
+    s_main_in_loop = 1U;
+    t15_rmw_loop(T15_RMW_ITERS, true, &s_main_in_loop, &f);   /* (f): hand RMW, no PRIMASK */
+    s_main_in_loop = 0U;
+    tim17_stop();
+    uint32_t f_isr_count = s_isr_count, f_isr_in_loop = s_isr_in_loop;
+    uint32_t f_isr_corr = s_isr_corr, f_isr_err = s_isr_err;
+
+    isr_phase_reset();
+    (void)tim17_start();
+    s_main_in_loop = 1U;
+    t15_drv_loop(T15_DRV_ITERS, NULL, &g);                    /* (g): gpio_bm, no hook */
+    s_main_in_loop = 0U;
+    tim17_stop();
+    uint32_t g_isr_count = s_isr_count, g_isr_in_loop = s_isr_in_loop;
+    uint32_t g_isr_corr = s_isr_corr, g_isr_err = s_isr_err;
+
+    /* Back to input, as found. */
+    GPIOF->MODER &= ~((3UL << PF6_SHIFT) | (3UL << PF10_SHIFT) | (3UL << PF11_SHIFT));
+
+    volatile GpioSelfTestShared_t *sh = GPIO_TEST_SHARED;
+    uint32_t corr_a = a.corr;
+    uint32_t corr_b = sh->t15_cm4_corr[0];
+    uint32_t corr_c = c.corr + sh->t15_cm4_corr[1];
+    uint32_t corr_d = d.corr + d.verify + d.other + sh->t15_cm4_corr[2] + sh->t15_cm4_verify[2];
+    uint32_t corr_e = e.corr + e.verify + e.other + sh->t15_cm4_corr[3] + sh->t15_cm4_verify[3];
+    uint32_t busy_e = e.busy + sh->t15_cm4_busy[3];
+    uint32_t corr_f = f.corr + f_isr_corr + f_isr_err;
+    uint32_t corr_g = g.corr + g.verify + g.other + g_isr_corr + g_isr_err;
+    uint32_t ok_sum_e = e.ok + sh->t15_cm4_ok[3];
+
+    APP_LOG("[m7_gpio_test] INFO T15 (a) CM7 solo, hand RMW: corruptions=%lu (expected 0)", (unsigned long)corr_a);
+    APP_LOG("[m7_gpio_test] INFO T15 (b) CM4 solo, hand RMW: corruptions=%lu (expected 0)", (unsigned long)corr_b);
+    APP_LOG("[m7_gpio_test] INFO T15 (c) both, hand RMW: corr=%lu (CM7=%lu CM4=%lu) ovl CM7=%lu CM4=%lu (expect >0)",
+            (unsigned long)corr_c, (unsigned long)c.corr, (unsigned long)sh->t15_cm4_corr[1],
+            (unsigned long)c.overlap, (unsigned long)sh->t15_cm4_overlap[1]);
+    APP_LOG("[m7_gpio_test] INFO T15 (d) both, gpio_bm no hook: corr=%lu ovl CM7=%lu CM4=%lu (expect >0)",
+            (unsigned long)corr_d, (unsigned long)d.overlap, (unsigned long)sh->t15_cm4_overlap[2]);
+    APP_LOG("[m7_gpio_test] INFO T15 (d) detail: CM7 field=%lu verify=%lu other=%lu, CM4 field=%lu verify=%lu",
+            (unsigned long)d.corr, (unsigned long)d.verify, (unsigned long)d.other,
+            (unsigned long)sh->t15_cm4_corr[2], (unsigned long)sh->t15_cm4_verify[2]);
+    APP_LOG("[m7_gpio_test] INFO T15 (e) both, gpio_bm + hook: corr=%lu busy=%lu hook_fail CM7=%lu CM4=%lu ovl CM7=%lu CM4=%lu (expect 0)",
+            (unsigned long)corr_e, (unsigned long)busy_e, (unsigned long)hook_fail_e,
+            (unsigned long)sh->t15_cm4_hook_fail, (unsigned long)e.overlap, (unsigned long)sh->t15_cm4_overlap[3]);
+    APP_LOG("[m7_gpio_test] INFO T15 (e) calls: locked=%lu ok CM7=%lu + CM4=%lu = %lu (iters CM7=%lu CM4=%lu)",
+            (unsigned long)sh->t15_locked_calls, (unsigned long)e.ok, (unsigned long)sh->t15_cm4_ok[3],
+            (unsigned long)ok_sum_e, (unsigned long)T15_DRV_ITERS, (unsigned long)sh->t15_cm4_calls[3]);
+    APP_LOG("[m7_gpio_test] INFO T15 (f) CM7 hand RMW vs TIM17 ISR at %lu Hz: corr=%lu ISR in loop=%lu of %lu (expect >0)",
+            (unsigned long)isr_rate, (unsigned long)corr_f, (unsigned long)f_isr_in_loop, (unsigned long)f_isr_count);
+    APP_LOG("[m7_gpio_test] INFO T15 (f) detail: main=%lu ISR=%lu ISR err=%lu",
+            (unsigned long)f.corr, (unsigned long)f_isr_corr, (unsigned long)f_isr_err);
+    APP_LOG("[m7_gpio_test] INFO T15 (g) CM7 gpio_bm vs TIM17 ISR: corr=%lu ISR in loop=%lu of %lu (expect 0)",
+            (unsigned long)corr_g, (unsigned long)g_isr_in_loop, (unsigned long)g_isr_count);
+    APP_LOG("[m7_gpio_test] INFO T15 (g) detail: main=%lu verify=%lu other=%lu ISR=%lu ISR err=%lu",
+            (unsigned long)g.corr, (unsigned long)g.verify, (unsigned long)g.other,
+            (unsigned long)g_isr_corr, (unsigned long)g_isr_err);
+
+    if (!xcore_ok)
     {
-        APP_LOG("[m7_gpio_test] T15 FAIL: TIMEOUT waiting for CM4 phase (c) in_loop=0");
-        pass = false;
-        goto exit;
-    }
-
-    /* Restore PF10 and PF11 to input mode (00) */
-    GPIOF->MODER &= ~((3UL << (10U * 2U)) | (3UL << (11U * 2U)));
-
-    uint32_t overlap_cm4 = GPIO_TEST_SHARED->t15_cm4_overlap_cnt;
-    uint32_t cm4_c = GPIO_TEST_SHARED->t15_cm4_corruptions_c;
-    uint32_t total_c = corruptions_c + cm4_c;
-    GPIO_TEST_SHARED->t15_corruptions_phase_c = total_c;
-
-    APP_LOG("[m7_gpio_test] INFO T15 phase (a) CM7 solo: corruptions=%lu (expected 0)", (unsigned long)corruptions_a);
-    APP_LOG("[m7_gpio_test] INFO T15 phase (b) CM4 solo: corruptions=%lu (expected 0)", (unsigned long)corruptions_b);
-    APP_LOG("[m7_gpio_test] INFO T15 phase (c) concurrent: total_corruptions=%lu (CM7=%lu, CM4=%lu, overlap CM7=%lu, CM4=%lu)",
-            (unsigned long)total_c, (unsigned long)corruptions_c, (unsigned long)cm4_c, (unsigned long)overlap_cm7, (unsigned long)overlap_cm4);
-
-    if (corruptions_a != 0U || corruptions_b != 0U || total_c == 0U || overlap_cm7 == 0U || overlap_cm4 == 0U)
-    {
+        APP_LOG("[m7_gpio_test] INFO T15 FAIL: a CM4 phase did not acknowledge in time");
         pass = false;
     }
+    if ((corr_a != 0U) || (corr_b != 0U))                                   { pass = false; }
+    if ((corr_c == 0U) || (c.overlap == 0U) || (sh->t15_cm4_overlap[1] == 0U)) { pass = false; }
+    if ((corr_d == 0U) || (d.overlap == 0U) || (sh->t15_cm4_overlap[2] == 0U)) { pass = false; }
+    if ((corr_e != 0U) || (busy_e != 0U) || (hook_fail_e != 0U) || (sh->t15_cm4_hook_fail != 0U) ||
+        (e.overlap == 0U) || (sh->t15_cm4_overlap[3] == 0U) ||
+        (sh->t15_locked_calls != ok_sum_e) ||
+        (e.ok != T15_DRV_ITERS) || (sh->t15_cm4_ok[3] != sh->t15_cm4_calls[3]))  { pass = false; }
+    if ((corr_f == 0U) || (f_isr_in_loop == 0U))                              { pass = false; }
+    if ((corr_g != 0U) || (g_isr_in_loop == 0U))                              { pass = false; }
 
     APP_LOG("[m7_gpio_test] T15 VERDICT: %s", pass ? "PASS" : "FAIL");
-
-exit:
     if (!pass)
     {
         bench_safe();
     }
+    return pass;
+}
+
+/* ---- T1: refusals touch nothing -------------------------------------------- */
+
+#define PHOTO_PORTS     11U
+#define PHOTO_REGS      8U
+
+typedef struct
+{
+    uint32_t enr_c1;
+    uint32_t enr_c2;
+    uint32_t regs[PHOTO_PORTS][PHOTO_REGS];
+} GpioPhoto_t;
+
+/* Every configuration register of every clocked port, LCKR, and both banks of
+   RCC_AHB4ENR. A port clocked by neither core is not read: its registers can
+   only change after a clock enable, which the RCC words show. */
+static void photo_take(GpioPhoto_t *ph)
+{
+    ph->enr_c1 = RCC_C1->AHB4ENR;
+    ph->enr_c2 = RCC_C2->AHB4ENR;
+    uint32_t clocked = ph->enr_c1 | ph->enr_c2;
+
+    for (uint32_t p = 0U; p < PHOTO_PORTS; p++)
+    {
+        if ((clocked & (1UL << p)) == 0U)
+        {
+            for (uint32_t r = 0U; r < PHOTO_REGS; r++)
+            {
+                ph->regs[p][r] = 0U;
+            }
+            continue;
+        }
+        const GPIO_TypeDef *g = (const GPIO_TypeDef *)(GPIOA_BASE + (p * 0x400UL));
+        ph->regs[p][0] = g->MODER;
+        ph->regs[p][1] = g->OTYPER;
+        ph->regs[p][2] = g->OSPEEDR;
+        ph->regs[p][3] = g->PUPDR;
+        ph->regs[p][4] = g->AFR[0];
+        ph->regs[p][5] = g->AFR[1];
+        ph->regs[p][6] = g->ODR;
+        ph->regs[p][7] = g->LCKR;
+    }
+}
+
+static bool photo_equal(const GpioPhoto_t *x, const GpioPhoto_t *y)
+{
+    return memcmp(x, y, sizeof(*x)) == 0;
+}
+
+/* A port clocked by neither core: a refusal that enabled its clock first
+   would show in RCC_AHB4ENR. Searched from GPIOK down. */
+static GPIO_TypeDef *t1_unclocked_port(char *letter)
+{
+    uint32_t clocked = RCC_C1->AHB4ENR | RCC_C2->AHB4ENR;
+    for (int32_t p = (int32_t)PHOTO_PORTS - 1; p >= 0; p--)
+    {
+        if ((clocked & (1UL << (uint32_t)p)) == 0U)
+        {
+            *letter = (char)('A' + p);
+            return (GPIO_TypeDef *)(GPIOA_BASE + ((uint32_t)p * 0x400UL));
+        }
+    }
+    *letter = '?';
+    return NULL;
+}
+
+typedef struct
+{
+    uint32_t cases;
+    uint32_t failed;
+} T1Stats_t;
+
+static GpioPhoto_t s_ph_before;
+static GpioPhoto_t s_ph_after;
+
+static void t1_check(const char *name, uint32_t got, uint32_t exp, T1Stats_t *st)
+{
+    bool same = photo_equal(&s_ph_before, &s_ph_after);
+    bool ok = (got == exp) && same;
+    st->cases++;
+    if (!ok)
+    {
+        st->failed++;
+    }
+    APP_LOG("[m7_gpio_test] INFO T1 %-22s got=%lu exp=%lu photo=%s %s",
+            name, (unsigned long)got, (unsigned long)exp, same ? "same" : "CHANGED", ok ? "OK" : "FAIL");
+}
+
+/* Photo, call, photo, all with PRIMASK set: no CM7 task or ISR writes a GPIO
+   in between, and CM4 is waiting for its next job. */
+#define T1_CASE(name, call_expr, expected)                           \
+    do {                                                             \
+        uint32_t pm_ = __get_PRIMASK();                              \
+        __disable_irq();                                             \
+        photo_take(&s_ph_before);                                    \
+        uint32_t got_ = (uint32_t)(call_expr);                       \
+        photo_take(&s_ph_after);                                     \
+        __set_PRIMASK(pm_);                                          \
+        t1_check((name), got_, (uint32_t)(expected), &st);           \
+    } while (0)
+
+static bool test_t1_reject(void)
+{
+    T1Stats_t st = {0};
+    char letter;
+    bool pass = true;
+
+    bench_enter_step(GPIO_BENCH_STEP_T1_REJECT);
+
+    GPIO_TypeDef *P = t1_unclocked_port(&letter);
+    if (P == NULL)
+    {
+        APP_LOG("[m7_gpio_test] INFO T1 no port is unclocked in both cores: the clock of a refusal cannot be checked");
+        pass = false;
+    }
+    else
+    {
+        APP_LOG("[m7_gpio_test] INFO T1 unclocked port used for field cases: GPIO%c", letter);
+
+        GPIO_TypeDef *const misaligned = (GPIO_TypeDef *)(GPIOA_BASE + 4U);
+        GPIO_TypeDef *const past_k     = (GPIO_TypeDef *)(GPIOK_BASE + 0x400U);
+        GpioBm_PinConfig_t cfg;
+
+#define CFG(p_, pin_, mode_, ot_, sp_, pu_, af_, lvl_)                                   \
+        (cfg = (GpioBm_PinConfig_t){ .port = (p_), .pin_idx = (pin_), .mode = (mode_),   \
+                                     .otype = (ot_), .speed = (sp_), .pull = (pu_),       \
+                                     .af = (af_), .initial_level = (lvl_),                \
+                                     .allow_debug_pins = false }, &cfg)
+
+        T1_CASE("ConfigPin(NULL)",      GPIO_BM_ConfigPin(NULL),                                 GPIO_BM_ERR_PARAM);
+        T1_CASE("port NULL",            GPIO_BM_ConfigPin(CFG(NULL, 0U, 0U, 0U, 0U, 0U, 0U, 0U)),       GPIO_BM_ERR_PARAM);
+        T1_CASE("GPIOA+4",              GPIO_BM_ConfigPin(CFG(misaligned, 0U, 0U, 0U, 0U, 0U, 0U, 0U)), GPIO_BM_ERR_PARAM);
+        T1_CASE("past GPIOK",           GPIO_BM_ConfigPin(CFG(past_k, 0U, 0U, 0U, 0U, 0U, 0U, 0U)),     GPIO_BM_ERR_PARAM);
+        T1_CASE("pin 16",               GPIO_BM_ConfigPin(CFG(P, 16U, 0U, 0U, 0U, 0U, 0U, 0U)),         GPIO_BM_ERR_PARAM);
+        T1_CASE("AF 16",                GPIO_BM_ConfigPin(CFG(P, 0U, 2U, 0U, 0U, 0U, 16U, 0U)),         GPIO_BM_ERR_PARAM);
+        T1_CASE("pull 3",               GPIO_BM_ConfigPin(CFG(P, 0U, 0U, 0U, 0U, 3U, 0U, 0U)),          GPIO_BM_ERR_PARAM);
+        T1_CASE("speed 4",              GPIO_BM_ConfigPin(CFG(P, 0U, 1U, 0U, 4U, 0U, 0U, 0U)),          GPIO_BM_ERR_PARAM);
+        T1_CASE("mode 4",               GPIO_BM_ConfigPin(CFG(P, 0U, 4U, 0U, 0U, 0U, 0U, 0U)),          GPIO_BM_ERR_PARAM);
+        T1_CASE("level 2",              GPIO_BM_ConfigPin(CFG(P, 0U, 1U, 0U, 0U, 0U, 0U, 2U)),          GPIO_BM_ERR_PARAM);
+        T1_CASE("analog + pull",        GPIO_BM_ConfigPin(CFG(P, 0U, 3U, 0U, 0U, 1U, 0U, 0U)),          GPIO_BM_ERR_PARAM);
+        T1_CASE("otype 2",              GPIO_BM_ConfigPin(CFG(P, 0U, 1U, 2U, 0U, 0U, 0U, 0U)),          GPIO_BM_ERR_PARAM);
+        T1_CASE("PA13",                 GPIO_BM_ConfigPin(CFG(GPIOA, 13U, 0U, 0U, 0U, 0U, 0U, 0U)),     GPIO_BM_ERR_DEBUG_PIN);
+        T1_CASE("PA14",                 GPIO_BM_ConfigPin(CFG(GPIOA, 14U, 0U, 0U, 0U, 0U, 0U, 0U)),     GPIO_BM_ERR_DEBUG_PIN);
+        T1_CASE("ConfigOutput speed 4", GPIO_BM_ConfigOutput(P, 0U, 0U, 4U, 0U, 0U),             GPIO_BM_ERR_PARAM);
+        T1_CASE("ConfigInput pull 3",   GPIO_BM_ConfigInput(P, 0U, 3U),                          GPIO_BM_ERR_PARAM);
+        T1_CASE("AlternateEx af 16",    GPIO_BM_ConfigAlternateEx(P, 0U, 16U, 0U, 0U, 0U),       GPIO_BM_ERR_PARAM);
+        T1_CASE("DeinitPin GPIOA+4",    GPIO_BM_DeinitPin(misaligned, 0U),                       GPIO_BM_ERR_PARAM);
+        T1_CASE("DeinitPin pin 16",     GPIO_BM_DeinitPin(P, 16U),                               GPIO_BM_ERR_PARAM);
+        T1_CASE("DeinitPin PA13",       GPIO_BM_DeinitPin(GPIOA, 13U),                           GPIO_BM_ERR_DEBUG_PIN);
+        T1_CASE("LockPins mask 0",      GPIO_BM_LockPins(P, 0U),                                 GPIO_BM_ERR_PARAM);
+        T1_CASE("LockPins mask 1<<16",  GPIO_BM_LockPins(P, 0x10000U),                           GPIO_BM_ERR_PARAM);
+        T1_CASE("LockPins past GPIOK",  GPIO_BM_LockPins(past_k, 1U),                            GPIO_BM_ERR_PARAM);
+        T1_CASE("ReadConfig out NULL",  GPIO_BM_ReadConfig(P, 0U, NULL),                         GPIO_BM_ERR_PARAM);
+        /* Legacy API (G3, G4): false and nothing written. */
+        T1_CASE("legacy AF pull 3",     GPIO_BM_ConfigAlternate(P, 0U, 7U, 3U, 0U),              0U);
+        T1_CASE("legacy AF speed 4",    GPIO_BM_ConfigAlternate(P, 0U, 7U, 0U, 4U),              0U);
+        T1_CASE("legacy AF af 16",      GPIO_BM_ConfigAlternate(P, 0U, 16U, 0U, 0U),             0U);
+        T1_CASE("legacy analog +4",     GPIO_BM_ConfigAnalog(misaligned, 0U),                    0U);
+        T1_CASE("EnableClock GPIOA+4",  GPIO_BM_EnablePortClock(misaligned),                     0U);
+        T1_CASE("EnableClock past K",   GPIO_BM_EnablePortClock(past_k),                         0U);
+#undef CFG
+    }
+
+    /* Control: a valid call does change the photo, so the comparator sees a change. */
+    bool control_changed = false;
+    if (bench_claim_output(GPIOF, 9U))
+    {
+        uint32_t pm = __get_PRIMASK();
+        __disable_irq();
+        photo_take(&s_ph_before);
+        GpioBm_Status_t r = GPIO_BM_ConfigOutput(GPIOF, 9U, GPIO_BM_OTYPE_OD, GPIO_BM_SPEED_HIGH,
+                                                 GPIO_BM_PULL_UP, 1U);
+        photo_take(&s_ph_after);
+        __set_PRIMASK(pm);
+        control_changed = (r == GPIO_BM_OK) && !photo_equal(&s_ph_before, &s_ph_after);
+        (void)GPIO_BM_DeinitPin(GPIOF, 9U);
+    }
+    APP_LOG("[m7_gpio_test] INFO T1 control: valid ConfigOutput(PF9) changed the photo: %s",
+            control_changed ? "yes" : "NO");
+
+    bool cm7_pass = pass && (st.failed == 0U) && control_changed;
+    APP_LOG("[m7_gpio_test] INFO T1 CM7: cases=%lu failed=%lu control=%s -> %s",
+            (unsigned long)st.cases, (unsigned long)st.failed, control_changed ? "changed" : "unchanged",
+            cm7_pass ? "PASS" : "FAIL");
+
+    /* CM4 runs its own T1 with CM7 parked. */
+    bool cm4_ok = cm4_run_parked(GPIO_ST_CMD_T1);
+    volatile GpioSelfTestShared_t *sh = GPIO_TEST_SHARED;
+    APP_LOG("[m7_gpio_test] INFO T1 CM4: cases=%lu failed=%lu control=%s -> %s%s",
+            (unsigned long)sh->t1_cm4_cases, (unsigned long)sh->t1_cm4_failed_cases,
+            (sh->t1_cm4_control_changed != 0U) ? "changed" : "unchanged",
+            (sh->t1_cm4_pass != 0U) ? "PASS" : "FAIL", cm4_ok ? "" : " (no ack)");
+
+    pass = cm7_pass && cm4_ok && (sh->t1_cm4_pass != 0U);
+    APP_LOG("[m7_gpio_test] T1 VERDICT: %s", pass ? "PASS" : "FAIL");
+    return pass;
+}
+
+/* ---- T2: same bits as HAL_GPIO_Init, and legacy as in ca569b6 --------------- */
+
+typedef struct
+{
+    uint32_t moder, otyper, ospeedr, pupdr, afr;
+} PinFields_t;
+
+static PinFields_t pin_fields(const GPIO_TypeDef *g, uint32_t pin)
+{
+    PinFields_t f;
+    f.moder   = (g->MODER   >> (pin * 2U)) & 3U;
+    f.otyper  = (g->OTYPER  >> pin) & 1U;
+    f.ospeedr = (g->OSPEEDR >> (pin * 2U)) & 3U;
+    f.pupdr   = (g->PUPDR   >> (pin * 2U)) & 3U;
+    f.afr     = (g->AFR[pin >> 3U] >> ((pin & 7U) * 4U)) & 0xFU;
+    return f;
+}
+
+static bool fields_equal(const PinFields_t *x, const PinFields_t *y)
+{
+    return (x->moder == y->moder) && (x->otyper == y->otyper) && (x->ospeedr == y->ospeedr) &&
+           (x->pupdr == y->pupdr) && (x->afr == y->afr);
+}
+
+/* Test-side writer for start states: plain RMW on unwired PF6..PF9, claimed. */
+static void pin_force(GPIO_TypeDef *g, uint32_t pin, const PinFields_t *f)
+{
+    g->OTYPER  = (g->OTYPER  & ~(1UL << pin))            | (f->otyper << pin);
+    g->OSPEEDR = (g->OSPEEDR & ~(3UL << (pin * 2U)))     | (f->ospeedr << (pin * 2U));
+    g->PUPDR   = (g->PUPDR   & ~(3UL << (pin * 2U)))     | (f->pupdr << (pin * 2U));
+    g->AFR[pin >> 3U] = (g->AFR[pin >> 3U] & ~(0xFUL << ((pin & 7U) * 4U))) | (f->afr << ((pin & 7U) * 4U));
+    g->MODER   = (g->MODER   & ~(3UL << (pin * 2U)))     | (f->moder << (pin * 2U));
+}
+
+/* The legacy bodies as they were in ca569b6, verbatim except for the clock
+   enable (GPIOF is already clocked). The oracle for "the legacy path leaves
+   the same bits as in ca569b6". */
+static void ref_ca569b6_config_alternate(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af, uint32_t pull, uint32_t speed)
+{
+    uint32_t afr_idx   = pin_idx >> 3U;
+    uint32_t afr_shift = (pin_idx & 7U) * 4U;
+    port->AFR[afr_idx] = (port->AFR[afr_idx] & ~(0xFU << afr_shift)) | ((af & 0xFU) << afr_shift);
+    port->OTYPER &= ~(1UL << pin_idx);
+    uint32_t pos2 = pin_idx * 2U;
+    port->OSPEEDR = (port->OSPEEDR & ~(0x3UL << pos2)) | ((speed & 0x3UL) << pos2);
+    port->PUPDR = (port->PUPDR & ~(0x3UL << pos2)) | ((pull & 0x3UL) << pos2);
+    port->MODER = (port->MODER & ~(0x3UL << pos2)) | (0x2UL << pos2);
+}
+
+static void ref_ca569b6_config_analog(GPIO_TypeDef *port, uint32_t pin_idx)
+{
+    uint32_t pos2 = pin_idx * 2U;
+    port->MODER |= (0x3UL << pos2);
+    port->PUPDR &= ~(0x3UL << pos2);
+}
+
+static const PinFields_t k_t2_start[2] = {
+    { .moder = 3U, .otyper = 1U, .ospeedr = 2U, .pupdr = 1U, .afr = 5U },
+    { .moder = 1U, .otyper = 0U, .ospeedr = 1U, .pupdr = 2U, .afr = 10U },
+};
+
+static uint32_t hal_mode(uint32_t mode, uint32_t otype)
+{
+    switch (mode)
+    {
+        case GPIO_BM_MODE_INPUT:  return GPIO_MODE_INPUT;
+        case GPIO_BM_MODE_OUTPUT: return (otype != 0U) ? GPIO_MODE_OUTPUT_OD : GPIO_MODE_OUTPUT_PP;
+        case GPIO_BM_MODE_AF:     return (otype != 0U) ? GPIO_MODE_AF_OD : GPIO_MODE_AF_PP;
+        default:                  return GPIO_MODE_ANALOG;
+    }
+}
+
+static const uint32_t k_hal_pull[3] = { GPIO_NOPULL, GPIO_PULLUP, GPIO_PULLDOWN };
+static const uint32_t k_t2_afs[3]   = { 0U, 7U, 15U };
+
+typedef struct
+{
+    uint32_t combos, compared, refused, mismatches, odr_bad, legacy_bad;
+} T2Stats_t;
+
+static void t2_report_mismatch(const char *what, uint32_t pin, const PinFields_t *a, const PinFields_t *b, T2Stats_t *st)
+{
+    if (st->mismatches + st->legacy_bad + st->odr_bad <= 8U)
+    {
+        APP_LOG("[m7_gpio_test] INFO T2 MISMATCH %s PF%lu drv M%lu T%lu S%lu P%lu A%lu ref M%lu T%lu S%lu P%lu A%lu",
+                what, (unsigned long)pin,
+                (unsigned long)a->moder, (unsigned long)a->otyper, (unsigned long)a->ospeedr, (unsigned long)a->pupdr, (unsigned long)a->afr,
+                (unsigned long)b->moder, (unsigned long)b->otyper, (unsigned long)b->ospeedr, (unsigned long)b->pupdr, (unsigned long)b->afr);
+    }
+}
+
+static bool test_t2_parity(void)
+{
+    T2Stats_t st = {0};
+    bool claims = true;
+    PinFields_t last_drv = {0}, last_ref = {0};
+    bool have_last = false;
+
+    bench_enter_step(GPIO_BENCH_STEP_T2_PARITY);
+
+    for (uint32_t pin = 6U; pin <= 9U; pin++)
+    {
+        claims = claims && bench_claim_output(GPIOF, pin);
+    }
+    if (!claims)
+    {
+        APP_LOG("[m7_gpio_test] INFO T2 bench_claim_output rejected PF6..PF9");
+        APP_LOG("[m7_gpio_test] T2 VERDICT: FAIL");
+        bench_safe();
+        return false;
+    }
+
+    /* Pairs: the driver writes the first pin, HAL_GPIO_Init the second. PF6/PF7
+       exercise AFR[0], PF8/PF9 AFR[1]. */
+    static const uint32_t pairs[2][2] = { { 6U, 7U }, { 8U, 9U } };
+
+    for (uint32_t mode = 0U; mode < 4U; mode++)
+    for (uint32_t ot = 0U; ot < 2U; ot++)
+    for (uint32_t sp = 0U; sp < 4U; sp++)
+    for (uint32_t pu = 0U; pu < 3U; pu++)
+    for (uint32_t ai = 0U; ai < 3U; ai++)
+    {
+        uint32_t level = st.combos & 1U;
+        st.combos++;
+
+        for (uint32_t pr = 0U; pr < 2U; pr++)
+        for (uint32_t sv = 0U; sv < 2U; sv++)
+        {
+            uint32_t pd = pairs[pr][0];
+            uint32_t ph = pairs[pr][1];
+            GpioBm_PinConfig_t cfg = {
+                .port = GPIOF, .pin_idx = pd, .mode = mode, .otype = ot, .speed = sp,
+                .pull = pu, .af = k_t2_afs[ai], .initial_level = level, .allow_debug_pins = false,
+            };
+
+            pin_force(GPIOF, pd, &k_t2_start[sv]);
+            pin_force(GPIOF, ph, &k_t2_start[sv]);
+
+            GpioBm_Status_t r = GPIO_BM_ConfigPin(&cfg);
+            if ((mode == GPIO_BM_MODE_ANALOG) && (pu != GPIO_BM_PULL_NONE))
+            {
+                /* C6 refuses analog with pull; HAL has no such rule (G7). */
+                st.refused++;
+                if (r != GPIO_BM_ERR_PARAM)
+                {
+                    st.mismatches++;
+                }
+                continue;
+            }
+
+            GPIO_InitTypeDef init = {
+                .Pin = (1UL << ph), .Mode = hal_mode(mode, ot), .Pull = k_hal_pull[pu],
+                .Speed = sp, .Alternate = k_t2_afs[ai],
+            };
+            HAL_GPIO_Init(GPIOF, &init);
+
+            PinFields_t fd = pin_fields(GPIOF, pd);
+            PinFields_t fh = pin_fields(GPIOF, ph);
+            st.compared++;
+            if ((r != GPIO_BM_OK) || !fields_equal(&fd, &fh))
+            {
+                t2_report_mismatch("cfg", pd, &fd, &fh, &st);
+                st.mismatches++;
+            }
+            else
+            {
+                last_drv = fd;
+                last_ref = fh;
+                have_last = true;
+            }
+            /* ODR: HAL does not write it; RM0399 12.4.6 does: BSRR set/reset. */
+            if ((mode == GPIO_BM_MODE_OUTPUT) && (((GPIOF->ODR >> pd) & 1U) != level))
+            {
+                st.odr_bad++;
+            }
+        }
+    }
+
+    /* Legacy calls with the consumers' arguments, against the ca569b6 bodies. */
+    for (uint32_t pr = 0U; pr < 2U; pr++)
+    for (uint32_t sv = 0U; sv < 2U; sv++)
+    {
+        uint32_t pd = pairs[pr][0];
+        uint32_t ph = pairs[pr][1];
+
+        pin_force(GPIOF, pd, &k_t2_start[sv]);
+        pin_force(GPIOF, ph, &k_t2_start[sv]);
+        bool ok_alt = GPIO_BM_ConfigAlternate(GPIOF, pd, 7U, GPIO_BM_PULL_UP, GPIO_BM_SPEED_VERY_HIGH);
+        ref_ca569b6_config_alternate(GPIOF, ph, 7U, GPIO_BM_PULL_UP, GPIO_BM_SPEED_VERY_HIGH);
+        PinFields_t fd = pin_fields(GPIOF, pd), fh = pin_fields(GPIOF, ph);
+        if (!ok_alt || !fields_equal(&fd, &fh))
+        {
+            t2_report_mismatch("legacy uart AF7", pd, &fd, &fh, &st);
+            st.legacy_bad++;
+        }
+
+        pin_force(GPIOF, pd, &k_t2_start[sv]);
+        pin_force(GPIOF, ph, &k_t2_start[sv]);
+        bool ok_an = GPIO_BM_ConfigAnalog(GPIOF, pd);
+        ref_ca569b6_config_analog(GPIOF, ph);
+        fd = pin_fields(GPIOF, pd);
+        fh = pin_fields(GPIOF, ph);
+        if (!ok_an || !fields_equal(&fd, &fh))
+        {
+            t2_report_mismatch("legacy adc analog", pd, &fd, &fh, &st);
+            st.legacy_bad++;
+        }
+    }
+
+    /* Control: an image altered on purpose must be seen as different. */
+    bool control_detected = false;
+    if (have_last)
+    {
+        PinFields_t altered = last_ref;
+        altered.ospeedr ^= 1U;
+        control_detected = !fields_equal(&last_drv, &altered);
+    }
+
+    /* Back to the reset state (analog) for the unwired pins. */
+    for (uint32_t pin = 6U; pin <= 9U; pin++)
+    {
+        (void)GPIO_BM_DeinitPin(GPIOF, pin);
+    }
+
+    bool cm7_pass = (st.mismatches == 0U) && (st.odr_bad == 0U) && (st.legacy_bad == 0U) &&
+                    control_detected && (st.compared > 0U);
+    APP_LOG("[m7_gpio_test] INFO T2 CM7 vs HAL_GPIO_Init: combos=%lu compared=%lu refused(analog+pull)=%lu",
+            (unsigned long)st.combos, (unsigned long)st.compared, (unsigned long)st.refused);
+    APP_LOG("[m7_gpio_test] INFO T2 CM7: mismatches=%lu odr_bad=%lu legacy_bad=%lu control=%s -> %s",
+            (unsigned long)st.mismatches, (unsigned long)st.odr_bad, (unsigned long)st.legacy_bad,
+            control_detected ? "detected" : "MISSED", cm7_pass ? "PASS" : "FAIL");
+
+    bool cm4_ok = cm4_run_parked(GPIO_ST_CMD_T2);
+    volatile GpioSelfTestShared_t *sh = GPIO_TEST_SHARED;
+    APP_LOG("[m7_gpio_test] INFO T2 CM4 vs RM table: combos=%lu mismatches=%lu control=%s -> %s%s",
+            (unsigned long)sh->t2_cm4_combos, (unsigned long)sh->t2_cm4_mismatches,
+            (sh->t2_cm4_control_detected != 0U) ? "detected" : "MISSED",
+            (sh->t2_cm4_pass != 0U) ? "PASS" : "FAIL", cm4_ok ? "" : " (no ack)");
+
+    bool pass = cm7_pass && cm4_ok && (sh->t2_cm4_pass != 0U);
+    APP_LOG("[m7_gpio_test] T2 VERDICT: %s", pass ? "PASS" : "FAIL");
+    return pass;
+}
+
+/* ---- B1: measurements, recorded only ------------------------------------------ */
+
+#define B1_SAMPLES      1000U
+
+static void b1_measure(bool with_hook, uint32_t *mn, uint32_t *mx)
+{
+    *mn = 0xFFFFFFFFU;
+    *mx = 0U;
+    GPIO_BM_SetSharedLock(with_hook ? &k_t15_hook : NULL);
+    for (uint32_t i = 0U; i < B1_SAMPLES; i++)
+    {
+        const GpioBm_PinConfig_t *cfg = ((i & 1U) != 0U) ? &k_pf10_out : &k_pf10_in;
+        uint32_t pm = __get_PRIMASK();
+        __disable_irq();
+        uint32_t t0 = DWT->CYCCNT;
+        (void)GPIO_BM_ConfigPin(cfg);
+        uint32_t dt = DWT->CYCCNT - t0;
+        __set_PRIMASK(pm);
+        if (dt < *mn) { *mn = dt; }
+        if (dt > *mx) { *mx = dt; }
+    }
+    GPIO_BM_SetSharedLock(NULL);
+}
+
+/* Cycles -> hundredths of a microsecond, for printing without floats. */
+static uint32_t cyc_to_cus(uint32_t cycles, uint32_t cycles_per_us)
+{
+    return (uint32_t)(((uint64_t)cycles * 100U) / cycles_per_us);
+}
+
+static void b1_print(const char *what, uint32_t cycles, uint32_t cycles_per_us)
+{
+    uint32_t cus = cyc_to_cus(cycles, cycles_per_us);
+    APP_LOG("[m7_gpio_test] INFO B1 %s: %lu cycles = %lu.%02lu us",
+            what, (unsigned long)cycles, (unsigned long)(cus / 100U), (unsigned long)(cus % 100U));
+}
+
+static bool test_b1_measure(void)
+{
+    bench_enter_step(GPIO_BENCH_STEP_B1_MEASURE);
+
+    if (!bench_claim_output(GPIOF, 10U))
+    {
+        APP_LOG("[m7_gpio_test] B1 DONE: INCOMPLETE");
+        return false;
+    }
+
+    uint32_t nh_min, nh_max, h_min, h_max;
+    b1_measure(false, &nh_min, &nh_max);
+    b1_measure(true, &h_min, &h_max);
+    GPIOF->MODER &= ~(3UL << PF10_SHIFT);
+
+    b1_print("CM7 ConfigPin, no hook, max", nh_max, CM7_CYCLES_PER_US);
+    b1_print("CM7 ConfigPin, no hook, min", nh_min, CM7_CYCLES_PER_US);
+    b1_print("CM7 ConfigPin, hook, max", h_max, CM7_CYCLES_PER_US);
+    b1_print("CM7 ConfigPin, hook, min", h_min, CM7_CYCLES_PER_US);
+    b1_print("CM7 T15(e) lock hold max", s_b1_hold_max_e, CM7_CYCLES_PER_US);
+    b1_print("CM7 T15(e) lock() entry to unlock max", s_b1_primask_max_e, CM7_CYCLES_PER_US);
+
+    bool cm4_ok = cm4_run_parked(GPIO_ST_CMD_B1);
+    volatile GpioSelfTestShared_t *sh = GPIO_TEST_SHARED;
+    const uint32_t c4 = 200U;
+    b1_print("CM4 ConfigPin, no hook, max", sh->b1_cm4_cfg_nohook_max, c4);
+    b1_print("CM4 ConfigPin, no hook, min", sh->b1_cm4_cfg_nohook_min, c4);
+    b1_print("CM4 ConfigPin, hook, max", sh->b1_cm4_cfg_hook_max, c4);
+    b1_print("CM4 ConfigPin, hook, min", sh->b1_cm4_cfg_hook_min, c4);
+    b1_print("CM4 T15(e) lock hold max", sh->b1_cm4_hold_max, c4);
+    b1_print("CM4 T15(e) lock() entry to unlock max", sh->b1_cm4_primask_max, c4);
+
+    bool complete = cm4_ok && (sh->b1_cm4_done != 0U) && (nh_max != 0U) && (h_max != 0U) &&
+                    (s_b1_hold_max_e != 0U) && (sh->b1_cm4_hold_max != 0U);
+    APP_LOG("[m7_gpio_test] B1 DONE: %s", complete ? "COMPLETE" : "INCOMPLETE");
+    return complete;
+}
+
+/* ---- T16: LCKR, the last test of the image -------------------------------------- */
+
+static bool test_t16_lckr(void)
+{
+    bool pass = true;
+    GpioPhoto_t *b = &s_ph_before;
+    GpioPhoto_t *a = &s_ph_after;
+
+    bench_enter_step(GPIO_BENCH_STEP_T16_LCKR);
+
+    for (uint32_t pin = 6U; pin <= 9U; pin++)
+    {
+        pass = pass && bench_claim_output(GPIOF, pin);
+    }
+    if (!pass)
+    {
+        APP_LOG("[m7_gpio_test] INFO T16 bench_claim_output rejected PF6..PF9");
+        APP_LOG("[m7_gpio_test] T16 VERDICT: FAIL");
+        return false;
+    }
+
+    if (s_lckr_boot != 0U)
+    {
+        APP_LOG("[m7_gpio_test] INFO T16 GPIOF was already locked at boot (0x%08lX): not a valid run",
+                (unsigned long)s_lckr_boot);
+        pass = false;
+    }
+
+    /* Known state before locking: input, pull-down, so an ignored OUTPUT
+       write would be visible in MODER, PUPDR and ODR. */
+    for (uint32_t pin = 6U; pin <= 9U; pin++)
+    {
+        (void)GPIO_BM_ConfigInput(GPIOF, pin, GPIO_BM_PULL_DOWN);
+    }
+
+    const uint32_t mask = (1UL << 7U) | (1UL << 8U) | (1UL << 9U);
+    GpioBm_Status_t lk = GPIO_BM_LockPins(GPIOF, mask);
+    uint32_t lckr = GPIOF->LCKR;
+    APP_LOG("[m7_gpio_test] INFO T16 LockPins(PF7..PF9) -> %u, LCKR=0x%08lX", (unsigned int)lk, (unsigned long)lckr);
+    if ((lk != GPIO_BM_OK) || ((lckr & GPIO_LCKR_LCKK) == 0U) || ((lckr & mask) != mask))
+    {
+        pass = false;
+    }
+
+    for (uint32_t pin = 7U; pin <= 9U; pin++)
+    {
+        uint32_t pm = __get_PRIMASK();
+        __disable_irq();
+        photo_take(b);
+        GpioBm_Status_t s1 = GPIO_BM_ConfigOutput(GPIOF, pin, GPIO_BM_OTYPE_OD, GPIO_BM_SPEED_HIGH, GPIO_BM_PULL_UP, 1U);
+        GpioBm_Status_t s2 = GPIO_BM_DeinitPin(GPIOF, pin);
+        bool            s3 = GPIO_BM_ConfigAnalog(GPIOF, pin);
+        bool            s4 = GPIO_BM_IsLocked(GPIOF, pin);
+        photo_take(a);
+        __set_PRIMASK(pm);
+        bool same = photo_equal(b, a);
+        bool ok = (s1 == GPIO_BM_ERR_LOCKED) && (s2 == GPIO_BM_ERR_LOCKED) && !s3 && s4 && same;
+        APP_LOG("[m7_gpio_test] INFO T16 PF%lu: ConfigOutput=%u DeinitPin=%u ConfigAnalog=%u IsLocked=%u photo=%s %s",
+                (unsigned long)pin, (unsigned int)s1, (unsigned int)s2, (unsigned int)s3, (unsigned int)s4,
+                same ? "same" : "CHANGED", ok ? "OK" : "FAIL");
+        pass = pass && ok;
+    }
+
+    /* Control: PF6 is not locked and does change. */
+    {
+        uint32_t pm = __get_PRIMASK();
+        __disable_irq();
+        photo_take(b);
+        GpioBm_Status_t s = GPIO_BM_ConfigOutput(GPIOF, 6U, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 0U);
+        bool locked6 = GPIO_BM_IsLocked(GPIOF, 6U);
+        photo_take(a);
+        __set_PRIMASK(pm);
+        bool changed = !photo_equal(b, a);
+        bool ok = (s == GPIO_BM_OK) && changed && !locked6;
+        APP_LOG("[m7_gpio_test] INFO T16 control PF6 (not locked): ConfigOutput=%u IsLocked=%u photo=%s %s",
+                (unsigned int)s, (unsigned int)locked6, changed ? "changed" : "SAME", ok ? "OK" : "FAIL");
+        pass = pass && ok;
+        (void)GPIO_BM_DeinitPin(GPIOF, 6U);
+    }
+
+    lckr = GPIOF->LCKR;
+    APP_LOG("[m7_gpio_test] INFO T16 LCKK=%lu (stays set until the next reset)",
+            (unsigned long)((lckr & GPIO_LCKR_LCKK) != 0U));
+    APP_LOG("[m7_gpio_test] T16 VERDICT: %s", pass ? "PASS" : "FAIL");
     return pass;
 }
 
@@ -956,12 +1869,12 @@ void GPIO_SelfTest_CM7_Run(void)
     /* Enforce S2 safe state initially */
     bench_safe();
 
-    /* 2. B1: Run T15 dual-core race control FIRST (before host synchronization) */
-    bool t15_pass = test_t15_race_control();
-    if (!t15_pass)
-    {
-        goto test_failed;
-    }
+    /* 2. Tests without the AD2, before host synchronization. CM4 takes part
+          in each through the job channel and finishes after B1. */
+    if (!test_t15_race())  goto test_failed;
+    if (!test_t1_reject()) goto test_failed;
+    if (!test_t2_parity()) goto test_failed;
+    if (!test_b1_measure()) goto test_failed;
 
     /* 3. S8: Announce idle state and wait for host session */
     bench_enter_step(GPIO_BENCH_STEP_IDLE);
@@ -982,6 +1895,9 @@ void GPIO_SelfTest_CM7_Run(void)
     if (!test_t0a_mcu_to_ad2())    goto test_failed;
     if (!test_t0a_ad2_to_mcu())    goto test_failed;
     if (!test_t0a_scope())         goto test_failed;
+
+    /* 5. T16 last: LCKR stays set until the next reset. */
+    if (!test_t16_lckr())          goto test_failed;
 
     bench_enter_step(GPIO_BENCH_STEP_DONE);
 

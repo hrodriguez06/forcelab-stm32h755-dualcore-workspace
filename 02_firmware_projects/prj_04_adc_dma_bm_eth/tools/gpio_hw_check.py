@@ -56,7 +56,19 @@ from tools.monitor import SerialPort
 
 
 # ---- Protocol Constants & Table Parser (gpio_bench_protocol.h) -------------
-GPIO_BENCH_PROTOCOL_VERSION = 1
+PROTOCOL_HEADER = PROJECT_ROOT / "Common" / "Inc" / "gpio_bench_protocol.h"
+
+
+def load_protocol_version(header_path: Optional[pathlib.Path] = None) -> int:
+    """GPIO_BENCH_PROTOCOL_VERSION from the header: one source for both sides."""
+    text = (header_path or PROTOCOL_HEADER).read_text(encoding="utf-8")
+    m = re.search(r"#define\s+GPIO_BENCH_PROTOCOL_VERSION\s+(\d+)U?", text)
+    if not m:
+        raise RuntimeError("GPIO_BENCH_PROTOCOL_VERSION not found in gpio_bench_protocol.h")
+    return int(m.group(1))
+
+
+GPIO_BENCH_PROTOCOL_VERSION = load_protocol_version()
 
 STEP_T15_RACE       = 1
 STEP_IDLE           = 2
@@ -68,6 +80,10 @@ STEP_T0A_HANDSHAKE  = 7
 STEP_T0A_MCU_TO_AD2 = 8
 STEP_T0A_AD2_TO_MCU = 9
 STEP_T0A_SCOPE      = 10
+STEP_T1_REJECT      = 11
+STEP_T2_PARITY      = 12
+STEP_B1_MEASURE     = 13
+STEP_T16_LCKR       = 20
 STEP_DONE           = 99
 
 AD2_DIO_LOOSE_13_MASK = (
@@ -717,10 +733,14 @@ def run_selftest(
     log("[checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.")
     log("================================================================================")
 
-    # Initialize 15-item host verdict checklist (B2: initialized to False)
+    # Host verdict checklist (B2: every item initialized to False)
     checklist_results: dict[str, bool] = {
         "sequence_complete": False,
+        "lckr_clean_at_boot": False,
         "t15_pass": False,
+        "t1_pass": False,
+        "t2_pass": False,
+        "b1_complete": False,
         "cm4_rev_match": False,
         "cm4_pass": False,
         "fw_all_passed": False,
@@ -734,6 +754,7 @@ def run_selftest(
         "t0a_mcu_to_ad2_ctrl": False,
         "t0a_ad2_to_mcu": False,
         "t0a_scope": False,
+        "t16_pass": False,
     }
 
     step_tracker = StepTracker(EXPECTED_STEP_SEQUENCE)
@@ -798,13 +819,30 @@ def run_selftest(
         m_step1 = line_reader.expect(table_pattern("step1_announcement"), timeout_s=10.0)
         step_tracker.validate_announcement(m_step1.group(0), ad2, log_fn=log)
 
-        m_t15 = line_reader.expect(table_pattern("step1_verdict"), timeout_s=15.0)
+        line_reader.expect(table_pattern("step1_lckr_boot"), timeout_s=10.0)
+        checklist_results["lckr_clean_at_boot"] = True
+        log("[host] GPIOF LCKR clean at boot (T16 of the previous run was reset away).")
+
+        m_t15 = line_reader.expect(table_pattern("step1_verdict"), timeout_s=30.0)
         if "PASS" in m_t15.group(0):
             checklist_results["t15_pass"] = True
             rec_measure("HOST_CHECK t15_pass")
             log("[host] T15 dual-core race PASSED.")
         else:
             log("[host] T15 dual-core race FAILED!")
+
+        # Steps 11-13: T1, T2 and B1 run without the AD2; the host only reads.
+        for step_name, verdict_name, item, key, label in (
+            ("step11_announcement", "step11_verdict", "HOST_CHECK t1_pass", "t1_pass", "T1 refusals"),
+            ("step12_announcement", "step12_verdict", "HOST_CHECK t2_pass", "t2_pass", "T2 parity"),
+            ("step13_announcement", "step13_done", "HOST_CHECK b1_complete", "b1_complete", "B1 measurements"),
+        ):
+            m_step = line_reader.expect(table_pattern(step_name), timeout_s=10.0)
+            step_tracker.validate_announcement(m_step.group(0), ad2, log_fn=log)
+            line_reader.expect(table_pattern(verdict_name), timeout_s=30.0)
+            checklist_results[key] = True
+            rec_measure(item)
+            log(f"[host] {label} reported by the firmware.")
 
         # Step 2: IDLE announcement
         m_step2 = line_reader.expect(table_pattern("step2_announcement"), timeout_s=10.0)
@@ -1134,7 +1172,15 @@ def run_selftest(
         else:
             log("[ad2] Scope check FAILED!")
 
-        # 13. Step 99: Final Verdicts and CM4 Drain
+        # 13. Step 20: T16 LCKR, last test of the image
+        m_step20 = line_reader.expect(table_pattern("step20_announcement"), timeout_s=10.0)
+        step_tracker.validate_announcement(m_step20.group(0), ad2, log_fn=log)
+        line_reader.expect(table_pattern("step20_verdict"), timeout_s=10.0)
+        checklist_results["t16_pass"] = True
+        rec_measure("HOST_CHECK t16_pass")
+        log("[host] T16 LCKR reported by the firmware.")
+
+        # 14. Step 99: Final Verdicts and CM4 Drain
         m_step99 = line_reader.expect(table_pattern("step99_announcement"), timeout_s=10.0)
         step_tracker.validate_announcement(m_step99.group(0), ad2, log_fn=log)
         checklist_results["sequence_complete"] = True
@@ -1170,7 +1216,7 @@ def run_selftest(
             if "CM4 VERDICT=PASS" in l:
                 checklist_results["cm4_pass"] = True
 
-        # Explicitly print the 15-item checklist (B2)
+        # Explicitly print the checklist (B2)
         log("================================================================================")
         log("HOST VERDICT CHECKLIST (B2):")
         all_passed = True
