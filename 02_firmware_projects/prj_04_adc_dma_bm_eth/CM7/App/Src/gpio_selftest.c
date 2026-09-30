@@ -17,48 +17,33 @@
 #include <string.h>
 #include <stdbool.h>
 
-/* ---- Bench Step Permission Table (M1) ------------------------------------ */
+/* ---- Bench Step Permission Table (M1, R4-m2) ------------------------------ */
+/* Lines other than the bus. Whether the bus PE8..PE15 may be claimed is not
+   listed here: it comes only from the bus owner of GPIO_BENCH_STEPS_TABLE
+   (bench_step_allows), so the table is the single source and nothing has to
+   be changed in two places. */
 typedef struct {
     uint8_t     step_id;
-    uint8_t     bus_owner;
-    const char *bus_name;
     uint16_t    gpioa_allowed_mask; /* bit 8 = PA8 */
-    uint16_t    gpioe_allowed_mask; /* bits 5, 6, 7, 8..15 */
+    uint16_t    gpioe_solo_mask;    /* bits 5, 6, 7 (Solo MCU); never bus bits */
     uint16_t    gpiof_allowed_mask; /* bits 6..11, 14, 15 */
 } BenchStepPerm_t;
 
-enum {
-#define EXPAND_STEP_BUS_ENUM(id, name, bus) k_step_bus_##id = (bus),
-    GPIO_BENCH_STEPS_TABLE(EXPAND_STEP_BUS_ENUM)
-#undef EXPAND_STEP_BUS_ENUM
-};
+#define BENCH_GPIOE_BUS_MASK  0xFF00U
 
 static const BenchStepPerm_t k_step_perms[] = {
-    { GPIO_BENCH_STEP_T15_RACE,       k_step_bus_1,  "NONE", 0U,         0U,                                                               (1U << 10) },
-    { GPIO_BENCH_STEP_IDLE,           k_step_bus_2,  "NONE", 0U,         (1U << 7),                                                        0U },
-    { GPIO_BENCH_STEP_T0B_GUARDS,     k_step_bus_3,  "NONE", 0U,         (1U << 7),                                                        0U },
-    { GPIO_BENCH_STEP_T0B_S5_NEG,     k_step_bus_4,  "MCU",  0U,         (1U << 7) | 0xFF00U,                                              0U },
-    { GPIO_BENCH_STEP_T0B_TIMEOUT,    k_step_bus_5,  "NONE", 0U,         (1U << 7),                                                        0U },
-    { GPIO_BENCH_STEP_T0A_LOOSE,      k_step_bus_6,  "NONE", 0U,         (1U << 7),                                                        0U },
-    { GPIO_BENCH_STEP_T0A_HANDSHAKE,  k_step_bus_7,  "NONE", 0U,         (1U << 7),                                                        0U },
-    { GPIO_BENCH_STEP_T0A_MCU_TO_AD2, k_step_bus_8,  "MCU",  (1U << 8), (1U << 5) | (1U << 6) | (1U << 7) | 0xFF00U,                     0U },
-    { GPIO_BENCH_STEP_T0A_AD2_TO_MCU, k_step_bus_9,  "AD2",  0U,         (1U << 7),                                                        0U },
-    { GPIO_BENCH_STEP_T0A_SCOPE,      k_step_bus_10, "NONE", 0U,         (1U << 7),                                                        (1U << 14) | (1U << 15) },
-    { GPIO_BENCH_STEP_DONE,           k_step_bus_99, "NONE", 0U,         (1U << 7),                                                        0U },
+    { GPIO_BENCH_STEP_T15_RACE,       0U,        0U,                                (1U << 10) },
+    { GPIO_BENCH_STEP_IDLE,           0U,        (1U << 7),                         0U },
+    { GPIO_BENCH_STEP_T0B_GUARDS,     0U,        (1U << 7),                         0U },
+    { GPIO_BENCH_STEP_T0B_S5_NEG,     0U,        (1U << 7),                         0U },
+    { GPIO_BENCH_STEP_T0B_TIMEOUT,    0U,        (1U << 7),                         0U },
+    { GPIO_BENCH_STEP_T0A_LOOSE,      0U,        (1U << 7),                         0U },
+    { GPIO_BENCH_STEP_T0A_HANDSHAKE,  0U,        (1U << 7),                         0U },
+    { GPIO_BENCH_STEP_T0A_MCU_TO_AD2, (1U << 8), (1U << 5) | (1U << 6) | (1U << 7), 0U },
+    { GPIO_BENCH_STEP_T0A_AD2_TO_MCU, 0U,        (1U << 7),                         0U },
+    { GPIO_BENCH_STEP_T0A_SCOPE,      0U,        (1U << 7),                         (1U << 14) | (1U << 15) },
+    { GPIO_BENCH_STEP_DONE,           0U,        (1U << 7),                         0U },
 };
-
-/* Single-source bus owner verification: k_step_perms must match GPIO_BENCH_STEPS_TABLE (R2-M3) */
-_Static_assert(k_step_bus_1 == GPIO_BENCH_BUS_NONE, "Step 1 bus mismatch");
-_Static_assert(k_step_bus_2 == GPIO_BENCH_BUS_NONE, "Step 2 bus mismatch");
-_Static_assert(k_step_bus_3 == GPIO_BENCH_BUS_NONE, "Step 3 bus mismatch");
-_Static_assert(k_step_bus_4 == GPIO_BENCH_BUS_MCU,  "Step 4 bus mismatch");
-_Static_assert(k_step_bus_5 == GPIO_BENCH_BUS_NONE, "Step 5 bus mismatch");
-_Static_assert(k_step_bus_6 == GPIO_BENCH_BUS_NONE, "Step 6 bus mismatch");
-_Static_assert(k_step_bus_7 == GPIO_BENCH_BUS_NONE, "Step 7 bus mismatch");
-_Static_assert(k_step_bus_8 == GPIO_BENCH_BUS_MCU,  "Step 8 bus mismatch");
-_Static_assert(k_step_bus_9 == GPIO_BENCH_BUS_AD2,  "Step 9 bus mismatch");
-_Static_assert(k_step_bus_10 == GPIO_BENCH_BUS_NONE, "Step 10 bus mismatch");
-_Static_assert(k_step_bus_99 == GPIO_BENCH_BUS_NONE, "Step 99 bus mismatch");
 
 #define EXPAND_BENCH_ITEM(s, t, p, n, l, b) { (uint8_t)(s), (uint8_t)(t), (uint8_t)(p), (n), (l), (uint8_t)(b) },
 
@@ -132,7 +117,12 @@ static bool bench_step_allows(uint8_t step_id, GPIO_TypeDef *port, uint32_t pin)
     }
     else if (port == GPIOE)
     {
-        return (perm->gpioe_allowed_mask & pin_mask) != 0U;
+        if ((pin_mask & BENCH_GPIOE_BUS_MASK) != 0U)
+        {
+            /* R4-m2: the bus follows the table's owner and nothing else */
+            return bench_get_step_bus_owner(step_id) == GPIO_BENCH_BUS_MCU;
+        }
+        return (perm->gpioe_solo_mask & pin_mask) != 0U;
     }
     else if (port == GPIOF)
     {
