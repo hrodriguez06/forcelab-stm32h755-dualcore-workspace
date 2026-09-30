@@ -207,6 +207,123 @@ class AD2:
         self._dwf.FDwfAnalogInStatusSample(self._hdwf, ctypes.c_int(channel), ctypes.byref(sample))
         return sample.value
 
+    # ---- Measurement instruments (F1a) --------------------------------------
+    # Everything below only listens: DigitalIn and AnalogIn. None of it touches
+    # FDwfDigitalIOOutputEnableSet, and DigitalOut (the pattern generator,
+    # which drives pins on its own) is never used, so S3 stays the only path
+    # by which the AD2 can drive a line.
+
+    DIGITAL_IN_CLOCK_HZ = 100e6
+
+    def _wait_state(self, status_fn, done: int, timeout_s: float) -> bool:
+        sts = ctypes.c_ubyte()
+        t0 = time.monotonic()
+        while True:
+            status_fn(self._hdwf, ctypes.c_int(1), ctypes.byref(sts))
+            if sts.value == done:
+                return True
+            if time.monotonic() - t0 > timeout_s:
+                return False
+            time.sleep(0.001)
+
+    def la_arm(self, rate_hz: float, samples: int, trigger_rise_mask: int = 0,
+               prefill: int = 0) -> tuple[float, int]:
+        """Arm the logic analyzer on DIO0..15 (16-bit samples).
+
+        With `trigger_rise_mask`, the capture starts on a rising edge of any of
+        those DIOs (for example HOST_REQ, which the host raises itself), with
+        `prefill` samples before the trigger. Without it, it starts at once.
+        Returns (actual rate in Hz, buffer size in samples).
+        """
+        div = max(1, int(round(self.DIGITAL_IN_CLOCK_HZ / rate_hz)))
+        max_size = ctypes.c_int()
+        self._dwf.FDwfDigitalInReset(self._hdwf)
+        self._dwf.FDwfDigitalInBufferSizeInfo(self._hdwf, ctypes.byref(max_size))
+        n = min(samples, max_size.value) if max_size.value > 0 else samples
+        self._dwf.FDwfDigitalInDividerSet(self._hdwf, ctypes.c_uint(div))
+        self._dwf.FDwfDigitalInSampleFormatSet(self._hdwf, ctypes.c_int(16))
+        self._dwf.FDwfDigitalInBufferSizeSet(self._hdwf, ctypes.c_int(n))
+        if trigger_rise_mask:
+            self._dwf.FDwfDigitalInTriggerSourceSet(self._hdwf, ctypes.c_ubyte(3))  # trigsrcDetectorDigitalIn
+            self._dwf.FDwfDigitalInTriggerSet(self._hdwf, ctypes.c_uint(0), ctypes.c_uint(0),
+                                              ctypes.c_uint(trigger_rise_mask & 0xFFFF), ctypes.c_uint(0))
+            self._dwf.FDwfDigitalInTriggerPositionSet(self._hdwf, ctypes.c_uint(max(0, n - prefill)))
+        else:
+            self._dwf.FDwfDigitalInTriggerSourceSet(self._hdwf, ctypes.c_ubyte(0))  # trigsrcNone
+        self._dwf.FDwfDigitalInConfigure(self._hdwf, ctypes.c_int(1), ctypes.c_int(1))
+        return self.DIGITAL_IN_CLOCK_HZ / div, n
+
+    def la_read(self, samples: int, timeout_s: float = 2.0) -> Optional[list[int]]:
+        """Wait for the armed capture to finish and return its 16-bit samples,
+        or None when it did not complete (no trigger) within `timeout_s`."""
+        if not self._wait_state(self._dwf.FDwfDigitalInStatus, 2, timeout_s):  # DwfStateDone
+            self._dwf.FDwfDigitalInConfigure(self._hdwf, ctypes.c_int(0), ctypes.c_int(0))
+            return None
+        buf = (ctypes.c_uint16 * samples)()
+        self._dwf.FDwfDigitalInStatusData(self._hdwf, buf, ctypes.c_int(2 * samples))
+        return [int(v) for v in buf]
+
+    def scope_arm_rise(self, rate_hz: float, samples: int, trigger_channel: int,
+                       level_v: float, pre_fraction: float = 0.1, range_v: float = 5.0) -> tuple[float, int]:
+        """Arm both scope channels, triggered by a rising edge of `trigger_channel`
+        through `level_v`, with `pre_fraction` of the buffer before the trigger.
+        Returns (actual rate in Hz, buffer size in samples)."""
+        size_min = ctypes.c_int()
+        size_max = ctypes.c_int()
+        self._dwf.FDwfAnalogInReset(self._hdwf)
+        self._dwf.FDwfAnalogInBufferSizeInfo(self._hdwf, ctypes.byref(size_min), ctypes.byref(size_max))
+        n = min(samples, size_max.value) if size_max.value > 0 else samples
+        for ch in (0, 1):
+            self._dwf.FDwfAnalogInChannelEnableSet(self._hdwf, ctypes.c_int(ch), ctypes.c_int(1))
+            self._dwf.FDwfAnalogInChannelRangeSet(self._hdwf, ctypes.c_int(ch), ctypes.c_double(range_v))
+            self._dwf.FDwfAnalogInChannelOffsetSet(self._hdwf, ctypes.c_int(ch), ctypes.c_double(0.0))
+        self._dwf.FDwfAnalogInFrequencySet(self._hdwf, ctypes.c_double(rate_hz))
+        self._dwf.FDwfAnalogInBufferSizeSet(self._hdwf, ctypes.c_int(n))
+        self._dwf.FDwfAnalogInAcquisitionModeSet(self._hdwf, ctypes.c_int(0))            # acqmodeSingle
+        self._dwf.FDwfAnalogInTriggerSourceSet(self._hdwf, ctypes.c_ubyte(2))            # trigsrcDetectorAnalogIn
+        self._dwf.FDwfAnalogInTriggerAutoTimeoutSet(self._hdwf, ctypes.c_double(0.0))    # wait for a real edge
+        self._dwf.FDwfAnalogInTriggerTypeSet(self._hdwf, ctypes.c_int(0))                # trigtypeEdge
+        self._dwf.FDwfAnalogInTriggerChannelSet(self._hdwf, ctypes.c_int(trigger_channel))
+        self._dwf.FDwfAnalogInTriggerLevelSet(self._hdwf, ctypes.c_double(level_v))
+        self._dwf.FDwfAnalogInTriggerConditionSet(self._hdwf, ctypes.c_int(0))           # rise
+        actual = ctypes.c_double()
+        self._dwf.FDwfAnalogInFrequencyGet(self._hdwf, ctypes.byref(actual))
+        rate = actual.value if actual.value > 0 else rate_hz
+        # Trigger position is relative to the centre of the buffer.
+        self._dwf.FDwfAnalogInTriggerPositionSet(self._hdwf, ctypes.c_double((0.5 - pre_fraction) * n / rate))
+        self._dwf.FDwfAnalogInConfigure(self._hdwf, ctypes.c_int(1), ctypes.c_int(1))
+        return rate, n
+
+    def scope_read(self, samples: int, timeout_s: float = 1.0) -> Optional[tuple[list[float], list[float]]]:
+        """Both channels of the armed capture, or None when nothing triggered."""
+        if not self._wait_state(self._dwf.FDwfAnalogInStatus, 2, timeout_s):
+            self._dwf.FDwfAnalogInConfigure(self._hdwf, ctypes.c_int(0), ctypes.c_int(0))
+            return None
+        out = []
+        for ch in (0, 1):
+            buf = (ctypes.c_double * samples)()
+            self._dwf.FDwfAnalogInStatusData(self._hdwf, ctypes.c_int(ch), buf, ctypes.c_int(samples))
+            out.append([float(v) for v in buf])
+        return out[0], out[1]
+
+    def analog_in_average(self, channel: int, samples: int = 8192, rate_hz: float = 100e3,
+                          range_v: float = 10.0) -> float:
+        """Mean of one untriggered acquisition of `samples` on `channel`."""
+        self._dwf.FDwfAnalogInReset(self._hdwf)
+        self._dwf.FDwfAnalogInChannelEnableSet(self._hdwf, ctypes.c_int(channel), ctypes.c_int(1))
+        self._dwf.FDwfAnalogInChannelRangeSet(self._hdwf, ctypes.c_int(channel), ctypes.c_double(range_v))
+        self._dwf.FDwfAnalogInChannelOffsetSet(self._hdwf, ctypes.c_int(channel), ctypes.c_double(0.0))
+        self._dwf.FDwfAnalogInFrequencySet(self._hdwf, ctypes.c_double(rate_hz))
+        self._dwf.FDwfAnalogInBufferSizeSet(self._hdwf, ctypes.c_int(samples))
+        self._dwf.FDwfAnalogInAcquisitionModeSet(self._hdwf, ctypes.c_int(0))
+        self._dwf.FDwfAnalogInTriggerSourceSet(self._hdwf, ctypes.c_ubyte(0))
+        self._dwf.FDwfAnalogInConfigure(self._hdwf, ctypes.c_int(1), ctypes.c_int(1))
+        if not self._wait_state(self._dwf.FDwfAnalogInStatus, 2, 2.0):
+            raise AD2Error("AnalogIn average: acquisition did not complete")
+        buf = (ctypes.c_double * samples)()
+        self._dwf.FDwfAnalogInStatusData(self._hdwf, ctypes.c_int(channel), buf, ctypes.c_int(samples))
+        return sum(buf) / samples
+
 
 if __name__ == "__main__":
     print("Testing AD2 connection and S3 safety guards...")
