@@ -1441,6 +1441,12 @@ static bool gpiok_unclock(void)
     return ((RCC_C1->AHB4ENR | RCC_C2->AHB4ENR) & RCC_AHB4ENR_GPIOKEN) == 0UL;
 }
 
+/* Test-side oracle for GPIO_BM_IsPortClocked(GPIOK): both RCC banks, raw. */
+static bool gpiok_clocked_raw(void)
+{
+    return ((RCC_C1->AHB4ENR | RCC_C2->AHB4ENR) & RCC_AHB4ENR_GPIOKEN) != 0UL;
+}
+
 /* A1 (audit of 2026-09-30): GPIO_HAL_Init on a port unclocked in both banks.
    Unclocked, the port's registers do not read their real value: on Rev V they
    read all ones (LCKR = 0xFFFFFFFF, so every pin looks locked). Before the fix
@@ -1450,8 +1456,15 @@ static bool gpiok_unclock(void)
      - zeros (the audit's assumption): a lower free pin is written before
        apply() finds the locked one               -> case A below fails.
    The step requires both cases, and prints what the unclocked read gives.
-   A: PK3 (free) and PK5 (locked) in one mask -> HAL_ERROR, nothing written.
-   B: PK3 alone                               -> HAL_OK, PK3 becomes an output. */
+   A: PK3 (free) and PK5 (locked) in one mask -> HAL_ERROR, nothing written,
+      and the call left the port clocked (MODER at reset is 0xFFFFFFFF, the
+      same as an unclocked read, so "MODER unchanged" alone would not tell).
+   B: PK3 alone                               -> HAL_OK, PK3 becomes an output.
+   C (R1): on the unclocked port, GPIO_BM_IsPortClocked is false and both
+      ReadConfig return GPIO_BM_ERR_NO_CLOCK with the output struct untouched
+      (sentinel 0xA5 compared byte by byte with a copy). Control, after case A
+      clocked the port: IsPortClocked true, both ReadConfig OK, PK3 analog and
+      no pull. The oracle of IsPortClocked is a raw read of both RCC banks. */
 static void run_t16_a1(void)
 {
     const GPIO_InitTypeDef both = { .Pin = GPIO_PIN_3 | GPIO_PIN_5, .Mode = GPIO_MODE_OUTPUT_PP,
@@ -1471,9 +1484,37 @@ static void run_t16_a1(void)
     const uint32_t lckr_off = GPIOK->LCKR;
     const bool     pk3_lk   = GPIO_BM_IsLocked(GPIOK, 3U);
     const bool     pk5_lk   = GPIO_BM_IsLocked(GPIOK, 5U);
+
+    /* Case C, still unclocked. */
+    GpioBm_PinConfig_t cb, cb_ref;
+    GpioLL_PinConfig_t cl, cl_ref;
+    (void)memset(&cb, 0xA5, sizeof cb);
+    (void)memset(&cl, 0xA5, sizeof cl);
+    cb_ref = cb;
+    cl_ref = cl;
+    const bool            clk_c    = GPIO_BM_IsPortClocked(GPIOK);
+    const bool            raw_c    = gpiok_clocked_raw();
+    const GpioBm_Status_t sb       = GPIO_BM_ReadConfig(GPIOK, 3U, &cb);
+    const GpioBm_Status_t sl       = GPIO_LL_ReadConfig(GPIOK, 3U, &cl);
+    const bool            sent_ok  = (memcmp(&cb, &cb_ref, sizeof cb) == 0) &&
+                                     (memcmp(&cl, &cl_ref, sizeof cl) == 0);
+
     const HAL_StatusTypeDef ha = GPIO_HAL_Init(GPIOK, &both);
     const uint32_t moder_a  = GPIOK->MODER;
     const uint32_t lckr_a   = GPIOK->LCKR;
+    const bool     clk_a    = GPIO_BM_IsPortClocked(GPIOK);
+    const bool     raw_a    = gpiok_clocked_raw();
+
+    /* Case C control: clocked by case A, PK3 still analog. */
+    GpioBm_PinConfig_t kb;
+    GpioLL_PinConfig_t kl;
+    (void)memset(&kb, 0, sizeof kb);
+    (void)memset(&kl, 0, sizeof kl);
+    const GpioBm_Status_t kbs = GPIO_BM_ReadConfig(GPIOK, 3U, &kb);
+    const GpioBm_Status_t kls = GPIO_LL_ReadConfig(GPIOK, 3U, &kl);
+    const bool ctrl_c = clk_a && (kbs == GPIO_BM_OK) && (kls == GPIO_BM_OK) &&
+                        (kb.mode == GPIO_BM_MODE_ANALOG) && (kb.pull == GPIO_BM_PULL_NONE) &&
+                        (kl.mode == LL_GPIO_MODE_ANALOG) && (kl.pull == LL_GPIO_PULL_NO);
 
     /* Case B, from the unclocked port again. */
     const bool off2 = gpiok_unclock();
@@ -1482,16 +1523,25 @@ static void run_t16_a1(void)
 
     const bool setup = add && pk3_an && (lckr_on == (GPIO_LCKR_LCKK | 0x23UL)) &&
                        (((moder_on >> (3U * 2U)) & 3UL) == 3UL) && off && off2;
-    const bool case_a = (ha == HAL_ERROR) && (moder_a == moder_on) && (lckr_a == lckr_on);
+    const bool case_a = (ha == HAL_ERROR) && (moder_a == moder_on) && (lckr_a == lckr_on) && clk_a && raw_a;
     const bool case_b = (hb == HAL_OK) && pk3_moved;
+    const bool case_c = !clk_c && !raw_c && (sb == GPIO_BM_ERR_NO_CLOCK) && (sl == GPIO_BM_ERR_NO_CLOCK) &&
+                        sent_ok && ctrl_c;
     LOG("T16 A1 GPIOK clocked: add PK5=%u LCKR=0x%08lX MODER=0x%08lX", (unsigned)add, (unsigned long)lckr_on,
         (unsigned long)moder_on);
     LOG("T16 A1 GPIOK unclocked in both banks=%u: LCKR reads 0x%08lX, IsLocked PK3=%u PK5=%u",
         (unsigned)off, (unsigned long)lckr_off, (unsigned)pk3_lk, (unsigned)pk5_lk);
     LOG("T16 A1 case A GPIO_HAL_Init(PK3|PK5)=%u MODER=0x%08lX LCKR=0x%08lX; case B PK3 alone=%u moved=%u",
         (unsigned)ha, (unsigned long)moder_a, (unsigned long)lckr_a, (unsigned)hb, (unsigned)pk3_moved);
-    verdict(setup && case_a && case_b,
-            "T16 A1: GPIO_HAL_Init on an unclocked port: locked pin in the mask -> nothing written; free pin -> written");
+    LOG("T16 A1 case A left the port clocked: IsPortClocked=%u raw RCC=%u", (unsigned)clk_a, (unsigned)raw_a);
+    LOG("T16 A1 case C unclocked: IsPortClocked=%u raw RCC=%u ReadConfig BM=%u LL=%u (NO_CLOCK=%u) sentinels intact=%u",
+        (unsigned)clk_c, (unsigned)raw_c, (unsigned)sb, (unsigned)sl, (unsigned)GPIO_BM_ERR_NO_CLOCK,
+        (unsigned)sent_ok);
+    LOG("T16 A1 case C control clocked: IsPortClocked=%u BM=%u mode=%lu pull=%lu LL=%u mode=%lu pull=%lu",
+        (unsigned)clk_a, (unsigned)kbs, (unsigned long)kb.mode, (unsigned long)kb.pull, (unsigned)kls,
+        (unsigned long)kl.mode, (unsigned long)kl.pull);
+    verdict(setup && case_a && case_b && case_c,
+            "T16 A1: unclocked port: HAL_Init locked pin -> nothing written, free pin -> written; ReadConfig -> NO_CLOCK");
 }
 
 static void run_t16(void)

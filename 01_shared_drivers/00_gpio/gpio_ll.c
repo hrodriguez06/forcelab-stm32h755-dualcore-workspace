@@ -254,6 +254,10 @@ GpioBm_Status_t GPIO_LL_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, G
     {
         return GPIO_BM_ERR_PARAM;
     }
+    if (!GPIO_BM_IsPortClocked(port))   /* R1: same rule as GPIO_BM_ReadConfig */
+    {
+        return GPIO_BM_ERR_NO_CLOCK;
+    }
 
     const uint32_t mask = 1UL << pin_idx;
 

@@ -94,6 +94,7 @@ BM and LL return `GpioBm_Status_t`. HAL returns `HAL_StatusTypeDef` through
 | `GPIO_BM_ERR_BUSY` | The cross-core hook did not get the lock; nothing was written | `HAL_BUSY` |
 | `GPIO_BM_ERR_VERIFY` | Read-back differs from what was written | `HAL_ERROR` |
 | `GPIO_BM_ERR_CONFLICT`, `_NOT_READY` | Reserved for F2 (EXTI, compensation cell); never returned | - |
+| `GPIO_BM_ERR_NO_CLOCK` | `ReadConfig` on a port unclocked in both RCC banks: its registers read all ones, not its configuration; nothing written to `*out` | `HAL_ERROR` |
 
 ### 2.2 `gpio_bm.h`
 
@@ -112,6 +113,7 @@ GpioBm_Status_t GPIO_BM_ConfigAlternateEx(GPIO_TypeDef *port, uint32_t pin_idx, 
                                           uint32_t otype, uint32_t pull, uint32_t speed);
 GpioBm_Status_t GPIO_BM_DeinitPin(GPIO_TypeDef *port, uint32_t pin_idx);   /* analog, AF0, PP, LOW, no pull, ODR 0 */
 GpioBm_Status_t GPIO_BM_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, GpioBm_PinConfig_t *out);
+                                    /* ERR_NO_CLOCK, *out untouched, on a port unclocked in both banks */
 
 /* Pin operations: static inline, no validation, one BSRR store (Toggle: one ODR read first) */
 void GPIO_BM_Set(GPIO_TypeDef *p, uint32_t mask);      void GPIO_BM_Reset(GPIO_TypeDef *p, uint32_t mask);
@@ -121,7 +123,7 @@ bool GPIO_BM_Read(const GPIO_TypeDef *p, uint32_t pin_idx);   uint32_t GPIO_BM_R
 
 /* LCKR */
 GpioBm_Status_t GPIO_BM_LockPins(GPIO_TypeDef *port, uint32_t mask);
-bool            GPIO_BM_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);   /* reads only: port clock must be on */
+bool            GPIO_BM_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);   /* reads only: meaningful only while IsPortClocked */
 
 /* Section and cross-core hook */
 void            GPIO_BM_SetSharedLock(const GpioBm_SharedLock_t *lock);   /* per core; NULL = PRIMASK only; any time */
@@ -131,6 +133,9 @@ void            GPIO_BM_SectionExit(const GpioBm_Section_t *s);
 /* Validation without access (used by LL and HAL) */
 bool            GPIO_BM_IsValidPort(const GPIO_TypeDef *port);
 GpioBm_Status_t GPIO_BM_CheckConfig(const GpioBm_PinConfig_t *cfg);
+
+/* Port clock, read-only: GPIOxEN in either core's bank (RCC_C1/RCC_C2->AHB4ENR); false for a bad port */
+bool            GPIO_BM_IsPortClocked(const GPIO_TypeDef *port);
 ```
 
 Constants are the register field values: `GPIO_BM_MODE_INPUT/OUTPUT/AF/ANALOG`
@@ -150,7 +155,7 @@ but take `GpioLL_PinConfig_t`, whose fields hold `LL_GPIO_*` constants.
 GpioBm_Status_t GPIO_LL_ConfigPin(const GpioLL_PinConfig_t *cfg);
 GpioBm_Status_t GPIO_LL_ConfigPins(const GpioLL_PinConfig_t *cfgs, uint32_t count, uint32_t *done);
 GpioBm_Status_t GPIO_LL_DeinitPin(GPIO_TypeDef *port, uint32_t pin_idx);
-GpioBm_Status_t GPIO_LL_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, GpioLL_PinConfig_t *out);
+GpioBm_Status_t GPIO_LL_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, GpioLL_PinConfig_t *out);   /* ERR_NO_CLOCK as BM */
 GpioBm_Status_t GPIO_LL_LockPins(GPIO_TypeDef *port, uint32_t mask);
 bool            GPIO_LL_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);
 /* static inline: GPIO_LL_Set, _Reset, _Toggle, _Write, _WritePort, _Read, _ReadPort */
@@ -582,10 +587,13 @@ py tools/gpio_hw_check.py                  # writes docs/gpio_selftest_<rev>.txt
   opens a nested section: it takes no lock, and writes while the other core may
   hold it. Once `lock()` has returned, the lock is this core's and a nested
   section is covered. Same class as G14: the fault path is terminal.
-- **`IsLocked` and `ReadConfig` only read (A5).** With the port unclocked in both
-  cores' banks the registers read all ones (`LCKR = 0xFFFFFFFF` on Rev V,
-  measured in T16 A1), so every pin reads as locked. Every
-  configuration call enables the clock before it looks at `LCKR`.
+- **`IsLocked` and `ReadConfig` only read (A5, R1).** With the port unclocked in
+  both cores' banks the registers read all ones (`LCKR = 0xFFFFFFFF` on Rev V,
+  measured in T16 A1). `ReadConfig` (BM and LL) refuses such a port with
+  `GPIO_BM_ERR_NO_CLOCK` and leaves `*out` untouched. `IsLocked` still answers
+  `true` for every pin there: it is meaningful only while
+  `GPIO_BM_IsPortClocked()` is `true`. Every configuration call enables the
+  clock before it looks at `LCKR`.
 - **PA13/PA14 cannot be de-initialised** through any tier: `DeinitPin` has no
   `allow_debug_pins`. `ConfigPin` with `MODE_ANALOG` and `allow_debug_pins`
   puts them in analog, but leaves `OTYPER`, `OSPEEDR`, `AFR` and `ODR` as they

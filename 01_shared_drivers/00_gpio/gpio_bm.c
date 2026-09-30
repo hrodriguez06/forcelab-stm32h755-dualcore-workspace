@@ -169,6 +169,26 @@ bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port)
     return true;
 }
 
+bool GPIO_BM_IsPortClocked(const GPIO_TypeDef *port)
+{
+    uint32_t port_idx;
+
+    if (!port_index(port, &port_idx))
+    {
+        return false;
+    }
+
+    /* RCC->AHB4ENR is only this core's bank; the port is clocked when either
+       bank has the bit (RM0399 9.7.1), so read both through their fixed
+       aliases. RCC_C1/RCC_C2 are CMSIS definitions (stm32h755xx.h). */
+    const uint32_t bit = 1UL << port_idx;
+#if defined(DUAL_CORE)
+    return ((RCC_C1->AHB4ENR | RCC_C2->AHB4ENR) & bit) != 0UL;
+#else
+    return (RCC->AHB4ENR & bit) != 0UL;
+#endif
+}
+
 /* G3, C2: both keep their signature and their bool, and every call the
    consumers make today (uart: AF7, PULL_UP, VERY_HIGH; adc: analog) is still
    accepted and leaves the same bits. They are wrappers of GPIO_BM_ConfigPin;
@@ -456,6 +476,12 @@ GpioBm_Status_t GPIO_BM_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, G
     if (!port_index(port, &idx) || (pin_idx >= GPIO_BM_PIN_COUNT))
     {
         return GPIO_BM_ERR_PARAM;
+    }
+    /* R1: unclocked, the port reads all ones, which would decode as a valid
+       OK configuration (analog, OD, VERY_HIGH, reserved pull 3, AF15, 1). */
+    if (!GPIO_BM_IsPortClocked(port))
+    {
+        return GPIO_BM_ERR_NO_CLOCK;
     }
 
     const uint32_t pos2 = pin_idx * 2U;

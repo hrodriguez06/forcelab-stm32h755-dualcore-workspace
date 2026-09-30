@@ -76,7 +76,9 @@ GpioBm_Status_t GPIO_LL_ConfigPins(const GpioLL_PinConfig_t *cfgs, uint32_t coun
 /** @brief  Analog, AF0, push-pull, low speed, no pull, ODR 0. MODER goes first. Same as GPIO_BM_DeinitPin(). */
 GpioBm_Status_t GPIO_LL_DeinitPin(GPIO_TypeDef *port, uint32_t pin_idx);
 
-/** @brief  Reads the five fields and the ODR bit of one pin (LL constants). No section. */
+/** @brief  Reads the five fields and the ODR bit of one pin (LL constants). No section.
+  *         GPIO_BM_ERR_NO_CLOCK, with *out untouched, on a port unclocked in
+  *         both banks (as GPIO_BM_ReadConfig()). */
 GpioBm_Status_t GPIO_LL_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, GpioLL_PinConfig_t *out);
 
 /**
@@ -88,9 +90,9 @@ GpioBm_Status_t GPIO_LL_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, G
 GpioBm_Status_t GPIO_LL_LockPins(GPIO_TypeDef *port, uint32_t mask);
 
 /** @retval true when LCKK is set and the pin's LCKy bit is set. false for a bad port or pin.
-  * @note   As GPIO_BM_IsLocked(): only reads, so the port clock must be on; an
-  *         unclocked port reads all ones (LCKR = 0xFFFFFFFF on Rev V), so
-  *         every pin reads as locked. */
+  * @note   As GPIO_BM_IsLocked(): only reads, and only meaningful while
+  *         GPIO_BM_IsPortClocked(port) is true; an unclocked port reads all
+  *         ones (LCKR = 0xFFFFFFFF on Rev V), so every pin reads as locked. */
 bool            GPIO_LL_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);
 
 /* ---- Pin operations: static inline, no validation --------------------------------

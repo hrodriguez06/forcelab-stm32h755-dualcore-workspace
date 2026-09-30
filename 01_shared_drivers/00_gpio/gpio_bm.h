@@ -47,6 +47,15 @@ extern "C" {
   */
 bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port);
 
+/**
+  * @brief  true when the port's GPIOxEN bit is set in either core's bank
+  *         (RCC_C1->AHB4ENR or RCC_C2->AHB4ENR), i.e. its registers can be
+  *         read; false when both are clear, and for an invalid port. Only
+  *         reads RCC; either core can read both banks. Unclocked, the port
+  *         reads all ones (LCKR = 0xFFFFFFFF, measured on Rev V).
+  */
+bool GPIO_BM_IsPortClocked(const GPIO_TypeDef *port);
+
 /* ---- GPIO Pull & Speed Constants (Bare-Metal) --------------------------- */
 #define GPIO_BM_PULL_NONE         0x00000000UL
 #define GPIO_BM_PULL_UP           0x00000001UL
@@ -110,6 +119,7 @@ typedef enum
     GPIO_BM_ERR_VERIFY,      /*!< read-back differs from what was written              */
     GPIO_BM_ERR_CONFLICT,    /*!< EXTI line already routed to another port (F2)        */
     GPIO_BM_ERR_NOT_READY    /*!< compensation cell: CSI off or READY not set (F2)      */
+    , GPIO_BM_ERR_NO_CLOCK   /*!< port unclocked in both RCC banks: its registers cannot be read */
 } GpioBm_Status_t;
 
 /* ---- Canonical pin -------------------------------------------------------------- */
@@ -165,7 +175,9 @@ GpioBm_Status_t GPIO_BM_DeinitPin(GPIO_TypeDef *port, uint32_t pin_idx);  /* ana
 
 /**
   * @brief  Reads the five configuration fields and the ODR bit of one pin.
-  *         No section: it only reads. The port clock must already be on.
+  *         No section: it only reads. The port clock must already be on:
+  *         GPIO_BM_ERR_NO_CLOCK, with *out untouched, when it is off in both
+  *         banks (an unclocked port reads all ones, not its configuration).
   */
 GpioBm_Status_t GPIO_BM_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, GpioBm_PinConfig_t *out);
 
@@ -230,10 +242,11 @@ GpioBm_Status_t GPIO_BM_LockPins(GPIO_TypeDef *port, uint32_t mask);  /* LCKK se
 
 /**
   * @brief  true when LCKK is set and the pin's LCKy bit is set; false for a bad
-  *         port or pin. Only reads, so the port clock must already be on (in
-  *         either core's bank): an unclocked port reads all ones (LCKR =
-  *         0xFFFFFFFF, measured on Rev V), so every pin reads as locked. The
-  *         configuration calls enable the clock before they look at LCKR.
+  *         port or pin. Only reads, and only meaningful while
+  *         GPIO_BM_IsPortClocked(port) is true: an unclocked port reads all
+  *         ones (LCKR = 0xFFFFFFFF, measured on Rev V), so every pin reads as
+  *         locked. The configuration calls enable the clock before they look
+  *         at LCKR.
   */
 bool            GPIO_BM_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);
 
