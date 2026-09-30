@@ -511,3 +511,88 @@ La placa quedó con `prj_04` **debug** de `e59baec` flasheado y el AD2 cerrado (
 4. **Si cambia el firmware** (por ejemplo, el dueño del bus desde la tabla): una ejecución completa con el AD2 y su captura. Si solo cambian el host, las pruebas y el informe, basta con las pruebas.
 
 La reauditoría 4 será corta: código, pruebas, mis dos comprobaciones de R2-M3 y, si cambia el firmware, una ejecución mía en la placa. Si pasa, F0 se cierra y `driver/gpio` puede ir a `main`.
+
+---
+
+## Reauditoría 4 de F0 (cierre)
+
+Sep 29, 2026 · auditor: Claude (el mismo del plan) · commit auditado: `51a29b7` (rama `driver/gpio`, rango `8d99b6c..51a29b7` sobre `dbe0331`) · instrucciones: `F0_CORRECTION_4_INSTRUCTIONS.md`
+
+**Veredicto: F0 pasa y queda cerrado.** Ya no hay bloqueantes ni mayores abiertos. Se cierran los dos mayores y el menor que quedaban:
+
+- **R2-M3:** host, modelo y firmware quedan atados a la tabla del protocolo. Cuatro cambios míos en la tabla ponen pruebas en rojo: los dos anunciados y dos sin anunciar. Uno de ellos, además, no compila.
+- **R3-m1:** en la placa, el host aborta en el mismo segundo en que el firmware anuncia `ABORT`.
+- **M3:** todos los identificadores que cita el informe existen.
+
+Mis dos ejecuciones completas con el AD2 coinciden con las de la entrega, y la producción sigue idéntica a `ca569b6`. Quedan dos menores, que pasan a F1a (R4-m1 y R4-m2), y una nota.
+
+Guía usada: `IMPLEMENTATION_PLAN.md`, `F0_CORRECTION_4_INSTRUCTIONS.md` (commiteado en `dbe0331`), el mensaje de entrega, `IMPLEMENTATION_REPORT.md` en `51a29b7`, el código y la placa.
+
+### Qué ejecuté yo (reauditoría 4)
+
+Capturas en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/audit_r4_*_51a29b7.txt`. El hardware lo ejecuté desde un worktree limpio en `51a29b7` (ya borrado), con mis propias compilaciones.
+
+| # | Qué | Resultado |
+| --- | --- | --- |
+| 1 | `git status --short`, `git ls-files -v \| grep -E '^[a-zS]'`, `git diff --stat 9209955 51a29b7` | Las dos primeras salidas, vacías. Entre el código capturado y la entrega solo cambian el informe y las capturas |
+| 2 | Lectura de `git diff dbe0331..51a29b7`: cabecera, host, modelo, pruebas y CM7 | Forma (b) de E7. `hs_mcu`, `hs_host` y `LineReader.expect` se registran solos. El host toma sus patrones con `table_pattern()`; fuera de la tabla solo queda el banner `Rev`. `ast.literal_eval` deshace los escapes C. El dueño del bus del firmware sale de `GPIO_BENCH_STEPS_TABLE` (`k_step_bus_*`, `bench_get_step_bus_owner`/`_name`) |
+| 3 | `py -m unittest test_gpio_hw_check` | 30/30 OK |
+| 4 | Cuatro cambios en la tabla de `gpio_bench_protocol.h`, uno por ejecución, con la batería entregada. **1** (anunciado): la primera primitiva del paso 7, de `HS_HOST` a `HS_MCU`. **2** (anunciado): el patrón `BUSCHK up` a `BUSCHK UP`. **3** (sin anunciar): el dueño del bus del paso 8 en `GPIO_BENCH_STEPS_TABLE`, de MCU a NONE. **4** (sin anunciar): las líneas `Scope LOW ready` y `Scope HIGH ready` intercambiadas | Caen 2, 11, 9 y 3 pruebas respectivamente. En el 1, las dos de traza (`('PRIM', 'HS_HOST') != ('PRIM', 'HS_MCU')`). En el 4, las de traza y la de la captura real. Captura: `audit_r4_table_checks` |
+| 5 | El cambio 3 compilado en el firmware | `gpio_selftest.c:58: error: static assertion failed: "Step 8 bus mismatch"` |
+| 6 | `selftest-gpio` compilada por mí, con el bloque de SRAM4 a cero, y dos ejecuciones completas con el AD2 dentro de mi envoltorio de `OE` | Las dos dan `HOST VERDICT=PASS` con 15/15. En T0b(c), `bus contention check failed at step 4: BUSCHK up gave 0x5A`, con los tres `OE` en 0x00. Las 17 escrituras del bus caen en el paso 9. `Rev` de CM4 verificado. T15 (c): 35 718 las dos veces. Capturas: `audit_r4_selftest_1` y `_2` |
+| 7 | `test_real_capture_matches_protocol_table` con **mi** captura de #6 como la más reciente, y otra vez con una copia en la que cambié `STEP id=6 bus=NONE` por `bus=MCU` | Con la original, OK. Con la alterada, `Mismatch at index 11 (step6_announcement)`. La copia está borrada |
+| 8 | En la placa, el firmware con el cambio 1 y el host del mismo commit | `[20:44:22] STEP id=7` → `[20:44:22] ABORT step=7 reason=protocol` → `[20:44:22] ERROR … ABORT received from firmware`, y `HOST VERDICT=FAIL`. En la reauditoría 3, el mismo caso tardaba 10 s. Captura: `audit_r4_r3m1_table_primitive` |
+| 9 | Producción (`debug`) de `51a29b7` y `ca569b6`, en la misma ruta, comparadas byte a byte | CM4 idéntica. CM7: solo cambian los bytes del hash en 0x1257C, 5 y no 7, porque las dos cadenas coinciden en dos posiciones |
+| 10 | `git grep -F -c` de los 21 identificadores de la tabla del informe, más `rec_measure` y `k_step_bus_`, sin contar `docs/`, `AUDIT.md` ni el propio informe | Ninguno da 0 |
+
+La placa quedó con `prj_04` **debug** de `51a29b7` flasheado y el AD2 cerrado (S2).
+
+### Estado de los hallazgos
+
+| ID | Estado | Por qué |
+| --- | --- | --- |
+| R2-M3 | **Cerrado** | #2, #4, #5 y #7. Un desacuerdo entre la tabla y el host, el modelo o el firmware se ve en las pruebas o en la compilación, y el firmware lo detecta además en la placa (#8) |
+| R3-m1 | **Cerrado** | #8 y `test_r3_m1_host_aborts_immediately_on_firmware_abort` |
+| M3 | **Cerrado** | #10. Las correcciones (a)–(c) son exactas, y los resultados de §2.1 que da el informe coinciden con los míos (#4). Hay un detalle menor en la tabla de identificadores: pone `hs_mcu` y `hs_host` en `gpio_bench_protocol.h`, pero están en `gpio_selftest.c` y en los `.py` (N17) |
+
+### Protocolo A1–A27 (cierre de F0)
+
+| # | Punto | Resultado | Nota |
+| --- | --- | --- | --- |
+| A1–A3, A5, A7 | Catálogo, literales, API, targets, estado | Pasa | `gpio_bm.[ch]` sin cambios en todo F0 |
+| A16 | Build | Pasa | Captura completa del implementador (`gpio_f0_build_9209955.txt`, 8/8) y mis compilaciones de `selftest-gpio` y `debug` |
+| A17 | R3: binario | **Pasa** | #9 |
+| A18 | Pruebas repetidas por mí | **Pasa** | #6 |
+| A19 | R1: controles negativos | **Pasa** | T0b(c) con guarda rota (reauditoría 3, #8). Mutaciones de veredicto (reauditoría 2). Mutaciones de tabla (#4, #8). T15 (reauditoría 1) |
+| A20 | Mapa de escritores | Pasa (inventario) | La migración es de F1b |
+| A21 | R2: trazabilidad | Pasa | #1 |
+| A22 | R4: no destructivas | Pasa | |
+| A23 | Oráculo independiente | Pasa | |
+| A26 | Documentación | Pasa | M3 cerrado; N17 |
+| A27 | Seguridad eléctrica S1–S10 | **Pasa** | Criterios de código comprobados antes de conectar el AD2, y T0b entero en verde en mi ejecución, incluido (c) |
+
+### Hallazgos que pasan a F1a
+
+| ID | Dónde | Hallazgo |
+| --- | --- | --- |
+| R4-m1 | `test_gpio_hw_check.py:873-901` | `test_real_capture_matches_protocol_table` elige la captura por `mtime`. En un clon nuevo, `git` pone a todos los archivos más o menos la misma fecha, así que la prueba puede coger una captura antigua de otro formato (`gpio_f0_selftest_a692afc.txt`, por ejemplo) y fallar sin motivo. La captura tiene que venir dada: por argumento o variable de entorno, o como la del commit más reciente según `git log`, no según el sistema de archivos |
+| R4-m2 | `CM7 gpio_selftest.c:24`, `:51-61` | El campo `bus_name` de `k_step_perms` ya no lo usa nadie. Los 11 `_Static_assert` repiten los valores de la tabla como literales: sirven de cerrojo, pero obligan a cambiar dos sitios. Se puede comprobar cada `k_step_perms[i]` contra `bench_get_step_bus_owner()` en una prueba de arranque, o quitar la duplicación |
+
+#### Notas
+
+- **N17:** En la tabla de identificadores del informe, la columna de archivos es aproximada (el caso de `hs_mcu`/`hs_host`). Los identificadores existen, que es lo que pedía §2.3.
+- **N18:** F0 ha necesitado cinco rondas. En las tres primeras correcciones, el informe describió como hecho algo que el código no hacía; lo que lo cortó fue la lista de `git grep` de §2.3 de la cuarta. Esa regla queda para todas las fases siguientes.
+
+### Cierre de F0
+
+- **Lo que F0 deja verificado:**
+  - la base de build (8/8);
+  - la seguridad eléctrica del banco sin resistencias en serie (S1–S10, con controles negativos en la placa);
+  - el protocolo host–firmware atado a una sola tabla;
+  - T15 como control negativo de la carrera entre núcleos (G1);
+  - la referencia de producción T18.
+
+  Todo con `gpio_bm.[ch]` sin cambios y la producción idéntica a `ca569b6`.
+- **F1a puede empezar**, sobre `driver/gpio` desde este commit, con R4-m1 y R4-m2 en su lista.
+- **Actualizo en el mismo cambio que este informe:** el aviso de `IMPLEMENTER_INSTRUCTIONS.md` y la fila de `00_gpio` en `DRIVER_ROADMAP.md` §1.
+- **Merge a `main`:** el plan lo prevé al cierre de la auditoría. Lo dejo a decisión del responsable.

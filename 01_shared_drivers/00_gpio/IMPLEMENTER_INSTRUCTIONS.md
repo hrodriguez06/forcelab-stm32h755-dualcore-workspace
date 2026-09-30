@@ -6,7 +6,10 @@ Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (re
 
 Este documento dice qué te toca, qué no te toca y qué tienes que entregar.
 
-> **F0 está en su cuarta corrección.** La reauditoría 3 (`AUDIT.md`) ya no encontró bloqueantes, pero quedan dos mayores y un menor. Lo que falta está en [`F0_CORRECTION_4_INSTRUCTIONS.md`](F0_CORRECTION_4_INSTRUCTIONS.md). Las instrucciones anteriores ([1](F0_CORRECTION_INSTRUCTIONS.md), [2](F0_CORRECTION_2_INSTRUCTIONS.md), [3](F0_CORRECTION_3_INSTRUCTIONS.md)) siguen vigentes donde la cuarta no diga otra cosa. No empieces F1a hasta que la reauditoría de F0 pase. Si algo de aquí choca con el plan, manda el plan. Una excepción: lo que este documento te **prohíbe** sigue prohibido aunque el plan lo mencione.
+> **F0 está cerrado** (`AUDIT.md`, "Reauditoría 4 de F0 (cierre)", 2026-09-29). **F1a puede empezar** sobre `driver/gpio`. En su lista van los menores R4-m1 y R4-m2. Las reglas de las cuatro instrucciones de corrección de F0 ([1](F0_CORRECTION_INSTRUCTIONS.md), [2](F0_CORRECTION_2_INSTRUCTIONS.md), [3](F0_CORRECTION_3_INSTRUCTIONS.md), [4](F0_CORRECTION_4_INSTRUCTIONS.md)) siguen valiendo en las fases siguientes, en especial estas tres:
+> - nada oculto a git;
+> - ante una regla que no se puede cumplir, preguntar;
+> - cada identificador que cite el informe se comprueba con `git grep`. Si algo de aquí choca con el plan, manda el plan. Una excepción: lo que este documento te **prohíbe** sigue prohibido aunque el plan lo mencione.
 
 ---
 

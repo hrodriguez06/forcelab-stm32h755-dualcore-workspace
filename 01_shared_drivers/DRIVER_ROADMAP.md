@@ -17,7 +17,7 @@ no lo sustituye.
 
 | Carpeta | Estado | Notas |
 | :--- | :--- | :--- |
-| `00_gpio` | Parcial | Solo `gpio_bm`: reloj de puerto, AF push-pull, analógico. Plan de F1–F2 (revisión 2, 2026-09-26) en `00_gpio/IMPLEMENTATION_PLAN.md`, sin ejecutar. |
+| `00_gpio` | Parcial | Solo `gpio_bm`: reloj de puerto, AF push-pull, analógico. Plan de F1–F2 (revisión 2, 2026-09-26) en `00_gpio/IMPLEMENTATION_PLAN.md`. F0 (banco, protocolo y base) cerrado el 2026-09-29 (`00_gpio/AUDIT.md`); F1a pendiente. |
 | `01_led` | Hecho | `led_bm`. Sin README. |
 | `02_dma` | Hecho y auditado | BM, LL, HAL. BDMA solo validado en M2M. |
 | `03_tim` | **Vacío** | |

@@ -1,0 +1,57 @@
+# auditor, re-audit 4: changes to the protocol table in gpio_bench_protocol.h (51a29b7), delivered suite after each; header restored after each
+
+## 1 (announced): step 7 first primitive HS_HOST -> HS_MCU
+warning: in the working copy of '02_firmware_projects/prj_04_adc_dma_bm_eth/Common/Inc/gpio_bench_protocol.h', LF will be replaced by CRLF the next time Git touches it
+-    X(7, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_HOST,"step7_pe2",          "", 0xFF) \
++    X(7, BENCH_ITEM_PRIM,    GPIO_BENCH_PRIM_HS_MCU, "step7_pe2",          "", 0xFF) \
+FAIL: test_host_and_model_trace_matches_protocol_table (test_gpio_hw_check.TestHarnessScenarios.test_host_and_model_trace_matches_protocol_table)
+FAIL: test_host_and_model_traverse_identical_table (test_gpio_hw_check.TestHarnessScenarios.test_host_and_model_traverse_identical_table)
+Ran 30 tests in 8.869s
+FAILED (failures=2)
+warning: in the working copy of '02_firmware_projects/prj_04_adc_dma_bm_eth/Common/Inc/gpio_bench_protocol.h', LF will be replaced by CRLF the next time Git touches it
+
+## 2 (announced): one LINE pattern text 'BUSCHK up' -> 'BUSCHK UP'
+warning: in the working copy of '02_firmware_projects/prj_04_adc_dma_bm_eth/Common/Inc/gpio_bench_protocol.h', LF will be replaced by CRLF the next time Git touches it
+-    X(6, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step6_buschk_up",    "^\\[m7_gpio_test\\] BUSCHK up$", 0xFF) \
++    X(6, BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step6_buschk_up",    "^\\[m7_gpio_test\\] BUSCHK UP$", 0xFF) \
+FAIL: test_control_of_contention_detection (test_gpio_hw_check.TestHarnessScenarios.test_control_of_contention_detection)
+FAIL: test_e11_host_comparison_bit_mismatches_identified (test_gpio_hw_check.TestHarnessScenarios.test_e11_host_comparison_bit_mismatches_identified)
+FAIL: test_e14_spurious_rev_line_before_banner_ignored (test_gpio_hw_check.TestHarnessScenarios.test_e14_spurious_rev_line_before_banner_ignored)
+FAIL: test_e1_correct_model_passes (test_gpio_hw_check.TestHarnessScenarios.test_e1_correct_model_passes)
+FAIL: test_e2_queued_line_reader_chunk_and_byte_by_byte (test_gpio_hw_check.TestHarnessScenarios.test_e2_queued_line_reader_chunk_and_byte_by_byte)
+FAIL: test_host_and_model_trace_matches_protocol_table (test_gpio_hw_check.TestHarnessScenarios.test_host_and_model_trace_matches_protocol_table)
+FAIL: test_host_and_model_traverse_identical_table (test_gpio_hw_check.TestHarnessScenarios.test_host_and_model_traverse_identical_table)
+FAIL: test_r2_m1_serial_drain_before_reset (test_gpio_hw_check.TestHarnessScenarios.test_r2_m1_serial_drain_before_reset)
+FAIL: test_r2_m3_log_console_encoding_resilience (test_gpio_hw_check.TestHarnessScenarios.test_r2_m3_log_console_encoding_resilience)
+FAIL: test_r3_m1_host_aborts_immediately_on_firmware_abort (test_gpio_hw_check.TestHarnessScenarios.test_r3_m1_host_aborts_immediately_on_firmware_abort)
+FAIL: test_real_capture_matches_protocol_table (test_gpio_hw_check.TestHarnessScenarios.test_real_capture_matches_protocol_table)
+Ran 30 tests in 0.965s
+FAILED (failures=11)
+
+## 3 (unannounced): GPIO_BENCH_STEPS_TABLE step 8 bus owner MCU -> NONE
+warning: in the working copy of '02_firmware_projects/prj_04_adc_dma_bm_eth/Common/Inc/gpio_bench_protocol.h', LF will be replaced by CRLF the next time Git touches it
+-    X(8,  "T0A_MCU_TO_AD2", GPIO_BENCH_BUS_MCU)  \
++    X(8,  "T0A_MCU_TO_AD2", GPIO_BENCH_BUS_NONE)  \
+FAIL: test_control_of_contention_detection (test_gpio_hw_check.TestHarnessScenarios.test_control_of_contention_detection)
+FAIL: test_e11_host_comparison_bit_mismatches_identified (test_gpio_hw_check.TestHarnessScenarios.test_e11_host_comparison_bit_mismatches_identified)
+FAIL: test_e14_spurious_rev_line_before_banner_ignored (test_gpio_hw_check.TestHarnessScenarios.test_e14_spurious_rev_line_before_banner_ignored)
+FAIL: test_e1_correct_model_passes (test_gpio_hw_check.TestHarnessScenarios.test_e1_correct_model_passes)
+FAIL: test_e2_queued_line_reader_chunk_and_byte_by_byte (test_gpio_hw_check.TestHarnessScenarios.test_e2_queued_line_reader_chunk_and_byte_by_byte)
+FAIL: test_host_and_model_trace_matches_protocol_table (test_gpio_hw_check.TestHarnessScenarios.test_host_and_model_trace_matches_protocol_table)
+FAIL: test_host_and_model_traverse_identical_table (test_gpio_hw_check.TestHarnessScenarios.test_host_and_model_traverse_identical_table)
+FAIL: test_r2_m1_serial_drain_before_reset (test_gpio_hw_check.TestHarnessScenarios.test_r2_m1_serial_drain_before_reset)
+FAIL: test_r2_m3_log_console_encoding_resilience (test_gpio_hw_check.TestHarnessScenarios.test_r2_m3_log_console_encoding_resilience)
+Ran 30 tests in 2.360s
+FAILED (failures=9)
+
+## 4 (unannounced): step 10 lines 'Scope LOW ready' and 'Scope HIGH ready' swapped
+warning: in the working copy of '02_firmware_projects/prj_04_adc_dma_bm_eth/Common/Inc/gpio_bench_protocol.h', LF will be replaced by CRLF the next time Git touches it
+-    X(10,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step10_low_ready",   "^\\[m7_gpio_test\\] Scope LOW ready$", 0xFF) \
++    X(10,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step10_high_ready",  "^\\[m7_gpio_test\\] Scope HIGH ready$", 0xFF) \
+-    X(10,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step10_high_ready",  "^\\[m7_gpio_test\\] Scope HIGH ready$", 0xFF) \
++    X(10,BENCH_ITEM_LINE,    GPIO_BENCH_PRIM_NONE,   "step10_low_ready",   "^\\[m7_gpio_test\\] Scope LOW ready$", 0xFF) \
+FAIL: test_host_and_model_trace_matches_protocol_table (test_gpio_hw_check.TestHarnessScenarios.test_host_and_model_trace_matches_protocol_table)
+FAIL: test_host_and_model_traverse_identical_table (test_gpio_hw_check.TestHarnessScenarios.test_host_and_model_traverse_identical_table)
+FAIL: test_real_capture_matches_protocol_table (test_gpio_hw_check.TestHarnessScenarios.test_real_capture_matches_protocol_table)
+Ran 30 tests in 8.835s
+FAILED (failures=3)
