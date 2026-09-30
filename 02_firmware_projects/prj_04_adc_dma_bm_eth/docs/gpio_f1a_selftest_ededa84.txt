@@ -1,0 +1,377 @@
+[22:26:08] ================================================================================
+[22:26:08] OPERATIONAL CHECKLIST (S9, IMPLEMENTATION_PLAN.md - declarado por el operador):
+[22:26:08] [checklist] [x] 1. Nucleo and AD2 connected via USB to same PC. WaveForms GUI closed.
+[22:26:08] [checklist] [x] 2. Wiring: GND first, then DIO per table. Nothing on W1, W2, V+, V-.
+[22:26:08] [checklist] [x] 3. Flash selftest-gpio with script stopped.
+[22:26:08] [checklist] [x] 4. Start gpio_hw_check.py. Script enforces S2, waits for banner (S8), runs loose check (T0a) before enabling outputs.
+[22:26:08] [checklist] [x] 5. On completion or abort, script leaves AD2 in S2. Only then reflash, reset, or disconnect.
+[22:26:08] [checklist] [x] 6. Disconnecting: stop script, disconnect DIO lines, GND last.
+[22:26:08] ================================================================================
+[22:26:08] [host] Expected firmware revision from git: ededa84
+[22:26:08] [host] Serial port drained before reset: 0 bytes discarded.
+[22:26:08] [host] S10: Confirmed AD2 in S2 safe state (OE=0x0000). Resetting target MCU...
+[22:26:08] [host] S10: Target MCU reset via C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe (exit code 0).
+[22:26:08]  
+[22:26:08] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev ededa84 ===
+[22:26:08] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[22:26:08] [sys] silicon revision id=0x2003
+[22:26:08] [ipc] shared block at 0x38008000, magic=0x48375353
+[22:26:08] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[22:26:08] [net] starting TCP/IP stack
+[22:26:08] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[22:26:08] [net] mac=02:00:00:00:00:01 phy_addr=0
+[22:26:08] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[22:26:08] [phy] partner advertised:
+[22:26:08] [net] udp echo listening on port 7
+[22:26:08] [adc_srv] listening on UDP port 5001
+[22:26:08] [ipc] m7=1 m4=0  (CPU2 starting)
+[22:26:08] [m7_gpio_test] Rev ededa84
+[22:26:08] [host] CM7 banner revision verified: ededa84
+[22:26:08] [m7_gpio_test] STEP id=1 bus=NONE v=2
+[22:26:08] [host] Step 1 validated (bus=NONE, v=2).
+[22:26:08] [m7_gpio_test] LCKR at boot: GPIOF=0x00000000 CLEAN
+[22:26:08] [host] GPIOF LCKR clean at boot (T16 of the previous run was reset away).
+[22:26:10] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[22:26:10] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[22:26:10] [net] link up: 100 Mbps full duplex
+[22:26:10] [m7_gpio_test] INFO T15 (a) CM7 solo, hand RMW: corruptions=0 (expected 0)
+[22:26:10] [m7_gpio_test] INFO T15 (b) CM4 solo, hand RMW: corruptions=0 (expected 0)
+[22:26:10] [m7_gpio_test] INFO T15 (c) both, hand RMW: corr=124934 (CM7=124632 CM4=302) ovl CM7=499999 CM4=375285 (expect >0)
+[22:26:10] [m7_gpio_test] INFO T15 (d) both, gpio_bm no hook: corr=45696 ovl CM7=200000 CM4=120205 (expect >0)
+[22:26:10] [m7_gpio_test] INFO T15 (d) detail: CM7 field=27777 verify=6305 other=0, CM4 field=11614 verify=0
+[22:26:10] [m7_gpio_test] INFO T15 (e) both, gpio_bm + hook: corr=0 busy=0 hook_fail CM7=0 CM4=0 ovl CM7=199999 CM4=199743 (expect 0)
+[22:26:10] [m7_gpio_test] INFO T15 (e) calls: locked=400000 ok CM7=200000 + CM4=200000 = 400000 (iters CM7=200000 CM4=200000)
+[22:26:10] [m7_gpio_test] INFO T15 (f) CM7 hand RMW vs TIM17 ISR at 20000 Hz: corr=352 ISR in loop=2429 of 2429 (expect >0)
+[22:26:10] [m7_gpio_test] INFO T15 (f) detail: main=0 ISR=352 ISR err=0
+[22:26:10] [m7_gpio_test] INFO T15 (g) CM7 gpio_bm vs TIM17 ISR: corr=0 ISR in loop=5599 of 5599 (expect 0)
+[22:26:10] [m7_gpio_test] INFO T15 (g) detail: main=0 verify=0 other=0 ISR=0 ISR err=0
+[22:26:10] [m7_gpio_test] T15 VERDICT: PASS
+[22:26:10] [host] T15 dual-core race PASSED.
+[22:26:10] [m7_gpio_test] STEP id=11 bus=NONE v=2
+[22:26:10] [host] Step 11 validated (bus=NONE, v=2).
+[22:26:10] [m7_gpio_test] INFO T1 unclocked port used for field cases: GPIOK
+[22:26:10] [m7_gpio_test] INFO T1 ConfigPin(NULL)        got=1 exp=1 photo=same OK
+[22:26:10] [m7_gpio_test] INFO T1 port NULL              got=1 exp=1 photo=same OK
+[22:26:10] [m7_gpio_test] INFO T1 GPIOA+4                got=1 exp=1 photo=same OK
+[22:26:10] [m7_gpio_test] INFO T1 past GPIOK             got=1 exp=1 photo=same OK
+[22:26:10] [m7_gpio_test] INFO T1 pin 16                 got=1 exp=1 photo=same OK
+[22:26:10] [m7_gpio_test] INFO T1 AF 16                  got=1 exp=1 photo=same OK
+[22:26:10] [m7_gpio_test] INFO T1 pull 3                 got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 speed 4                got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 mode 4                 got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 level 2                got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 analog + pull          got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 otype 2                got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 PA13                   got=2 exp=2 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 PA14                   got=2 exp=2 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 ConfigOutput speed 4   got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 ConfigInput pull 3     got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 AlternateEx af 16      got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 DeinitPin GPIOA+4      got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 DeinitPin pin 16       got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 DeinitPin PA13         got=2 exp=2 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 LockPins mask 0        got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 LockPins mask 1<<16    got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 LockPins past GPIOK    got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 ReadConfig out NULL    got=1 exp=1 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 legacy AF pull 3       got=0 exp=0 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 legacy AF speed 4      got=0 exp=0 photo=same OK
+[22:26:11] [ipc] m7=4 m4=0  (CPU2 NOT RESPONDING)
+[22:26:11] [m7_gpio_test] INFO T1 legacy AF af 16        got=0 exp=0 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 legacy analog +4       got=0 exp=0 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 EnableClock GPIOA+4    got=0 exp=0 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 EnableClock past K     got=0 exp=0 photo=same OK
+[22:26:11] [m7_gpio_test] INFO T1 control: valid ConfigOutput(PF9) changed the photo: yes
+[22:26:11] [m7_gpio_test] INFO T1 CM7: cases=30 failed=0 control=changed -> PASS
+[22:26:11] [m7_gpio_test] INFO T1 CM4: cases=30 failed=0 control=changed -> PASS
+[22:26:11] [m7_gpio_test] T1 VERDICT: PASS
+[22:26:11] [host] T1 refusals reported by the firmware.
+[22:26:11] [m7_gpio_test] STEP id=12 bus=NONE v=2
+[22:26:11] [host] Step 12 validated (bus=NONE, v=2).
+[22:26:11] [m7_gpio_test] INFO T2 CM7 vs HAL_GPIO_Init: combos=288 compared=960 refused(analog+pull)=192
+[22:26:11] [m7_gpio_test] INFO T2 CM7: mismatches=0 odr_bad=0 legacy_bad=0 control=detected -> PASS
+[22:26:11] [m7_gpio_test] INFO T2 CM4 vs RM table: combos=288 mismatches=0 control=detected -> PASS
+[22:26:11] [m7_gpio_test] T2 VERDICT: PASS
+[22:26:11] [host] T2 parity reported by the firmware.
+[22:26:11] [m7_gpio_test] STEP id=13 bus=NONE v=2
+[22:26:11] [host] Step 13 validated (bus=NONE, v=2).
+[22:26:11] [m7_gpio_test] INFO B1 CM7 ConfigPin, no hook, max: 576 cycles = 1.44 us
+[22:26:11] [m7_gpio_test] INFO B1 CM7 ConfigPin, no hook, min: 442 cycles = 1.10 us
+[22:26:11] [m7_gpio_test] INFO B1 CM7 ConfigPin, hook, max: 1018 cycles = 2.54 us
+[22:26:11] [m7_gpio_test] INFO B1 CM7 ConfigPin, hook, min: 901 cycles = 2.25 us
+[22:26:11] [m7_gpio_test] INFO B1 CM7 T15(e) lock hold max: 383 cycles = 0.95 us
+[22:26:11] [m7_gpio_test] INFO B1 CM7 T15(e) lock() entry to unlock max: 1389 cycles = 3.47 us
+[22:26:11] [m7_gpio_test] INFO B1 CM4 ConfigPin, no hook, max: 574 cycles = 2.87 us
+[22:26:11] [m7_gpio_test] INFO B1 CM4 ConfigPin, no hook, min: 391 cycles = 1.95 us
+[22:26:11] [m7_gpio_test] INFO B1 CM4 ConfigPin, hook, max: 898 cycles = 4.49 us
+[22:26:11] [m7_gpio_test] INFO B1 CM4 ConfigPin, hook, min: 749 cycles = 3.74 us
+[22:26:11] [m7_gpio_test] INFO B1 CM4 T15(e) lock hold max: 273 cycles = 1.36 us
+[22:26:11] [m7_gpio_test] INFO B1 CM4 T15(e) lock() entry to unlock max: 782 cycles = 3.91 us
+[22:26:11] [m7_gpio_test] B1 DONE: COMPLETE
+[22:26:11] [host] B1 measurements reported by the firmware.
+[22:26:11] [m7_gpio_test] STEP id=2 bus=NONE v=2
+[22:26:11] [host] Step 2 validated (bus=NONE, v=2).
+[22:26:11] [m7_gpio_test] GPIO_BENCH v2 idle
+[22:26:11] [ad2] Running T0b(a) host OE guards verification...
+[22:26:11] [ad2] T0b(a) host OE guards PASSED.
+[22:26:11] [host] Handshaking session start with MCU via HS_HOST...
+[22:26:11] [host] Session start synchronized.
+[22:26:11] [m7_gpio_test] INFO Waiting for HOST_REQ to start session...
+[22:26:11] [m7_gpio_test] STEP id=3 bus=NONE v=2
+[22:26:11] [host] Step 3 validated (bus=NONE, v=2).
+[22:26:11] [m7_gpio_test] T0b_b guards verification: PASS
+[22:26:11] [ad2] T0b(b) firmware claim guards PASSED.
+[22:26:11] [m7_gpio_test] STEP id=4 bus=MCU v=2
+[22:26:11] [host] Step 4 validated (bus=MCU, v=2).
+[22:26:11] [ad2] Step T0b(c): Calling s5_verify_released to verify S5 guard stops contention...
+[22:26:11] [m7_gpio_test] BUSCHK up drive=0x5A
+[22:26:11] [ad2] ABORT: bus contention check failed at step 4: BUSCHK up gave 0x5A, expected 0xFF (OE start=0x00, pre=0x00, post=0x00)
+[22:26:11] [ad2] MCU announced drive pattern: 0x5A
+[22:26:11] [ad2] Contention verified on BUSCHK up: read 0x5A (announced=0x5A)
+[22:26:11] [ad2] T0b(c) OE checks: Point 1 (start)=0x00, Point 2 (pre-read)=0x00, Point 3 (post-check)=0x00
+[22:26:11] [ad2] T0b(c) S5 negative control PASSED.
+[22:26:11] [m7_gpio_test] T0b_c safe state verified: all wired pins input
+[22:26:11] [m7_gpio_test] STEP id=5 bus=NONE v=2
+[22:26:11] [host] Step 5 validated (bus=NONE, v=2).
+[22:26:11] [ad2] Step T0b(d): Deliberately silent for 10.5 seconds without asserting HOST_REQ...
+[22:26:21] [m4_gpio_test] Rev ededa84
+[22:26:21] [host] CM4 banner revision verified: ededa84
+[22:26:21] [m4_gpio_test] T15 (b): corr=0 
+[22:26:21] [m4_gpio_test] T15 (c): corr=302 ovl=375285 
+[22:26:21] [m4_gpio_test] T15 (d): corr=11614 verify=0 ovl=120205 
+[22:26:21] [m4_gpio_test] T15 (e): corr=0 verify=0 busy=0 hook_fail=0 
+[22:26:21] [m4_gpio_test] T15 (e): ok=200000 calls=200000 ovl=199743 
+[22:26:21] [m4_gpio_test] T1: port_idx=10 cases=30 failed=0 first=0 
+[22:26:21] [m4_gpio_test] T1: control=changed PASS
+[22:26:21] [m4_gpio_test] T2 vs RM table: combos=288 mismatches=0 
+[22:26:21] [m4_gpio_test] T2: control=detected PASS
+[22:26:21] [m4_gpio_test] B1 cycles: nohook_min=391 nohook_max=574 
+[22:26:21] [m4_gpio_test] B1 cycles: hook_min=749 hook_max=898 
+[22:26:21] [m4_gpio_test] B1 cycles: hold_max_e=273 primask_max_e=782 
+[22:26:21] [m4_gpio_test] CM4 VERDICT=PASS
+[22:26:21] [ipc] m7=9 m4=17  (CPU2 alive)
+[22:26:21] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[22:26:21] [ipc] m7=12 m4=37  (CPU2 alive)
+[22:26:21] [ipc] m7=16 m4=57  (CPU2 alive)
+[22:26:21] [ipc] m7=20 m4=77  (CPU2 alive)
+[22:26:21] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[22:26:21] [ipc] m7=24 m4=97  (CPU2 alive)
+[22:26:21] [m7_gpio_test] timeout expired -> bench_safe() invoked (PASS)
+[22:26:21] [m7_gpio_test] STEP id=6 bus=NONE v=2
+[22:26:21] [m7_gpio_test] BUSCHK up
+[22:26:21] [ad2] T0b(d) timeout test PASSED.
+[22:26:21] [host] Step 6 validated (bus=NONE, v=2).
+[22:26:21] [ad2] Step T0a: Testing loose lines (13 lines)...
+[22:26:21] [ad2] Loose check pull-up read: 0x4FFF (expected 0x4FFF)
+[22:26:21] [m7_gpio_test] BUSCHK down
+[22:26:21] [ad2] Loose check pull-down read: 0x0000 (expected 0x0000)
+[22:26:21] [m7_gpio_test] T0a_loose: DONE (host verdict)
+[22:26:21] [ad2] T0a loose check PASSED (all 13 lines).
+[22:26:21] [m7_gpio_test] STEP id=7 bus=NONE v=2
+[22:26:21] [host] Step 7 validated (bus=NONE, v=2).
+[22:26:21] [ad2] Step T0a: Testing handshake lines (PE2 HOST_REQ, PE7 MCU_ACK)...
+[22:26:21] [m7_gpio_test] Handshake PE2: OK
+[22:26:21] [m7_gpio_test] T0a_handshake: DONE (host verdict)
+[22:26:21] [ad2] T0a handshake lines PASSED.
+[22:26:21] [m7_gpio_test] STEP id=8 bus=MCU v=2
+[22:26:21] [host] Step 8 validated (bus=MCU, v=2).
+[22:26:21] [ad2] Step T0a: Walking-1 MCU -> AD2 (11 lines)...
+[22:26:21] [m7_gpio_test] BUSCHK up
+[22:26:21] [m7_gpio_test] BUSCHK down
+[22:26:22] [ad2] Walking-1 MCU->AD2 DIO9: OK (0x0200)
+[22:26:22] [ad2] Walking-1 MCU->AD2 DIO11: OK (0x0800)
+[22:26:22] [ad2] Walking-1 MCU->AD2 DIO0: OK (0x0001)
+[22:26:22] [ad2] Walking-1 MCU->AD2 DIO1: OK (0x0002)
+[22:26:22] [ad2] Walking-1 MCU->AD2 DIO2: OK (0x0004)
+[22:26:22] [ad2] Walking-1 MCU->AD2 DIO3: OK (0x0008)
+[22:26:22] [ad2] Walking-1 MCU->AD2 DIO4: OK (0x0010)
+[22:26:22] [ad2] Walking-1 MCU->AD2 DIO5: OK (0x0020)
+[22:26:22] [ad2] Walking-1 MCU->AD2 DIO6: OK (0x0040)
+[22:26:22] [ad2] Walking-1 MCU->AD2 DIO7: OK (0x0080)
+[22:26:22] [ipc] m7=28 m4=117  (CPU2 alive)
+[22:26:22] [ad2] Walking-1 MCU->AD2 DIO14: OK (0x4000)
+[22:26:22] [m7_gpio_test] T0a_mcu control ready
+[22:26:22] [ad2] Walking-1 MCU->AD2 negative control: OK (0x0000)
+[22:26:22] [m7_gpio_test] T0a_mcu: DONE (host verdict)
+[22:26:22] [ad2] Walking-1 MCU->AD2 PASSED.
+[22:26:22] [m7_gpio_test] STEP id=9 bus=AD2 v=2
+[22:26:22] [host] Step 9 validated (bus=AD2, v=2).
+[22:26:22] [ad2] Step T0a: Walking-1 AD2 -> MCU (10 lines)...
+[22:26:22] [m7_gpio_test] BUSCHK up
+[22:26:22] [m7_gpio_test] BUSCHK down
+[22:26:22] [m7_gpio_test] T0a_ad2 ready
+[22:26:22] [m7_gpio_test] T0a_ad2 bit=8 idr=0x0008 exp=0x0008 OK
+[22:26:22] [m7_gpio_test] T0a_ad2 bit=10 idr=0x0010 exp=0x0010 OK
+[22:26:22] [m7_gpio_test] T0a_ad2 bit=0 idr=0x0100 exp=0x0100 OK
+[22:26:22] [m7_gpio_test] T0a_ad2 bit=1 idr=0x0200 exp=0x0200 OK
+[22:26:22] [m7_gpio_test] T0a_ad2 bit=2 idr=0x0400 exp=0x0400 OK
+[22:26:22] [m7_gpio_test] T0a_ad2 bit=3 idr=0x0800 exp=0x0800 OK
+[22:26:22] [m7_gpio_test] T0a_ad2 bit=4 idr=0x1000 exp=0x1000 OK
+[22:26:22] [m7_gpio_test] T0a_ad2 bit=5 idr=0x2000 exp=0x2000 OK
+[22:26:22] [m7_gpio_test] T0a_ad2 bit=6 idr=0x4000 exp=0x4000 OK
+[22:26:22] [m7_gpio_test] T0a_ad2 bit=7 idr=0x8000 exp=0x8000 OK
+[22:26:22] [m7_gpio_test] T0a_ad2 analog control ready
+[22:26:22] [m7_gpio_test] T0a_ad2 analog control result: OK
+[22:26:22] [m7_gpio_test] T0a_ad2: PASS
+[22:26:22] [ad2] Walking-1 AD2->MCU PASSED.
+[22:26:22] [m7_gpio_test] STEP id=10 bus=NONE v=2
+[22:26:22] [host] Step 10 validated (bus=NONE, v=2).
+[22:26:22] [ad2] Step T0a: Testing Scope 1 (PF14) and Scope 2 (PF15) DC levels...
+[22:26:22] [m7_gpio_test] Scope LOW ready
+[22:26:23] [ad2] Scope LOW: PF14=0.003V, PF15=0.058V (expected <= 0.4V)
+[22:26:23] [m7_gpio_test] Scope HIGH ready
+[22:26:23] [ad2] Scope HIGH: PF14=3.303V, PF15=3.306V (expected >= 2.9V)
+[22:26:23] [m7_gpio_test] T0a_scope: DONE (host verdict)
+[22:26:23] [ad2] Scope check PASSED.
+[22:26:23] [m7_gpio_test] STEP id=30 bus=MCU v=2
+[22:26:23] [host] Step 30 validated (bus=MCU, v=2).
+[22:26:23] [ad2] Step T3: Set/Reset/Write/WritePort/Toggle on the bus, LA capture...
+[22:26:23] [m7_gpio_test] BUSCHK up
+[22:26:23] [m7_gpio_test] BUSCHK down
+[22:26:23] [m7_gpio_test] T3 ready
+[22:26:23] [ad2] T3 sequence: 47 values captured at 25 MHz, expected 47; mismatches at none
+[22:26:23] [m7_gpio_test] T3 control ready
+[22:26:23] [ad2] T3 control: 47 values captured at 25 MHz, expected 47; mismatches at [33]
+[22:26:23] [ad2] T3 captured: 01 00 02 00 04 00 08 00 10 00 20 00 40 00 80 00 FF FE FF FD FF FB FF F7 FF EF FF DF FF BF FF 7F FF 54 AA 0F F0 00 05 A5 00 FF F0 00 01 81 00
+[22:26:23] [ad2] T3 sequence PASSED; control (one wrong value at index 33) detected.
+[22:26:23] [m7_gpio_test] T3: DONE (host verdict)
+[22:26:23] [m7_gpio_test] STEP id=31 bus=AD2 v=2
+[22:26:23] [host] Step 31 validated (bus=AD2, v=2).
+[22:26:23] [ad2] Step T4: 256 patterns driven by the AD2, read with ReadPort/Read...
+[22:26:23] [m7_gpio_test] BUSCHK up
+[22:26:23] [m7_gpio_test] BUSCHK down
+[22:26:23] [m7_gpio_test] T4 ready
+[22:26:23] [m7_gpio_test] T4 pass=1 count=256 crc_port=0x29058C73 crc_bits=0x29058C73
+[22:26:24] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[22:26:24] [m7_gpio_test] T4 pass=2 count=256 crc_port=0xDA3BA10A crc_bits=0xDA3BA10A
+[22:26:24] [ad2] T4 pass 1: count=256 crc_port=0x29058C73 crc_bits=0x29058C73, host CRC32=0x29058C73 -> PASSED
+[22:26:24] [ad2] T4 control (inverted pass): crc_port=0xDA3BA10A differs from 0x29058C73 and equals inverted CRC 0xDA3BA10A -> detected
+[22:26:24] [m7_gpio_test] T4: DONE (host verdict)
+[22:26:24] [m7_gpio_test] STEP id=32 bus=AD2 v=2
+[22:26:24] [host] Step 32 validated (bus=AD2, v=2).
+[22:26:24] [ad2] Step T7: AD2 drives 0xFF; MCU reads IDR in analog, then in input...
+[22:26:24] [m7_gpio_test] BUSCHK up
+[22:26:24] [m7_gpio_test] BUSCHK down
+[22:26:24] [m7_gpio_test] T7 analog ready
+[22:26:24] [m7_gpio_test] T7 analog idr=0x00
+[22:26:24] [m7_gpio_test] T7 input ready
+[22:26:24] [m7_gpio_test] T7 input idr=0xFF
+[22:26:24] [ad2] T7 analog IDR=0x00 (expected 0x00); control, input IDR=0xFF (expected 0xFF)
+[22:26:24] [m7_gpio_test] T7: DONE (host verdict)
+[22:26:24] [m7_gpio_test] STEP id=33 bus=NONE v=2
+[22:26:24] [host] Step 33 validated (bus=NONE, v=2).
+[22:26:24] [ad2] Step T8: input -> output on PE5 (DIO9), LA at 100 MHz...
+[22:26:24] [m7_gpio_test] T8 case=A ready
+[22:26:24] [ad2] T8 case A (input PD -> output high): DIO9 transitions=1 (expected 1) OK
+[22:26:24] [m7_gpio_test] T8 case=B ready
+[22:26:24] [ad2] T8 case B (input PU -> output low): DIO9 transitions=1 (expected 1) OK
+[22:26:24] [m7_gpio_test] T8 case=C ready
+[22:26:24] [ad2] T8 case C (input PU -> output high, stale ODR 0): DIO9 transitions=0 (expected 0) OK
+[22:26:24] [m7_gpio_test] T8 case=D ready
+[22:26:24] [ad2] T8 case D (input PD -> output low, stale ODR 1): DIO9 transitions=0 (expected 0) OK
+[22:26:24] [m7_gpio_test] T8 case=E ready
+[22:26:24] [ad2] T8 case E (control: C in naive order (MODER, 1 us, BSRR)): DIO9 transitions=2 (expected >=2) pulse seen
+[22:26:24] [m7_gpio_test] T8: DONE (host verdict)
+[22:26:24] [m7_gpio_test] STEP id=34 bus=NONE v=2
+[22:26:24] [host] Step 34 validated (bus=NONE, v=2).
+[22:26:24] [ad2] Step T5: pull resistances on PF14 / PF15...
+[22:26:24] [m7_gpio_test] T5 vdd ready
+[22:26:24] [m7_gpio_test] T5 nopull ready
+[22:26:24] [m7_gpio_test] T5 pulls ready
+[22:26:24] [ad2] T5 V_DD=3.302 V, V_NP14=0.086 V, V_NP15=3.235 V, V_PU14=1.170 V, V_PD15=2.148 V (R_X=22k nominal)
+[22:26:24] [ad2] T5 R_IN=1054.4k R_PU=39.3k R_PD=42.6k (range 30-50k) -> PASSED
+[22:26:24] [ad2] T5 controls: V_NP14<0.1 True, V_NP15>2.9 True, V_PU14<=2.0 True (scope offset read on PF14 with no pull: 86 mV)
+[22:26:24] [ipc] m7=32 m4=137  (CPU2 alive)
+[22:26:24] [m7_gpio_test] T5: DONE (host verdict)
+[22:26:24] [m7_gpio_test] STEP id=35 bus=NONE v=2
+[22:26:24] [host] Step 35 validated (bus=NONE, v=2).
+[22:26:24] [ad2] Step T6: open-drain on PF15 (22k to 3V3) and PF14 (22k to GND)...
+[22:26:24] [m7_gpio_test] T6 od low ready
+[22:26:25] [m7_gpio_test] T6 od released ready
+[22:26:25] [m7_gpio_test] T6 control ready
+[22:26:25] [ad2] T6 (a) PF15 OD low=0.023 V (<=0.4), OD released=3.234 V (V_NP15=3.235 +-0.1); (b) PF14 OD released=0.087 V (<0.1) -> PASSED
+[22:26:25] [ad2] T6 control: PF14 push-pull high=3.302 V (>2.9)
+[22:26:25] [m7_gpio_test] T6: DONE (host verdict)
+[22:26:25] [m7_gpio_test] STEP id=36 bus=NONE v=2
+[22:26:25] [host] Step 36 validated (bus=NONE, v=2).
+[22:26:25] [ad2] Step T9: 10-90 % rise time per OSPEEDR on PF14 / PF15, 100 MS/s...
+[22:26:25] [m7_gpio_test] T9 speed=0 ready
+[22:26:25] [ad2] T9 speed=0 PF14: tr=15.10 ns sd=1.02 ns over 10 edges [15.9, 16.0, 15.8, 15.5, 14.7, 16.0, 15.4, 14.8, 13.0, 13.8]
+[22:26:25] [ad2] T9 speed=0 PF15: tr=16.94 ns sd=0.73 ns over 10 edges [16.3, 17.4, 16.0, 17.8, 16.2, 17.2, 17.8, 16.1, 17.0, 17.7]
+[22:26:25] [m7_gpio_test] T9 speed=1 ready
+[22:26:26] [ad2] T9 speed=1 PF14: tr=13.38 ns sd=1.23 ns over 10 edges [14.5, 12.7, 14.5, 10.8, 14.0, 13.6, 14.3, 12.3, 14.5, 12.6]
+[22:26:26] [ad2] T9 speed=1 PF15: tr=14.80 ns sd=0.79 ns over 10 edges [14.8, 13.8, 14.7, 14.7, 13.6, 15.8, 14.1, 15.7, 15.0, 15.7]
+[22:26:26] [m7_gpio_test] T9 speed=2 ready
+[22:26:26] [ad2] T9 speed=2 PF14: tr=13.25 ns sd=1.31 ns over 10 edges [12.3, 14.3, 10.9, 11.2, 13.5, 13.9, 14.3, 13.6, 14.0, 14.4]
+[22:26:26] [ad2] T9 speed=2 PF15: tr=14.41 ns sd=0.84 ns over 10 edges [13.7, 15.1, 14.6, 14.9, 13.2, 13.5, 14.9, 15.6, 13.6, 14.9]
+[22:26:26] [m7_gpio_test] T9 speed=3 ready
+[22:26:27] [ad2] T9 speed=3 PF14: tr=12.74 ns sd=1.42 ns over 10 edges [11.9, 12.2, 11.7, 14.3, 14.2, 10.8, 14.1, 13.1, 10.8, 14.2]
+[22:26:27] [ad2] T9 speed=3 PF15: tr=14.47 ns sd=0.74 ns over 10 edges [13.7, 13.5, 15.1, 15.2, 14.0, 14.2, 13.9, 15.6, 14.2, 15.3]
+[22:26:27] [ipc] m7=36 m4=157  (CPU2 alive)
+[22:26:27] [m7_gpio_test] T9 control ready
+[22:26:27] [ad2] T9 gate PF14: tr(LOW)-tr(VERY_HIGH)=2.36 ns, 5 sigma=2.76 ns (sigma of the difference of means) -> FAIL
+[22:26:27] [ad2] T9 gate PF15: tr(LOW)-tr(VERY_HIGH)=2.48 ns, 5 sigma=1.65 ns (sigma of the difference of means) -> OK
+[22:26:27] [ad2] T9 control (pins in input): no edge
+[22:26:27] [m7_gpio_test] T9: DONE (host verdict)
+[22:26:27] [m7_gpio_test] STEP id=37 bus=NONE v=2
+[22:26:27] [m7_gpio_test] T10 mco ready hsi=1
+[22:26:27] [host] Step 37 validated (bus=NONE, v=2).
+[22:26:27] [ad2] Step T10: MCO1 = HSI/4 on PA8, frequency on DIO14...
+[22:26:27] [ad2] T10 DIO14: 16.055 MHz from 657 rising edges (expected 16 MHz +-2 %, HSI ready=True) -> PASSED
+[22:26:27] [m7_gpio_test] T10 control ready
+[22:26:27] [ad2] T10 control (PA8 in AF1): 0 rising edges, 0.000 MHz (expected no signal)
+[22:26:27] [m7_gpio_test] T10: DONE (host verdict)
+[22:26:27] [m7_gpio_test] STEP id=20 bus=NONE v=2
+[22:26:27] [host] Step 20 validated (bus=NONE, v=2).
+[22:26:27] [m7_gpio_test] INFO T16 LockPins(PF7..PF9) -> 0, LCKR=0x00010380
+[22:26:27] [m7_gpio_test] INFO T16 PF7: ConfigOutput=3 DeinitPin=3 ConfigAnalog=0 IsLocked=1 photo=same OK
+[22:26:27] [m7_gpio_test] INFO T16 PF8: ConfigOutput=3 DeinitPin=3 ConfigAnalog=0 IsLocked=1 photo=same OK
+[22:26:27] [m7_gpio_test] INFO T16 PF9: ConfigOutput=3 DeinitPin=3 ConfigAnalog=0 IsLocked=1 photo=same OK
+[22:26:27] [m7_gpio_test] INFO T16 control PF6 (not locked): ConfigOutput=0 IsLocked=0 photo=changed OK
+[22:26:27] [m7_gpio_test] INFO T16 LCKK=1 (stays set until the next reset)
+[22:26:27] [m7_gpio_test] T16 VERDICT: PASS
+[22:26:27] [host] T16 LCKR reported by the firmware.
+[22:26:27] [m7_gpio_test] STEP id=99 bus=NONE v=2
+[22:26:27] [host] Step 99 validated (bus=NONE, v=2).
+[22:26:27] [m7_gpio_test] VERDICT: ALL GPIO SELF-TESTS PASSED
+[22:26:27] ================================================================================
+[22:26:27] HOST VERDICT CHECKLIST (B2):
+[22:26:27]   [OK] sequence_complete
+[22:26:27]   [OK] lckr_clean_at_boot
+[22:26:27]   [OK] t15_pass
+[22:26:27]   [OK] t1_pass
+[22:26:27]   [OK] t2_pass
+[22:26:27]   [OK] b1_complete
+[22:26:27]   [OK] cm4_rev_match
+[22:26:27]   [OK] cm4_pass
+[22:26:27]   [OK] fw_all_passed
+[22:26:27]   [OK] t0b_a_oe_guards
+[22:26:27]   [OK] t0b_b_claim_guards
+[22:26:27]   [OK] t0b_c_contention
+[22:26:27]   [OK] t0b_d_timeout
+[22:26:27]   [OK] t0a_loose
+[22:26:27]   [OK] t0a_handshake
+[22:26:27]   [OK] t0a_mcu_to_ad2
+[22:26:27]   [OK] t0a_mcu_to_ad2_ctrl
+[22:26:27]   [OK] t0a_ad2_to_mcu
+[22:26:27]   [OK] t0a_scope
+[22:26:27]   [OK] t3_sequence
+[22:26:27]   [OK] t3_control
+[22:26:27]   [OK] t4_crc
+[22:26:27]   [OK] t4_control
+[22:26:27]   [OK] t7_analog
+[22:26:27]   [OK] t7_control
+[22:26:27]   [OK] t8_driver
+[22:26:27]   [OK] t8_control
+[22:26:27]   [OK] t5_pulls
+[22:26:27]   [OK] t5_controls
+[22:26:27]   [OK] t6_open_drain
+[22:26:27]   [OK] t6_control
+[22:26:27]   [FAIL] t9_gate
+[22:26:27]   [OK] t9_control
+[22:26:27]   [OK] t10_freq
+[22:26:27]   [OK] t10_control
+[22:26:27]   [OK] t16_pass
+[22:26:27] ================================================================================
+[22:26:27] HOST VERDICT=FAIL
+[22:26:27] ================================================================================
