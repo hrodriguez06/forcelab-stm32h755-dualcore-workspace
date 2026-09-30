@@ -14,7 +14,10 @@ Implements the test orchestrator for 00_gpio (Phase F0):
   - T0b(c): S5 contention validation via s5_verify_released() (B4).
   - T0b(d): 10-second timeout to bench_safe().
   - T0a: Loose line check (13 lines), handshake lines check (PE2/PE7), walking-1 in both directions, scope 1/2 DC levels.
-  - Evaluates and prints explicit 15-item host checklist and final HOST VERDICT=.
+  - F1a (protocol v2): T15/T1/T2/B1/T16 results from the firmware, and the AD2 tests
+    T3 (LA), T4 (CRC32 of 256 patterns), T7, T8 (LA), T5/T6 (scope DC), T9 (scope
+    100 MS/s) and T10 (LA frequency), each with its negative control.
+  - Evaluates and prints the explicit host checklist and final HOST VERDICT=.
 """
 
 from __future__ import annotations
@@ -119,6 +122,7 @@ class BenchItem:
     name: str
     line_pattern: str
     bit_arg: int
+    repeat: int = 1        # the item occurs this many times in a row
 
 
 def load_protocol_from_header(header_path: Optional[pathlib.Path] = None) -> tuple[list[StepDef], list[BenchItem]]:
@@ -134,7 +138,7 @@ def load_protocol_from_header(header_path: Optional[pathlib.Path] = None) -> tup
 
     items: list[BenchItem] = []
     item_pattern = re.compile(
-        r'X\s*\(\s*(\d+)\s*,\s*BENCH_ITEM_(\w+)\s*,\s*GPIO_BENCH_PRIM_(\w+)\s*,\s*"([^"]*)"\s*,\s*("(?:[^"\\]|\\.)*")\s*,\s*(0x[0-9a-fA-F]+|\d+)\s*\)'
+        r'X\s*\(\s*(\d+)\s*,\s*BENCH_ITEM_(\w+)\s*,\s*GPIO_BENCH_PRIM_(\w+)\s*,\s*"([^"]*)"\s*,\s*("(?:[^"\\]|\\.)*")\s*,\s*(0x[0-9a-fA-F]+|\d+)\s*,\s*(\d+)\s*\)'
     )
     for m in item_pattern.finditer(text):
         raw_bit = m.group(6)
@@ -148,6 +152,7 @@ def load_protocol_from_header(header_path: Optional[pathlib.Path] = None) -> tup
             name=m.group(4),
             line_pattern=pattern,
             bit_arg=bit_val,
+            repeat=int(m.group(7)),
         ))
 
     return steps, items
@@ -170,6 +175,133 @@ def table_pattern(name: str) -> str:
     return table_item(name).line_pattern
 
 STEP_RE = re.compile(r"^\[m7_gpio_test\] STEP id=(\d+) bus=(NONE|MCU|AD2) v=(\d+)")
+
+# ---- F1a bench analysis (pure functions; the oracle is the AD2 data) --------
+
+STEP_T3_MCU_OPS      = 30
+STEP_T4_AD2_PATTERNS = 31
+STEP_T7_ANALOG_IDR   = 32
+STEP_T8_NO_GLITCH    = 33
+STEP_T5_PULLS        = 34
+STEP_T6_OPEN_DRAIN   = 35
+STEP_T9_RISE_TIME    = 36
+STEP_T10_MCO1        = 37
+
+# T3: the bus values the firmware's burst must leave, in order, after the
+# starting 0x00. Written out here, independently of gpio_selftest.c.
+T3_EXPECTED: list[int] = (
+    [v for b in range(8) for v in (1 << b, 0x00)]            # Set / Reset walking 1
+    + [0xFF]                                                   # WritePort all ones
+    + [v for b in range(8) for v in (0xFF & ~(1 << b), 0xFF)]  # Write walking 0
+    + [0x55, 0xAA, 0x0F, 0xF0, 0x00]                           # WritePort, full mask
+    + [0x05, 0xA5, 0x00]                                       # WritePort, partial masks
+    + [0xFF, 0xF0, 0x00]                                       # Toggle
+    + [0x01, 0x81, 0x00]                                       # set + reset in one write: set wins
+)
+T3_CONTROL_INDEX = T3_EXPECTED.index(0x55)                     # the value the control gets wrong
+T3_LA_RATE_HZ = 25e6
+T3_LA_SAMPLES = 4096
+T3_MIN_RUN = 10                                                # 400 ns: shorter runs are edge skew
+
+T8_LA_RATE_HZ = 100e6
+T8_LA_SAMPLES = 4096
+# case -> (expected DIO9 transitions, description). E is the naive-order control.
+T8_CASES = {
+    "A": (1, "input PD -> output high"),
+    "B": (1, "input PU -> output low"),
+    "C": (0, "input PU -> output high, stale ODR 0"),
+    "D": (0, "input PD -> output low, stale ODR 1"),
+    "E": (2, "control: C in naive order (MODER, 1 us, BSRR)"),
+}
+
+T5_RX_OHMS = 22000.0
+T5_R_MIN, T5_R_MAX = 30e3, 50e3                                # DS12923 table 59
+
+T9_RATE_HZ = 100e6
+T9_SAMPLES = 8192
+T9_EDGES = 10
+T10_EXPECTED_HZ = 16e6
+T10_TOLERANCE = 0.02
+
+
+def crc32_bytes(values) -> int:
+    import zlib
+    return zlib.crc32(bytes(v & 0xFF for v in values)) & 0xFFFFFFFF
+
+
+def la_stable_sequence(samples: list[int], mask: int, shift: int, min_run: int) -> list[int]:
+    """Values of (sample & mask) >> shift that last at least `min_run` samples,
+    with consecutive repeats merged."""
+    runs: list[list[int]] = []
+    for s in samples:
+        v = (s & mask) >> shift
+        if runs and runs[-1][0] == v:
+            runs[-1][1] += 1
+        else:
+            runs.append([v, 1])
+    out: list[int] = []
+    for v, n in runs:
+        if n >= min_run and (not out or out[-1] != v):
+            out.append(v)
+    return out
+
+
+def la_transitions(samples: list[int], bit: int) -> int:
+    count = 0
+    prev = None
+    for s in samples:
+        v = (s >> bit) & 1
+        if prev is not None and v != prev:
+            count += 1
+        prev = v
+    return count
+
+
+def la_frequency(samples: list[int], bit: int, rate_hz: float) -> tuple[float, int]:
+    """Frequency from the rising edges of `bit`: (hz, number of rising edges)."""
+    rises = [i for i in range(1, len(samples))
+             if ((samples[i] >> bit) & 1) and not ((samples[i - 1] >> bit) & 1)]
+    if len(rises) < 2:
+        return 0.0, len(rises)
+    return (len(rises) - 1) * rate_hz / (rises[-1] - rises[0]), len(rises)
+
+
+def rise_time_10_90(v: list[float], rate_hz: float, pre_fraction: float) -> Optional[float]:
+    """10-90 % rise time in seconds, levels taken from the flat parts of the capture."""
+    n = len(v)
+    pre = max(4, int(n * pre_fraction))
+    lo_part = sorted(v[: pre // 2])
+    hi_part = sorted(v[int(n * 0.8):])
+    if not lo_part or not hi_part:
+        return None
+    v_lo = lo_part[len(lo_part) // 2]
+    v_hi = hi_part[len(hi_part) // 2]
+    if v_hi - v_lo < 1.0:
+        return None
+    t10 = v_lo + 0.1 * (v_hi - v_lo)
+    t90 = v_lo + 0.9 * (v_hi - v_lo)
+
+    def crossing(level: float, start: int) -> Optional[float]:
+        for i in range(max(1, start), n):
+            if v[i - 1] < level <= v[i]:
+                return (i - 1) + (level - v[i - 1]) / (v[i] - v[i - 1])
+        return None
+
+    i10 = crossing(t10, pre // 2)
+    if i10 is None:
+        return None
+    i90 = crossing(t90, int(i10))
+    if i90 is None:
+        return None
+    return (i90 - i10) / rate_hz
+
+
+def mean_std(xs: list[float]) -> tuple[float, float]:
+    m = sum(xs) / len(xs)
+    if len(xs) < 2:
+        return m, 0.0
+    return m, (sum((x - m) ** 2 for x in xs) / (len(xs) - 1)) ** 0.5
+
 
 
 class BenchAbort(Exception):
@@ -591,23 +723,20 @@ def s5_verify_released(
     8. Handshake HS_MCU (automatically traced).
     9. Creates and installs valid BusToken in tracker.
     """
+    def step_pattern(kind: str) -> str:
+        try:
+            return table_pattern(f"step{step_id}_buschk_{kind}")
+        except KeyError:
+            return table_pattern(f"step6_buschk_{kind}")
+
     if up_pattern is None:
         if step_id == STEP_T0B_S5_NEG:
             up_pattern = table_pattern("step4_buschk_drive")
-        elif step_id == STEP_T0A_MCU_TO_AD2:
-            up_pattern = table_pattern("step8_buschk_up")
-        elif step_id == STEP_T0A_AD2_TO_MCU:
-            up_pattern = table_pattern("step9_buschk_up")
         else:
-            up_pattern = table_pattern("step6_buschk_up")
+            up_pattern = step_pattern("up")
 
     if down_pattern is None:
-        if step_id == STEP_T0A_MCU_TO_AD2:
-            down_pattern = table_pattern("step8_buschk_down")
-        elif step_id == STEP_T0A_AD2_TO_MCU:
-            down_pattern = table_pattern("step9_buschk_down")
-        else:
-            down_pattern = table_pattern("step6_buschk_down")
+        down_pattern = step_pattern("down")
 
     oe_start = ad2.get_oe() & AD2_DIO_BUS_MASK
     if oe_start != 0:
@@ -754,6 +883,22 @@ def run_selftest(
         "t0a_mcu_to_ad2_ctrl": False,
         "t0a_ad2_to_mcu": False,
         "t0a_scope": False,
+        "t3_sequence": False,
+        "t3_control": False,
+        "t4_crc": False,
+        "t4_control": False,
+        "t7_analog": False,
+        "t7_control": False,
+        "t8_driver": False,
+        "t8_control": False,
+        "t5_pulls": False,
+        "t5_controls": False,
+        "t6_open_drain": False,
+        "t6_control": False,
+        "t9_gate": False,
+        "t9_control": False,
+        "t10_freq": False,
+        "t10_control": False,
         "t16_pass": False,
     }
 
@@ -1171,6 +1316,267 @@ def run_selftest(
             log("[ad2] Scope check PASSED.")
         else:
             log("[ad2] Scope check FAILED!")
+
+        # ---- F1a steps with the AD2 ------------------------------------------
+
+        def enter(step_id: int) -> None:
+            m = line_reader.expect(table_pattern(f"step{step_id}_announcement"), timeout_s=10.0)
+            step_tracker.validate_announcement(m.group(0), ad2, log_fn=log)
+
+        def host_req_output() -> None:
+            ad2.set_oe(AD2_DIO_HOST_REQ, GPIO_BENCH_BUS_NONE)
+            ad2.digital_io_write(0, AD2_DIO_HOST_REQ)
+
+        def release_bus_then_strobe(step_name: str) -> None:
+            """S5 point 2, end: OE = 0 with read-back, then a HOST_REQ pulse."""
+            ad2.set_safe_state()
+            if ad2.get_oe() != 0:
+                raise AD2SafetyViolation(f"S5: OE not 0 after releasing the bus in {step_name}")
+            host_req_output()
+            hs_host(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+
+        # Step 30: T3 (bus = MCU)
+        enter(STEP_T3_MCU_OPS)
+        log("[ad2] Step T3: Set/Reset/Write/WritePort/Toggle on the bus, LA capture...")
+        s5_verify_released(ad2, step_tracker, STEP_T3_MCU_OPS, line_reader, clock=clock, log_fn=log)
+        t3_results = []
+        for ready_name, arm_name, check_name, is_control in (
+            ("step30_ready", "HOST_ARM t3_la", "HOST_CHECK t3_sequence", False),
+            ("step30_ctrl_ready", "HOST_ARM t3_ctrl_la", "HOST_CHECK t3_control", True),
+        ):
+            line_reader.expect(table_pattern(ready_name), timeout_s=10.0)
+            rec_measure(arm_name)
+            rate, n = ad2.la_arm(T3_LA_RATE_HZ, T3_LA_SAMPLES, trigger_rise_mask=AD2_DIO_HOST_REQ, prefill=50)
+            hs_host(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+            samples = ad2.la_read(n, timeout_s=2.0)
+            rec_measure(check_name)
+            seq = la_stable_sequence(samples or [], AD2_DIO_BUS_MASK, 0, T3_MIN_RUN)
+            if seq and seq[0] == 0x00:
+                seq = seq[1:]
+            diffs = [i for i in range(min(len(seq), len(T3_EXPECTED))) if seq[i] != T3_EXPECTED[i]]
+            if len(seq) != len(T3_EXPECTED):
+                diffs.append(-1)
+            log(f"[ad2] T3 {'control' if is_control else 'sequence'}: {len(seq)} values captured at "
+                f"{rate / 1e6:.0f} MHz, expected {len(T3_EXPECTED)}; mismatches at {diffs if diffs else 'none'}")
+            if diffs:
+                log("[ad2] T3 captured: " + " ".join(f"{v:02X}" for v in seq))
+            t3_results.append(diffs)
+        checklist_results["t3_sequence"] = (t3_results[0] == [])
+        checklist_results["t3_control"] = (t3_results[1] == [T3_CONTROL_INDEX])
+        log(f"[ad2] T3 sequence {'PASSED' if checklist_results['t3_sequence'] else 'FAILED'}; "
+            f"control (one wrong value at index {T3_CONTROL_INDEX}) {'detected' if checklist_results['t3_control'] else 'NOT detected'}.")
+        line_reader.expect(table_pattern("step30_done"), timeout_s=10.0)
+
+        # Step 31: T4 (bus = AD2)
+        enter(STEP_T4_AD2_PATTERNS)
+        log("[ad2] Step T4: 256 patterns driven by the AD2, read with ReadPort/Read...")
+        s5_verify_released(ad2, step_tracker, STEP_T4_AD2_PATTERNS, line_reader, clock=clock, log_fn=log)
+        line_reader.expect(table_pattern("step31_ready"), timeout_s=10.0)
+        hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+        clock.sleep(0.001)                                  # S6: 1 ms after the MCU let go
+        t4_lines = {}
+        for pass_no, patterns in ((1, list(range(256))), (2, [(~p) & 0xFF for p in range(256)])):
+            for p in patterns:
+                drive_bus(ad2, step_tracker, p)
+                hs_host(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+            m = line_reader.expect(table_pattern(f"step31_pass{pass_no}_res"), timeout_s=10.0)
+            t4_lines[pass_no] = m.group(0)
+            rec_measure("HOST_CHECK t4_crc" if pass_no == 1 else "HOST_CHECK t4_control")
+        crc_ok = crc32_bytes(range(256))
+        crc_inv = crc32_bytes((~p) & 0xFF for p in range(256))
+
+        def parse_t4(text: str) -> tuple[int, int, int]:
+            mm = re.search(r"count=(\d+) crc_port=0x([0-9A-F]{8}) crc_bits=0x([0-9A-F]{8})", text)
+            return int(mm.group(1)), int(mm.group(2), 16), int(mm.group(3), 16)
+
+        c1, p1, b1 = parse_t4(t4_lines[1])
+        c2, p2, b2 = parse_t4(t4_lines[2])
+        checklist_results["t4_crc"] = (c1 == 256 and p1 == crc_ok and b1 == crc_ok)
+        checklist_results["t4_control"] = (c2 == 256 and p2 != crc_ok and p2 == crc_inv and b2 == crc_inv)
+        log(f"[ad2] T4 pass 1: count={c1} crc_port=0x{p1:08X} crc_bits=0x{b1:08X}, host CRC32=0x{crc_ok:08X} -> "
+            f"{'PASSED' if checklist_results['t4_crc'] else 'FAILED'}")
+        log(f"[ad2] T4 control (inverted pass): crc_port=0x{p2:08X} differs from 0x{crc_ok:08X} and equals "
+            f"inverted CRC 0x{crc_inv:08X} -> {'detected' if checklist_results['t4_control'] else 'NOT detected'}")
+        release_bus_then_strobe("T4")
+        line_reader.expect(table_pattern("step31_done"), timeout_s=10.0)
+
+        # Step 32: T7 (bus = AD2)
+        enter(STEP_T7_ANALOG_IDR)
+        log("[ad2] Step T7: AD2 drives 0xFF; MCU reads IDR in analog, then in input...")
+        s5_verify_released(ad2, step_tracker, STEP_T7_ANALOG_IDR, line_reader, clock=clock, log_fn=log)
+        line_reader.expect(table_pattern("step32_analog_ready"), timeout_s=10.0)
+        hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+        clock.sleep(0.001)
+        rec_measure("HOST_DRIVE t7_ff")
+        drive_bus(ad2, step_tracker, 0xFF)
+        hs_host(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+        m_an = line_reader.expect(table_pattern("step32_analog_res"), timeout_s=10.0)
+        line_reader.expect(table_pattern("step32_input_ready"), timeout_s=10.0)
+        hs_host(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+        m_in = line_reader.expect(table_pattern("step32_input_res"), timeout_s=10.0)
+        rec_measure("HOST_CHECK t7")
+        idr_an = int(re.search(r"idr=0x([0-9A-F]{2})", m_an.group(0)).group(1), 16)
+        idr_in = int(re.search(r"idr=0x([0-9A-F]{2})", m_in.group(0)).group(1), 16)
+        checklist_results["t7_analog"] = (idr_an == 0x00)
+        checklist_results["t7_control"] = (idr_in == 0xFF)
+        log(f"[ad2] T7 analog IDR=0x{idr_an:02X} (expected 0x00); control, input IDR=0x{idr_in:02X} (expected 0xFF)")
+        release_bus_then_strobe("T7")
+        line_reader.expect(table_pattern("step32_done"), timeout_s=10.0)
+
+        # Step 33: T8 (bus = NONE, PE5 = DIO9)
+        enter(STEP_T8_NO_GLITCH)
+        log("[ad2] Step T8: input -> output on PE5 (DIO9), LA at 100 MHz...")
+        t8_ok = True
+        t8_ctrl = False
+        for case, (expected, desc) in T8_CASES.items():
+            line_reader.expect(table_pattern(f"step33_case{case}_ready"), timeout_s=10.0)
+            rec_measure("HOST_ARM t8_la")
+            rate, n = ad2.la_arm(T8_LA_RATE_HZ, T8_LA_SAMPLES, trigger_rise_mask=AD2_DIO_HOST_REQ, prefill=100)
+            hs_host(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+            samples = ad2.la_read(n, timeout_s=2.0)
+            rec_measure("HOST_CHECK t8_case")
+            edges = la_transitions(samples or [], 9) if samples else -1
+            if case == "E":
+                t8_ctrl = edges >= 2
+                verdict = "pulse seen" if t8_ctrl else "NO PULSE"
+            else:
+                ok = (edges == expected)
+                t8_ok = t8_ok and ok
+                verdict = "OK" if ok else "FAIL"
+            log(f"[ad2] T8 case {case} ({desc}): DIO9 transitions={edges} (expected "
+                f"{'>=2' if case == 'E' else expected}) {verdict}")
+        checklist_results["t8_driver"] = t8_ok
+        checklist_results["t8_control"] = t8_ctrl
+        line_reader.expect(table_pattern("step33_done"), timeout_s=10.0)
+
+        # Step 34: T5 (bus = NONE)
+        enter(STEP_T5_PULLS)
+        log("[ad2] Step T5: pull resistances on PF14 / PF15...")
+        v = {}
+        for key in ("vdd", "nopull", "pulls"):
+            line_reader.expect(table_pattern(f"step34_{key}_ready"), timeout_s=10.0)
+            rec_measure(f"HOST_MEASURE t5_{key}")
+            v[key] = (ad2.analog_in_average(0), ad2.analog_in_average(1))
+            hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+        v_dd = v["vdd"][1]
+        v_np14, v_np15 = v["nopull"]
+        v_pu14, v_pd15 = v["pulls"]
+        t5_ctrl = (v_np14 < 0.1) and (v_np15 > 2.9) and (v_pu14 <= 2.0)
+        r_pu = r_pd = r_in = float("nan")
+        try:
+            r_in = T5_RX_OHMS * v_np15 / (v_dd - v_np15)
+            r_par = 1.0 / (1.0 / T5_RX_OHMS + 1.0 / r_in)
+            r_pu = r_par * (v_dd / v_pu14 - 1.0)
+            x = T5_RX_OHMS * v_pd15 / (v_dd - v_pd15)
+            r_pd = 1.0 / (1.0 / x - 1.0 / r_in)
+        except ZeroDivisionError:
+            pass
+        t5_ok = t5_ctrl and (T5_R_MIN <= r_pu <= T5_R_MAX) and (T5_R_MIN <= r_pd <= T5_R_MAX)
+        checklist_results["t5_controls"] = t5_ctrl
+        checklist_results["t5_pulls"] = t5_ok
+        log(f"[ad2] T5 V_DD={v_dd:.3f} V, V_NP14={v_np14:.3f} V, V_NP15={v_np15:.3f} V, "
+            f"V_PU14={v_pu14:.3f} V, V_PD15={v_pd15:.3f} V (R_X={T5_RX_OHMS / 1e3:.0f}k nominal)")
+        log(f"[ad2] T5 R_IN={r_in / 1e3:.1f}k R_PU={r_pu / 1e3:.1f}k R_PD={r_pd / 1e3:.1f}k "
+            f"(range {T5_R_MIN / 1e3:.0f}-{T5_R_MAX / 1e3:.0f}k) -> {'PASSED' if t5_ok else 'FAILED'}")
+        log(f"[ad2] T5 controls: V_NP14<0.1 {v_np14 < 0.1}, V_NP15>2.9 {v_np15 > 2.9}, V_PU14<=2.0 {v_pu14 <= 2.0} "
+            f"(scope offset read on PF14 with no pull: {v_np14 * 1e3:.0f} mV)")
+        line_reader.expect(table_pattern("step34_done"), timeout_s=10.0)
+
+        # Step 35: T6 (bus = NONE)
+        enter(STEP_T6_OPEN_DRAIN)
+        log("[ad2] Step T6: open-drain on PF15 (22k to 3V3) and PF14 (22k to GND)...")
+        w = {}
+        for key in ("odlow", "odrel", "ctrl"):
+            line_reader.expect(table_pattern(f"step35_{key}_ready"), timeout_s=10.0)
+            rec_measure(f"HOST_MEASURE t6_{key}")
+            w[key] = (ad2.analog_in_average(0), ad2.analog_in_average(1))
+            hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+        v15_low = w["odlow"][1]
+        v14_rel = w["odlow"][0]
+        v15_rel = w["odrel"][1]
+        v14_pp = w["ctrl"][0]
+        t6_ok = (v15_low <= 0.4) and (abs(v15_rel - v_np15) <= 0.1) and (v14_rel < 0.1)
+        checklist_results["t6_open_drain"] = t6_ok
+        checklist_results["t6_control"] = (v14_pp > 2.9)
+        log(f"[ad2] T6 (a) PF15 OD low={v15_low:.3f} V (<=0.4), OD released={v15_rel:.3f} V (V_NP15={v_np15:.3f} +-0.1); "
+            f"(b) PF14 OD released={v14_rel:.3f} V (<0.1) -> {'PASSED' if t6_ok else 'FAILED'}")
+        log(f"[ad2] T6 control: PF14 push-pull high={v14_pp:.3f} V (>2.9)")
+        line_reader.expect(table_pattern("step35_done"), timeout_s=10.0)
+
+        # Step 36: T9 (bus = NONE)
+        enter(STEP_T9_RISE_TIME)
+        log("[ad2] Step T9: 10-90 % rise time per OSPEEDR on PF14 / PF15, 100 MS/s...")
+        tr: dict[int, tuple[list[float], list[float]]] = {}
+        for sp in range(4):
+            line_reader.expect(table_pattern(f"step36_speed{sp}_ready"), timeout_s=10.0)
+            r14: list[float] = []
+            r15: list[float] = []
+            for _ in range(T9_EDGES):
+                rate, n = ad2.scope_arm_rise(T9_RATE_HZ, T9_SAMPLES, trigger_channel=0, level_v=1.65)
+                hs_host(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+                data = ad2.scope_read(n, timeout_s=1.0)
+                if data is None:
+                    continue
+                t14 = rise_time_10_90(data[0], rate, 0.1)
+                t15 = rise_time_10_90(data[1], rate, 0.1)
+                if t14 is not None:
+                    r14.append(t14 * 1e9)
+                if t15 is not None:
+                    r15.append(t15 * 1e9)
+            tr[sp] = (r14, r15)
+            for name, rs in (("PF14", r14), ("PF15", r15)):
+                if rs:
+                    m_, s_ = mean_std(rs)
+                    log(f"[ad2] T9 speed={sp} {name}: tr={m_:.2f} ns sd={s_:.2f} ns over {len(rs)} edges "
+                        f"[{', '.join(f'{x:.1f}' for x in rs)}]")
+                else:
+                    log(f"[ad2] T9 speed={sp} {name}: no edge measured")
+        line_reader.expect(table_pattern("step36_ctrl_ready"), timeout_s=10.0)
+        rate, n = ad2.scope_arm_rise(T9_RATE_HZ, T9_SAMPLES, trigger_channel=0, level_v=1.65)
+        hs_host(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+        ctrl_data = ad2.scope_read(n, timeout_s=0.5)
+        rec_measure("HOST_CHECK t9")
+        gate = True
+        for idx, name in ((0, "PF14"), (1, "PF15")):
+            low, vh = tr[0][idx], tr[3][idx]
+            if len(low) < 2 or len(vh) < 2:
+                gate = False
+                log(f"[ad2] T9 gate {name}: not enough edges")
+                continue
+            (m_l, s_l), (m_v, s_v) = mean_std(low), mean_std(vh)
+            sigma = ((s_l ** 2) / len(low) + (s_v ** 2) / len(vh)) ** 0.5
+            ok = (m_l - m_v) > 5.0 * sigma
+            gate = gate and ok
+            log(f"[ad2] T9 gate {name}: tr(LOW)-tr(VERY_HIGH)={m_l - m_v:.2f} ns, 5 sigma={5 * sigma:.2f} ns "
+                f"(sigma of the difference of means) -> {'OK' if ok else 'FAIL'}")
+        checklist_results["t9_gate"] = gate
+        checklist_results["t9_control"] = ctrl_data is None
+        log(f"[ad2] T9 control (pins in input): {'no edge' if ctrl_data is None else 'EDGE SEEN'}")
+        line_reader.expect(table_pattern("step36_done"), timeout_s=10.0)
+
+        # Step 37: T10 (bus = NONE, PA8 = DIO14)
+        enter(STEP_T10_MCO1)
+        log("[ad2] Step T10: MCO1 = HSI/4 on PA8, frequency on DIO14...")
+        m_mco = line_reader.expect(table_pattern("step37_mco_ready"), timeout_s=10.0)
+        rec_measure("HOST_MEASURE t10_freq")
+        rate, n = ad2.la_arm(100e6, 4096)
+        samples = ad2.la_read(n, timeout_s=2.0) or []
+        f_hz, rises = la_frequency(samples, 14, rate)
+        hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+        hsi_on = m_mco.group(0).endswith("hsi=1")
+        f_ok = hsi_on and abs(f_hz - T10_EXPECTED_HZ) <= T10_EXPECTED_HZ * T10_TOLERANCE
+        checklist_results["t10_freq"] = f_ok
+        log(f"[ad2] T10 DIO14: {f_hz / 1e6:.3f} MHz from {rises} rising edges (expected 16 MHz +-2 %, HSI ready={hsi_on}) "
+            f"-> {'PASSED' if f_ok else 'FAILED'}")
+        line_reader.expect(table_pattern("step37_ctrl_ready"), timeout_s=10.0)
+        rec_measure("HOST_MEASURE t10_control")
+        rate, n = ad2.la_arm(100e6, 4096)
+        samples = ad2.la_read(n, timeout_s=2.0) or []
+        f_ctrl, rises_ctrl = la_frequency(samples, 14, rate)
+        hs_mcu(ad2, clock=clock, log_fn=log, timeout_s=10.0, line_reader=line_reader)
+        checklist_results["t10_control"] = (rises_ctrl < 2)
+        log(f"[ad2] T10 control (PA8 in AF1): {rises_ctrl} rising edges, {f_ctrl / 1e6:.3f} MHz (expected no signal)")
+        line_reader.expect(table_pattern("step37_done"), timeout_s=10.0)
 
         # 13. Step 20: T16 LCKR, last test of the image
         m_step20 = line_reader.expect(table_pattern("step20_announcement"), timeout_s=10.0)

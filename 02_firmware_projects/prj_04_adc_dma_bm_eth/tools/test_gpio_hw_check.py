@@ -128,6 +128,8 @@ class MockDwfLib:
         self.output_val = 0
         self.analog_dc = [0.0, 0.0]
         self.calls: list[tuple] = []
+        self.oe_by_step: list[tuple[int, int]] = []   # (firmware step when written, OE mask)
+        self.fw_model = None
 
     def connect_bus(self, bus: SimBus) -> None:
         self.bus = bus
@@ -161,6 +163,8 @@ class MockDwfLib:
     def FDwfDigitalIOOutputEnableSet(self, hdwf, mask):
         val = getattr(mask, "value", mask)
         self.calls.append(("FDwfDigitalIOOutputEnableSet", getattr(hdwf, "value", hdwf), val))
+        step = self.fw_model.step_id if self.fw_model is not None else 0
+        self.oe_by_step.append((step, val))
         self.oe = val
         if self.bus:
             self.bus.check_electrical_invariant()
@@ -196,10 +200,13 @@ class MockDwfLib:
         pass
 
     def FDwfAnalogInConfigure(self, hdwf, reconfig, start):
-        pass
+        if getattr(start, "value", start) and self.ai_trigger and self.bus is not None:
+            self.bus.scope_edge = None
 
     def FDwfAnalogInStatus(self, hdwf, re_read, p_status):
-        p_status._obj.value = 2  # DwfStateDone
+        if self.fw_model is not None and self.ai_trigger:
+            self.fw_model.step()
+        p_status._obj.value = 2 if self._analog_done() else 1
 
     def FDwfAnalogInStatusSample(self, hdwf, channel, p_val):
         ch = getattr(channel, "value", channel)
@@ -210,6 +217,135 @@ class MockDwfLib:
 
     def FDwfGetLastErrorMsg(self, buf):
         buf.value = b"Mock error"
+
+    # ---- DigitalIn (logic analyzer), fed by SimBus.la_* -------------------
+    di_div = 1
+    di_size = 4096
+    di_trigger = 0
+    di_position = 0
+
+    def FDwfDigitalInReset(self, hdwf):
+        self.di_trigger = 0
+
+    def FDwfDigitalInBufferSizeInfo(self, hdwf, p_max):
+        p_max._obj.value = 4096
+
+    def FDwfDigitalInDividerSet(self, hdwf, div):
+        self.di_div = getattr(div, "value", div)
+
+    def FDwfDigitalInSampleFormatSet(self, hdwf, bits):
+        pass
+
+    def FDwfDigitalInBufferSizeSet(self, hdwf, n):
+        self.di_size = getattr(n, "value", n)
+
+    def FDwfDigitalInTriggerSourceSet(self, hdwf, src):
+        if getattr(src, "value", src) == 0:
+            self.di_trigger = 0
+
+    def FDwfDigitalInTriggerSet(self, hdwf, low, high, rise, fall):
+        self.di_trigger = getattr(rise, "value", rise)
+
+    def FDwfDigitalInTriggerPositionSet(self, hdwf, pos):
+        self.di_position = getattr(pos, "value", pos)
+
+    def FDwfDigitalInConfigure(self, hdwf, reconfigure, start):
+        if getattr(start, "value", start) and self.bus is not None:
+            self.bus.la_capture = None
+
+    def FDwfDigitalInStatus(self, hdwf, read, p_sts):
+        if self.fw_model is not None:
+            self.fw_model.step()
+        done = (self.di_trigger == 0) or (self.bus is not None and self.bus.la_capture is not None)
+        p_sts._obj.value = 2 if done else 1
+
+    def FDwfDigitalInStatusData(self, hdwf, buf, nbytes):
+        n = getattr(nbytes, "value", nbytes) // 2
+        rate = 100e6 / self.di_div
+        bus = self.bus
+        if self.di_trigger:
+            prefill = n - self.di_position
+            data = [bus.la_pre_value] * prefill
+            for word, dur in (bus.la_capture or []):
+                data += [word] * max(1, int(round(dur * rate)))
+            last = data[-1] if data else 0
+            data = (data + [last] * n)[:n]
+        else:
+            static = bus.read_dio() & ~0x4000 if bus else 0
+            f = bus.dio14_freq_hz if bus else 0.0
+            data = []
+            for i in range(n):
+                hi = f > 0 and ((i * f / rate) % 1.0) < 0.5
+                data.append(static | (0x4000 if hi else 0))
+        for i in range(n):
+            buf[i] = data[i]
+
+    # ---- AnalogIn (scope), fed by SimBus.pf14/15_voltage and scope_edge ---
+    ai_rate = 100e6
+    ai_size = 8192
+    ai_trigger = 0
+
+    def FDwfAnalogInReset(self, hdwf):
+        self.ai_trigger = 0
+
+    def FDwfAnalogInBufferSizeInfo(self, hdwf, p_min, p_max):
+        p_min._obj.value = 16
+        p_max._obj.value = 8192
+
+    def FDwfAnalogInFrequencySet(self, hdwf, hz):
+        self.ai_rate = getattr(hz, "value", hz)
+
+    def FDwfAnalogInFrequencyGet(self, hdwf, p_hz):
+        p_hz._obj.value = self.ai_rate
+
+    def FDwfAnalogInBufferSizeSet(self, hdwf, n):
+        self.ai_size = getattr(n, "value", n)
+
+    def FDwfAnalogInAcquisitionModeSet(self, hdwf, mode):
+        pass
+
+    def FDwfAnalogInTriggerSourceSet(self, hdwf, src):
+        self.ai_trigger = getattr(src, "value", src)
+
+    def FDwfAnalogInTriggerAutoTimeoutSet(self, hdwf, t):
+        pass
+
+    def FDwfAnalogInTriggerTypeSet(self, hdwf, t):
+        pass
+
+    def FDwfAnalogInTriggerChannelSet(self, hdwf, ch):
+        pass
+
+    def FDwfAnalogInTriggerLevelSet(self, hdwf, v):
+        pass
+
+    def FDwfAnalogInTriggerConditionSet(self, hdwf, c):
+        pass
+
+    def FDwfAnalogInTriggerPositionSet(self, hdwf, t):
+        pass
+
+    def FDwfAnalogInStatusData(self, hdwf, channel, buf, n):
+        ch = getattr(channel, "value", channel)
+        n = getattr(n, "value", n)
+        bus = self.bus
+        if self.ai_trigger and bus is not None and bus.scope_edge is not None:
+            tr_s = bus.scope_edge[ch] * 1e-9
+            ramp = tr_s / 0.8                      # 0 -> 100 % takes tr / 0.8
+            start = int(0.1 * n)
+            for i in range(n):
+                t = (i - start) / self.ai_rate
+                frac = 0.0 if t <= 0 else min(1.0, t / ramp)
+                buf[i] = 3.3 * frac
+        else:
+            v = (bus.pf14_voltage if ch == 0 else bus.pf15_voltage) if bus else self.analog_dc[ch]
+            for i in range(n):
+                buf[i] = v
+
+    def _analog_done(self):
+        if self.ai_trigger:
+            return self.bus is not None and self.bus.scope_edge is not None
+        return True
 
 
 class SimClock:
@@ -469,6 +605,58 @@ class TestHarnessScenarios(BaseSimTest):
         self.assertNotEqual(code, 0)
         self.assertEqual(GPIO_BENCH_PROTOCOL_VERSION, 2)
         self.assertTrue(any("Protocol version mismatch" in l or "Unexpected protocol line" in l for l in logs))
+
+    # ---- F1a banco: cada control, fallos del driver, E15/E16 en T3/T4/T7 ------
+    def test_f1a_each_bench_control_failing_gives_fail(self):
+        """F1a §2.4: when a control does not reproduce its danger, the host marks it and HOST VERDICT=FAIL."""
+        for fault, item in (
+            ("t3_ctrl", "t3_control"),
+            ("t4_ctrl", "t4_control"),
+            ("t7_ctrl", "t7_control"),
+            ("t8_ctrl", "t8_control"),
+            ("t5_ctrl", "t5_controls"),
+            ("t6_ctrl", "t6_control"),
+            ("t9_ctrl", "t9_control"),
+            ("t10_ctrl", "t10_control"),
+        ):
+            with self.subTest(control=fault):
+                faults = FaultInjectionConfig()
+                faults.bench_fault = fault
+                code, logs, _ = self._run_with(faults)
+                self.assertNotEqual(code, 0)
+                self.assertTrue(any(f"[FAIL] {item}" in l for l in logs), f"{item} not marked FAIL")
+                self.assertTrue(any("HOST VERDICT=FAIL" in l for l in logs))
+
+    def test_f1a_driver_faults_on_the_bench_give_fail(self):
+        """F1a: a wrong T3 value, a glitch in T8 case C (MODER before BSRR) and a wrong MCO frequency are caught."""
+        for fault, item in (("t3_seq", "t3_sequence"), ("t8_glitch", "t8_driver"), ("t10_freq", "t10_freq")):
+            with self.subTest(fault=fault):
+                faults = FaultInjectionConfig()
+                faults.bench_fault = fault
+                code, logs, _ = self._run_with(faults)
+                self.assertNotEqual(code, 0)
+                self.assertTrue(any(f"[FAIL] {item}" in l for l in logs), f"{item} not marked FAIL")
+
+    def test_f1a_e15_e16_mcu_keeps_bus_in_new_steps(self):
+        """E15/E16 extended to T3 (bus=MCU), T4 and T7 (bus=AD2): a line the MCU does not let go aborts the
+        step before any bus output is enabled in it, with OE=0 at the end and no contention."""
+        for step in (30, 31, 32):
+            for kind in ("up", "down"):
+                with self.subTest(step=step, check=kind):
+                    faults = FaultInjectionConfig()
+                    faults.buschk_fail = (step, kind)
+                    ad2, ser, clock, reset_fn, _, bus = self.create_simulated_bench(faults=faults)
+                    logs: list[str] = []
+                    code = run_selftest(serial_port=ser, ad2=ad2, clock=clock, reset_fn=reset_fn,
+                                        expected_rev="ca569b6", log_fn=logs.append)
+                    self.assertNotEqual(code, 0)
+                    self.assertEqual(ad2.get_oe(), 0x0000)
+                    self.assertTrue(any("HOST VERDICT=FAIL" in l for l in logs))
+                    self.assertTrue(any(f"contention check failed at step {step}" in l for l in logs))
+                    in_step = [oe for st, oe in ad2._mock_dwf.oe_by_step if st == step]
+                    self.assertTrue(all((oe & AD2_DIO_BUS_MASK) == 0 for oe in in_step),
+                                    f"bus OE written in step {step}: {in_step}")
+                    self.assertEqual(bus.violations, [])
 
     # ---- E5: CM4 VERDICT=FAIL o no llega ------------------------------------
     def test_e5_cm4_verdict_fail_or_missing(self):
@@ -942,15 +1130,18 @@ class TestHarnessScenarios(BaseSimTest):
         self.assertEqual(code, 0)
         expected_table_trace = []
         for it in PROTOCOL_ITEMS:
-            if it.item_type == "LINE":
-                expected_table_trace.append(("LINE", it.line_pattern))
-            elif it.item_type == "PRIM":
-                expected_table_trace.append(("PRIM", it.primitive))
-            elif it.item_type == "MEASURE":
-                expected_table_trace.append(("MEASURE", it.name))
+            # An item with repeat = n stands for n identical items in a row (T4 strobes, T9 edges).
+            for _ in range(it.repeat):
+                if it.item_type == "LINE":
+                    expected_table_trace.append(("LINE", it.line_pattern))
+                elif it.item_type == "PRIM":
+                    expected_table_trace.append(("PRIM", it.primitive))
+                elif it.item_type == "MEASURE":
+                    expected_table_trace.append(("MEASURE", it.name))
+        table_len = sum(it.repeat for it in PROTOCOL_ITEMS)
 
-        self.assertEqual(len(host_trace), len(PROTOCOL_ITEMS), "Host trace length does not match protocol table")
-        self.assertEqual(len(fw.trace), len(PROTOCOL_ITEMS), "Model trace length does not match protocol table")
+        self.assertEqual(len(host_trace), table_len, "Host trace length does not match protocol table")
+        self.assertEqual(len(fw.trace), table_len, "Model trace length does not match protocol table")
         self.assertEqual(host_trace, expected_table_trace, "Host trace differs from protocol table")
         self.assertEqual(fw.trace, expected_table_trace, "Model trace differs from protocol table")
         self.assertEqual(host_trace, fw.trace, "Host and model traces differ")

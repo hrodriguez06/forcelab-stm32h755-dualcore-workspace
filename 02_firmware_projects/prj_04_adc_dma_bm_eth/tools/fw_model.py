@@ -60,6 +60,14 @@ STEP_T1_REJECT      = 11
 STEP_T2_PARITY      = 12
 STEP_B1_MEASURE     = 13
 STEP_T16_LCKR       = 20
+STEP_T3_MCU_OPS      = 30
+STEP_T4_AD2_PATTERNS = 31
+STEP_T7_ANALOG_IDR   = 32
+STEP_T8_NO_GLITCH    = 33
+STEP_T5_PULLS        = 34
+STEP_T6_OPEN_DRAIN   = 35
+STEP_T9_RISE_TIME    = 36
+STEP_T10_MCO1        = 37
 STEP_DONE           = 99
 
 
@@ -91,6 +99,16 @@ class SimBus:
         # PF14 / PF15 analog scope voltages
         self.pf14_voltage = 0.0
         self.pf15_voltage = 0.0
+
+        # F1a measurement sources, read by the mock DWF library:
+        #   la_pre_value / la_capture: DIO words before the trigger and, from the
+        #   trigger on, a list of (word, duration in s) the firmware produced;
+        #   dio14_freq_hz: square wave on DIO14 (MCO1) for untriggered captures;
+        #   scope_edge: (tr PF14, tr PF15) in ns of the next rising edge, or None.
+        self.la_pre_value = 0
+        self.la_capture: Optional[list[tuple[int, float]]] = None
+        self.dio14_freq_hz = 0.0
+        self.scope_edge: Optional[tuple[float, float]] = None
 
         # R2-M2: Contention tracking list
         self.violations: list[dict] = []
@@ -218,6 +236,8 @@ class FaultInjectionConfig:
         self.inject_step7_protocol_abort: bool = False          # R3-m1: MCU aborts during Step 7 handshake
         self.lckr_locked_at_boot: bool = False                  # F1a: GPIOF LCKR not clean at boot
         self.verdict_fail: Optional[str] = None                 # F1a: 't1', 't2', 'b1' or 't16' reports FAIL
+        self.bench_fault: Optional[str] = None                  # F1a bench: see FirmwareModel._bench_f1a
+        self.buschk_fail: Optional[tuple[int, str]] = None      # F1a: (step, 'up'|'down') MCU keeps a bus line
 
 
 class FirmwareModel:
@@ -348,6 +368,275 @@ class FirmwareModel:
 
         # Phase 4: MCU drops MCU_ACK = 0
         self.bus.set_mcu_output(DIO_MCU_ACK, 0)
+        yield
+        return True
+
+    # ---- F1a bench steps (T3, T4, T7, T8, T5, T6, T9, T10) --------------------
+
+    def hs_host_act(self, step_name: str, action=None):
+        """HS_HOST with an action between HOST_REQ rising and MCU_ACK rising."""
+        self.visited_items.append(step_name)
+        self.trace.append(("PRIM", "HS_HOST"))
+        if self.faults.handshake_timeout_step == step_name:
+            return False
+        start = self.clock.monotonic()
+        while not (self.bus.read_mcu_idr(DIO_HOST_REQ) & DIO_HOST_REQ):
+            if self.clock.monotonic() - start > 10.0:
+                self.log_m7(f"[m7_gpio_test] ABORT step={self.step_id} reason=timeout")
+                self.bus.set_mcu_safe()
+                return False
+            yield
+        if action is not None:
+            action()
+        self.bus.set_mcu_output(DIO_MCU_ACK, DIO_MCU_ACK)
+        start = self.clock.monotonic()
+        while self.bus.read_mcu_idr(DIO_HOST_REQ) & DIO_HOST_REQ:
+            if self.clock.monotonic() - start > 10.0:
+                self.log_m7(f"[m7_gpio_test] ABORT step={self.step_id} reason=timeout")
+                self.bus.set_mcu_safe()
+                return False
+            yield
+        self.bus.set_mcu_output(DIO_MCU_ACK, 0)
+        yield
+        return True
+
+    def _buschk(self, step: int):
+        """S5 point 1 in the model, with the E15/E16-style faults per step."""
+        fail = self.faults.buschk_fail
+        self.bus.mcu_pupdr = 0xAAAA if fail == (step, "up") else 0x5555
+        self.log_m7("[m7_gpio_test] BUSCHK up", item_name=f"step{step}_buschk_up")
+        yield
+        ok = yield from self.hs_mcu(f"step{step}_up")
+        if not ok:
+            return False
+        self.bus.mcu_pupdr = 0x5555 if fail == (step, "down") else 0xAAAA
+        self.log_m7("[m7_gpio_test] BUSCHK down", item_name=f"step{step}_buschk_down")
+        yield
+        ok = yield from self.hs_mcu(f"step{step}_down")
+        if not ok:
+            return False
+        return True
+
+    @staticmethod
+    def t3_values(corrupt: bool) -> list[int]:
+        vals = [v for b in range(8) for v in (1 << b, 0)]
+        vals += [0xFF] + [v for b in range(8) for v in (0xFF & ~(1 << b), 0xFF)]
+        vals += [0x54 if corrupt else 0x55, 0xAA, 0x0F, 0xF0, 0x00, 0x05, 0xA5, 0x00]
+        vals += [0xFF, 0xF0, 0x00, 0x01, 0x81, 0x00]
+        return vals
+
+    def _bench_f1a(self):
+        f = self.faults.bench_fault
+
+        # Step 30: T3 (bus = MCU)
+        self._enter_step(STEP_T3_MCU_OPS, "MCU")
+        ok = yield from self._buschk(STEP_T3_MCU_OPS)
+        if not ok:
+            return False
+        self.bus.mcu_pupdr = 0
+        for ready, arm, prim, check, corrupt in (
+            ("step30_ready", "HOST_ARM t3_la", "step30_burst", "HOST_CHECK t3_sequence", False),
+            ("step30_ctrl_ready", "HOST_ARM t3_ctrl_la", "step30_ctrl_burst", "HOST_CHECK t3_control", True),
+        ):
+            self.bus.set_mcu_output(DIO_BUS_MASK, 0)
+            self.log_m7(f"[m7_gpio_test] {'T3 control ready' if corrupt else 'T3 ready'}", item_name=ready)
+            self.record_item(arm)
+            yield
+            values = self.t3_values(corrupt and f != "t3_ctrl")
+            if not corrupt and f == "t3_seq":
+                values[5] ^= 0x10
+
+            def burst(values=values):
+                self.bus.la_capture = [(DIO_HOST_REQ | v, 2e-6) for v in values]
+                self.bus.set_mcu_output(DIO_BUS_MASK, values[-1])
+
+            ok = yield from self.hs_host_act(prim, burst)
+            if not ok:
+                return False
+            self.record_item(check)
+        self.bus.clear_mcu_output(DIO_BUS_MASK)
+        self.log_m7("[m7_gpio_test] T3: DONE (host verdict)", item_name="step30_done")
+        yield
+
+        # Step 31: T4 (bus = AD2)
+        self._enter_step(STEP_T4_AD2_PATTERNS, "AD2")
+        ok = yield from self._buschk(STEP_T4_AD2_PATTERNS)
+        if not ok:
+            return False
+        self.log_m7("[m7_gpio_test] T4 ready", item_name="step31_ready")
+        yield
+        ok = yield from self.hs_mcu("step31_ready_hs")
+        if not ok:
+            return False
+        import zlib
+        for pass_no in (1, 2):
+            got: list[int] = []
+            for _ in range(256):
+                ok = yield from self.hs_host_act(
+                    f"step31_pass{pass_no}", lambda: got.append(self.bus.read_mcu_idr(DIO_BUS_MASK)))
+                if not ok:
+                    return False
+            if pass_no == 2 and f == "t4_ctrl":
+                got = list(range(256))
+            crc = zlib.crc32(bytes(got)) & 0xFFFFFFFF
+            self.log_m7(f"[m7_gpio_test] T4 pass={pass_no} count={len(got)} crc_port=0x{crc:08X} crc_bits=0x{crc:08X}",
+                        item_name=f"step31_pass{pass_no}_res")
+            self.record_item("HOST_CHECK t4_crc" if pass_no == 1 else "HOST_CHECK t4_control")
+            yield
+        ok = yield from self.hs_host_act("step31_released")
+        if not ok:
+            return False
+        self.bus.mcu_pupdr = 0
+        self.log_m7("[m7_gpio_test] T4: DONE (host verdict)", item_name="step31_done")
+        yield
+
+        # Step 32: T7 (bus = AD2)
+        self._enter_step(STEP_T7_ANALOG_IDR, "AD2")
+        ok = yield from self._buschk(STEP_T7_ANALOG_IDR)
+        if not ok:
+            return False
+        self.bus.mcu_pupdr = 0
+        self.bus.mcu_analog = DIO_BUS_MASK
+        self.log_m7("[m7_gpio_test] T7 analog ready", item_name="step32_analog_ready")
+        yield
+        ok = yield from self.hs_mcu("step32_ready_hs")
+        if not ok:
+            return False
+        self.record_item("HOST_DRIVE t7_ff")
+        sample: list[int] = []
+        ok = yield from self.hs_host_act("step32_analog", lambda: sample.append(self.bus.read_mcu_idr(DIO_BUS_MASK)))
+        if not ok:
+            return False
+        self.log_m7(f"[m7_gpio_test] T7 analog idr=0x{sample[-1]:02X}", item_name="step32_analog_res")
+        if f != "t7_ctrl":
+            self.bus.mcu_analog = 0
+        self.log_m7("[m7_gpio_test] T7 input ready", item_name="step32_input_ready")
+        yield
+        ok = yield from self.hs_host_act("step32_input", lambda: sample.append(self.bus.read_mcu_idr(DIO_BUS_MASK)))
+        if not ok:
+            return False
+        self.log_m7(f"[m7_gpio_test] T7 input idr=0x{sample[-1]:02X}", item_name="step32_input_res")
+        self.record_item("HOST_CHECK t7")
+        yield
+        ok = yield from self.hs_host_act("step32_released")
+        if not ok:
+            return False
+        self.bus.mcu_analog = 0
+        self.log_m7("[m7_gpio_test] T7: DONE (host verdict)", item_name="step32_done")
+        yield
+
+        # Step 33: T8 (bus = NONE, PE5 = DIO9)
+        self._enter_step(STEP_T8_NO_GLITCH, "NONE")
+        cases = {  # case -> (level before, DIO9 levels after REQ)
+            "A": (0, [1]),
+            "B": (1, [0]),
+            "C": (1, [0, 1] if f == "t8_glitch" else [1]),
+            "D": (0, [0]),
+            "E": (1, [1] if f == "t8_ctrl" else [0, 1]),
+        }
+        for case, (before, after) in cases.items():
+            self.log_m7(f"[m7_gpio_test] T8 case={case} ready", item_name=f"step33_case{case}_ready")
+            self.record_item("HOST_ARM t8_la")
+            yield
+
+            def apply(before=before, after=after):
+                self.bus.la_pre_value = before * DIO_CM7_ACK
+                self.bus.la_capture = [(DIO_HOST_REQ | (lvl * DIO_CM7_ACK), 1e-6) for lvl in after]
+                self.bus.set_mcu_output(DIO_CM7_ACK, after[-1] * DIO_CM7_ACK)
+
+            ok = yield from self.hs_host_act(f"step33_case{case}", apply)
+            if not ok:
+                return False
+            self.bus.clear_mcu_output(DIO_CM7_ACK)
+            self.record_item("HOST_CHECK t8_case")
+        self.log_m7("[m7_gpio_test] T8: DONE (host verdict)", item_name="step33_done")
+        yield
+
+        # Step 34: T5 (bus = NONE) - voltages of the auditor's reference (plan, T5 row)
+        self._enter_step(STEP_T5_PULLS, "NONE")
+        pf14_pu = 2.500 if f == "t5_ctrl" else 1.104
+        for key, text, v14, v15 in (
+            ("vdd", "T5 vdd ready", 0.003, 3.289),
+            ("nopull", "T5 nopull ready", 0.150 if f == "t5_ctrl" else 0.003, 3.101),
+            ("pulls", "T5 pulls ready", pf14_pu, 2.089),
+        ):
+            self.bus.pf14_voltage, self.bus.pf15_voltage = v14, v15
+            self.log_m7(f"[m7_gpio_test] {text}", item_name=f"step34_{key}_ready")
+            self.record_item(f"HOST_MEASURE t5_{key}")
+            yield
+            ok = yield from self.hs_mcu(f"step34_{key}")
+            if not ok:
+                return False
+        self.log_m7("[m7_gpio_test] T5: DONE (host verdict)", item_name="step34_done")
+        yield
+
+        # Step 35: T6 (bus = NONE)
+        self._enter_step(STEP_T6_OPEN_DRAIN, "NONE")
+        for key, text, v14, v15 in (
+            ("odlow", "T6 od low ready", -0.002, 0.004),
+            ("odrel", "T6 od released ready", -0.002, 3.105),
+            ("ctrl", "T6 control ready", 1.500 if f == "t6_ctrl" else 3.289, 3.105),
+        ):
+            self.bus.pf14_voltage, self.bus.pf15_voltage = v14, v15
+            self.log_m7(f"[m7_gpio_test] {text}", item_name=f"step35_{key}_ready")
+            self.record_item(f"HOST_MEASURE t6_{key}")
+            yield
+            ok = yield from self.hs_mcu(f"step35_{key}")
+            if not ok:
+                return False
+        self.log_m7("[m7_gpio_test] T6: DONE (host verdict)", item_name="step35_done")
+        yield
+
+        # Step 36: T9 (bus = NONE)
+        self._enter_step(STEP_T9_RISE_TIME, "NONE")
+        base_ns = {0: 30.0, 1: 20.0, 2: 16.0, 3: 14.0}
+        for sp in range(4):
+            self.log_m7(f"[m7_gpio_test] T9 speed={sp} ready", item_name=f"step36_speed{sp}_ready")
+            yield
+            for e in range(10):
+                jitter = 0.2 * ((e % 3) - 1)
+                tr = (base_ns[sp] + jitter, base_ns[sp] + 0.5 + jitter)
+
+                def edge(tr=tr):
+                    self.bus.scope_edge = tr
+
+                ok = yield from self.hs_host_act(f"step36_speed{sp}", edge)
+                if not ok:
+                    return False
+        self.log_m7("[m7_gpio_test] T9 control ready", item_name="step36_ctrl_ready")
+        yield
+
+        def ctrl_edge():
+            if f == "t9_ctrl":
+                self.bus.scope_edge = (15.0, 15.0)
+
+        ok = yield from self.hs_host_act("step36_ctrl", ctrl_edge)
+        if not ok:
+            return False
+        self.record_item("HOST_CHECK t9")
+        self.log_m7("[m7_gpio_test] T9: DONE (host verdict)", item_name="step36_done")
+        yield
+
+        # Step 37: T10 (bus = NONE, PA8 = DIO14)
+        self._enter_step(STEP_T10_MCO1, "NONE")
+        self.bus.set_mcu_output(DIO_MCO1_PA8, 0)
+        self.bus.dio14_freq_hz = 17.0e6 if f == "t10_freq" else 16.0e6
+        self.log_m7("[m7_gpio_test] T10 mco ready hsi=1", item_name="step37_mco_ready")
+        self.record_item("HOST_MEASURE t10_freq")
+        yield
+        ok = yield from self.hs_mcu("step37_mco")
+        if not ok:
+            return False
+        self.bus.dio14_freq_hz = 16.0e6 if f == "t10_ctrl" else 0.0
+        self.log_m7("[m7_gpio_test] T10 control ready", item_name="step37_ctrl_ready")
+        self.record_item("HOST_MEASURE t10_control")
+        yield
+        ok = yield from self.hs_mcu("step37_ctrl")
+        if not ok:
+            return False
+        self.bus.dio14_freq_hz = 0.0
+        self.bus.clear_mcu_output(DIO_MCO1_PA8)
+        self.log_m7("[m7_gpio_test] T10: DONE (host verdict)", item_name="step37_done")
         yield
         return True
 
@@ -680,6 +969,11 @@ class FirmwareModel:
 
         self.log_m7("[m7_gpio_test] T0a_scope: DONE (host verdict)", item_name="step10_scope_done")
         yield
+
+        # F1a bench steps 30-37
+        ok = yield from self._bench_f1a()
+        if not ok:
+            return
 
         # 13. Step 20: T16 LCKR
         self._enter_step(STEP_T16_LCKR, "NONE")

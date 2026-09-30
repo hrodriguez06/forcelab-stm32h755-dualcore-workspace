@@ -50,10 +50,18 @@ static const BenchStepPerm_t k_step_perms[] = {
     { GPIO_BENCH_STEP_T0A_AD2_TO_MCU, 0U,        (1U << 7),                         0U },
     { GPIO_BENCH_STEP_T0A_SCOPE,      0U,        (1U << 7),                         (1U << 14) | (1U << 15) },
     { GPIO_BENCH_STEP_T16_LCKR,       0U,        (1U << 7),                         (0xFU << 6) },
+    { GPIO_BENCH_STEP_T3_MCU_OPS,     0U,        (1U << 7),                         0U },  /* + bus: table says MCU */
+    { GPIO_BENCH_STEP_T4_AD2_PATTERNS,0U,        (1U << 7),                         0U },
+    { GPIO_BENCH_STEP_T7_ANALOG_IDR,  0U,        (1U << 7),                         0U },
+    { GPIO_BENCH_STEP_T8_NO_GLITCH,   0U,        (1U << 5) | (1U << 7),             0U },
+    { GPIO_BENCH_STEP_T5_PULLS,       0U,        (1U << 7),                         (1U << 14) | (1U << 15) },
+    { GPIO_BENCH_STEP_T6_OPEN_DRAIN,  0U,        (1U << 7),                         (1U << 14) | (1U << 15) },
+    { GPIO_BENCH_STEP_T9_RISE_TIME,   0U,        (1U << 7),                         (1U << 14) | (1U << 15) },
+    { GPIO_BENCH_STEP_T10_MCO1,       (1U << 8), (1U << 7),                         0U },
     { GPIO_BENCH_STEP_DONE,           0U,        (1U << 7),                         0U },
 };
 
-#define EXPAND_BENCH_ITEM(s, t, p, n, l, b) { (uint8_t)(s), (uint8_t)(t), (uint8_t)(p), (n), (l), (uint8_t)(b) },
+#define EXPAND_BENCH_ITEM(s, t, p, n, l, b, r) { (uint8_t)(s), (uint8_t)(t), (uint8_t)(p), (n), (l), (uint8_t)(b), (uint16_t)(r) },
 
 const BenchProtocolItem_t g_bench_protocol_items[] = {
     GPIO_BENCH_PROTOCOL_TABLE(EXPAND_BENCH_ITEM)
@@ -204,8 +212,13 @@ static bool bench_set_pin_mode(GPIO_TypeDef *port, uint32_t pin, uint32_t mode, 
  *          - PE2 (HOST_REQ) which is INPUT with pull-down (10)
  *        PE0 and PE1 (LD2) are completely UNTOUCHED.
  */
+static void t10_restore_mco(void);
+
 static void bench_safe(void)
 {
+    /* T10 may have left MCO1 on HSI/4; put the saved fields back. */
+    t10_restore_mco();
+
     /* Ensure clocks are active for test ports */
     RCC->AHB4ENR |= (RCC_AHB4ENR_GPIOAEN | RCC_AHB4ENR_GPIOEEN | RCC_AHB4ENR_GPIOFEN);
     __DSB();
@@ -323,47 +336,22 @@ static bool hs_mcu(void)
  *        Waits HOST_REQ=1 -> samples IDR (optional) -> asserts MCU_ACK=1 -> waits HOST_REQ=0 -> drops MCU_ACK=0.
  *        Timeout per phase. On timeout: bench_safe(), announces abort, returns false.
  */
+typedef void (*BenchAction_t)(void *ctx);
+static bool hs_host_act(uint32_t timeout_ms, BenchAction_t act, void *ctx);
+
+static void hs_sample_idr(void *ctx)
+{
+    *(uint32_t *)ctx = GPIOE->IDR;
+}
+
+/* R-B1 HS_HOST with an IDR sample between HOST_REQ and MCU_ACK (hs_host_act). */
 static bool hs_host_sample(uint32_t timeout_ms, uint32_t *p_idr)
 {
-    /* Check protocol table at runtime (R2-M3) */
-    uint8_t expected = bench_get_expected_primitive(s_current_step_id, s_step_prim_idx);
-    if (expected != GPIO_BENCH_PRIM_HS_HOST)
-    {
-        bench_safe();
-        APP_LOG("[m7_gpio_test] ABORT step=%u reason=protocol", (unsigned int)s_current_step_id);
-        return false;
-    }
-    s_step_prim_idx++;
-
-    /* Phase 1: Wait for HOST_REQ = 1 */
-    if (!wait_host_req(true, timeout_ms))
-    {
-        bench_safe();
-        APP_LOG("[m7_gpio_test] ABORT step=%u reason=timeout", (unsigned int)s_current_step_id);
-        return false;
-    }
-
     if (p_idr != NULL)
     {
-        *p_idr = GPIOE->IDR;
+        return hs_host_act(timeout_ms, hs_sample_idr, p_idr);
     }
-
-    /* Phase 2: MCU asserts MCU_ACK = 1 */
-    set_mcu_ack(true);
-
-    /* Phase 3: Wait for HOST_REQ = 0 */
-    if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS))
-    {
-        set_mcu_ack(false);
-        bench_safe();
-        APP_LOG("[m7_gpio_test] ABORT step=%u reason=timeout", (unsigned int)s_current_step_id);
-        return false;
-    }
-
-    /* Phase 4: MCU drops MCU_ACK = 0 */
-    set_mcu_ack(false);
-
-    return true;
+    return hs_host_act(timeout_ms, NULL, NULL);
 }
 
 static bool hs_host(uint32_t timeout_ms)
@@ -1859,6 +1847,547 @@ static bool test_t0a_scope(void)
     return true;
 }
 
+/* ==========================================================================
+ * Tests with the AD2 (F1a): T3, T4, T7, T8, T5, T6, T9 and T10.
+ * Every step follows its row of GPIO_BENCH_PROTOCOL_TABLE; every output or
+ * AF configuration of a wired pin is preceded by bench_claim_output() for the
+ * current step (S4); every bus handover runs the S5 procedure first.
+ * ========================================================================== */
+
+/* Busy wait on this core's DWT cycle counter. */
+static void delay_cycles(uint32_t cycles)
+{
+    uint32_t t0 = DWT->CYCCNT;
+    while ((DWT->CYCCNT - t0) < cycles)
+    {
+    }
+}
+
+/* S5 point 1, shared by every step that hands the bus over: pull-up, the host
+   reads 0xFF; pull-down, the host reads 0x00. The MCU checks its IDR too. */
+static bool bench_buschk(void)
+{
+    uint32_t pupdr_e = GPIOE->PUPDR;
+    pupdr_e &= ~0xFFFF0000UL;
+    pupdr_e |= 0x55550000UL;
+    GPIOE->PUPDR = pupdr_e;
+    HAL_Delay(GPIO_BENCH_DEADTIME_MS);
+    uint32_t idr_up = (GPIOE->IDR >> 8U) & 0xFFU;
+    APP_LOG("[m7_gpio_test] BUSCHK up");
+    if (!hs_mcu()) { return false; }
+
+    pupdr_e = GPIOE->PUPDR;
+    pupdr_e &= ~0xFFFF0000UL;
+    pupdr_e |= 0xAAAA0000UL;
+    GPIOE->PUPDR = pupdr_e;
+    HAL_Delay(GPIO_BENCH_DEADTIME_MS);
+    uint32_t idr_down = (GPIOE->IDR >> 8U) & 0xFFU;
+    APP_LOG("[m7_gpio_test] BUSCHK down");
+    if (!hs_mcu()) { return false; }
+
+    if ((idr_up != 0xFFU) || (idr_down != 0x00U))
+    {
+        bench_safe();
+        APP_LOG("[m7_gpio_test] ABORT step=%u reason=buschk idr up=0x%02lX down=0x%02lX",
+                (unsigned int)s_current_step_id, (unsigned long)idr_up, (unsigned long)idr_down);
+        return false;
+    }
+    return true;
+}
+
+/* A HS_HOST whose action runs between HOST_REQ rising and MCU_ACK rising. */
+
+static bool hs_host_act(uint32_t timeout_ms, BenchAction_t act, void *ctx)
+{
+    uint8_t expected = bench_get_expected_primitive(s_current_step_id, s_step_prim_idx);
+    if (expected != GPIO_BENCH_PRIM_HS_HOST)
+    {
+        bench_safe();
+        APP_LOG("[m7_gpio_test] ABORT step=%u reason=protocol", (unsigned int)s_current_step_id);
+        return false;
+    }
+    s_step_prim_idx++;
+
+    if (!wait_host_req(true, timeout_ms))
+    {
+        bench_safe();
+        APP_LOG("[m7_gpio_test] ABORT step=%u reason=timeout", (unsigned int)s_current_step_id);
+        return false;
+    }
+    if (act != NULL)
+    {
+        act(ctx);
+    }
+    set_mcu_ack(true);
+    if (!wait_host_req(false, GPIO_BENCH_TIMEOUT_MS))
+    {
+        set_mcu_ack(false);
+        bench_safe();
+        APP_LOG("[m7_gpio_test] ABORT step=%u reason=timeout", (unsigned int)s_current_step_id);
+        return false;
+    }
+    set_mcu_ack(false);
+    return true;
+}
+
+/* Output configuration of a wired pin: the S4 claim, then the driver. */
+static bool bench_cfg_output(GPIO_TypeDef *port, uint32_t pin, uint32_t otype, uint32_t speed,
+                             uint32_t pull, uint32_t level)
+{
+    if (!bench_claim_output(port, pin))
+    {
+        return false;
+    }
+    return GPIO_BM_ConfigOutput(port, pin, otype, speed, pull, level) == GPIO_BM_OK;
+}
+
+/* ---- T3: Set / Reset / Write / WritePort / Toggle on the bus (bus = MCU) ---- */
+
+#define T3_HOLD_CYCLES      (2U * CM7_CYCLES_PER_US)   /* each value held 2 us */
+
+typedef struct
+{
+    bool corrupt;   /* the control: one value wrong on purpose */
+} T3Ctx_t;
+
+static void t3_hold(void)
+{
+    delay_cycles(T3_HOLD_CYCLES);
+}
+
+/* The sequence the host expects is written out in gpio_hw_check.py
+   (T3_EXPECTED); the two are kept apart on purpose, so a mistake on one side
+   shows up as a mismatch. */
+static void t3_burst(void *ctx)
+{
+    const T3Ctx_t *c = (const T3Ctx_t *)ctx;
+    uint32_t pm = __get_PRIMASK();
+    __disable_irq();
+
+    /* Walking 1 with Set / Reset */
+    for (uint32_t b = 0U; b < 8U; b++)
+    {
+        GPIO_BM_Set(GPIOE, 1UL << (8U + b));   t3_hold();
+        GPIO_BM_Reset(GPIOE, 1UL << (8U + b)); t3_hold();
+    }
+    /* Walking 0 with Write */
+    GPIO_BM_WritePort(GPIOE, 0xFF00U, 0xFF00U); t3_hold();
+    for (uint32_t b = 0U; b < 8U; b++)
+    {
+        GPIO_BM_Write(GPIOE, 8U + b, 0U); t3_hold();
+        GPIO_BM_Write(GPIOE, 8U + b, 1U); t3_hold();
+    }
+    /* WritePort, full and partial masks */
+    GPIO_BM_WritePort(GPIOE, 0xFF00U, c->corrupt ? 0x5400U : 0x5500U); t3_hold();
+    GPIO_BM_WritePort(GPIOE, 0xFF00U, 0xAA00U); t3_hold();
+    GPIO_BM_WritePort(GPIOE, 0xFF00U, 0x0F00U); t3_hold();
+    GPIO_BM_WritePort(GPIOE, 0xFF00U, 0xF000U); t3_hold();
+    GPIO_BM_WritePort(GPIOE, 0xFF00U, 0x0000U); t3_hold();
+    GPIO_BM_WritePort(GPIOE, 0x0F00U, 0x0500U); t3_hold();
+    GPIO_BM_WritePort(GPIOE, 0xF000U, 0xA000U); t3_hold();
+    GPIO_BM_WritePort(GPIOE, 0xFF00U, 0x0000U); t3_hold();
+    /* Toggle */
+    GPIO_BM_Toggle(GPIOE, 0xFF00U); t3_hold();
+    GPIO_BM_Toggle(GPIOE, 0x0F00U); t3_hold();
+    GPIO_BM_Toggle(GPIOE, 0xF000U); t3_hold();
+    /* Set and reset of the same pin in one BSRR write: set wins (RM0399 12.4.7) */
+    GPIOE->BSRR = (1UL << 8U) | (1UL << (8U + 16U));   t3_hold();
+    GPIOE->BSRR = (1UL << 15U) | (1UL << (15U + 16U)); t3_hold();
+    GPIO_BM_Reset(GPIOE, 0xFF00U); t3_hold();
+
+    __set_PRIMASK(pm);
+}
+
+static bool test_t3_mcu_ops(void)
+{
+    bench_enter_step(GPIO_BENCH_STEP_T3_MCU_OPS);
+    if (!bench_buschk()) { return false; }
+
+    /* S5 point 3: bus proven loose in this step; 1 ms, then drive. */
+    HAL_Delay(GPIO_BENCH_DEADTIME_MS);
+    GPIOE->BSRR = 0xFF00UL << 16U;               /* level low before MODER (C11) */
+    if (!bench_claim_pins(GPIOE, 0xFF00UL, 1U, 0U))
+    {
+        bench_safe();
+        return false;
+    }
+    GPIOE->PUPDR &= ~0xFFFF0000UL;
+
+    T3Ctx_t ctx = { .corrupt = false };
+    APP_LOG("[m7_gpio_test] T3 ready");
+    if (!hs_host_act(GPIO_BENCH_TIMEOUT_MS, t3_burst, &ctx)) { return false; }
+
+    ctx.corrupt = true;
+    APP_LOG("[m7_gpio_test] T3 control ready");
+    if (!hs_host_act(GPIO_BENCH_TIMEOUT_MS, t3_burst, &ctx)) { return false; }
+
+    bench_safe();
+    APP_LOG("[m7_gpio_test] T3: DONE (host verdict)");
+    return true;
+}
+
+/* ---- T4: 256 patterns from the AD2, ReadPort and Read (bus = AD2) ----------- */
+
+static uint32_t crc32_update(uint32_t crc, uint8_t byte)
+{
+    crc ^= byte;
+    for (uint32_t k = 0U; k < 8U; k++)
+    {
+        crc = ((crc & 1U) != 0U) ? ((crc >> 1U) ^ 0xEDB88320UL) : (crc >> 1U);
+    }
+    return crc;
+}
+
+typedef struct
+{
+    uint32_t count;
+    uint32_t crc_port;
+    uint32_t crc_bits;
+} T4Ctx_t;
+
+static void t4_sample(void *ctx)
+{
+    T4Ctx_t *c = (T4Ctx_t *)ctx;
+    uint8_t by_port = (uint8_t)((GPIO_BM_ReadPort(GPIOE) >> 8U) & 0xFFU);
+    uint8_t by_bits = 0U;
+    for (uint32_t b = 0U; b < 8U; b++)
+    {
+        if (GPIO_BM_Read(GPIOE, 8U + b))
+        {
+            by_bits |= (uint8_t)(1U << b);
+        }
+    }
+    c->crc_port = crc32_update(c->crc_port, by_port);
+    c->crc_bits = crc32_update(c->crc_bits, by_bits);
+    c->count++;
+}
+
+static bool t4_pass(uint32_t pass)
+{
+    T4Ctx_t c = { 0U, 0xFFFFFFFFUL, 0xFFFFFFFFUL };
+    for (uint32_t i = 0U; i < 256U; i++)
+    {
+        if (!hs_host_act(GPIO_BENCH_TIMEOUT_MS, t4_sample, &c)) { return false; }
+    }
+    APP_LOG("[m7_gpio_test] T4 pass=%lu count=%lu crc_port=0x%08lX crc_bits=0x%08lX",
+            (unsigned long)pass, (unsigned long)c.count,
+            (unsigned long)(c.crc_port ^ 0xFFFFFFFFUL), (unsigned long)(c.crc_bits ^ 0xFFFFFFFFUL));
+    return true;
+}
+
+/* S5 point 2: the bus stays in input (pull-down from BUSCHK); MODER read
+   back before MCU_ACK tells the host it may drive. */
+static bool bench_bus_released_for_ad2(uint32_t mode_field)
+{
+    uint32_t moder = GPIOE->MODER & 0xFFFF0000UL;
+    uint32_t want  = (mode_field == 0U) ? 0U : 0xFFFF0000UL;
+    if (moder != want)
+    {
+        bench_safe();
+        APP_LOG("[m7_gpio_test] ABORT step=%u reason=moder 0x%08lX", (unsigned int)s_current_step_id,
+                (unsigned long)moder);
+        return false;
+    }
+    return true;
+}
+
+static bool test_t4_ad2_patterns(void)
+{
+    bench_enter_step(GPIO_BENCH_STEP_T4_AD2_PATTERNS);
+    if (!bench_buschk()) { return false; }
+    if (!bench_bus_released_for_ad2(0U)) { return false; }
+
+    APP_LOG("[m7_gpio_test] T4 ready");
+    if (!hs_mcu()) { return false; }
+    if (!t4_pass(1U)) { return false; }
+    if (!t4_pass(2U)) { return false; }
+    /* The host has set OE = 0 (read back) before this last strobe. */
+    if (!hs_host_act(GPIO_BENCH_TIMEOUT_MS, NULL, NULL)) { return false; }
+    bench_safe();
+    APP_LOG("[m7_gpio_test] T4: DONE (host verdict)");
+    return true;
+}
+
+/* ---- T7: IDR in analog, then in input, while the AD2 drives 0xFF (bus = AD2) ---- */
+
+static void t7_sample(void *ctx)
+{
+    *(uint32_t *)ctx = (GPIOE->IDR >> 8U) & 0xFFU;
+}
+
+static bool test_t7_analog_idr(void)
+{
+    uint32_t idr = 0U;
+    bool cfg_ok = true;
+
+    bench_enter_step(GPIO_BENCH_STEP_T7_ANALOG_IDR);
+    if (!bench_buschk()) { return false; }
+
+    /* Analog through the driver: not an output, no claim needed (S4). */
+    for (uint32_t pin = 8U; pin <= 15U; pin++)
+    {
+        cfg_ok = cfg_ok && GPIO_BM_ConfigAnalog(GPIOE, pin);
+    }
+    if (!cfg_ok || !bench_bus_released_for_ad2(3U)) { bench_safe(); return false; }
+
+    APP_LOG("[m7_gpio_test] T7 analog ready");
+    if (!hs_mcu()) { return false; }
+    if (!hs_host_act(GPIO_BENCH_TIMEOUT_MS, t7_sample, &idr)) { return false; }
+    APP_LOG("[m7_gpio_test] T7 analog idr=0x%02lX", (unsigned long)idr);
+
+    for (uint32_t pin = 8U; pin <= 15U; pin++)
+    {
+        cfg_ok = cfg_ok && (GPIO_BM_ConfigInput(GPIOE, pin, GPIO_BM_PULL_NONE) == GPIO_BM_OK);
+    }
+    if (!cfg_ok) { bench_safe(); return false; }
+    APP_LOG("[m7_gpio_test] T7 input ready");
+    if (!hs_host_act(GPIO_BENCH_TIMEOUT_MS, t7_sample, &idr)) { return false; }
+    APP_LOG("[m7_gpio_test] T7 input idr=0x%02lX", (unsigned long)idr);
+
+    if (!hs_host_act(GPIO_BENCH_TIMEOUT_MS, NULL, NULL)) { return false; }
+    bench_safe();
+    APP_LOG("[m7_gpio_test] T7: DONE (host verdict)");
+    return true;
+}
+
+/* ---- T8: input -> output on PE5 without glitch (bus = NONE) ------------------- */
+
+typedef struct
+{
+    char     name;
+    uint32_t pull;          /* input pull before the switch */
+    uint32_t stale_odr;     /* ODR left opposite on purpose where it matters */
+    uint32_t target;        /* output level */
+    bool     naive;         /* control: MODER first, 1 us, then BSRR */
+} T8Case_t;
+
+/* A and B change level: exactly one edge. C and D keep the level with a stale
+   ODR: no edge at all, which is what shows the driver writes BSRR first.
+   E is C done in the naive order: the stale ODR must show as a pulse. */
+static const T8Case_t k_t8_cases[5] = {
+    { 'A', GPIO_BM_PULL_DOWN, 0U, 1U, false },
+    { 'B', GPIO_BM_PULL_UP,   1U, 0U, false },
+    { 'C', GPIO_BM_PULL_UP,   0U, 1U, false },
+    { 'D', GPIO_BM_PULL_DOWN, 1U, 0U, false },
+    { 'E', GPIO_BM_PULL_UP,   0U, 1U, true  },
+};
+
+static void t8_apply(void *ctx)
+{
+    const T8Case_t *tc = (const T8Case_t *)ctx;
+    if (tc->naive)
+    {
+        (void)bench_set_pin_mode(GPIOE, 5U, 1U, 0U);           /* MODER first */
+        delay_cycles(1U * CM7_CYCLES_PER_US);
+        GPIOE->BSRR = (tc->target != 0U) ? (1UL << 5U) : (1UL << (5U + 16U));
+    }
+    else
+    {
+        (void)bench_cfg_output(GPIOE, 5U, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW,
+                               GPIO_BM_PULL_NONE, tc->target);
+    }
+}
+
+static bool test_t8_no_glitch(void)
+{
+    bench_enter_step(GPIO_BENCH_STEP_T8_NO_GLITCH);
+
+    for (uint32_t i = 0U; i < 5U; i++)
+    {
+        const T8Case_t *tc = &k_t8_cases[i];
+        if (!bench_claim_output(GPIOE, 5U)) { bench_safe(); return false; }
+        (void)GPIO_BM_ConfigInput(GPIOE, 5U, tc->pull);
+        GPIOE->BSRR = (tc->stale_odr != 0U) ? (1UL << 5U) : (1UL << (5U + 16U));
+        HAL_Delay(2U);                                          /* let the pull settle */
+
+        APP_LOG("[m7_gpio_test] T8 case=%c ready", tc->name);
+        if (!hs_host_act(GPIO_BENCH_TIMEOUT_MS, t8_apply, (void *)tc)) { return false; }
+        (void)GPIO_BM_ConfigInput(GPIOE, 5U, GPIO_BM_PULL_NONE);
+    }
+
+    bench_safe();
+    APP_LOG("[m7_gpio_test] T8: DONE (host verdict)");
+    return true;
+}
+
+/* ---- T5: pull resistances on PF14 / PF15 (bus = NONE) --------------------------- */
+
+static bool test_t5_pulls(void)
+{
+    bench_enter_step(GPIO_BENCH_STEP_T5_PULLS);
+
+    /* V_DD: PF15 push-pull high (its 22k goes to 3V3, so no current). */
+    if (!bench_cfg_output(GPIOF, 15U, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 1U) ||
+        (GPIO_BM_ConfigInput(GPIOF, 14U, GPIO_BM_PULL_NONE) != GPIO_BM_OK))
+    {
+        bench_safe();
+        return false;
+    }
+    HAL_Delay(2U);
+    APP_LOG("[m7_gpio_test] T5 vdd ready");
+    if (!hs_mcu()) { return false; }
+
+    /* No pull: PF14 sits on its 22k to GND, PF15 on its 22k to 3V3 against the scope load. */
+    if ((GPIO_BM_ConfigInput(GPIOF, 14U, GPIO_BM_PULL_NONE) != GPIO_BM_OK) ||
+        (GPIO_BM_ConfigInput(GPIOF, 15U, GPIO_BM_PULL_NONE) != GPIO_BM_OK))
+    {
+        bench_safe();
+        return false;
+    }
+    HAL_Delay(2U);
+    APP_LOG("[m7_gpio_test] T5 nopull ready");
+    if (!hs_mcu()) { return false; }
+
+    if ((GPIO_BM_ConfigInput(GPIOF, 14U, GPIO_BM_PULL_UP) != GPIO_BM_OK) ||
+        (GPIO_BM_ConfigInput(GPIOF, 15U, GPIO_BM_PULL_DOWN) != GPIO_BM_OK))
+    {
+        bench_safe();
+        return false;
+    }
+    HAL_Delay(2U);
+    APP_LOG("[m7_gpio_test] T5 pulls ready");
+    if (!hs_mcu()) { return false; }
+
+    bench_safe();
+    APP_LOG("[m7_gpio_test] T5: DONE (host verdict)");
+    return true;
+}
+
+/* ---- T6: open-drain (bus = NONE) ------------------------------------------------- */
+
+static bool test_t6_open_drain(void)
+{
+    bench_enter_step(GPIO_BENCH_STEP_T6_OPEN_DRAIN);
+
+    /* (a) PF15 like an I2C line: OD low; (b) PF14 on its 22k to GND: OD released. */
+    if (!bench_cfg_output(GPIOF, 15U, GPIO_BM_OTYPE_OD, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 0U) ||
+        !bench_cfg_output(GPIOF, 14U, GPIO_BM_OTYPE_OD, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 1U))
+    {
+        bench_safe();
+        return false;
+    }
+    HAL_Delay(2U);
+    APP_LOG("[m7_gpio_test] T6 od low ready");
+    if (!hs_mcu()) { return false; }
+
+    GPIO_BM_Set(GPIOF, 1UL << 15U);                  /* (a) OD released */
+    HAL_Delay(2U);
+    APP_LOG("[m7_gpio_test] T6 od released ready");
+    if (!hs_mcu()) { return false; }
+
+    /* Control: push-pull high on PF14 does reach the rail. */
+    if (!bench_cfg_output(GPIOF, 14U, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 1U))
+    {
+        bench_safe();
+        return false;
+    }
+    HAL_Delay(2U);
+    APP_LOG("[m7_gpio_test] T6 control ready");
+    if (!hs_mcu()) { return false; }
+
+    bench_safe();
+    APP_LOG("[m7_gpio_test] T6: DONE (host verdict)");
+    return true;
+}
+
+/* ---- T9: rise time per OSPEEDR (bus = NONE) ---------------------------------------- */
+
+static void t9_rise(void *ctx)
+{
+    (void)ctx;
+    GPIOF->BSRR = (1UL << 14U) | (1UL << 15U);
+}
+
+static bool test_t9_rise_time(void)
+{
+    bench_enter_step(GPIO_BENCH_STEP_T9_RISE_TIME);
+
+    for (uint32_t sp = 0U; sp < 4U; sp++)
+    {
+        if (!bench_cfg_output(GPIOF, 14U, GPIO_BM_OTYPE_PP, sp, GPIO_BM_PULL_NONE, 0U) ||
+            !bench_cfg_output(GPIOF, 15U, GPIO_BM_OTYPE_PP, sp, GPIO_BM_PULL_NONE, 0U))
+        {
+            bench_safe();
+            return false;
+        }
+        HAL_Delay(2U);
+        APP_LOG("[m7_gpio_test] T9 speed=%lu ready", (unsigned long)sp);
+        for (uint32_t e = 0U; e < 10U; e++)
+        {
+            if (!hs_host_act(GPIO_BENCH_TIMEOUT_MS, t9_rise, NULL)) { return false; }
+            GPIOF->BSRR = ((1UL << 14U) | (1UL << 15U)) << 16U;
+            HAL_Delay(1U);
+        }
+    }
+
+    /* Control: pins in input; the same BSRR write makes no edge. */
+    (void)GPIO_BM_ConfigInput(GPIOF, 14U, GPIO_BM_PULL_NONE);
+    (void)GPIO_BM_ConfigInput(GPIOF, 15U, GPIO_BM_PULL_NONE);
+    GPIOF->BSRR = ((1UL << 14U) | (1UL << 15U)) << 16U;
+    HAL_Delay(2U);
+    APP_LOG("[m7_gpio_test] T9 control ready");
+    if (!hs_host_act(GPIO_BENCH_TIMEOUT_MS, t9_rise, NULL)) { return false; }
+
+    bench_safe();
+    APP_LOG("[m7_gpio_test] T9: DONE (host verdict)");
+    return true;
+}
+
+/* ---- T10: MCO1 = HSI / 4 on PA8 (bus = NONE) ---------------------------------------- */
+
+static uint32_t s_t10_cfgr_saved;
+static bool     s_t10_cfgr_dirty;
+
+/* Only the MCO1 fields are touched and restored; RCC_CFGR belongs to CPU1. */
+static void t10_restore_mco(void)
+{
+    if (s_t10_cfgr_dirty)
+    {
+        const uint32_t mco = RCC_CFGR_MCO1 | RCC_CFGR_MCO1PRE;
+        RCC->CFGR = (RCC->CFGR & ~mco) | (s_t10_cfgr_saved & mco);
+        s_t10_cfgr_dirty = false;
+    }
+}
+
+static bool test_t10_mco1(void)
+{
+    bench_enter_step(GPIO_BENCH_STEP_T10_MCO1);
+
+    uint32_t hsi = ((RCC->CR & RCC_CR_HSIRDY) != 0U) ? 1U : 0U;
+    s_t10_cfgr_saved = RCC->CFGR;
+    s_t10_cfgr_dirty = true;
+    RCC->CFGR = (RCC->CFGR & ~(RCC_CFGR_MCO1 | RCC_CFGR_MCO1PRE)) |
+                (0U << RCC_CFGR_MCO1_Pos) |            /* HSI */
+                (4U << RCC_CFGR_MCO1PRE_Pos);           /* / 4 -> 16 MHz */
+
+    if (!bench_claim_output(GPIOA, 8U) ||
+        (GPIO_BM_ConfigAlternateEx(GPIOA, 8U, 0U, GPIO_BM_OTYPE_PP, GPIO_BM_PULL_NONE,
+                                   GPIO_BM_SPEED_VERY_HIGH) != GPIO_BM_OK))
+    {
+        bench_safe();
+        return false;
+    }
+    HAL_Delay(2U);
+    APP_LOG("[m7_gpio_test] T10 mco ready hsi=%lu", (unsigned long)hsi);
+    if (!hs_mcu()) { return false; }
+
+    /* Control: AF1 (TIM1_CH1, timer not running) carries no clock. */
+    if (!bench_claim_output(GPIOA, 8U) ||
+        (GPIO_BM_ConfigAlternateEx(GPIOA, 8U, 1U, GPIO_BM_OTYPE_PP, GPIO_BM_PULL_NONE,
+                                   GPIO_BM_SPEED_VERY_HIGH) != GPIO_BM_OK))
+    {
+        bench_safe();
+        return false;
+    }
+    HAL_Delay(2U);
+    APP_LOG("[m7_gpio_test] T10 control ready");
+    if (!hs_mcu()) { return false; }
+
+    bench_safe();                                       /* PA8 input, MCO1 restored */
+    APP_LOG("[m7_gpio_test] T10: DONE (host verdict)");
+    return true;
+}
+
 /* ---- CM7 Main Entry Point ------------------------------------------------ */
 
 void GPIO_SelfTest_CM7_Run(void)
@@ -1896,7 +2425,17 @@ void GPIO_SelfTest_CM7_Run(void)
     if (!test_t0a_ad2_to_mcu())    goto test_failed;
     if (!test_t0a_scope())         goto test_failed;
 
-    /* 5. T16 last: LCKR stays set until the next reset. */
+    /* 5. F1a tests with the AD2, in the order of GPIO_BENCH_STEPS_TABLE. */
+    if (!test_t3_mcu_ops())        goto test_failed;
+    if (!test_t4_ad2_patterns())   goto test_failed;
+    if (!test_t7_analog_idr())     goto test_failed;
+    if (!test_t8_no_glitch())      goto test_failed;
+    if (!test_t5_pulls())          goto test_failed;
+    if (!test_t6_open_drain())     goto test_failed;
+    if (!test_t9_rise_time())      goto test_failed;
+    if (!test_t10_mco1())          goto test_failed;
+
+    /* 6. T16 last: LCKR stays set until the next reset. */
     if (!test_t16_lckr())          goto test_failed;
 
     bench_enter_step(GPIO_BENCH_STEP_DONE);
