@@ -124,6 +124,19 @@ static GpioBm_Status_t validate_config(const GpioBm_PinConfig_t *cfg)
     return GPIO_BM_OK;
 }
 
+/* ---- Validation for the tiers above --------------------------------------------- */
+
+bool GPIO_BM_IsValidPort(const GPIO_TypeDef *port)
+{
+    uint32_t idx;
+    return port_index(port, &idx);
+}
+
+GpioBm_Status_t GPIO_BM_CheckConfig(const GpioBm_PinConfig_t *cfg)
+{
+    return validate_config(cfg);
+}
+
 /* ---- Existing API ------------------------------------------------------------- */
 
 bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port)

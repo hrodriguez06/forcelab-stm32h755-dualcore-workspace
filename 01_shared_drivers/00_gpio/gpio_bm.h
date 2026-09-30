@@ -243,6 +243,18 @@ void            GPIO_BM_SetSharedLock(const GpioBm_SharedLock_t *lock);   /* per
 GpioBm_Status_t GPIO_BM_SectionEnter(GpioBm_Section_t *s);   /* for consumers wrapping HAL_GPIO_Init */
 void            GPIO_BM_SectionExit(const GpioBm_Section_t *s);
 
+/* ---- Validation without peripheral access (used by gpio_ll and gpio_hal) --------
+ * Pure functions: no GPIO, RCC or LCKR access, so a tier built on top can refuse
+ * a request with exactly the status gpio_bm would return, before it touches
+ * anything. They are the single copy of the rules of GPIO_BM_ConfigPin step 1. */
+
+/** @retval true when `port` is exactly one of GPIOA..GPIOK (base address on the 0x400 stride). */
+bool            GPIO_BM_IsValidPort(const GPIO_TypeDef *port);
+
+/** @retval The status GPIO_BM_ConfigPin() would return from its validation step:
+  *         GPIO_BM_OK, GPIO_BM_ERR_PARAM or GPIO_BM_ERR_DEBUG_PIN. */
+GpioBm_Status_t GPIO_BM_CheckConfig(const GpioBm_PinConfig_t *cfg);
+
 #ifdef __cplusplus
 }
 #endif
