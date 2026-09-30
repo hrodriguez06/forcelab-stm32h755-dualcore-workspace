@@ -366,4 +366,93 @@ Ningún archivo tiene activado `assume-unchanged` ni `skip-worktree`, y no exist
 1. **Fases F1, F1b y F2 del controlador GPIO:**
    - La migración de drivers periféricos a `gpio_bm` (F1), la eliminación de accesos directos concurrentes a registros GPIO (F1b) y la gestión de interrupciones EXTI con caracterización de tiempos (F2) permanecen fuera del alcance de la línea base F0 y se abordarán en fases posteriores del roadmap.
 
+---
+
+## Respuesta a la reauditoría 3
+
+### Tabla de resolución de hallazgos (R2-M3, R3-m1, M3)
+
+| Hallazgo | Commit | Qué se ejecutó para comprobarlo | Estado |
+| --- | --- | --- | --- |
+| **R2-M3** | `8d99b6c` | Implementación de la Forma (b) de E7: `LineReader.expect()` registra automáticamente `("LINE", pattern)`, y `hs_mcu()` / `hs_host()` registran `("PRIM", "HS_MCU")` / `("PRIM", "HS_HOST")`. El host obtiene sus patrones de la tabla (`table_pattern()`), y el parser Python desescapa las cadenas C con `ast.literal_eval`. El dueño del bus del firmware deriva de `GPIO_BENCH_STEPS_TABLE` con 11 `_Static_assert`s de coherencia. Comprobado con `test_host_and_model_trace_matches_protocol_table` (comparación exacta de la traza de 115 ítems contra la tabla) y `test_real_capture_matches_protocol_table` (46 líneas no-INFO de la captura de hardware contra los patrones `LINE`). Ejecutadas las dos comprobaciones previas (§2.1), ambas poniéndose en rojo. | corregido, pendiente de verificación |
+| **R3-m1** | `e26eb72` | `hs_mcu()` y `hs_host()` ejecutan `line_reader.poll()` en sus bucles de espera. Si el firmware emite `[m7_gpio_test] ABORT …`, se invoca inmediatamente `on_abort()` (estado seguro S2, `OE=0x0000`) y se lanza `BenchAbort` citando la línea en el log, sin esperar los 10 s de timeout. Comprobado con el nuevo escenario `test_r3_m1_host_aborts_immediately_on_firmware_abort`, verificando aborto en < 1.0 s simulado con FAIL, `OE=0` y 0 colisiones en `SimBus`. | corregido, pendiente de verificación |
+| **M3** | commit actual | Corrección de las afirmaciones (a)–(c) de M3 de la reauditoría 3; documentación de la forma (b) elegida para R2-M3 y resultado de las dos comprobaciones previas; y tabla de verificación de identificadores citados mediante `git grep -c`. | corregido, pendiente de verificación |
+
+---
+
+### Corrección de las afirmaciones (a)–(c) de M3
+
+1. **Afirmación M3 (a) – Derivación de secuencias y discrepancias de handshake:**
+   - *Afirmación previa:* El informe anterior afirmó: *"Firmware, host y modelo derivan sus secuencias de esta única fuente"* e *"imposibilitando discrepancias de handshake entre los extremos"*.
+   - *Corrección y fuente:* En la entrega de la reauditoría 2, la afirmación no era cierta para el host ni para el modelo: ambos contenían código escrito a mano con llamadas `rec("nombre")` manuales. La prueba anterior `test_host_and_model_traverse_identical_table` solo comparaba listas de nombres de cadenas hardcodeadas, sin verificar tipos de primitiva ni patrones de línea, por lo que una mutación en una primitiva de la tabla no era detectada por el arnés (prueba #5 de la reauditoría 3).
+   - *Estado corregido:* Se adoptó la Forma (b) de la errata E7. El host toma sus expresiones regulares directamente de la cabecera mediante `table_pattern()`; `LineReader.expect()`, `hs_mcu()` y `hs_host()` registran su actividad automáticamente en `trace`; y la prueba `test_host_and_model_trace_matches_protocol_table` compara la traza completa (115 ítems: tipo, primitiva y patrón carácter a carácter) con `PROTOCOL_ITEMS`. Además, `test_real_capture_matches_protocol_table` valida las líneas de una captura real de placa frente a los patrones de la tabla.
+
+2. **Afirmación M3 (b) – Nombres inexistentes en el código:**
+   - *Afirmación previa:* El informe anterior citó seis identificadores que no existían en el código del repositorio:
+     1. `GPIO_BENCH_ITEM_TABLE`: el nombre real de la macro en `Common/Inc/gpio_bench_protocol.h` es `GPIO_BENCH_PROTOCOL_TABLE`.
+     2. `GPIO_BENCH_STEP_TABLE`: el nombre real de la macro en `Common/Inc/gpio_bench_protocol.h` es `GPIO_BENCH_STEPS_TABLE`.
+     3. `test_e6_t0b_c_contention_caught_by_s5`: el nombre real del método de prueba en `tools/test_gpio_hw_check.py` es `test_e6_t0b_c_mcu_not_driving_fails`.
+     4. `test_t0b_s5_negative_control()`: el nombre real de la función estática en `CM7/App/Src/gpio_selftest.c` es `test_t0b_s5_neg()`.
+     5. `all_safe`: el nombre real de la variable booleana local en `test_t0b_s5_neg()` es `all_inputs`.
+     6. `"FAIL: wired pins not in safe input state"`: el mensaje real emitido por el firmware en `CM7/App/Src/gpio_selftest.c` es `"[m7_gpio_test] T0b_c safe state verification FAILED: pins not input"`.
+   - *Corrección:* Se corrigen formalmente los seis nombres, enlazándolos a sus identificadores exactos y verificados en código.
+
+3. **Afirmación M3 (c) – Atribución de la corrección de R2-M1:**
+   - *Afirmación previa:* La fila R2-M1 del informe anterior atribuyó la corrección al commit `aa30222` y al "commit actual" del implementador.
+   - *Corrección y fuente:* La marca `--assume-unchanged` fue detectada y retirada directamente por el auditor durante la reauditoría 2 (#1 de `AUDIT.md:356`). En el código de `driver/gpio` no hubo modificación que commitear para este concepto. El implementador tiene la obligación estricta de no volver a aplicar banderas que oculten el árbol de trabajo, verificando antes de cada captura y entrega que `git status --short` y `git ls-files -v | grep -E '^[a-zS]'` produzcan una salida completamente vacía.
+
+---
+
+### Forma elegida para R2-M3 y comprobaciones previas (§2.1)
+
+Se seleccionó la **Forma (b)** de la errata E7:
+1. **Traza automática:** `hs_mcu()` y `hs_host()` apuntan por sí mismos `("PRIM", "HS_MCU")` o `("PRIM", "HS_HOST")`. `LineReader.expect()` apunta `("LINE", <patrón>)`. Se eliminaron las llamadas manuales `rec()` de líneas y primitivas. Los 33 puntos de medida (`MEASURE`) se registran con `rec_measure()`.
+2. **Patrones desde la tabla:** El host obtiene sus patrones mediante `table_pattern(<name>)`, y el parser `load_protocol_from_header()` desescapa las cadenas C con `ast.literal_eval`.
+3. **Validación de traza completa y captura real:**
+   - `test_host_and_model_trace_matches_protocol_table` valida que la traza del host y la del modelo coincidan exactamente con los 115 ítems de la tabla (tipo, primitiva y patrón carácter a carácter).
+   - `test_real_capture_matches_protocol_table` toma la captura real de placa más reciente en `docs/` y verifica que sus 46 líneas no-INFO coincidan en orden estricto con los 46 patrones `LINE` de la tabla.
+4. **Dueño del bus desde una sola fuente:** En `gpio_bench_protocol.h`, `GPIO_BENCH_STEPS_TABLE` expande `bench_get_step_bus_owner(step_id)` y `bench_get_step_bus_name(step_id)`. En `CM7/App/Src/gpio_selftest.c`, la tabla `k_step_perms` toma los identificadores `k_step_bus_*` generados por la misma macro, con 11 directivas `_Static_assert` que validan la coincidencia paso por paso.
+
+#### Resultado de las dos comprobaciones previas (§2.1):
+- **Comprobación 1 (Mutación de primitiva en paso 7: `HS_HOST` → `HS_MCU`):**
+  - Al mutar `HS_HOST` por `HS_MCU` en la tabla para el paso 7, la ejecución de la suite de pruebas unitarias falla con 2 pruebas en rojo:
+    - `test_host_and_model_trace_matches_protocol_table`
+    - `test_host_and_model_traverse_identical_table` (alias)
+    Ambas fallan con `AssertionError: Lists differ at element 28: ('PRIM', 'HS_HOST') != ('PRIM', 'HS_MCU')`.
+- **Comprobación 2 (Mutación de patrón LINE: `BUSCHK up` → `BUSCHK UP`):**
+  - Al mutar el patrón de `step6_buschk_up` en la tabla a `BUSCHK UP`, la ejecución de la suite falla con 11 pruebas en rojo:
+    - `test_real_capture_matches_protocol_table`: falla de inmediato con `AssertionError: None is not true : Mismatch at index 12 (step6_buschk_up): pattern '^\[m7_gpio_test\] BUSCHK UP$' does not match '[m7_gpio_test] BUSCHK up'`.
+    - `test_host_and_model_trace_matches_protocol_table` y `test_host_and_model_traverse_identical_table`: fallan por discrepancia de patrón.
+    - `test_e1_correct_model_passes`, `test_e2_queued_line_reader_chunk_and_byte_by_byte`, `test_e11_host_comparison_bit_mismatches_identified`, `test_e14_spurious_rev_line_before_banner_ignored`, `test_r2_m1_serial_drain_before_reset`, `test_r2_m3_log_console_encoding_resilience`, `test_r3_m1_host_aborts_immediately_on_firmware_abort`: fallan por timeout al no casar la línea recibida.
+
+---
+
+### Lista de verificación de identificadores citados (`git grep -c`)
+
+A continuación se listan todos los identificadores (funciones, pruebas, macros, variables, archivos o mensajes) citados en esta sección, con el conteo de apariciones arrojado por `git grep -c` en el repositorio (ninguno es 0):
+
+| Identificador citado | Tipo | Archivos con ocurrencias | Total apariciones |
+| --- | --- | --- | --- |
+| `GPIO_BENCH_PROTOCOL_TABLE` | Macro X-Table | `Common/Inc/gpio_bench_protocol.h`, `tools/gpio_hw_check.py`, `AUDIT.md`, `IMPLEMENTATION_REPORT.md` | 5 |
+| `GPIO_BENCH_STEPS_TABLE` | Macro X-Table | `Common/Inc/gpio_bench_protocol.h`, `CM7/App/Src/gpio_selftest.c`, `tools/gpio_hw_check.py`, `AUDIT.md`, `IMPLEMENTATION_REPORT.md` | 12 |
+| `bench_get_step_bus_owner` | Función inline C | `Common/Inc/gpio_bench_protocol.h`, `CM7/App/Src/gpio_selftest.c`, `IMPLEMENTATION_REPORT.md` | 5 |
+| `bench_get_step_bus_name` | Función inline C | `Common/Inc/gpio_bench_protocol.h`, `CM7/App/Src/gpio_selftest.c`, `IMPLEMENTATION_REPORT.md` | 4 |
+| `k_step_perms` | Variable/Tabla C | `CM7/App/Src/gpio_selftest.c`, `AUDIT.md`, `IMPLEMENTATION_REPORT.md`, docs | 17 |
+| `test_t0b_s5_neg` | Función C | `CM7/App/Src/gpio_selftest.c`, `AUDIT.md`, `IMPLEMENTATION_REPORT.md`, docs | 8 |
+| `all_inputs` | Variable booleana C | `CM7/App/Src/gpio_selftest.c`, `IMPLEMENTATION_REPORT.md` | 7 |
+| `LineReader` | Clase Python | `tools/gpio_hw_check.py`, `tools/test_gpio_hw_check.py`, `AUDIT.md`, `IMPLEMENTATION_REPORT.md` | 18 |
+| `table_pattern` | Función Python | `tools/gpio_hw_check.py`, `tools/fw_model.py`, `tools/test_gpio_hw_check.py`, `IMPLEMENTATION_REPORT.md` | 48 |
+| `table_item` | Función Python | `tools/gpio_hw_check.py`, `tools/fw_model.py`, `IMPLEMENTATION_REPORT.md` | 5 |
+| `hs_mcu` | Función Python / C | `Common/Inc/gpio_bench_protocol.h`, `tools/gpio_hw_check.py`, `tools/fw_model.py`, `AUDIT.md`, `IMPLEMENTATION_REPORT.md`, docs | 58 |
+| `hs_host` | Función Python / C | `Common/Inc/gpio_bench_protocol.h`, `tools/gpio_hw_check.py`, `tools/fw_model.py`, `AUDIT.md`, `IMPLEMENTATION_REPORT.md`, docs | 30 |
+| `ast.literal_eval` | Método estándar Python | `tools/gpio_hw_check.py`, `IMPLEMENTATION_REPORT.md` | 5 |
+| `inject_step7_protocol_abort` | Variable/Atributo Python | `tools/fw_model.py`, `tools/test_gpio_hw_check.py`, `IMPLEMENTATION_REPORT.md` | 4 |
+| `test_host_and_model_trace_matches_protocol_table` | Método de prueba | `tools/test_gpio_hw_check.py`, `IMPLEMENTATION_REPORT.md` | 8 |
+| `test_host_and_model_traverse_identical_table` | Método de prueba | `tools/test_gpio_hw_check.py`, `AUDIT.md`, `IMPLEMENTATION_REPORT.md`, docs | 9 |
+| `test_real_capture_matches_protocol_table` | Método de prueba | `tools/test_gpio_hw_check.py`, `IMPLEMENTATION_REPORT.md` | 6 |
+| `test_r3_m1_host_aborts_immediately_on_firmware_abort` | Método de prueba | `tools/test_gpio_hw_check.py`, `IMPLEMENTATION_REPORT.md` | 4 |
+| `test_e6_t0b_c_mcu_not_driving_fails` | Método de prueba | `tools/test_gpio_hw_check.py`, `IMPLEMENTATION_REPORT.md` | 3 |
+| `T0b_c safe state verification FAILED: pins not input` | Mensaje de log | `CM7/App/Src/gpio_selftest.c`, `tools/fw_model.py`, `AUDIT.md`, `IMPLEMENTATION_REPORT.md` | 5 |
+| `ABORT step=7 reason=protocol` | Mensaje de log | `tools/fw_model.py`, `tools/test_gpio_hw_check.py`, `AUDIT.md`, `IMPLEMENTATION_REPORT.md`, docs | 6 |
+
 
