@@ -675,6 +675,13 @@ static uint32_t s_race_phase;
 #endif
 static const volatile uint32_t k_race_seed_fixed = (uint32_t)(GST_RACE_SEED);
 
+/* T15 starts this long after the RNG read begins. What runs before it must
+   fit, or the start moves with the RNG again: the RNG's bounded waits
+   (2 x 1 ms) and three blocking log lines (about 8 ms each at 115200 baud).
+   The selftest fails if it does not fit. */
+#define RACE_START_MS       40U
+#define RACE_START_CYC      (RACE_START_MS * CYC_PER_MS)
+
 /* R2: one 32-bit word from the RNG (HSI48 kernel clock, RNGSEL = 0 at reset).
    CPU1 only: RCC_CR is CPU1's by the boot contract. Leaves HSI48, the RNG
    and its clock as it found them. Returns false with the reason on a timeout,
@@ -856,7 +863,12 @@ static void run_race_tests(void)
 
     /* R2: a new seed per run, so a second run samples other interleavings.
        The RNG is read and checked in every build; a fixed seed
-       (GST_RACE_SEED, above) then replaces its word. */
+       (GST_RACE_SEED, above) then replaces its word. HSI48 and the RNG start
+       after a variable delay, which would shift the cores' relative phase for
+       everything after it (docs/gpio_dev_replay_seed_3f9a7bfb_7cedf36*.txt):
+       T15 starts at a fixed deadline from t_seed instead, so the seed alone
+       decides the interleaving and a replay replays. */
+    const uint32_t t_seed = DWT->CYCCNT;
     const char    *why;
     const bool     rng_ok = race_seed_from_rng(&s_race_seed, &why);
     const uint32_t fixed  = k_race_seed_fixed;
@@ -865,6 +877,12 @@ static void run_race_tests(void)
     LOG("T15 seed=0x%08lX (%s, RNG gave 0x%08lX; phase k uses seed^k)", (unsigned long)s_race_seed,
         (fixed != 0UL) ? "fixed by GST_RACE_SEED" : "RNG", (unsigned long)rng);
     verdict(rng_ok, "T15 seed from the RNG: %s", why);
+    const uint32_t used = DWT->CYCCNT - t_seed;
+    verdict(used < ((RACE_START_MS - 10U) * CYC_PER_MS), "T15 start deadline: %lu us of %u ms used before this line",
+            (unsigned long)(used / CYC_PER_US), (unsigned)RACE_START_MS);
+    while ((DWT->CYCCNT - t_seed) < RACE_START_CYC)
+    {
+    }
     s_race_phase = 0U;
 
     /* Controls first: without protection the race must be reproduced, and the
