@@ -1,226 +1,607 @@
-# STM32H755 Shared GPIO Helpers (`01_shared_drivers/00_gpio`)
+# STM32H755 Shared GPIO Driver (`01_shared_drivers/00_gpio`)
 
-Bare-metal GPIO helpers for the STM32H755ZI dual-core microcontroller: port clock
-enable, alternate-function mode and analog mode. `00_gpio` is the bottom of the
-driver stack. `01_led`, `04_uart`, `07_adc` and `08_eth` configure their pins
-through it, and it works before the clock tree, before the MPU and before
-`HAL_Init()`.
+Peripheral-First (Plan A), 3-tier shared driver for the GPIO ports of the
+STM32H755ZI, `GPIOA`..`GPIOK`. It covers pin configuration (input, output,
+alternate function and analog; push-pull or open-drain; pull; speed; initial
+level), atomic pin operations, the `LCKR` lock, de-initialisation and read-back.
+Every configuration write runs inside a section that masks the calling core's
+interrupts and, when the project installs one, takes a cross-core lock. The
+GPIO configuration registers have a single copy shared by both cores, so without
+that lock two cores configuring pins of the same port can silently undo each
+other's changes. `00_gpio` is the bottom of the driver stack: `01_led`, `04_uart`,
+`07_adc` and `08_eth` link it, and the BM tier works before the clock tree,
+the MPU and `HAL_Init()`.
 
-Status: this is **not yet a full GPIO driver**. There is one tier (BM) with three
-functions. It has no test of its own; it has been exercised in hardware only
-through the drivers that use it (see [section 6](#6-validation)). The plan to turn it
-into a 3-tier catalogue driver with output, input, lock and EXTI is in
-[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md), and none of it is implemented
-yet.
+Status: phase F1 of [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) plus the
+LL and HAL tiers, which the plan had deferred (F3–F4). Validated on a
+NUCLEO-H755ZI-Q (silicon Rev V, `REV_ID = 0x2003`) on 2026-09-30, in
+`prj_01_template_dualcore` only, with an Analog Discovery 2. Two complete runs
+at `2b9bf21` pass: see [section 9](#9-validation). **EXTI and the compensation
+cell (F2) are not implemented.** This driver has not had an independent audit.
 
 ---
 
-## 1. Tier and target
+## 1. Tiers
 
-| Tier | Files | CMake target | Links | ST dependency |
-| :--- | :--- | :--- | :--- | :--- |
-| **Bare-Metal** | `gpio_bm.[c\|h]` | `stm32h7_driver_gpio` | - | CMSIS only (`stm32h7xx.h`) |
+| Tier | Files | CMake target | Links | ST dependency | Typical use |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Bare-Metal** | `gpio_bm.[c\|h]` | `stm32h7_driver_gpio_bm` (alias `stm32h7_driver_gpio`) | - | CMSIS only (`stm32h7xx.h`) | Both cores, boot code, fault paths, other drivers |
+| **Low-Level** | `gpio_ll.[c\|h]` | `stm32h7_driver_gpio_ll` | `_gpio_bm` | `stm32h7xx_ll_gpio.h` inlines | Code written against `LL_GPIO_*` constants |
+| **HAL** | `gpio_hal.[c\|h]` | `stm32h7_driver_gpio_hal` | `_gpio_bm` | `HAL_GPIO_Init`, `HAL_GPIO_LockPin` | MSP code, CubeMX-style `GPIO_InitTypeDef` |
 
 ```cmake
-target_link_libraries(cm4_firmware PRIVATE stm32h7_driver_gpio)
+target_link_libraries(cm4_firmware PRIVATE stm32h7_driver_gpio_bm)   # or _ll, _hal
 ```
 
 ```c
-#include "gpio_bm.h"    /* never "00_gpio/gpio_bm.h": the directory is on the include path */
+#include "gpio_ll.h"    /* never "00_gpio/gpio_ll.h": the directory is on the include path */
 ```
 
-- **`stm32h7_driver_gpio` is the BM tier.** There is no LL or HAL tier yet, so the
-  unsuffixed name has only ever meant `gpio_bm`, the same situation as
-  `stm32h7_driver_dma`.
-- **Who links it:** `led`, all three `uart` targets, all three `adc` targets,
-  `eth`, and the umbrella `stm32h7_shared_drivers`. A project that links any of
-  those gets `gpio_bm.c` compiled once.
-- **No HAL or LL headers,** which is what lets `01_led` flash boot codes before the
-  clock tree exists.
+- **`stm32h7_driver_gpio` is the BM tier.** It is an alias with no sources,
+  kept because seven driver targets and the umbrella `stm32h7_shared_drivers`
+  link that name. The umbrella does not link LL or HAL.
+- **`gpio_bm` holds the only copy of** the validation (`GPIO_BM_CheckConfig`,
+  `GPIO_BM_IsValidPort`), the port clock, the section and the hook. LL and HAL
+  call into it, so every tier refuses the same requests with the same status,
+  and one installed hook protects all three.
+- **State in RAM, from the linked `.map`:** `gpio_bm` keeps at most 8 B of
+  `.bss` per image: the hook pointer and the nesting counter. The `prj_01`
+  production images link only the pointer (4 B). LL and HAL keep
+  `.data = .bss = 0`.
+- **LL needs no LL `.c` file** and no `USE_FULL_LL_DRIVER`; it never includes
+  `stm32h7xx_hal.h`. **HAL compiles to nothing** without `HAL_GPIO_MODULE_ENABLED`.
+- **The driver never defines** `EXTIx_IRQHandler` or `HAL_GPIO_EXTI_Callback`.
+
+### 1.1 Feature matrix
+
+| Feature | BM | LL | HAL |
+| :--- | :---: | :---: | :---: |
+| Input / output / AF / analog, PP/OD, pull, speed | yes | yes | yes |
+| Initial level written with `BSRR` before `MODER` (no glitch) | yes | yes | yes (`ConfigPin`; `Init` keeps HAL semantics) |
+| Everything validated before the first peripheral access | yes | yes | yes |
+| PA13/PA14 (SWD) refused unless `allow_debug_pins` | yes | yes | yes (`GPIO_HAL_Init`: always refused) |
+| Locked pin refused without writing; five fields read back | yes | yes | yes |
+| Cross-core section + hook around every write | yes | yes | yes |
+| Several pins, all validated before the first write | - | `ConfigPins` | `GPIO_HAL_Init` (mask) |
+| Deinit (analog first), `ReadConfig` | yes | yes | deinit via BM |
+| `LCKR` lock with read-back | yes | yes | yes |
+| Pin operations, one `BSRR` store | `static inline` | `static inline` | `HAL_GPIO_WritePin/TogglePin/ReadPin` |
+| EXTI, compensation cell | no | no | no (EXTI modes refused) |
 
 ---
 
-## 2. API
+## 2. API summary
 
-| Function | Does | Returns `false` when |
+### 2.1 Status codes
+
+BM and LL return `GpioBm_Status_t`. HAL returns `HAL_StatusTypeDef` through
+`GPIO_HAL_Status()`. The legacy BM functions keep their `bool`.
+
+| `GpioBm_Status_t` | Meaning | HAL |
 | :--- | :--- | :--- |
-| `bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port)` | Sets the port's bit in `RCC_AHB4ENR` and reads it back, so the next access to the port is not dropped. The bit is derived from the port address (ports are 0x400 apart, `GPIOAEN..GPIOKEN` are bits 0..10), guarded by a `_Static_assert` on the stride. | `port` is `NULL` or outside `GPIOA..GPIOK`. Nothing is written. |
-| `bool GPIO_BM_ConfigAlternate(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af, uint32_t pull, uint32_t speed)` | Clocks the port, then writes `AFR`, `OTYPER` = push-pull, `OSPEEDR`, `PUPDR` and **`MODER` = AF last**. The pin therefore never passes through AF0 with the new mode. | `port` is `NULL`, `pin_idx > 15`, `af > 15`, or the port is invalid. |
-| `bool GPIO_BM_ConfigAnalog(GPIO_TypeDef *port, uint32_t pin_idx)` | Clocks the port, sets `MODER` = analog, then `PUPDR` = no pull. | `port` is `NULL`, `pin_idx > 15`, or the port is invalid. |
+| `GPIO_BM_OK` | Written and read back | `HAL_OK` |
+| `GPIO_BM_ERR_PARAM` | Refused before any peripheral access, including the port clock | `HAL_ERROR` |
+| `GPIO_BM_ERR_DEBUG_PIN` | PA13/PA14 without `allow_debug_pins` | `HAL_ERROR` |
+| `GPIO_BM_ERR_LOCKED` | The pin is frozen by `LCKR`; nothing was written | `HAL_ERROR` |
+| `GPIO_BM_ERR_BUSY` | The cross-core hook did not get the lock; nothing was written | `HAL_BUSY` |
+| `GPIO_BM_ERR_VERIFY` | Read-back differs from what was written | `HAL_ERROR` |
+| `GPIO_BM_ERR_CONFLICT`, `_NOT_READY` | Reserved for F2 (EXTI, compensation cell); never returned | - |
 
-| Constant | Value | Field |
-| :--- | :--- | :--- |
-| `GPIO_BM_PULL_NONE` / `_UP` / `_DOWN` | 0 / 1 / 2 | `PUPDR` |
-| `GPIO_BM_SPEED_LOW` / `_MEDIUM` / `_HIGH` / `_VERY_HIGH` | 0 / 1 / 2 / 3 | `OSPEEDR` |
-
-- **`pin_idx` is a pin index (0..15), not a HAL mask.** `GPIO_PIN_8` (`0x0100`)
-  passed as `pin_idx` is rejected. `board_def.h` files hold HAL masks for the HAL
-  drivers, so convert them before calling `gpio_bm` (for example with
-  `__builtin_ctz(mask)`).
-- **`ConfigAlternate` is push-pull only.** There is no open-drain variant, so it
-  cannot set up I2C pins.
-- **The constants are the register field values.** They are not validated: see §7.
+### 2.2 `gpio_bm.h`
 
 ```c
-/* USART3 on PD8/PD9, AF7, as uart_bm does it */
-if (!GPIO_BM_ConfigAlternate(GPIOD, 8U, 7U, GPIO_BM_PULL_UP, GPIO_BM_SPEED_VERY_HIGH) ||
-    !GPIO_BM_ConfigAlternate(GPIOD, 9U, 7U, GPIO_BM_PULL_UP, GPIO_BM_SPEED_VERY_HIGH))
+/* Legacy (frozen signatures; since F1a they also refuse pull > 2, speed > 3 and misaligned ports) */
+bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port);
+bool GPIO_BM_ConfigAlternate(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af, uint32_t pull, uint32_t speed);
+bool GPIO_BM_ConfigAnalog(GPIO_TypeDef *port, uint32_t pin_idx);
+
+/* Configuration */
+GpioBm_Status_t GPIO_BM_ConfigPin(const GpioBm_PinConfig_t *cfg);
+GpioBm_Status_t GPIO_BM_ConfigOutput(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t otype,
+                                     uint32_t speed, uint32_t pull, uint32_t initial_level);
+GpioBm_Status_t GPIO_BM_ConfigInput(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t pull);
+GpioBm_Status_t GPIO_BM_ConfigAlternateEx(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af,
+                                          uint32_t otype, uint32_t pull, uint32_t speed);
+GpioBm_Status_t GPIO_BM_DeinitPin(GPIO_TypeDef *port, uint32_t pin_idx);   /* analog, AF0, PP, LOW, no pull, ODR 0 */
+GpioBm_Status_t GPIO_BM_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, GpioBm_PinConfig_t *out);
+
+/* Pin operations: static inline, no validation, one BSRR store (Toggle: one ODR read first) */
+void GPIO_BM_Set(GPIO_TypeDef *p, uint32_t mask);      void GPIO_BM_Reset(GPIO_TypeDef *p, uint32_t mask);
+void GPIO_BM_Toggle(GPIO_TypeDef *p, uint32_t mask);   void GPIO_BM_Write(GPIO_TypeDef *p, uint32_t pin_idx, uint32_t level);
+void GPIO_BM_WritePort(GPIO_TypeDef *p, uint32_t mask, uint32_t value);
+bool GPIO_BM_Read(const GPIO_TypeDef *p, uint32_t pin_idx);   uint32_t GPIO_BM_ReadPort(const GPIO_TypeDef *p);
+
+/* LCKR */
+GpioBm_Status_t GPIO_BM_LockPins(GPIO_TypeDef *port, uint32_t mask);
+bool            GPIO_BM_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);
+
+/* Section and cross-core hook */
+void            GPIO_BM_SetSharedLock(const GpioBm_SharedLock_t *lock);   /* per core; NULL = PRIMASK only */
+GpioBm_Status_t GPIO_BM_SectionEnter(GpioBm_Section_t *s);                /* to wrap code outside the driver */
+void            GPIO_BM_SectionExit(const GpioBm_Section_t *s);
+
+/* Validation without access (used by LL and HAL) */
+bool            GPIO_BM_IsValidPort(const GPIO_TypeDef *port);
+GpioBm_Status_t GPIO_BM_CheckConfig(const GpioBm_PinConfig_t *cfg);
+```
+
+Constants are the register field values: `GPIO_BM_MODE_INPUT/OUTPUT/AF/ANALOG`
+(0..3), `GPIO_BM_OTYPE_PP/OD`, `GPIO_BM_PULL_NONE/UP/DOWN` (0..2) and
+`GPIO_BM_SPEED_LOW..VERY_HIGH` (0..3). **`pin_idx` is an index (0..15), not a
+mask.** `GPIO_BM_PIN_INDEX(GPIO_PIN_8)` gives 8 and `GPIO_BM_PIN_MASK(8)` gives
+`0x100`.
+
+### 2.3 `gpio_ll.h`
+
+These functions have the same semantics and return the same statuses as BM,
+but take `GpioLL_PinConfig_t`, whose fields hold `LL_GPIO_*` constants.
+`_Static_assert` checks that those constants equal the register field values.
+
+```c
+GpioBm_Status_t GPIO_LL_ConfigPin(const GpioLL_PinConfig_t *cfg);
+GpioBm_Status_t GPIO_LL_ConfigPins(const GpioLL_PinConfig_t *cfgs, uint32_t count, uint32_t *done);
+GpioBm_Status_t GPIO_LL_DeinitPin(GPIO_TypeDef *port, uint32_t pin_idx);
+GpioBm_Status_t GPIO_LL_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, GpioLL_PinConfig_t *out);
+GpioBm_Status_t GPIO_LL_LockPins(GPIO_TypeDef *port, uint32_t mask);
+bool            GPIO_LL_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);
+/* static inline: GPIO_LL_Set, _Reset, _Toggle, _Write, _WritePort, _Read, _ReadPort */
+```
+
+- **`ConfigPins`** validates every entry before the first write, then gives each
+  pin its own section. If entry *k* fails, pins 0..*k*−1 stay configured and
+  `*done = k`.
+- **`GPIO_LL_WritePort`** is one `BSRR` store. It does **not** wrap
+  `LL_GPIO_WriteOutputPort`, which writes `ODR` as a whole and can undo a
+  concurrent `BSRR` from the other core.
+- **`IsLocked`** also checks `LCKK`. `LL_GPIO_IsPinLocked` alone looks only at
+  `LCKy`, so it reports a pin as locked before the key sequence has run.
+
+### 2.4 `gpio_hal.h`
+
+```c
+HAL_StatusTypeDef GPIO_HAL_ConfigPin(const GpioHal_PinConfig_t *cfg);           /* GPIO_MODE_*, GPIO_PULL*, ... */
+HAL_StatusTypeDef GPIO_HAL_Init(GPIO_TypeDef *port, const GPIO_InitTypeDef *init); /* drop-in for HAL_GPIO_Init */
+HAL_StatusTypeDef GPIO_HAL_DeinitPin(GPIO_TypeDef *port, uint32_t pin_idx);       /* = GPIO_BM_DeinitPin */
+HAL_StatusTypeDef GPIO_HAL_LockPins(GPIO_TypeDef *port, uint32_t mask);
+HAL_StatusTypeDef GPIO_HAL_Status(GpioBm_Status_t st);                            /* static inline mapping */
+```
+
+- **Modes:** `GPIO_MODE_INPUT`, `_OUTPUT_PP`, `_OUTPUT_OD`, `_AF_PP`, `_AF_OD`
+  and `_ANALOG`. The `GPIO_MODE_IT_*` and `GPIO_MODE_EVT_*` modes are refused
+  with `HAL_ERROR`.
+- **`GPIO_HAL_Init`** keeps the semantics of `HAL_GPIO_Init`, which never writes
+  `ODR`. For an output, set the level first with `HAL_GPIO_WritePin`, or use
+  `GPIO_HAL_ConfigPin` with `initial_level`. The whole mask is validated and
+  checked for `LCKR` before the first write.
+- **Pin levels:** `HAL_GPIO_WritePin`, `HAL_GPIO_TogglePin` and
+  `HAL_GPIO_ReadPin` are single `BSRR` or `IDR` accesses. They are safe from
+  both cores and need no wrapper.
+
+---
+
+## 3. Project contract
+
+The driver contains no port, pin, HSEM ID or time limit of any project. The project
+supplies them.
+
+### 3.1 The cross-core hook (`Common/Inc/shared_memory.h`, `Common/Src/shared_memory.c`)
+
+```c
+#define BOARD_GPIO_HSEM_ID            5U      /* 1-step, taken only inside the gpio_bm section */
+#define SHARED_GPIO_LOCK_US           50U     /* >= 10x the longest hold measured (B1, section 9.2) */
+#define SHARED_GPIO_LOCK_CYCLES_CM7  (SHARED_GPIO_LOCK_US * 400U)
+#define SHARED_GPIO_LOCK_CYCLES_CM4  (SHARED_GPIO_LOCK_US * 200U)
+
+static bool shared_gpio_lock(void *ctx)
 {
-    /* bad port or pin */
+    (void)ctx;
+    if (HSEM_BM_TakeTimeout(BOARD_GPIO_HSEM_ID, 0U, SHARED_GPIO_LOCK_CYCLES) == HSEM_BM_OK) { return true; }
+    SHARED_GPIO_FAIL_COUNT++;                 /* g_shared.m7_/m4_gpio_lock_fail_count, own core only */
+    return false;
 }
+static void shared_gpio_unlock(void *ctx) { (void)ctx; (void)HSEM_BM_Release(BOARD_GPIO_HSEM_ID, 0U); }
+const GpioBm_SharedLock_t g_shared_gpio_lock = { shared_gpio_lock, shared_gpio_unlock, NULL };
+void Shared_GpioLockInstall(void) { GPIO_BM_SetSharedLock(&g_shared_gpio_lock); }
+```
 
-/* ADC input on PB1, as adc_bm does it when analog_pin_port is set */
-(void)GPIO_BM_ConfigAnalog(GPIOB, 1U);
+- **A 1-step lock is enough.** The hook is called only at nesting level 1 and
+  only with this core's interrupts masked, so at most one context per core holds
+  the semaphore.
+- **The timeout works inside the section.** `CYCCNT` keeps counting with
+  PRIMASK set, so `TakeTimeout` stays bounded there.
+
+### 3.2 Order of calls
+
+| Core | Where (`prj_01`) | Why there |
+| :--- | :--- | :--- |
+| CPU1 | `CM7 main.c`: after `SystemClock_Config()` and `Shared_Init()`, before `HSEM_BM_BootReleaseCpu2` | Before the release, only CPU1 configures pins. The cycle limit assumes 400 MHz. |
+| CPU2 | `CM4 main.c`: right after `HSEM_BM_Init()` and `HSEM_BM_TimebaseStart()` | Before this core's first pin configuration |
+
+### 3.3 Writers outside the driver
+
+The lock protects a port only if **every** writer of that port takes it.
+
+| Writer | What to do |
+| :--- | :--- |
+| `HAL_GPIO_Init` in an MSP (`04_uart/uart_hal.c`, `08_eth/eth_hal.c`) | Replace it with `GPIO_HAL_Init` (same arguments), or put `GPIO_BM_SectionEnter/Exit` around each call. Phase T15 `g` shows the section works; phase `h` shows that one unprotected writer breaks the lock for everyone. |
+| Raw `MODER`/`PUPDR` RMW in project code | Replace it with a driver call, or wrap it in the section |
+| `01_led` (`LED_Init`, before the release) | Safe by contract: CPU2 is parked |
+| `LED_PanicRed` (fault path) | Documented exception (G14): a fault handler cannot wait for a semaphore |
+
+In `prj_01`, CPU2 configures no pin in production, and the console MSP (GPIOD)
+is the only `HAL_GPIO_Init` left. Neither is migrated.
+
+---
+
+## 4. Rules the driver enforces
+
+1. **Validate before the first access (C6).** Rejected with `ERR_PARAM`, before
+   the port clock is touched: `NULL`, a port outside `GPIOA..GPIOK` or off the
+   0x400 stride, pin > 15, mode > 3, otype > 1, pull > 2 (`PUPDR = 11` is
+   reserved), speed > 3, AF > 15, level > 1, and analog with a pull. PA13/PA14
+   return `ERR_DEBUG_PIN`. The checks run in a fixed order: `NULL`, port, pin,
+   fields, SWD.
+2. **Section (C10).** PRIMASK is saved and interrupts masked (with `DSB`/`ISB`),
+   then the hook is called at nesting level 1. `SectionExit` restores the saved
+   PRIMASK and never calls `__enable_irq()`, so the driver works from a fault
+   handler. A refusal from the hook restores PRIMASK and the nesting counter.
+   `EnablePortClock` takes no section: `RCC_AHB4ENR` is banked per core
+   (RM0399 §9.7.1).
+3. **Write order (C11).** `BSRR` (output only), `OTYPER`/`OSPEEDR` (output and
+   AF), `PUPDR`, `AFR` (AF only), and `MODER` last. Deinit goes the other way:
+   `MODER = analog` first.
+4. **Honesty (C12).** A pin whose `LCKy` bit is set with `LCKK` set returns
+   `ERR_LOCKED` without writing. After every write, the five fields of the pin
+   are read back and compared.
+5. **`LockPins`.** The key sequence runs inside the section, as 32-bit accesses.
+   On a port that is already locked, the pins already locked stay in the
+   sequence and the read-back decides the result (§6). A mask whose pins are all
+   locked already writes nothing.
+6. **Bounded waits (C13).** The only wait is inside the hook, and the project
+   bounds it.
+7. **Pin operations** are single stores to `BSRR`, which is atomic
+   (RM0399 §12.3.5), so they take no section. Two cores toggling the **same**
+   pin can both read the same `ODR`.
+
+---
+
+## 5. Why not call `HAL_GPIO_*` directly
+
+| `HAL_GPIO_*` (from `stm32h7xx_hal_gpio.c`) | Consequence | Driver |
+| :--- | :--- | :--- |
+| Unprotected read-modify-write of `MODER`/`OTYPER`/`OSPEEDR`/`PUPDR`/`AFR`, which both cores share | A configuration on the other core can undo this one without any error (T15 `c`: 315 897 corruptions) | Section + hook |
+| Parameters checked only by `assert_param` | Invalid values reach the registers in release builds | `GPIO_BM_CheckConfig` |
+| `HAL_GPIO_Init` never writes `ODR` | An output drives a stale level before the code writes the right one (T8 control: 2 transitions) | `initial_level` via `BSRR` before `MODER` |
+| Analog + `GPIO_PULLUP` skips `PUPDR`; analog + `GPIO_PULLDOWN` writes it | The pull is left as it was, or enabled on an analog pin (G7, shown 6/6 in T2) | Analog with a pull is refused |
+| Writes a locked pin and returns nothing | A configuration that did not happen looks successful | `ERR_LOCKED`, read-back |
+| `HAL_GPIO_LockPin` checks only `LCKK` | After any earlier lock of the port, it returns `HAL_OK` whatever happened to the pins asked for | Read-back of every pin of the mask |
+| `HAL_GPIO_DeInit` clears this core's `IMR1`/`EMR1` and the shared `RTSR1`/`FTSR1`/`EXTICR` of any line routed to the port, including every GPIOA line while `EXTICR` still holds its reset value | Deinit of a pin can stop the other core's EXTI | `GPIO_HAL_DeinitPin` = `GPIO_BM_DeinitPin`, which never writes EXTI |
+
+---
+
+## 6. Silicon facts and errata
+
+| Rule | Mechanism | Test |
+| :--- | :--- | :--- |
+| RM0399 §12.3.5: `BSRR` is atomic, and set wins over reset | Pin operations through `BSRR` only | T3 (`0x3F` after a combined set+reset of PE8) |
+| RM0399 §12.4.4: `PUPDR = 11` is reserved | `ERR_PARAM` | T1 |
+| RM0399 §12.4.8: key sequence, word accesses; a locked pin ignores writes | `LockPins`, `ERR_LOCKED` before writing | T16 |
+| In analog mode, `IDR` reads 0 | Silicon fact | T7 |
+| RM0399 §9.7.1: `RCC_AHB4ENR` is banked per core | No section in `EnablePortClock`; both banks in the T1 snapshot | T1 |
+| PA13/PA14 carry SWD after reset (RM0399 §12.3.2) | `ERR_DEBUG_PIN` | T1 |
+| **Measured, differs from RM0399 §12.4.8** ("LCKy can only be written when LCKK is 0") | After PF7\|PF8 were locked (`LCKR = 0x00010180`), a second full sequence for PF6 gave `0x000101C0` (SWD read, 2026-09-30). The pins already locked stayed locked. The driver does not rely on either reading: it keeps the locked pins in the sequence and judges by read-back | T16 (`0x000101F0` after BM, LL and HAL each add one pin) |
+| `GPIOJ`/`GPIOK` have no pads on this package, but their registers work | T16 locks pins there, where a lock can reach nothing | T16 |
+
+**Errata (ES0445 rev 6)** that concern pins but not this code:
+
+- **2.3.3:** a GPIO assigned to the DAC cannot be used as an output while the DAC
+  drives an on-chip peripheral (PA4/PA5).
+- **2.3.13:** transitions on PC13 can disturb the LSE oscillator. On the Nucleo,
+  PC13 is the user button, and no test uses it.
+
+ES0445 has no entry for `LCKR`.
+
+---
+
+## 7. Examples
+
+### A. Output and input (`gpio_bm`, either core)
+
+```c
+/* CS of an SPI device on PD14: high before it becomes an output */
+if (GPIO_BM_ConfigOutput(GPIOD, 14U, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_HIGH,
+                         GPIO_BM_PULL_NONE, 1U) != GPIO_BM_OK) { /* refused, locked, busy or verify */ }
+GPIO_BM_Reset(GPIOD, GPIO_BM_PIN_MASK(14U));   /* select */
+GPIO_BM_Set(GPIOD, GPIO_BM_PIN_MASK(14U));     /* deselect */
+
+(void)GPIO_BM_ConfigInput(GPIOC, 13U, GPIO_BM_PULL_NONE);
+bool pressed = GPIO_BM_Read(GPIOC, 13U);
+```
+
+### B. I2C pins, open-drain AF (`gpio_bm`)
+
+```c
+(void)GPIO_BM_ConfigAlternateEx(GPIOB, 8U, 4U, GPIO_BM_OTYPE_OD, GPIO_BM_PULL_UP, GPIO_BM_SPEED_LOW);  /* I2C1_SCL */
+(void)GPIO_BM_ConfigAlternateEx(GPIOB, 9U, 4U, GPIO_BM_OTYPE_OD, GPIO_BM_PULL_UP, GPIO_BM_SPEED_LOW);  /* I2C1_SDA */
+```
+
+### C. Several pins, all or nothing (`gpio_ll`)
+
+```c
+static const GpioLL_PinConfig_t k_bus[] = {
+    { GPIOE, 8U, LL_GPIO_MODE_OUTPUT, LL_GPIO_OUTPUT_PUSHPULL, LL_GPIO_SPEED_FREQ_LOW, LL_GPIO_PULL_NO, 0U, 0U, false },
+    { GPIOE, 9U, LL_GPIO_MODE_OUTPUT, LL_GPIO_OUTPUT_PUSHPULL, LL_GPIO_SPEED_FREQ_LOW, LL_GPIO_PULL_NO, 0U, 0U, false },
+};
+uint32_t done;
+if (GPIO_LL_ConfigPins(k_bus, 2U, &done) != GPIO_BM_OK) { /* done = pins configured before the failure */ }
+GPIO_LL_WritePort(GPIOE, 0x0300U, 0x0100U);   /* PE8 high, PE9 low, one BSRR store */
+```
+
+### D. An MSP that is safe on a dual-core board (`gpio_hal`)
+
+```c
+void HAL_UART_MspInit(UART_HandleTypeDef *huart)
+{
+    GPIO_InitTypeDef gpio = { .Pin = GPIO_PIN_8 | GPIO_PIN_9, .Mode = GPIO_MODE_AF_PP,
+                              .Pull = GPIO_PULLUP, .Speed = GPIO_SPEED_FREQ_VERY_HIGH,
+                              .Alternate = GPIO_AF7_USART3 };
+    if (GPIO_HAL_Init(GPIOD, &gpio) != HAL_OK) { Error_Handler(); }   /* was HAL_GPIO_Init */
+    /* ... */
+}
+```
+
+### E. Code outside the driver (`gpio_bm` section)
+
+```c
+GpioBm_Section_t s;
+if (GPIO_BM_SectionEnter(&s) == GPIO_BM_OK)      /* PRIMASK + the cross-core lock */
+{
+    HAL_GPIO_Init(GPIOB, &one_pin);               /* one pin per section keeps the masked time short */
+    GPIO_BM_SectionExit(&s);
+}
 ```
 
 ---
 
-## 3. What is not here
+## 8. Test bench (Analog Discovery 2)
 
-There is no API for any of the following. Consumers that need them write the
-registers themselves, or use `HAL_GPIO_Init`:
+Board: NUCLEO-H755ZI-Q (MB1363). Instrument: an AD2 (SN `210321B5D38D`, WaveForms
+SDK, driven from `tools/ad2.py` over ctypes). The WaveForms GUI must stay closed.
 
-- output and input configuration, pin read and write (`led_bm` writes `MODER`
-  directly);
-- open-drain, lock (`LCKR`), de-initialisation, reading a pin's configuration
-  back;
-- EXTI, although the workspace guidelines describe `00_gpio` as "GPIO & EXTI";
-- the I/O compensation cell and the dual-pad analog switches (`SYSCFG_PMCR`).
+```text
+ AD2                     NUCLEO-H755ZI-Q                      AD2 scope
+ DIO0..DIO7  ─────────── PE8..PE15  (bus, one owner per step)
+ DIO8        ─────────── PE3   (AD2 only; not driven by this bench)
+ DIO9        ─────────── PE5   (MCU only: T8)
+ DIO10       ─────────── PE4   (AD2 only; not driven by this bench)
+ DIO11       ─────────── PE6   (MCU only; unused)          PF14 ──┬──── 1+   (1− to GND)
+ DIO12 ───────────────►  PE2   HOST_REQ                           ├─[22k]─ GND
+ DIO13 ◄───────────────  PE7   MCU_ACK                            └─[150p]─ GND
+ DIO14 ◄───────────────  PA8   MCO1 (T10)                  PF15 ──┬──── 2+   (2− to GND)
+ GND   ─────────────────  GND  (connected first, removed last)    ├─[22k]─ 3V3
+ W1, W2, V+, V−: never connected                                 └─[150p]─ GND
+```
+
+| AD2 | MCU | Zio | Morpho | Use | Who drives |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| DIO0..DIO7 | PE8..PE15 | CN10-18, CN9-15, CN10-24, CN10-6, CN10-26, CN10-10, CN10-8, CN10-30 | CN12-40, 52, 47, 56, 49, 55, 51, 53 | Bus (T3, T4/T7, T0b(c)) | MCU **or** AD2, with the S5 handover |
+| DIO8 | PE3 | CN9-22 | CN11-47 | EXTI line (F2) | AD2 only |
+| DIO9 | PE5 | CN9-18 | CN11-50 | T8 | MCU only |
+| DIO10 | PE4 | CN9-16 | CN11-48 | EXTI line (F2) | AD2 only |
+| DIO11 | PE6 | CN9-20 | CN11-62 | Unused | MCU only |
+| DIO12 | PE2 | CN9-14 | CN11-46 | `HOST_REQ` | AD2 only |
+| DIO13 | PE7 | CN10-20 | CN12-44 | `MCU_ACK` | MCU only |
+| DIO14 | PA8 | CN10-4 | CN12-23 | MCO1 (T10) | MCU only |
+| Scope 1+ | PF14 | CN9-19 | CN12-50 | T5, T6, T9; 22 kΩ to GND, 150 pF to GND | MCU only |
+| Scope 2+ | PF15 | CN9-21 | CN12-60 | T5, T6, T9; 22 kΩ to 3V3, 150 pF to GND | MCU only |
+
+The pins used unwired are PF3..PF11 (T1, T2, TB, B1, T15, T16), GPIOJ and GPIOK
+(T16). PF0..PF5, PF12 and PF13 reach no connector on this board. PE0 and PE1
+(LD2) are never touched.
+
+**Electrical safety.** There are no series resistors, so nothing limits the
+current in a contention (DS12923: 20 mA per pin, +0 mA injection). The rules
+S1–S10 of `IMPLEMENTATION_PLAN.md` are implemented as follows:
+
+- **S2, safe state.** `bench_safe()` puts every wired pin in input with
+  `MCU_ACK` low. It runs at start, on any abort or timeout, and at the end. The
+  AD2 opens and closes with every DIO in input, and returns there on any
+  exception.
+- **S3, host guard.** `ad2_set_oe()` is the only path to
+  `FDwfDigitalIOOutputEnableSet`, and it checks each mask against the bus owner
+  of the current step.
+- **S4, firmware guard.** `bench_claim()` is the only way a wired pin becomes an
+  output, open-drain or AF. It reads its permission from the current step,
+  which only `step_begin()` sets; a caller cannot pass a step.
+- **S5, bus handover.** Before either side drives the bus, the bus must follow
+  both MCU pulls: 0xFF with pull-up and 0x00 with pull-down.
+- **S7, step sync.** Each step is announced and matched against the host's copy
+  of the table. 10 s without the other side sends both to the safe state.
+- **S8, image check.** The host enables no output before it has read the banner
+  of a clean `Rev`.
+
+**Procedure:**
+1. Connect GND first, then the DIO lines.
+2. Flash with the script stopped: `py tools/flash.py --preset selftest-gpio`.
+3. Run `py tools/gpio_hw_check.py`. It resets the board through SWD, with the
+   AD2 in S2.
+4. After the verdict, stop the script, and only then reflash, reset or unwire.
+5. Keep the AD2 on USB whenever the Nucleo is powered.
 
 ---
 
-## 4. Dual-core rules
+## 9. Validation
 
-The two kinds of register this code touches behave differently between the
-cores.
+Project: `03_firmware_templates/prj_01_template_dualcore`, preset
+`selftest-gpio`. Code:
+- CPU1: `CM7/App/Src/gpio_selftest.c`.
+- CPU2: `CM4/App/Src/gpio_selftest.c`.
+- Both cores: `Common/Src/gpio_selftest_common.c`.
+- Host: `tools/gpio_hw_check.py`.
 
-| Register | Shared between CPU1 and CPU2? | Consequence |
+The two cores coordinate through a block at `0x3800A000` (SRAM4). CPU1 opens a
+new session there before it releases CPU2. The global verdict needs
+`FW VERDICT=PASS` and every host check (`HOST VERDICT=PASS`). No test compares a
+tier with itself: the oracles are register snapshots, a field table written from
+RM0399, ST's `HAL_GPIO_Init`, private counters, and the AD2.
+
+### 9.1 Tests (runs at `2b9bf21`, identical in both unless two values are given)
+
+| Test | What it proves | Negative control | Result |
+| :--- | :--- | :--- | :--- |
+| T1 | Refusals of each tier on both cores: exact status; snapshot of every clocked port and both `RCC_AHB4ENR` banks unchanged. Includes a batch with a bad third entry and a mask with PA0 next to PA13 | A valid call of the same tier changes the snapshot | 45 BM / 32 LL / 35 HAL refusals per core, 0 failures |
+| T2 | 1440 configurations per tier (PF6–PF11, 4 modes × 2 types × 4 speeds × 3 pulls × AF 0/7/15), from a state with every field different, match the RM0399 field table; BM and LL also match raw `HAL_GPIO_Init`; `ODR` = initial level; BM/LL `ReadConfig` = registers; legacy calls give the `ca569b6` bits | A deliberately altered expected image is detected | 0 differences in 4320 configurations per core (1440 per tier) and in 2880 comparisons with raw `HAL_GPIO_Init`; 288 analog+pull refusals per tier; G7 shown on raw HAL 6/6 |
+| TB | A refusing hook: 16 calls × PRIMASK 0/1 all return busy, nothing written, PRIMASK restored, `lock()` called once, nesting counter back to 0. Nesting: one lock for an outer section | The same hook allowing writes | 242 checks, 0 failures, 32/32 busy, both cores |
+| T15 | Race PF10 (CPU1) against PF11 (CPU2), same registers | Raw RMW on both cores: **315 897** corruptions, with overlap on both. Each core alone: 0 | Through the production hook (counting shim), 0 corruptions and `locked_calls` = sum of both cores in: HAL/LL, LL/HAL, BM/BM and `HAL_GPIO_Init`-in-section/BM, 200 000 calls per core each |
+| T15 `h` | One writer without the section defeats the lock | - | Raw `HAL_GPIO_Init` on CPU1 against BM on CPU2: 13 257 corruptions |
+| T15 `i`/`j` | A TIM17 ISR (about 20 kHz) reconfigures PF6 while the thread reconfigures PF10 | Raw RMW in both: 860 corruptions in 12 820 ISR entries | Thread HAL + ISR LL: 0 in 20 412 entries |
+| T0a | 13 lines follow both MCU pulls; REQ/ACK work | - | 0x4FFF / 0x0000 on the AD2; `IDR` 0xFF78 / 0x0000 |
+| T0b | (a) host guard refuses 8 masks before the DLL (mock); (b) `bench_claim` refuses PE0–PE4, PE7, bus, PA8, PF14; (c) the released-bus check catches a driven bus; (d) no `HOST_REQ` → MCU safe state | (a) allowed masks pass; (b) PE5 accepted; (c) the MCU drives 0x5A on purpose | All pass; (c) `False` twice at `0x5A`; (d) GPIOE `MODER[31:4]` = `0x00004000` |
+| T3 | Pin operations of each tier (`WritePort`, `Set`, `Reset`, `Write`, `Toggle`) read by the AD2 | A deliberate 0x54 where the host expects 0x55 | 24 values per tier (26 for BM), 0 differences; set+reset → `0x3F`; control detected at index 25 only |
+| T4 / T7 | 256 patterns driven by the AD2, read per tier by port and by bit; then analog `IDR` = 0 | Inverted pass (BM): CRC differs and equals the inverted CRC; input mode reads 0xFF | CRC32 `0x29058C73` = host for all tiers; T7 0xFF → 0x00 after `DeinitPin` |
+| T5 | Pull resistances set by each tier; the scope load R<sub>IN</sub> is measured, not assumed | PF14 no pull < 0.1 V; PF15 no pull > 2.9 V; V<sub>DD</sub> agrees on both channels within 50 mV | R<sub>PU</sub> 39.2–39.3 kΩ, R<sub>PD</sub> 42.5–42.6 kΩ (30–50 kΩ, DS12923 table 59); R<sub>IN</sub> 1057.2 / 1040.1 kΩ |
+| T6 | Open-drain of each tier: PF15 as an I2C line (22 kΩ to 3V3), PF14 released | PF14 push-pull high: 3.302 V | PF15 OD low 0.025–0.026 V, released 3.233–3.235 V; PF14 released 0.085–0.088 V |
+| T8 | Input → output on PE5 through each tier: A, B one transition; C, D (stale `ODR`) none | Naive order (`MODER`, 1 µs, `BSRR`): a pulse | A=1 B=1 C=0 D=0 on all tiers; control 2 transitions |
+| T9 | t<sub>r</sub> 10–90 % per `OSPEEDR`, 40 edges per speed and pin, 4 interleaved rounds (BM, LL, HAL, BM), Lanczos reconstruction (errata E9) | Pins in input: no edge in 0.5 s | Gate t<sub>r</sub>(LOW) − t<sub>r</sub>(VERY_HIGH) > 5σ: PF14 2.02 > 1.30 ns and 2.07 > 1.29 ns; PF15 2.60 > 0.81 ns and 2.53 > 0.78 ns |
+| T10 | PA8 in AF0 through each tier outputs MCO1 = HSE/2 | PA8 in AF1: 0 edges | 4.053–4.055 MHz (4 MHz ± 2 %); `RCC_CFGR` restored |
+| T16 | Locked pins refuse every tier (config, deinit, legacy) with `MODER` unchanged; a locked port gets more pins from each tier; LL on GPIOJ, HAL on GPIOK | PF6, then PF3, stay free and configurable | `LCKR` `0x00010180` → `0x000101F0`; GPIOJ/GPIOK `0x00010003` |
+| Production | 20 warm resets of `debug` and of `release`; lock-fail counters by SWD | - | 20/20 "CPU2 alive" in each; `m7/m4_gpio_lock_fail_count` = 0 |
+
+### 9.2 Measurements (B1)
+
+Cycles for one `ConfigPin`, over 1000 calls with PRIMASK set around each, with no
+contention (min/max):
+
+| Tier | CM7, no hook | CM7, hook | CM4, no hook | CM4, hook |
+| :--- | :--- | :--- | :--- | :--- |
+| BM | 547 / 706 | 948 / 975 (2.43 µs) | 475 / 642 | 769 / 973 (4.86 µs) |
+| LL | 716 / 799 | 1111 / 1180 (2.95 µs) | 622 / 748 | 1072 / 1159 (5.79 µs) |
+| HAL | 1153 / 1195 | 1486 / 1523 (3.80 µs) | 1202 / 1346 | 1791 / 1850 (9.25 µs) |
+
+The longest lock hold under contention in T15 was **743 cycles on CM7 (1.86 µs)**
+and **851 cycles on CM4 (4.26 µs, HAL tier)**. `SHARED_GPIO_LOCK_US = 50` is 11.7×
+the longer of the two, and the selftest fails below 10×. The first value, 20 µs,
+left only 4.7×.
+
+Flash (`.text` + `.rodata`, from the `.map`, "Discarded input sections"
+excluded):
+- `prj_01` release (production): `gpio_bm` 92 B on CM7 and 20 B on CM4.
+- Selftest image (debug, `-Og`): `gpio_bm` 1660 B, `gpio_ll` 1246/1256 B,
+  `gpio_hal` 920/922 B (CM7/CM4).
+
+### 9.3 Evidence
+
+All of these are in `prj_01_template_dualcore/docs/`. Each file is the unedited
+output of one run.
+
+| File | Content |
+| :--- | :--- |
+| `gpio_selftest_2b9bf21.txt`, `_2.txt` | The two runs of §9.1, built from a clean worktree (`Rev 2b9bf21` on both cores) |
+| `gpio_selftest_780dddd.txt`, `_2.txt` | The same at `780dddd`, before the V<sub>DD</sub> cross-check; superseded |
+| `gpio_warm_resets_{debug,release}_780dddd.txt`, `gpio_swd_counters_780dddd.txt` | Production regression (`2b9bf21` changes only the host script) |
+| `gpio_map_sizes_780dddd.txt`, `gpio_build_all_780dddd.txt` | Sizes; `build_all.ps1 -Clean` 8/8 (compile only) |
+| `gpio_dev_mutation_ll_no_section_780dddd-dirty.txt` | `gpio_ll` without its section: TB fails on both cores; T15 `d`/`e` 15 708 and 8 507 corruptions |
+| `gpio_dev_mutation_hal_no_level_780dddd-dirty.txt` | `gpio_hal` without the `BSRR` level: T2 `odr_bad` 432 per core; T6_HAL and T8_HAL A–D fail |
+
+### 9.4 Reproducing it
+
+```powershell
+.\tools\env.ps1
+cd 03_firmware_templates\prj_01_template_dualcore
+cmake --preset selftest-gpio; cmake --build --preset selftest-gpio
+py tools/flash.py --preset selftest-gpio
+py tools/gpio_hw_check.py                  # writes docs/gpio_selftest_<rev>.txt; refuses a -dirty Rev
+```
+
+### 9.5 Not exercised
+
+- **Other projects on the board.** `prj_02`, `prj_03` and `prj_04` were only
+  compiled (8/8). `prj_04` does not install the hook, so G1/G13 are still open
+  there: CM4 writes PB1 by hand in `adc_acquisition.c`, and the MSPs of `eth_hal`
+  and `uart_hal` call `HAL_GPIO_Init` without the section.
+- **`ERR_VERIFY` from LL and HAL** on a correct build (BM returns it in T15 `h`);
+  `LockPins` returning `ERR_VERIFY`.
+- **`ConfigPins` failing at entry *k* > 0** after a successful validation.
+- **Reconfiguring PA13/PA14** with `allow_debug_pins`.
+- **Ports B, C, D, G and H** through the new API. The bench uses A, E, F, J
+  and K.
+- **T15 `j` covers only an LL ISR against a HAL thread.** An LL ISR against an
+  LL thread is not run: mutation M1 goes undetected in that phase.
+- **Silicon revisions other than V.**
+
+---
+
+## 10. Known limitations
+
+- **One writer outside the driver breaks the lock for a port** (T15 `h`). §3.3
+  lists the writers.
+- **T9 is close to its gate on PF14:** 2.0 ns of separation against a 5σ of
+  1.3 ns. At 30 MHz of bandwidth, the AD2 cannot resolve MEDIUM, HIGH and
+  VERY_HIGH from each other (12.5–13.0 ns on PF14, 14.6–14.7 ns on PF15).
+- **R<sub>IN</sub> of the scope once read 20.8 MΩ** in a development run, with
+  V<sub>DD</sub> 66 mV low on PF15. The cause was not found. The cross-channel
+  check added in `2b9bf21` fails such a run.
+- **Toggle is not atomic** between two togglers of the same pin (one `ODR` read,
+  then one `BSRR` store).
+- **The section masks interrupts for one pin configuration.** The longest
+  uncontended call measured is 9.25 µs (CM4, HAL tier, §9.2). Under contention
+  it grows by the other core's hold, at most 1.86 µs measured on CM7.
+  Configure one pin per section; never loop inside one.
+- **`GPIO_HAL_Init` refuses PA13/PA14** in any mask.
+- **G14:** `LED_PanicRed` writes `MODER` from a fault handler without the lock.
+- **EXTI (F2) is missing:** there is no conflict detection on `EXTICR` and no
+  deinit that respects the other core, and the `GPIO_MODE_IT/EVT_*` modes are
+  refused. The compensation cell is missing too; `prj_01` still enables it with
+  `HAL_EnableCompensationCell()`.
+
+---
+
+## 11. Consumers
+
+| Consumer | Tier | Uses |
 | :--- | :--- | :--- |
-| `RCC_AHB4ENR` (port clock) | **No, banked per core** (RM0399 §9.7.1: offset `0xE0`, in the "registers mapped at the same address" bank routed by core ID) | `GPIO_BM_EnablePortClock` is safe from either core at any time. A port stays clocked while either core has its bit set. |
-| `GPIOx_MODER`, `OTYPER`, `OSPEEDR`, `PUPDR`, `AFR` | **Yes, one copy** | Every configuration write is an unprotected read-modify-write. If both cores configure pins of the **same port** at the same time, one core can undo the other's change without any error. |
-
-- **Port ownership is the project's job.** Configure a port from one core, or
-  make sure the two cores never configure the same port concurrently (for
-  example, CPU1 configures everything before it releases CPU2). The driver takes
-  no HSEM: it has to work before the HSEM clock exists.
-- **Current exposure: `prj_04`.** CPU1 configures PB13 (ETH TXD1) and PB0/PB14
-  (LEDs), and CPU2 configures PB1 (ADC), all on GPIOB. They are safe as long as
-  those configurations never overlap in time. The planned fix is a critical
-  section with an injectable cross-core lock (`IMPLEMENTATION_PLAN.md`, finding
-  G1).
-- **Pin levels (`BSRR`) are atomic** (RM0399 §12.3.5), so writing output levels
-  from two cores is safe even without a lock. There is just no API for it here yet.
+| `01_led/led_bm.c` | BM | `EnablePortClock`, then `MODER` directly |
+| `04_uart` (all tiers) | BM | `ConfigAlternate`; `uart_hal`'s MSP also calls `EnablePortClock` + `HAL_GPIO_Init` |
+| `07_adc` (all tiers) | BM | `ConfigAnalog` |
+| `08_eth/eth_hal.c` | BM | `EnablePortClock` + `HAL_GPIO_Init` |
+| `prj_01_template_dualcore` | BM (hook) on both cores; LL and HAL in `selftest-gpio` only | `Shared_GpioLockInstall()` |
+| `prj_04_adc_dma_bm_eth` | BM | F1a selftest; hook not installed (F1b not done) |
 
 ---
 
-## 5. Consumers
+## 12. Changing this driver
 
-| Consumer | Uses | How |
-| :--- | :--- | :--- |
-| `01_led/led_bm.c` | `EnablePortClock` | Then writes `MODER` directly. |
-| `04_uart/uart_bm.c`, `uart_ll.c`, `uart_hal.c` (`InitEx`) | `ConfigAlternate` | TX/RX pins, `PULL_UP`, `SPEED_VERY_HIGH`. `uart_hal.c` also uses `EnablePortClock` in its default MSP. |
-| `07_adc/adc_bm.c`, `adc_ll.c`, `adc_hal.c` | `ConfigAnalog` | Only when `analog_pin_port != NULL`. |
-| `08_eth/eth_hal.c` | `EnablePortClock` | Then `HAL_GPIO_Init` with masks. |
-| `prj_04 CM4/App/Src/adc_acquisition.c` | `EnablePortClock` | Project code. |
-
-Any behaviour change in these three functions reaches every one of them. §8 lists
-what that means before changing anything.
-
----
-
-## 6. Validation
-
-There is no GPIO selftest. The three functions have only been exercised in
-hardware indirectly, by their consumers on a NUCLEO-H755ZI-Q (Rev V):
-
-| Function | Exercised by | Evidence |
-| :--- | :--- | :--- |
-| `ConfigAlternate` (AF7, pull-up, very high speed) | UART selftest on PD5/PD6 (`uart_bm`, `uart_ll`) and the BM early-boot console on PD8/PD9. The HAL console muxes its pins with `HAL_GPIO_Init` in its MSP instead | `prj_04 docs/boot_capture.txt` (`[m4_uart_test] … bm_loop=1,1,1 ll=1,1`) |
-| `ConfigAnalog` | ADC1 on PB1 at 500 kSPS | `07_adc/README.md` §9 |
-| `EnablePortClock` | Ports A, B, C, D, E and G: LED boot codes (PB0, PE1, PB14), the ETH RMII pins, the console, the ADC pin | Boards boot, and ETH and the console run |
-
-**Never exercised:**
-
-- the rejection paths (`NULL`, pin 16, AF 16);
-- `PULL_DOWN` and the `LOW`/`MEDIUM`/`HIGH` speeds;
-- `ConfigAlternate` on any port other than GPIOD;
-- `EnablePortClock` on ports F, H, I, J and K;
-- concurrent configuration from both cores.
+1. **Signatures and existing struct fields are frozen**
+   (`01_shared_drivers/README.md` rule 2). Add new functions, or new fields at
+   the end of a struct. Check with
+   `git diff main -- '01_shared_drivers/00_gpio/*.h'`: the diff may only add
+   lines or change comments.
+2. **Keep the three tiers on the single validation of `gpio_bm`** and give them
+   the same status in every case. Extend T1/T2 for every new path.
+3. **`gpio_bm` stays CMSIS-only** and usable before the clock tree, the MPU and
+   `HAL_Init()`.
+4. **Every test needs a negative control that prints its value**, and an oracle
+   that is not the driver.
+5. **Captures are the output of one run** from a clean commit, and are never
+   edited.
+6. **Before merging:** run `.\tools\build_all.ps1 -Clean` (8/8), two complete
+   `gpio_hw_check.py` runs on the bench, and the production warm resets.
 
 ---
 
-## 7. Known limitations
-
-These come from the audit in `IMPLEMENTATION_PLAN.md` (IDs in brackets).
-
-- **Cross-core race on shared GPIO registers** (G1): see §4. (G2, a comment in
-  `gpio_bm.h` that called the `RCC_AHB4ENR` write a race and said nothing about
-  the shared GPIO registers, has been corrected.)
-- **`pull` and `speed` are masked, not validated** (G3). `pull = 3` programs
-  `PUPDR = 11`, which is reserved, and `speed = 4` silently becomes `LOW`.
-  `ConfigAlternate` returns `true` in both cases. No current consumer passes
-  those values.
-- **Misaligned port pointers are accepted** (G4). An address inside
-  `[GPIOA, GPIOK]` that is not on the 0x400 stride, such as `GPIOA + 4`, enables
-  a real port and returns `true`.
-- **Pin types.** Each consumer has its own pin type (`UartBm_Pin_t`,
-  `UartLL_Pin_t`, `uart_hal_pin_t`, `led_pin_config_t`, `port + analog_pin_idx`),
-  and `board_def.h` uses HAL masks while `gpio_bm` takes indices (G10).
-- **Errata that concern pins, not this code:** ES0445 2.3.3 (a GPIO assigned to
-  the DAC cannot be used as an output while the DAC drives an on-chip
-  peripheral) and 2.3.13 (transitions on PC13 can disturb the LSE oscillator; on
-  the Nucleo, PC13 is the user button). See
-  `00_docs_stm32h7/docs/00_core_and_system/errata_summary.md`.
-
----
-
-## 8. Changing this driver
-
-Seven driver targets and every firmware project depend on these three functions.
-
-1. **Signatures and constants are frozen** (`01_shared_drivers/README.md` rule 2):
-   `GPIO_BM_EnablePortClock`, `GPIO_BM_ConfigAlternate`, `GPIO_BM_ConfigAnalog`,
-   `GPIO_BM_PULL_*` and `GPIO_BM_SPEED_*`. New capability is added as new
-   functions. A behaviour change is acceptable only where the old behaviour was
-   already wrong (for example, rejecting `pull = 3`), and it must still accept
-   every call the consumers of §5 make today.
-2. **Stay free of HAL and LL headers**, and of anything that needs the clock tree,
-   the MPU or the HSEM: `01_led` depends on it at boot.
-3. **Validate before the first write**, and keep the write order that avoids
-   glitches: `MODER` last when entering a mode.
-4. **No port or pin literals** in the driver, other than facts about the silicon
-   (the port stride).
-5. **Before merging:** `.\tools\build_all.ps1 -Clean` (8/8 with `-Werror`), plus
-   the UART and ADC selftests, which are the only hardware coverage these
-   functions have (`prj_04` presets `selftest-uart` and `selftest-adc`).
-
----
-
-## 9. Roadmap
-
-[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (2026-09-23) plans the
-catalogue driver in phases F0-F6:
-
-- **F0:** `_gpio_bm` target and compatibility alias.
-- **F1:** the BM core. Output, input, open-drain, lock, de-init and read-back, a
-  cross-core lock hook, and fixes G1, G3 and G4 (G2 is already done).
-- **F2:** EXTI lines 0-15 and the compensation cell.
-- **F3 and F4:** the LL and HAL tiers.
-- **F5:** dual pads (conditional).
-- **F6:** documentation closure.
-
-The test plan uses an Analog Discovery 2 on GPIOE (PE8-PE15 bus, PE2-PE7 EXTI and handshake) and PF14/PF15 (analog probes); PF0-PF5, PF12 and PF13 do not reach any connector on this board. **None of it is implemented.**
-This README describes only what exists. Update it phase by phase as the plan is
-carried out.
-
----
-
-## 10. History
+## 13. History
 
 | Milestone | Commits |
 | :--- | :--- |
-| Port-clock helper promoted from the drivers into `00_gpio` | `784febb` |
-| Why the RCC clock enables are not a dual-core race, recorded in `gpio_bm.c` | `91622db` |
-| `GPIO_BM_ConfigAlternate`, used by the unified UART driver | `dcd9230` |
-| `GPIO_BM_ConfigAnalog`, used by the ADC tiers | `be31f3c` |
-| Implementation plan for the catalogue driver | `5f97e2e` |
+| Port-clock helper, `ConfigAlternate`, `ConfigAnalog` | `784febb`, `dcd9230`, `be31f3c` |
+| Plan (revision 2), F0 bench and audit | `5f97e2e` … `d713e75` (`AUDIT.md`) |
+| F1a: `gpio_bm` core, section and hook, `LCKR`, `ReadConfig` (prj_04 selftest) | `a94c89c` … `b52ffec` |
+| LL and HAL tiers, shared validation | `6c864c8`, `de138ba`, `b9c1a76` |
+| `prj_01`: hook on both cores; limit sized from B1 (50 µs) | `5c6f849`, `35b5e4e` |
+| `LockPins` adds pins to a locked port (silicon finding) | `bbb7f40` |
+| `prj_01` selftest, host bench, evidence | `e3feb02`, `780dddd`, `d11fb8d`, `2b9bf21`, `778fcbb` |
+
+The process documents (`IMPLEMENTATION_PLAN.md`, `IMPLEMENTER_INSTRUCTIONS.md`,
+`F0_CORRECTION*_INSTRUCTIONS.md`, `F1A_INSTRUCTIONS.md`,
+`IMPLEMENTATION_REPORT.md`, `AUDIT.md`) are still in this folder. The plan
+leaves their removal to the catalog owner, after the closing audit.

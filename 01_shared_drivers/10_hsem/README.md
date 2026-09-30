@@ -666,7 +666,7 @@ nothing.
 | `prj_01_template_dualcore` | BM on both cores | Boot through the driver, key set. New projects start from here |
 | `prj_02_eth_lwip_dualcore`, `prj_03_adc_dma_eth` | none | Not migrated (`DRIVER_ROADMAP.md` §8). They keep a hand-written handshake that leaves STOP on any wake, without the fix of `9034a5f`, and `SHARED_LOCK` over `HAL_HSEM_FastTake` |
 | `prj_eth_lwip_node` | none | Private copies, by decision |
-| `00_gpio` F1 (planned) | BM | Installs a cross-core lock hook on `HSEM_BM_FastTake(BOARD_GPIO_HSEM_ID)`, under PRIMASK |
+| `00_gpio` (hook installed in `prj_01`) | BM | `Shared_GpioLockInstall()`: `HSEM_BM_TakeTimeout(BOARD_GPIO_HSEM_ID, 0, 50 µs)` inside the gpio_bm section, with PRIMASK set (`00_gpio/README.md` §3) |
 
 ---
 

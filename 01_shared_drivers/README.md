@@ -21,7 +21,7 @@ because it needs both cores already running.
 01_shared_drivers/
 ├── CMakeLists.txt              # CMake INTERFACE library target (stm32h7_shared_drivers)
 ├── README.md                   # This document
-├── 00_gpio/                    # gpio_bm: port clock, alternate-function and analog pin modes. Everything that drives a pin links it
+├── 00_gpio/                    # Pin configuration, pin ops, LCKR, cross-core section (gpio_bm, gpio_ll, gpio_hal). Everything that drives a pin links gpio_bm
 ├── 01_led/                     # Board status and 3-bit boot diagnosis - works before the clock tree
 ├── 02_dma/                     # DMA1, DMA2, BDMA (D3), reachability, cache helpers (dma_bm, dma_ll, dma_hal)
 ├── 03_tim/                     # General, Advanced, Basic & Low-Power Timers - time base
