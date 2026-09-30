@@ -29,8 +29,12 @@ All four are closed at `fa44386`, with one criterion not met: a
 re-audit at `7b01a10` accepted that criterion and found R2-a, R2-b and R3-a
 ([section 12.4](#124-re-audit-2-r2-a-r2-b-r3-a-2026-09-30-at-7b01a10)), none a
 driver defect. All three are closed at `1ff10c8`, where the cross-core lock
-limit is 60 µs and every capture carries a build id. This driver has had no
-independent bench audit.
+limit is 60 µs and every `selftest-gpio` capture carries a build id. A third
+re-audit at `5a5deeb` confirmed them and left two open traceability findings,
+R3-b and R3-c
+([section 12.5](#125-re-audit-3-r3-b-r3-c-2026-09-30-at-5a5deeb)): the
+host does not bind the image to its commit, and the production captures do
+not identify their image. This driver has had no independent bench audit.
 
 ---
 
@@ -783,6 +787,29 @@ shows how to read it).
 | R2-a | Two comments in `CM7/App/Src/gpio_selftest.c` (lines 670 and 870) claim an exact replay ("a replay replays"), which `gpio_dev_replay_seed_d9d40bdd_fa44386.txt` refutes and §10 states correctly | **Closed** (`88b0cba`): both comments say what was measured (4-byte image difference, delays repeated but not the interleaving, source not isolated, the fixed start removes the HSI48/RNG variation). `selftest-gpio` at `25b6a45` and `88b0cba` with the same `FW_GIT_REV`: identical `.bin` for CM7 and CM4 (`gpio_r2a_bin_cmp_88b0cba.txt`). No other comment or text of the repository claims an exact replay; the subjects of `7cedf36` and `fa44386` say "replays" and are history |
 | R2-b | B1 is at its gate: 992 cycles on CM4 leave 80 cycles to 10×. The rise from `0cd803f` also shows in B1 itself, which has no contention and no jitter (CM7 HAL with hook 1559 → 1739, CM4 1875 → 1983; `gpio_hal.c` unchanged, `gpio_bm` +62 B). That points to the link layout rather than to R2, so an unrelated code change can fail B1 | **Closed** (`1ff10c8`): the padding run (`164fdfd`) did not confirm the layout cause (CM4 HAL with hook 1983 → 1987, T15 hold 991 → 980), so it stays not isolated. Owner's decision, quoted in `1ff10c8`: "A: 60 µs (Recommended)". B1 12.10× in both runs at `1ff10c8`; warm resets 20/20, counters 0; the A2 bound is now 60 µs plus the call; the 10× gate is unchanged |
 | R3-a | The capture identifies the host checkout, not the image. `tree clean` and the diff describe where the script runs; build flags are not recorded (the `GST_RACE_SEED` replay says `Rev fa44386`, `tree clean`); and `FW_GIT_REV` is computed at configure time, so an edit without reconfiguring builds with the old revision and no `-dirty` | **Closed** (`663ae65`): `generated/fw_build_id.h` written at build time (`FW_GIT_REV` and `FW_BUILD_ID`), printed by CM7 and, through `GstArea_t.m4_build_id`, CM4; the host aborts before S8 on a mismatch. Equal on host, CM7 and CM4 at `663ae65` and in both runs at `1ff10c8`; control (1) aborted before S8 with no output enabled; control (2) gave `663ae65-dirty` and a new id. The id does not cover the commit (§9.4) |
+
+### 12.5 Re-audit 3 (R3-b, R3-c, 2026-09-30, at `5a5deeb`)
+
+A verification of the R2-a, R2-b and R3-a corrections (`88b0cba` …
+`5a5deeb`, validated revision `1ff10c8`). All three are closed. No line of
+`01_shared_drivers` code changed in that round.
+
+Checked without discrepancy:
+- the R2-a binary compare, and no exact-replay claim left in the repository;
+- the owner's decision quoted in `1ff10c8`, and B1 at 12.10× in both runs;
+- the three R3-a build ids, **recomputed by hand**, equal to the printed ones
+  (`3c889d2e7e66805d`, `dbcf810508d80301`, `f37405fc05564ac0`);
+- control (1) aborted before S8 with `OE=0x0000`;
+- the headers against `7b01a10`;
+- every figure of the status line, §3.1, §9.1–§9.4, §10, §12.4 and §15
+  against its capture, except the two claims below.
+
+Corrections: `REAUDIT_3_INSTRUCTIONS.md`.
+
+| ID | Finding | State |
+| :--- | :--- | :--- |
+| R3-b | The host does not bind the image to its commit. On a clean tree the id is the same for every commit (§9.4), and `gpio_hw_check.py` requires the CM7 and CM4 `Rev` to be equal and not `-dirty`, but never compares them with its own `HEAD`. An image built clean at one commit passes the check from a clean checkout at another, against §9.1 ("the image is the one this checkout … builds") and §9.4 ("the host refuses an image that this checkout … would not build") | **Open**: `HEAD` in the id payload, and `Rev` = `HEAD` before S8; control with an image of `HEAD~1` |
+| R3-c | The production captures do not identify their image. The `debug`/`release` images print neither `FW_GIT_REV` nor `FW_BUILD_ID`. `tools/run_warm_resets.py` writes the host's `HEAD` as "Firmware Git Revision", with no `-dirty` check and a free-text title. The `fa44386` and `1ff10c8` warm-reset captures are titled "after re-audit 1, R1-R4". The status line claims "every capture carries a build id" | **Open**: build line in the CPU1 banner and CPU2's identity through `SharedMemory_t`, checked by `run_warm_resets.py` per reset (opt-in options); README corrected |
 
 ---
 
