@@ -464,10 +464,15 @@ class Session:
             self.sync(pre=measure)
         v_np14, v_np15 = vals[0]
         v_pp14, v_dd = vals[1]        # V_DD from PF15 push-pull high (22k to 3V3: no current)
-        ctrl = v_np14 < 0.1 and v_np15 > 2.9 and v_pp14 > 2.9
+        # V_DD comes from PF15 driven high; it must agree with PF14 driven high on the
+        # other channel, or R_IN below is computed from a wrong V_DD (seen once in
+        # development: 3.235 V against 3.301 V gave R_IN = 20.8 M).
+        vdd_ok = abs(v_dd - v_pp14) <= 0.05
+        ctrl = v_np14 < 0.1 and v_np15 > 2.9 and v_pp14 > 2.9 and vdd_ok
         self.check("T5T6 controls", ctrl,
                    f"PF14 no pull {v_np14:.3f} V (<0.1: 22k to GND present), PF15 no pull {v_np15:.3f} V (>2.9: "
-                   f"22k to 3V3 present), PF14 push-pull high {v_pp14:.3f} V (>2.9: the pin can rise), V_DD {v_dd:.3f} V")
+                   f"22k to 3V3 present), PF14 push-pull high {v_pp14:.3f} V (>2.9: the pin can rise), "
+                   f"V_DD on PF15 {v_dd:.3f} V (within 0.05 V of PF14 high: {vdd_ok})")
         r_in = T5_RX_OHMS * v_np15 / (v_dd - v_np15)
         self.log(f"[ad2] T5 scope load measured on PF15: R_IN = {r_in / 1e3:.1f}k")
         for i, tier in enumerate(TIERS):
