@@ -37,11 +37,13 @@
    How long a core waits for the other to finish one pin configuration. It is
    written in time and converted per core, because each core's DWT counts its
    own clock (10_hsem/README.md section 3.5). The value comes from the hold
-   times measured by the selftest (00_gpio/README.md, B1): the longest hold is
-   far below it, so a TIMEOUT means a stuck core, not contention.           */
-#define SHARED_GPIO_LOCK_US            20U
-#define SHARED_GPIO_LOCK_CYCLES_CM7   (SHARED_GPIO_LOCK_US * 400U)   /* 8 000 at 400 MHz */
-#define SHARED_GPIO_LOCK_CYCLES_CM4   (SHARED_GPIO_LOCK_US * 200U)   /* 4 000 at 200 MHz */
+   times measured by the selftest (00_gpio/README.md, B1): the longest hold
+   is 4.3 us (CPU2, gpio_hal, HAL_GPIO_Init at 200 MHz), and the selftest
+   fails below a 10x margin, so a TIMEOUT means a stuck core, not
+   contention. 20 us, the first value, left only 4.7x.                     */
+#define SHARED_GPIO_LOCK_US            50U
+#define SHARED_GPIO_LOCK_CYCLES_CM7   (SHARED_GPIO_LOCK_US * 400U)   /* 20 000 at 400 MHz */
+#define SHARED_GPIO_LOCK_CYCLES_CM4   (SHARED_GPIO_LOCK_US * 200U)   /* 10 000 at 200 MHz */
 
 #define SHARED_MBOX_SIZE        64U  /* multiple of 32 (cache line)          */
 
