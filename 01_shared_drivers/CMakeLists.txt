@@ -26,6 +26,13 @@ target_sources(stm32h7_driver_gpio_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/00_gpi
 add_library(stm32h7_driver_gpio INTERFACE)
 target_link_libraries(stm32h7_driver_gpio INTERFACE stm32h7_driver_gpio_bm)
 
+# LL and HAL tiers. Both link the BM tier, which keeps the single copy of the
+# validation, the port clock and the cross-core section they run in.
+add_library(stm32h7_driver_gpio_ll INTERFACE)
+target_include_directories(stm32h7_driver_gpio_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/00_gpio)
+target_sources(stm32h7_driver_gpio_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/00_gpio/gpio_ll.c)
+target_link_libraries(stm32h7_driver_gpio_ll INTERFACE stm32h7_driver_gpio_bm)
+
 add_library(stm32h7_driver_led INTERFACE)
 target_include_directories(stm32h7_driver_led INTERFACE ${CMAKE_CURRENT_LIST_DIR}/01_led)
 target_sources(stm32h7_driver_led INTERFACE ${CMAKE_CURRENT_LIST_DIR}/01_led/led_bm.c)
