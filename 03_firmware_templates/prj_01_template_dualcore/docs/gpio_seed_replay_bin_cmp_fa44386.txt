@@ -1,0 +1,12 @@
+prj_01 selftest-gpio at fa44386, clean worktree (C:\wt_gpio): the image built with -DCMAKE_C_FLAGS= and with -DCMAKE_C_FLAGS=-DGST_RACE_SEED=0xD9D40BDDUL (the replay of gpio_selftest_fa44386.txt), compared with cmp -l (offset, octal byte of each image).
+17956 cm4_fixed.bin
+17956 cm4_rng.bin
+58976 cm7_fixed.bin
+58976 cm7_rng.bin
+cmp -l cm7_rng.bin cm7_fixed.bin:
+58313   0 335
+58314   0  13
+58315   0 324
+58316   0 331
+cmp cm4_rng.bin cm4_fixed.bin:
+identical
