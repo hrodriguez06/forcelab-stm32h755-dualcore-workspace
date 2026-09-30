@@ -257,7 +257,7 @@ GpioBm_Status_t GPIO_LL_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, G
 
     const uint32_t mask = 1UL << pin_idx;
 
-    out->port             = (GPIO_TypeDef *)port;
+    out->port             = (GPIO_TypeDef *)(uintptr_t)port;   /* the struct's field is non-const */
     out->pin_idx          = pin_idx;
     out->mode             = LL_GPIO_GetPinMode(port, mask);
     out->output_type      = LL_GPIO_GetPinOutputType(port, mask);

@@ -40,10 +40,10 @@ extern "C" {
   *         0xE0) is banked per core (RM0399 9.7.1), so each CPU writes its own
   *         copy and a port stays clocked while either core has its bit set.
   *         What the two cores DO share are the port's configuration registers
-  *         (MODER, OTYPER, OSPEEDR, PUPDR, AFR): GPIO_BM_ConfigAlternate() and
-  *         GPIO_BM_ConfigAnalog() read-modify-write them without a lock, so two
-  *         cores must not configure pins of the same port at the same time.
-  *         See 00_gpio/README.md section 4.
+  *         (MODER, OTYPER, OSPEEDR, PUPDR, AFR): every configuration call of
+  *         this driver writes them inside GPIO_BM_SectionEnter/Exit, which
+  *         takes the cross-core lock when a project installed one with
+  *         GPIO_BM_SetSharedLock(). See 00_gpio/README.md sections 3 and 4.
   */
 bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port);
 
@@ -69,7 +69,11 @@ bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port);
   * @param  af       Alternate function index (0..15, e.g. 7 for USART1..3).
   * @param  pull     Pull configuration (GPIO_BM_PULL_*).
   * @param  speed    Speed configuration (GPIO_BM_SPEED_*).
-  * @retval true on success, false on invalid parameters (NULL port or pin/AF > 15).
+  * @retval true when written and read back (GPIO_BM_ConfigPin() == GPIO_BM_OK).
+  * @retval false on an invalid parameter (NULL or misaligned port, pin or
+  *         AF > 15, pull > 2, speed > 3; nothing written), a pin locked by
+  *         LCKR, a cross-core lock that timed out, or a read-back mismatch.
+  *         PA13/PA14 are accepted, as before F1a.
   */
 bool GPIO_BM_ConfigAlternate(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af, uint32_t pull, uint32_t speed);
 
@@ -81,22 +85,18 @@ bool GPIO_BM_ConfigAlternate(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t af, 
   *
   * @param  port     GPIO port pointer (GPIOA..GPIOK).
   * @param  pin_idx  Pin index (0..15).
-  * @retval true on success, false on invalid parameters (NULL port or pin > 15).
+  * @retval true when written and read back (GPIO_BM_ConfigPin() == GPIO_BM_OK).
+  * @retval false on an invalid parameter (NULL or misaligned port, pin > 15;
+  *         nothing written), a pin locked by LCKR, a cross-core lock that
+  *         timed out, or a read-back mismatch. PA13/PA14 are accepted.
   */
 bool GPIO_BM_ConfigAnalog(GPIO_TypeDef *port, uint32_t pin_idx);
 
 /* ==========================================================================
  * F1a additions. Everything above this line is the pre-F1a API and keeps its
- * signatures and constants (catalog criterion C2). Two notes above are
- * superseded by what follows:
- *   - GPIO_BM_ConfigAlternate() and GPIO_BM_ConfigAnalog() now also reject
- *     pull > 2 and speed > 3 and misaligned port pointers, run inside the
- *     section below, and return false when the pin is locked by LCKR or the
- *     read-back differs from what was written.
- *   - They no longer read-modify-write without a lock: every configuration
- *     write of this driver happens inside GPIO_BM_SectionEnter/Exit, which
- *     masks interrupts on the calling core and, when a project installed a
- *     cross-core hook with GPIO_BM_SetSharedLock(), also takes that lock.
+ * signatures and constants (catalog criterion C2); since F1a the two legacy
+ * configuration calls are wrappers of GPIO_BM_ConfigPin(), so they share its
+ * validation, its section and its read-back.
  * ========================================================================== */
 
 /* ---- Status ------------------------------------------------------------------ */
@@ -115,7 +115,10 @@ typedef enum
 /* ---- Canonical pin -------------------------------------------------------------- */
 typedef struct { GPIO_TypeDef *port; uint8_t pin_idx; } GpioBm_Pin_t;
 #define GPIO_BM_PIN_MASK(idx)    (1UL << (idx))
-#define GPIO_BM_PIN_INDEX(mask)  ((uint32_t)__builtin_ctz((uint32_t)(mask)))   /* single-bit masks only */
+/* Single-bit masks of bits 0..15. A mask of 0 (or with no bit below 16) gives
+   16, an index every function of the driver refuses with GPIO_BM_ERR_PARAM,
+   instead of the undefined __builtin_ctz(0). */
+#define GPIO_BM_PIN_INDEX(mask)  ((uint32_t)__builtin_ctz(((uint32_t)(mask) & 0xFFFFUL) | 0x10000UL))
 
 #define GPIO_BM_MODE_INPUT   0U   /* MODER field values, RM0399 12.4.1 */
 #define GPIO_BM_MODE_OUTPUT  1U
@@ -224,6 +227,14 @@ static inline uint32_t GPIO_BM_ReadPort(const GPIO_TypeDef *p)
   *         When every pin of `mask` is already locked, nothing is written.
   */
 GpioBm_Status_t GPIO_BM_LockPins(GPIO_TypeDef *port, uint32_t mask);  /* LCKK sequence, word accesses, LCKK read back */
+
+/**
+  * @brief  true when LCKK is set and the pin's LCKy bit is set; false for a bad
+  *         port or pin. Only reads, so the port clock must already be on (in
+  *         either core's bank): with the port unclocked LCKR reads 0 and a
+  *         locked pin reads as free. The configuration calls enable the clock
+  *         before they look at LCKR.
+  */
 bool            GPIO_BM_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);
 
 /* ---- Section and cross-core hook ------------------------------------------------ */
@@ -233,7 +244,13 @@ bool            GPIO_BM_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);
  * cross-core lock is held. GPIO_BM_SectionExit() restores the saved PRIMASK
  * and never enables interrupts that were masked on entry, so the driver can
  * be used from a fault handler. The driver itself never waits: the hook is
- * bounded by the project. */
+ * bounded by the project, and that bound is also the longest time this core
+ * can spend with interrupts masked inside lock() (00_gpio/README.md, 10).
+ *
+ * Fault handlers: a section opened by a handler that preempted this core while
+ * it was inside lock() is nested, so it does not take the cross-core lock and
+ * writes unprotected (00_gpio/README.md, 10). Once lock() has returned, the
+ * lock belongs to this core and a nested section is protected by it. */
 typedef struct
 {
     bool (*lock)(void *ctx);    /*!< true = taken. Bounded by the project (TakeTimeout) */
@@ -241,9 +258,17 @@ typedef struct
     void  *ctx;
 } GpioBm_SharedLock_t;
 
-typedef struct { uint32_t primask; uint8_t took_shared; } GpioBm_Section_t;
+typedef struct
+{
+    uint32_t primask;                  /*!< PRIMASK on entry, restored by Exit           */
+    uint8_t  took_shared;              /*!< 1 when this section called lock()            */
+    const GpioBm_SharedLock_t *taken;  /*!< the hook lock() was called on; Exit unlocks
+                                            that one, even if the hook changed meanwhile */
+} GpioBm_Section_t;
 
-void            GPIO_BM_SetSharedLock(const GpioBm_SharedLock_t *lock);   /* per core; NULL = PRIMASK only */
+/* Per core; NULL = PRIMASK only. Safe at any time: a section already open
+   releases the hook it took, and the new hook is used from the next section. */
+void            GPIO_BM_SetSharedLock(const GpioBm_SharedLock_t *lock);
 GpioBm_Status_t GPIO_BM_SectionEnter(GpioBm_Section_t *s);   /* for consumers wrapping HAL_GPIO_Init */
 void            GPIO_BM_SectionExit(const GpioBm_Section_t *s);
 

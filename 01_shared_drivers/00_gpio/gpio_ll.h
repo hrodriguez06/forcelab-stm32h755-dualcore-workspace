@@ -87,7 +87,9 @@ GpioBm_Status_t GPIO_LL_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, G
   */
 GpioBm_Status_t GPIO_LL_LockPins(GPIO_TypeDef *port, uint32_t mask);
 
-/** @retval true when LCKK is set and the pin's LCKy bit is set. false for a bad port or pin. */
+/** @retval true when LCKK is set and the pin's LCKy bit is set. false for a bad port or pin.
+  * @note   As GPIO_BM_IsLocked(): only reads, so the port clock must be on; an
+  *         unclocked port reads LCKR = 0 and a locked pin reads as free. */
 bool            GPIO_LL_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);
 
 /* ---- Pin operations: static inline, no validation --------------------------------

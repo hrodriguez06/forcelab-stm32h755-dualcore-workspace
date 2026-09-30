@@ -7,6 +7,7 @@
 
 #include "gpio_bm.h"
 #include <stddef.h>
+#include <stdint.h>
 
 /* GPIOA..GPIOK are consecutive, 0x400 apart, and RCC_AHB4ENR carries
    GPIOAEN..GPIOKEN in bits 0..10 in the same order. Both facts come from
@@ -222,6 +223,7 @@ GpioBm_Status_t GPIO_BM_SectionEnter(GpioBm_Section_t *s)
 
     s->primask     = primask;
     s->took_shared = 0U;
+    s->taken       = NULL;
     s_section_depth++;
 
     if (s_section_depth == 1UL)
@@ -236,6 +238,7 @@ GpioBm_Status_t GPIO_BM_SectionEnter(GpioBm_Section_t *s)
                 return GPIO_BM_ERR_BUSY;
             }
             s->took_shared = 1U;
+            s->taken       = lk;   /* Exit releases this hook, whatever is installed then */
         }
     }
 
@@ -256,7 +259,10 @@ void GPIO_BM_SectionExit(const GpioBm_Section_t *s)
 
     if (s->took_shared != 0U)
     {
-        const GpioBm_SharedLock_t *lk = s_shared_lock;
+        /* The hook that was locked, not the one installed now: a
+           GPIO_BM_SetSharedLock() inside the section must not leave the
+           semaphore taken or release one this core never took. */
+        const GpioBm_SharedLock_t *lk = s->taken;
         /* Every GPIO write of the section must have landed before the other
            core can get in. */
         __DSB();
@@ -454,7 +460,7 @@ GpioBm_Status_t GPIO_BM_ReadConfig(const GPIO_TypeDef *port, uint32_t pin_idx, G
 
     const uint32_t pos2 = pin_idx * 2U;
 
-    out->port             = (GPIO_TypeDef *)port;
+    out->port             = (GPIO_TypeDef *)(uintptr_t)port;   /* the struct's field is non-const */
     out->pin_idx          = pin_idx;
     out->mode             = (port->MODER   >> pos2) & 3UL;
     out->otype            = (port->OTYPER  >> pin_idx) & 1UL;
