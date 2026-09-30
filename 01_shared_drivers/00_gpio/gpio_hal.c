@@ -176,8 +176,10 @@ HAL_StatusTypeDef GPIO_HAL_Init(GPIO_TypeDef *port, const GPIO_InitTypeDef *init
     }
 
     /* The port is valid now. Clock it before reading LCKR: an unclocked port
-       reads LCKR = 0, which would hide a locked pin until apply() found it
-       after the lower pins of the mask had already been written. */
+       reads all ones (LCKR = 0xFFFFFFFF, measured on Rev V), so without the
+       clock every pin of the mask would read as locked and a free pin would
+       be refused. On silicon that read 0 instead, a locked pin would hide
+       until apply() found it after the lower pins had been written. */
     (void)GPIO_BM_EnablePortClock(port);
     for (pin = 0U; pin < GPIO_HAL_PIN_COUNT; pin++)
     {

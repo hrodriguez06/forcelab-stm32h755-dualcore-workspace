@@ -231,9 +231,9 @@ GpioBm_Status_t GPIO_BM_LockPins(GPIO_TypeDef *port, uint32_t mask);  /* LCKK se
 /**
   * @brief  true when LCKK is set and the pin's LCKy bit is set; false for a bad
   *         port or pin. Only reads, so the port clock must already be on (in
-  *         either core's bank): with the port unclocked LCKR reads 0 and a
-  *         locked pin reads as free. The configuration calls enable the clock
-  *         before they look at LCKR.
+  *         either core's bank): an unclocked port reads all ones (LCKR =
+  *         0xFFFFFFFF, measured on Rev V), so every pin reads as locked. The
+  *         configuration calls enable the clock before they look at LCKR.
   */
 bool            GPIO_BM_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx);
 

@@ -1441,12 +1441,17 @@ static bool gpiok_unclock(void)
     return ((RCC_C1->AHB4ENR | RCC_C2->AHB4ENR) & RCC_AHB4ENR_GPIOKEN) == 0UL;
 }
 
-/* A1 (audit of 2026-09-30): GPIO_HAL_Init on a port unclocked in both banks,
-   with a free pin (PK3) below a locked one (PK5) in the mask. Unclocked, LCKR
-   reads 0 and the lock is invisible (shown below, the premise of A1). Before
-   the fix, GPIO_HAL_Init checked LCKR there, then apply() clocked the port and
-   wrote PK3 before it found PK5 locked. Now: HAL_ERROR and nothing written.
-   Control: the same unclocked port with PK3 alone in the mask is written. */
+/* A1 (audit of 2026-09-30): GPIO_HAL_Init on a port unclocked in both banks.
+   Unclocked, the port's registers do not read their real value: on Rev V they
+   read all ones (LCKR = 0xFFFFFFFF, so every pin looks locked). Before the fix
+   GPIO_HAL_Init checked LCKR on the unclocked port, which gives a wrong answer
+   either way the silicon reads:
+     - all ones (Rev V): a free pin is refused  -> case B below fails;
+     - zeros (the audit's assumption): a lower free pin is written before
+       apply() finds the locked one               -> case A below fails.
+   The step requires both cases, and prints what the unclocked read gives.
+   A: PK3 (free) and PK5 (locked) in one mask -> HAL_ERROR, nothing written.
+   B: PK3 alone                               -> HAL_OK, PK3 becomes an output. */
 static void run_t16_a1(void)
 {
     const GPIO_InitTypeDef both = { .Pin = GPIO_PIN_3 | GPIO_PIN_5, .Mode = GPIO_MODE_OUTPUT_PP,
@@ -1461,30 +1466,32 @@ static void run_t16_a1(void)
     const uint32_t lckr_on  = GPIOK->LCKR;
     const uint32_t moder_on = GPIOK->MODER;
 
-    /* Unclocked: the premise, then the call under test. */
+    /* Unclocked: what the silicon returns (information), then case A. */
     const bool     off      = gpiok_unclock();
     const uint32_t lckr_off = GPIOK->LCKR;
-    const bool     hidden   = !GPIO_BM_IsLocked(GPIOK, 5U);
-    const HAL_StatusTypeDef hs = GPIO_HAL_Init(GPIOK, &both);
-    const uint32_t moder_after = GPIOK->MODER;
-    const uint32_t lckr_after  = GPIOK->LCKR;
+    const bool     pk3_lk   = GPIO_BM_IsLocked(GPIOK, 3U);
+    const bool     pk5_lk   = GPIO_BM_IsLocked(GPIOK, 5U);
+    const HAL_StatusTypeDef ha = GPIO_HAL_Init(GPIOK, &both);
+    const uint32_t moder_a  = GPIOK->MODER;
+    const uint32_t lckr_a   = GPIOK->LCKR;
 
-    /* Control. */
+    /* Case B, from the unclocked port again. */
     const bool off2 = gpiok_unclock();
-    const HAL_StatusTypeDef hc = GPIO_HAL_Init(GPIOK, &pk3);
+    const HAL_StatusTypeDef hb = GPIO_HAL_Init(GPIOK, &pk3);
     const bool pk3_moved = ((GPIOK->MODER >> (3U * 2U)) & 3UL) == 1UL;
 
-    const bool ok = add && pk3_an && (lckr_on == (GPIO_LCKR_LCKK | 0x23UL)) &&
-                    (((moder_on >> (3U * 2U)) & 3UL) == 3UL) &&
-                    off && (lckr_off == 0UL) && hidden &&
-                    (hs == HAL_ERROR) && (moder_after == moder_on) && (lckr_after == lckr_on) &&
-                    off2 && (hc == HAL_OK) && pk3_moved;
-    LOG("T16 A1 GPIOK: add PK5=%u LCKR=0x%08lX MODER=0x%08lX; unclocked=%u LCKR reads 0x%08lX, PK5 looks free=%u",
-        (unsigned)add, (unsigned long)lckr_on, (unsigned long)moder_on, (unsigned)off, (unsigned long)lckr_off,
-        (unsigned)hidden);
-    LOG("T16 A1 GPIOK: GPIO_HAL_Init(PK3|PK5)=%u MODER=0x%08lX LCKR=0x%08lX; control unclocked PK3 alone=%u moved=%u",
-        (unsigned)hs, (unsigned long)moder_after, (unsigned long)lckr_after, (unsigned)hc, (unsigned)pk3_moved);
-    verdict(ok, "T16 A1: GPIO_HAL_Init on an unclocked port with a locked pin writes nothing, control writes");
+    const bool setup = add && pk3_an && (lckr_on == (GPIO_LCKR_LCKK | 0x23UL)) &&
+                       (((moder_on >> (3U * 2U)) & 3UL) == 3UL) && off && off2;
+    const bool case_a = (ha == HAL_ERROR) && (moder_a == moder_on) && (lckr_a == lckr_on);
+    const bool case_b = (hb == HAL_OK) && pk3_moved;
+    LOG("T16 A1 GPIOK clocked: add PK5=%u LCKR=0x%08lX MODER=0x%08lX", (unsigned)add, (unsigned long)lckr_on,
+        (unsigned long)moder_on);
+    LOG("T16 A1 GPIOK unclocked in both banks=%u: LCKR reads 0x%08lX, IsLocked PK3=%u PK5=%u",
+        (unsigned)off, (unsigned long)lckr_off, (unsigned)pk3_lk, (unsigned)pk5_lk);
+    LOG("T16 A1 case A GPIO_HAL_Init(PK3|PK5)=%u MODER=0x%08lX LCKR=0x%08lX; case B PK3 alone=%u moved=%u",
+        (unsigned)ha, (unsigned long)moder_a, (unsigned long)lckr_a, (unsigned)hb, (unsigned)pk3_moved);
+    verdict(setup && case_a && case_b,
+            "T16 A1: GPIO_HAL_Init on an unclocked port: locked pin in the mask -> nothing written; free pin -> written");
 }
 
 static void run_t16(void)

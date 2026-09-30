@@ -595,7 +595,8 @@ py tools/gpio_hw_check.py                  # writes docs/gpio_selftest_<rev>.txt
   hold it. Once `lock()` has returned, the lock is this core's and a nested
   section is covered. Same class as G14: the fault path is terminal.
 - **`IsLocked` and `ReadConfig` only read (A5).** With the port unclocked in both
-  cores' banks the registers read 0, so a locked pin reads as free. Every
+  cores' banks the registers read all ones (`LCKR = 0xFFFFFFFF` on Rev V,
+  measured in T16 A1), so every pin reads as locked. Every
   configuration call enables the clock before it looks at `LCKR`.
 - **PA13/PA14 cannot be de-initialised** through any tier: `DeinitPin` has no
   `allow_debug_pins`. `ConfigPin` with `MODE_ANALOG` and `allow_debug_pins`
@@ -635,11 +636,11 @@ against git, and a build with `-Wextra -Wconversion -Wsign-conversion
 
 | ID | Finding | State |
 | :--- | :--- | :--- |
-| A1 | `GPIO_HAL_Init` read `LCKR` before clocking the port. On a locked port unclocked in both banks `LCKR` read 0, so the lower pins of the mask were written before `apply()` found the lock: against "a mask with a locked pin writes nothing" | Fixed: the port is clocked between the validation and the `LCKR` check. Test `T16 A1` added, not run yet (§9.5) |
+| A1 | `GPIO_HAL_Init` read `LCKR` before clocking the port. The audit assumed an unclocked port reads `LCKR = 0`, so a lower free pin would be written before `apply()` found the locked one. **The bench showed otherwise** (`gpio_selftest_8b8919a.txt`): on Rev V an unclocked port reads all ones (`LCKR = 0xFFFFFFFF`), so every pin looked locked and `GPIO_HAL_Init` refused **any** mask on an unclocked port, free pins included | Fixed: the port is clocked between the validation and the `LCKR` check, which is right for either reading. `T16 A1` checks both cases (§9.1) |
 | A2 | §10 gave the masked time as the measured holds (≈ 11 µs); the bound is the hook's limit (50 µs) plus the call. A core that faults or is halted inside a section keeps the HSEM until reset | Documented (§3.1, §10) |
 | A3 | A fault handler that preempts `lock()` opens a nested section and writes without the lock | Documented (§10, `gpio_bm.h`) |
 | A4 | `SetSharedLock` inside an open section made `SectionExit` call the new hook's `unlock` (or none, leaving the HSEM taken) | Fixed: `GpioBm_Section_t.taken` records the hook that was locked, and `SectionExit` releases that one. TB step A4 added, not run yet (§9.5) |
-| A5 | `IsLocked` said nothing about the port clock; unclocked, a locked pin reads as free | Documented (`gpio_bm.h`, `gpio_ll.h`, §10) |
+| A5 | `IsLocked` said nothing about the port clock. Unclocked, the port reads all ones on Rev V (the audit assumed 0), so every pin reads as locked | Documented (`gpio_bm.h`, `gpio_ll.h`, §10), corrected after the bench (T16 A1) |
 | A6 | Stale comments in `gpio_bm.h`: legacy calls "without a lock", `@retval false` only for bad parameters, a "section 4" that no longer holds that text | Fixed in place (C2 allows comment changes) |
 | A7 | `GPIO_BM_PIN_INDEX(0)` was `__builtin_ctz(0)`, undefined; `-Wcast-qual` in both `ReadConfig`; README counted seven alias users (there are eight) and did not name the cleanup commit | Fixed: `PIN_INDEX(0)` = 16, refused everywhere; casts through `uintptr_t`; README corrected |
 
