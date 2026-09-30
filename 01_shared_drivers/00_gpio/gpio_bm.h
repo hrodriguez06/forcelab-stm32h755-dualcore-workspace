@@ -123,6 +123,27 @@ typedef struct
     bool     allow_debug_pins; /*!< false: PA13/PA14 refused                          */
 } GpioBm_PinConfig_t;
 
+/* ---- Section and cross-core hook ------------------------------------------------ */
+/* The section covers one pin. PRIMASK is saved and interrupts are masked on
+ * the calling core first; only then, at nesting level 1 and when a hook is
+ * installed, lock() is called. So no ISR of this core can run while the
+ * cross-core lock is held. GPIO_BM_SectionExit() restores the saved PRIMASK
+ * and never enables interrupts that were masked on entry, so the driver can
+ * be used from a fault handler. The driver itself never waits: the hook is
+ * bounded by the project. */
+typedef struct
+{
+    bool (*lock)(void *ctx);    /*!< true = taken. Bounded by the project (TakeTimeout) */
+    void (*unlock)(void *ctx);
+    void  *ctx;
+} GpioBm_SharedLock_t;
+
+typedef struct { uint32_t primask; uint8_t took_shared; } GpioBm_Section_t;
+
+void            GPIO_BM_SetSharedLock(const GpioBm_SharedLock_t *lock);   /* per core; NULL = PRIMASK only */
+GpioBm_Status_t GPIO_BM_SectionEnter(GpioBm_Section_t *s);   /* for consumers wrapping HAL_GPIO_Init */
+void            GPIO_BM_SectionExit(const GpioBm_Section_t *s);
+
 #ifdef __cplusplus
 }
 #endif
