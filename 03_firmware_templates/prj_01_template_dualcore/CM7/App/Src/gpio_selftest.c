@@ -665,6 +665,16 @@ static uint32_t s_hold_max_cm4;
 static uint32_t s_race_seed;       /* this run's T15 seed; phase k runs with seed ^ k */
 static uint32_t s_race_phase;
 
+/* -DGST_RACE_SEED=0x... replays a run with that seed. It only changes this
+   word: the code is the same in both builds, read at run time (volatile), so
+   the replay image has the timing of the image it replays. 0 = the RNG's
+   word. A define that selected code changed the timing and did not replay
+   (docs/gpio_dev_replay_seed_6f6841b8_9ccc971.txt). */
+#if !defined(GST_RACE_SEED)
+#define GST_RACE_SEED 0UL
+#endif
+static const volatile uint32_t k_race_seed_fixed = (uint32_t)(GST_RACE_SEED);
+
 /* R2: one 32-bit word from the RNG (HSI48 kernel clock, RNGSEL = 0 at reset).
    CPU1 only: RCC_CR is CPU1's by the boot contract. Leaves HSI48, the RNG
    and its clock as it found them. Returns false with the reason on a timeout,
@@ -845,18 +855,15 @@ static void run_race_tests(void)
     const uint32_t f4 = g_shared.m4_gpio_lock_fail_count;
 
     /* R2: a new seed per run, so a second run samples other interleavings.
-       -DGST_RACE_SEED=0x... replays one run: the RNG is still read and
-       checked, so both builds run the same code up to here, and the fixed
-       value then replaces its word. */
-    const char *why;
-    const bool  rng_ok = race_seed_from_rng(&s_race_seed, &why);
-#if defined(GST_RACE_SEED)
-    LOG("T15 seed=0x%08lX (fixed by GST_RACE_SEED, RNG gave 0x%08lX; phase k uses seed^k)",
-        (unsigned long)(uint32_t)(GST_RACE_SEED), (unsigned long)s_race_seed);
-    s_race_seed = (uint32_t)(GST_RACE_SEED);
-#else
-    LOG("T15 seed=0x%08lX (RNG; phase k uses seed^k)", (unsigned long)s_race_seed);
-#endif
+       The RNG is read and checked in every build; a fixed seed
+       (GST_RACE_SEED, above) then replaces its word. */
+    const char    *why;
+    const bool     rng_ok = race_seed_from_rng(&s_race_seed, &why);
+    const uint32_t fixed  = k_race_seed_fixed;
+    const uint32_t rng    = s_race_seed;
+    s_race_seed = (fixed != 0UL) ? fixed : rng;
+    LOG("T15 seed=0x%08lX (%s, RNG gave 0x%08lX; phase k uses seed^k)", (unsigned long)s_race_seed,
+        (fixed != 0UL) ? "fixed by GST_RACE_SEED" : "RNG", (unsigned long)rng);
     verdict(rng_ok, "T15 seed from the RNG: %s", why);
     s_race_phase = 0U;
 
