@@ -600,3 +600,23 @@ La placa quedó con `prj_04` **debug** de `51a29b7` flasheado y el AD2 cerrado (
 ### Errata del plan (mía, al preparar F1a, 2026-09-29)
 
 - **E8:** El plan ponía T18 en F0 (referencia), F1b y F2, y no en F1a. Pero `gpio_bm.c` se enlaza en producción (lo usan `uart` y `adc`), así que la producción cambia ya en F1a, y la paridad byte a byte con `ca569b6` de F0 deja de valer. Ahora la puerta de F1a exige T18 igual que la referencia de F0 (sin `mX_gpio_lock_fail_count`, que llega en F1b) y un diff del `.map` de producción por objeto, en el que solo cambia `gpio_bm.c.obj`. Corregidas la fila de F1a en "Fases" y la de T18 en "Plan de pruebas"; el detalle está en `F1A_INSTRUCTIONS.md` §2.6.
+
+### Errata del plan (mía, durante F1a, 2026-09-29)
+
+El implementador paró en la puerta de T9 y lo preguntó, como pide §6 de `F1A_INSTRUCTIONS.md`. Estas son mis decisiones; F1a sigue sin entregar para auditoría.
+
+- **E9 (T9):** con 10 flancos por velocidad, la puerta de PF14 depende del ruido del banco, no del driver.
+  - **Lo medido (`gpio_f1a_selftest_ededa84.txt`):** LOW 15,10 ns (σ 1,02) y VERY\_HIGH 12,74 ns (σ 1,42). La diferencia es de 2,36 ns y el 5σ de la diferencia de medias, 2,76 ns. PF15 pasa con 2,48 ns frente a 1,65.
+  - **El efecto es real:** 2,36 ns coincide con la referencia del 2026-09-26 (unos 2,4–2,8 ns).
+  - **La puerta 5σ no cambia.** Lo que cambia es el número de flancos, que era un parámetro del procedimiento y no del criterio:
+    - **40 flancos por velocidad y por pin,** fijados antes de medir;
+    - **intercalados** en cuatro rondas de 10, una por velocidad (LOW, MEDIUM, HIGH, VERY\_HIGH), para que una deriva del banco no se confunda con la velocidad;
+    - **una sola ejecución,** sin repetir para quedarse con la buena.
+  - Con las mismas σ, el 5σ baja a unos 1,4 ns. **Si aun así falla, se para y se pregunta:** no se sube N otra vez.
+- **E10 (E8 ampliada):** `gpio_bm.c` también se enlaza en `prj_01`, `prj_02` y `prj_03`, así que sus binarios cambian aunque sus fuentes no.
+  - El diff del `.map` por objeto se hace en **las cuatro** imágenes de `debug` y `release` de esos proyectos, y en cada una solo puede cambiar `gpio_bm.c.obj`.
+  - En la placa no se les exige regresión: están fuera del alcance de `00_gpio`, y su comportamiento con el driver nuevo lo cubren T2 (paridad legacy) y la T18 de `prj_04`.
+- **E11 (lo no ejercitado que se congela):** la API de F1a se congela al pasar la auditoría, así que ninguna función de la API puede quedar sin ejercitar.
+  - **`GPIO_BM_ReadConfig`:** T2 lo compara, caso por caso, con la configuración que acaba de escribir.
+  - **La ruta de `ERR_BUSY`:** una prueba nueva, dentro de T15 o aparte, instala un hook de prueba cuyo `lock()` devuelve `false`. Tiene que dar `ERR_BUSY`, con PRIMASK restaurado, el contador de anidamiento sin cambiar y los registros sin tocar (foto antes y después). Control: el mismo hook devolviendo `true` escribe.
+  - **Los códigos LED de arranque** no son API de `00_gpio`: basta con apuntarlos como no ejercitados.

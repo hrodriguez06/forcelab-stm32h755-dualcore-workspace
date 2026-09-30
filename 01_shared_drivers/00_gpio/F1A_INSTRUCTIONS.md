@@ -283,3 +283,27 @@ Las situaciones de `IMPLEMENTER_INSTRUCTIONS.md` §7, y además estas:
 - Un paso del banco necesita una línea o una dirección que la tabla "Quién conduce" del plan no prevé.
 - El diff del `.map` de producción muestra cambios fuera de `gpio_bm.c.obj`.
 - Algún valor de T5, T6 o T9 sale del rango de referencia.
+
+---
+
+## 7. Para retomar después de la parada en T9 (2026-09-29)
+
+Paraste en la puerta de T9 y preguntaste, que era lo correcto. Las decisiones están en `AUDIT.md`, "Errata del plan (mía, durante F1a)". Sigue sobre tu misma rama `driver/gpio` y haz, por orden:
+
+1. **E9 (T9).**
+   - 40 flancos por velocidad y por pin, fijados antes de medir.
+   - Intercalados en cuatro rondas de 10, una por velocidad y en el orden LOW, MEDIUM, HIGH, VERY\_HIGH.
+   - Misma puerta 5σ sobre la diferencia de medias.
+   - Actualiza la tabla, el host, el modelo y el arnés.
+   - **Una sola ejecución.** Si PF14 o PF15 fallan, para y pregunta otra vez: no subas N ni toques el umbral.
+2. **E11 (se congela, así que se ejercita):**
+   - T2 compara `GPIO_BM_ReadConfig` con lo escrito, caso por caso;
+   - una prueba de `ERR_BUSY` con un hook que devuelve `false`: estado exacto, PRIMASK restaurado, contador de anidamiento igual y foto de registros idéntica, con el control del hook que devuelve `true`.
+3. **E10:** el diff del `.map` por objeto en las imágenes `debug` y `release` de `prj_01`, `prj_02`, `prj_03` y `prj_04`. En todas solo cambia `gpio_bm.c.obj`.
+4. **Dos ejecuciones completas** con el AD2 en el commit que entregues (§2.5), y la entrega de §4 entera. Las capturas anteriores, incluidas la de `ededa84` y las de desarrollo, se quedan en el repo como historia; el informe dice cuál sustituye a cuál.
+5. **En el informe:**
+   - la medida nueva de T9 (método de reconstrucción de `ededa84` incluido) con los 40 valores por velocidad y pin;
+   - qué cambió respecto a la ejecución de `ededa84`;
+   - la lista de `git grep` de §0.
+
+Después, el aviso con el hash, y esperas a la "Auditoría de F1a".
