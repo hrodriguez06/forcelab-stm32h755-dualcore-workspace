@@ -37,8 +37,11 @@ at `7456494`: the build id covers the commit and the host checks the image's
 which `run_warm_resets.py` checks in every reset. Which captures carry a build
 id: the `selftest-gpio` captures from `663ae65` on, and the production
 warm-reset captures from `7456494` on; every earlier capture identifies its
-image only by `Rev` or by the host's `HEAD` (§9.3). This driver has had no
-independent bench audit.
+image only by `Rev` or by the host's `HEAD` (§9.3). A fourth re-audit at
+`7fc7ad2` confirmed them and left two low, non-blocking findings on
+development runs, R4-a and R4-b
+([section 12.6](#126-re-audit-4-r4-a-r4-b-2026-09-30-at-7fc7ad2)). This
+driver has had no independent bench audit.
 
 ---
 
@@ -853,6 +856,33 @@ shows how to read it).
 | :--- | :--- | :--- |
 | R3-b | The host does not bind the image to its commit. On a clean tree the id is the same for every commit (§9.4), and `gpio_hw_check.py` requires the CM7 and CM4 `Rev` to be equal and not `-dirty`, but never compares them with its own `HEAD`. An image built clean at one commit passes the check from a clean checkout at another, against §9.1 ("the image is the one this checkout … builds") and §9.4 ("the host refuses an image that this checkout … would not build") | **Closed** (`f005eda`): the payload starts with `HEAD=<40 hex>`, the same bytes in `fw_build_id.cmake` and `host_build_id()`; the host requires `Rev` (without `-dirty`) = `HEAD` before S8, not waived by `--allow-dirty`. At `7456494`: host = CM7 = CM4 = `991971a381ccb862`, equal to the id recomputed with `git`/`printf`/`sha256sum` (`gpio_build_id_recompute_7456494.txt`); control (3), the image of `HEAD~1`, aborted before S8 with and without `--allow-dirty`, `OE=0x0000` throughout; the production `.bin` did not change (`gpio_r3b_bin_cmp_f005eda.txt`) |
 | R3-c | The production captures do not identify their image. The `debug`/`release` images print neither `FW_GIT_REV` nor `FW_BUILD_ID`. `tools/run_warm_resets.py` writes the host's `HEAD` as "Firmware Git Revision", with no `-dirty` check and a free-text title. The `fa44386` and `1ff10c8` warm-reset captures are titled "after re-audit 1, R1-R4". The status line claims "every capture carries a build id" | **Closed** (`7456494`): CPU1 prints `[sys] build rev= id=`; CPU2 writes its rev and id into `SharedMemory_t.m4_fw_rev`/`m4_fw_build_id` (appended; `g_shared` 0xA0 → 0xD0, no field moved) before its first heartbeat, and CPU1 prints `[sys] cpu2 build`. `run_warm_resets.py --project --preset` checks both in every reset: 20/20 with identity PASS in `debug` and `release`; control (4) failed at reset 1; without the options the tool keeps its old output (`gpio_warm_resets_compat_no_options_7456494.txt`). The SWD-counter capture names its images. The status line says which captures carry a build id, and §9.3 marks the older warm-reset captures and their wrong titles |
+
+### 12.6 Re-audit 4 (R4-a, R4-b, 2026-09-30, at `7fc7ad2`)
+
+A verification of the R3-b and R3-c corrections (`f005eda` … `7fc7ad2`,
+validated revision `7456494`). Both are closed.
+
+Checked without discrepancy:
+- the three build ids **recomputed by hand** from `git rev-parse 7456494`
+  (`991971a381ccb862`, `b761febaca21c7b7`, `8c71cc7386c89b16`), equal to the
+  capture and to the printed ones;
+- control (3) aborted before S8 with `OE=0x0000`, and the `Rev` = `HEAD` check
+  independent of `--allow-dirty` in the code;
+- the production `.bin` identical after R3-b, and R3-c adding only what was
+  asked;
+- identity PASS in 20 of 20 resets in `debug` and `release`, control (4) with
+  exit 1, and the compatibility run in the old format;
+- the headers against `5a5deeb`;
+- every figure of the status line, §9.1–§9.4, §10, §12.5 and §15 against its
+  capture.
+
+Both new findings are low and not blocking: they concern only
+development (`-dirty`) runs. Corrections: `REAUDIT_4_INSTRUCTIONS.md`.
+
+| ID | Finding | State |
+| :--- | :--- | :--- |
+| R4-a | Under `--allow-dirty` the CM4 image is bound to nothing. `--allow-dirty` waives `clean`, which holds `Rev(cm7) == Rev(cm4)`, turns a build-id mismatch into a note, and the R3-b check derives its base from the CM7 `Rev` only. A `-dirty` run, such as every mutation run, would pass with a CM4 flashed from another commit or build | **Open**: always require `Rev(cm7) == Rev(cm4)`, `id(cm7) == id(cm4)` and base = `HEAD` for both; `--allow-dirty` waives only `-dirty` and the host-vs-image id. Control (5): CM4 alone flashed from `HEAD~1`, `--allow-dirty` → abort before S8 |
+| R4-b | The host tools do not record their arguments. `gpio_dev_build_id_old_commit_7456494_allow_dirty.txt` cannot be told from the run without the flag, because the R3-b abort comes before the only line that depends on it; "with and without `--allow-dirty`" (§9.1, §9.3) rests on the code, not on the capture (C9) | **Open**: `[host] argv:` and `[host] options:` as the first lines of `gpio_hw_check.py` and `run_warm_resets.py` captures |
 
 ---
 
