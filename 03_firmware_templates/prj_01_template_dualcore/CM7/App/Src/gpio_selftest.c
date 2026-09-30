@@ -845,16 +845,19 @@ static void run_race_tests(void)
     const uint32_t f4 = g_shared.m4_gpio_lock_fail_count;
 
     /* R2: a new seed per run, so a second run samples other interleavings.
-       -DGST_RACE_SEED=0x... replays one run. */
-#if defined(GST_RACE_SEED)
-    s_race_seed = (uint32_t)(GST_RACE_SEED);
-    LOG("T15 seed=0x%08lX (fixed by GST_RACE_SEED; phase k uses seed^k)", (unsigned long)s_race_seed);
-#else
+       -DGST_RACE_SEED=0x... replays one run: the RNG is still read and
+       checked, so both builds run the same code up to here, and the fixed
+       value then replaces its word. */
     const char *why;
     const bool  rng_ok = race_seed_from_rng(&s_race_seed, &why);
+#if defined(GST_RACE_SEED)
+    LOG("T15 seed=0x%08lX (fixed by GST_RACE_SEED, RNG gave 0x%08lX; phase k uses seed^k)",
+        (unsigned long)(uint32_t)(GST_RACE_SEED), (unsigned long)s_race_seed);
+    s_race_seed = (uint32_t)(GST_RACE_SEED);
+#else
     LOG("T15 seed=0x%08lX (RNG; phase k uses seed^k)", (unsigned long)s_race_seed);
-    verdict(rng_ok, "T15 seed from the RNG: %s", why);
 #endif
+    verdict(rng_ok, "T15 seed from the RNG: %s", why);
     s_race_phase = 0U;
 
     /* Controls first: without protection the race must be reproduced, and the
