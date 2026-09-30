@@ -376,7 +376,7 @@ Ningún archivo tiene activado `assume-unchanged` ni `skip-worktree`, y no exist
 | --- | --- | --- | --- |
 | **R2-M3** | `8d99b6c` | Implementación de la Forma (b) de E7: `LineReader.expect()` registra automáticamente `("LINE", pattern)`, y `hs_mcu()` / `hs_host()` registran `("PRIM", "HS_MCU")` / `("PRIM", "HS_HOST")`. El host obtiene sus patrones de la tabla (`table_pattern()`), y el parser Python desescapa las cadenas C con `ast.literal_eval`. El dueño del bus del firmware deriva de `GPIO_BENCH_STEPS_TABLE` con 11 `_Static_assert`s de coherencia. Comprobado con `test_host_and_model_trace_matches_protocol_table` (comparación exacta de la traza de 115 ítems contra la tabla) y `test_real_capture_matches_protocol_table` (46 líneas no-INFO de la captura de hardware contra los patrones `LINE`). Ejecutadas las dos comprobaciones previas (§2.1), ambas poniéndose en rojo. | corregido, pendiente de verificación |
 | **R3-m1** | `e26eb72` | `hs_mcu()` y `hs_host()` ejecutan `line_reader.poll()` en sus bucles de espera. Si el firmware emite `[m7_gpio_test] ABORT …`, se invoca inmediatamente `on_abort()` (estado seguro S2, `OE=0x0000`) y se lanza `BenchAbort` citando la línea en el log, sin esperar los 10 s de timeout. Comprobado con el nuevo escenario `test_r3_m1_host_aborts_immediately_on_firmware_abort`, verificando aborto en < 1.0 s simulado con FAIL, `OE=0` y 0 colisiones en `SimBus`. | corregido, pendiente de verificación |
-| **M3** | commit actual | Corrección de las afirmaciones (a)–(c) de M3 de la reauditoría 3; documentación de la forma (b) elegida para R2-M3 y resultado de las dos comprobaciones previas; y tabla de verificación de identificadores citados mediante `git grep -c`. | corregido, pendiente de verificación |
+| **M3** | `9209955` | Corrección de las afirmaciones (a)–(c) de M3 de la reauditoría 3; documentación de la forma (b) elegida para R2-M3 y resultado de las dos comprobaciones previas; y tabla de verificación de identificadores citados mediante `git grep -c`. | corregido, pendiente de verificación |
 
 ---
 
@@ -454,5 +454,34 @@ A continuación se listan todos los identificadores (funciones, pruebas, macros,
 | `test_e6_t0b_c_mcu_not_driving_fails` | Método de prueba | `tools/test_gpio_hw_check.py`, `IMPLEMENTATION_REPORT.md` | 3 |
 | `T0b_c safe state verification FAILED: pins not input` | Mensaje de log | `CM7/App/Src/gpio_selftest.c`, `tools/fw_model.py`, `AUDIT.md`, `IMPLEMENTATION_REPORT.md` | 5 |
 | `ABORT step=7 reason=protocol` | Mensaje de log | `tools/fw_model.py`, `tools/test_gpio_hw_check.py`, `AUDIT.md`, `IMPLEMENTATION_REPORT.md`, docs | 6 |
+
+---
+
+### Entregables y estado de la placa para la reauditoría 3 (§3 y §4)
+
+#### Estado del árbol antes de las capturas
+Tal como exige el §3, se verificó la ausencia total de banderas que oculten el árbol de trabajo y la ausencia de cambios locales no commiteados antes de proceder a la ejecución de pruebas físicas:
+
+```text
+$ git status --short
+<salida vacía>
+
+$ git ls-files -v | grep -E '^[a-zS]'
+<salida vacía>
+```
+
+#### Verificación de paridad de producción con `ca569b6`
+Se compiló la matriz multi-proyecto completa (`gpio_f0_build_9209955.txt`, 8/8 builds en PASS). Los tamaños de los ejecutables de producción son estrictamente idénticos a los de la entrega inicial `ca569b6`:
+- `prj_04_adc_dma_bm_eth` [debug]: CM7 Text=88948, Data=156, Bss=121212; CM4 Text=8908, Data=28, Bss=15880.
+- `prj_04_adc_dma_bm_eth` [release]: CM7 Text=85036, Data=156, Bss=121216; CM4 Text=8476, Data=28, Bss=15880.
+
+#### Índice de artefactos generados para la entrega
+| Archivo | Comando ejecutado | Commit base | Propósito |
+| --- | --- | --- | --- |
+| `docs/gpio_f0_build_9209955.txt` | `build_matrix (8/8 builds)` | `9209955` | Salida cruda de la matriz CI multi-proyecto. 8/8 proyectos y presets compilan limpios sin advertencias. |
+| `docs/gpio_f0_unittest_9209955.txt` | `py -m unittest discover -s tools -p "test_*.py" -v` | `9209955` | Salida cruda de la suite de 30 pruebas unitarias del arnés (incluyendo las nuevas de R2-M3 y R3-m1), todas en OK. |
+| `docs/gpio_f0_selftest_9209955.txt` | `py tools/gpio_hw_check.py --checklist-confirmed --log docs/gpio_f0_selftest_9209955.txt` | `9209955` | Primera ejecución completa en banco con hardware real (AD2 + Nucleo-H755ZI-Q). Finaliza en `HOST VERDICT=PASS` (15/15 `[OK]`). |
+| `docs/gpio_f0_selftest_9209955_2.txt` | `py tools/gpio_hw_check.py --checklist-confirmed --log docs/gpio_f0_selftest_9209955_2.txt` | `9209955` | Segunda ejecución física consecutiva tras reset en hardware (exigida por cambio en firmware). Finaliza en `HOST VERDICT=PASS` (15/15 `[OK]`). |
+
 
 

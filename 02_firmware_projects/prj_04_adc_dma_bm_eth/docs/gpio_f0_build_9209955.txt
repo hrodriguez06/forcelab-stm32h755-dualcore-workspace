@@ -1,0 +1,47 @@
+=================================================================
+ STM32H755 Multi-Project CI Matrix Build
+ Projects: 4 | Presets: debug, release
+=================================================================
+
+>>> Configuring & Building prj_01_template_dualcore [debug] ...
+  -> PASS in 30.6s
+>>> Configuring & Building prj_01_template_dualcore [release] ...
+  -> PASS in 17.9s
+>>> Configuring & Building prj_02_eth_lwip_dualcore [debug] ...
+  -> PASS in 32.6s
+>>> Configuring & Building prj_02_eth_lwip_dualcore [release] ...
+  -> PASS in 24.8s
+>>> Configuring & Building prj_03_adc_dma_eth [debug] ...
+  -> PASS in 32.2s
+>>> Configuring & Building prj_03_adc_dma_eth [release] ...
+  -> PASS in 25.6s
+>>> Configuring & Building prj_04_adc_dma_bm_eth [debug] ...
+  -> PASS in 34.1s
+>>> Configuring & Building prj_04_adc_dma_bm_eth [release] ...
+  -> PASS in 24.5s
+
+==========================================================================================
+ Matrix Build & Binary Size Summary Table
+==========================================================================================
+
+Project                    Preset    Core   Status        Text (B)   Data (B)    Bss (B)  Total (B)     Time
+-------                    ------    ----   ------        --------   --------    -------  ---------     ----
+prj_01_template_dualcore   debug     CM7    PASS             28428        132      55604      84164    30.6s
+prj_01_template_dualcore   debug     CM4    PASS              2576         24      12488      15088    30.6s
+prj_01_template_dualcore   release   CM7    PASS             27292        132      55608      83032    17.9s
+prj_01_template_dualcore   release   CM4    PASS              2364         24      12488      14876    17.9s
+prj_02_eth_lwip_dualcore   debug     CM7    PASS             85748        152     120080     205980    32.6s
+prj_02_eth_lwip_dualcore   debug     CM4    PASS              2580         24      12488      15092    32.6s
+prj_02_eth_lwip_dualcore   release   CM7    PASS             81772        152     120080     202004    24.8s
+prj_02_eth_lwip_dualcore   release   CM4    PASS              2332         24      12488      14844    24.8s
+prj_03_adc_dma_eth         debug     CM7    PASS             87164        152     121200     208516    32.2s
+prj_03_adc_dma_eth         debug     CM4    PASS             20164         24      16176      36364    32.2s
+prj_03_adc_dma_eth         release   CM7    PASS             83124        152     121200     204476    25.6s
+prj_03_adc_dma_eth         release   CM4    PASS             18008         24      16176      34208    25.6s
+prj_04_adc_dma_bm_eth      debug     CM7    PASS             88948        156     121212     210316    34.1s
+prj_04_adc_dma_bm_eth      debug     CM4    PASS              8908         28      15880      24816    34.1s
+prj_04_adc_dma_bm_eth      release   CM7    PASS             85036        156     121216     206408    24.5s
+prj_04_adc_dma_bm_eth      release   CM4    PASS              8476         28      15880      24384    24.5s
+
+
+All 8 builds PASSED successfully.
