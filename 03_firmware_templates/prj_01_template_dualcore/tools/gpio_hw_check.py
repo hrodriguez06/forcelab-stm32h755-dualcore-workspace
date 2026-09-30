@@ -10,6 +10,7 @@ file: every console line and every host measurement, with timestamps, until
     py tools/flash.py --preset selftest-gpio
     py tools/gpio_hw_check.py                   # resets the board through SWD and runs
     py tools/gpio_hw_check.py --allow-dirty     # development only: accept a -dirty Rev
+                                                # (the capture then carries the git diff)
 
 Electrical safety (no series resistors on the bench):
   S2  the AD2 opens and closes with every DIO in input (tools/ad2.py), and goes
@@ -27,6 +28,7 @@ Standard library only (ctypes); `py`, not `python`.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import math
 import os
 import pathlib
@@ -601,6 +603,30 @@ def git_rev() -> str:
         return "unknown"
 
 
+def tree_record(stamp: Callable[[str], None]) -> bool:
+    """R3: write the state of this checkout into the capture, before the AD2 is
+    opened. Dirty is decided as CMakeLists.txt decides FW_GIT_REV's -dirty
+    (`git status --porcelain -uno`, tracked files only); a dirty tree gets its
+    whole `git diff --no-color HEAD`, so a -dirty capture carries its own patch.
+    Read-only: nothing is added, stashed or checked out. Returns True if dirty."""
+    try:
+        status = subprocess.run(["git", "status", "--porcelain", "-uno"], cwd=str(PROJECT),
+                                capture_output=True, check=True).stdout
+        if not status.strip():
+            stamp("[host] tree clean")
+            return False
+        diff = subprocess.run(["git", "diff", "--no-color", "HEAD"], cwd=str(PROJECT),
+                              capture_output=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError) as e:
+        stamp(f"[host] tree state unknown: git failed ({e})")
+        return True
+    text = diff.decode("utf-8", errors="replace").splitlines()
+    stamp(f"[host] dirty diff sha256={hashlib.sha256(diff).hexdigest()} lines={len(text)}")
+    for line in text:
+        stamp(f"[host] diff| {line}")
+    return True
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", help="ST-LINK VCP (default: autodetect)")
@@ -622,6 +648,7 @@ def main() -> int:
     stamp(f"[host] gpio_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}")
     stamp("[host] checklist: GND first, DIO per README table, nothing on W1/W2/V+/V-; WaveForms GUI closed; "
           "image selftest-gpio flashed with this script stopped")
+    tree_record(stamp)
     guard_ok = t0b_guard_selftest(stamp)
 
     port = args.port or autodetect()
