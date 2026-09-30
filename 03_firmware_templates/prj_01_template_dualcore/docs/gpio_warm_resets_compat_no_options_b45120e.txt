@@ -1,0 +1,28 @@
+[host] argv: --count 2 --out docs/gpio_warm_resets_compat_no_options_b45120e.txt --title 'H6 compatibility (no --project/--preset), debug image, 2 resets'
+================================================================================
+H6 compatibility (no --project/--preset), debug image, 2 resets
+Firmware Git Revision: b45120e
+Target: NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK V3)
+Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
+================================================================================
+
+--- WARM RESET 1/2 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=b45120e id=758bba0d11477228
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=b45120e id=758bba0d11477228
+[ipc] m7=1 m4=1  (CPU2 alive)
+
+--- WARM RESET 2/2 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=b45120e id=758bba0d11477228
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=b45120e id=758bba0d11477228
+[ipc] m7=1 m4=1  (CPU2 alive)
+

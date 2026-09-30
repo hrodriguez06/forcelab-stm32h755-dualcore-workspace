@@ -1,0 +1,24 @@
+﻿R4-a control 5, step 2 as written in REAUDIT_4_INSTRUCTIONS.md, run from C:\wt_gpio\03_firmware_templates\prj_01_template_dualcore (HEAD b45120e):
+> py tools/flash.py --core cm4 --elf C:\wt_prev\03_firmware_templates\prj_01_template_dualcore\build\selftest-gpio\CM4\cm4_firmware.elf
+exit code: 1
+
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : debug
+Traceback (most recent call last):
+  File "C:\wt_gpio\03_firmware_templates\prj_01_template_dualcore\tools\flash.py", line 33, in <module>
+    runpy.run_path(str(TARGET), run_name="__main__")
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen runpy>", line 294, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\wt_gpio\tools\flash.py", line 502, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "C:\wt_gpio\tools\flash.py", line 475, in main
+    f"  {elf.relative_to(PROJECT_ROOT)}  ({size:,} B)")
+         ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\Lib\pathlib\__init__.py", line 490, in relative_to
+    raise ValueError(f"{str(self)!r} is not in the subpath of {str(other)!r}")
+ValueError: 'C:\\wt_prev\\03_firmware_templates\\prj_01_template_dualcore\\build\\selftest-gpio\\CM4\\cm4_firmware.elf' is not in the subpath of 'C:\\wt_gpio\\03_firmware_templates\\prj_01_template_dualcore'

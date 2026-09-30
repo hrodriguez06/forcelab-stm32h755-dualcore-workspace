@@ -1,0 +1,269 @@
+[+   0.000s] [host] argv: --allow-dirty --out docs/gpio_dev_allow_dirty_positive_b45120e-dirty.txt
+[+   0.000s] [host] options: allow_dirty=True preset=selftest-gpio no_reset=False
+[+   0.045s] [host] gpio_hw_check.py, host checkout b45120e, protocol v1
+[+   0.045s] [host] checklist: GND first, DIO per README table, nothing on W1/W2/V+/V-; WaveForms GUI closed; image selftest-gpio flashed with this script stopped
+[+   0.209s] [host] dirty diff sha256=d2bfffd2110da4d81754462b98167b49978a0991f9a0a43a040253b6fcc277a9 lines=12
+[+   0.209s] [host] diff| diff --git a/03_firmware_templates/prj_01_template_dualcore/Common/Src/gpio_selftest_common.c b/03_firmware_templates/prj_01_template_dualcore/Common/Src/gpio_selftest_common.c
+[+   0.209s] [host] diff| index 35617fb..b41ca74 100644
+[+   0.209s] [host] diff| --- a/03_firmware_templates/prj_01_template_dualcore/Common/Src/gpio_selftest_common.c
+[+   0.209s] [host] diff| +++ b/03_firmware_templates/prj_01_template_dualcore/Common/Src/gpio_selftest_common.c
+[+   0.209s] [host] diff| @@ -1,6 +1,6 @@
+[+   0.209s] [host] diff|  /**
+[+   0.209s] [host] diff|    ******************************************************************************
+[+   0.209s] [host] diff| -  * @file    gpio_selftest_common.c
+[+   0.209s] [host] diff| +  * @file    gpio_selftest_common.c (R4-a positive control)
+[+   0.209s] [host] diff|    * @brief   00_gpio selftest: the tests both cores run, on pins nothing on the
+[+   0.209s] [host] diff|    *          bench is wired to (PF6..PF11, GPIOJ, GPIOK).
+[+   0.209s] [host] diff|    *
+[+   0.341s] [host] build id of this checkout and build/selftest-gpio: b19f7cef96d5086e
+[+   0.341s] [ad2] T0B(a) ad2_set_oe(0x0200, bus=NONE): refused before the DLL
+[+   0.341s] [ad2] T0B(a) ad2_set_oe(0x0800, bus=NONE): refused before the DLL
+[+   0.341s] [ad2] T0B(a) ad2_set_oe(0x2000, bus=NONE): refused before the DLL
+[+   0.341s] [ad2] T0B(a) ad2_set_oe(0x4000, bus=NONE): refused before the DLL
+[+   0.341s] [ad2] T0B(a) ad2_set_oe(0x8000, bus=NONE): refused before the DLL
+[+   0.341s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=NONE): refused before the DLL
+[+   0.341s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=MCU): refused before the DLL
+[+   0.341s] [ad2] T0B(a) ad2_set_oe(0x10FF, bus=MCU): refused before the DLL
+[+   0.341s] [ad2] T0B(a) control ad2_set_oe(0x1000, bus=NONE): passed to the DLL
+[+   0.341s] [ad2] T0B(a) control ad2_set_oe(0x10FF, bus=AD2): passed to the DLL
+[+   0.717s] [ad2] opened in S2: OE=0x0000 DIO=0x0000
+[+   0.718s] [host] reset through SWD (STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst), AD2 in S2
+[+   0.873s]  
+[+   0.878s] === STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[+   0.882s] [sys] build rev=b45120e-dirty id=b19f7cef96d5086e
+[+   0.886s] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[+   0.889s] [sys] silicon revision id=0x2003
+[+   0.893s] [ipc] shared block at 0x38008000, magic=0x48375353
+[+   0.897s] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[+   0.900s] [gpio] CM7 Rev b45120e-dirty
+[+   0.903s] [gpio] CM7 Build id b19f7cef96d5086e
+[+   0.906s] [gpio] CM4 Rev b45120e-dirty
+[+   0.909s] [gpio] CM4 Build id b19f7cef96d5086e
+[+   0.911s] [gpio] GPIO_BENCH v1 idle
+[+   0.918s] [gpio] silicon REV_ID=0x2003, lock limit 60 us, test block at 0x3800A000
+[+   0.923s] [gpio] T1 cm7 BM  refusals=45 fail=0 control_wrote=1 -> PASS
+[+   0.929s] [gpio] T1 cm7 LL  refusals=32 fail=0 control_wrote=1 -> PASS
+[+   0.935s] [gpio] T1 cm7 HAL refusals=35 fail=0 control_wrote=1 -> PASS
+[+   0.946s] [gpio] T1 cm4 BM  refusals=45 fail=0 control_wrote=1 -> PASS
+[+   0.951s] [gpio] T1 cm4 LL  refusals=32 fail=0 control_wrote=1 -> PASS
+[+   0.954s] [host] R4-a: cm7 Rev=b45120e-dirty id=b19f7cef96d5086e; cm4 Rev=b45120e-dirty id=b19f7cef96d5086e; host HEAD=b45120e id=b19f7cef96d5086e
+[+   0.954s] [host] build id host=b19f7cef96d5086e cm7=b19f7cef96d5086e cm4=b19f7cef96d5086e
+[+   0.954s] [host] S8: banner v1, Rev cm7=b45120e-dirty cm4=b45120e-dirty
+[+   0.957s] [gpio] T1 cm4 HAL refusals=35 fail=0 control_wrote=1 -> PASS
+[+   0.994s] [gpio] T2 cm7 BM  configs=1440 analog+pull refused=288 diff_rm=0 diff_hal=0 odr_bad=0
+[+   1.002s] [gpio] T2 cm7 LL  configs=1440 analog+pull refused=288 diff_rm=0 diff_hal=0 odr_bad=0
+[+   1.009s] [gpio] T2 cm7 HAL configs=1440 analog+pull refused=288 diff_rm=0 diff_hal=0 odr_bad=0
+[+   1.018s] [gpio] T2 cm7 readconfig_bad=0 legacy_bad=0 comparator_control=1 raw_hal_g7_kept=6/6 -> PASS
+[+   1.088s] [gpio] T2 cm4 BM  configs=1440 analog+pull refused=288 diff_rm=0 diff_hal=0 odr_bad=0
+[+   1.096s] [gpio] T2 cm4 LL  configs=1440 analog+pull refused=288 diff_rm=0 diff_hal=0 odr_bad=0
+[+   1.103s] [gpio] T2 cm4 HAL configs=1440 analog+pull refused=288 diff_rm=0 diff_hal=0 odr_bad=0
+[+   1.111s] [gpio] T2 cm4 readconfig_bad=0 legacy_bad=0 comparator_control=1 raw_hal_g7_kept=6/6 -> PASS
+[+   1.120s] [gpio] TB cm7 checks=274 fail=0 busy_calls=32/32 control_wrote=1 swap_control=1 -> PASS
+[+   1.129s] [gpio] TB cm4 checks=274 fail=0 busy_calls=32/32 control_wrote=1 swap_control=1 -> PASS
+[+   1.155s] [gpio] B1 cm7 BM  ConfigPin cycles: no hook 551/717, hook 969/1047 (min/max) = 2.61 us max with hook
+[+   1.164s] [gpio] B1 cm7 LL  ConfigPin cycles: no hook 745/858, hook 1168/1226 (min/max) = 3.06 us max with hook
+[+   1.173s] [gpio] B1 cm7 HAL ConfigPin cycles: no hook 1301/1392, hook 1697/1751 (min/max) = 4.37 us max with hook
+[+   1.216s] [gpio] B1 cm4 BM  ConfigPin cycles: no hook 475/660, hook 767/1015 (min/max) = 5.07 us max with hook
+[+   1.224s] [gpio] B1 cm4 LL  ConfigPin cycles: no hook 622/754, hook 1200/1241 (min/max) = 6.20 us max with hook
+[+   1.233s] [gpio] B1 cm4 HAL ConfigPin cycles: no hook 1437/1506, hook 1990/2069 (min/max) = 10.34 us max with hook
+[+   1.240s] [gpio] T15 seed=0xFEF7ACC1 (RNG, RNG gave 0xFEF7ACC1; phase k uses seed^k)
+[+   1.244s] [gpio] T15 seed from the RNG: ok -> PASS
+[+   1.250s] [gpio] T15 start deadline: 10265 us of 40 ms used before this line -> PASS
+[+   1.983s] [gpio] T15 a_raw_cm7_alone cm7: iters=500000 corrupt=0 err=0 overlap=0 locked=0 hold_max=0 cyc time=710 ms
+[+   1.991s] [gpio] T15 a_raw_cm7_alone cm4: iters=0 corrupt=0 err=0 overlap=0 locked=0 hold_max=0 cyc time=0 ms
+[+   1.998s] [gpio] T15 a_raw_cm7_alone corrupt=0 (expected 0) locked_calls=0 -> PASS
+[+   3.123s] [gpio] T15 b_raw_cm4_alone cm7: iters=0 corrupt=0 err=0 overlap=0 locked=0 hold_max=0 cyc time=0 ms
+[+   3.132s] [gpio] T15 b_raw_cm4_alone cm4: iters=500000 corrupt=0 err=0 overlap=0 locked=0 hold_max=0 cyc time=1132 ms
+[+   3.138s] [gpio] T15 b_raw_cm4_alone corrupt=0 (expected 0) locked_calls=0 -> PASS
+[+   4.261s] [gpio] T15 c_raw_both cm7: iters=500000 corrupt=24885 err=0 overlap=499999 locked=0 hold_max=0 cyc time=715 ms
+[+   4.270s] [gpio] T15 c_raw_both cm4: iters=500000 corrupt=34116 err=0 overlap=317648 locked=0 hold_max=0 cyc time=1129 ms
+[+   4.279s] [gpio] T15 c_raw_both corrupt=59001 (expected >0 with overlap on both cores) locked_calls=0 -> PASS
+[+   6.403s] [gpio] T15 d_hal7_ll4 cm7: iters=200000 corrupt=0 err=0 overlap=200000 locked=200000 hold_max=903 cyc time=1202 ms
+[+   6.413s] [gpio] T15 d_hal7_ll4 cm4: iters=200000 corrupt=0 err=0 overlap=100185 locked=200000 hold_max=394 cyc time=2145 ms
+[+   6.419s] [gpio] T15 d_hal7_ll4 corrupt=0 (expected 0) locked_calls=400000 -> PASS
+[+   9.075s] [gpio] T15 e_ll7_hal4 cm7: iters=200000 corrupt=0 err=0 overlap=200000 locked=200000 hold_max=501 cyc time=1343 ms
+[+   9.084s] [gpio] T15 e_ll7_hal4 cm4: iters=200000 corrupt=0 err=0 overlap=99999 locked=200000 hold_max=987 cyc time=2685 ms
+[+   9.091s] [gpio] T15 e_ll7_hal4 corrupt=0 (expected 0) locked_calls=400000 -> PASS
+[+  10.736s] [gpio] T15 f_bm7_bm4 cm7: iters=200000 corrupt=0 err=0 overlap=200000 locked=200000 hold_max=426 cyc time=843 ms
+[+  10.746s] [gpio] T15 f_bm7_bm4 cm4: iters=200000 corrupt=0 err=0 overlap=99999 locked=200000 hold_max=292 cyc time=1660 ms
+[+  10.752s] [gpio] T15 f_bm7_bm4 corrupt=0 (expected 0) locked_calls=400000 -> PASS
+[+  12.372s] [gpio] T15 g_halsection7_bm4 cm7: iters=200000 corrupt=0 err=0 overlap=200000 locked=200000 hold_max=391 cyc time=817 ms
+[+  12.383s] [gpio] T15 g_halsection7_bm4 cm4: iters=200000 corrupt=0 err=0 overlap=99999 locked=200000 hold_max=292 cyc time=1634 ms
+[+  12.390s] [gpio] T15 g_halsection7_bm4 corrupt=0 (expected 0) locked_calls=400000 -> PASS
+[+  14.007s] [gpio] T15 h_halraw7_bm4 cm7: iters=200000 corrupt=10564 err=0 overlap=199999 locked=0 hold_max=0 cyc time=316 ms
+[+  14.018s] [gpio] T15 h_halraw7_bm4 cm4: iters=200000 corrupt=4541 err=3452 overlap=39023 locked=200000 hold_max=294 cyc time=1631 ms
+[+  14.027s] [gpio] T15 h_halraw7_bm4 corrupt=15105 (expected >0 with overlap on both cores) locked_calls=200000 -> PASS
+[+  14.760s] [gpio] T15 i_isr_raw thread: iters=500000 corrupt=0 err=0; isr: entries=14704 corrupt=1451 err=0
+[+  14.765s] [gpio] T15 i_isr_raw corrupt=1451 (expected >0) -> PASS
+[+  15.939s] [gpio] T15 j_isr_tier thread: iters=200000 corrupt=0 err=0; isr: entries=23659 corrupt=0 err=0
+[+  15.943s] [gpio] T15 j_isr_tier corrupt=0 (expected 0) -> PASS
+[+  15.950s] [gpio] T15 production hook timeouts during the race: cm7=0 cm4=0 -> PASS
+[+  15.959s] [gpio] B1 lock hold max: cm7 903 cyc (2257 ns), cm4 987 cyc (4935 ns); limit 60 us = 12.15x (>=10x) -> PASS
+[+  15.962s] [gpio] STEP T0A bus=NONE v=1
+[+  15.969s] [ad2] T0A loose lines: 13 lines with MCU pull-up 0x4FFF (0x4FFF), pull-down 0x0000 (0x0000); handshake REQ/ACK exercised by every sync -> PASS
+[+  15.976s] [gpio] T0A MCU IDR with pull-up E=0xFF78 A8=1, with pull-down E=0x0000 A8=0 -> PASS
+[+  15.979s] [gpio] STEP T0B bus=NONE v=1
+[+  15.992s] [gpio] T0B(b) claim refuses PE0 PE1 PE2 PE3 PE4 PE7 bus PA8 PF14 and a mixed mask; accepts PE5 (control); MODER untouched -> PASS
+[+  15.996s] [gpio] STEP T0B_S5NEG bus=MCU v=1
+[+  16.004s] [ad2] S5 T0B_S5NEG before: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  16.009s] [ad2] T0B(c) S5 negative control: MCU drives the bus: s5_released() returned [(False, '0x5A'), (False, '0x5A')] (must be False twice, DIO=0x5A) -> PASS
+[+  16.014s] [ad2] S5 T0B_S5NEG after: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  16.022s] [gpio] T0B(c) bus driven to 0x5A during the host check, then released (MODER bus = input) -> PASS
+[+  16.025s] [gpio] STEP T0B_TIMEOUT bus=NONE v=1
+[+  16.028s] [ad2] T0B(d) MCU_ACK high: the host deliberately does not raise HOST_REQ
+[+  25.893s] [gpio] T0B(d) no HOST_REQ in 10 s -> bench_safe: GPIOE MODER[31:4]=0x00004000 (0x00004000 expected), PF14/15 and PA8 input, ACK low -> PASS
+[+  25.895s] [gpio] T0B timeout handled
+[+  25.896s] [ad2] T0B(d) firmware timeout: firmware reported the timeout and MCU_ACK is low -> PASS
+[+  25.898s] [gpio] STEP T3_BM bus=MCU v=1
+[+  25.906s] [ad2] S5 T3_BM: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  25.962s] [ad2] T3_BM control: deliberate 0x54 against 0x55 detected at index 25 only: diffs=[25] -> PASS
+[+  25.962s] [ad2] T3_BM pin operations: 26 values read by the AD2, differences at [] [55 AA 00 01 02 04 08 10 20 40 80 FF FE FD FB F7 EF DF BF 7F 80 8F BF 3E 3F 54] -> PASS
+[+  25.968s] [gpio] T3_BM pin operations shown to the AD2 (the host compares them) -> PASS
+[+  25.971s] [gpio] STEP T3_LL bus=MCU v=1
+[+  25.979s] [ad2] S5 T3_LL: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  26.030s] [ad2] T3_LL pin operations: 24 values read by the AD2, differences at [] [55 AA 00 01 02 04 08 10 20 40 80 FF FE FD FB F7 EF DF BF 7F 80 8F BF 3E] -> PASS
+[+  26.036s] [gpio] T3_LL pin operations shown to the AD2 (the host compares them) -> PASS
+[+  26.039s] [gpio] STEP T3_HAL bus=MCU v=1
+[+  26.046s] [ad2] S5 T3_HAL: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  26.098s] [ad2] T3_HAL pin operations: 24 values read by the AD2, differences at [] [55 AA 00 01 02 04 08 10 20 40 80 FF FE FD FB F7 EF DF BF 7F 80 8F BF 3E] -> PASS
+[+  26.104s] [gpio] T3_HAL pin operations shown to the AD2 (the host compares them) -> PASS
+[+  26.107s] [gpio] STEP T4_BM bus=AD2 v=1
+[+  26.115s] [ad2] S5 T4_BM: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  27.153s] [gpio] T4_BM count=256 crc_port=0x29058C73 crc_bits=0x29058C73
+[+  27.153s] [ad2] T4_BM input reads: MCU count=256 crc_port=0x29058C73 crc_bits=0x29058C73, host CRC32=0x29058C73 -> PASS
+[+  27.159s] [gpio] T4_BM inverted count=256 crc_port=0xDA3BA10A crc_bits=0xDA3BA10A
+[+  27.159s] [ad2] T4_BM control: inverted pass: MCU 0xDA3BA10A differs from 0x29058C73 and equals CRC32 of the inverted patterns 0xDA3BA10A -> PASS
+[+  27.168s] [gpio] T4_BM 256 patterns read, port read and bit reads agree (the host checks the CRC) -> PASS
+[+  27.176s] [gpio] T7_BM AD2 drives 0xFF: IDR input=0xFF (control), after DeinitPin (analog)=0x00 -> PASS
+[+  27.178s] [gpio] STEP T4_LL bus=AD2 v=1
+[+  27.186s] [ad2] S5 T4_LL: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  27.701s] [gpio] T4_LL count=256 crc_port=0x29058C73 crc_bits=0x29058C73
+[+  27.701s] [ad2] T4_LL input reads: MCU count=256 crc_port=0x29058C73 crc_bits=0x29058C73, host CRC32=0x29058C73 -> PASS
+[+  27.709s] [gpio] T4_LL 256 patterns read, port read and bit reads agree (the host checks the CRC) -> PASS
+[+  27.717s] [gpio] T7_LL AD2 drives 0xFF: IDR input=0xFF (control), after DeinitPin (analog)=0x00 -> PASS
+[+  27.720s] [gpio] STEP T4_HAL bus=AD2 v=1
+[+  27.727s] [ad2] S5 T4_HAL: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  28.264s] [gpio] T4_HAL count=256 crc_port=0x29058C73 crc_bits=0x29058C73
+[+  28.264s] [ad2] T4_HAL input reads: MCU count=256 crc_port=0x29058C73 crc_bits=0x29058C73, host CRC32=0x29058C73 -> PASS
+[+  28.273s] [gpio] T4_HAL 256 patterns read, port read and bit reads agree (the host checks the CRC) -> PASS
+[+  28.281s] [gpio] T7_HAL AD2 drives 0xFF: IDR input=0xFF (control), after DeinitPin (analog)=0x00 -> PASS
+[+  28.283s] [gpio] STEP T5T6 bus=NONE v=1
+[+  30.213s] [ad2] T5T6 controls: PF14 no pull 0.075 V (<0.1: 22k to GND present), PF15 no pull 3.237 V (>2.9: 22k to 3V3 present), PF14 push-pull high 3.304 V (>2.9: the pin can rise), V_DD on PF15 3.305 V (within 0.05 V of PF14 high: True) -> PASS
+[+  30.214s] [ad2] T5 scope load measured on PF15: R_IN = 1040.5k
+[+  30.214s] [ad2] T5_BM pulls: V_PU14=1.165 V V_PD15=2.150 V -> R_PU=39.6k R_PD=42.6k (30-50k, DS12923 table 59) -> PASS
+[+  30.214s] [ad2] T6_BM open-drain: PF15 OD low 0.028 V (<=0.4), OD released 3.236 V (V_NP15 3.237 +-0.1); PF14 OD released 0.074 V (<0.1) -> PASS
+[+  30.214s] [ad2] T5_LL pulls: V_PU14=1.164 V V_PD15=2.150 V -> R_PU=39.6k R_PD=42.6k (30-50k, DS12923 table 59) -> PASS
+[+  30.214s] [ad2] T6_LL open-drain: PF15 OD low 0.028 V (<=0.4), OD released 3.237 V (V_NP15 3.237 +-0.1); PF14 OD released 0.074 V (<0.1) -> PASS
+[+  30.214s] [ad2] T5_HAL pulls: V_PU14=1.165 V V_PD15=2.150 V -> R_PU=39.6k R_PD=42.6k (30-50k, DS12923 table 59) -> PASS
+[+  30.214s] [ad2] T6_HAL open-drain: PF15 OD low 0.028 V (<=0.4), OD released 3.237 V (V_NP15 3.237 +-0.1); PF14 OD released 0.074 V (<0.1) -> PASS
+[+  30.221s] [gpio] T5T6 pull and open-drain states shown to the scope (the host measures them) -> PASS
+[+  30.224s] [gpio] STEP T8_BM bus=NONE v=1
+[+  30.231s] [ad2] T8_BM case A: input PD -> output high: DIO9 transitions=1 (expected 1) -> PASS
+[+  30.236s] [ad2] T8_BM case B: input PU -> output low: DIO9 transitions=1 (expected 1) -> PASS
+[+  30.241s] [ad2] T8_BM case C: input PU -> output high, stale ODR 0: DIO9 transitions=0 (expected 0) -> PASS
+[+  30.246s] [ad2] T8_BM case D: input PD -> output low, stale ODR 1: DIO9 transitions=0 (expected 0) -> PASS
+[+  30.252s] [gpio] T8_BM four transitions shown to the logic analyzer (the host counts them) -> PASS
+[+  30.255s] [gpio] STEP T8_LL bus=NONE v=1
+[+  30.262s] [ad2] T8_LL case A: input PD -> output high: DIO9 transitions=1 (expected 1) -> PASS
+[+  30.267s] [ad2] T8_LL case B: input PU -> output low: DIO9 transitions=1 (expected 1) -> PASS
+[+  30.272s] [ad2] T8_LL case C: input PU -> output high, stale ODR 0: DIO9 transitions=0 (expected 0) -> PASS
+[+  30.276s] [ad2] T8_LL case D: input PD -> output low, stale ODR 1: DIO9 transitions=0 (expected 0) -> PASS
+[+  30.282s] [gpio] T8_LL four transitions shown to the logic analyzer (the host counts them) -> PASS
+[+  30.285s] [gpio] STEP T8_HAL bus=NONE v=1
+[+  30.292s] [ad2] T8_HAL case A: input PD -> output high: DIO9 transitions=1 (expected 1) -> PASS
+[+  30.297s] [ad2] T8_HAL case B: input PU -> output low: DIO9 transitions=1 (expected 1) -> PASS
+[+  30.301s] [ad2] T8_HAL case C: input PU -> output high, stale ODR 0: DIO9 transitions=0 (expected 0) -> PASS
+[+  30.307s] [ad2] T8_HAL case D: input PD -> output low, stale ODR 1: DIO9 transitions=0 (expected 0) -> PASS
+[+  30.312s] [gpio] T8_HAL four transitions shown to the logic analyzer (the host counts them) -> PASS
+[+  30.315s] [gpio] STEP T8_CTRL bus=NONE v=1
+[+  30.323s] [ad2] T8_CTRL case E: control: case C in the naive order (MODER, 1 us, BSRR): DIO9 transitions=2 (expected >=2) -> PASS
+[+  30.323s] [gpio] STEP T9 bus=NONE v=1
+[+  31.408s] [ad2] T9 round 1 (BM) done
+[+  32.538s] [ad2] T9 round 2 (LL) done
+[+  33.609s] [ad2] T9 round 3 (HAL) done
+[+  34.694s] [ad2] T9 round 4 (BM) done
+[+  34.706s] [gpio] T9 160 rising edges per pin produced (the host measures them) -> PASS
+[+  34.709s] [gpio] STEP T10_BM bus=NONE v=1
+[+  35.200s] [ad2] T9 PF14 LOW: tr=14.76 ns sd=1.02 ns n=40 [14.8, 15.2, 15.0, 15.6, 15.3, 13.3, 13.9, 14.3, 15.6, 16.1, 15.2, 16.2, 14.7, 13.3, 13.9, 15.3, 15.7, 16.0, 14.9, 14.9, 14.3, 13.0, 15.8, 15.8, 15.4, 15.6, 14.5, 13.1, 15.4, 13.1, 13.2, 16.0, 13.9, 13.4, 13.5, 16.0, 13.3, 15.9, 15.0, 15.1]
+[+  35.200s] [ad2] T9 PF15 LOW: tr=17.49 ns sd=0.55 ns n=40 [18.0, 17.8, 16.7, 17.7, 17.7, 17.5, 17.2, 18.1, 17.6, 16.7, 17.9, 16.6, 18.1, 17.5, 18.0, 16.5, 16.4, 16.3, 18.0, 18.0, 18.0, 17.6, 16.3, 17.4, 17.8, 17.7, 16.8, 17.6, 17.8, 17.6, 17.8, 17.1, 18.1, 17.9, 17.3, 17.3, 17.8, 17.3, 17.9, 17.9]
+[+  35.200s] [ad2] T9 PF14 MEDIUM: tr=12.73 ns sd=1.26 ns n=40 [11.1, 12.2, 11.1, 11.4, 14.3, 12.3, 10.9, 11.5, 11.8, 10.9, 11.9, 14.3, 11.7, 14.1, 11.0, 13.9, 14.4, 11.5, 13.4, 14.4, 13.5, 14.1, 13.0, 14.2, 14.0, 12.6, 12.3, 10.8, 14.2, 12.4, 14.2, 14.3, 12.2, 13.3, 14.4, 11.8, 13.0, 13.1, 11.0, 12.8]
+[+  35.200s] [ad2] T9 PF15 MEDIUM: tr=14.54 ns sd=0.81 ns n=40 [15.3, 14.2, 14.8, 15.5, 13.7, 15.8, 14.9, 15.6, 14.5, 14.9, 14.5, 15.1, 14.5, 13.3, 15.2, 13.5, 14.9, 14.6, 13.7, 14.1, 13.7, 13.4, 13.8, 13.4, 13.4, 14.0, 15.8, 15.0, 15.3, 14.1, 13.5, 13.8, 14.2, 15.7, 13.8, 15.6, 15.8, 15.7, 15.2, 13.9]
+[+  35.200s] [ad2] T9 PF14 HIGH: tr=13.20 ns sd=1.21 ns n=40 [12.8, 14.3, 10.8, 13.6, 14.4, 14.2, 11.4, 11.8, 14.3, 14.3, 13.6, 10.9, 14.3, 13.6, 13.6, 14.1, 10.9, 14.2, 14.2, 12.5, 14.3, 14.3, 13.3, 11.8, 13.9, 11.7, 11.1, 13.6, 13.4, 11.2, 14.1, 14.4, 12.0, 13.9, 13.5, 14.4, 13.7, 14.4, 13.2, 12.3]
+[+  35.200s] [ad2] T9 PF15 HIGH: tr=14.51 ns sd=0.77 ns n=40 [15.7, 14.1, 14.9, 13.4, 14.3, 15.0, 14.4, 15.6, 14.8, 13.9, 15.6, 15.0, 14.9, 13.5, 15.6, 13.4, 15.0, 15.1, 13.6, 13.8, 15.0, 15.1, 15.6, 14.3, 13.4, 14.3, 14.6, 13.5, 15.6, 15.3, 15.2, 14.3, 14.2, 13.4, 13.5, 14.7, 15.5, 14.1, 13.5, 13.9]
+[+  35.200s] [ad2] T9 PF14 VERY_HIGH: tr=12.98 ns sd=1.24 ns n=40 [11.0, 14.2, 12.6, 11.0, 11.2, 12.8, 10.9, 14.1, 13.9, 12.9, 10.9, 14.3, 11.2, 14.4, 14.4, 11.3, 14.1, 14.2, 13.1, 12.2, 12.7, 11.5, 13.0, 12.1, 12.8, 14.0, 13.9, 14.3, 14.2, 13.4, 13.9, 14.2, 14.0, 10.8, 13.1, 14.0, 14.2, 11.8, 12.4, 14.1]
+[+  35.200s] [ad2] T9 PF15 VERY_HIGH: tr=14.50 ns sd=0.82 ns n=40 [15.1, 13.7, 15.7, 15.1, 15.3, 13.7, 15.0, 13.5, 13.3, 15.7, 14.9, 14.8, 14.4, 14.8, 14.4, 15.3, 13.5, 13.6, 15.6, 13.9, 15.6, 14.3, 13.7, 14.0, 13.8, 13.3, 15.4, 14.5, 15.1, 15.5, 13.2, 15.0, 13.3, 14.7, 13.6, 15.3, 13.7, 14.1, 15.6, 15.1]
+[+  35.200s] [ad2] T9 gate PF14: tr(LOW)-tr(VERY_HIGH)=1.78 ns, 5 sigma of the difference of means=1.27 ns (40 edges each, 4 interleaved rounds) -> PASS
+[+  35.200s] [ad2] T9 gate PF15: tr(LOW)-tr(VERY_HIGH)=2.99 ns, 5 sigma of the difference of means=0.78 ns (40 edges each, 4 interleaved rounds) -> PASS
+[+  35.200s] [ad2] T9 control: pins in input, ODR set: no edge within 0.5 s -> PASS
+[+  35.207s] [ad2] T10_BM MCO1 on PA8 (AF0): DIO14 4.0600 MHz from 166 rising edges (4 MHz +-2 %) -> PASS
+[+  35.212s] [ad2] T10 control: PA8 in AF1: 0 rising edges (0.000 MHz), expected no signal -> PASS
+[+  35.218s] [gpio] T10_BM MCO1 shown on PA8, RCC_CFGR MCO fields restored -> PASS
+[+  35.221s] [gpio] STEP T10_LL bus=NONE v=1
+[+  35.228s] [ad2] T10_LL MCO1 on PA8 (AF0): DIO14 4.0600 MHz from 166 rising edges (4 MHz +-2 %) -> PASS
+[+  35.233s] [gpio] T10_LL MCO1 shown on PA8, RCC_CFGR MCO fields restored -> PASS
+[+  35.236s] [gpio] STEP T10_HAL bus=NONE v=1
+[+  35.243s] [ad2] T10_HAL MCO1 on PA8 (AF0): DIO14 4.0590 MHz from 166 rising edges (4 MHz +-2 %) -> PASS
+[+  35.249s] [gpio] T10_HAL MCO1 shown on PA8, RCC_CFGR MCO fields restored -> PASS
+[+  35.252s] [gpio] STEP DONE bus=NONE v=1
+[+  35.258s] [gpio] bench completed without abort -> PASS
+[+  35.266s] [gpio] T16 BM GPIOF: LCKR before=0x00000000, LockPins(PF7|PF8)=0, LCKR after=0x00010180
+[+  35.274s] [gpio] T16 BM GPIOF: PF7 config BM=3 LL=3 HAL=100, deinit BM=3 LL=3 HAL=100, ConfigAnalog=0
+[+  35.282s] [gpio] T16 BM GPIOF: MODER frozen=1, IsLocked PF7/PF8 yes PF6 no=1, control PF6 config=0 moved=1
+[+  35.292s] [gpio] T16 GPIOF relock: PF7 (already)=0 LCKR=0x00010180; add PF6 BM=0, PF5 LL=0, PF4 HAL=0 -> LCKR=0x000101F0
+[+  35.298s] [gpio] T16 GPIOF: PF6 now refused by LL=3; control PF3 free and configurable=1
+[+  35.309s] [gpio] T16 LL GPIOJ: registers real=1, LockPins(pin0|pin1)=0, LCKR=0x00010003, own-tier config=3, BM config=3, MODER frozen=1
+[+  35.320s] [gpio] T16 HAL GPIOK: registers real=1, LockPins(pin0|pin1)=0, LCKR=0x00010003, own-tier config=100, BM config=3, MODER frozen=1
+[+  35.330s] [gpio] T16 LCKR: locked pins refuse every tier with nothing written, relock semantics, control pin free -> PASS
+[+  35.336s] [gpio] T16 A1 GPIOK clocked: add PK5=1 LCKR=0x00010023 MODER=0xFFFFFFFF
+[+  35.344s] [gpio] T16 A1 GPIOK unclocked in both banks=1: LCKR reads 0xFFFFFFFF, IsLocked PK3=1 PK5=1
+[+  35.354s] [gpio] T16 A1 case A GPIO_HAL_Init(PK3|PK5)=1 MODER=0xFFFFFFFF LCKR=0x00010023; case B PK3 alone=0 moved=1
+[+  35.360s] [gpio] T16 A1 case A left the port clocked: IsPortClocked=1 raw RCC=1
+[+  35.369s] [gpio] T16 A1 case C unclocked: IsPortClocked=0 raw RCC=0 ReadConfig BM=8 LL=8 (NO_CLOCK=8) sentinels intact=1
+[+  35.377s] [gpio] T16 A1 case C control clocked: IsPortClocked=1 BM=0 mode=3 pull=0 LL=0 mode=3 pull=0
+[+  35.388s] [gpio] T16 A1: unclocked port: HAL_Init locked pin -> nothing written, free pin -> written; ReadConfig -> NO_CLOCK -> PASS
+[+  35.395s] [gpio] production hook: m7_gpio_lock_fail_count=0 m4_gpio_lock_fail_count=0 -> PASS
+[+  35.398s] [gpio] FW VERDICT=PASS failures=0
+[+  35.406s] [sys] cpu2 build rev=b45120e-dirty id=b19f7cef96d5086e
+[+  35.408s] [ipc] m7=6 m4=1  (CPU2 alive)
+[+  35.739s] [ad2] closing in S2: OE=0x0000
+[+  35.757s] [host] T0B(a) host guard: PASS
+[+  35.757s] [host] CHECK T0A loose lines: PASS
+[+  35.757s] [host] CHECK T0B(c) S5 negative control: PASS
+[+  35.757s] [host] CHECK T0B(d) firmware timeout: PASS
+[+  35.757s] [host] CHECK T3_BM control: PASS
+[+  35.757s] [host] CHECK T3_BM pin operations: PASS
+[+  35.757s] [host] CHECK T3_LL pin operations: PASS
+[+  35.757s] [host] CHECK T3_HAL pin operations: PASS
+[+  35.757s] [host] CHECK T4_BM input reads: PASS
+[+  35.757s] [host] CHECK T4_BM control: PASS
+[+  35.757s] [host] CHECK T4_LL input reads: PASS
+[+  35.757s] [host] CHECK T4_HAL input reads: PASS
+[+  35.757s] [host] CHECK T5T6 controls: PASS
+[+  35.757s] [host] CHECK T5_BM pulls: PASS
+[+  35.757s] [host] CHECK T6_BM open-drain: PASS
+[+  35.757s] [host] CHECK T5_LL pulls: PASS
+[+  35.757s] [host] CHECK T6_LL open-drain: PASS
+[+  35.757s] [host] CHECK T5_HAL pulls: PASS
+[+  35.757s] [host] CHECK T6_HAL open-drain: PASS
+[+  35.757s] [host] CHECK T8_BM case A: PASS
+[+  35.757s] [host] CHECK T8_BM case B: PASS
+[+  35.757s] [host] CHECK T8_BM case C: PASS
+[+  35.757s] [host] CHECK T8_BM case D: PASS
+[+  35.757s] [host] CHECK T8_LL case A: PASS
+[+  35.757s] [host] CHECK T8_LL case B: PASS
+[+  35.757s] [host] CHECK T8_LL case C: PASS
+[+  35.757s] [host] CHECK T8_LL case D: PASS
+[+  35.757s] [host] CHECK T8_HAL case A: PASS
+[+  35.757s] [host] CHECK T8_HAL case B: PASS
+[+  35.757s] [host] CHECK T8_HAL case C: PASS
+[+  35.757s] [host] CHECK T8_HAL case D: PASS
+[+  35.757s] [host] CHECK T8_CTRL case E: PASS
+[+  35.757s] [host] CHECK T9 gate PF14: PASS
+[+  35.757s] [host] CHECK T9 gate PF15: PASS
+[+  35.757s] [host] CHECK T9 control: PASS
+[+  35.757s] [host] CHECK T10_BM MCO1 on PA8 (AF0): PASS
+[+  35.757s] [host] CHECK T10 control: PASS
+[+  35.757s] [host] CHECK T10_LL MCO1 on PA8 (AF0): PASS
+[+  35.757s] [host] CHECK T10_HAL MCO1 on PA8 (AF0): PASS
+[+  35.757s] [host] 38/38 host checks passed, FW VERDICT=PASS, abort=None
+[+  35.757s] HOST VERDICT=PASS
