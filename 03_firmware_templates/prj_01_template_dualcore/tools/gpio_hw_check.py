@@ -42,6 +42,7 @@ import os
 import pathlib
 import queue
 import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -684,6 +685,10 @@ def main() -> int:
             lines.append(entry)
         print(entry, flush=True)
 
+    # R4-b: what the run was asked to do, first. argv as given (shell-quoted),
+    # then the options as argparse resolved them, defaults included.
+    stamp(f"[host] argv: {shlex.join(sys.argv[1:])}")
+    stamp(f"[host] options: allow_dirty={args.allow_dirty} preset={args.preset} no_reset={args.no_reset}")
     stamp(f"[host] gpio_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}")
     stamp("[host] checklist: GND first, DIO per README table, nothing on W1/W2/V+/V-; WaveForms GUI closed; "
           "image selftest-gpio flashed with this script stopped")

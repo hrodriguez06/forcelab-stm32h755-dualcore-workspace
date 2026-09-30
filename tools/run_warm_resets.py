@@ -3,7 +3,9 @@
 
 Without --project/--preset the tool behaves as it always did (10_hsem uses it
 that way): a free --title, the host's HEAD as "Firmware Git Revision", and a
-PASS/TIMEOUT per reset on the stop phrase.
+PASS/TIMEOUT per reset on the stop phrase. The one difference with the format
+before 00_gpio R4-b is the first line of the capture, "[host] argv: <the
+arguments, shell-quoted>". --count (default 20) sets the number of resets.
 
 With --project <dir> --preset <name> (00_gpio R3-c) it also identifies the
 image in every reset: CPU1 prints "[sys] build rev=<FW_GIT_REV> id=<FW_BUILD_ID>"
@@ -13,7 +15,9 @@ build/<preset>. The id is computed by host_build_id() of <project>/tools/
 gpio_hw_check.py (imported, one definition; see cmake/fw_build_id.cmake), the
 tree state is recorded as there (tree_record), and the title is composed from
 the host revision and the id, with --title as a subtitle. The first reset that
-differs fails the run, with its reason, and the exit code is 1.
+differs fails the run, with its reason, and the exit code is 1. In this mode the
+capture starts with "[host] argv: ..." and "[host] options: project=...
+preset=... count=..." (R4-b).
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -99,6 +104,8 @@ def run_warm_resets(
     target_count: int = 20,
     stop_phrase: str = "(CPU2 alive)",
     identity: Optional[Identity] = None,
+    argv_line: str = "",
+    options_line: str = "",
 ) -> int:
     print(f"Opening {port_name}...")
     git_rev = "unknown"
@@ -111,6 +118,10 @@ def run_warm_resets(
     alive = 0
     with SerialPort(port_name, 115200) as ser:
         records: list[str] = []
+        if argv_line:
+            records.append(argv_line + "\n")
+        if options_line:
+            records.append(options_line + "\n")
         if identity is None:
             header = (
                 "================================================================================\n"
@@ -213,7 +224,10 @@ def main() -> None:
     parser.add_argument("--project", type=Path, default=None,
                         help="project dir whose build/<preset> the image must match (with --preset)")
     parser.add_argument("--preset", default=None, help="configure preset of the flashed image (with --project)")
+    parser.add_argument("--count", type=int, default=20, help="number of warm resets (default 20)")
     args = parser.parse_args()
+    if args.count < 1:
+        sys.exit("Error: --count must be at least 1")
     if (args.project is None) != (args.preset is None):
         sys.exit("Error: --project and --preset go together")
 
@@ -222,7 +236,13 @@ def main() -> None:
         sys.exit("Error: no ST-LINK serial port found")
 
     identity = Identity(args.project.resolve(), args.preset) if args.project is not None else None
-    sys.exit(run_warm_resets(port, args.out, args.title, identity=identity))
+    # R4-b: the arguments first; the resolved options only in the identity mode,
+    # so that without the new options argv is the one line added to the old format.
+    argv_line = f"[host] argv: {shlex.join(sys.argv[1:])}"
+    options_line = (f"[host] options: project={identity.project} preset={identity.preset} count={args.count}"
+                    if identity is not None else "")
+    sys.exit(run_warm_resets(port, args.out, args.title, target_count=args.count, identity=identity,
+                             argv_line=argv_line, options_line=options_line))
 
 
 if __name__ == "__main__":
