@@ -25,6 +25,9 @@
 #include "led_bm.h"
 #include "shared_memory.h"
 #include "hsem_bm.h"
+#if defined(GPIO_DRIVER_SELFTEST)
+#include "gpio_selftest.h"
+#endif
 
 static void SystemClock_Config(void);
 static void PeripheralClock_Config(void);
@@ -101,6 +104,13 @@ int main(void)
        HSEM_BM_Init() and the DWT timebase are already running, and the cycle
        limit assumes the 400 MHz clock set just above. */
     Shared_GpioLockInstall();
+
+#if defined(GPIO_DRIVER_SELFTEST)
+    /* Zeroes the selftest block in SRAM4 and opens a new session, so CPU2
+       never acts on flags a previous run left there (SRAM4 survives a warm
+       reset). Must happen before CPU2 is released. */
+    GPIO_Selftest_CM7_PreRelease();
+#endif
 
     /* The clock tree is up and shared memory is ready: release CPU2. */
     if (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) != HSEM_BM_OK)

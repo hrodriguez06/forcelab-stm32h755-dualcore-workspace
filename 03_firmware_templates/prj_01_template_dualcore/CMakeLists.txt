@@ -21,6 +21,38 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/common_flags.cmake)
 
+# ---- Driver selftests --------------------------------------------------------
+# 00_gpio: BM, LL and HAL tiers on both cores, plus the Analog Discovery 2 bench
+# of 01_shared_drivers/00_gpio/README.md. Preset selftest-gpio; never in a
+# product image.
+option(GPIO_DRIVER_SELFTEST "Build the 00_gpio selftest (needs the AD2 bench)" OFF)
+
+# Every selftest capture starts with the revision it was built from, and says
+# -dirty when tracked files differ from it, so a capture can be traced to a
+# commit (and one from an uncommitted tree cannot pass for one).
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+    OUTPUT_VARIABLE GIT_REV
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT GIT_REV)
+    set(GIT_REV "unknown")
+else()
+    execute_process(
+        COMMAND git status --porcelain -uno
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+        OUTPUT_VARIABLE GIT_STATUS_OUT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(GIT_STATUS_OUT)
+        set(GIT_REV "${GIT_REV}-dirty")
+    endif()
+endif()
+add_compile_definitions(FW_GIT_REV="${GIT_REV}")
+
 # ---- External dependencies -------------------------------------------------
 # The Cube package is a submodule of the workspace, shared by every project
 # rather than checked out once per product: it is 110 MB and identical for all

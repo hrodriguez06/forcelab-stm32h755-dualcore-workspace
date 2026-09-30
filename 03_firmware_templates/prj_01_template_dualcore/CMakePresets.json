@@ -17,10 +17,19 @@
       "binaryDir": "${sourceDir}/build/release",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "selftest-gpio",
+      "displayName": "Dual-Core Debug with the 00_gpio selftest (AD2 bench)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/selftest-gpio",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "GPIO_DRIVER_SELFTEST": "ON" }
     }
   ],
   "buildPresets": [
-    { "name": "debug",   "configurePreset": "debug"   },
-    { "name": "release", "configurePreset": "release" }
+    { "name": "debug",         "configurePreset": "debug"         },
+    { "name": "release",       "configurePreset": "release"       },
+    { "name": "selftest-gpio", "configurePreset": "selftest-gpio" }
   ]
 }

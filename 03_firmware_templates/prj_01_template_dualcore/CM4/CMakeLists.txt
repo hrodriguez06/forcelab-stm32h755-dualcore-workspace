@@ -95,6 +95,18 @@ target_link_libraries(${TARGET} PRIVATE
     stm32h7_driver_gpio_bm      # the cross-core GPIO lock hook in shared_memory.c
 )
 
+if(GPIO_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE GPIO_DRIVER_SELFTEST=1)
+    target_sources(${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/App/Src/gpio_selftest.c
+        ${CMAKE_SOURCE_DIR}/Common/Src/gpio_selftest_common.c
+    )
+    target_link_libraries(${TARGET} PRIVATE
+        stm32h7_driver_gpio_ll
+        stm32h7_driver_gpio_hal
+    )
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"

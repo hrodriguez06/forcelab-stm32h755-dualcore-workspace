@@ -26,6 +26,9 @@
 
 #include "main.h"
 #include "shared_memory.h"
+#if defined(GPIO_DRIVER_SELFTEST)
+#include "gpio_selftest.h"
+#endif
 
 #define HEARTBEAT_DELAY_LOOPS   2000000UL
 
@@ -61,6 +64,12 @@ int main(void)
     /* Deliberately not calling Shared_Init(): the block belongs to CPU1 and is
        already initialised by the time this core is released. Zeroing it here
        would wipe whatever CPU1 has published. */
+
+#if defined(GPIO_DRIVER_SELFTEST)
+    /* Serves CPU1's test commands until CPU1 says it is done, then falls
+       through to the application loop. */
+    GPIO_Selftest_CM4_Run();
+#endif
 
     for (;;)
     {

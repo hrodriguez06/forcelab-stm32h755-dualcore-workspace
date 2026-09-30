@@ -29,6 +29,9 @@
 #include "main.h"
 #include "led_bm.h"
 #include "shared_memory.h"
+#if defined(GPIO_DRIVER_SELFTEST)
+#include "gpio_selftest.h"
+#endif
 
 #include <stdbool.h>
 
@@ -39,7 +42,11 @@
 #define HEARTBEAT_TASK_PRIO          (tskIDLE_PRIORITY + 1U)
 #define HEARTBEAT_PERIOD_MS          500U
 
+#if defined(GPIO_DRIVER_SELFTEST)
+#define STATUS_TASK_STACK_WORDS      2048U   /* the 00_gpio selftest runs in this task first */
+#else
 #define STATUS_TASK_STACK_WORDS      512U
+#endif
 #define STATUS_TASK_PRIO             (tskIDLE_PRIORITY + 1U)
 #define STATUS_PERIOD_MS             2000U
 
@@ -115,6 +122,12 @@ static void Status_Task(void *arg)
     bool       have_previous = false;
 
     (void)arg;
+
+#if defined(GPIO_DRIVER_SELFTEST)
+    /* Once, before the status loop: 01_shared_drivers/00_gpio/README.md. */
+    GPIO_Selftest_CM7_Run();
+    last = xTaskGetTickCount();
+#endif
 
     for (;;)
     {
