@@ -665,10 +665,13 @@ static uint32_t s_hold_max_cm4;
 static uint32_t s_race_seed;       /* this run's T15 seed; phase k runs with seed ^ k */
 static uint32_t s_race_phase;
 
-/* -DGST_RACE_SEED=0x... replays a run with that seed. It only changes this
-   word: the code is the same in both builds, read at run time (volatile), so
-   the replay image has the timing of the image it replays. 0 = the RNG's
-   word. A define that selected code changed the timing and did not replay
+/* -DGST_RACE_SEED=0x... runs T15 with that seed. It only changes this word,
+   read at run time (volatile): the image differs from the default one in the
+   4 bytes of the seed (docs/gpio_seed_replay_bin_cmp_fa44386.txt). That
+   repeats the sequence of delays, not the interleaving: the replay of a run
+   gives other T15 counts (docs/gpio_dev_replay_seed_d9d40bdd_fa44386.txt), and
+   the source of the remaining difference was not isolated. 0 = the RNG's
+   word. A define that selected code changed the timing even more
    (docs/gpio_dev_replay_seed_6f6841b8_9ccc971.txt). */
 #if !defined(GST_RACE_SEED)
 #define GST_RACE_SEED 0UL
@@ -866,8 +869,9 @@ static void run_race_tests(void)
        (GST_RACE_SEED, above) then replaces its word. HSI48 and the RNG start
        after a variable delay, which would shift the cores' relative phase for
        everything after it (docs/gpio_dev_replay_seed_3f9a7bfb_7cedf36*.txt):
-       T15 starts at a fixed deadline from t_seed instead, so the seed alone
-       decides the interleaving and a replay replays. */
+       T15 starts at a fixed deadline from t_seed instead, which removes that
+       variation (docs/gpio_dev_deadline_*_7cedf36-dirty*.txt). A replay with
+       GST_RACE_SEED still does not give the same counts (see above). */
     const uint32_t t_seed = DWT->CYCCNT;
     const char    *why;
     const bool     rng_ok = race_seed_from_rng(&s_race_seed, &why);
