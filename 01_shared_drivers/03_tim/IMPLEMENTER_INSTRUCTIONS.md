@@ -2,7 +2,7 @@
 
 Oct 1, 2026 · @Hector
 
-Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta. El trabajo es el driver de timers en tres tiers, `tim_bm` (F1), `tim_ll` (F2) y `tim_hal` (F3), con una fase F0 que prepara el banco del AD2 en `prj_01_template_dualcore`. Otra persona audita cada fase de forma independiente y repite tus pruebas en la placa.
+Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 3) de esta carpeta. El trabajo es el driver de timers en tres tiers, `tim_bm` (F1), `tim_ll` (F2) y `tim_hal` (F3), con una fase F0 que prepara el banco del AD2 en `prj_01_template_dualcore`. Otra persona audita cada fase de forma independiente y repite tus pruebas en la placa.
 
 Este documento dice qué te toca, qué no te toca y qué tienes que entregar. Si algo de aquí choca con el plan, manda el plan, con una excepción: lo que este documento te **prohíbe** sigue prohibido aunque el plan lo mencione.
 
@@ -93,7 +93,7 @@ Si una captura no cumple **todo** esto, no vale como evidencia:
 
 1. Es la salida de **una sola ejecución** de `prj_01/tools/tim_hw_check.py`, con marcas de tiempo, desde `[host] argv:` hasta `HOST VERDICT=`.
 2. Los dos núcleos imprimen el mismo `Rev <hash>` y el mismo id de build. El hash es el del commit entregado, sin `-dirty`, y el id es el que calcula el host (mismo método que `00_gpio/README.md` §9.4). Commitea antes de compilar la imagen que vas a capturar.
-3. Lleva TREF al principio y la lista de comprobación del procedimiento de `00_gpio/README.md` §8 marcada.
+3. Lleva TREF\_A al principio y TREF\_B al final (R3-1) y la lista de comprobación del procedimiento de `00_gpio/README.md` §8 marcada.
 4. **No se edita:** ni recortar, ni resumir, ni corregir a mano. Si hay que repetir, la nueva ejecución va en un archivo nuevo, con su hash.
 5. Los números que cites en el informe salen de una captura o de un `.map` que estén en el repo.
 6. Nombre: `03_firmware_templates/prj_01_template_dualcore/docs/tim_<fase>_<prueba>_<hash>.txt` (por ejemplo `tim_f1_selftest_1a2b3c4.txt`). Las ejecuciones de desarrollo con `--allow-dirty` llevan `tim_dev_…` y no cuentan como entrega.
@@ -105,7 +105,7 @@ Si una captura no cumple **todo** esto, no vale como evidencia:
 - **Las pruebas no son destructivas (R4):**
   - **nunca TIM6**: es el tick de la HAL en CM7. No se lo pases a ninguna función que escriba, ni para probar un rechazo (usa TIM7);
   - nunca SysTick, LPTIM, HRTIM, `DBGMCU`, `RCC_D2CFGR`, `RCC_CFGR.TIMPRE` ni ningún `RCC_APBxRSTR`;
-  - `RCC_CFGR` (`MCO1SEL`/`MCO1PRE`) solo en TREF y T9: lo guardas antes y lo restauras con read-back;
+  - `RCC_CFGR` (`MCO1SEL`/`MCO1PRE`) solo en TREF\_A, TREF\_B, T9 y los pasos de T6/T8 (R3-2): lo guardas antes y lo restauras con read-back;
   - nunca PE0, PE1 (LD2) ni PC13;
   - cada prueba termina con `Deinit` de su timer, y T14 lo comprueba.
 - **Propiedad de las instancias:** la de la tabla del plan ("Selftest"). Un timer lo escribe solo su núcleo dueño.
@@ -169,7 +169,7 @@ Reglas de redacción:
 ```markdown
 # Informe de implementación 03_tim
 
-Implementador: <nombre> · Rama: driver/tim · Plan: IMPLEMENTATION_PLAN.md revisión 2
+Implementador: <nombre> · Rama: driver/tim · Plan: IMPLEMENTATION_PLAN.md revisión 3
 
 ## Resumen
 <5-10 líneas: qué hay implementado, en qué fase estás, qué falta y qué está bloqueado.

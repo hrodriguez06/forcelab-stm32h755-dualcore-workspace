@@ -154,3 +154,8 @@ Además del +1,3 % de desviación media, el reloj de la placa varía de una ejec
 1. Decisión D5 del responsable y revisión 3 del plan.
 2. El implementador aplica D5 y entrega una captura nueva.
 3. A18/A27: mi ejecución del banco sobre esa entrega, con la lista de comprobación física confirmada.
+
+## F0, adenda a la auditoría 3 (2026-10-01)
+
+- **D5 aprobada.** El responsable del catálogo aprobó la recomendación. Está en la revisión 3 del plan: R3-1 (TREF\_A + TREF\_B, 8 + 8 capturas, x ajustada sobre las medias de ráfaga, criterio \|ē − x\| ≤ 3·√(u² + s\_ef²/16)), R3-2 (desde F1, las medidas del AD2 como cociente con MCO1 en la misma adquisición) y R3-3 (protocolo del banco v2). O2 queda cubierta por R3-1.
+- **Para que F0 pase:** el implementador aplica R3-1 y R3-3 y entrega una captura nueva. Después viene mi ejecución del banco (A18/A27), con la lista de comprobación física confirmada.
