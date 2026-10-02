@@ -114,13 +114,17 @@ if(GPIO_DRIVER_SELFTEST)
     )
 endif()
 
-# 03_tim selftest. F0 (the bench) needs only gpio_bm, already linked above for
-# the lock hook; the _tim_* targets join with the phase that adds their source.
+# 03_tim selftest: gpio_bm (linked above for the lock hook) for the bench, and,
+# only with the option, the driver under test (tim_bm since F1) and dma_bm (T13).
 if(TIM_DRIVER_SELFTEST)
     target_compile_definitions(${TARGET} PRIVATE TIM_DRIVER_SELFTEST=1)
     target_sources(${TARGET} PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/App/Src/tim_selftest.c
         ${CMAKE_SOURCE_DIR}/Common/Src/tim_selftest_common.c
+    )
+    target_link_libraries(${TARGET} PRIVATE
+        stm32h7_driver_tim_bm
+        stm32h7_driver_dma_bm
     )
 endif()
 
