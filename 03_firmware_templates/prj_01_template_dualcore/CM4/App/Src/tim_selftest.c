@@ -135,22 +135,45 @@ static const Claim_t k_claims[TST_M4_CLAIM_CASES] = {
 #undef O
 #undef A
 
-static uint32_t regs_sum(void)
+/* The configuration registers of GPIOA and GPIOE, read raw: a refused claim
+   writes none of them (the same oracle as CPU1's port_snap). */
+#define SNAP_REGS   12U
+typedef struct { uint32_t r[SNAP_REGS]; } PortSnap_t;
+
+static void port_snap(PortSnap_t *s)
 {
-    /* Any change of a configuration register of GPIOA or GPIOE moves this. */
-    uint32_t h = 0x811C9DC5UL;
-    const uint32_t v[10] = { GPIOA->MODER, GPIOA->OTYPER, GPIOA->PUPDR, GPIOA->AFR[0], GPIOA->AFR[1],
-                             GPIOE->MODER, GPIOE->OTYPER, GPIOE->PUPDR, GPIOE->AFR[0], GPIOE->AFR[1] };
-    for (uint32_t i = 0U; i < 10U; i++)
+    const GPIO_TypeDef *const ports[2] = { GPIOA, GPIOE };
+    uint32_t i = 0U;
+    for (uint32_t k = 0U; k < 2U; k++)
     {
-        h = (h ^ v[i]) * 0x01000193UL;
+        s->r[i++] = ports[k]->MODER;
+        s->r[i++] = ports[k]->OTYPER;
+        s->r[i++] = ports[k]->OSPEEDR;
+        s->r[i++] = ports[k]->PUPDR;
+        s->r[i++] = ports[k]->AFR[0];
+        s->r[i++] = ports[k]->AFR[1];
     }
-    return h;
+}
+
+/* Bit k set = register k of the snapshot differs. */
+static uint32_t port_snap_diff(const PortSnap_t *a, const PortSnap_t *b)
+{
+    uint32_t diff = 0U;
+    for (uint32_t k = 0U; k < SNAP_REGS; k++)
+    {
+        if (a->r[k] != b->r[k])
+        {
+            diff |= 1UL << k;
+        }
+    }
+    return diff;
 }
 
 static void run_claims(TstClaimResult_t *r)
 {
-    const uint32_t before = regs_sum();
+    PortSnap_t before;
+    PortSnap_t after;
+    port_snap(&before);
     uint32_t acc = 0U;
     r->step_seen = TST_AREA->step;
     for (uint32_t k = 0U; k < TST_M4_CLAIM_CASES; k++)
@@ -162,7 +185,8 @@ static void run_claims(TstClaimResult_t *r)
     }
     r->accepted     = acc;
     r->cases        = TST_M4_CLAIM_CASES;
-    r->regs_changed = (regs_sum() != before) ? 1U : 0U;
+    port_snap(&after);
+    r->regs_changed = port_snap_diff(&before, &after);
 }
 
 /* PE5 to AF4 through the claim (allowed in step T0B; PE5 is an MCU-only line,

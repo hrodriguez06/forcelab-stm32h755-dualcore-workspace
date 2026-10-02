@@ -106,7 +106,8 @@ typedef struct
 {
     uint32_t cases;           /* claims evaluated                                   */
     uint32_t accepted;        /* bit k = case k accepted                            */
-    uint32_t regs_changed;    /* GPIOA/GPIOE MODER/AFR/PUPDR/OTYPER moved (1 = yes) */
+    uint32_t regs_changed;    /* bit k: register k of the GPIOA/GPIOE snapshot (MODER,
+                                 OTYPER, OSPEEDR, PUPDR, AFR[0], AFR[1]) differs        */
     uint32_t step_seen;       /* the step index CPU2 judged against                 */
 } TstClaimResult_t;
 

@@ -618,7 +618,7 @@ static void step_tref(void)
 }
 
 /* Configuration registers of the wired ports: a refused claim writes none. */
-typedef struct { uint32_t r[15]; } PortSnap_t;
+typedef struct { uint32_t r[18]; } PortSnap_t;
 
 static void port_snap(PortSnap_t *s)
 {
@@ -628,6 +628,7 @@ static void port_snap(PortSnap_t *s)
     {
         s->r[i++] = ports[k]->MODER;
         s->r[i++] = ports[k]->OTYPER;
+        s->r[i++] = ports[k]->OSPEEDR;
         s->r[i++] = ports[k]->PUPDR;
         s->r[i++] = ports[k]->AFR[0];
         s->r[i++] = ports[k]->AFR[1];
@@ -693,7 +694,7 @@ static void step_t0b(void)
         const TstClaimResult_t *r = &a->m4_claims[0];
         verdict((r->cases == TST_M4_CLAIM_CASES) && (r->accepted == TST_M4_CLAIMS_EXPECT_T0B) &&
                 (r->regs_changed == 0U) && (r->step_seen == s_step),
-                "T0B(b) CM4 claim in T0B: %lu cases, accepted 0x%04lX (0x%04lX: PE5 AF4 only), regs changed %lu",
+                "T0B(b) CM4 claim in T0B: %lu cases, accepted 0x%04lX (0x%04lX: PE5 AF4 only), regs changed 0x%03lX",
                 (unsigned long)r->cases, (unsigned long)r->accepted, (unsigned long)TST_M4_CLAIMS_EXPECT_T0B,
                 (unsigned long)r->regs_changed);
     }
@@ -716,7 +717,7 @@ static void step_t0b(void)
         const TstClaimResult_t *r = &a->m4_claims[1];
         verdict((r->cases == TST_M4_CLAIM_CASES) && (r->accepted == TST_M4_CLAIMS_EXPECT_NONE) &&
                 (r->regs_changed == 0U) && (r->step_seen == TST_STEP_NONE),
-                "T0B(b) CM4 claim between steps: accepted 0x%04lX (0x0000), regs changed %lu",
+                "T0B(b) CM4 claim between steps: accepted 0x%04lX (0x0000), regs changed 0x%03lX",
                 (unsigned long)r->accepted, (unsigned long)r->regs_changed);
     }
 
