@@ -1098,7 +1098,7 @@ class Session:
         self.delay = d
         self.check("T8 reset delay", ok_d and 0 <= d <= 4,
                    f"1 MHz on PE9, one Digital Out generation: PWM-input periods {pwm_per}, direct differences "
-                   f"{direct}: d = mean(direct) - mean(PWM input) = {d:.2f} ticks (RM0399 40.4.3: reset delayed "
+                   f"{direct}: d = mean(direct) - mean(PWM input) = {d:.2f} ticks (RM0399 40.3.26: reset delayed "
                    f"by the TI1 resynchronization; subtracted below)")
         for k, (ti, f, duty, psc) in enumerate(T8_POINTS):
             m = self.con.expect(rf"\[tim\] T8 P{k} ti=(\d+) f=(\d+) duty=(\d+) psc=(\d+) config (\d)", 30.0)

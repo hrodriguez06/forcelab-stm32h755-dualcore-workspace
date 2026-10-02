@@ -3315,7 +3315,7 @@ static void step_t8(void)
         (void)pin_cfg(GPIOE, p, GPIO_BM_MODE_AF, TST_AF_TIM1, GPIO_BM_PULL_DOWN, 0U);
     }
 
-    /* The counter-reset delay of the slave reset mode (RM0399 40.4.3: "due to the
+    /* The counter-reset delay of the slave reset mode (RM0399 40.3.26: "due to the
        resynchronization circuit on TI1 input", no value given), measured in this session
        on one 1 MHz Digital Out generation: PWM input first, then direct captures of the
        same signal. The host subtracts it from the expected period and high time (owner's
