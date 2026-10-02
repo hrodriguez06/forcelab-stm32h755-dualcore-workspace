@@ -357,3 +357,40 @@ La revisión 5 del plan tiene que recoger:
 
 - **D7 aprobada** por el responsable del catálogo. Está en la revisión 5 del plan: R5-1 (corrección d de T8, 0 ≤ d ≤ 4 ticks), R5-2 (`TIM_BM_CH(n)` en la API), R5-3 (erratas de TISEL de TIM1/TIM8 y de DIR/CMS) y R5-4 (pasos v3 y desviaciones de procedimiento 2–7).
 - **Para que F1 pase:** solo queda A18/A27, mi ejecución del banco.
+
+## F1, parte 2: ejecución del banco por el auditor (2026-10-02, en `70e0181`) — **F1 no pasa**
+
+Lista de comprobación física confirmada en el chat por el responsable del catálogo (Hector): cableado y GND según `00_gpio` §8, sin resistencias en serie, nada en W1/W2/V+/V−, WaveForms cerrado, sin depurador y los dos USB conectados. `Get-Process` no mostraba WaveForms ni ningún servidor de depuración.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `selftest-tim` desde un directorio vacío, en `70e0181` | 0 avisos |
+| `py tools/flash.py --preset selftest-tim`, con el script del banco parado | "Download verified successfully" |
+| `py tools/tim_hw_check.py --checklist-confirmed Hector --out <scratchpad>`, **una sola ejecución** | **108/109, `FW VERDICT=PASS` y `HOST VERDICT=FAIL`.** Captura sin editar: `03_firmware_templates/prj_01_template_dualcore/docs/tim_f1_audit_bench_70e0181.txt`, copiada después de ejecutar |
+
+Trazabilidad: `tree clean`, `Rev` `70e0181` e id `505e91eb54fed692` iguales en CM7, CM4 y el host. El AD2 se abre en S2 (`DIO=0x0000`) y se cierra en S2. TREF, T0a, T0b y las demás 107 comprobaciones pasan.
+
+### El fallo
+
+`T8 TI1 1000000 Hz 25 %` (línea 880): periodos `[201, 201, 200, 202, 201, 200, 201, 200]` frente a 200,6 ± 1,2 ticks, con d = 2,06. La captura de 202 queda a +1,4. Las 8 de tiempo en alto (`48`–`49` frente a 48,6 ± 2,0) pasan.
+
+**No es un defecto del driver.** La configuración de PWM input se verifica con read-back, el firmware da PASS y los valores son capturas de hardware a un tick del intervalo. Es el problema que el implementador dejó abierto en §5.8 ("T8 a 1 MHz: tres valores, 200, 201 y a veces 202; tolerancia ±1,2"). El criterio no cubre la dispersión física de la medida:
+
+Residuos (captura − esperado) de los puntos en PWM input en las tres ejecuciones con el código final (`e26d289`, `f86706c` y la mía), 144 capturas por frecuencia:
+
+| f | Periodo: residuos | Tolerancia del plan | Alto: residuos | Tolerancia |
+| --- | --- | --- | --- | --- |
+| 1 kHz | −40,4 … +40,4 | ±51,7 | −28,8 … +15,4 | ±40,0 |
+| 10 kHz | −14,4 … +17,8 | ±21,3 | −8,1 … +7,7 | ±17,2 |
+| 100 kHz | −2,4 … +2,7 | **±3,0 (90 %)** | −1,9 … +2,1 | ±3,5 |
+| 1 MHz | −1,0 … +1,4 | **±1,2 (1 fuera)** | −0,9 … +0,8 | ±2,1 |
+
+En PWM input, el periodo es la distancia entre el reset del contador por un flanco y la captura del flanco siguiente. Los dos pasan por la resincronización de TI1 (RM0399 40.3.26), y cada uno puede caer en un tick u otro según la fase. Eso da ±1 tick de cuantización más ±1 de la fase del reset, es decir, ±2 ticks, que es justo lo que el plan ya concede al tiempo en alto ("± 2 ticks"). ±1 tick solo vale para las capturas directas, donde no hay reset. A 1–10 kHz manda el 0,1 %, que queda holgado.
+
+### Decisión D8 del responsable (bloquea F1)
+
+Recomiendo: **en los puntos en PWM input de T8, la tolerancia de periodo pasa a ±(2 ticks + 0,1 %), igual que la del tiempo en alto.** Las capturas directas (ICPSC = 8, filtro y T13(b)) mantienen ±(1 tick + 0,1 %). Con eso, en las 432 capturas el peor residuo de periodo queda en el 64 % de la cota a 1 MHz (1,4/2,2) y en el 67 % a 100 kHz (2,7/4,03). La sensibilidad no se pierde: un error del driver en la configuración de la captura (PSC del timer, prescaler de entrada, canal, flanco o TISEL) cambia la medida en un factor ≥ 2, en el duty o en el periodo completo, muy por encima de ±2 ticks. El valor exacto de ARR y PSC lo comprueban ya T2 (imagen de registros) y T5 (base de tiempo frente a CYCCNT).
+
+No repetí la ejecución: el resultado de A18 es esta captura. Con D8 aprobada, el implementador cambia la tolerancia en `tim_hw_check.py` (un commit, sin tocar nada más) y yo repito A18 sobre esa entrega.
