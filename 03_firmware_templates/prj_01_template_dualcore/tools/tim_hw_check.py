@@ -34,7 +34,7 @@ Electrical safety (no series resistors on the bench):
       it must fail.
   S6  1 ms or more between one side releasing and the other driving.
   S7  a step is acted on only if its announcement matches STEPS below.
-  S8  no output is enabled before the banner `TIM_BENCH v1 idle` of the right
+  S8  no output is enabled before the banner `TIM_BENCH v2 idle` of the right
       image has been read.
   S11 Digital Out only through ad2.ad2_set_dout(): DIO1/DIO3, "bus = AD2"
       steps, Digital-IO OE read back 0 on the Digital Out lines while it runs
@@ -76,7 +76,7 @@ from monitor import SerialPort, autodetect             # noqa: E402
 from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E402
                            t0b_guard_selftest, tree_record)
 
-BENCH_VERSION = 1
+BENCH_VERSION = 2          # plan R3-3: TREF_A + TREF_B
 
 # ---- Wiring (00_gpio README section 8) ----------------------------------------
 DIO_BUS = 0x00FF        # DIO0..7  <- PE8..PE15
@@ -98,8 +98,8 @@ BUS = {"NONE": GPIO_BENCH_BUS_NONE, "MCU": GPIO_BENCH_BUS_MCU, "AD2": GPIO_BENCH
 
 # S7: the host's own copy of the firmware's step table (name, bus owner), in order.
 STEPS = [
-    ("T0A", "NONE"), ("TREF", "NONE"), ("T0B", "NONE"), ("T0B_S5NEG", "MCU"), ("T0B_TIMEOUT", "NONE"),
-    ("T0B_DOUT", "AD2"), ("T0B_S12", "AD2"), ("DONE", "NONE"),
+    ("T0A", "NONE"), ("TREF_A", "NONE"), ("T0B", "NONE"), ("T0B_S5NEG", "MCU"), ("T0B_TIMEOUT", "NONE"),
+    ("T0B_DOUT", "AD2"), ("T0B_S12", "AD2"), ("TREF_B", "NONE"), ("DONE", "NONE"),
 ]
 
 HS_TIMEOUT_S = 10.0
@@ -475,25 +475,28 @@ class Session:
                    f"firmware pulls DIO9 (PE5) down where the host expects all up: the check flags 0x{ctrl:04X} "
                    f"(0x{1 << T0A_CTRL_DIO:04X} expected)")
 
-    def tref(self) -> dict:
-        self.step("TREF")
+    def tref(self, name: str, control: bool) -> dict:
+        """TREF_A (with the control of R2-1) or TREF_B (without it), plan R3-1/R3-3."""
+        self.step(name)
         box: dict = {}
 
         def measure(key: str) -> None:
             samples, rate = self.la_capture()
             box[key] = (ad2mod.la_period_high(samples, 14, rate), rate, len(samples))
         self.sync(pre=lambda: measure("on"))
-        self.sync(pre=lambda: measure("off"))
-        (m, rate, n), (c, _, _) = box["on"], box["off"]
+        (m, rate, n) = box["on"]
         e_ppm = (m["freq_hz"] - TREF_EXPECTED_HZ) / TREF_EXPECTED_HZ * 1e6 if m["freq_hz"] else float("nan")
         # The check itself is made at the end of the session (tref_check), when
         # the HAL_GetTick cross-check it is compared with exists.
-        self.log(f"[ad2] TREF measured: DIO14 {m['freq_hz']:.3f} Hz over {m['periods']} periods "
+        self.log(f"[ad2] {name} measured: DIO14 {m['freq_hz']:.3f} Hz over {m['periods']} periods "
                  f"({m['span_samples']} samples of {n} at {rate / 1e6:.0f} MS/s), e_ppm={e_ppm:+.1f}, resolution "
                  f"{m['resolution_ppm']:.1f} ppm, time high {m['high_s'] * 1e9:.1f} ns")
-        self.check("TREF control", c["rises"] == 0 and c["falls"] == 0,
-                   f"PA8 in AF1 (TIM1_CH1, TIM1 unclocked), MCO1 still HSE/8 in the RCC: {c['rises']} rising, "
-                   f"{c['falls']} falling edges on DIO14 (0 expected)")
+        if control:
+            self.sync(pre=lambda: measure("off"))
+            c = box["off"][0]
+            self.check(f"{name} control", c["rises"] == 0 and c["falls"] == 0,
+                       f"PA8 in AF1 (TIM1_CH1, TIM1 unclocked), MCO1 still HSE/8 in the RCC: {c['rises']} rising, "
+                       f"{c['falls']} falling edges on DIO14 (0 expected)")
         return {"e_ppm": e_ppm, "res_ppm": m["resolution_ppm"], "periods": m["periods"]}
 
     def tref_check(self, tref: dict, xchk: Optional[tuple[float, float]]) -> None:
@@ -607,10 +610,11 @@ class Session:
 
     def run(self) -> dict:
         self.t0a()
-        tref = self.tref()
+        tref = self.tref("TREF_A", control=True)
         self.t0b()
         self.t0b_dout()
         self.t0b_s12()
+        self.tref("TREF_B", control=False)
         self.step("DONE")
         return tref
 

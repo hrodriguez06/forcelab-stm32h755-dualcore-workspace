@@ -32,18 +32,19 @@
 
 /* The single table of permissions (S4). Plan "Banco de pruebas": PE8, PE10,
    PE12 and PE15 are never in AF; PE9/PE11 in AF1 with the AD2 driving only
-   under S12; PE5/PE6 in AF4 only on CPU2; PA8 in AF0 only on CPU1, and in AF1
-   (TIM1_CH1, TIM1 stopped) only for the TREF control. PA8 is an MCU-only
-   line: the AD2 never drives DIO14. */
+   under S12; PE5/PE6 in AF4 only on CPU2; PA8 in AF0 only on CPU1 (TREF_A,
+   TREF_B), and in AF1 (TIM1_CH1, TIM1 stopped) only for the control of
+   TREF_A. PA8 is an MCU-only line: the AD2 never drives DIO14. */
 const TstStep_t k_tst_steps[] = {
     /* name            bus            out_pe        af_pe            af_pa       af1_pa     */
     { "T0A",           TST_BUS_NONE,  0U,           0U,              0U,         0U         },
-    { "TREF",          TST_BUS_NONE,  0U,           0U,              E(PA_MCO),  E(PA_MCO)  },  /* control: PA8 AF1 */
+    { "TREF_A",        TST_BUS_NONE,  0U,           0U,              E(PA_MCO),  E(PA_MCO)  },  /* control: PA8 AF1 */
     { "T0B",           TST_BUS_NONE,  0U,           E(PE_T15C1),     E(PA_MCO),  0U         },  /* the accepted controls */
     { "T0B_S5NEG",     TST_BUS_MCU,   PE_BUS_MASK,  0U,              0U,         0U         },  /* 00_gpio T0b(c) */
     { "T0B_TIMEOUT",   TST_BUS_NONE,  0U,           0U,              0U,         0U         },
     { "T0B_DOUT",      TST_BUS_AD2,   0U,           0U,              0U,         0U         },  /* S11: MCU inputs only */
     { "T0B_S12",       TST_BUS_AD2,   0U,           PE_BUS_CAPTURE,  0U,         0U         },  /* S12 */
+    { "TREF_B",        TST_BUS_NONE,  0U,           0U,              E(PA_MCO),  0U         },  /* no control: AF0 only */
     { "DONE",          TST_BUS_NONE,  0U,           0U,              0U,         0U         },
 };
 
@@ -127,7 +128,7 @@ bool tst_line_rule(uint32_t core, uint32_t step, const GPIO_TypeDef *port, uint3
     const TstStep_t *s = &k_tst_steps[step];
     if (port == GPIOA)
     {
-        /* PA8, CPU1 only: MCO1 in AF0, or TIM1_CH1 in AF1 for the TREF control. */
+        /* PA8, CPU1 only: MCO1 in AF0, or TIM1_CH1 in AF1 for the control of TREF_A. */
         if ((core != 0U) || (mode != GPIO_BM_MODE_AF))
         {
             return false;
