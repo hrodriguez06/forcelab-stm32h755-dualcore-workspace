@@ -568,3 +568,229 @@ Todos los valores en ppm. **Pasan las 10:** 16/16, `FW VERDICT=PASS` y `HOST VER
 - x va de +12 798 a +13 865 ppm entre ejecuciones, y ē de +12 877 a +13 789: el reloj de la placa sigue derivando en cientos de ppm.
 
 Estado de F0: **entregada para auditoría**. Falta la ejecución del banco por el auditor (A18/A27). F1 no se ha empezado.
+
+
+## F1 (tim_bm)
+
+Plan de referencia: revisión 4 (`336180b`). F1 empieza sobre `708c212`, el commit en el que `AUDIT.md` (auditoría 6) dice que F0 pasa.
+
+### Resumen
+
+- `tim_bm` implementa el contrato completo de F1 en `01_shared_drivers/03_tim/tim_bm.{h,c}`. El target es `stm32h7_driver_tim_bm`, sin target sin sufijo y fuera del paraguas. `prj_01` lo enlaza solo con `TIM_DRIVER_SELFTEST`.
+- El selftest cubre T1–T16 y B1 en los dos núcleos. CPU2 prueba TIM15 y su banco de RCC (T16) mediante comandos en el bloque SRAM4. La regresión de F0 (T0a, TREF\_A/TREF\_B con R4-1 y T0b) sigue en cada captura. El protocolo del banco pasa a v3, con MCO1 en los pasos de T6 y T8 (R3-2).
+- La captura de entrega es `docs/tim_f1_bench_f86706c.txt`, de una sola ejecución: 109/109 comprobaciones del host, `FW VERDICT=PASS` (0 fallos) y `HOST VERDICT=PASS`.
+- Hay también una captura anterior del mismo código salvo dos comentarios, `docs/tim_f1_bench_e26d289.txt`: 109/109. Se repitió para que la captura de entrega sea del commit entregado: `f86706c` corrige una cita del RM en dos comentarios (§5.5, fila 1).
+- T8 no se juzga con el criterio del plan, sino con la corrección del retardo de reset que decidió el responsable el 2026-10-02 (§5.5, fila 1). El cambio está pendiente de la revisión del plan.
+- Durante el desarrollo, el selftest encontró un defecto del driver: Deinit e InitTimeBase no borraban `CR1.DIR` al salir del modo center-aligned. Está corregido en `6ededca`.
+- Sin bloqueos. F2 no ha empezado: espera a que `AUDIT.md` diga que F1 pasa.
+
+| Fase | Estado | Último commit | Captura |
+| --- | --- | --- | --- |
+| F0 | pasa (`AUDIT.md`, auditoría 6) | `cae5414` | `docs/tim_f0_audit_bench_cae5414.txt` (la del auditor) |
+| F1 | entregada para auditoría (`f86706c`; evidencia en `9e7388c`) | el commit que añade esta sección | `03_firmware_templates/prj_01_template_dualcore/docs/tim_f1_bench_f86706c.txt` |
+| F2 | sin empezar | — | — |
+| F3 | sin empezar | — | — |
+
+### 5.1 Commits
+
+Rango de la entrega: `708c212..` el commit que añade esta sección.
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `1f0fedc` | feat(tim): add tim_bm, the bare-metal timer tier | — |
+| `3eb5514` | build(tim): add the stm32h7_driver_tim_bm target | — |
+| `6ededca` | fix(tim): clear CR1.DIR when a timer leaves center-aligned mode | propio, encontrado por T14 y T6 en la ejecución de desarrollo 1 |
+| `4f4c5c3` | feat(tools): add a Digital Out custom pattern to ad2.py | — (T8, filtro) |
+| `2732f2c` | build(tim): link tim_bm into selftest-tim, and dma_bm on CPU1 | — |
+| `1570fdb` | test(prj_01): bench protocol v3 and the F1 oracles typed from RM0399 | R3-2 |
+| `84be1d4` | test(prj_01): the F1 tests of tim_bm on CPU1 and CPU2 | O1, R3-2 |
+| `a446006` | test(prj_01): the host side of the F1 bench | R3-2 |
+| `a7b1f9d` | docs(tim): add the seven F1 development runs (not evidence) | — |
+| `e26d289` | docs(tim): name the README in tim_bm.h without the 03_tim/ path | — (A4) |
+| `18b2ea9` | docs(tim): add the F1 evidence at e26d289 | — (sustituida por la de `f86706c`) |
+| `f86706c` | test(prj_01): cite RM0399 40.3.26 for the reset delay of PWM input | — (cita del RM) |
+| `9e7388c` | docs(tim): add the F1 evidence at f86706c, the delivered commit | — |
+
+### 5.2 Build y tamaños
+
+- `build_all -Clean` da 8/8: `docs/tim_f1_build_all_f86706c.txt`.
+- `selftest-tim`, compilado desde un directorio vacío, da 0 avisos: `docs/tim_f1_selftest_build_f86706c.txt`.
+- La compilación aparte con `CMAKE_C_FLAGS=-Werror` de `selftest-tim`, `debug` y `release` da 0 avisos en las tres: `docs/tim_f1_werror_f86706c.txt`.
+- `git diff e7542dc -- 02_firmware_projects` sale vacío. `git diff e7542dc --stat` no toca nada fuera de `01_shared_drivers/03_tim`, `01_shared_drivers/CMakeLists.txt`, `03_firmware_templates/prj_01_template_dualcore` y `tools/ad2.py`.
+
+Producción de `prj_01` frente a `2481396` (R4-2). Fuente: `docs/tim_f1_map_sizes_f86706c.txt`, `.map` enlazado sin "Discarded input sections".
+
+| Imagen | .text | .data | .bss | Δ frente a 2481396 (R4-2) | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| debug CM7 | 29304 | 132 | 55668 | 0 en todas las secciones asignadas | `tim_f1_map_sizes_f86706c.txt` |
+| debug CM4 | 3456 | 24 | 12560 | 0 | ídem |
+| release CM7 | 28356 | 132 | 55672 | 0 | ídem |
+| release CM4 | 3112 | 24 | 12560 | 0 | ídem |
+
+Objetos de `selftest-tim`. La columna .text suma `.text` y `.rodata`, como `arm-none-eabi-size`.
+
+| Objeto | Núcleo | .text | .data | .bss | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| `tim_bm.c.obj` | CM7 | 5992 | 0 | 0 | `tim_f1_map_sizes_f86706c.txt` |
+| `tim_bm.c.obj` | CM4 | 4514 | 0 | 0 | ídem |
+| `tim_selftest.c.obj` | CM7 | 40001 | 8 | 8874 | ídem |
+| `tim_selftest_common.c.obj` | CM7 | 3662 | 0 | 956 | ídem |
+| `tim_selftest.c.obj` | CM4 | 3591 | 0 | 296 | ídem |
+| `tim_selftest_common.c.obj` | CM4 | 3636 | 0 | 956 | ídem |
+
+`.data = .bss = 0` en `tim_bm.c.obj` en los dos núcleos (C7). `tim_bm.c` también compila sin avisos fuera de `prj_01`, con `-Wall -Wextra -Wpedantic -Wconversion -Werror`, para CM7 y para CM4 (mensaje de `1f0fedc`).
+
+### 5.3 Pruebas
+
+Todos los valores salen de `docs/tim_f1_bench_f86706c.txt` (una ejecución, `Rev` `f86706c`, id `e3df266a1b52e8fc`). Es la captura de la tabla salvo que se indique otra.
+
+| ID | Tier | Núcleo | Resultado | Valor medido | Control negativo: valor | Oráculo | Captura |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| T0a | banco | CM7 | PASS | 13 líneas: pull-up `0x1FFF` en el MCU y `0x4FFF` en el AD2 (DIO0–11 y DIO14), pull-down `0x0000` en los dos; walking-1 sin diferencias | DIO9 al revés: los dos lados marcan `0x0200` | `IDR`, DIO del AD2 | `tim_f1_bench_f86706c.txt` |
+| TREF\_A/B | banco | CM7 | PASS | ē = +12 780,0 ppm (16 capturas, s\_ef 530,9); x = +13 083,5 ± 7,5 ppm; \|ē − x\| = 303,4 ≤ 590,1 (R4-1) | PA8 en AF1, TIM1 sin reloj: 0 flancos | DIO14 del AD2, reloj del host | ídem |
+| T0b(a)(e) | host | — | PASS | mocks S3 y S11 (los de F0) | los controles de F0 pasan | mock de la DLL | ídem |
+| T0b(b) | banco | CM7, CM4 | PASS | CM7: 20 rechazos, registros sin tocar; CM4: `accepted 0x0001`, `regs changed 0x000` | O1: PA8 a AF0 cambia exactamente `0x00021` (GPIOA MODER, AFR[1]); PE5 a AF4 en CM4, `0x440` (GPIOE MODER, AFR[0]) | fotos de GPIO | ídem |
+| T0b(c)(d)(f)(g) | banco | CM7 | PASS | como en F0 | `0x5A` detectado; timeout; Idle=Low `0xFD`; 13 casos S12 rechazados | AD2, fotos | ídem |
+| T1 | BM | CM7 | PASS | 39 rechazos, estado esperado en los 39, fotos (6 timers y los dos bancos de RCC) sin cambios | O1: `ConfigOutput(TIM2 CH1)` cambia exactamente CCMR1 y CCR1 (`0x0002040`); `EnableClock(TIM13)` solo `RCC_C1 APB1LENR` (`0x01`) | registros leídos en crudo | ídem |
+| T1 | BM | CM4 | PASS | 10 rechazos de TIM15, estados esperados, foto sin cambios | O1: `ConfigOutput(TIM15 CH1)` cambia `0x0002040` (CCMR1, CCR1) | ídem | ídem |
+| T2 | BM | CM7 | PASS | `GetCaps` de las 14 instancias = tabla a mano; 6008 imágenes de 12 instancias sin diferencias con la codificación a mano | una imagen esperada alterada (ARPE) se detecta en las 12 instancias | campos del RM a mano; HAL cruda | ídem |
+| T2 HAL | — | CM7 | (lista) | 6008 configuraciones por la HAL cruda, 0 llamadas con error; difieren solo los bits OCxPE de CCMR1/CCMR2 en OC (17 entradas instancia × registro) | — | `HAL_TIM_*` | ídem; explicación en §5.5 |
+| T2 | BM | CM4 | PASS | TIM15: 1313 imágenes, 0 diferencias | imagen alterada detectada | campos del RM a mano | ídem |
+| T3 | puro | CM7 + host | PASS | 234 `CalcTimeBase`, 70 `DutyToCompare` y 34 `KernelClockFromFields` (32 filas de la tabla 59): 0 diferencias | el primer vector OK con psc + 1 como esperado se detecta | Python con `fractions` | ídem |
+| T5(a) | BM | CM7 | PASS | 12 instancias, 1000 ticks: de −1 a +2 ppm | PSC + 2: −333 333 ppm aprox. en todas | `CYCCNT` (2 ciclos por tick) | ídem |
+| T5(b) | BM | CM7 | PASS | RCR = 3 en TIM1, TIM8, TIM16 y TIM17: de −2 a +2 ppm | sin RCR (1000 ticks): +3 000 000 ppm aprox. | ídem | ídem |
+| T5(c) | BM | CM7 | PASS | TIM2 +0 ppm y TIM5 +2 ppm con `ARR + 1 = 0x20000` | 16 bits (65 536 ticks): +1 000 000 ppm aprox. | ídem | ídem |
+| T5(d) | BM | CM7 | PASS | down 0 ppm (TIM1 y TIM2); center 1: TIM1 (RCR = 1) 2000 ticks por update, −1 ppm; TIM2 1000 ticks por update (dos por periodo de 2 ARR), 0 ppm | fórmula de flanco (ARR + 1): −1997 ppm aprox. | ídem | ídem |
+| T5(e) | BM | CM7, CM4 | PASS | `GetKernelClockHz` = 200 000 000 Hz en las 14 instancias (D2PPRE1 = D2PPRE2 = 4, `100` = /2; TIMPRE = 0) y en TIM15 desde CM4 | — | tabla 59 y `HAL_RCC_GetHCLKFreq` | ídem |
+| T5 | BM | CM4 | PASS | TIM15 (a) +7 ppm, (b) −9 ppm | −333 328 y +2 999 960 ppm | `CYCCNT` de CM4 (1 ciclo por tick) | ídem |
+| T6 | BM | CM7 | PASS | TIM1 CH1–CH4 × 9 puntos: 36/36 dentro de ±0,1 % sobre f/f\_MCO1 y de ±15 ns de tiempo en alto; 0 % y 100 % sin flancos y al nivel esperado; ningún flanco en las otras líneas | MOE = 0 con los 4 canales habilitados: 0 flancos, nivel 0 | LA con DIO14 en la misma adquisición (R3-2) | ídem |
+| T6 | BM | CM4 | PASS | TIM15 CH1/CH2 × 8 puntos: 16/16 | CC1E = CC2E = 0: 0 flancos, nivel 0 | ídem | ídem |
+| T7 | BM | CM7 | PASS | TIM13 (PF8), TIM14 (PF9), TIM16 (PF6), TIM17 (PF7) a 1 kHz y 25 %: periodo de −10 a +5 ppm, duty de 24,99 a 25,00 %, hueco máximo entre muestras de 231–248 ciclos | CC1E = 0: 0 flancos, nivel 0 | `IDR` + `CYCCNT` | ídem |
+| T8 | BM | CM7 | PASS | 24/24 puntos (TI1/TI2 × 1 k/10 k/100 k/1 MHz × 25/50/75 %): cada captura dentro de ±(1 tick + 0,1 %) en periodo y ±(2 ticks + 0,1 %) en alto, con d = 1,94 ticks restado (§5.5, fila 1); prescaler 8 (1620–1622 frente a 1620,6); con filtro, 2073–2076 frente a 2075,9 | polaridad invertida: duty complementario (1516–1518 frente a 1517,4); CC1E = 0: CC1IF 0; sin filtro, el glitch se captura (518–519 y 1555–1556) | Digital Out y MCO1 en DIO14 en la misma generación (R3-2) | ídem |
+| T8 | BM | CM7 | PASS | sobrecaptura: CC1OF = 1 sin leer CCR1 en 3 periodos | leyendo cada captura, CC1OF = 0 | `SR` crudo | ídem |
+| T9 | BM | CM7 | PASS | TIM17 con `TI1SEL = 0011`: 16 periodos, 199..201 ticks (200 ± 1); el AD2 mide MCO1 a 1,0131 MHz en PA8 a la vez | `TI1SEL = 0000` (PF7 sin cablear, pull-down): CC1IF 0 en 1 ms | AD2 en DIO14 | ídem |
+| T10(a) | BM | CM7 | PASS | TIM3 update → TIM2 ext clock 1 (ITR2): 1000 updates, CNT = 1000 | ITR1 (TIM8 parado): CNT = 0 | `CNT` del esclavo | ídem |
+| T10(b) | BM | CM7 | PASS | TIM2 OC1REF → TIM4 gated (ITR1): CNT = 20 000 = N·CCR | ITR3 (TIM8 parado): CNT = 0 | ídem | ídem |
+| T10(c) | BM | CM7 | PASS | TIM1 TRGO → TIM8 trigger (ITR0): CEN 0 → 1 tras el primer update | ITR3 (TIM5 parado): CEN 0 | `CR1` del esclavo | ídem |
+| T10(d) | BM | CM7, CM4 | PASS | TRC de TIM2, TIM3, TIM4, TIM5, TIM8 (TIM1 por ITR0), TIM12 (TIM4 por ITR0) y TIM15 en CM4 (TIM1): diferencia 1000 (± 1) en las 7 | TIM2 con TIM1 parado: 0 capturas | `CCR1` del esclavo | ídem |
+| T10(e) | BM | CM7 | PASS | TIM13 OC1 → TIM12 (ITR2) y TIM14 OC1 → TIM12 (ITR3), gated: CNT = 20 000 | (el control de (b) cubre el ITR parado) | `CNT` | ídem |
+| T11 | BM | CM7 | PASS | 10 disparos → 10 pulsos; D (subida CH1 − subida CH2, referencia a CNT = 1) y W dentro de ±(1 tick + 1 muestra) = ±14,9 ns en los 10 | OPM = 0: 59 pulsos en la ventana | LA disparado en DIO1, tick a partir de MCO1 | ídem |
+| T12(a) | BM | CM7 | PASS | 13 vectores (14 filas: TIM8 UP y TIM13 comparten el suyo) a 10 kHz durante 100 ms: 1000 en cada uno; TIM8 UP/CC, TIM12, TIM13 y TIM14 juntos, 1000 cada uno, sin cruces; 0 llamadas a ISR sin flag | UIE = 0: 0 IRQ | contadores de ISR + `CYCCNT` | ídem |
+| T12(b) | BM | CM7, CM4 | PASS | 0 IRQ espurias tras InitTimeBase + EnableIrq sin Start (TIM2; TIM15 en CM4) | a mano (UG con URS = 0): 1 IRQ en los dos | ídem | ídem |
+| T12(a) | BM | CM4 | PASS | TIM15: 1000 IRQ en 100 ms | UIE = 0: 0 | ídem | ídem |
+| T12(c) | BM | CM7 | PASS | `GetIRQn`: 84 pares (instancia, evento), 0 diferencias | — | tabla a mano de `stm32h755xx.h` | ídem |
+| T13(a) | BM | CM7 | PASS | TIM1 UP (petición 15) → DMA1 S0 → CCR1: los 16 tiempos en alto de 10 a 160 ticks, en secuencia, ±15 ns | UDE = 0: 40 periodos todos de 100 ticks | LA | ídem |
+| T13(b) | BM | CM7 | PASS | TIM1 CC1 (petición 11) → DMA1 S1: 64 capturas, diferencias 202..203 frente a 202,58 ± 1 | CC1DE = 0: NDTR 64, centinela intacto en 64/64 | Digital Out + MCO1 | ídem |
+| T13(c) | BM | CM7 | PASS | `GetDmaRequest`: 70 pares, 0 diferencias | — | `DMA_REQUEST_TIM*` de `stm32h7xx_hal_dma.h` | ídem |
+| T14 | BM | CM7, CM4 | PASS | 101 Deinit en CM7 con su imagen de reset exacta; TIM15 en CM4 después de T5, T6, T10(d) y T12; S5 en verde al final de T6\_TIM1 y de T8 | TIM2 sin Deinit (PSC = 5, ARR = 1234): se detecta (PSC lee 5) | tabla de reset del RM a mano | ídem |
+| T15 | BM | CM7 | PASS | 10⁶ × Enable/DisableIrq(TIM2, CC2) contra 42 446 ISR de TIM7 a 50 kHz: 0 pérdidas | RMW a mano sin PRIMASK, ventana de 24 ciclos: 12 688 ISR dentro de la ventana, 8893 pérdidas | estado propio de la ISR + `DIER` final | ídem |
+| T16 | BM | CM7, CM4 | PASS | CM4 `DisableClock(TIM2)`: TIM2 sigue contando, solo cambia `RCC_C2`; CM4 Enable/Disable: bit de C2 1 → 0, sigue contando | CM7 `DisableClock(TIM2)`: TIM2 se para | `CNT` y `RCC_C1`/`RCC_C2` crudos | ídem |
+| B1 | — | CM7, CM4 | registro | §5.4 | — | `.map` y DWT | ídem |
+
+T2 abarca, por instancia: base de tiempo (todos los modos de cuenta × ARPE × OPM × URS), OC (8 modos × 2 polaridades × preload), IC (3 selecciones × 3 flancos × 4 prescalers × filtros 0/7/15 × TISEL válidos), MMS (y MSM donde hay SMCR) y modo esclavo (todos los SMS × todos los ITR cableados, TI1F\_ED, TI1FP1 y TI2FP2). Las cuentas por instancia están en la captura (líneas `T2 TIMx: ...`).
+
+### 5.4 Medidas (B1)
+
+Ciclos medidos con DWT y PRIMASK en `docs/tim_f1_bench_f86706c.txt`:
+
+| Función | CM7 (ciclos a 400 MHz) | CM4 (ciclos a 200 MHz, TIM15) |
+| --- | --- | --- |
+| `TIM_BM_TakeFlags` | 152 | 280 |
+| `TIM_BM_OutputEnable` | 348 | 489 |
+| `TIM_BM_ConfigOutput` | 442 | 514 |
+| `TIM_BM_InitTimeBase` | 404 | 511 |
+
+- **Peor caso de `CalcTimeBase` en el barrido de T3:** 1101 ciclos en CM7.
+- **Resolución de TREF:** una captura del LA de 4096 muestras a 100 MS/s abarca 40–41 periodos de MCO1, es decir, unos 250 ppm (las líneas `TREF_x capture i: r_i`). Desde R3-2 no se usa para corregir ninguna medida.
+- **Pila de Status\_Task:** quedan libres 238 palabras de 512.
+
+### 5.5 Desviaciones del plan
+
+| # | Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- | --- |
+| 1 | T8: periodo en ticks = 200·f\_MCO1/f ± (1 tick + 0,1 %); tiempo en alto ± 2 ticks | Sigue el modo PWM input. Al empezar el paso T8, sobre una sola generación de 1 MHz en PE9, se mide el retardo de reset del modo esclavo: d = media de 16 diferencias de captura directa − media de 16 periodos en PWM input. d se resta del periodo y del alto esperados, y el alto se juzga con ±(2 ticks + 0,1 %). En la entrega, d = 1,94 ticks | En PWM input, CCR1 y CCR2 leen unos 2 ticks menos que lo que da el AD2 en todas las frecuencias (1 MHz: 200–201 frente a 202,5; ejecuciones de desarrollo 1–3). Las capturas directas de la misma señal no tienen ese desfase (DMA a 1 MHz: 202–203; ICPSC 8: 1620–1621 frente a 1620,8). RM0399 40.3.26, "Slave mode: Reset mode" (`40_*.txt` l. 2640), describe el retardo ("due to the resynchronization circuit on TI1 input"), pero no da su valor. Mi pregunta al responsable y los mensajes de `84be1d4` y `a446006` lo citaban mal, como 40.4.3; `f86706c` corrige los comentarios. Además, ±2 ticks a 1–10 kHz (12 650–37 960 ticks) es más fino que los unos 250 ppm con los que se mide MCO1 en una ventana de 41 µs | Sí: responsable del catálogo (Hector), en el chat de esta sesión, el 2026-10-02 (opción "Correct the reset delay"). Está pendiente de que el plan lo recoja en una revisión |
+| 2 | T8: el plan no fija cómo leer las capturas ni MCO1 | Se descartan dos capturas tras `Start`, no una; MCO1 se mide antes y después de las capturas del timer en la misma generación y se usa la media; el contador arranca antes de habilitar la captura | En el desarrollo, la primera captura útil tras `Start` salió hasta 9 ticks corta en periodo y alto a la vez (ejecución 3: 192/91), y una captura tomada con CEN = 0 guardaba el CNT parado (ejecución 4: T13(b) 152; ejecución 6: 155). Una sola ventana de MCO1 antes de unos 10 ms de capturas a 1 kHz dejaba hasta −0,15 % (ejecución 5). El criterio no cambia | No: es el procedimiento de medida |
+| 3 | Pasos: el plan nombra T6, T8, T9, T11 y T13 sin decir qué paso lleva cada uno; `RCC_CFGR` solo en TREF, T9 y los pasos de T6 y T8 | Cuatro pasos nuevos: `T6_TIM1` (T6, T11 y T13a), `T6_TIM15`, `T8` (T8 y T13b) y `T9`. T11 y T13 usan el tick de MCO1 del paso en el que corren | Así ningún otro paso escribe `RCC_CFGR` (instrucciones §3.5), y T11 y T13 miden también en ticks de la placa | No |
+| 4 | T9: "con la frecuencia del AD2 dentro de la tolerancia común" | El host comprueba que MCO1 está en DIO14 durante la captura de TIM17 (≥ 40 periodos) y que \|e\| ≤ 20 000 ppm (la cota absoluta de TREF). El criterio de TIM17 es 200 ± 1 ticks | La tolerancia común es ±0,1 % sobre el cociente con MCO1 en la misma adquisición. En T9 la señal medida es MCO1, así que el cociente vale 1 por construcción; frente al valor nominal, la placa está a +1,3 % | No |
+| 5 | T7: "IDR muestreado en bucle con PRIMASK" | PRIMASK en cada muestra (lectura de `CYCCNT` e `IDR` juntas), no en los 12 ms de la ventana | Con PRIMASK durante 12 ms, TIM6 (el tick de la HAL) perdería ticks y estropearía la verificación cruzada de TREF. Se registra el hueco máximo entre muestras: 231–248 ciclos | No |
+| 6 | T10(b)(e): "tras N periodos, CNT = N·CCR" | N periodos contados desde el primer update del maestro | OC1REF no se pone a 1 hasta el primer update: contando desde el arranque, la ejecución 1 dio (N − 1)·CCR = 19 800 | No |
+| 7 | T5(d): "center da un periodo de 2·ARR ticks" | TIM1 con RCR = 1 (un update por periodo de 2·ARR); TIM2, sin RCR, da un update cada ARR (dos por periodo) | El update del modo center llega en el overflow y en el underflow | No |
+| 8 | Contrato: solo las funciones listadas | Además, la macro pública `TIM_BM_CH(n)` (bit n − 1 = canal n) para los `ch_mask` | El contrato usa `ch_mask` sin definir su codificación. No es una función | No: pregunto aquí si se acepta antes de congelar la API |
+| 9 | Comportamientos que el plan no detalla | `DutyToCompare`: `ERR_PARAM` si `counter_bits` no es 16/32 o `arr` supera el contador. `EnableDmaRequest`: `ERR_UNSUPPORTED` donde la tabla 126 no tiene petición (TIM4 CC4, TIM15 CC2, TIM12–14). `OutputEnable`/`CaptureEnable`: `ERR_PARAM` sobre un canal de la otra dirección. `ConfigSlave`: `ERR_BUSY` con SMS ≠ 0, salvo para pedir `SMS_DISABLED`. ES0445 2.16.1 también se rechaza en `InitTimeBase` con OPM, la tercera vía a la combinación. `Start` no hace read-back (en OPM, CEN baja solo). `Deinit` no genera UG | C6/C12; la combinación de 2.16.1 se puede formar por las tres llamadas; un UG con MMS = reset sería un pulso TRGO hacia los esclavos | No |
+| 10 | T1: la lista de casos del plan | Están todos. `repetition > 0xFF` en TIM15 se prueba en CM4 (TIM15 es de CPU2), y en CM7 con TIM17. ETRF se prueba de dos formas: valor de driver inexistente (19, `ERR_PARAM`) y el código TS 7 de ETRF, que en el driver es ITR7, no cableado en TIM4 (`ERR_UNSUPPORTED`). Hay 21 casos más (NULL, canales, capacidades, `ERR_BUSY` de TS) | Propiedad de las instancias | No |
+| 11 | T2: "la imagen que deja la HAL cruda" | URS con `__HAL_TIM_URS_ENABLE`, OPM con `HAL_TIM_OnePulse_Init` y, en los modos OC que no son PWM, el preload con `__HAL_TIM_ENABLE_OCxPRELOAD`. La única diferencia que queda es OCxPE en PWM con `preload = false`: la HAL la pone siempre (`stm32h7xx_hal_tim.c` l. 4294, 4311, 4328, 4345, `HAL_TIM_PWM_ConfigChannel`) | Para comparar la misma intención | No |
+| 12 | Captura `tim_<fase>_<prueba>_<hash>.txt` | `docs/tim_f1_bench_<hash>.txt` | Una captura por ejecución, como en F0 | No |
+
+### 5.6 Puntos de las auditorías de F0 que pasan a F1
+
+| Punto | Commit | Qué ejecuté para comprobarlo | Estado |
+| --- | --- | --- | --- |
+| R3-2: en T6 y T8, cada frecuencia del AD2 frente a MCO1 en la misma adquisición; PA8 en AF0 con MCO1 = HSE/8 en esos pasos; tabla de pasos y reglas de línea ampliadas; `TIM_BENCH_VERSION` = 3 igual en el firmware y en `STEPS`; `RCC_CFGR` guardado y restaurado con read-back | `1570fdb`, `84be1d4`, `a446006` | Captura: los cuatro pasos imprimen los campos MCO1 `0x00A00000` y `RCC_CFGR restored: before 0x0000001B after 0x0000001B`; T6 juzga f/f\_MCO1 y T8 200·f\_MCO1/f, con DIO14 en la misma adquisición; banner v3 en los dos lados | aplicado en `84be1d4`, pendiente de verificación |
+| O1: control de sensibilidad en las fotos de T1 y T0b(b), con la máscara impresa | `84be1d4` | T0b(b) CM7 `0x00021` (GPIOA MODER, AFR[1]), CM4 `0x440`; T1 CM7 `0x0002040` y `RCC 0x01`, T1 CM4 `0x0002040` | aplicado en `84be1d4`, pendiente de verificación |
+| Regresión de F0 en cada captura | — | T0a, TREF\_A/TREF\_B (R4-1) y T0b(a)–(g) en verde en la captura de entrega | — |
+| Producción igual a `2481396` (R4-2) | — | `.map` a 0 de diferencia (§5.2) | — |
+
+### 5.7 Erratas del plan encontradas
+
+| Sección del plan | Qué dice | Qué es correcto | Fuente |
+| --- | --- | --- | --- |
+| Regla 2, tabla de capacidades, TIM1/TIM8 | `TISEL` ≠ 0 válidos: "ninguno (§40.4.30–31)" | TIM1 `TI1SEL = 0001` es COMP1 output; TIM8 `TI1SEL = 0001` es COMP2 output. TI2–TI4SEL solo 0000. El driver sigue el RM: `tisel_mask[0] = 0x3` | RM0399 40.4.30 (`40_*.txt` l. 4769–4796) y 40.4.31 (l. 4799–4828) |
+| Regla 3 (InitTimeBase) y regla 11 (Deinit) | Una escritura de CR1 con el modo, o `CR1.CEN = 0` y después los valores de reset | `DIR` es de solo lectura mientras `CMS ≠ 00`. Al salir del modo center hace falta una escritura que borre CMS antes de la que fija o borra DIR (`6ededca`) | RM0399 40.4.1 (`40_*.txt` l. 2889 y siguientes), nota de DIR |
+
+### 5.8 Problemas abiertos y no ejercitado
+
+- **TREF tuvo poco margen en la captura de `e26d289`:** \|ē − x\| = 556,1 frente a una cota de 589,9 (94 %), con x = +13 410 y ē = +12 854. En la de entrega, `f86706c`, es 303,4 frente a 590,1. La sesión de F1 dura 30 s, frente a unos 18 s en F0. No cambié nada de TREF.
+- **T8 a 1 MHz:** las capturas en PWM input toman tres valores (200, 201 y, a veces, 202) y la tolerancia de periodo es ±1,2 ticks. En la ejecución de desarrollo 5, una captura de 202 quedó a +1,7 del esperado. En la entrega pasan las 24.
+- **Arranque del modo esclavo reset:** la primera captura útil tras `Start` salió hasta 9 ticks corta en una ejecución de desarrollo. La causa no está en el RM. El selftest descarta dos capturas (§5.5, fila 2).
+- **No ejercitado, según el plan:**
+  - TRGO → ADC/DAC (D2), TRGO2 y los canales 5–6;
+  - la captura desde pin en TIM2–5, TIM8, TIM12, TIM15 (que capturan TRC en T10(d)), TIM13, TIM14 y TIM16;
+  - la salida PWM en pin de TIM2–5, TIM8 y TIM12;
+  - `tim_hal` en CM4.
+- **OCxREF por TRGO + gated:** T10(b) lo ejercita solo en TIM2 → TIM4, más TIM13/TIM14 → TIM12 en T10(e). El OCxREF de TIM3, TIM4, TIM5 y TIM8 no tiene una medida propia: solo su imagen de registros (T2).
+- **TIM6:** el driver lo soporta, pero las pruebas nunca lo pasan a una función que escriba. Solo `GetKernelClockHz`, `GetIRQn`, `GetDmaRequest` y `GetCaps` lo leen, y `git grep TIM6` en los dos `tim_selftest.c` no da ninguna línea que escriba en él.
+- **Errata ES0445 2.16.2–2.16.4:** quedan para el README de cierre, sin workaround en el driver.
+
+## Decisiones abiertas usadas (F1)
+
+| # | Opción usada | Consultada |
+| --- | --- | --- |
+| 1 | `TimBm_Status_t` | No (por defecto) |
+| 2 | El alcance de la tabla "Alcance" | No (por defecto) |
+| 3 | El PSC más pequeño que cabe; la búsqueda de error mínimo global solo se registra en T3 como información | No (por defecto) |
+| 4 | TIM6 de `prj_01` no se migra | No (por defecto) |
+| 5 | `tim_hal` en CM4 no se ejercita (F3) | No (por defecto) |
+| 6 | Los documentos de proceso se borran al cierre | No (por defecto) |
+
+## Tabla de capacidades (F1)
+
+La del driver es `k_tim[]` en `tim_bm.c`, con la cita en cada fila. La de la prueba es `tst_hand_caps()` en `Common/Src/tim_selftest_common.c`, tecleada aparte; T2 las compara para las 14 instancias. Las líneas son de los `.txt` de `00_docs_stm32h7/docs/peripherals/timers_pwm/` (40 a 44) y de `dma_mdma/18_*.txt` (tabla 126). Se marca **(≠ plan)** la celda que difiere del plan.
+
+| Instancia | Bits | Canales | Up/down/center | RCR | BDTR | Slave | MMS válidos | ITR válidos | TISEL ≠ 0 válidos | DMAMUX1 (UP; CC1–CC4) | Fuente (sección y línea) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| TIM1 | 16 | 4 | sí | 16 bits | sí | sí | 0–7 | 0–3 (TIM15, TIM2, TIM3, TIM4) | **TI1: 1 (COMP1) (≠ plan)** | 15; 11–14 | 40.4.1 l. 2889; tabla 353 l. 3214; 40.4.2 l. 3050; 40.4.15 l. 3970; 40.4.20 l. 4088; 40.4.30 l. 4769; tabla 126 l. 76 |
+| TIM8 | 16 | 4 | sí | 16 bits | sí | sí | 0–7 | 0–3 (TIM1, TIM2, TIM4, TIM5) | **TI1: 1 (COMP2) (≠ plan)** | 51; 47–50 | tabla 353 l. 3214; 40.4.31 l. 4799; tabla 126 |
+| TIM2 | 32 | 4 | sí | — | — | sí | 0–7 | 0–6 (TIM1, TIM8, TIM3, TIM4, ETH PPS, OTG HS SOF, OTG FS SOF) | TI4: 1–3 | 22; 18–21 | `41_*.txt` l. 21 (32 bits); 41.4.1 l. 2356; tabla 358 l. 2604; 41.4.2 l. 2448; 41.4.26 l. 3464 |
+| TIM3 | 16 | 4 | sí | — | — | sí | 0–7 | 0–4 (TIM1, TIM2, TIM15, TIM4, ETH PPS) | TI1: 1–3 | 27; 23–26 | tabla 358; 41.4.27 l. 3501 |
+| TIM4 | 16 | 4 | sí | — | — | sí | 0–7 | 0–3 (TIM1, TIM2, TIM3, TIM8) | ninguno | 32; 29–31, CC4 sin petición | tabla 358; 41.4.28 l. 3541; tabla 126 |
+| TIM5 | 32 | 4 | sí | — | — | sí | 0–7 | 0–3, 6–8 (fdcan1\_soc, OTG HS SOF, OTG FS SOF) | TI1: 1–2 (fdcan1\_tmp, \_rtp) | 59; 55–58 | `41_*.txt` l. 21; tabla 358; 41.4.29 l. 3577 |
+| TIM6, TIM7 | 16 | 0 | solo up | — | — | — | 0–2 | — | — | 69 / 70 | 44.4.1 l. 411; 44.4.2 l. 476; 44.4.3 l. 496 |
+| TIM12 | 16 | 2 | solo up | — | — | sí | 0–5 | 0–3 (TIM4, TIM5, TIM13 OC1, TIM14 OC1) | TI1: 1 (spdifrx) | ninguna | 42.4.1 l. 1264; tabla 361 l. 1426; 42.4.2 l. 1337; 42.4.15 l. 1884 |
+| TIM13, TIM14 | 16 | 1 | solo up | — | — | — | sin TRGO (no hay CR2) | — | ninguno | ninguna | 42.5.1 l. 2382; 42.5.12 l. 2789; 42.5.13 l. 2805 |
+| TIM15 | 16 | 2 | solo up | 8 bits | sí | sí | 0–5 | 0–3 (TIM1, TIM3, TIM16 OC1, TIM17 OC1) | TI1: 1–6; TI2: 1–3 | 106; 105, CC2 sin petición | 43.5.1 l. 1811; tabla 366 l. 2004; 43.5.2 l. 1899; 43.5.13 l. 2531; 43.5.16 l. 2594; 43.5.20 l. 2830 |
+| TIM16 | 16 | 1 | solo up | 8 bits | sí | — | sin TRGO (CR2 sin MMS) | — | TI1: 1–3 (LSI, LSE, WKUP\_IT) | 110; 109 | 43.6.2 l. 3605; 43.6.12 l. 4072; 43.6.14 l. 4112; 43.6.18 l. 4357 |
+| TIM17 | 16 | 1 | solo up | 8 bits | sí | — | sin TRGO (CR2 sin MMS) | — | TI1: 2 (HSE\_1MHz), 3 (MCO1); 0001 reservado | 112; 111 | 43.6.20 l. 4450 |
+
+Vectores de interrupción (`stm32h755xx.h`):
+
+- TIM1: UP / CC / TRG\_COM.
+- TIM8: UP\_TIM13 / CC / TRG\_COM\_TIM14.
+- TIM12: TIM8\_BRK\_TIM12.
+- TIM13: TIM8\_UP\_TIM13.
+- TIM14: TIM8\_TRG\_COM\_TIM14.
+- TIM6: TIM6\_DAC.
+- El resto: su vector global.
+
+El evento TRIGGER solo existe con controlador esclavo (TIE en 41.4.4 l. 2625, 42.4.4 l. 1432 y 43.5.4 l. 2010). TIM13/14 tienen solo CC1IE/UIE (42.5.2 l. 2439), TIM16/17 no tienen TIE (43.6.3 l. 3646) y TIM6/7 tienen solo UDE/UIE (44.4.3 l. 496).
+
+Estado de F1: **entregada para auditoría** (`f86706c`; evidencia en `9e7388c`).
