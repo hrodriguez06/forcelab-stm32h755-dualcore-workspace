@@ -64,6 +64,14 @@ target_include_directories(stm32h7_driver_dma_hal INTERFACE ${CMAKE_CURRENT_LIST
 target_sources(stm32h7_driver_dma_hal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/02_dma/dma_hal.c)
 target_link_libraries(stm32h7_driver_dma_hal INTERFACE stm32h7_driver_dma_bm)
 
+# 03_tim: TIM1-8, TIM12-17. Like 10_hsem (rule C4) there is no unsuffixed
+# target, and the umbrella below does not link the tiers: a project picks one.
+# stm32h7_driver_tim_bm holds the single capability table and validation; the
+# LL and HAL tiers will link it (03_tim plan, phases F2 and F3).
+add_library(stm32h7_driver_tim_bm INTERFACE)
+target_include_directories(stm32h7_driver_tim_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/03_tim)
+target_sources(stm32h7_driver_tim_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/03_tim/tim_bm.c)
+
 add_library(stm32h7_driver_uart INTERFACE)
 target_include_directories(stm32h7_driver_uart INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart)
 target_sources(stm32h7_driver_uart INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart/uart_hal.c)
