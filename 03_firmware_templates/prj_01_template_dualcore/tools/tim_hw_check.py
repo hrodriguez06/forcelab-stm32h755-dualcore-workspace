@@ -12,7 +12,8 @@ wiring and rules S1-S10: 01_shared_drivers/00_gpio/README.md section 8.
     py tools/tim_hw_check.py --allow-dirty    # development only (capture tim_dev_...)
 
 F0 tests: T0a (loose lines, walking 1, control), TREF (MCO1 = HSE/8 on PA8,
-measured by the AD2 in 8 + 8 captures, |e| <= 2 % and within 3 sqrt(u^2 + s_ef^2/16) of HAL_GetTick
+measured by the AD2 in 8 + 8 captures, |e| <= 2 % and within
+3 sqrt(u^2 + s_ef^2/16 + sigma_ser^2) of HAL_GetTick
 against the host clock; control PA8 in AF1), T0b(a) and (e) on mock DLLs
 before the AD2 is opened,
 then T0b(b)(c)(d)(f)(g) on the bench.
@@ -111,13 +112,22 @@ TREF_EXPECTED_HZ = 1e6          # MCO1 = HSE_VALUE (8 MHz) / 8
 TREF_CAPTURES = 8
 TREF_MIN_PERIODS = 40
 TREF_SPACING_S = 0.100
-# TREF criterion, plan revision 3, R3-1 (it replaces R2-2): |e| <= 2 %, and the mean
-# e of the 16 captures within 3 sqrt(u^2 + s_ef^2 / 16) of the cross-check x, u the
-# standard error of x's slope and s_ef = max(s, r/sqrt(6)) the measured scatter of
-# the captures (tref_stats). The plan's first 500 ppm cannot hold on this board: its
-# HSE, the ST-LINK MCO, is about +1.3 % and wanders by hundreds of ppm.
+# TREF criterion, plan revision 4, R4-1 (it replaces the criterion of R3-1): |e| <= 2 %,
+# and the mean e of the 16 captures within 3 sqrt(u^2 + s_ef^2 / 16 + sigma_ser^2) of
+# the cross-check x, u the standard error of x's slope and s_ef = max(s, r/sqrt(6))
+# the measured scatter of the captures (tref_stats). The plan's first 500 ppm cannot
+# hold on this board: its HSE, the ST-LINK MCO, is about +1.3 % and wanders by
+# hundreds of ppm.
 TREF_MAX_PPM = 20000.0
 TREF_XCHK_K = 3.0
+# sigma_ser: the run-to-run variation of e - x that u and s_ef do not explain,
+# sqrt(mean(d^2) - mean(u^2 + s_ef^2 / 16)) with d = e - x, measured over the 17
+# captures of plan revision 3: docs/tim_f0_bench_<rev>.txt for 2481396, 89f11b5,
+# 781212b, 20e5b89, 105edfb, aef5596, 94abb65, cd0d613 and cd0d613_2 to _10.
+# Source: plan R4-1 and AUDIT.md, audit 4 of F0, decision D6. It belongs to this
+# bench (this board and this ST-LINK): measure it again, with a series of >= 10
+# runs, if either changes.
+TREF_SIGMA_SER_PPM = 145.0
 # The cross-check (plan R3-1): CPU1 prints bursts of lines "TICK <label> <i> <HAL_GetTick>",
 # TICK_BURST_LONG at the banner and at the verdict and TICK_BURST_STEP at the start
 # of every step (tick_burst() in CM7/App/Src/tim_selftest.c). The host fits the
@@ -562,10 +572,12 @@ class Session:
         return caps
 
     def tref_check(self, tref: dict, xchk: Optional[tuple[float, float]]) -> None:
-        """TREF criterion, plan R3-1: |e| <= TREF_MAX_PPM and
-        |e - x| <= 3 sqrt(u^2 + s_ef^2 / n), e the mean of the n = 16 captures
-        of TREF_A and TREF_B, s_ef = max(s, r/sqrt(6)) their measured scatter,
-        x the HAL_GetTick cross-check and u the standard error of its slope.
+        """TREF criterion, plan R4-1: |e| <= TREF_MAX_PPM and
+        |e - x| <= 3 sqrt(u^2 + s_ef^2 / n + sigma_ser^2), e the mean of the
+        n = 16 captures of TREF_A and TREF_B, s_ef = max(s, r/sqrt(6)) their
+        measured scatter, x the HAL_GetTick cross-check, u the standard error
+        of its slope and sigma_ser = TREF_SIGMA_SER_PPM the measured run-to-run
+        variation of this bench.
         Two estimates of the same board clock against two independent
         references (the AD2 crystal, the host clock), over the same interval."""
         e = tref["e_ppm"]
@@ -574,12 +586,14 @@ class Session:
             return
         x, u = xchk
         s_ef, n = tref["s_ef"], tref["n"]
-        bound = TREF_XCHK_K * math.sqrt(u * u + s_ef * s_ef / n)
+        ser = TREF_SIGMA_SER_PPM
+        bound = TREF_XCHK_K * math.sqrt(u * u + s_ef * s_ef / n + ser * ser)
         ok = (n == 2 * TREF_CAPTURES and abs(e) <= TREF_MAX_PPM and abs(e - x) <= bound)
         self.check("TREF MCO1 = HSE/8 on PA8", ok,
                    f"e={e:+.1f} ppm over {n} captures (|e| <= {TREF_MAX_PPM:.0f}), s_ef={s_ef:.1f} ppm; cross-check "
-                   f"x={x:+.1f} +-{u:.1f} ppm; |e - x| = {abs(e - x):.1f} (<= {TREF_XCHK_K:.0f} x "
-                   f"sqrt(u^2 + s_ef^2/{n}) = {bound:.1f})")
+                   f"x={x:+.1f} +-{u:.1f} ppm; sigma_ser={ser:.1f} ppm (plan R4-1, AUDIT.md audit 4, the 17 "
+                   f"captures of revision 3); |e - x| = {abs(e - x):.1f} (<= {TREF_XCHK_K:.0f} x "
+                   f"sqrt(u^2 + s_ef^2/{n} + sigma_ser^2) = {bound:.1f})")
 
     def t0b(self) -> None:
         self.step("T0B")
