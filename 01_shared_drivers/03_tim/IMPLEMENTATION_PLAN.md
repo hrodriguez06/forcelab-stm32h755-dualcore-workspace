@@ -1,12 +1,23 @@
 # Plan del driver TIM 03\_tim
 
-Oct 2, 2026 · @Hector · revisión 4 (sustituye a la revisión 3, `92983ec`)
+Oct 2, 2026 · @Hector · revisión 5 (sustituye a la revisión 4, `336180b`)
 
 Este plan cubre el paso 3 de `DRIVER_ROADMAP.md`: el driver de timers `03_tim` en sus tres tiers, `tim_bm`, `tim_ll` y `tim_hal`. Tiene una fase F0 de preparación del banco, tres fases de implementación (F1 BM, F2 LL, F3 HAL) y una de cierre.
 
 Cada fase pasa una auditoría independiente antes de empezar la siguiente, con las reglas de [Protocolo de auditoría](#protocolo-de-auditoría). Las reglas del implementador están en [`IMPLEMENTER_INSTRUCTIONS.md`](IMPLEMENTER_INSTRUCTIONS.md).
 
 Base: `e7542dc` de `main` (merge de `00_gpio` F1), árbol limpio, rama `driver/tim`.
+
+## Cambios respecto a la revisión 4
+
+Salen de la entrega de F1 (`IMPLEMENTATION_REPORT.md`, §5.5 y §5.7) y de la parte 1 de la auditoría de F1 (`AUDIT.md`, `a9f8c7c`, decisión D7). El responsable del catálogo aprobó D7 el 2026-10-02, antes de congelar la API de `tim_bm`.
+
+| # | Cambio | Por qué |
+| --- | --- | --- |
+| R5-1 | **T8, retardo de reset del modo PWM input:** al empezar el paso T8, sobre una generación de 1 MHz en PE9, se mide d = media de 16 diferencias de captura directa − media de 16 periodos en PWM input. Tiene que cumplir **0 ≤ d ≤ 4 ticks** (comprobación propia del host). d se resta del periodo y del tiempo en alto esperados de **solo** los puntos en PWM input y de su control de polaridad invertida. El tiempo en alto se juzga con ±(2 ticks + 0,1 %). Las pruebas de captura directa (ICPSC = 8, filtro, T13(b)) no llevan corrección | RM0399 40.3.26 ("Slave mode: Reset mode") describe el retardo del reset por la resincronización de TI1, pero no da su valor. En la placa, d ≈ 1,94 ticks: sin corregirlo, el punto de 1 MHz falla por unos 2 ticks. Las capturas directas lo anclan a MCO1 de forma independiente (auditoría de F1, parte 1) |
+| R5-2 | **API de `tim_bm`:** `TIM_BM_CH(n)` (bit n − 1 = canal n, el orden de `CCER`) forma parte del contrato y codifica todo `ch_mask` | El contrato usaba `ch_mask` sin fijar cómo se codifica (desviación 8 del informe de F1) |
+| R5-3 | **Erratas de las reglas:** (a) regla 2, tabla de capacidades: TIM1 `TI1SEL = 0001` es COMP1 y TIM8 `TI1SEL = 0001` es COMP2 (40.4.30, 40.4.31); TI2–TI4SEL, solo `0000`. (b) Reglas 3 y 11: DIR es de solo lectura mientras `CMS ≠ 00` (40.4.1) y DIR y CMS no se cambian a la vez (40.3.2): al salir del modo center hace falta una escritura que borre CMS antes de la que fija o borra DIR | Errata del informe de F1, §5.7, verificada contra el RM en la auditoría |
+| R5-4 | **Pasos del banco (protocolo v3):** `T6_TIM1` (T6, T11 y T13a), `T6_TIM15`, `T8` (T8 y T13b) y `T9`, los únicos con PA8 en AF0 y escritura de `RCC_CFGR` aparte de TREF\_A/TREF\_B. Se aceptan como procedimiento las desviaciones 2–7 del informe de F1: T8 descarta dos capturas tras `Start` y mide MCO1 antes y después de las capturas; T9 se juzga en 200 ± 1 ticks con MCO1 presente en DIO14; T7 usa PRIMASK por muestra; T10(b)(e) cuentan N periodos desde el primer update; T5(d), en center, TIM1 con RCR = 1 y TIM2 con un update cada ARR | Informe de F1, §5.5; auditoría de F1, parte 1 |
 
 ## Cambios respecto a la revisión 3
 
@@ -287,6 +298,7 @@ TimBm_Status_t TIM_BM_DisableIrq(TIM_TypeDef *tim, uint32_t ev_mask);
 TimBm_Status_t TIM_BM_EnableDmaRequest(TIM_TypeDef *tim, uint32_t ev_mask);   /* UPDATE, CC1-4 */
 TimBm_Status_t TIM_BM_DisableDmaRequest(TIM_TypeDef *tim, uint32_t ev_mask);
 uint32_t       TIM_BM_TakeFlags(TIM_TypeDef *tim, uint32_t ev_mask);   /* SR = ~taken, then DSB */
+#define TIM_BM_CH(n)  (1UL << ((uint32_t)(n) - 1UL))   /* ch_mask: bit n - 1 = channel n (R5-2) */
 uint32_t       TIM_BM_TakeOvercapture(TIM_TypeDef *tim, uint32_t ch_mask);   /* CCxOF          */
 TimBm_Status_t TIM_BM_WaitFlags(TIM_TypeDef *tim, uint32_t ev_mask, uint32_t max_cycles,
                                 uint32_t *taken);                           /* C13          */
@@ -382,7 +394,7 @@ TimBm_Status_t TIM_BM_ConfigSlave(TIM_TypeDef *tim, uint32_t sms, uint32_t trigg
 
    | Instancia | Bits | Canales | Up/down/center | RCR | BDTR | Slave | `MMS` válidos | ITR válidos | `TISEL` ≠ 0 válidos |
    | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-   | TIM1, TIM8 | 16 | 4 | sí | 16 bits | sí | sí | 0–7 | 0–3 | ninguno (§40.4.30–31) |
+   | TIM1, TIM8 | 16 | 4 | sí | 16 bits | sí | sí | 0–7 | 0–3 | TI1: `0001` (COMP1 en TIM1, COMP2 en TIM8; §40.4.30–31, R5-3) |
    | TIM2 | 32 | 4 | sí | — | — | sí | 0–7 | 0–6 | TI4: 1–3 (COMP) |
    | TIM3 | 16 | 4 | sí | — | — | sí | 0–7 | 0–4 | TI1: 1–3 (COMP) |
    | TIM4 | 16 | 4 | sí | — | — | sí | 0–7 | 0–3 | ninguno |
@@ -395,7 +407,7 @@ TimBm_Status_t TIM_BM_ConfigSlave(TIM_TypeDef *tim, uint32_t sms, uint32_t trigg
    | TIM17 | 16 | 1 | solo up | 8 bits | sí | — | sin TRGO (`CR2` sin `MMS`) | — | TI1: 2 (HSE\_1MHz), 3 (MCO1) |
 
    Fuentes: tablas 353, 358, 361 y 366 (ITR); `TIMx_CR2.MMS` de cada capítulo (§40.4.2, §41.4.2, §42.4.2, §43.5.2, §44.4.2); §40.4.30–31, §41.4.26–29, §42.4.15, §42.5.12–13, §43.5.20, §43.6.18 y §43.6.20 (`TISEL`). TIM17 `TI1SEL = 0001` no aparece en RM0399 rev 4, así que se trata como reservado. Si el implementador encuentra en el RM un dato distinto de esta tabla, manda el RM: lo apunta como errata del plan (instrucciones §5.7) y lo cita.
-3. **`InitTimeBase` (C11, C12).** Exige `CEN = 0`. Si no, devuelve `ERR_BUSY`. Orden: `CR1` (modo, ARPE, OPM, URS) con `CEN = 0` → `PSC` → `ARR` → `RCR` → `UG` con `URS = 1` temporal → `CR1` final → `SR = 0` → read-back de `CR1`, `PSC`, `ARR` y `RCR`. Después, `SR.UIF = 0` (T12 lo comprueba).
+3. **`InitTimeBase` (C11, C12).** Exige `CEN = 0`. Si no, devuelve `ERR_BUSY`. Orden: `CR1` con `CMS = 00` (R5-3) → `CR1` (modo, ARPE, OPM, URS) con `CEN = 0` → `PSC` → `ARR` → `RCR` → `UG` con `URS = 1` temporal → `CR1` final → `SR = 0` → read-back de `CR1`, `PSC`, `ARR` y `RCR`. Después, `SR.UIF = 0` (T12 lo comprueba).
 4. **`ARR = 0` se rechaza.** Con `ARR = 0` el contador no cuenta (RM0399 §40.4.14).
 5. **Salidas (C11).** `ConfigOutput` exige `CCxE = 0`. `OutputEnable` pone `CCxE` y, en las instancias con BDTR, `MOE` el último. `OutputDisable` borra `CCxE` y, si no queda ningún canal habilitado, `MOE`. `OSSI`, `OSSR` y `CCxNE` no se tocan nunca: quedan a 0, así que con `CCxE = 0` el pin no lo conduce el timer (tablas 354 y 359: Hi-Z).
 6. **PWM 0 % y 100 %.** En PWM1 hacia arriba, `CCR = 0` da 0 % y `CCR > ARR` da 100 % (RM0399 §40.3.11). `DutyToCompare(10000)` devuelve `ARR + 1`. Por eso exige `ARR + 1 ≤` máximo del contador y, si no, `ERR_RANGE`.
@@ -403,7 +415,7 @@ TimBm_Status_t TIM_BM_ConfigSlave(TIM_TypeDef *tim, uint32_t sms, uint32_t trigg
 8. **Esclavo.** `ConfigSlave` sigue la nota de `TS` (RM0399 §40.4.3): `SMS = 0` → `TS` → `SMS`. Rechaza un ITR sin bit en la tabla, ETRF y los modos de encoder.
 9. **Errata 2.16.1 (C5).** `ConfigMaster(msm = true)` sobre un timer con `OPM = 1` y `SMS = reset + trigger`, o `ConfigSlave(RESET_TRIGGER)` con `MSM = 1` y `OPM = 1`, devuelve `ERR_UNSUPPORTED` sin escribir.
 10. **Flags.** `TakeFlags` lee `SR`, calcula `taken = SR & mask`, escribe `SR = ~taken` (una sola escritura), hace `__DSB()` y devuelve `taken`. El `DSB` es para que la línea de IRQ baje antes de salir de la ISR del M7, como `GPIO_BM_ExtiTakePending` en el plan de GPIO.
-11. **Deinit (C10, C11).** Exige un timer válido. Orden: `BDTR.MOE = 0` → `CCER = 0` → `CR1.CEN = 0` → `DIER = 0` → los demás registros a su valor de reset (tabla del RM por instancia, también `AF1`/`AF2`/`TISEL`) → `SR = 0` → read-back de todos. No escribe en RCC.
+11. **Deinit (C10, C11).** Exige un timer válido. Orden: `BDTR.MOE = 0` → `CCER = 0` → `CR1.CEN = 0` y `CMS = 00` (R5-3) → `DIER = 0` → los demás registros a su valor de reset (tabla del RM por instancia, también `AF1`/`AF2`/`TISEL`) → `SR = 0` → read-back de todos. No escribe en RCC.
 12. **Sin literales de proyecto (C1).** `grep -nE "BOARD_|GPIO[A-K]|HSEM|DMA[12]_Stream|NVIC_|200000000|400000000" tim_*.[ch]` = 0.
 
 ### Reglas de cálculo
@@ -562,7 +574,7 @@ Cada prueba tiene un **control negativo** (R1) y un **oráculo que no es el driv
 | T5 | F1 BM (los dos núcleos), F2 LL, F3 HAL | Base de tiempo frente a DWT en cada instancia salvo TIM6: (a) periodos de ≤ 1000 ticks, ventana ≥ 100 ms; (b) RCR en TIM1/8/15/16/17: un update cada RCR+1 periodos; (c) 32 bits en TIM2/TIM5: `ARR + 1 = 0x20000` (si el contador fuera de 16 bits, el periodo sería la mitad); (d) down y center en TIM1 y TIM2: center da un periodo de 2·ARR ticks; (e) `GetKernelClockHz` = 200 000 000 en todas las instancias | `CYCCNT` del núcleo: 2 ciclos por tick en CM7 (400 MHz) y 1 en CM4 (200 MHz), con el mismo PLL. Duración del primer al último update en la ventana | La misma medida con `PSC + 1`: fuera de tolerancia | \|error\| ≤ 100 ppm frente a `ticks` (un error de una cuenta en (a) es ≥ 1000 ppm). (c) dentro de tolerancia con el periodo de 32 bits |
 | T6 | F1 BM, F2 LL, F3 HAL (TIM1); F1 BM y F2 LL en CM4 (TIM15) | PWM en el AD2: TIM1 CH1–CH4 en PE9/PE11/PE13/PE14 (paso "bus = MCU") y TIM15 CH1–CH2 en PE5/PE6. Puntos: 1 MHz (`PSC = 0`, `ARR = 199`) al 50 %; 100 kHz (`PSC = 9`, `ARR = 199`) con `CCR` = 1 (50 ns), 0, 25, 50 y 100 %; `active_low`; PWM2; center 1 en TIM1 (periodo de 2·ARR ticks) | LA del AD2 a 100 MS/s, con DIO14 (MCO1 = HSE/8, PA8 en AF0) en la misma adquisición: frecuencia como cociente con MCO1 (R3-2) | TIM1 con `MOE = 0` (`OSSI = 0`) y TIM15 con `CCxE = 0`: el pin no lo conduce el timer y sigue al pull-down de `PUPDR` → nivel constante. Ninguna transición en los canales que no se configuraron | Frecuencia y tiempo en alto dentro de las tolerancias comunes; 0 %: sin flanco de subida, nivel bajo; 100 %: sin flanco de bajada, nivel alto; solo el canal configurado conmuta |
 | T7 | F1 BM | PWM en pines sin cablear: TIM13 (PF8), TIM14 (PF9), TIM16 (PF6) y TIM17 (PF7) a 1 kHz al 25 % | `IDR` muestreado en bucle con PRIMASK y marcas de `CYCCNT`, ≥ 10 periodos | `CCxE = 0` con pull-down: `IDR` constante a 0 | Periodo ±0,5 % y duty ±0,5 puntos |
-| T8 | F1 BM, F2 LL, F3 HAL | Captura desde el AD2 (Digital Out en DIO1/DIO3, paso "bus = AD2", S5 + S11 + S12): modo PWM input en TI1 (PE9) y TI2 (PE11), a 1 kHz, 10 kHz, 100 kHz y 1 MHz, con duty de 25, 50 y 75 %; prescaler 8 a 1 MHz; filtro: Digital Out en modo Custom a 100 MHz con un glitch de una muestra (10 ns) por periodo, en el tamaño de buffer que devuelve `FDwfDigitalOutDataInfo` (sin filtro se captura; con `ICxF = 0011`, fCK\_INT y N = 8, es decir 40 ns, no); overcapture | El divisor y los contadores programados en Digital Out (reloj de `FDwfDigitalOutInternalClockInfo`), con MCO1 en DIO14 capturado por el LA durante la misma generación (R3-2) | Polaridad invertida: duty complementario. `CC1E = 0`: `CC1IF` nunca se levanta. Sin filtro: el glitch sí se captura | Periodo en ticks = 200·f\_MCO1,medida / f ± (1 tick + 0,1 %) (R3-2); tiempo en alto ± 2 ticks; `CC1OF = 1` cuando no se lee `CCR1` dos eventos seguidos |
+| T8 | F1 BM, F2 LL, F3 HAL | Captura desde el AD2 (Digital Out en DIO1/DIO3, paso "bus = AD2", S5 + S11 + S12): modo PWM input en TI1 (PE9) y TI2 (PE11), a 1 kHz, 10 kHz, 100 kHz y 1 MHz, con duty de 25, 50 y 75 %; prescaler 8 a 1 MHz; filtro: Digital Out en modo Custom a 100 MHz con un glitch de una muestra (10 ns) por periodo, en el tamaño de buffer que devuelve `FDwfDigitalOutDataInfo` (sin filtro se captura; con `ICxF = 0011`, fCK\_INT y N = 8, es decir 40 ns, no); overcapture | El divisor y los contadores programados en Digital Out (reloj de `FDwfDigitalOutInternalClockInfo`), con MCO1 en DIO14 capturado por el LA durante la misma generación (R3-2) | Polaridad invertida: duty complementario. `CC1E = 0`: `CC1IF` nunca se levanta. Sin filtro: el glitch sí se captura | Periodo en ticks = (200·f\_MCO1,medida / f − d) ± (1 tick + 0,1 %) (R3-2, R5-1); tiempo en alto (… − d) ± (2 ticks + 0,1 %); 0 ≤ d ≤ 4 ticks (R5-1); `CC1OF = 1` cuando no se lee `CCR1` dos eventos seguidos |
 | T9 | F1 BM, F2 LL, F3 HAL | `TISEL`: TIM17 `TI1SEL = 0011` (MCO1) con MCO1 = HSE/8 y prescaler de entrada 1 → periodo de 200 ticks | El AD2 mide MCO1 en PA8 a la vez | `TI1SEL = 0000` (PF7 sin cablear, pull-down): ninguna captura | Periodo de 200 ± 1 ticks, con la frecuencia del AD2 dentro de la tolerancia común. `RCC_CFGR` restaurado |
 | T10 | F1 BM; (a) y (b) también F2 LL | Maestro/esclavo interno. (a) External clock 1: TIM3 (`MMS = update`) → TIM2 (ITR2), 1000 updates. (b) Gated: TIM2 (`MMS = OC1REF`, PWM) → TIM4 (ITR1, reloj interno): tras N periodos, `CNT = N·CCR`. (c) Trigger: TIM1 TRGO → TIM8 (ITR0), TIM8 arranca solo. (d) Captura de TRC: TIM2, TIM3, TIM4, TIM5, TIM8, TIM12 y TIM15 (CM4) capturan el TRGO de un maestro con ITR válido (TIM1 para todos salvo TIM12, que usa TIM4 por ITR0); la diferencia entre capturas = periodo del maestro. (e) OC1REF de TIM13 y TIM14 → TIM12 (ITR2/ITR3) en gated: `CNT = N·CCR` | `CNT` y `CCRx` del esclavo, leídos directamente. El periodo del maestro ya está validado por T5 | `TS` de un ITR cuyo maestro está parado: cuenta 0, no arranca, ninguna captura | (a) cuenta = 1000 exactos; (b)(e) \|`CNT − N·CCR`\| ≤ N; (c) `CEN` de TIM8 = 0 antes y 1 después del primer update de TIM1; (d) diferencia = periodo ± 1 tick |
 | T11 | F1 BM | One-pulse en TIM1 CH1 (PE9, "bus = MCU"): PWM2, retardo D y anchura W; 10 disparos por software | LA del AD2 | `OPM = 0`: pulsos periódicos (> 1 en la ventana) | Exactamente 1 pulso por disparo; D y W ± (1 tick + 1 muestra) |

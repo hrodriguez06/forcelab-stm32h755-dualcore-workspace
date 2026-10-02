@@ -352,3 +352,8 @@ La revisión 5 del plan tiene que recoger:
 
 1. D7 aprobada y revisión 5 del plan, que no requiere código.
 2. **A18/A27:** mi ejecución del banco sobre `selftest-tim` compilado en la cabeza de la rama, con la lista de comprobación física confirmada.
+
+## F1, adenda a la parte 1 (2026-10-02)
+
+- **D7 aprobada** por el responsable del catálogo. Está en la revisión 5 del plan: R5-1 (corrección d de T8, 0 ≤ d ≤ 4 ticks), R5-2 (`TIM_BM_CH(n)` en la API), R5-3 (erratas de TISEL de TIM1/TIM8 y de DIR/CMS) y R5-4 (pasos v3 y desviaciones de procedimiento 2–7).
+- **Para que F1 pase:** solo queda A18/A27, mi ejecución del banco.
