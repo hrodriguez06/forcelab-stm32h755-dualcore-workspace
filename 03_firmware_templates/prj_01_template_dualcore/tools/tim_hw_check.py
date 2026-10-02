@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host side of the 03_tim selftest on prj_01 (preset selftest-tim), phase F0.
+"""Host side of the 03_tim selftest on prj_01 (preset selftest-tim), phases F0 and F1.
 
 Runs one complete bench session against CM7/App/Src/tim_selftest.c with the
 Analog Discovery 2 and writes ONE capture file: every console line and every
@@ -17,6 +17,13 @@ measured by the AD2 in 8 + 8 captures, |e| <= 2 % and within
 against the host clock; control PA8 in AF1), T0b(a) and (e) on mock DLLs
 before the AD2 is opened,
 then T0b(b)(c)(d)(f)(g) on the bench.
+
+F1 tests (tim_bm): T3 recomputed here from the firmware's vectors (fractions),
+and on the bench T6 (TIM1 and TIM15 PWM), T11 (one-pulse) and T13(a) (DMA to
+CCR1) in the T6 steps, T8 (captures of Digital Out) and T13(b) (captures to
+DMA) in the T8 step, and T9 (TIM17 on MCO1). Plan R3-2: every frequency the
+AD2 measures is a ratio with MCO1 (DIO14) in the same acquisition. The other
+F1 tests run in the firmware between the steps and print their verdicts.
 
 Image identity (00_gpio README 9.4, R3-a/R3-b/R4-a), checked before any output
 is enabled: Rev(CM7) == Rev(CM4), id(CM7) == id(CM4) (never "unknown"), each
@@ -50,11 +57,13 @@ from __future__ import annotations
 
 import argparse
 import math
+from fractions import Fraction
 import os
 import pathlib
 import queue
 import re
 import shlex
+import statistics
 import subprocess
 import sys
 import threading
@@ -77,7 +86,7 @@ from monitor import SerialPort, autodetect             # noqa: E402
 from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E402
                            t0b_guard_selftest, tree_record)
 
-BENCH_VERSION = 2          # plan R3-3: TREF_A + TREF_B
+BENCH_VERSION = 3          # plan R3-3: TREF_A + TREF_B; v3: the F1 steps (R3-2)
 
 # ---- Wiring (00_gpio README section 8) ----------------------------------------
 DIO_BUS = 0x00FF        # DIO0..7  <- PE8..PE15
@@ -100,7 +109,9 @@ BUS = {"NONE": GPIO_BENCH_BUS_NONE, "MCU": GPIO_BENCH_BUS_MCU, "AD2": GPIO_BENCH
 # S7: the host's own copy of the firmware's step table (name, bus owner), in order.
 STEPS = [
     ("T0A", "NONE"), ("TREF_A", "NONE"), ("T0B", "NONE"), ("T0B_S5NEG", "MCU"), ("T0B_TIMEOUT", "NONE"),
-    ("T0B_DOUT", "AD2"), ("T0B_S12", "AD2"), ("TREF_B", "NONE"), ("DONE", "NONE"),
+    ("T0B_DOUT", "AD2"), ("T0B_S12", "AD2"),
+    ("T6_TIM1", "MCU"), ("T6_TIM15", "NONE"), ("T8", "AD2"), ("T9", "NONE"),
+    ("TREF_B", "NONE"), ("DONE", "NONE"),
 ]
 
 HS_TIMEOUT_S = 10.0
@@ -143,6 +154,160 @@ DOUT_HIGH_TOL_S = 15e-9         # +-15 ns
 
 class BenchAbort(Exception):
     pass
+
+
+# ---- F1: T3, the pure functions recomputed by the host (plan "Reglas de calculo") -------
+
+ST_OK, ST_PARAM, ST_UNSUPPORTED, ST_RANGE = 0, 1, 2, 3      # TimBm_Status_t
+T3_CT_RX = re.compile(r"\[tim\] T3 CT (\d+) (\d+) (\d+) (\d+) (\d+) (\d+) (\d+) 0x([0-9A-F]{16}) (-?\d+) (\d+)\s*$")
+T3_DC_RX = re.compile(r"\[tim\] T3 DC (\d+) (\d+) (\d+) (\d+) (\d+) (\d+)\s*$")
+T3_KC_RX = re.compile(r"\[tim\] T3 KC (\d+) (\d+) (\d+) (\d+) (\d+) (\d+)\s*$")
+# RM0399 table 59, typed here: divisor of rcc_hclk1 per D2PPRE (index 0..7), per TIMPRE.
+TABLE59_DIV = {0: [1, 1, 1, 1, 1, 2, 4, 8], 1: [1, 1, 1, 1, 1, 1, 2, 4]}
+
+
+def t3_calc_time_base(clk: int, target: int, arr_max: int) -> tuple:
+    """The plan's rule, with Fractions: (status, psc, arr, ticks, error_ppm)."""
+    if target == 0 or target > clk // 2 or arr_max == 0:
+        return (ST_PARAM, 0, 0, 0, 0)
+    psc = max(math.ceil(Fraction(clk, target * (arr_max + 1))) - 1, 0)
+    if psc > 65535:
+        return (ST_RANGE, 0, 0, 0, 0)
+    n = math.floor(Fraction(clk, (psc + 1) * target) + Fraction(1, 2))     # half rounds up
+    n = min(n, arr_max + 1)
+    if n < 2:
+        return (ST_RANGE, 0, 0, 0, 0)
+    ticks = (psc + 1) * n
+    num = clk * 10**6 // ticks - target * 10**6                            # both >= 0 terms: floor = trunc
+    return (ST_OK, psc, n - 1, ticks, int(Fraction(num, target)))          # int(): toward zero
+
+
+def t3_duty(arr: int, bits: int, duty: int) -> tuple:
+    if bits not in (16, 32) or duty > 10000:
+        return (ST_PARAM, 0)
+    cmax = (1 << bits) - 1
+    if arr > cmax:
+        return (ST_PARAM, 0)
+    if duty == 10000 and arr + 1 > cmax:
+        return (ST_RANGE, 0)
+    return (ST_OK, math.floor(Fraction((arr + 1) * duty, 10000) + Fraction(1, 2)))
+
+
+def t3_kernel(hclk: int, d2ppre: int, timpre: int) -> tuple:
+    if d2ppre > 7 or timpre > 1:
+        return (ST_PARAM, 0)
+    return (ST_OK, hclk // TABLE59_DIV[timpre][d2ppre])
+
+
+def t3_min_error_info(clk: int, target: int, arr_max: int, psc0: int, span: int = 4096) -> tuple[int, int]:
+    """Information only (decision 3): the smallest |error| over psc0..psc0+span with the
+    best n for each psc, against the plan's rule. Returns (best |ppm|, its psc)."""
+    best, best_psc = None, psc0
+    for psc in range(psc0, min(65535, psc0 + span) + 1):
+        d = (psc + 1) * target
+        for n in (clk // d, clk // d + 1):
+            if 2 <= n <= arr_max + 1:
+                e = abs(Fraction(clk, (psc + 1) * n) - target) / target * 10**6
+                if best is None or e < best:
+                    best, best_psc = e, psc
+    return (int(best) if best is not None else -1, best_psc)
+
+
+def t3_check(lines: list[str], log: Callable[[str], None]) -> list[tuple[str, bool, str]]:
+    """Recomputes every T3 vector; returns (check name, ok, detail) entries."""
+    ct, dc, kc = [], [], []
+    for line in lines:
+        for rx, dst in ((T3_CT_RX, ct), (T3_DC_RX, dc), (T3_KC_RX, kc)):
+            m = rx.search(line)
+            if m:
+                dst.append(m.groups())
+    bad_ct, bad_dc, bad_kc = [], [], []
+    worse = []
+    first_ok = None
+    for g in ct:
+        i, clk, target, arr_max, st, psc, arr, ticks_hex, err, _cyc = g
+        clk, target, arr_max = int(clk), int(target), int(arr_max)
+        got = (int(st), int(psc), int(arr), int(ticks_hex, 16), int(err))
+        exp = t3_calc_time_base(clk, target, arr_max)
+        if exp[0] != ST_OK:
+            got = (got[0], 0, 0, 0, 0)
+        if got != exp:
+            bad_ct.append((int(i), got, exp))
+        elif exp[0] == ST_OK:
+            if first_ok is None:
+                first_ok = (got, exp)
+            if len(worse) < 12 and exp[4] != 0:
+                bmin, bpsc = t3_min_error_info(clk, target, arr_max, exp[1], 256)
+                if bmin < abs(exp[4]):
+                    worse.append((int(i), exp[4], bmin, bpsc))
+    for g in dc:
+        i, arr, bits, duty, st, ccr = (int(x) for x in g)
+        exp = t3_duty(arr, bits, duty)
+        got = (st, ccr if st == ST_OK else 0)
+        if got != exp:
+            bad_dc.append((i, got, exp))
+    for g in kc:
+        i, hclk, d2ppre, timpre, st, hz = (int(x) for x in g)
+        exp = t3_kernel(hclk, d2ppre, timpre)
+        got = (st, hz if st == ST_OK else 0)
+        if got != exp:
+            bad_kc.append((i, got, exp))
+    for name, bad in (("CalcTimeBase", bad_ct), ("DutyToCompare", bad_dc), ("KernelClockFromFields", bad_kc)):
+        for b in bad[:5]:
+            log(f"[host] T3 {name} vector {b[0]}: firmware {b[1]}, host {b[2]}")
+    # The control: an expected value altered on purpose must be flagged by the same comparison.
+    ctrl = False
+    if first_ok is not None:
+        got, exp = first_ok
+        altered = (exp[0], exp[1] + 1) + exp[2:]
+        ctrl = got != altered
+    for i, e_rule, e_min, psc in worse:
+        log(f"[host] T3 info (decision 3): vector {i}: rule {e_rule:+d} ppm, smallest over psc {psc}: {e_min} ppm")
+    n_rows = sum(1 for g in kc if int(g[3]) <= 1 and int(g[2]) <= 7)
+    return [
+        ("T3 CalcTimeBase", len(ct) >= 200 and not bad_ct,
+         f"{len(ct)} vectors (>= 200) recomputed with fractions, {len(bad_ct)} differ in status, psc, arr, ticks or error_ppm"),
+        ("T3 DutyToCompare", len(dc) >= 50 and not bad_dc, f"{len(dc)} vectors (>= 50), {len(bad_dc)} differ"),
+        ("T3 KernelClockFromFields", n_rows >= 16 and not bad_kc,
+         f"{len(kc)} vectors, {n_rows} rows of table 59 (>= 16), {len(bad_kc)} differ"),
+        ("T3 control", ctrl, f"the first OK vector with psc + 1 as the expected value is flagged: {ctrl}"),
+    ]
+
+
+# ---- F1 bench (protocol v3) ----------------------------------------------------------------
+
+DIO_PE13 = 1 << 5
+DIO_PE14 = 1 << 6
+TIM1_CH_DIO = {1: 1, 2: 3, 3: 5, 4: 6}        # TIM1 CH1..CH4 on PE9/PE11/PE13/PE14 = DIO1/3/5/6
+TIM15_CH_DIO = {1: 9, 2: 11}                  # TIM15 CH1/CH2 on PE5/PE6 = DIO9/DIO11
+OC_PWM1, OC_PWM2 = 6, 7
+# T6 points, the host's own copy (psc, arr, mode, ccr, active_low, center 1). P8 is TIM1 only.
+T6_POINTS = [(0, 199, OC_PWM1, 100, 0, 0), (9, 199, OC_PWM1, 1, 0, 0), (9, 199, OC_PWM1, 0, 0, 0),
+             (9, 199, OC_PWM1, 50, 0, 0), (9, 199, OC_PWM1, 100, 0, 0), (9, 199, OC_PWM1, 200, 0, 0),
+             (9, 199, OC_PWM1, 50, 1, 0), (9, 199, OC_PWM2, 50, 0, 0), (0, 199, OC_PWM1, 50, 0, 1)]
+T6_FREQ_TOL = 0.001          # +-0.1 % on the ratio with MCO1 (plan, common tolerances; R3-2)
+T6_HIGH_TOL_S = 15e-9        # +-15 ns
+TIMCLK_PER_MCO1 = 200        # f_timclk = 200 f_MCO1 in prj_01 (plan R3-2)
+T11_CCR1, T11_ARR, T11_PULSES = 40, 139, 10
+T13A_SEQ = [10 * (k + 1) for k in range(16)]
+T8_POINTS = [(ti, f, d, 3 if f == 1000 else 0) for ti in (1, 2) for f in (1000, 10000, 100000, 1000000)
+             for d in (25, 50, 75)]
+
+
+def t6_expect(p: tuple) -> tuple[int, int]:
+    """(period, high) in timer ticks of a T6 point on the OCx pin."""
+    psc, arr, mode, ccr, low, center = p
+    if center:
+        per = 2 * arr * (psc + 1)
+        high = min(2 * ccr, 2 * arr) * (psc + 1)
+    else:
+        per = (psc + 1) * (arr + 1)
+        high = min(ccr, arr + 1) * (psc + 1)
+    if mode == OC_PWM2:
+        high = per - high
+    if low:
+        high = per - high
+    return per, high
 
 
 # ---- Procedure checklist (00_gpio README section 8) -----------------------------------
@@ -371,6 +536,7 @@ class Console:
         self._stop = threading.Event()
         self.fw_abort: Optional[str] = None
         self.ticks: list[tuple[str, int, int, float]] = []   # (label, i, HAL_GetTick ms, arrival s)
+        self.t3: list[str] = []                               # T3 vectors, recomputed after the session
         self._th = threading.Thread(target=self._run, daemon=True)
         self._th.start()
 
@@ -395,6 +561,8 @@ class Console:
                 mt = TICK_RX.search(line)
                 if mt:
                     self.ticks.append((mt.group(1), int(mt.group(2)), int(mt.group(3)), t))
+                if "[tim] T3 " in line:
+                    self.t3.append(line)
                 self._q.put((t, line))
 
     def expect_t(self, pattern: str, timeout_s: float) -> tuple[re.Match, float]:
@@ -432,6 +600,7 @@ class Session:
         self.checks: list[tuple[str, bool]] = []
         self.step_idx = 0
         self.la_n = 0
+        self.delay = 0.0        # T8: the reset delay of PWM input mode, ticks
 
     # -- bookkeeping
     def check(self, name: str, ok: bool, detail: str) -> None:
@@ -685,12 +854,371 @@ class Session:
                    "the bus followed both MCU pulls with TIM1 CH1/CH2 inputs in AF (else BenchAbort)")
         self.buschk("T0B_S12 after")
 
+
+    # ================================================================ F1 steps (protocol v3)
+    def _mco(self, samples: list[int], rate: float) -> dict:
+        m = ad2mod.la_period_high(samples, 14, rate)
+        return m
+
+    def _edges(self, samples: list[int], bit: int) -> int:
+        r, f = ad2mod.la_edges(samples, bit)
+        return len(r) + len(f)
+
+    def _t6_point(self, tim: str, ch: int, k: int, bit: int, others: list[int], tag: str) -> None:
+        """One T6 point: the announcement against the host table, then one LA capture
+        with DIO14 (MCO1) and the channel's line in the same acquisition (R3-2)."""
+        m = self.con.expect(rf"\[tim\] T6 {tim} CH{ch} P{k} psc=(\d+) arr=(\d+) mode=(\d+) ccr=(\d+) low=(\d+) "
+                            rf"center=(\d+) st=(\d+)", 30.0)
+        ann = tuple(int(x) for x in m.groups()[:6])
+        st = int(m.group(7))
+        p = T6_POINTS[k]
+        box: dict = {}
+
+        def measure() -> None:
+            samples, rate = self.la_capture()
+            box["mco"] = self._mco(samples, rate)
+            box["out"] = ad2mod.la_period_high(samples, bit, rate)
+            box["level"] = (samples[0] >> bit) & 1
+            box["others"] = {b: self._edges(samples, b) for b in others}
+        self.sync(pre=measure)
+        mco, out = box["mco"], box["out"]
+        per, high = t6_expect(p)
+        f_mco = mco["freq_hz"]
+        other_edges = sum(box["others"].values())
+        if high == 0 or high == per:
+            want = 1 if high == per else 0
+            ok = (out["rises"] == 0 and out["falls"] == 0 and box["level"] == want and mco["periods"] >= 40)
+            detail = (f"{'100' if want else '0'} %: {out['rises']} rising, {out['falls']} falling edges, level "
+                      f"{box['level']} ({want})")
+        else:
+            ratio = out["freq_hz"] / f_mco if f_mco else 0.0
+            exp_ratio = TIMCLK_PER_MCO1 / per
+            r_err = (ratio - exp_ratio) / exp_ratio if exp_ratio else 1.0
+            exp_high = high / (TIMCLK_PER_MCO1 * f_mco) if f_mco else 0.0
+            ok = (abs(r_err) <= T6_FREQ_TOL and abs(out["high_s"] - exp_high) <= T6_HIGH_TOL_S and
+                  out["periods"] >= 1 and mco["periods"] >= 40)
+            detail = (f"f/f_MCO1 = {ratio:.6f} ({exp_ratio:.6f}, {r_err * 1e6:+.0f} ppm, +-1000), high "
+                      f"{out['high_s'] * 1e9:.1f} ns ({exp_high * 1e9:.1f} +-15), {out['periods']} periods")
+        ok = ok and ann == p and st == 0 and other_edges == 0
+        self.check(f"T6 {tim} CH{ch} P{k}{tag}", ok,
+                   f"psc={p[0]} arr={p[1]} mode={p[2]} ccr={p[3]} low={p[4]} center={p[5]} (announced {ann}, st {st}): "
+                   f"{detail}; MCO1 {f_mco / 1e6:.4f} MHz over {mco['periods']} periods; edges on the other lines "
+                   f"{other_edges}")
+
+    def t6_tim1(self) -> None:
+        self.step("T6_TIM1")
+        self.buschk("T6_TIM1 before")
+        tim1_bits = [TIM1_CH_DIO[c] for c in (1, 2, 3, 4)]
+        quiet = [0, 2, 4, 7, 9, 11]
+        for ch in (1, 2, 3, 4):
+            for k in range(len(T6_POINTS)):
+                bit = TIM1_CH_DIO[ch]
+                self._t6_point("TIM1", ch, k, bit, [b for b in tim1_bits if b != bit] + quiet,
+                               " center 1" if T6_POINTS[k][5] else "")
+        # control: MOE = 0 -> no transition on any TIM1 line, all low (pull-down)
+        self.con.expect(r"\[tim\] T6 TIM1 control", 30.0)
+        box: dict = {}
+
+        def ctrl() -> None:
+            samples, rate = self.la_capture()
+            box["edges"] = {b: self._edges(samples, b) for b in tim1_bits}
+            box["levels"] = [(samples[0] >> b) & 1 for b in tim1_bits]
+        self.sync(pre=ctrl)
+        self.check("T6 TIM1 control MOE=0", sum(box["edges"].values()) == 0 and not any(box["levels"]),
+                   f"CH1-4 enabled with MOE = 0: edges {box['edges']}, levels {box['levels']} (all 0)")
+        self.t11()
+        self.t13a()
+        self.buschk("T6_TIM1 after (T14)")
+
+    def t11(self) -> None:
+        self.con.expect(r"\[tim\] T11 TIM1 one-pulse", 30.0)
+        box: dict = {}
+
+        def arm() -> None:
+            box["arm"] = self.ad2.la_arm(LA_RATE_HZ, self.la_n, trigger_rise_mask=DIO_PE9, prefill=100)
+
+        self.sync(pre=arm)
+        rate, n = box["arm"]
+        samples = self.ad2.la_read(n, timeout_s=2.0)
+        if samples is None:
+            self.check("T11 one-pulse", False, "the LA did not trigger on DIO1")
+            return
+        mco = self._mco(samples, rate)
+        tick = 1.0 / (TIMCLK_PER_MCO1 * mco["freq_hz"]) if mco["freq_hz"] else 0.0
+        r1, f1 = ad2mod.la_edges(samples, 1)
+        r2, _ = ad2mod.la_edges(samples, 3)
+        # trigger at sample n - prefill... the first pulse may be at the very start: include it
+        lvl0 = (samples[0] >> 1) & 1
+        if lvl0 and (not r1 or (f1 and f1[0] < r1[0])):
+            r1 = [0] + r1
+        pulses = []
+        for r in r1:
+            f = next((x for x in f1 if x > r), None)
+            ref = max((x for x in r2 if x <= r), default=None)
+            if f is not None and ref is not None:
+                pulses.append(((r - ref) / rate, (f - r) / rate))
+        d_exp = (T11_CCR1 - 1) * tick                      # CH2 rises one tick after the start
+        w_exp = (T11_ARR - T11_CCR1 + 1) * tick
+        tol = tick + 1.0 / rate
+        bad = [(round(d * 1e9, 1), round(w * 1e9, 1)) for d, w in pulses
+               if abs(d - d_exp) > tol or abs(w - w_exp) > tol]
+        self.check("T11 one-pulse", len(r1) == T11_PULSES and len(pulses) == T11_PULSES and not bad and mco["periods"] >= 30,
+                   f"{len(r1)} pulses on DIO1 ({T11_PULSES} triggers); D = CCR1 = {T11_CCR1} ticks: "
+                   f"rise(CH1) - rise(CH2) {d_exp * 1e9:.1f} ns expected, W {w_exp * 1e9:.1f} ns expected, "
+                   f"+-{tol * 1e9:.1f} ns (1 tick + 1 sample); out of tolerance {bad}; MCO1 {mco['freq_hz'] / 1e6:.4f} MHz")
+        self.con.expect(r"\[tim\] T11 control", 30.0)
+        box2: dict = {}
+
+        def ctrl() -> None:
+            samples2, rate2 = self.la_capture()
+            box2["rises"] = len(ad2mod.la_edges(samples2, 1)[0])
+        self.sync(pre=ctrl)
+        self.check("T11 control OPM=0", box2["rises"] > 1, f"{box2['rises']} pulses in the window (> 1)")
+
+    def t13a(self) -> None:
+        self.con.expect(r"\[tim\] T13A TIM1 UP", 30.0)
+        box: dict = {}
+
+        def measure(key: str) -> None:
+            samples, rate = self.la_capture()
+            mco = self._mco(samples, rate)
+            rises, falls = ad2mod.la_edges(samples, 1)
+            highs = []
+            for r, r_next in zip(rises, rises[1:]):
+                f = next((x for x in falls if r < x < r_next), None)
+                if f is not None:
+                    highs.append((f - r) / rate)
+            box[key] = (mco, highs)
+        self.sync(pre=lambda: measure("dma"))
+        mco, highs = box["dma"]
+        tick = 1.0 / (TIMCLK_PER_MCO1 * mco["freq_hz"]) if mco["freq_hz"] else 0.0
+        match = None
+        for s in range(16):
+            if highs and all(abs(h - T13A_SEQ[(k + s) % 16] * tick) <= T6_HIGH_TOL_S for k, h in enumerate(highs)):
+                match = s
+                break
+        self.check("T13(a) DMA -> CCR1", match is not None and len(highs) >= 16,
+                   f"{len(highs)} complete periods on DIO1; the 16 high times 10..160 ticks (tick {tick * 1e9:.3f} ns "
+                   f"from MCO1) found in sequence at offset {match}, +-15 ns each; measured "
+                   f"{[round(h / tick) if tick else 0 for h in highs[:20]]}")
+        self.con.expect(r"\[tim\] T13A control", 30.0)
+        self.sync(pre=lambda: measure("ctrl"))
+        mco, highs = box["ctrl"]
+        tick = 1.0 / (TIMCLK_PER_MCO1 * mco["freq_hz"]) if mco["freq_hz"] else 0.0
+        same = bool(highs) and all(abs(h - 100 * tick) <= T6_HIGH_TOL_S for h in highs)
+        self.check("T13(a) control UDE=0", same, f"{len(highs)} periods, all 100 ticks +-15 ns: {same}")
+
+    def t6_tim15(self) -> None:
+        self.step("T6_TIM15")
+        quiet = [0, 1, 2, 3, 4, 5, 6, 7]
+        for ch in (1, 2):
+            for k in range(len(T6_POINTS) - 1):
+                bit = TIM15_CH_DIO[ch]
+                self._t6_point("TIM15", ch, k, bit, [TIM15_CH_DIO[3 - ch]] + quiet, "")
+        self.con.expect(r"\[tim\] T6 TIM15 control", 30.0)
+        box: dict = {}
+
+        def ctrl() -> None:
+            samples, rate = self.la_capture()
+            box["edges"] = {b: self._edges(samples, b) for b in (9, 11)}
+            box["levels"] = [(samples[0] >> b) & 1 for b in (9, 11)]
+        self.sync(pre=ctrl)
+        self.check("T6 TIM15 control CCxE=0", sum(box["edges"].values()) == 0 and not any(box["levels"]),
+                   f"CH1/CH2 configured, CC1E = CC2E = 0: edges {box['edges']}, levels {box['levels']} (0)")
+
+    # ---- T8 + T13(b)
+    def _dout_start(self, ch: int, f: float, duty: int) -> tuple[float, float]:
+        """Digital Out pulse on DIO1/DIO3 through the S11 guard. Returns (f_dout, high_s)."""
+        clk = self.ad2.dout_clock_hz()
+        for div in (1, 10, 100):
+            total = int(round(clk / div / f))
+            high = total * duty // 100
+            try:
+                f_cfg = self.ad2.dout_pulse(ch, div, total - high, high)
+            except ad2mod.AD2Error:
+                continue
+            time.sleep(0.001)                                          # S6
+            self.ad2.set_dout(1 << ch, self.owner, ad2mod.DWF_DOUT_IDLE_ZET, self.step_name)
+            return f_cfg, high * div / clk
+        raise BenchAbort(f"Digital Out cannot make {f} Hz")
+
+    def _dout_stop(self) -> None:
+        self.ad2.set_dout(0, self.owner)
+
+    def _t8_on(self, ch: int, f: float, duty: int, box: dict, custom: Optional[list[int]] = None) -> None:
+        if custom is not None:
+            box["f_sample"] = self.ad2.dout_custom(ch, 1, custom)
+            time.sleep(0.001)
+            self.ad2.set_dout(1 << ch, self.owner, ad2mod.DWF_DOUT_IDLE_ZET, self.step_name)
+        else:
+            box["f"], box["high_s"] = self._dout_start(ch, f, duty)
+        box["oe"] = self.ad2.get_oe()
+        samples, rate = self.la_capture()
+        box["mco"] = self._mco(samples, rate)
+
+    def _t8_off(self, pattern: str, box: dict) -> None:
+        """After the firmware's captures: its result line, a second MCO1 capture of the same
+        Digital Out generation, then Digital Out off. The expected tick count uses the mean of
+        the two MCO1 captures, which bracket the timer's measurement (the board clock drifts
+        hundreds of ppm within seconds; one 41 us window also only resolves ~250 ppm)."""
+        box["res"] = self.con.expect(pattern, 30.0)
+        samples, rate = self.la_capture()
+        mco2 = self._mco(samples, rate)
+        f1, f2 = box["mco"]["freq_hz"], mco2["freq_hz"]
+        box["mco"] = dict(box["mco"], freq_hz=(f1 + f2) / 2 if f1 and f2 else 0.0,
+                          periods=min(box["mco"]["periods"], mco2["periods"]), f_before=f1, f_after=f2)
+        self._dout_stop()
+
+    @staticmethod
+    def _pwm_values(m: re.Match) -> tuple[list[int], list[int]]:
+        return [int(x) for x in m.group(2).split()], [int(x) for x in m.group(3).split()]
+
+    def t8(self) -> None:
+        self.step("T8")
+        self.buschk("T8 before")
+        self.buschk("T8 with PE9/PE11 in AF1 (S12)")
+        # The reset delay d of PWM input mode, measured on one 1 MHz generation (owner's
+        # decision of 2026-10-02): mean of the direct capture differences minus mean of the
+        # PWM-input periods (the captures are integers either side of a fractional period, so
+        # the means, not the medians, estimate it). Subtracted from every expected period and
+        # high time.
+        self.con.expect(r"\[tim\] T8 DELAY ti=1 f=1000000 duty=50 config 1", 30.0)
+        box: dict = {}
+        self.sync(pre=lambda: self._t8_on(1, 1000000, 50, box))
+
+        def off_delay() -> None:
+            box["pwm"] = self.con.expect(r"\[tim\] T8 RDELAY_PWM n=(\d+) per((?: \d+)*)", 30.0)
+            box["dir"] = self.con.expect(r"\[tim\] T8 RDELAY_DIR n=(\d+) diffs((?: \d+)*)", 30.0)
+            self._dout_stop()
+        self.sync(pre=off_delay)
+        pwm_per = [int(x) for x in box["pwm"].group(2).split()]
+        direct = [int(x) for x in box["dir"].group(2).split()]
+        ok_d = len(pwm_per) == 16 and len(direct) == 16
+        d = (statistics.mean(direct) - statistics.mean(pwm_per)) if ok_d else 0.0
+        self.delay = d
+        self.check("T8 reset delay", ok_d and 0 <= d <= 4,
+                   f"1 MHz on PE9, one Digital Out generation: PWM-input periods {pwm_per}, direct differences "
+                   f"{direct}: d = mean(direct) - mean(PWM input) = {d:.2f} ticks (RM0399 40.4.3: reset delayed "
+                   f"by the TI1 resynchronization; subtracted below)")
+        for k, (ti, f, duty, psc) in enumerate(T8_POINTS):
+            m = self.con.expect(rf"\[tim\] T8 P{k} ti=(\d+) f=(\d+) duty=(\d+) psc=(\d+) config (\d)", 30.0)
+            ann = tuple(int(x) for x in m.groups()[:4])
+            box: dict = {}
+            ch = 1 if ti == 1 else 3
+            self.sync(pre=lambda b=box, c=ch, fr=f, d=duty: self._t8_on(c, fr, d, b))
+            self.sync(pre=lambda b=box, kk=k: self._t8_off(rf"\[tim\] T8 R{kk} n=(\d+) per((?: \d+)*) hi((?: \d+)*)", b))
+            pers, his = self._pwm_values(box["res"])
+            f_mco = box["mco"]["freq_hz"]
+            per = (TIMCLK_PER_MCO1 * f_mco / box["f"] - self.delay) / (psc + 1)
+            hi = (TIMCLK_PER_MCO1 * f_mco * box["high_s"] - self.delay) / (psc + 1)
+            ptol = 1 + 0.001 * per
+            htol = 2 + 0.001 * hi
+            bad = [(a, b) for a, b in zip(pers, his) if abs(a - per) > ptol or abs(b - hi) > htol]
+            ok = (ann == (ti, f, duty, psc) and int(m.group(5)) == 1 and len(pers) == 8 and not bad and
+                  (box["oe"] & (1 << ch)) == 0 and box["mco"]["periods"] >= 40)
+            self.check(f"T8 TI{ti} {f} Hz {duty} %", ok,
+                       f"psc={psc}: periods {pers} ({per:.1f} +-{ptol:.1f} = (200 f_MCO1/f - d)/(PSC+1)), high {his} "
+                       f"({hi:.1f} +-{htol:.1f}), out of tolerance {bad}; Digital Out {box['f']:.3f} Hz on DIO{ch}, "
+                       f"OE 0x{box['oe']:04X}; MCO1 {f_mco / 1e6:.5f} MHz (mean of {box['mco']['f_before'] / 1e6:.5f} "
+                       f"before and {box['mco']['f_after'] / 1e6:.5f} after the captures); d = {self.delay:.2f}")
+        # control: inverted polarity
+        self.con.expect(r"\[tim\] T8 INV", 30.0)
+        box = {}
+        self.sync(pre=lambda: self._t8_on(1, 100000, 25, box))
+        self.sync(pre=lambda: self._t8_off(r"\[tim\] T8 RINV n=(\d+) per((?: \d+)*) hi((?: \d+)*)", box))
+        pers, his = self._pwm_values(box["res"])
+        f_mco = box["mco"]["freq_hz"]
+        per = TIMCLK_PER_MCO1 * f_mco / box["f"]
+        low = per - TIMCLK_PER_MCO1 * f_mco * box["high_s"] - self.delay
+        ltol = 2 + 0.001 * low
+        self.check("T8 control inverted polarity", len(his) == 8 and all(abs(h - low) <= ltol for h in his),
+                   f"100 kHz 25 % captured on the falling edge: 'high' {his} ticks = the low time "
+                   f"({low:.1f} +-{ltol:.1f}, the complementary duty, d = {self.delay:.1f})")
+        # input prescaler 8
+        self.con.expect(r"\[tim\] T8 PSC8", 30.0)
+        box = {}
+        self.sync(pre=lambda: self._t8_on(1, 1000000, 50, box))
+        self.sync(pre=lambda: self._t8_off(r"\[tim\] T8 RPSC8 n=(\d+) diffs((?: \d+)*)", box))
+        diffs = [int(x) for x in box["res"].group(2).split()]
+        per8 = 8 * TIMCLK_PER_MCO1 * box["mco"]["freq_hz"] / box["f"]
+        tol8 = 1 + 0.001 * per8
+        self.check("T8 input prescaler 8", len(diffs) >= 8 and all(abs(d - per8) <= tol8 for d in diffs),
+                   f"1 MHz, ICxPSC = /8: capture differences {diffs} ({per8:.1f} +-{tol8:.1f} = 8 periods)")
+        # filter: one 10 ns glitch per period
+        nmax = self.ad2.dout_data_max(1)
+        plen = nmax
+        while plen > 2048 and plen % 2 == 0:
+            plen //= 2
+        reps_n = nmax // plen
+        period_bits = [1 if b < plen // 2 else 0 for b in range(plen)]
+        period_bits[3 * plen // 4] = 1
+        pattern = period_bits * reps_n
+        for icf, label in ((0, "RGLITCH0"), (3, "RGLITCH3")):
+            self.con.expect(rf"\[tim\] T8 GLITCH ti=1 icf={icf}", 30.0)
+            box = {}
+            self.sync(pre=lambda b=box: self._t8_on(1, 0.0, 0, b, custom=pattern))
+            self.sync(pre=lambda b=box, lab=label: self._t8_off(rf"\[tim\] T8 {lab} n=(\d+) diffs((?: \d+)*)", b))
+            diffs = [int(x) for x in box["res"].group(2).split()]
+            ticks_per_bit = TIMCLK_PER_MCO1 * box["mco"]["freq_hz"] / box["f_sample"]
+            full = plen * ticks_per_bit
+            part = (plen // 4) * ticks_per_bit
+            tol = 1 + 0.001 * full
+            if icf == 0:
+                seen_glitch = any(abs(d - part) <= tol for d in diffs) and any(abs(d - (full - part)) <= tol for d in diffs)
+                self.check("T8 control without filter", len(diffs) >= 8 and seen_glitch,
+                           f"{plen}-bit period at 100 MS/s ({nmax}-bit buffer, FDwfDigitalOutDataInfo) with a 10 ns "
+                           f"glitch: differences {diffs[:12]} include {part:.1f} and {full - part:.1f} ticks (glitch captured)")
+            else:
+                self.check("T8 filter ICxF=0011", len(diffs) >= 8 and all(abs(d - full) <= tol for d in diffs),
+                           f"the same pattern with fCK_INT N = 8 (40 ns): differences {diffs[:12]} all {full:.1f} "
+                           f"+-{tol:.1f} ticks (glitch filtered)")
+        # overcapture (the firmware judges it)
+        self.con.expect(r"\[tim\] T8 OVR", 30.0)
+        box = {}
+        self.sync(pre=lambda: self._t8_on(1, 100000, 50, box))
+        self.sync(pre=lambda: (self.con.expect(r"\[tim\] T8 overcapture", 30.0), self._dout_stop()))
+        # T13(b): 64 captures by DMA, then the control CC1DE = 0
+        for ctl in (False, True):
+            self.con.expect(r"\[tim\] T13B" + (r" control" if ctl else r" TIM1 CC1"), 30.0)
+            box = {}
+            self.sync(pre=lambda b=box: self._t8_on(1, 1000000, 50, b))
+            if not ctl:
+                self.sync(pre=lambda b=box: self._t8_off(r"\[tim\] T13B R remaining=(\d+) diffs=(\d+) min=(\d+) max=(\d+)", b))
+                rem, nd, dmin, dmax = (int(x) for x in box["res"].groups())
+                per = TIMCLK_PER_MCO1 * box["mco"]["freq_hz"] / box["f"]
+                self.check("T13(b) CCR1 -> DMA", rem == 0 and nd == 63 and abs(dmin - per) <= 1 and abs(dmax - per) <= 1,
+                           f"64 captures by DMA (NDTR left {rem}): differences {dmin}..{dmax} ticks ({per:.2f} +-1 = "
+                           f"200 f_MCO1 / 1 MHz)")
+            else:
+                self.sync(pre=lambda: (self.con.expect(r"\[tim\] T13\(b\) control", 30.0), self._dout_stop()))
+        self.buschk("T8 after (T14)")
+
+    def t9(self) -> None:
+        self.step("T9")
+        self.con.expect(r"\[tim\] T9 TIM17 TI1SEL", 30.0)
+        box: dict = {}
+
+        def measure() -> None:
+            samples, rate = self.la_capture()
+            box["mco"] = self._mco(samples, rate)
+        self.sync(pre=measure)
+        mco = box["mco"]
+        e = (mco["freq_hz"] - TREF_EXPECTED_HZ) / TREF_EXPECTED_HZ * 1e6 if mco["freq_hz"] else float("nan")
+        self.check("T9 MCO1 on PA8 during the capture", mco["periods"] >= 40 and abs(e) <= TREF_MAX_PPM,
+                   f"the AD2 measures DIO14 while TIM17 captures TI1SEL = MCO1: {mco['freq_hz'] / 1e6:.4f} MHz "
+                   f"({e:+.0f} ppm, |e| <= {TREF_MAX_PPM:.0f}, the TREF bound), {mco['periods']} periods; the ratio "
+                   f"with MCO1 in the same acquisition is 1 by construction (plan T9; report 5.5)")
+
     def run(self) -> dict:
         self.t0a()
         caps_a = self.tref("TREF_A", control=True)
         self.t0b()
         self.t0b_dout()
         self.t0b_s12()
+        self.t6_tim1()
+        self.t6_tim15()
+        self.t8()
+        self.t9()
         caps_b = self.tref("TREF_B", control=False)
         self.step("DONE")
         return tref_stats(caps_a, caps_b, self.log)
@@ -700,7 +1228,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", help="ST-LINK VCP (default: autodetect)")
     ap.add_argument("--out", type=pathlib.Path,
-                    help="capture file (default: docs/tim_f0_bench_<rev>.txt, tim_dev_f0_bench_<rev>.txt with --allow-dirty)")
+                    help="capture file (default: docs/tim_f1_bench_<rev>.txt, tim_dev_f1_bench_<rev>.txt with --allow-dirty)")
     ap.add_argument("--allow-dirty", action="store_true", help="accept a -dirty Rev (development runs)")
     ap.add_argument("--no-reset", action="store_true", help="do not reset the board; wait for the banner")
     ap.add_argument("--preset", default="selftest-tim", help="configure preset of the image (build id)")
@@ -721,7 +1249,7 @@ def main() -> int:
     stamp(f"[host] argv: {shlex.join(sys.argv[1:])}")
     stamp(f"[host] options: allow_dirty={args.allow_dirty} preset={args.preset} no_reset={args.no_reset} "
           f"checklist_confirmed={args.checklist_confirmed}")
-    stamp(f"[host] tim_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}, phase F0")
+    stamp(f"[host] tim_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}, phases F0 and F1")
     procs_ok = checklist(stamp, args.checklist_confirmed)
     tree_record(stamp)
     build_id = host_build_id(args.preset)
@@ -738,6 +1266,7 @@ def main() -> int:
 
     verdict_fw = None
     con_ticks: list[tuple[str, int, int, float]] = []
+    con_t3: list[str] = []
     session: Optional[Session] = None
     abort: Optional[str] = None
     revs: dict[str, str] = {}
@@ -765,6 +1294,10 @@ def main() -> int:
                     subprocess.run([cube_programmer(), "-c", "port=SWD", "mode=HOTPLUG", "-rst"],
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 revs["cm7"] = con.expect(r"\[tim\] CM7 Rev (\S+)", 20.0).group(1)
+                # The TICK and T3 lines of this boot start after its banner; anything before
+                # is the tail of the boot the reset ended (seen in a development run).
+                con.ticks.clear()
+                con.t3.clear()
                 ids = {"cm7": con.expect(r"\[tim\] CM7 Build id (\S+)", 10.0).group(1)}
                 revs["cm4"] = con.expect(r"\[tim\] CM4 Rev (\S+)", 10.0).group(1)
                 ids["cm4"] = con.expect(r"\[tim\] CM4 Build id (.+?)\s*$", 10.0).group(1)
@@ -813,6 +1346,7 @@ def main() -> int:
                 time.sleep(0.3)
                 con.close()
             con_ticks = list(con.ticks)
+            con_t3 = list(con.t3)
             en, zet = ad2.dout_state()
             stamp(f"[ad2] closing in S2: OE=0x{ad2.get_oe():04X} Digital Out enable=0x{en:04X} Zet=0x{zet:04X}")
 
@@ -838,6 +1372,9 @@ def main() -> int:
                   f"expected: {lens_ok}; no x")
     if tref and session is not None:
         session.tref_check(tref, xchk)
+    if session is not None:
+        for name, ok, detail in t3_check(con_t3, stamp):
+            session.check(name, ok, detail)
     checks = session.checks if session else []
     stamp(f"[host] T0B(a) host S3 guard: {'PASS' if guard_a else 'FAIL'}")
     stamp(f"[host] T0B(e) host S11 guard: {'PASS' if guard_e else 'FAIL'}")
@@ -854,7 +1391,7 @@ def main() -> int:
     out = args.out
     if out is None:
         rev = revs.get("cm7", git_rev())
-        prefix = "tim_dev_f0_bench" if args.allow_dirty else "tim_f0_bench"
+        prefix = "tim_dev_f1_bench" if args.allow_dirty else "tim_f1_bench"
         out = PROJECT / "docs" / f"{prefix}_{rev}.txt"
         n = 2
         while out.exists():
