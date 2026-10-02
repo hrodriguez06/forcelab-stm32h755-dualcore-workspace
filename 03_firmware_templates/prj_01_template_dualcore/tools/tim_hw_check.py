@@ -106,6 +106,11 @@ HS_TIMEOUT_S = 10.0
 LA_RATE_HZ = 100e6
 
 TREF_EXPECTED_HZ = 1e6          # MCO1 = HSE_VALUE (8 MHz) / 8
+# Plan R3-1: per group, TREF_CAPTURES LA captures of >= TREF_MIN_PERIODS periods of
+# MCO1 each, started >= TREF_SPACING_S apart.
+TREF_CAPTURES = 8
+TREF_MIN_PERIODS = 40
+TREF_SPACING_S = 0.100
 # TREF criterion, owner's decision of 2026-10-01 (the plan's 500 ppm cannot hold on
 # this board: its HSE, the ST-LINK MCO, measured +13 171 and +13 685 ppm in
 # tim_f0_bench_d01061e.txt and tim_f0_bench_38d15c1.txt): |e_ppm| <= 2 %, and the
@@ -275,6 +280,26 @@ def t0b_dout_guard_selftest(log: Callable[[str], None]) -> bool:
             f"Digital-IO OE=0x{oe:04X}): "
             f"{'passed to the DLL, Idle and push-pull before EnableSet(1), Configure(1) last' if good else 'BLOCKED'}")
     return ok
+
+
+# ---- TREF statistics (plan R3-1) ----------------------------------------------------
+
+def tref_stats(caps_a: list[dict], caps_b: list[dict], log: Callable[[str], None]) -> dict:
+    """e_A, e_B, e (mean of the 16 captures), s (their standard deviation,
+    n - 1) and s_ef = max(s, r / sqrt(6)), r the mean one-sample resolution
+    of the captures: r / sqrt(6) is the standard deviation of the
+    quantisation of the two extreme edges."""
+    es = [c["e"] for c in caps_a + caps_b]
+    n = len(es)
+    e = sum(es) / n
+    s = math.sqrt(sum((v - e) ** 2 for v in es) / (n - 1))
+    r = sum(c["r"] for c in caps_a + caps_b) / n
+    s_ef = max(s, r / math.sqrt(6))
+    e_a = sum(c["e"] for c in caps_a) / len(caps_a)
+    e_b = sum(c["e"] for c in caps_b) / len(caps_b)
+    log(f"[host] TREF statistics: e_A={e_a:+.1f} ppm, e_B={e_b:+.1f} ppm, e={e:+.1f} ppm over {n} captures, "
+        f"s={s:.1f} ppm, r={r:.1f} ppm, r/sqrt(6)={r / math.sqrt(6):.1f} ppm, s_ef=max(s, r/sqrt(6))={s_ef:.1f} ppm")
+    return {"e_ppm": e, "e_a": e_a, "e_b": e_b, "s": s, "r": r, "s_ef": s_ef, "n": n}
 
 
 # ---- TREF cross-check (plan R2-2, R2-10) ----------------------------------------------
@@ -475,29 +500,53 @@ class Session:
                    f"firmware pulls DIO9 (PE5) down where the host expects all up: the check flags 0x{ctrl:04X} "
                    f"(0x{1 << T0A_CTRL_DIO:04X} expected)")
 
-    def tref(self, name: str, control: bool) -> dict:
-        """TREF_A (with the control of R2-1) or TREF_B (without it), plan R3-1/R3-3."""
+    def tref(self, name: str, control: bool) -> list[dict]:
+        """TREF_A (with the control of R2-1) or TREF_B (without it), plan R3-1/R3-3:
+        TREF_CAPTURES LA captures of MCO1 inside one handshake (the MCU waits up
+        to 10 s for HOST_REQ), each of >= TREF_MIN_PERIODS periods and started
+        >= TREF_SPACING_S after the previous one. Returns e_i, r_i per capture."""
         self.step(name)
         box: dict = {}
+        caps: list[dict] = []
+
+        def measure_group() -> None:
+            t_prev = None
+            for i in range(TREF_CAPTURES):
+                if t_prev is not None:
+                    wait = TREF_SPACING_S - (time.monotonic() - t_prev)
+                    if wait > 0:
+                        time.sleep(wait)
+                t_start = time.monotonic()
+                samples, rate = self.la_capture()
+                m = ad2mod.la_period_high(samples, 14, rate)
+                e = (m["freq_hz"] - TREF_EXPECTED_HZ) / TREF_EXPECTED_HZ * 1e6 if m["freq_hz"] else float("nan")
+                caps.append({"i": i, "e": e, "r": m["resolution_ppm"], "periods": m["periods"],
+                             "span": m["span_samples"], "n": len(samples), "rate": rate,
+                             "dt": 0.0 if t_prev is None else t_start - t_prev, "high_s": m["high_s"]})
+                t_prev = t_start
 
         def measure(key: str) -> None:
             samples, rate = self.la_capture()
             box[key] = (ad2mod.la_period_high(samples, 14, rate), rate, len(samples))
-        self.sync(pre=lambda: measure("on"))
-        (m, rate, n) = box["on"]
-        e_ppm = (m["freq_hz"] - TREF_EXPECTED_HZ) / TREF_EXPECTED_HZ * 1e6 if m["freq_hz"] else float("nan")
-        # The check itself is made at the end of the session (tref_check), when
+        self.sync(pre=measure_group)
+        # The criterion is checked at the end of the session (tref_check), when
         # the HAL_GetTick cross-check it is compared with exists.
-        self.log(f"[ad2] {name} measured: DIO14 {m['freq_hz']:.3f} Hz over {m['periods']} periods "
-                 f"({m['span_samples']} samples of {n} at {rate / 1e6:.0f} MS/s), e_ppm={e_ppm:+.1f}, resolution "
-                 f"{m['resolution_ppm']:.1f} ppm, time high {m['high_s'] * 1e9:.1f} ns")
+        for c in caps:
+            self.log(f"[ad2] {name} capture {c['i']}: e_{c['i']}={c['e']:+.1f} ppm, r_{c['i']}={c['r']:.1f} ppm "
+                     f"({c['periods']} periods over {c['span']} of {c['n']} samples at {c['rate'] / 1e6:.0f} MS/s, "
+                     f"started {c['dt'] * 1e3:.1f} ms after the previous one, time high {c['high_s'] * 1e9:.1f} ns)")
+        ok = (len(caps) == TREF_CAPTURES and all(c["periods"] >= TREF_MIN_PERIODS for c in caps) and
+              all(c["dt"] >= TREF_SPACING_S for c in caps[1:]))
+        self.check(f"{name} captures", ok,
+                   f"{len(caps)} captures (8), periods min {min(c['periods'] for c in caps)} (>= {TREF_MIN_PERIODS}), "
+                   f"spacing min {min(c['dt'] for c in caps[1:]) * 1e3:.1f} ms (>= {TREF_SPACING_S * 1e3:.0f})")
         if control:
             self.sync(pre=lambda: measure("off"))
             c = box["off"][0]
             self.check(f"{name} control", c["rises"] == 0 and c["falls"] == 0,
                        f"PA8 in AF1 (TIM1_CH1, TIM1 unclocked), MCO1 still HSE/8 in the RCC: {c['rises']} rising, "
                        f"{c['falls']} falling edges on DIO14 (0 expected)")
-        return {"e_ppm": e_ppm, "res_ppm": m["resolution_ppm"], "periods": m["periods"]}
+        return caps
 
     def tref_check(self, tref: dict, xchk: Optional[tuple[float, float]]) -> None:
         """TREF criterion (owner's decision, 2026-10-01): |e_ppm| <= 2 % and the
@@ -510,9 +559,9 @@ class Session:
             self.check("TREF MCO1 = HSE/8 on PA8", False, f"e_ppm={e:+.1f}; no HAL_GetTick cross-check (aborted)")
             return
         x, u = xchk
-        r = tref["res_ppm"]
+        r = tref["r"]
         bound = TREF_XCHK_K * math.sqrt(u * u + r * r)
-        ok = (tref["periods"] > 0 and abs(e) <= TREF_MAX_PPM and abs(e - x) <= bound)
+        ok = (tref["n"] > 0 and abs(e) <= TREF_MAX_PPM and abs(e - x) <= bound)
         self.check("TREF MCO1 = HSE/8 on PA8", ok,
                    f"e_ppm={e:+.1f} (|e| <= {TREF_MAX_PPM:.0f}), resolution r={r:.1f} ppm; cross-check "
                    f"{x:+.1f} +-{u:.1f} ppm, |e - cross-check| = {abs(e - x):.1f} (<= {TREF_XCHK_K:.0f} x "
@@ -610,13 +659,13 @@ class Session:
 
     def run(self) -> dict:
         self.t0a()
-        tref = self.tref("TREF_A", control=True)
+        caps_a = self.tref("TREF_A", control=True)
         self.t0b()
         self.t0b_dout()
         self.t0b_s12()
-        self.tref("TREF_B", control=False)
+        caps_b = self.tref("TREF_B", control=False)
         self.step("DONE")
-        return tref
+        return tref_stats(caps_a, caps_b, self.log)
 
 
 def main() -> int:
