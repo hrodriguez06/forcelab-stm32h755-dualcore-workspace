@@ -152,9 +152,11 @@ def ad2_set_dout(dwf_lib, hdwf: int, mask: int, step_bus_owner: int,
       - the step is not "bus = AD2";
       - `idle` is not Zet or Low (Low only exists for the T0b(f) control; it is
         still a DIO1/DIO3 line in a "bus = AD2" step);
-      - the Digital-IO OE does not read 0 in every bit (S11 d; SDK section 8:
-        Digital-IO has priority, and Digital Out applies only where its Enable
-        and Output are zero).
+      - the Digital-IO OE does not read 0 on the bits of `mask` (S11 d, applied
+        to the Digital Out channels only, owner's decision of 2026-10-01; SDK
+        section 8: Digital-IO has priority, and Digital Out applies only where
+        its Enable and Output are zero). Other Digital-IO outputs, HOST_REQ for
+        the handshake, may stay enabled: S3 keeps them off the bus.
     Otherwise, SDK section 10.2: FDwfDigitalOutIdleSet(idle) and
     FDwfDigitalOutOutputSet(PushPull) on each channel of `mask`, read back,
     BEFORE its FDwfDigitalOutEnableSet(1) (S11 c); every other channel
@@ -176,8 +178,9 @@ def ad2_set_dout(dwf_lib, hdwf: int, mask: int, step_bus_owner: int,
     elif mask != 0:
         oe = ctypes.c_uint32(0xFFFFFFFF)
         dwf_lib.FDwfDigitalIOOutputEnableGet(h, ctypes.byref(oe))
-        if (oe.value & 0xFFFF) != 0:
-            reason = f"Digital-IO OE=0x{oe.value & 0xFFFF:04X}, must be 0x0000 while Digital Out runs (S11 d)"
+        if (oe.value & mask) != 0:
+            reason = (f"Digital-IO OE=0x{oe.value & 0xFFFF:04X} on the Digital Out channels 0x{mask:04X}: "
+                      f"must be 0 there while Digital Out runs (S11 d)")
     if reason is not None:
         try:
             dwf_lib.FDwfDigitalIOReset(h)

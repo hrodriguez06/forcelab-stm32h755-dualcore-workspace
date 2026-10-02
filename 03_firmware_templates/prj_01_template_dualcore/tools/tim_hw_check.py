@@ -37,8 +37,9 @@ Electrical safety (no series resistors on the bench):
   S8  no output is enabled before the banner `TIM_BENCH v1 idle` of the right
       image has been read.
   S11 Digital Out only through ad2.ad2_set_dout(): DIO1/DIO3, "bus = AD2"
-      steps, Digital-IO OE read back 0 in every bit while it runs; T0b(e)
-      proves the guard on a mock first.
+      steps, Digital-IO OE read back 0 on the Digital Out lines while it runs
+      (S11 d; HOST_REQ may stay enabled); T0b(e) proves the guard on a mock
+      first.
   S12 is enforced by the firmware (bench_claim reads TIM1 back); T0b(g) runs
       the S5 check with PE9/PE11 already in AF1.
 Standard library only (ctypes); `py`, not `python`.
@@ -227,7 +228,9 @@ def t0b_dout_guard_selftest(log: Callable[[str], None]) -> bool:
         (DIO_PE11, "MCU", zet, 0, "bus = MCU"),
         (DIO_PE9, "AD2", ad2mod.DWF_DOUT_IDLE_HIGH, 0, "idle High"),
         (DIO_PE9, "AD2", ad2mod.DWF_DOUT_IDLE_INIT, 0, "idle Init"),
-        (DIO_PE9, "AD2", zet, DIO_REQ, "Digital-IO OE = HOST_REQ (S11 d)"),
+        (DIO_PE9, "AD2", zet, DIO_PE9 | DIO_REQ, "Digital-IO OE on DIO1 (S11 d)"),
+        (DIO_PE11, "AD2", zet, DIO_PE11, "Digital-IO OE on DIO3 (S11 d)"),
+        (DIO_PE9 | DIO_PE11, "AD2", zet, DIO_PE11 | DIO_REQ, "DIO1|DIO3 with OE on DIO3 (S11 d)"),
     ]
     ok = True
     for mask, owner, idle, oe, why in forbidden:
@@ -241,8 +244,10 @@ def t0b_dout_guard_selftest(log: Callable[[str], None]) -> bool:
         ok = ok and good
         log(f"[ad2] T0B(e) ad2_set_dout(0x{mask:04X}, bus={owner}, idle={idle}) [{why}]: "
             f"{'refused, S2 reached, no enabling call reached the DLL' if good else 'NOT REFUSED CLEANLY'}")
-    for mask, idle in ((DIO_PE9, zet), (DIO_PE11, zet), (DIO_PE9 | DIO_PE11, zet), (DIO_PE9, low)):  # the controls
-        m = _MockDwfDout(0)
+    # The controls; HOST_REQ (DIO12) enabled in Digital-IO is not a Digital Out line (S11 d).
+    for mask, idle, oe in ((DIO_PE9, zet, 0), (DIO_PE11, zet, 0), (DIO_PE9 | DIO_PE11, zet, 0), (DIO_PE9, low, 0),
+                           (DIO_PE9, zet, DIO_REQ), (DIO_PE9 | DIO_PE11, zet, DIO_REQ)):
+        m = _MockDwfDout(oe)
         ad2mod.ad2_set_dout(m, 1, mask, GPIO_BENCH_BUS_AD2, idle)
         en = [c for c in range(16) if (mask >> c) & 1]
         order_ok = True
@@ -253,7 +258,7 @@ def t0b_dout_guard_selftest(log: Callable[[str], None]) -> bool:
         good = (order_ok and m.calls[-1] == ("Configure", 1) and
                 [c[1] for c in _enabling(m.calls) if c[0] == "EnableSet"] == en)
         ok = ok and good
-        log(f"[ad2] T0B(e) control ad2_set_dout(0x{mask:04X}, bus=AD2, idle={idle}): "
+        log(f"[ad2] T0B(e) control ad2_set_dout(0x{mask:04X}, bus=AD2, idle={idle}, Digital-IO OE=0x{oe:04X}): "
             f"{'passed to the DLL, Idle and push-pull before EnableSet(1), Configure(1) last' if good else 'BLOCKED'}")
     return ok
 
@@ -476,7 +481,8 @@ class Session:
 
     def _dout_run(self, idle: int, res: dict) -> None:
         """Inside one handshake: DIO1 at 1 MHz from Digital Out, then stopped."""
-        self.set_oe(0)                                     # S11 d: no Digital-IO OE while it runs
+        # HOST_REQ stays enabled (S11 d covers the Digital Out lines only); the
+        # guard refuses to start if the Digital-IO OE of DIO1 is not 0.
         f_cfg = self.ad2.dout_pulse(1, DOUT_DIVIDER, DOUT_LOW, DOUT_HIGH)
         time.sleep(0.001)                                  # S6
         self.ad2.set_dout(DIO_PE9, self.owner, idle)       # S11: the guarded path
@@ -486,8 +492,6 @@ class Session:
         self.ad2.set_dout(0, self.owner)                   # stop: Configure(0), DIO1 goes to its idle
         en_stop, zet_stop = self.ad2.dout_state()
         oe_stop = self.ad2.get_oe()
-        time.sleep(0.001)
-        self.set_oe(DIO_REQ)
         m = ad2mod.la_period_high(samples, 1, rate)
         others = {b: ad2mod.la_edges(samples, b) for b in range(8) if b != 1}
         res.update(f_cfg=f_cfg, en=en, zet=zet, oe_run=oe_run, m=m, en_stop=en_stop, zet_stop=zet_stop,
@@ -506,10 +510,10 @@ class Session:
             want_zet = DIO_PE9 if idle == zet else 0
             self.check(f"T0B(f) {label}: Digital Out ran on DIO1 only",
                        ran and res["en"] == DIO_PE9 and (res["zet"] & DIO_PE9) == want_zet and
-                       res["oe_run"] == 0 and res["other_edges"] == 0,
+                       (res["oe_run"] & DIO_PE9) == 0 and res["oe_run"] == DIO_REQ and res["other_edges"] == 0,
                        f"DIO1 {m['freq_hz'] / 1e6:.4f} MHz (configured {res['f_cfg'] / 1e6:.4f}), high "
                        f"{m['high_s'] * 1e9:.1f} ns, {m['periods']} periods; enable mask 0x{res['en']:04X}, "
-                       f"Zet mask 0x{res['zet']:04X}; Digital-IO OE while running 0x{res['oe_run']:04X} (S11 d); "
+                       f"Zet mask 0x{res['zet']:04X}; Digital-IO OE while running 0x{res['oe_run']:04X} (HOST_REQ only, 0 on DIO1: S11 d); "
                        f"edges on the other bus lines {res['other_edges']}")
             self.log(f"[ad2] T0B(f) {label} stopped: enable 0x{res['en_stop']:04X} Zet 0x{res['zet_stop']:04X} "
                      f"OE 0x{res['oe_stop']:04X}")
