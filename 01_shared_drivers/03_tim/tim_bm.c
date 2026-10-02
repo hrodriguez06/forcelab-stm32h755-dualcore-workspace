@@ -158,6 +158,7 @@ static const TimEntry_t k_tim[] = {
 #define CR1_OPM     (1UL << 3)
 #define CR1_DIR     (1UL << 4)
 #define CR1_CMS_POS 5U
+#define CR1_CMS_MSK (3UL << CR1_CMS_POS)
 #define CR1_ARPE    (1UL << 7)
 
 #define CR2_MMS_POS 4U
@@ -619,6 +620,9 @@ TimBm_Status_t TIM_BM_InitTimeBase(const TimBm_TimeBaseConfig_t *cfg)
     }
 
     const uint32_t pm = irq_save();
+    /* DIR is read-only while CMS != 0 (40.4.1): leaving center mode takes one write that
+       clears CMS before the one that sets DIR, or a DOWN after a center mode stays up. */
+    tim->CR1 = CR1_URS;
     tim->CR1 = cr1 | CR1_URS;                  /* CEN = 0; URS = 1 until the UG below */
     tim->PSC = cfg->psc;
     tim->ARR = cfg->arr;
@@ -709,7 +713,9 @@ TimBm_Status_t TIM_BM_Deinit(TIM_TypeDef *tim)
     {
         tim->CCER = 0U;
     }
-    tim->CR1 &= ~CR1_CEN;
+    /* CMS = 0 here, so the CR1 = 0 of the image below can clear DIR, which is read-only
+       while CMS != 0 (40.4.1): stopped during a down-count in center mode, DIR reads 1. */
+    tim->CR1 &= ~(CR1_CEN | CR1_CMS_MSK);
     tim->DIER = 0U;
     irq_restore(pm);
 
