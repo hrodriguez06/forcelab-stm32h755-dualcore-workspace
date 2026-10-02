@@ -300,9 +300,10 @@ static uint32_t ccmr_field_mask(uint32_t channel)
 }
 
 /* CCxS of a channel, read: 0 = output. Reads only. */
-static uint32_t ccxs(TIM_TypeDef *tim, uint32_t channel)
+static uint32_t ccxs(const TIM_TypeDef *tim, uint32_t channel)
 {
-    return (*ccmr_reg(tim, channel) >> ccmr_shift(channel)) & 3UL;
+    const uint32_t ccmr = (channel <= 2U) ? tim->CCMR1 : tim->CCMR2;
+    return (ccmr >> ccmr_shift(channel)) & 3UL;
 }
 
 static bool prescaler_code(uint32_t prescaler, uint32_t *code)
@@ -554,7 +555,7 @@ TimBm_Status_t TIM_BM_DutyToCompare(uint32_t arr, uint32_t counter_bits, uint32_
  * Time base
  * ========================================================================== */
 
-TimBm_Status_t TIM_BM_InitTimeBase(const TimBm_TimeBaseConfig_t *cfg)
+TimBm_Status_t TIM_BM_CheckTimeBase(const TimBm_TimeBaseConfig_t *cfg)
 {
     if (cfg == NULL)
     {
@@ -582,7 +583,7 @@ TimBm_Status_t TIM_BM_InitTimeBase(const TimBm_TimeBaseConfig_t *cfg)
     {
         return TIM_BM_ERR_PARAM;
     }
-    TIM_TypeDef *tim = cfg->tim;
+    const TIM_TypeDef *tim = cfg->tim;
     /* state: reads only */
     if ((tim->CR1 & CR1_CEN) != 0U)
     {
@@ -596,6 +597,18 @@ TimBm_Status_t TIM_BM_InitTimeBase(const TimBm_TimeBaseConfig_t *cfg)
             return TIM_BM_ERR_UNSUPPORTED;    /* ES0445 2.16.1, the third way into it */
         }
     }
+    return TIM_BM_OK;
+}
+
+TimBm_Status_t TIM_BM_InitTimeBase(const TimBm_TimeBaseConfig_t *cfg)
+{
+    const TimBm_Status_t st = TIM_BM_CheckTimeBase(cfg);
+    if (st != TIM_BM_OK)
+    {
+        return st;
+    }
+    const TimEntry_t *e = entry(cfg->tim);
+    TIM_TypeDef *tim = cfg->tim;
 
     uint32_t cr1 = 0U;
     if (cfg->count_mode == TIM_BM_COUNT_DOWN)
@@ -646,7 +659,7 @@ TimBm_Status_t TIM_BM_InitTimeBase(const TimBm_TimeBaseConfig_t *cfg)
     return TIM_BM_OK;
 }
 
-TimBm_Status_t TIM_BM_SetPeriod(TIM_TypeDef *tim, uint32_t arr)
+TimBm_Status_t TIM_BM_CheckPeriod(const TIM_TypeDef *tim, uint32_t arr)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
@@ -656,6 +669,16 @@ TimBm_Status_t TIM_BM_SetPeriod(TIM_TypeDef *tim, uint32_t arr)
     if ((arr == 0U) || (arr > counter_max(e)))
     {
         return TIM_BM_ERR_PARAM;
+    }
+    return TIM_BM_OK;
+}
+
+TimBm_Status_t TIM_BM_SetPeriod(TIM_TypeDef *tim, uint32_t arr)
+{
+    const TimBm_Status_t st = TIM_BM_CheckPeriod(tim, arr);
+    if (st != TIM_BM_OK)
+    {
+        return st;
     }
     tim->ARR = arr;
     return (tim->ARR == arr) ? TIM_BM_OK : TIM_BM_ERR_VERIFY;
@@ -816,14 +839,40 @@ static TimBm_Status_t dier_update(TIM_TypeDef *tim, uint32_t bits, bool set)
     return (rb == (set ? bits : 0U)) ? TIM_BM_OK : TIM_BM_ERR_VERIFY;
 }
 
-static TimBm_Status_t irq_common(TIM_TypeDef *tim, uint32_t ev_mask, bool set)
+static uint32_t mux_request(const TimEntry_t *e, uint32_t ev);
+
+TimBm_Status_t TIM_BM_CheckEvents(const TIM_TypeDef *tim, uint32_t ev_mask, uint32_t use)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
     {
         return TIM_BM_ERR_PARAM;
     }
-    const TimBm_Status_t st = ev_check(e, ev_mask);
+    if (use == TIM_BM_USE_IRQ)
+    {
+        return ev_check(e, ev_mask);
+    }
+    if (use != TIM_BM_USE_DMA)
+    {
+        return TIM_BM_ERR_PARAM;
+    }
+    if ((ev_mask == 0U) || ((ev_mask & ~EV_DMA) != 0U))
+    {
+        return TIM_BM_ERR_PARAM;
+    }
+    for (uint32_t b = 0U; b <= 4U; b++)
+    {
+        if (((ev_mask & (1UL << b)) != 0U) && (mux_request(e, 1UL << b) == 0U))
+        {
+            return TIM_BM_ERR_UNSUPPORTED;
+        }
+    }
+    return TIM_BM_OK;
+}
+
+static TimBm_Status_t irq_common(TIM_TypeDef *tim, uint32_t ev_mask, bool set)
+{
+    const TimBm_Status_t st = TIM_BM_CheckEvents(tim, ev_mask, TIM_BM_USE_IRQ);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -859,21 +908,10 @@ static uint32_t mux_request(const TimEntry_t *e, uint32_t ev)
 
 static TimBm_Status_t dmareq_common(TIM_TypeDef *tim, uint32_t ev_mask, bool set)
 {
-    const TimEntry_t *e = entry(tim);
-    if (e == NULL)
+    const TimBm_Status_t st = TIM_BM_CheckEvents(tim, ev_mask, TIM_BM_USE_DMA);
+    if (st != TIM_BM_OK)
     {
-        return TIM_BM_ERR_PARAM;
-    }
-    if ((ev_mask == 0U) || ((ev_mask & ~EV_DMA) != 0U))
-    {
-        return TIM_BM_ERR_PARAM;
-    }
-    for (uint32_t b = 0U; b <= 4U; b++)
-    {
-        if (((ev_mask & (1UL << b)) != 0U) && (mux_request(e, 1UL << b) == 0U))
-        {
-            return TIM_BM_ERR_UNSUPPORTED;
-        }
+        return st;
     }
     return dier_update(tim, ev_mask << DIER_DMA_SHIFT, set);
 }
@@ -935,12 +973,7 @@ TimBm_Status_t TIM_BM_WaitFlags(TIM_TypeDef *tim, uint32_t ev_mask, uint32_t max
     {
         return TIM_BM_ERR_PARAM;
     }
-    const TimEntry_t *e = entry(tim);
-    if (e == NULL)
-    {
-        return TIM_BM_ERR_PARAM;
-    }
-    const TimBm_Status_t st = ev_check(e, ev_mask);
+    const TimBm_Status_t st = TIM_BM_CheckEvents(tim, ev_mask, TIM_BM_USE_IRQ);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -978,12 +1011,7 @@ TimBm_Status_t TIM_BM_WaitFlags(TIM_TypeDef *tim, uint32_t ev_mask, uint32_t max
 
 TimBm_Status_t TIM_BM_GenerateEvent(TIM_TypeDef *tim, uint32_t ev_mask)
 {
-    const TimEntry_t *e = entry(tim);
-    if (e == NULL)
-    {
-        return TIM_BM_ERR_PARAM;
-    }
-    const TimBm_Status_t st = ev_check(e, ev_mask);
+    const TimBm_Status_t st = TIM_BM_CheckEvents(tim, ev_mask, TIM_BM_USE_IRQ);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -1045,7 +1073,7 @@ TimBm_Status_t TIM_BM_GetDmaRequest(const TIM_TypeDef *tim, uint32_t ev, uint32_
  * Output compare / PWM
  * ========================================================================== */
 
-TimBm_Status_t TIM_BM_ConfigOutput(const TimBm_OcConfig_t *cfg)
+TimBm_Status_t TIM_BM_CheckOutput(const TimBm_OcConfig_t *cfg)
 {
     if (cfg == NULL)
     {
@@ -1056,7 +1084,7 @@ TimBm_Status_t TIM_BM_ConfigOutput(const TimBm_OcConfig_t *cfg)
     {
         return TIM_BM_ERR_PARAM;
     }
-    TimBm_Status_t st = ch_check(e, cfg->channel);
+    const TimBm_Status_t st = ch_check(e, cfg->channel);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -1065,13 +1093,23 @@ TimBm_Status_t TIM_BM_ConfigOutput(const TimBm_OcConfig_t *cfg)
     {
         return TIM_BM_ERR_PARAM;
     }
-    TIM_TypeDef *tim = cfg->tim;
-    const uint32_t ch = cfg->channel;
-    const uint32_t e_bit = 1UL << (4U * (ch - 1U));
-    if ((tim->CCER & e_bit) != 0U)
+    const uint32_t e_bit = 1UL << (4U * (cfg->channel - 1U));
+    if ((cfg->tim->CCER & e_bit) != 0U)
     {
         return TIM_BM_ERR_BUSY;                /* CCxS is read-only while CCxE = 1 (40.4.7) */
     }
+    return TIM_BM_OK;
+}
+
+TimBm_Status_t TIM_BM_ConfigOutput(const TimBm_OcConfig_t *cfg)
+{
+    const TimBm_Status_t st = TIM_BM_CheckOutput(cfg);
+    if (st != TIM_BM_OK)
+    {
+        return st;
+    }
+    TIM_TypeDef *tim = cfg->tim;
+    const uint32_t ch = cfg->channel;
 
     volatile uint32_t *ccmr = ccmr_reg(tim, ch);
     const uint32_t fmask = ccmr_field_mask(ch);
@@ -1094,7 +1132,7 @@ TimBm_Status_t TIM_BM_ConfigOutput(const TimBm_OcConfig_t *cfg)
     return TIM_BM_OK;
 }
 
-TimBm_Status_t TIM_BM_SetCompare(TIM_TypeDef *tim, uint32_t channel, uint32_t ccr)
+TimBm_Status_t TIM_BM_CheckCompare(const TIM_TypeDef *tim, uint32_t channel, uint32_t ccr)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
@@ -1110,12 +1148,22 @@ TimBm_Status_t TIM_BM_SetCompare(TIM_TypeDef *tim, uint32_t channel, uint32_t cc
     {
         return TIM_BM_ERR_PARAM;
     }
+    return TIM_BM_OK;
+}
+
+TimBm_Status_t TIM_BM_SetCompare(TIM_TypeDef *tim, uint32_t channel, uint32_t ccr)
+{
+    const TimBm_Status_t st = TIM_BM_CheckCompare(tim, channel, ccr);
+    if (st != TIM_BM_OK)
+    {
+        return st;
+    }
     (&tim->CCR1)[channel - 1U] = ccr;
     return ((&tim->CCR1)[channel - 1U] == ccr) ? TIM_BM_OK : TIM_BM_ERR_VERIFY;
 }
 
 /* All channels of ch_mask have CCxS == 00 (want_output) or != 00 (inputs). */
-static bool channels_are(TIM_TypeDef *tim, uint32_t ch_mask, bool want_output)
+static bool channels_are(const TIM_TypeDef *tim, uint32_t ch_mask, bool want_output)
 {
     for (uint32_t ch = 1U; ch <= 4U; ch++)
     {
@@ -1130,10 +1178,14 @@ static bool channels_are(TIM_TypeDef *tim, uint32_t ch_mask, bool want_output)
     return true;
 }
 
-TimBm_Status_t TIM_BM_OutputEnable(TIM_TypeDef *tim, uint32_t ch_mask)
+TimBm_Status_t TIM_BM_CheckChannels(const TIM_TypeDef *tim, uint32_t ch_mask, uint32_t use)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
+    {
+        return TIM_BM_ERR_PARAM;
+    }
+    if ((use != TIM_BM_USE_OUTPUT_ON) && (use != TIM_BM_USE_OUTPUT_OFF) && (use != TIM_BM_USE_CAPTURE))
     {
         return TIM_BM_ERR_PARAM;
     }
@@ -1142,10 +1194,25 @@ TimBm_Status_t TIM_BM_OutputEnable(TIM_TypeDef *tim, uint32_t ch_mask)
     {
         return st;
     }
-    if (!channels_are(tim, ch_mask, true))
+    if ((use == TIM_BM_USE_OUTPUT_ON) && !channels_are(tim, ch_mask, true))
     {
         return TIM_BM_ERR_PARAM;               /* an input: CCxE would start a capture */
     }
+    if ((use == TIM_BM_USE_CAPTURE) && !channels_are(tim, ch_mask, false))
+    {
+        return TIM_BM_ERR_PARAM;               /* an output: CCxE would drive the pin */
+    }
+    return TIM_BM_OK;
+}
+
+TimBm_Status_t TIM_BM_OutputEnable(TIM_TypeDef *tim, uint32_t ch_mask)
+{
+    const TimBm_Status_t st = TIM_BM_CheckChannels(tim, ch_mask, TIM_BM_USE_OUTPUT_ON);
+    if (st != TIM_BM_OK)
+    {
+        return st;
+    }
+    const TimEntry_t *e = entry(tim);
     const uint32_t bits = ccer_e_bits(ch_mask);
     const bool bdtr = (e->flags & F_BDTR) != 0U;
     const uint32_t pm = irq_save();
@@ -1164,16 +1231,12 @@ TimBm_Status_t TIM_BM_OutputEnable(TIM_TypeDef *tim, uint32_t ch_mask)
 
 TimBm_Status_t TIM_BM_OutputDisable(TIM_TypeDef *tim, uint32_t ch_mask)
 {
-    const TimEntry_t *e = entry(tim);
-    if (e == NULL)
-    {
-        return TIM_BM_ERR_PARAM;
-    }
-    const TimBm_Status_t st = chmask_check(e, ch_mask);
+    const TimBm_Status_t st = TIM_BM_CheckChannels(tim, ch_mask, TIM_BM_USE_OUTPUT_OFF);
     if (st != TIM_BM_OK)
     {
         return st;
     }
+    const TimEntry_t *e = entry(tim);
     const uint32_t bits = ccer_e_bits(ch_mask);
     const uint32_t all_e = ccer_e_bits(0xFU);
     const bool bdtr = (e->flags & F_BDTR) != 0U;
@@ -1230,7 +1293,7 @@ static bool tisel_verify(TIM_TypeDef *tim, uint32_t ti, uint32_t value)
     return ((tim->TISEL >> (8U * (ti - 1U))) & 0xFUL) == value;
 }
 
-TimBm_Status_t TIM_BM_ConfigInput(const TimBm_IcConfig_t *cfg)
+TimBm_Status_t TIM_BM_CheckInput(const TimBm_IcConfig_t *cfg)
 {
     if (cfg == NULL)
     {
@@ -1241,7 +1304,7 @@ TimBm_Status_t TIM_BM_ConfigInput(const TimBm_IcConfig_t *cfg)
     {
         return TIM_BM_ERR_PARAM;
     }
-    TimBm_Status_t st = ch_check(e, cfg->channel);
+    const TimBm_Status_t st = ch_check(e, cfg->channel);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -1267,12 +1330,25 @@ TimBm_Status_t TIM_BM_ConfigInput(const TimBm_IcConfig_t *cfg)
     {
         return TIM_BM_ERR_PARAM;
     }
-    TIM_TypeDef *tim = cfg->tim;
     /* state */
-    if ((tim->CCER & (1UL << (4U * (ch - 1U)))) != 0U)
+    if ((cfg->tim->CCER & (1UL << (4U * (ch - 1U)))) != 0U)
     {
         return TIM_BM_ERR_BUSY;
     }
+    return TIM_BM_OK;
+}
+
+TimBm_Status_t TIM_BM_ConfigInput(const TimBm_IcConfig_t *cfg)
+{
+    const TimBm_Status_t st = TIM_BM_CheckInput(cfg);
+    if (st != TIM_BM_OK)
+    {
+        return st;
+    }
+    TIM_TypeDef *tim = cfg->tim;
+    const uint32_t ch = cfg->channel;
+    uint32_t psc_code = 0U;
+    (void)prescaler_code(cfg->prescaler, &psc_code);   /* validated above */
     ic_write(tim, ch, cfg->selection, cfg->edge, psc_code, cfg->filter);
     tisel_write(tim, ch, cfg->tisel);
     if (!ic_verify(tim, ch, cfg->selection, cfg->edge, psc_code, cfg->filter) || !tisel_verify(tim, ch, cfg->tisel))
@@ -1282,8 +1358,8 @@ TimBm_Status_t TIM_BM_ConfigInput(const TimBm_IcConfig_t *cfg)
     return TIM_BM_OK;
 }
 
-TimBm_Status_t TIM_BM_ConfigPwmInput(TIM_TypeDef *tim, uint32_t ti, uint32_t edge,
-                                     uint32_t prescaler, uint32_t filter, uint32_t tisel)
+TimBm_Status_t TIM_BM_CheckPwmInput(const TIM_TypeDef *tim, uint32_t ti, uint32_t edge,
+                                    uint32_t prescaler, uint32_t filter, uint32_t tisel)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
@@ -1315,6 +1391,19 @@ TimBm_Status_t TIM_BM_ConfigPwmInput(TIM_TypeDef *tim, uint32_t ti, uint32_t edg
     {
         return TIM_BM_ERR_BUSY;
     }
+    return TIM_BM_OK;
+}
+
+TimBm_Status_t TIM_BM_ConfigPwmInput(TIM_TypeDef *tim, uint32_t ti, uint32_t edge,
+                                     uint32_t prescaler, uint32_t filter, uint32_t tisel)
+{
+    const TimBm_Status_t st = TIM_BM_CheckPwmInput(tim, ti, edge, prescaler, filter, tisel);
+    if (st != TIM_BM_OK)
+    {
+        return st;
+    }
+    uint32_t psc_code = 0U;
+    (void)prescaler_code(prescaler, &psc_code);        /* validated above */
     const uint32_t other = (ti == 1U) ? 2U : 1U;
     const uint32_t opposite = (edge == TIM_BM_EDGE_RISING) ? TIM_BM_EDGE_FALLING : TIM_BM_EDGE_RISING;
     const uint32_t ts = (ti == 1U) ? 5U : 6U;  /* TI1FP1 = 00101, TI2FP2 = 00110 */
@@ -1341,19 +1430,10 @@ TimBm_Status_t TIM_BM_ConfigPwmInput(TIM_TypeDef *tim, uint32_t ti, uint32_t edg
 
 static TimBm_Status_t capture_common(TIM_TypeDef *tim, uint32_t ch_mask, bool set)
 {
-    const TimEntry_t *e = entry(tim);
-    if (e == NULL)
-    {
-        return TIM_BM_ERR_PARAM;
-    }
-    const TimBm_Status_t st = chmask_check(e, ch_mask);
+    const TimBm_Status_t st = TIM_BM_CheckChannels(tim, ch_mask, TIM_BM_USE_CAPTURE);
     if (st != TIM_BM_OK)
     {
         return st;
-    }
-    if (!channels_are(tim, ch_mask, false))
-    {
-        return TIM_BM_ERR_PARAM;               /* an output: CCxE would drive the pin */
     }
     const uint32_t bits = ccer_e_bits(ch_mask);
     const uint32_t pm = irq_save();
@@ -1383,7 +1463,7 @@ TimBm_Status_t TIM_BM_CaptureDisable(TIM_TypeDef *tim, uint32_t ch_mask)
  * Master / slave
  * ========================================================================== */
 
-TimBm_Status_t TIM_BM_ConfigMaster(TIM_TypeDef *tim, uint32_t mms, bool msm)
+TimBm_Status_t TIM_BM_CheckMaster(const TIM_TypeDef *tim, uint32_t mms, bool msm)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
@@ -1406,6 +1486,17 @@ TimBm_Status_t TIM_BM_ConfigMaster(TIM_TypeDef *tim, uint32_t mms, bool msm)
     {
         return TIM_BM_ERR_UNSUPPORTED;
     }
+    return TIM_BM_OK;
+}
+
+TimBm_Status_t TIM_BM_ConfigMaster(TIM_TypeDef *tim, uint32_t mms, bool msm)
+{
+    const TimBm_Status_t st = TIM_BM_CheckMaster(tim, mms, msm);
+    if (st != TIM_BM_OK)
+    {
+        return st;
+    }
+    const bool slave = (entry(tim)->flags & F_SLAVE) != 0U;
     const uint32_t pm = irq_save();
     tim->CR2 = (tim->CR2 & ~CR2_MMS_MSK) | (mms << CR2_MMS_POS);
     if (slave)
@@ -1425,7 +1516,7 @@ static bool sms_valid(uint32_t sms)
     return (sms == TIM_BM_SMS_DISABLED) || ((sms >= TIM_BM_SMS_RESET) && (sms <= TIM_BM_SMS_RESET_TRIGGER));
 }
 
-TimBm_Status_t TIM_BM_ConfigSlave(TIM_TypeDef *tim, uint32_t sms, uint32_t trigger)
+TimBm_Status_t TIM_BM_CheckSlave(const TIM_TypeDef *tim, uint32_t sms, uint32_t trigger)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
@@ -1458,6 +1549,18 @@ TimBm_Status_t TIM_BM_ConfigSlave(TIM_TypeDef *tim, uint32_t sms, uint32_t trigg
     {
         return TIM_BM_ERR_UNSUPPORTED;         /* ES0445 2.16.1 */
     }
+    return TIM_BM_OK;
+}
+
+TimBm_Status_t TIM_BM_ConfigSlave(TIM_TypeDef *tim, uint32_t sms, uint32_t trigger)
+{
+    const TimBm_Status_t st = TIM_BM_CheckSlave(tim, sms, trigger);
+    if (st != TIM_BM_OK)
+    {
+        return st;
+    }
+    uint32_t ts = 0U;
+    (void)ts_code(trigger, &ts);               /* validated above */
     const uint32_t pm = irq_save();
     uint32_t smcr = tim->SMCR & ~SMCR_SMS_MSK;
     tim->SMCR = smcr;                          /* SMS = 0 */
