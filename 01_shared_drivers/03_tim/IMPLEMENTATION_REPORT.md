@@ -204,7 +204,7 @@ Propuesta, que no he aplicado porque es un criterio: \|e − cruzada\| ≤ 3·�
 
 ## F0: cota de TREF con la resolución
 
-Estado: entregada para auditoría (`d69508e` código, evidencia en `3fffb50`). Esta sección cierra, por mi parte, la pregunta abierta de la anterior; el hallazgo, si lo hay, lo cierra el auditor.
+Estado: entregada para auditoría (`d69508e` código, evidencia en `3fffb50`). Esta sección responde a la pregunta abierta de la sección anterior con la decisión del responsable.
 
 ### Commits
 
