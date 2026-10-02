@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file    tim_selftest.c
   * @brief   03_tim selftest, CPU2 side (preset selftest-tim): the bench of F0
-  *          and the TIM15 tests of F1 (tim_bm).
+  *          and the TIM15 tests of F1 (tim_bm) and F2 (tim_ll).
   *
   *          CPU2 has no console. It publishes its Rev, build id and step-table
   *          version in the SRAM4 block (Common/Inc/tim_selftest.h), serves the
@@ -20,6 +20,7 @@
 #include "fw_build_id.h"
 #include "gpio_bm.h"
 #include "tim_bm.h"
+#include "tim_ll.h"
 #include "stm32h7xx_hal.h"
 
 /* CPU1 sends the next command within seconds; a minute of silence means it
@@ -237,12 +238,15 @@ static void m4_delay_cycles(uint32_t n)
     }
 }
 
+/* The tier of the command being served (F2): TST_TIER_LL in arg0 selects tim_ll. */
+static const TstTier_t *s_tr4 = &k_tst_tier_bm;
+
 static uint32_t t14_tim15(void)
 {
     uint32_t idx = 0U;
     uint32_t got = 0U;
     uint32_t exp = 0U;
-    return ((TIM_BM_Deinit(TIM15) == TIM_BM_OK) && tst_reset_ok(TIM15, &idx, &got, &exp)) ? 1U : 0U;
+    return ((s_tr4->deinit(TIM15) == TIM_BM_OK) && tst_reset_ok(TIM15, &idx, &got, &exp)) ? 1U : 0U;
 }
 
 static TimBm_TimeBaseConfig_t tb15(uint32_t psc, uint32_t arr)
@@ -362,13 +366,94 @@ static void run_t1(volatile uint32_t *r)
     (void)TIM_BM_Deinit(TIM15);
 }
 
+/* F2: the TIM15 refusals with LL constants (tim_ll), the same snapshot and layout. */
+static void run_t1_ll(volatile uint32_t *r)
+{
+    static const uint8_t k_expect[] = {
+        TIM_BM_ERR_PARAM,        /*  0 InitTimeBase(TIM15 repetition 0x100: RCR is 8 bits)          */
+        TIM_BM_ERR_UNSUPPORTED,  /*  1 ConfigOutput(TIM15 LL_TIM_CHANNEL_CH3)                       */
+        TIM_BM_ERR_UNSUPPORTED,  /*  2 InitTimeBase(TIM15 LL_TIM_COUNTERMODE_CENTER_DOWN)           */
+        TIM_BM_ERR_UNSUPPORTED,  /*  3 ConfigSlave(TIM15 LL_TIM_TS_ITR4: not wired, table 366)      */
+        TIM_BM_ERR_UNSUPPORTED,  /*  4 ConfigMaster(TIM15 LL_TIM_TRGO_OC3REF > MMS 5)               */
+        TIM_BM_ERR_UNSUPPORTED,  /*  5 EnableDmaRequest(TIM15 LL_TIM_DIER_CC2IE: none in table 126) */
+        TIM_BM_ERR_UNSUPPORTED,  /*  6 ConfigInput(TIM15 CH2 remap TI2SEL = 0100, reserved)         */
+        TIM_BM_ERR_BUSY,         /*  7 ConfigOutput(TIM15 CH1) with CC1E = 1                        */
+        TIM_BM_ERR_BUSY,         /*  8 InitTimeBase(TIM15) with CEN = 1                             */
+        TIM_BM_ERR_PARAM,        /*  9 EnableClock(TIM1 + 4)                                        */
+        TIM_BM_ERR_PARAM,        /* 10 ConfigOutput(TIM15 LL_TIM_CHANNEL_CH1N)                      */
+        TIM_BM_ERR_PARAM,        /* 11 InitTimeBase(TIM15 counter mode 0x0008: no LL constant)      */
+    };
+    const uint32_t n = sizeof(k_expect) / sizeof(k_expect[0]);
+    uint32_t bad = 0U;
+    uint32_t touched = 0U;
+    (void)TIM_LL_EnableClock(TIM15);
+    for (uint32_t k = 0U; k < n; k++)
+    {
+        TimLl_TimeBaseConfig_t tb = { TIM15, 0U, LL_TIM_COUNTERMODE_UP, 999U, 0U, false, false, false };
+        TimLl_OcConfig_t oc = { TIM15, LL_TIM_CHANNEL_CH1, LL_TIM_OCMODE_PWM1, 100U, false, true };
+        TimLl_IcConfig_t ic = { TIM15, LL_TIM_CHANNEL_CH2, LL_TIM_ACTIVEINPUT_DIRECTTI, LL_TIM_IC_POLARITY_RISING,
+                                LL_TIM_ICPSC_DIV1, LL_TIM_IC_FILTER_FDIV1, TIM_TISEL_TI2SEL_2 };   /* TI2SEL 0100 */
+        TimBm_Status_t st = TIM_BM_OK;
+        (void)TIM_LL_Deinit(TIM15);
+        if (k == 7U)
+        {
+            (void)TIM_LL_ConfigOutput(&oc);
+            (void)TIM_LL_OutputEnable(TIM15, LL_TIM_CHANNEL_CH1);
+        }
+        else if (k == 8U)
+        {
+            (void)TIM_LL_InitTimeBase(&tb);
+            (void)TIM_LL_Start(TIM15);
+        }
+        m4_snap(&s_m4_b);
+        switch (k)
+        {
+        case 0:  tb.repetition = 0x100U; st = TIM_LL_InitTimeBase(&tb); break;
+        case 1:  oc.channel = LL_TIM_CHANNEL_CH3; st = TIM_LL_ConfigOutput(&oc); break;
+        case 2:  tb.counter_mode = LL_TIM_COUNTERMODE_CENTER_DOWN; st = TIM_LL_InitTimeBase(&tb); break;
+        case 3:  st = TIM_LL_ConfigSlave(TIM15, LL_TIM_SLAVEMODE_TRIGGER, LL_TIM_TS_ITR4); break;
+        case 4:  st = TIM_LL_ConfigMaster(TIM15, LL_TIM_TRGO_OC3REF, false); break;
+        case 5:  st = TIM_LL_EnableDmaRequest(TIM15, LL_TIM_DIER_CC2IE); break;
+        case 6:  st = TIM_LL_ConfigInput(&ic); break;
+        case 7:  st = TIM_LL_ConfigOutput(&oc); break;
+        case 8:  st = TIM_LL_InitTimeBase(&tb); break;
+        case 9:  st = TIM_LL_EnableClock((TIM_TypeDef *)(TIM1_BASE + 4U)); break;
+        case 10: oc.channel = LL_TIM_CHANNEL_CH1N; st = TIM_LL_ConfigOutput(&oc); break;
+        default: tb.counter_mode = 0x0008U; st = TIM_LL_InitTimeBase(&tb); break;
+        }
+        m4_snap(&s_m4_a);
+        r[TST_R_T1_STATUS0 + k] = (uint32_t)st;
+        if (st != (TimBm_Status_t)k_expect[k])
+        {
+            bad |= 1UL << k;
+        }
+        if (m4_diff(k == 8U) != 0U)
+        {
+            touched |= 1UL << k;
+        }
+        (void)TIM_LL_Stop(TIM15);
+    }
+    (void)TIM_LL_Deinit(TIM15);
+    /* O1: the valid LL call changes exactly CCMR1 and CCR1 */
+    const TimLl_OcConfig_t oc = { TIM15, LL_TIM_CHANNEL_CH1, LL_TIM_OCMODE_PWM1, 100U, false, true };
+    m4_snap(&s_m4_b);
+    r[TST_R_T1_CTRL_ST] = (uint32_t)TIM_LL_ConfigOutput(&oc);
+    m4_snap(&s_m4_a);
+    r[TST_R_T1_CTRL_DIFF] = m4_diff(false);
+    r[TST_R_T1_CTRL_EXP] = (1UL << TST_RI_CCMR1) | (1UL << TST_RI_CCR1);
+    r[TST_R_T1_CASES] = n;
+    r[TST_R_T1_BAD] = bad;
+    r[TST_R_T1_TOUCHED] = touched;
+    (void)TIM_LL_Deinit(TIM15);
+}
+
 /* ---- T2 ------------------------------------------------------------------------------ */
 
 static void run_t2(volatile uint32_t *r)
 {
     static TstT2Result_t res;
     (void)TIM_BM_EnableClock(TIM15);
-    tst_t2_run(TIM15, NULL, &res);
+    tst_t2_run(TIM15, s_tr4, NULL, &res);
     r[TST_R_T2_CONFIGS] = res.configs;
     r[TST_R_T2_MISMATCH] = res.mismatches;
     r[TST_R_T2_FIRST_CFG] = res.first_cfg;
@@ -377,6 +462,13 @@ static void run_t2(volatile uint32_t *r)
     r[TST_R_T2_FIRST_EXP] = res.first_exp;
     r[TST_R_T2_CTRL] = res.ctrl_detected;
     r[TST_R_T2_CALLS_BAD] = res.calls_bad;
+    r[TST_R_T2_PAR_CONFIGS] = res.par_configs;
+    r[TST_R_T2_PAR_MISMATCH] = res.par_mismatches;
+    r[TST_R_T2_PAR_FIRST_CFG] = res.par_first_cfg;
+    r[TST_R_T2_PAR_FIRST_REG] = res.par_first_idx;
+    r[TST_R_T2_PAR_FIRST_LL] = res.par_first_tier;
+    r[TST_R_T2_PAR_FIRST_BM] = res.par_first_bm;
+    r[TST_R_T2_PAR_CTRL] = res.par_ctrl;
 }
 
 /* ---- T5 ------------------------------------------------------------------------------ */
@@ -387,12 +479,12 @@ static void t5_15(const TimBm_TimeBaseConfig_t *c, uint32_t ticks, volatile uint
     uint32_t n = 0U;
     uint32_t first = 0U;
     uint32_t last = 0U;
-    (void)TIM_BM_InitTimeBase(c);
-    (void)TIM_BM_Start(TIM15);
+    (void)s_tr4->init_tb(c);
+    (void)s_tr4->start(TIM15);
     const uint32_t t0 = DWT->CYCCNT;
     while ((DWT->CYCCNT - t0) < (window + (8U * ticks) + CM4_CYC_PER_MS))
     {
-        if (TIM_BM_TakeFlags(TIM15, TIM_BM_EV_UPDATE) != 0U)
+        if (s_tr4->take_flags(TIM15, TIM_BM_EV_UPDATE) != 0U)
         {
             const uint32_t now = DWT->CYCCNT;
             if (n == 0U)
@@ -407,7 +499,7 @@ static void t5_15(const TimBm_TimeBaseConfig_t *c, uint32_t ticks, volatile uint
             }
         }
     }
-    (void)TIM_BM_Stop(TIM15);
+    (void)s_tr4->stop(TIM15);
     out[0] = ticks;
     out[1] = n;
     out[2] = last - first;
@@ -418,7 +510,7 @@ static void run_t5(volatile uint32_t *r)
     (void)TIM_BM_EnableClock(TIM15);
     TimBm_TimeBaseConfig_t a = tb15(1U, 499U);          /* (a) 1000 ticks */
     t5_15(&a, 1000U, &r[0]);
-    (void)TIM_BM_Deinit(TIM15);
+    (void)s_tr4->deinit(TIM15);
     TimBm_TimeBaseConfig_t b = tb15(1U, 499U);          /* (b) RCR = 3: 4000 ticks */
     b.repetition = 3U;
     t5_15(&b, 4000U, &r[3]);
@@ -432,8 +524,10 @@ static void run_t5(volatile uint32_t *r)
 
 /* ---- T6: TIM15 PWM on PE5/PE6 (step T6_TIM15) -------------------------------------- */
 
-static void run_t6(uint32_t arg, volatile uint32_t *r)
+static void run_t6(uint32_t arg_in, volatile uint32_t *r)
 {
+    s_tr4 = ((arg_in & TST_T6_LL) != 0U) ? &k_tst_tier_ll : &k_tst_tier_bm;
+    const uint32_t arg = arg_in & ~TST_T6_LL;
     (void)TIM_BM_EnableClock(TIM15);
     if (arg == TST_T6_OFF)
     {
@@ -453,14 +547,14 @@ static void run_t6(uint32_t arg, volatile uint32_t *r)
     {
         /* both channels configured, CC1E = CC2E = 0 (and so MOE = 0): the pins are not
            driven by the timer and follow the pull-down */
-        TimBm_Status_t st = TIM_BM_Deinit(TIM15);
+        TimBm_Status_t st = s_tr4->deinit(TIM15);
         const TimBm_TimeBaseConfig_t c = { TIM15, 0U, 199U, TIM_BM_COUNT_UP, 0U, true, false, false };
         const TimBm_OcConfig_t o1 = { TIM15, 1U, TIM_BM_OC_PWM1, 100U, false, true };
         const TimBm_OcConfig_t o2 = { TIM15, 2U, TIM_BM_OC_PWM1, 100U, false, true };
-        if (st == TIM_BM_OK) { st = TIM_BM_InitTimeBase(&c); }
-        if (st == TIM_BM_OK) { st = TIM_BM_ConfigOutput(&o1); }
-        if (st == TIM_BM_OK) { st = TIM_BM_ConfigOutput(&o2); }
-        if (st == TIM_BM_OK) { st = TIM_BM_Start(TIM15); }
+        if (st == TIM_BM_OK) { st = s_tr4->init_tb(&c); }
+        if (st == TIM_BM_OK) { st = s_tr4->config_output(&o1); }
+        if (st == TIM_BM_OK) { st = s_tr4->config_output(&o2); }
+        if (st == TIM_BM_OK) { st = s_tr4->start(TIM15); }
         r[0] = (uint32_t)st;
         return;
     }
@@ -471,7 +565,7 @@ static void run_t6(uint32_t arg, volatile uint32_t *r)
         r[0] = 97U;
         return;
     }
-    r[0] = (uint32_t)tst_t6_apply(TIM15, ch, &k_tst_t6[k]);
+    r[0] = (uint32_t)tst_t6_apply(s_tr4, TIM15, ch, &k_tst_t6[k]);
 }
 
 /* ---- T10(d): TIM15 captures TRC = ITR0 (TIM1 TRGO, run by CPU1) ---------------------- */
@@ -515,7 +609,7 @@ static volatile uint32_t s_t15_spur;
 
 void TIM15_IRQHandler(void)
 {
-    if (TIM_BM_TakeFlags(TIM15, TIM_BM_EV_UPDATE) != 0U)
+    if (s_tr4->take_flags(TIM15, TIM_BM_EV_UPDATE) != 0U)
     {
         s_t15_irq++;
     }
@@ -545,52 +639,54 @@ static void run_t12(volatile uint32_t *r)
     (void)TIM_BM_EnableClock(TIM15);
     const TimBm_TimeBaseConfig_t c = tb15(199U, 99U);    /* 10 kHz */
     /* (a) */
-    (void)TIM_BM_Deinit(TIM15);
+    (void)s_tr4->deinit(TIM15);
     s_t15_irq = 0U;
     s_t15_spur = 0U;
-    (void)TIM_BM_InitTimeBase(&c);
-    (void)TIM_BM_EnableIrq(TIM15, TIM_BM_EV_UPDATE);
+    (void)s_tr4->init_tb(&c);
+    (void)s_tr4->enable_irq(TIM15, TIM_BM_EV_UPDATE);
     irq15(true);
     const uint32_t t0 = DWT->CYCCNT;
-    (void)TIM_BM_Start(TIM15);
+    (void)s_tr4->start(TIM15);
     m4_delay_cycles(100U * CM4_CYC_PER_MS);
-    (void)TIM_BM_Stop(TIM15);
+    (void)s_tr4->stop(TIM15);
     r[1] = DWT->CYCCNT - t0;
     irq15(false);
     r[0] = s_t15_irq;
     /* (b) no spurious IRQ after InitTimeBase + EnableIrq without Start */
-    (void)TIM_BM_Deinit(TIM15);
+    (void)s_tr4->deinit(TIM15);
     s_t15_irq = 0U;
-    (void)TIM_BM_InitTimeBase(&c);
-    (void)TIM_BM_EnableIrq(TIM15, TIM_BM_EV_UPDATE);
+    (void)s_tr4->init_tb(&c);
+    (void)s_tr4->enable_irq(TIM15, TIM_BM_EV_UPDATE);
     irq15(true);
     m4_delay_cycles(10U * CM4_CYC_PER_MS);
     irq15(false);
     r[2] = s_t15_irq;
     /* control: by hand, UG with URS = 0, UIF left set */
-    (void)TIM_BM_Deinit(TIM15);
+    (void)s_tr4->deinit(TIM15);
     s_t15_irq = 0U;
     TIM15->PSC = 199U;
     TIM15->ARR = 99U;
     TIM15->EGR = TIM_EGR_UG;
-    (void)TIM_BM_EnableIrq(TIM15, TIM_BM_EV_UPDATE);
+    (void)s_tr4->enable_irq(TIM15, TIM_BM_EV_UPDATE);
     irq15(true);
     m4_delay_cycles(10U * CM4_CYC_PER_MS);
     irq15(false);
     r[3] = s_t15_irq;
     /* UIE = 0 with the counter running */
-    (void)TIM_BM_Deinit(TIM15);
+    (void)s_tr4->deinit(TIM15);
     s_t15_irq = 0U;
-    (void)TIM_BM_InitTimeBase(&c);
+    (void)s_tr4->init_tb(&c);
     irq15(true);
-    (void)TIM_BM_Start(TIM15);
+    (void)s_tr4->start(TIM15);
     m4_delay_cycles(10U * CM4_CYC_PER_MS);
-    (void)TIM_BM_Stop(TIM15);
+    (void)s_tr4->stop(TIM15);
     irq15(false);
     r[4] = s_t15_irq + s_t15_spur;
     r[5] = t14_tim15();
     IRQn_Type irq = (IRQn_Type)0;
-    r[6] = ((TIM_BM_GetIRQn(TIM15, TIM_BM_EV_UPDATE, &irq) == TIM_BM_OK) && (irq == TIM15_IRQn)) ? 1U : 0U;
+    const TimBm_Status_t st = (s_tr4 == &k_tst_tier_ll) ? TIM_LL_GetIRQn(TIM15, LL_TIM_DIER_UIE, &irq)
+                                                     : TIM_BM_GetIRQn(TIM15, TIM_BM_EV_UPDATE, &irq);
+    r[6] = ((st == TIM_BM_OK) && (irq == TIM15_IRQn)) ? 1U : 0U;
 }
 
 /* ---- T16: TIM2's bit in CPU2's RCC bank ---------------------------------------------- */
@@ -614,6 +710,30 @@ static void run_t16(uint32_t arg, volatile uint32_t *r)
 
 /* ---- B1 ------------------------------------------------------------------------------ */
 
+static void run_b1_ll(volatile uint32_t *r)
+{
+    (void)TIM_LL_EnableClock(TIM15);
+    (void)TIM_LL_Deinit(TIM15);
+    const TimLl_TimeBaseConfig_t c = { TIM15, 0U, LL_TIM_COUNTERMODE_UP, 999U, 0U, true, false, false };
+    const TimLl_OcConfig_t oc = { TIM15, LL_TIM_CHANNEL_CH1, LL_TIM_OCMODE_PWM1, 100U, false, true };
+    const uint32_t pm = __get_PRIMASK();
+    __disable_irq();
+    uint32_t c0 = DWT->CYCCNT;
+    (void)TIM_LL_InitTimeBase(&c);
+    r[3] = DWT->CYCCNT - c0;
+    c0 = DWT->CYCCNT;
+    (void)TIM_LL_ConfigOutput(&oc);
+    r[2] = DWT->CYCCNT - c0;
+    c0 = DWT->CYCCNT;
+    (void)TIM_LL_OutputEnable(TIM15, LL_TIM_CHANNEL_CH1);
+    r[1] = DWT->CYCCNT - c0;
+    c0 = DWT->CYCCNT;
+    (void)TIM_LL_TakeFlags(TIM15, LL_TIM_DIER_UIE);
+    r[0] = DWT->CYCCNT - c0;
+    __set_PRIMASK(pm);
+    r[4] = t14_tim15();
+}
+
 static void run_b1(volatile uint32_t *r)
 {
     (void)TIM_BM_EnableClock(TIM15);
@@ -636,6 +756,11 @@ static void run_b1(volatile uint32_t *r)
     r[0] = DWT->CYCCNT - c0;
     __set_PRIMASK(pm);
     r[4] = t14_tim15();
+}
+
+static const TstTier_t *tier_of(uint32_t a0)
+{
+    return (a0 == TST_TIER_LL) ? &k_tst_tier_ll : &k_tst_tier_bm;
 }
 
 static void copy_str(volatile char *dst, uint32_t n, const char *src)
@@ -697,15 +822,21 @@ void TIM_Selftest_CM4_Run(void)
         case TST_CMD_SAFE:
             run_safe(&a->m4_safe);
             break;
-        case TST_CMD_T1:        res_clear(); run_t1(a->m4_res); break;
-        case TST_CMD_T2:        res_clear(); run_t2(a->m4_res); break;
-        case TST_CMD_T5:        res_clear(); run_t5(a->m4_res); break;
+        case TST_CMD_T1:
+            res_clear();
+            if (a0 == TST_TIER_LL) { run_t1_ll(a->m4_res); } else { run_t1(a->m4_res); }
+            break;
+        case TST_CMD_T2:        res_clear(); s_tr4 = tier_of(a0); run_t2(a->m4_res); break;
+        case TST_CMD_T5:        res_clear(); s_tr4 = tier_of(a0); run_t5(a->m4_res); break;
         case TST_CMD_T6:        res_clear(); run_t6(a0, a->m4_res); break;
         case TST_CMD_T10D_ARM:  res_clear(); run_t10d_arm(a->m4_res); break;
         case TST_CMD_T10D_READ: run_t10d_read(a->m4_res); break;
-        case TST_CMD_T12:       res_clear(); run_t12(a->m4_res); break;
+        case TST_CMD_T12:       res_clear(); s_tr4 = tier_of(a0); run_t12(a->m4_res); break;
         case TST_CMD_T16:       res_clear(); run_t16(a0, a->m4_res); break;
-        case TST_CMD_B1:        res_clear(); run_b1(a->m4_res); break;
+        case TST_CMD_B1:
+            res_clear();
+            if (a0 == TST_TIER_LL) { run_b1_ll(a->m4_res); } else { run_b1(a->m4_res); }
+            break;
         case TST_CMD_DONE:
             bench_safe();
             __DMB();
@@ -714,6 +845,7 @@ void TIM_Selftest_CM4_Run(void)
         default:
             break;
         }
+        s_tr4 = &k_tst_tier_bm;                /* every command starts on tim_bm */
         __DMB();
         a->ack_seq = last_seq;
     }

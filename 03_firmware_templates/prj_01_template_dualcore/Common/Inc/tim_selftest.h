@@ -36,8 +36,9 @@ void TIM_Selftest_CM4_Run(void);          /* CPU2, after Shared_GpioLockInstall(
  * protocol: printed in the banner and in every STEP line, and checked by
  * tools/tim_hw_check.py, which keeps its own copy of the step names, their bus
  * owners and their handshakes. Bump it when any of those change.             */
-#define TIM_BENCH_VERSION    3U    /* v2: TREF_A + TREF_B (plan R3-3); v3: the F1 steps,
-                                      MCO1 on PA8 in T6/T8 (plan R3-2) */
+#define TIM_BENCH_VERSION    4U    /* v2: TREF_A + TREF_B (plan R3-3); v3: the F1 steps,
+                                      MCO1 on PA8 in T6/T8 (plan R3-2); v4: the F2 steps
+                                      T6_TIM1_LL, T6_TIM15_LL and T8_LL (tim_ll) */
 
 typedef enum
 {
@@ -122,6 +123,41 @@ bool     tst_reset_ok(const TIM_TypeDef *tim, uint32_t *bad_idx, uint32_t *got, 
 /* The capability table typed by hand (plan rule 2, RM0399; TIM1/TIM8 TI1SEL as the RM). */
 bool     tst_hand_caps(const TIM_TypeDef *tim, TimBm_Caps_t *caps);
 
+/* ---- The tier under test (F2) ---------------------------------------------------- *
+ * The tests take tim_bm's configurations and values; a tier applies them. BM calls
+ * tim_bm. LL translates each value to the constant of stm32h7xx_ll_tim.h with its own
+ * table, typed by hand from that header (never from tim_ll.c), and calls tim_ll; a
+ * value with no LL constant becomes a word no LL constant has, which tim_ll must
+ * refuse. Event masks are the same bits in both (LL_TIM_DIER_* = TIM_BM_EV_*).      */
+typedef struct
+{
+    const char *name;                     /* "BM" or "LL"                              */
+    const char *tag;                      /* "" or " LL": inserted in the test's lines */
+    TimBm_Status_t (*init_tb)(const TimBm_TimeBaseConfig_t *cfg);
+    TimBm_Status_t (*start)(TIM_TypeDef *tim);
+    TimBm_Status_t (*stop)(TIM_TypeDef *tim);
+    TimBm_Status_t (*deinit)(TIM_TypeDef *tim);
+    TimBm_Status_t (*enable_irq)(TIM_TypeDef *tim, uint32_t ev_mask);
+    TimBm_Status_t (*disable_irq)(TIM_TypeDef *tim, uint32_t ev_mask);
+    uint32_t       (*take_flags)(TIM_TypeDef *tim, uint32_t ev_mask);
+    uint32_t       (*take_ovr)(TIM_TypeDef *tim, uint32_t ch_mask);
+    TimBm_Status_t (*wait_flags)(TIM_TypeDef *tim, uint32_t ev_mask, uint32_t max_cycles, uint32_t *taken);
+    TimBm_Status_t (*config_output)(const TimBm_OcConfig_t *cfg);
+    TimBm_Status_t (*output_enable)(TIM_TypeDef *tim, uint32_t ch_mask);
+    TimBm_Status_t (*output_disable)(TIM_TypeDef *tim, uint32_t ch_mask);
+    TimBm_Status_t (*config_input)(const TimBm_IcConfig_t *cfg);
+    TimBm_Status_t (*config_pwm_input)(TIM_TypeDef *tim, uint32_t ti, uint32_t edge, uint32_t prescaler,
+                                       uint32_t filter, uint32_t tisel);
+    TimBm_Status_t (*capture_enable)(TIM_TypeDef *tim, uint32_t ch_mask);
+    TimBm_Status_t (*capture_disable)(TIM_TypeDef *tim, uint32_t ch_mask);
+    uint32_t       (*read_capture)(TIM_TypeDef *tim, uint32_t channel);
+    TimBm_Status_t (*config_master)(TIM_TypeDef *tim, uint32_t mms, bool msm);
+    TimBm_Status_t (*config_slave)(TIM_TypeDef *tim, uint32_t sms, uint32_t trigger);
+} TstTier_t;
+
+extern const TstTier_t k_tst_tier_bm;
+extern const TstTier_t k_tst_tier_ll;
+
 /* T2: one configuration of the matrix, handed to the core's hook after the driver
    applied it (CPU1 rebuilds it through the raw HAL and lists the differences). */
 enum { TST_T2_TB = 0, TST_T2_OC, TST_T2_IC, TST_T2_MS, TST_T2_SL, TST_T2_CLASSES };
@@ -150,11 +186,21 @@ typedef struct
     uint32_t first_cls;
     uint32_t ctrl_detected;    /* the image altered on purpose was flagged        */
     uint32_t per_class[TST_T2_CLASSES];
+    /* Parity (F2, tier != BM): the same configuration applied again through tim_bm, and
+       every word but CNT compared bit for bit with the tier's image.               */
+    uint32_t par_configs;
+    uint32_t par_mismatches;
+    uint32_t par_first_cfg;
+    uint32_t par_first_idx;
+    uint32_t par_first_tier;   /* the word in the tier's image                      */
+    uint32_t par_first_bm;     /* ... and in tim_bm's                               */
+    uint32_t par_ctrl;         /* a tim_bm image altered on purpose was flagged     */
 } TstT2Result_t;
 
-/* Runs the whole matrix on `tim` (owned by the calling core, clock on), Deinit
-   before each configuration and at the end. `hook` may be NULL.                */
-void tst_t2_run(TIM_TypeDef *tim, TstT2Hook_t hook, TstT2Result_t *res);
+/* Runs the whole matrix on `tim` (owned by the calling core, clock on) through `tier`,
+   Deinit before each configuration and at the end. `hook` may be NULL. With a tier
+   other than BM, each image is also compared with tim_bm's (parity).            */
+void tst_t2_run(TIM_TypeDef *tim, const TstTier_t *tier, TstT2Hook_t hook, TstT2Result_t *res);
 
 /* T6 points, one table for TIM1 (CPU1) and TIM15 (CPU2); the host keeps its own copy
    and checks each announcement. Edge-aligned: period (PSC+1)(ARR+1) ticks, high CCR
@@ -162,8 +208,8 @@ void tst_t2_run(TIM_TypeDef *tim, TstT2Hook_t hook, TstT2Result_t *res);
 typedef struct { uint16_t psc; uint16_t arr; uint8_t mode; uint16_t ccr; uint8_t low; uint8_t center; } TstT6Point_t;
 #define TST_T6_POINTS   9U
 extern const TstT6Point_t k_tst_t6[TST_T6_POINTS];
-/* Deinit, time base, the channel, OutputEnable, Start. */
-TimBm_Status_t tst_t6_apply(TIM_TypeDef *tim, uint32_t ch, const TstT6Point_t *p);
+/* Deinit, time base, the channel, OutputEnable, Start, through `tier`. */
+TimBm_Status_t tst_t6_apply(const TstTier_t *tier, TIM_TypeDef *tim, uint32_t ch, const TstT6Point_t *p);
 
 /* Bench AF per wired pin (DS12923 table 9, STM32H755_Alternate_Functions.md). */
 #define TST_AF_TIM1          1U    /* PE9, PE11, PE13, PE14: TIM1_CH1..CH4 */
@@ -185,8 +231,9 @@ typedef enum
     TST_CMD_CLAIMS,      /* arg0 = 0: during step T0B; 1: between steps (nothing allowed) */
     TST_CMD_SAFE,        /* claim PE5 AF4 (step T0B), write it, then CPU2's bench_safe()   */
     TST_CMD_DONE,
-    /* F1 (tim_bm on CPU2: TIM15, and TIM2's RCC bit in CPU2's bank for T16). Each
-       writes m4_res[]; the layout is the TST_R_* list of its command below.      */
+    /* F1 (tim_bm on CPU2: TIM15, and TIM2's RCC bit in CPU2's bank for T16) and F2
+       (tim_ll on CPU2: arg0 = TST_TIER_LL for T1, T2, T5, T12 and B1; bit TST_T6_LL of
+       arg0 for T6). Each writes m4_res[]; the layout is the TST_R_* list below.    */
     TST_CMD_T1,          /* TIM15 refusals and their snapshot                              */
     TST_CMD_T2,          /* TIM15 register-image matrix against the hand table             */
     TST_CMD_T5,          /* TIM15 time base against CPU2's CYCCNT                          */
@@ -198,8 +245,11 @@ typedef enum
     TST_CMD_B1           /* cycles of TakeFlags, OutputEnable, ConfigOutput, InitTimeBase   */
 } TstCmd_t;
 
+#define TST_TIER_BM          0U
+#define TST_TIER_LL          1U
 #define TST_T6_CONTROL       0xFEU   /* TIM15 CC1E = CC2E = 0: pins follow the pull-down */
 #define TST_T6_OFF           0xFFU   /* Deinit, PE5/PE6 back to input                    */
+#define TST_T6_LL            (1UL << 16)   /* T6 through tim_ll                          */
 
 /* CPU2's T0b(b) refusals. The expected bit pattern is written by hand in
    TST_M4_CLAIMS_EXPECT_*: bit k = case k accepted. CPU1 judges it. */
@@ -229,6 +279,13 @@ typedef enum
 #define TST_R_T2_FIRST_EXP   5U
 #define TST_R_T2_CTRL        6U    /* 1: the altered image was detected                  */
 #define TST_R_T2_CALLS_BAD   7U    /* driver calls that did not return OK                */
+#define TST_R_T2_PAR_CONFIGS 8U    /* F2, tim_ll: images compared with tim_bm's          */
+#define TST_R_T2_PAR_MISMATCH 9U
+#define TST_R_T2_PAR_FIRST_CFG 10U
+#define TST_R_T2_PAR_FIRST_REG 11U
+#define TST_R_T2_PAR_FIRST_LL 12U
+#define TST_R_T2_PAR_FIRST_BM 13U
+#define TST_R_T2_PAR_CTRL    14U   /* 1: the altered tim_bm image was detected           */
 /* TST_CMD_T5: [0..5] (a) ticks, updates, cycles; (b) ticks, updates, cycles;
    [6] GetKernelClockHz; [7] its status; [8] T14 after it; [9] HAL_RCC_GetHCLKFreq */
 /* TST_CMD_T6: [0] status of the configuration (0 = OK), [1] T14 after OFF          */

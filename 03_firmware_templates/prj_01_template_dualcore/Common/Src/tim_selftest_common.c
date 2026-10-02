@@ -11,12 +11,13 @@
   *          an output or AF. The two exceptions read or write the registers of
   *          the timer they are given, and each core passes only the instances it
   *          owns: tst_img_read()/tst_reset_ok() (raw reads, T14) and tst_t2_run()
-  *          (the T2 matrix, through tim_bm).
+  *          (the T2 matrix, through the tier under test).
   ******************************************************************************
   */
 
 #include "tim_selftest.h"
 #include "gpio_bm.h"
+#include "tim_ll.h"
 
 #include <string.h>
 
@@ -59,6 +60,11 @@ const TstStep_t k_tst_steps[] = {
     { "T11",           TST_BUS_MCU,   0U,           PE_BUS_CAPTURE,  0U,         0U         },  /* one-pulse, CH2 reference */
     { "T13A",          TST_BUS_MCU,   0U,           E(9),            0U,         0U         },  /* DMA -> CCR1 */
     { "T13B",          TST_BUS_AD2,   0U,           E(9),            0U,         0U         },  /* CCR1 -> DMA, S12 */
+    /* F2 (protocol v4): T6 and T8 again through tim_ll, with the permissions of the F1
+       steps they repeat (MCO1 on PA8, R3-2). */
+    { "T6_TIM1_LL",    TST_BUS_MCU,   0U,           PE_BUS_TIM1,     E(PA_MCO),  0U         },  /* PWM, CPU1 */
+    { "T6_TIM15_LL",   TST_BUS_NONE,  0U,           E(PE_T15C1) | E(PE_T15C2), E(PA_MCO), 0U },  /* PWM, CPU2 */
+    { "T8_LL",         TST_BUS_AD2,   0U,           PE_BUS_CAPTURE,  E(PA_MCO),  0U         },  /* capture, S11 + S12 */
     { "TREF_B",        TST_BUS_NONE,  0U,           0U,              E(PA_MCO),  0U         },  /* no control: AF0 only */
     { "DONE",          TST_BUS_NONE,  0U,           0U,              0U,         0U         },
 };
@@ -343,6 +349,195 @@ bool tst_hand_caps(const TIM_TypeDef *tim, TimBm_Caps_t *c)
     return true;
 }
 
+/* ---- The tiers under test (F2) -------------------------------------------------- *
+ * BM: tim_bm as it is. LL: each tim_bm value turned into the LL constant by these
+ * tables, typed from the constants of stm32h7xx_ll_tim.h in the order of the tim_bm
+ * values (RM0399 field order), then tim_ll. A value with no LL constant becomes
+ * TST_LL_NONE, which is no LL constant and which tim_ll must refuse.               */
+
+static uint32_t bm_read_capture(TIM_TypeDef *tim, uint32_t channel)
+{
+    return TIM_BM_ReadCapture(tim, channel);    /* a static inline: no pointer to it */
+}
+
+const TstTier_t k_tst_tier_bm = {
+    "BM", "",
+    TIM_BM_InitTimeBase, TIM_BM_Start, TIM_BM_Stop, TIM_BM_Deinit, TIM_BM_EnableIrq, TIM_BM_DisableIrq,
+    TIM_BM_TakeFlags, TIM_BM_TakeOvercapture, TIM_BM_WaitFlags, TIM_BM_ConfigOutput, TIM_BM_OutputEnable,
+    TIM_BM_OutputDisable, TIM_BM_ConfigInput, TIM_BM_ConfigPwmInput, TIM_BM_CaptureEnable, TIM_BM_CaptureDisable,
+    bm_read_capture, TIM_BM_ConfigMaster, TIM_BM_ConfigSlave,
+};
+
+#define TST_LL_NONE   0xA5A50000UL   /* no LL constant has this value */
+
+static uint32_t ll_channel(uint32_t ch)
+{
+    static const uint32_t k[5] = { TST_LL_NONE, LL_TIM_CHANNEL_CH1, LL_TIM_CHANNEL_CH2, LL_TIM_CHANNEL_CH3,
+                                   LL_TIM_CHANNEL_CH4 };
+    return (ch <= 4U) ? k[ch] : TST_LL_NONE;
+}
+
+static uint32_t ll_ch_mask(uint32_t bm_mask)
+{
+    uint32_t m = ((bm_mask & ~0xFUL) != 0U) ? TST_LL_NONE : 0U;
+    for (uint32_t ch = 1U; ch <= 4U; ch++)
+    {
+        if ((bm_mask & TIM_BM_CH(ch)) != 0U)
+        {
+            m |= ll_channel(ch);
+        }
+    }
+    return m;
+}
+
+static uint32_t bm_ch_from_ll(uint32_t ll_mask)
+{
+    uint32_t m = 0U;
+    for (uint32_t ch = 1U; ch <= 4U; ch++)
+    {
+        if ((ll_mask & ll_channel(ch)) != 0U)
+        {
+            m |= TIM_BM_CH(ch);
+        }
+    }
+    return m;
+}
+
+static TimBm_Status_t ll_init_tb(const TimBm_TimeBaseConfig_t *c)
+{
+    static const uint32_t k_mode[5] = { LL_TIM_COUNTERMODE_UP, LL_TIM_COUNTERMODE_DOWN, LL_TIM_COUNTERMODE_CENTER_DOWN,
+                                        LL_TIM_COUNTERMODE_CENTER_UP, LL_TIM_COUNTERMODE_CENTER_UP_DOWN };
+    if (c == NULL)
+    {
+        return TIM_LL_InitTimeBase(NULL);
+    }
+    const TimLl_TimeBaseConfig_t l = {
+        .tim = c->tim, .prescaler = c->psc, .counter_mode = (c->count_mode < 5U) ? k_mode[c->count_mode] : TST_LL_NONE,
+        .autoreload = c->arr, .repetition = c->repetition, .arr_preload = c->arr_preload, .one_pulse = c->one_pulse,
+        .urs_overflow_only = c->urs_overflow_only,
+    };
+    return TIM_LL_InitTimeBase(&l);
+}
+
+static TimBm_Status_t ll_config_output(const TimBm_OcConfig_t *c)
+{
+    static const uint32_t k_mode[8] = { LL_TIM_OCMODE_FROZEN, LL_TIM_OCMODE_ACTIVE, LL_TIM_OCMODE_INACTIVE,
+                                        LL_TIM_OCMODE_TOGGLE, LL_TIM_OCMODE_FORCED_INACTIVE, LL_TIM_OCMODE_FORCED_ACTIVE,
+                                        LL_TIM_OCMODE_PWM1, LL_TIM_OCMODE_PWM2 };
+    if (c == NULL)
+    {
+        return TIM_LL_ConfigOutput(NULL);
+    }
+    const TimLl_OcConfig_t l = {
+        .tim = c->tim, .channel = ll_channel(c->channel), .oc_mode = (c->mode < 8U) ? k_mode[c->mode] : TST_LL_NONE,
+        .compare = c->compare, .active_low = c->active_low, .preload = c->preload,
+    };
+    return TIM_LL_ConfigOutput(&l);
+}
+
+static uint32_t ll_polarity(uint32_t edge)
+{
+    static const uint32_t k[4] = { LL_TIM_IC_POLARITY_RISING, LL_TIM_IC_POLARITY_FALLING, TST_LL_NONE,
+                                   LL_TIM_IC_POLARITY_BOTHEDGE };
+    return (edge < 4U) ? k[edge] : TST_LL_NONE;
+}
+
+static uint32_t ll_icpsc(uint32_t prescaler)
+{
+    switch (prescaler)
+    {
+    case 1U: return LL_TIM_ICPSC_DIV1;
+    case 2U: return LL_TIM_ICPSC_DIV2;
+    case 4U: return LL_TIM_ICPSC_DIV4;
+    case 8U: return LL_TIM_ICPSC_DIV8;
+    default: return TST_LL_NONE;
+    }
+}
+
+static uint32_t ll_filter(uint32_t f)
+{
+    /* ICxF = 0000 .. 1111 (RM0399 40.4.7) */
+    static const uint32_t k[16] = {
+        LL_TIM_IC_FILTER_FDIV1, LL_TIM_IC_FILTER_FDIV1_N2, LL_TIM_IC_FILTER_FDIV1_N4, LL_TIM_IC_FILTER_FDIV1_N8,
+        LL_TIM_IC_FILTER_FDIV2_N6, LL_TIM_IC_FILTER_FDIV2_N8, LL_TIM_IC_FILTER_FDIV4_N6, LL_TIM_IC_FILTER_FDIV4_N8,
+        LL_TIM_IC_FILTER_FDIV8_N6, LL_TIM_IC_FILTER_FDIV8_N8, LL_TIM_IC_FILTER_FDIV16_N5, LL_TIM_IC_FILTER_FDIV16_N6,
+        LL_TIM_IC_FILTER_FDIV16_N8, LL_TIM_IC_FILTER_FDIV32_N5, LL_TIM_IC_FILTER_FDIV32_N6, LL_TIM_IC_FILTER_FDIV32_N8,
+    };
+    return (f < 16U) ? k[f] : TST_LL_NONE;
+}
+
+/* TIxSEL value v of input ti, where the LL_TIM_TIMy_TIx_RMP_* constants put it
+   (bits 8 (ti - 1) + 3..0 of TISEL, RM0399 40.4.30). */
+static uint32_t ll_remap(uint32_t v, uint32_t ti)
+{
+    return ((v < 16U) && (ti >= 1U) && (ti <= 4U)) ? (v << (8U * (ti - 1U))) : TST_LL_NONE;
+}
+
+static TimBm_Status_t ll_config_input(const TimBm_IcConfig_t *c)
+{
+    static const uint32_t k_sel[4] = { TST_LL_NONE, LL_TIM_ACTIVEINPUT_DIRECTTI, LL_TIM_ACTIVEINPUT_INDIRECTTI,
+                                       LL_TIM_ACTIVEINPUT_TRC };
+    if (c == NULL)
+    {
+        return TIM_LL_ConfigInput(NULL);
+    }
+    const TimLl_IcConfig_t l = {
+        .tim = c->tim, .channel = ll_channel(c->channel),
+        .active_input = (c->selection < 4U) ? k_sel[c->selection] : TST_LL_NONE, .polarity = ll_polarity(c->edge),
+        .prescaler = ll_icpsc(c->prescaler), .filter = ll_filter(c->filter), .remap = ll_remap(c->tisel, c->channel),
+    };
+    return TIM_LL_ConfigInput(&l);
+}
+
+static TimBm_Status_t ll_config_pwm_input(TIM_TypeDef *tim, uint32_t ti, uint32_t edge, uint32_t prescaler,
+                                          uint32_t filter, uint32_t tisel)
+{
+    return TIM_LL_ConfigPwmInput(tim, ll_channel(ti), ll_polarity(edge), ll_icpsc(prescaler), ll_filter(filter),
+                                 ll_remap(tisel, ti));
+}
+
+static TimBm_Status_t ll_output_enable(TIM_TypeDef *tim, uint32_t m)   { return TIM_LL_OutputEnable(tim, ll_ch_mask(m)); }
+static TimBm_Status_t ll_output_disable(TIM_TypeDef *tim, uint32_t m)  { return TIM_LL_OutputDisable(tim, ll_ch_mask(m)); }
+static TimBm_Status_t ll_capture_enable(TIM_TypeDef *tim, uint32_t m)  { return TIM_LL_CaptureEnable(tim, ll_ch_mask(m)); }
+static TimBm_Status_t ll_capture_disable(TIM_TypeDef *tim, uint32_t m) { return TIM_LL_CaptureDisable(tim, ll_ch_mask(m)); }
+
+static uint32_t ll_take_ovr(TIM_TypeDef *tim, uint32_t m)
+{
+    return bm_ch_from_ll(TIM_LL_TakeOvercapture(tim, ll_ch_mask(m)));
+}
+
+static uint32_t ll_read_capture(TIM_TypeDef *tim, uint32_t channel)
+{
+    return TIM_LL_ReadCapture(tim, ll_channel(channel));
+}
+
+static TimBm_Status_t ll_config_master(TIM_TypeDef *tim, uint32_t mms, bool msm)
+{
+    static const uint32_t k[8] = { LL_TIM_TRGO_RESET, LL_TIM_TRGO_ENABLE, LL_TIM_TRGO_UPDATE, LL_TIM_TRGO_CC1IF,
+                                   LL_TIM_TRGO_OC1REF, LL_TIM_TRGO_OC2REF, LL_TIM_TRGO_OC3REF, LL_TIM_TRGO_OC4REF };
+    return TIM_LL_ConfigMaster(tim, (mms < 8U) ? k[mms] : TST_LL_NONE, msm);
+}
+
+static TimBm_Status_t ll_config_slave(TIM_TypeDef *tim, uint32_t sms, uint32_t trigger)
+{
+    static const uint32_t k_sms[9] = { LL_TIM_SLAVEMODE_DISABLED, TST_LL_NONE, TST_LL_NONE, TST_LL_NONE,
+                                       LL_TIM_SLAVEMODE_RESET, LL_TIM_SLAVEMODE_GATED, LL_TIM_SLAVEMODE_TRIGGER,
+                                       LL_TIM_CLOCKSOURCE_EXT_MODE1, LL_TIM_SLAVEMODE_COMBINED_RESETTRIGGER };
+    static const uint32_t k_trg[19] = { LL_TIM_TS_ITR0, LL_TIM_TS_ITR1, LL_TIM_TS_ITR2, LL_TIM_TS_ITR3, LL_TIM_TS_ITR4,
+                                        LL_TIM_TS_ITR5, LL_TIM_TS_ITR6, LL_TIM_TS_ITR7, LL_TIM_TS_ITR8,
+                                        TST_LL_NONE, TST_LL_NONE, TST_LL_NONE, TST_LL_NONE, TST_LL_NONE, TST_LL_NONE,
+                                        TST_LL_NONE, LL_TIM_TS_TI1F_ED, LL_TIM_TS_TI1FP1, LL_TIM_TS_TI2FP2 };
+    return TIM_LL_ConfigSlave(tim, (sms < 9U) ? k_sms[sms] : TST_LL_NONE, (trigger < 19U) ? k_trg[trigger] : TST_LL_NONE);
+}
+
+const TstTier_t k_tst_tier_ll = {
+    "LL", " LL",
+    ll_init_tb, TIM_LL_Start, TIM_LL_Stop, TIM_LL_Deinit, TIM_LL_EnableIrq, TIM_LL_DisableIrq,
+    TIM_LL_TakeFlags, ll_take_ovr, TIM_LL_WaitFlags, ll_config_output, ll_output_enable,
+    ll_output_disable, ll_config_input, ll_config_pwm_input, ll_capture_enable, ll_capture_disable,
+    ll_read_capture, ll_config_master, ll_config_slave,
+};
+
 /* ---- T2: the field encodings, by hand ------------------------------------------- */
 
 /* CR1 (40.4.1): URS bit 2, OPM bit 3, DIR bit 4, CMS bits 6:5, ARPE bit 7. */
@@ -392,8 +587,64 @@ static uint32_t enc_sms(uint32_t sms)
     return (sms & 7U) | ((sms >> 3) << 16);
 }
 
-static void t2_check(TIM_TypeDef *tim, const TstT2Cfg_t *cfg, TimBm_Status_t st, const TstImg_t *exp,
-                     const TstImg_t *mask, TstT2Hook_t hook, TstT2Result_t *res)
+/* One configuration of the matrix through `tier`, from the reset state. */
+static TimBm_Status_t t2_apply(TIM_TypeDef *tim, const TstTier_t *tier, const TstT2Cfg_t *c)
+{
+    (void)TIM_BM_Deinit(tim);
+    switch (c->cls)
+    {
+    case TST_T2_TB: return tier->init_tb(&c->tb);
+    case TST_T2_OC: return tier->config_output(&c->oc);
+    case TST_T2_IC: return tier->config_input(&c->ic);
+    case TST_T2_MS: return tier->config_master(tim, c->mms, c->msm);
+    default:        return tier->config_slave(tim, c->sms, c->trg);
+    }
+}
+
+/* First word (CNT aside) in which two images differ, TST_RI_N if none. */
+static uint32_t img_first_diff(const TstImg_t *a, const TstImg_t *b)
+{
+    for (uint32_t i = 0U; i < TST_RI_N; i++)
+    {
+        if ((i != TST_RI_CNT) && (a->v[i] != b->v[i]))
+        {
+            return i;
+        }
+    }
+    return TST_RI_N;
+}
+
+/* Parity (F2): the configuration again through tim_bm, and its image against the
+   tier's, every bit of every word but CNT. The first comparison also runs once with
+   one bit of tim_bm's image flipped, which must be flagged (the control). */
+static void t2_parity(TIM_TypeDef *tim, const TstT2Cfg_t *cfg, const TstImg_t *tier_img, TstT2Result_t *res)
+{
+    static TstImg_t bm;
+    (void)t2_apply(tim, &k_tst_tier_bm, cfg);
+    tst_img_read(tim, &bm);
+    if (res->par_configs == 0U)
+    {
+        bm.v[TST_RI_ARR] ^= 1UL;
+        res->par_ctrl = (img_first_diff(tier_img, &bm) == TST_RI_ARR) ? 1U : 0U;
+        bm.v[TST_RI_ARR] ^= 1UL;
+    }
+    res->par_configs++;
+    const uint32_t i = img_first_diff(tier_img, &bm);
+    if (i < TST_RI_N)
+    {
+        if (res->par_mismatches == 0U)
+        {
+            res->par_first_cfg = res->par_configs - 1U;
+            res->par_first_idx = i;
+            res->par_first_tier = tier_img->v[i];
+            res->par_first_bm = bm.v[i];
+        }
+        res->par_mismatches++;
+    }
+}
+
+static void t2_check(TIM_TypeDef *tim, const TstTier_t *tier, const TstT2Cfg_t *cfg, TimBm_Status_t st,
+                     const TstImg_t *exp, const TstImg_t *mask, TstT2Hook_t hook, TstT2Result_t *res)
 {
     static TstImg_t got;
     tst_img_read(tim, &got);
@@ -419,13 +670,17 @@ static void t2_check(TIM_TypeDef *tim, const TstT2Cfg_t *cfg, TimBm_Status_t st,
             break;
         }
     }
+    if (tier != &k_tst_tier_bm)
+    {
+        t2_parity(tim, cfg, &got, res);
+    }
     if (hook != NULL)
     {
         hook(cfg, &got);
     }
 }
 
-void tst_t2_run(TIM_TypeDef *tim, TstT2Hook_t hook, TstT2Result_t *res)
+void tst_t2_run(TIM_TypeDef *tim, const TstTier_t *tier, TstT2Hook_t hook, TstT2Result_t *res)
 {
     static const uint32_t k_sms[6] = { TIM_BM_SMS_DISABLED, TIM_BM_SMS_RESET, TIM_BM_SMS_GATED, TIM_BM_SMS_TRIGGER,
                                        TIM_BM_SMS_EXT_CLOCK1, TIM_BM_SMS_RESET_TRIGGER };
@@ -459,8 +714,7 @@ void tst_t2_run(TIM_TypeDef *tim, TstT2Hook_t hook, TstT2Result_t *res)
             cfg.tb = (TimBm_TimeBaseConfig_t){ tim, 7U, (caps.counter_bits == 32U) ? 0x12345UL : 999UL, m,
                                                caps.repetition ? 3U : 0U, (b & 1U) != 0U, (b & 2U) != 0U,
                                                (b & 4U) != 0U };
-            (void)TIM_BM_Deinit(tim);
-            const TimBm_Status_t st = TIM_BM_InitTimeBase(&cfg.tb);
+            const TimBm_Status_t st = t2_apply(tim, tier, &cfg);
             exp = reset;
             exp.v[TST_RI_CR1] = enc_cr1(&cfg.tb);
             exp.v[TST_RI_PSC] = cfg.tb.psc;
@@ -479,7 +733,7 @@ void tst_t2_run(TIM_TypeDef *tim, TstT2Hook_t hook, TstT2Result_t *res)
                 res->ctrl_detected = (((cr1 ^ exp.v[TST_RI_CR1]) & mk.v[TST_RI_CR1]) != 0U) ? 1U : 0U;
                 exp.v[TST_RI_CR1] ^= 1UL << 7;
             }
-            t2_check(tim, &cfg, st, &exp, &mk, hook, res);
+            t2_check(tim, tier, &cfg, st, &exp, &mk, hook, res);
         }
     }
 
@@ -493,13 +747,12 @@ void tst_t2_run(TIM_TypeDef *tim, TstT2Hook_t hook, TstT2Result_t *res)
                 cfg = (TstT2Cfg_t){ 0 };
                 cfg.cls = TST_T2_OC;
                 cfg.oc = (TimBm_OcConfig_t){ tim, ch, mode, 0x1234U & cmax, (b & 1U) != 0U, (b & 2U) != 0U };
-                (void)TIM_BM_Deinit(tim);
-                const TimBm_Status_t st = TIM_BM_ConfigOutput(&cfg.oc);
+                const TimBm_Status_t st = t2_apply(tim, tier, &cfg);
                 exp = reset;
                 exp.v[ccmr_word(ch)] = ((mode << 4) | (cfg.oc.preload ? (1UL << 3) : 0U)) << ccmr_sh(ch);
                 exp.v[TST_RI_CCR1 + ch - 1U] = cfg.oc.compare;
                 exp.v[TST_RI_CCER] = cfg.oc.active_low ? (1UL << (4U * (ch - 1U) + 1U)) : 0U;   /* CCxP */
-                t2_check(tim, &cfg, st, &exp, &mask, hook, res);
+                t2_check(tim, tier, &cfg, st, &exp, &mask, hook, res);
             }
         }
     }
@@ -528,15 +781,14 @@ void tst_t2_run(TIM_TypeDef *tim, TstT2Hook_t hook, TstT2Result_t *res)
                             cfg = (TstT2Cfg_t){ 0 };
                             cfg.cls = TST_T2_IC;
                             cfg.ic = (TimBm_IcConfig_t){ tim, ch, sel, k_edge[e], k_icpsc[p], k_icf[f], ts };
-                            (void)TIM_BM_Deinit(tim);
-                            const TimBm_Status_t st = TIM_BM_ConfigInput(&cfg.ic);
+                            const TimBm_Status_t st = t2_apply(tim, tier, &cfg);
                             exp = reset;
                             exp.v[ccmr_word(ch)] = (sel | (psc_bits(k_icpsc[p]) << 2) | (k_icf[f] << 4)) << ccmr_sh(ch);
                             /* CCxP bit 4(n-1)+1, CCxNP bit 4(n-1)+3 (40.4.11): 00 rising, 01 falling, 11 both */
                             exp.v[TST_RI_CCER] = (((k_edge[e] & 1U) != 0U) ? (1UL << (4U * (ch - 1U) + 1U)) : 0U) |
                                                  (((k_edge[e] & 2U) != 0U) ? (1UL << (4U * (ch - 1U) + 3U)) : 0U);
                             exp.v[TST_RI_TISEL] = ts << (8U * (ch - 1U));   /* TIxSEL at bits 8(n-1)+3:8(n-1) */
-                            t2_check(tim, &cfg, st, &exp, &mask, hook, res);
+                            t2_check(tim, tier, &cfg, st, &exp, &mask, hook, res);
                         }
                     }
                 }
@@ -556,12 +808,11 @@ void tst_t2_run(TIM_TypeDef *tim, TstT2Hook_t hook, TstT2Result_t *res)
                 cfg.cls = TST_T2_MS;
                 cfg.mms = mms;
                 cfg.msm = msm != 0U;
-                (void)TIM_BM_Deinit(tim);
-                const TimBm_Status_t st = TIM_BM_ConfigMaster(tim, mms, cfg.msm);
+                const TimBm_Status_t st = t2_apply(tim, tier, &cfg);
                 exp = reset;
                 exp.v[TST_RI_CR2] = mms << 4;
                 exp.v[TST_RI_SMCR] = cfg.msm ? (1UL << 7) : 0U;
-                t2_check(tim, &cfg, st, &exp, &mask, hook, res);
+                t2_check(tim, tier, &cfg, st, &exp, &mask, hook, res);
             }
         }
     }
@@ -584,11 +835,10 @@ void tst_t2_run(TIM_TypeDef *tim, TstT2Hook_t hook, TstT2Result_t *res)
                 cfg.cls = TST_T2_SL;
                 cfg.sms = k_sms[s];
                 cfg.trg = trg;
-                (void)TIM_BM_Deinit(tim);
-                const TimBm_Status_t st = TIM_BM_ConfigSlave(tim, cfg.sms, trg);
+                const TimBm_Status_t st = t2_apply(tim, tier, &cfg);
                 exp = reset;
                 exp.v[TST_RI_SMCR] = enc_ts(trg) | enc_sms(cfg.sms);
-                t2_check(tim, &cfg, st, &exp, &mask, hook, res);
+                t2_check(tim, tier, &cfg, st, &exp, &mask, hook, res);
             }
         }
     }
@@ -609,15 +859,15 @@ const TstT6Point_t k_tst_t6[TST_T6_POINTS] = {
     { 0U, 199U, TIM_BM_OC_PWM1, 50U,  0U, 1U },   /* P8: center 1 (TIM1 only)    */
 };
 
-TimBm_Status_t tst_t6_apply(TIM_TypeDef *tim, uint32_t ch, const TstT6Point_t *p)
+TimBm_Status_t tst_t6_apply(const TstTier_t *tier, TIM_TypeDef *tim, uint32_t ch, const TstT6Point_t *p)
 {
     const TimBm_TimeBaseConfig_t c = { tim, p->psc, p->arr, (p->center != 0U) ? TIM_BM_COUNT_CENTER1 : TIM_BM_COUNT_UP,
                                        0U, true, false, false };
     const TimBm_OcConfig_t oc = { tim, ch, p->mode, p->ccr, p->low != 0U, true };
-    TimBm_Status_t st = TIM_BM_Deinit(tim);
-    if (st == TIM_BM_OK) { st = TIM_BM_InitTimeBase(&c); }
-    if (st == TIM_BM_OK) { st = TIM_BM_ConfigOutput(&oc); }
-    if (st == TIM_BM_OK) { st = TIM_BM_OutputEnable(tim, TIM_BM_CH(ch)); }
-    if (st == TIM_BM_OK) { st = TIM_BM_Start(tim); }
+    TimBm_Status_t st = tier->deinit(tim);
+    if (st == TIM_BM_OK) { st = tier->init_tb(&c); }
+    if (st == TIM_BM_OK) { st = tier->config_output(&oc); }
+    if (st == TIM_BM_OK) { st = tier->output_enable(tim, TIM_BM_CH(ch)); }
+    if (st == TIM_BM_OK) { st = tier->start(tim); }
     return st;
 }
