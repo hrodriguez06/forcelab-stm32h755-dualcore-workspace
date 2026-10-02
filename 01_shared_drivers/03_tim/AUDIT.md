@@ -70,3 +70,9 @@ F0 no tiene código del driver, así que A2–A15, A24 y A25 no aplican.
 2. N3 confirmada por el responsable.
 
 m1–m4 no bloquean el paso de F0, pero se corrigen antes de entregar F1.
+
+## F0, adenda a la parte 1 (2026-10-01)
+
+- **N3 confirmada.** El responsable del catálogo confirmó las tres decisiones: el control de TREF con PA8 en AF1, la cota de TREF 3·√(u² + r²) y S11(d) solo en los canales de Digital Out. Están en la revisión 2 del plan como R2-1, R2-2 y R2-3, junto con E1–E4 (R2-5 a R2-9), m1 (R2-4) y m2 (R2-10).
+- **Efecto sobre la entrega.** El código de `d69508e` ya cumple R2-1, R2-2, R2-3, R2-5, R2-6, R2-7 y R2-8. Faltan R2-4 (m1) y R2-10 (m2), y quedan abiertos m3 y m4. Ninguno bloquea F0; los cuatro se corrigen antes de entregar F1.
+- **Para que F0 pase** solo queda A18/A27: la ejecución del banco por el auditor.

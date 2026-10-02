@@ -2,7 +2,7 @@
 
 Oct 1, 2026 · @Hector
 
-Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 1) de esta carpeta. El trabajo es el driver de timers en tres tiers, `tim_bm` (F1), `tim_ll` (F2) y `tim_hal` (F3), con una fase F0 que prepara el banco del AD2 en `prj_01_template_dualcore`. Otra persona audita cada fase de forma independiente y repite tus pruebas en la placa.
+Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta. El trabajo es el driver de timers en tres tiers, `tim_bm` (F1), `tim_ll` (F2) y `tim_hal` (F3), con una fase F0 que prepara el banco del AD2 en `prj_01_template_dualcore`. Otra persona audita cada fase de forma independiente y repite tus pruebas en la placa.
 
 Este documento dice qué te toca, qué no te toca y qué tienes que entregar. Si algo de aquí choca con el plan, manda el plan, con una excepción: lo que este documento te **prohíbe** sigue prohibido aunque el plan lo mencione.
 
@@ -120,7 +120,8 @@ Valen S1–S10 de `00_gpio/README.md` §8, tal como están. Este driver añade d
 - **S11: Digital Out conduce aunque `OE = 0`.** Manual del SDK, §8: Digital-Out se aplica a una línea justo cuando Digital-IO tiene enable y output a 0, que es el S2 actual. Por eso:
   - La única llamada a `FDwfDigitalOutEnableSet` está dentro de `ad2_set_dout(mask, step_bus_owner)`. Esa función acepta solo DIO1 y DIO3, y solo en un paso "bus = AD2".
   - S2 hace `FDwfDigitalOutReset`, `Configure(0)`, `EnableSet(0)` e `IdleSet(DwfDigitalOutIdleZet)` en los 16 canales, con read-back.
-  - Todo canal que habilitas lleva `Idle = Zet` y push-pull **antes** de `Configure(1)`.
+  - Todo canal que habilitas lleva `Idle = Zet` y push-pull **antes** de `Configure(1)`. `Idle = Low` solo se acepta en el control de T0b(f), ligado a su paso (plan R2-4).
+  - Mientras corre Digital Out, el `OE` de Digital-IO lee 0 en los bits de los canales de Digital Out. HOST\_REQ puede seguir habilitado (plan R2-3).
   - Impleméntalo **en F0, antes que ninguna prueba**, y comprueba que `gpio_hw_check.py` sigue pasando su T0b(a).
 - **S12: un pin de captura en AF mientras el AD2 conduce.** Solo PE9 y PE11, en AF1, con TIM1 en entrada. `bench_claim()` lee TIM1 antes de aceptar: `CCxS ≠ 00`, `CCxNE = 0`, `CC3E = CC4E = 0` y `MOE = OSSI = OSSR = 0`. La prueba de pulls S5 se hace con los pines **ya en AF**.
 - **Líneas que nunca van en AF:** PE0–PE4, PE7, PE8, PE10, PE12 y PE15. PE4 en AF4 es TIM15\_CH1N: el MCU conduciría una línea "solo AD2". `bench_claim()` existe en los dos núcleos, porque CM4 configura PE5/PE6 para TIM15.
@@ -137,7 +138,7 @@ El auditor revisa todo esto en A27. Un incumplimiento es **bloqueante** aunque t
 ## 4. Qué entregar al terminar cada fase
 
 1. El rango de commits en `driver/tim`, con el árbol limpio.
-2. La salida completa de `.\tools\build_all.ps1 -Clean` (8/8 con `-Werror`) y la de `cmake --build --preset selftest-tim`.
+2. La salida completa de `.\tools\build_all.ps1 -Clean` (8/8), la de `cmake --build --preset selftest-tim` (0 avisos) y la de una compilación aparte con `CMAKE_C_FLAGS=-Werror` (plan C9, R2-5).
 3. Los tamaños **del `.map` enlazado**, sin contar "Discarded input sections": `.text`, `.data` y `.bss` de cada `tim_*.c.obj` en CM4 y CM7, y los totales de `prj_01` debug/release frente a `e7542dc` (tienen que ser iguales: con la opción apagada nada enlaza el driver).
 4. Las capturas de la fase (§3.4), commiteadas.
 5. **Tu informe actualizado** (§5), con la sección de la fase.
@@ -168,7 +169,7 @@ Reglas de redacción:
 ```markdown
 # Informe de implementación 03_tim
 
-Implementador: <nombre> · Rama: driver/tim · Plan: IMPLEMENTATION_PLAN.md revisión 1
+Implementador: <nombre> · Rama: driver/tim · Plan: IMPLEMENTATION_PLAN.md revisión 2
 
 ## Resumen
 <5-10 líneas: qué hay implementado, en qué fase estás, qué falta y qué está bloqueado.
