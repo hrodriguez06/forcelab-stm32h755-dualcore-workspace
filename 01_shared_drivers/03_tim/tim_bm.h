@@ -30,7 +30,7 @@
   *
   *          Pins are the caller's (the GPIO driver), and so are the DMA streams.
   *          Ownership: one core per instance; the driver takes no cross-core
-  *          lock. See 01_shared_drivers/03_tim/README.md (at close).
+  *          lock. See this driver's README.md (written at close).
   ******************************************************************************
   */
 
