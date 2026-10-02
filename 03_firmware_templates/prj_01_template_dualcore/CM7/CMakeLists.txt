@@ -115,7 +115,8 @@ if(GPIO_DRIVER_SELFTEST)
 endif()
 
 # 03_tim selftest: gpio_bm (linked above for the lock hook) for the bench, and,
-# only with the option, the driver under test (tim_bm since F1) and dma_bm (T13).
+# only with the option, the drivers under test (tim_bm since F1, tim_ll since F2)
+# and dma_bm (T13).
 if(TIM_DRIVER_SELFTEST)
     target_compile_definitions(${TARGET} PRIVATE TIM_DRIVER_SELFTEST=1)
     target_sources(${TARGET} PRIVATE
@@ -124,6 +125,7 @@ if(TIM_DRIVER_SELFTEST)
     )
     target_link_libraries(${TARGET} PRIVATE
         stm32h7_driver_tim_bm
+        stm32h7_driver_tim_ll
         stm32h7_driver_dma_bm
     )
 endif()

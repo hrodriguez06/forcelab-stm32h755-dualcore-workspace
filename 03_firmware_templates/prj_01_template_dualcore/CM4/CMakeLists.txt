@@ -107,7 +107,7 @@ if(GPIO_DRIVER_SELFTEST)
     )
 endif()
 
-# 03_tim selftest, CPU2 side (see CM7/CMakeLists.txt): TIM15 and T16 through tim_bm.
+# 03_tim selftest, CPU2 side (see CM7/CMakeLists.txt): TIM15 and T16 through tim_bm, TIM15 through tim_ll.
 if(TIM_DRIVER_SELFTEST)
     target_compile_definitions(${TARGET} PRIVATE TIM_DRIVER_SELFTEST=1)
     target_sources(${TARGET} PRIVATE
@@ -116,6 +116,7 @@ if(TIM_DRIVER_SELFTEST)
     )
     target_link_libraries(${TARGET} PRIVATE
         stm32h7_driver_tim_bm
+        stm32h7_driver_tim_ll
     )
 endif()
 
