@@ -473,3 +473,35 @@ Todos los valores en ppm. Con la misma imagen, de las siete ejecuciones con el c
 En las seis que pasan, ē − x vale de media −2,6 ppm, con una desviación típica de 134,0 ppm (n − 1). La tendencia de ē − x a ser positiva que anotó la sección de la quinta ejecución (media +115 ppm en cinco ejecuciones, contando el fallo) no se confirma. x cambia entre ejecuciones de +12 549 a +13 534 ppm.
 
 Estado de F0: **en curso**. Siguen pendientes las dos decisiones del responsable: el gate de tamaños de producción desde `2481396` y la repetibilidad de R3-1.
+
+## F0: serie de 10 ejecuciones con la misma imagen (revisión 3)
+
+El responsable pidió el 2026-10-02 "repetir la ejecución 10 más para terminar de verificar".
+
+Una sola imagen, compilada en `cd0d613` y flasheada una vez, con 10 ejecuciones seguidas de `tim_hw_check.py`; cada una resetea la placa por SWD. El árbol estuvo limpio en todas. `Rev` cd0d613 coincide en el host, CM7 y CM4. Capturas: `docs/tim_f0_bench_cd0d613.txt` y de `_2` a `_10`.
+
+| Ejecución | ē | x ± u | ē − x | Cota | \|ē − x\| / cota | Resultado |
+| --- | --- | --- | --- | --- | --- | --- |
+| `cd0d613` | +12 705,7 | +12 609,7 ± 14,1 | +96,0 | 367,4 | 0,26 | PASS |
+| `cd0d613_2` | +12 550,4 | +12 471,7 ± 13,2 | +78,7 | 202,2 | 0,39 | PASS |
+| `cd0d613_3` | +12 115,1 | +12 312,4 ± 11,6 | −197,3 | 303,8 | 0,65 | PASS |
+| `cd0d613_4` | +12 872,2 | +13 032,2 ± 17,4 | −160,0 | 274,2 | 0,58 | PASS |
+| `cd0d613_5` | +12 457,5 | +12 418,3 ± 15,5 | +39,3 | 278,5 | 0,14 | PASS |
+| `cd0d613_6` | +12 943,8 | +13 143,9 ± 11,5 | −200,1 | 366,0 | 0,55 | PASS |
+| `cd0d613_7` | +12 719,8 | +12 735,1 ± 16,6 | −15,3 | 324,8 | 0,05 | PASS |
+| `cd0d613_8` | +13 040,0 | +12 729,5 ± 14,2 | +310,5 | 355,4 | 0,87 | PASS |
+| `cd0d613_9` | +12 642,3 | +12 359,0 ± 11,7 | +283,3 | 244,7 | 1,16 | **FAIL** |
+| `cd0d613_10` | +12 844,9 | +12 872,0 ± 19,1 | −27,1 | 409,3 | 0,07 | PASS |
+
+Todos los valores en ppm. En las 10 ejecuciones, todo lo demás pasa: T0a, T0b(a)–(g), las capturas y el control de TREF y `FW VERDICT=PASS`. La ejecución 9 da 15/16 y `HOST VERDICT=FAIL`, solo por el criterio de TREF.
+
+### Las 17 ejecuciones con el criterio de R3-1 (las 7 anteriores y estas 10)
+
+- **2 de 17 fallan:** `2481396` y `cd0d613_9`. La segunda no fue justo después de reconectar el USB del ST-LINK, así que la explicación por calentamiento que sugerí antes no basta.
+- **ē − x:** media +36,1 ppm y desviación típica 184,5 ppm (n − 1). En las 10 de esta serie: +20,8 y 181,0 ppm. Ya no hay sesgo.
+- **El criterio está mal calibrado.** Si la cota de R3-1 fuera 3σ de la diferencia, z = (ē − x)/(cota/3) tendría un rms cercano a 1, y fallaría alrededor de 3 de cada 1 000 ejecuciones. El rms de z es **2,00** en las 17 ejecuciones (1,75 en esta serie), y el máximo de \|z\| es 5,32. Es decir, la cota corresponde a unos 1,5σ de la dispersión real, y con eso se espera que falle alrededor de 1 de cada 8 ejecuciones. Se observaron 2 de 17.
+- **u no cubre la variación de x.** Cada ejecución declara u entre 11,5 y 19,1 ppm; la dispersión real de ē − x es unas 10 veces mayor.
+
+Lo que no puedo separar con estos datos es cuánto de la dispersión de ē − x viene de x (latencia del VCP, que el ajuste no ve como ruido) y cuánto de ē (variación del reloj dentro de las ventanas de 40 µs más allá de lo que mide s). Tampoco propongo un criterio nuevo: es decisión del responsable.
+
+Estado de F0: **en curso**. Con la misma imagen, el criterio de R3-1 falla en unas 2 de cada 17 ejecuciones por la medida de TREF, no por el firmware. Una ejecución del auditor (A18) tiene una probabilidad del orden del 10 % de fallar así. Siguen pendientes las dos decisiones del responsable: el criterio de TREF y el gate de tamaños de producción desde `2481396`.
