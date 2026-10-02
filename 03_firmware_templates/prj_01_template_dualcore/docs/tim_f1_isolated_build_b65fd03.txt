@@ -1,0 +1,35 @@
+tim_bm.c compiled alone at b65fd03 (arm-none-eabi-gcc 14.3.1, -std=c11 -O2, CPU flags of each core,
+-DSTM32H755xx -DCORE_CMx, no -DUSE_HAL_DRIVER; CMSIS of the Cube package that prj_01 uses). Variant A is the
+command of 1f0fedc; B and C add -Wsign-conversion and -Wcast-qual, with the CMSIS headers as -I and as -isystem.
+
+A: 1f0fedc command (-I, -Wno-sign-conversion) CORE_CM7: exit=0 diagnostics=0
+A: 1f0fedc command (-I, -Wno-sign-conversion) CORE_CM4: exit=0 diagnostics=0
+B: full set, CMSIS as -I CORE_CM7: exit=1 diagnostics=16 first: cachel1_armv7.h:119:32: error: conversion to 'long unsigned int' from 'int32_t' {aka 'long int'} may change the sign of the result [-Werror=sign-conversion]
+B: full set, CMSIS as -I CORE_CM4: exit=0 diagnostics=0
+C: full set, CMSIS as -isystem CORE_CM7: exit=0 diagnostics=0
+C: full set, CMSIS as -isystem CORE_CM4: exit=0 diagnostics=0
+
+--- script (iso_build.ps1) ---
+$ws = "C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755"
+. "$ws\tools\env.ps1" | Out-Null
+$cube = "$ws\02_firmware_projects\prj_eth_lwip_node\external\STM32CubeH7\Drivers\CMSIS"
+$src = "$ws\01_shared_drivers\03_tim\tim_bm.c"
+$o = "$env:TEMP\tim_bm_iso.o"
+$cores = @(@('CORE_CM7', 'cortex-m7', 'fpv5-d16'), @('CORE_CM4', 'cortex-m4', 'fpv4-sp-d16'))
+$full = @('-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wsign-conversion', '-Wshadow', '-Wcast-qual', '-Werror')
+$variants = @(
+    @('A: 1f0fedc command (-I, -Wno-sign-conversion)', @('-Wall', '-Wextra', '-Wpedantic', '-Wshadow', '-Wconversion', '-Wno-sign-conversion', '-Werror'), '-I'),
+    @('B: full set, CMSIS as -I', $full, '-I'),
+    @('C: full set, CMSIS as -isystem', $full, '-isystem')
+)
+foreach ($v in $variants) {
+    foreach ($c in $cores) {
+        $inc = @($v[2], "$cube\Include", $v[2], "$cube\Device\ST\STM32H7xx\Include", "-I$ws\01_shared_drivers\03_tim")
+        $log = arm-none-eabi-gcc -c -std=c11 -O2 @($v[1]) "-mcpu=$($c[1])" -mthumb "-mfpu=$($c[2])" -mfloat-abi=hard -DSTM32H755xx "-D$($c[0])" @inc $src -o $o 2>&1
+        $ex = $LASTEXITCODE
+        $w = @($log | Select-String -Pattern 'warning:|error:')
+        $first = ''
+        if ($w.Count -gt 0) { $first = ' first: ' + (($w[0].Line -replace '.*[\\/]', '') -replace '\s+', ' ') }
+        "$($v[0]) $($c[0]): exit=$ex diagnostics=$($w.Count)$first"
+    }
+}
