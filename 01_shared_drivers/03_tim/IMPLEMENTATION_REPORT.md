@@ -505,3 +505,37 @@ Todos los valores en ppm. En las 10 ejecuciones, todo lo demás pasa: T0a, T0b(a
 Lo que no puedo separar con estos datos es cuánto de la dispersión de ē − x viene de x (latencia del VCP, que el ajuste no ve como ruido) y cuánto de ē (variación del reloj dentro de las ventanas de 40 µs más allá de lo que mide s). Tampoco propongo un criterio nuevo: es decisión del responsable.
 
 Estado de F0: **en curso**. Con la misma imagen, el criterio de R3-1 falla en unas 2 de cada 17 ejecuciones por la medida de TREF, no por el firmware. Una ejecución del auditor (A18) tiene una probabilidad del orden del 10 % de fallar así. Siguen pendientes las dos decisiones del responsable: el criterio de TREF y el gate de tamaños de producción desde `2481396`.
+
+## Respuesta a la auditoría 4 (F0; plan revisión 4)
+
+Plan de referencia: revisión 4 (`336180b`). La auditoría 4 y su adenda (`AUDIT.md`) aceptan la revisión 3 y el cambio de SMPS (`2481396`) como desviación aprobada (R4-2). Para F0 faltaba R4-1.
+
+**Estado de F0: entregada para auditoría** (`7ac9e44` código, evidencia en `1abf3d3`). Falta la ejecución del banco por el auditor (A18/A27).
+
+### Cambios de la revisión 4
+
+| Cambio | Commit | Qué ejecuté para comprobarlo | Estado |
+| --- | --- | --- | --- |
+| R4-1: la cota de TREF pasa a ser 3·√(u² + s_ef²/16 + σ_ser²), con σ_ser = 145 ppm como constante nombrada (`TREF_SIGMA_SER_PPM` en `tools/tim_hw_check.py`). Su comentario cita el plan R4-1, `AUDIT.md` auditoría 4 (D6) y las 17 capturas de la revisión 3, y la línea del criterio de la captura imprime σ_ser junto a u y s_ef. Las capturas, el ajuste de x, el firmware y \|ē\| ≤ 20 000 ppm no cambian | `7ac9e44` | Recalculé σ_ser con las 17 capturas: 145,1 ppm, rms de z 1,05 y máximo de \|z\| 2,55, como dice la auditoría. Fuera de línea, con s_ef = 330 y x = +13 571,2 ± 2,2: pasa con 28,8 ≤ 500,5 y falla con 528,8, sin x y con \|ē\| > 20 000. En la placa: pasa, ver abajo | aplicado en `7ac9e44`, pendiente de verificación |
+| R4-2: la base de la producción de `prj_01` es `2481396` | — (no requiere código) | `.map` de `7ac9e44` frente a un worktree aislado de `2481396`: 0 en todas las secciones asignadas de CM7 y CM4, debug y release. CM7: 29304/132/55668 (debug) y 28356/132/55672 (release); CM4: 3456/24/12560 y 3112/24/12560 (`docs/tim_f0_map_sizes_7ac9e44.txt`) | igual a `2481396` |
+
+Evidencia en `7ac9e44`:
+
+- `build_all -Clean` 8/8 (`tim_f0_build_all_7ac9e44.txt`).
+- `selftest-tim` con 0 avisos (`tim_f0_selftest_build_7ac9e44.txt`).
+- Los tres builds con `-Werror`, también a 0 avisos (`tim_f0_werror_7ac9e44.txt`).
+- `git diff e7542dc -- 02_firmware_projects` sale vacío.
+
+### Resultado en la placa (`docs/tim_f0_bench_7ac9e44.txt`)
+
+Una sola ejecución, como pide la revisión 4. `Rev` 7ac9e44 e id `e890fb1c2f192c33` en el host, CM7 y CM4. Árbol limpio y lista de comprobación confirmada por Hector. Resultado: **16/16, `FW VERDICT=PASS` y `HOST VERDICT=PASS`**.
+
+| Magnitud | Valor |
+| --- | --- |
+| ē_A, ē_B, ē | +13 230,2, +12 713,2, +12 971,7 ppm |
+| s, r̄, r̄/√6, s_ef | 578,2, 248,6, 101,5, 578,2 ppm |
+| x, u (11 ráfagas, 9 g. l., residuos 0,274 ms) | +12 843,5 ± 14,0 ppm |
+| σ_ser | 145,0 ppm |
+| \|ē − x\| frente a la cota | 128,2 ≤ 3·√(u² + s_ef²/16 + σ_ser²) = 615,7 → PASS |
+
+Con el criterio de R3-1, esta ejecución también habría pasado: la cota era 3·√(u² + s_ef²/16) = 435,7. No empiezo F1 hasta que `AUDIT.md` diga que F0 pasa.
