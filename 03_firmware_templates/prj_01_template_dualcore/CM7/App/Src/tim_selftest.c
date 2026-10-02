@@ -3958,11 +3958,22 @@ static void t9_capture(void *arg)
     s_t9_min = 0xFFFFFFFFUL;
     s_t9_max = 0U;
     uint32_t prev = 0U;
+    /* A capture comes every 1 us (400 cycles). In the F2 development runs a WaitFlags call
+       per capture, then also with interrupts masked, let CCR1 be overwritten once (a 400-
+       and a 401-tick difference): the loop polls TakeFlags instead, bounded by CYCCNT, with
+       PRIMASK for the 17 captures (at most about 0.4 ms: the HAL tick is delayed, not lost). */
+    const uint32_t pm = __get_PRIMASK();
+    __disable_irq();
     (void)TIM_BM_TakeFlags(TIM17, TIM_BM_EV_CC1);
     for (uint32_t k = 0U; k <= 16U; k++)
     {
-        uint32_t taken = 0U;
-        if (TIM_BM_WaitFlags(TIM17, TIM_BM_EV_CC1, 8000U, &taken) != TIM_BM_OK)
+        const uint32_t t0 = DWT->CYCCNT;
+        uint32_t got = 0U;
+        while ((got == 0U) && ((DWT->CYCCNT - t0) < 8000U))
+        {
+            got = TIM_BM_TakeFlags(TIM17, TIM_BM_EV_CC1);
+        }
+        if (got == 0U)
         {
             break;
         }
@@ -3976,6 +3987,7 @@ static void t9_capture(void *arg)
         }
         prev = v;
     }
+    __set_PRIMASK(pm);
 }
 
 static void step_t9(void)
