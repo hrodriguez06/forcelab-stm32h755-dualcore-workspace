@@ -107,6 +107,15 @@ if(GPIO_DRIVER_SELFTEST)
     )
 endif()
 
+# 03_tim selftest, CPU2 side (see CM7/CMakeLists.txt).
+if(TIM_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE TIM_DRIVER_SELFTEST=1)
+    target_sources(${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/App/Src/tim_selftest.c
+        ${CMAKE_SOURCE_DIR}/Common/Src/tim_selftest_common.c
+    )
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"

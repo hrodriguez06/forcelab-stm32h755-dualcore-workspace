@@ -30,6 +30,9 @@
 #if defined(GPIO_DRIVER_SELFTEST)
 #include "gpio_selftest.h"
 #endif
+#if defined(TIM_DRIVER_SELFTEST)
+#include "tim_selftest.h"
+#endif
 
 #define HEARTBEAT_DELAY_LOOPS   2000000UL
 
@@ -75,6 +78,10 @@ int main(void)
     /* Serves CPU1's test commands until CPU1 says it is done, then falls
        through to the application loop. */
     GPIO_Selftest_CM4_Run();
+#endif
+#if defined(TIM_DRIVER_SELFTEST)
+    /* Serves CPU1's 03_tim bench commands until it says it is done. */
+    TIM_Selftest_CM4_Run();
 #endif
 
     for (;;)

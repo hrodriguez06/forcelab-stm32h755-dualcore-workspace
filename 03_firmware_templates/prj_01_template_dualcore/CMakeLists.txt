@@ -26,6 +26,17 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/common_flags.cmake)
 # of 01_shared_drivers/00_gpio/README.md. Preset selftest-gpio; never in a
 # product image.
 option(GPIO_DRIVER_SELFTEST "Build the 00_gpio selftest (needs the AD2 bench)" OFF)
+# 03_tim: the Analog Discovery 2 bench of 01_shared_drivers/03_tim/
+# IMPLEMENTATION_PLAN.md. Preset selftest-tim; never in a product image. Both
+# selftests drive the same bench lines from their own step tables, so one
+# image never carries both.
+option(TIM_DRIVER_SELFTEST "Build the 03_tim selftest (needs the AD2 bench)" OFF)
+if(GPIO_DRIVER_SELFTEST AND TIM_DRIVER_SELFTEST)
+    message(FATAL_ERROR
+        "GPIO_DRIVER_SELFTEST and TIM_DRIVER_SELFTEST are incompatible: each owns the "
+        "AD2 bench lines through its own step table. Configure one of them (presets "
+        "selftest-gpio or selftest-tim).")
+endif()
 
 # Every selftest capture starts with the revision it was built from, and says
 # -dirty when tracked files differ from it, so a capture can be traced to a

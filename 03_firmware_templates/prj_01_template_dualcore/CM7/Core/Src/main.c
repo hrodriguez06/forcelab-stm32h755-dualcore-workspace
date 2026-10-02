@@ -28,6 +28,9 @@
 #if defined(GPIO_DRIVER_SELFTEST)
 #include "gpio_selftest.h"
 #endif
+#if defined(TIM_DRIVER_SELFTEST)
+#include "tim_selftest.h"
+#endif
 
 static void SystemClock_Config(void);
 static void PeripheralClock_Config(void);
@@ -110,6 +113,10 @@ int main(void)
        never acts on flags a previous run left there (SRAM4 survives a warm
        reset). Must happen before CPU2 is released. */
     GPIO_Selftest_CM7_PreRelease();
+#endif
+#if defined(TIM_DRIVER_SELFTEST)
+    /* Same for the 03_tim selftest block (01_shared_drivers/03_tim). */
+    TIM_Selftest_CM7_PreRelease();
 #endif
 
     /* The clock tree is up and shared memory is ready: release CPU2. */

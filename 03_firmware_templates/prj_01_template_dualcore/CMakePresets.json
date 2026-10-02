@@ -25,11 +25,20 @@
       "binaryDir": "${sourceDir}/build/selftest-gpio",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "GPIO_DRIVER_SELFTEST": "ON", "FW_PRESET": "selftest-gpio" }
+    },
+    {
+      "name": "selftest-tim",
+      "displayName": "Dual-Core Debug with the 03_tim selftest (AD2 bench)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/selftest-tim",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "TIM_DRIVER_SELFTEST": "ON", "FW_PRESET": "selftest-tim" }
     }
   ],
   "buildPresets": [
     { "name": "debug",         "configurePreset": "debug"         },
     { "name": "release",       "configurePreset": "release"       },
-    { "name": "selftest-gpio", "configurePreset": "selftest-gpio" }
+    { "name": "selftest-gpio", "configurePreset": "selftest-gpio" },
+    { "name": "selftest-tim",  "configurePreset": "selftest-tim"  }
   ]
 }
