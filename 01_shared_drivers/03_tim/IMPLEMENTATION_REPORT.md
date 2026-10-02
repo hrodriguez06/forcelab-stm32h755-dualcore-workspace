@@ -412,3 +412,25 @@ El responsable pidió el 2026-10-02 repetir la ejecución otra vez. La captura e
 Todos los valores en ppm. Con la misma imagen, de las cuatro ejecuciones con el criterio de R3-1, tres pasan y una falla. La que falla es la primera después de reconectar el USB del ST-LINK. En las dos últimas, x se mantiene en +13 485 y +13 534 y la diferencia entre grupos es pequeña (254 y 58 ppm). En esta, s = 527,4 ppm sin que ē_A y ē_B se separen: la dispersión está dentro de cada grupo.
 
 Estado de F0: **en curso**. Siguen pendientes las dos decisiones del responsable: el gate de tamaños de producción desde `2481396` y la repetibilidad de R3-1.
+
+## F0: quinta ejecución con la revisión 3
+
+El responsable pidió el 2026-10-02 repetir la ejecución otra vez. La captura es `docs/tim_f0_bench_105edfb.txt`. Desde `2481396` solo cambió documentación, y la imagen se recompiló para que su `Rev` sea el de `HEAD`. Resultado: `Rev` 105edfb e id `ccf10a34cba8e061` en el host, CM7 y CM4, árbol limpio, lista de comprobación confirmada por Hector, **16/16, `FW VERDICT=PASS` y `HOST VERDICT=PASS`**.
+
+| Ejecución | ē_A | ē_B | ē | s_ef | x ± u | ē − x | \|ē − x\| / cota | Resultado |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `2481396` | +10 541,5 | +10 290,8 | +10 416,2 | 310,9 | +9 994,7 ± 15,4 | +421,4 | 421,4 / 237,7 | FAIL |
+| `89f11b5` | +13 188,6 | +12 038,9 | +12 613,7 | 689,8 | +12 549,1 ± 13,1 | +64,6 | 64,6 / 518,8 | PASS |
+| `781212b` | +13 619,1 | +13 365,3 | +13 492,2 | 356,0 | +13 485,0 ± 13,4 | +7,3 | 7,3 / 270,0 | PASS |
+| `20e5b89` | +13 438,3 | +13 380,5 | +13 409,4 | 527,4 | +13 534,4 ± 12,4 | −125,0 | 125,0 / 397,3 | PASS |
+| `105edfb` | +13 303,5 | +13 152,6 | +13 228,0 | 315,1 | +13 019,8 ± 10,6 | +208,3 | 208,3 / 238,4 | PASS |
+
+Todos los valores en ppm. Con la misma imagen, de las cinco ejecuciones con el criterio de R3-1, cuatro pasan y una falla. En `105edfb` el margen es pequeño: la diferencia es el 87 % de la cota.
+
+Hechos, sin conclusión:
+
+- **En cuatro de las cinco ejecuciones, ē queda por encima de x.** La media de ē − x es +115 ppm.
+- **La cota de R3-1 solo cuenta s_ef/4 y u.** Con s_ef ≈ 310 ppm, como en `2481396` y en `105edfb`, eso da unos 80 ppm por σ. Las dos ejecuciones con esa s_ef quedaron a 5,3σ y a 2,6σ.
+- **x varía de una ejecución a otra con una desviación de unos 230 ppm** en las tres últimas (+13 485, +13 534, +13 020), aunque u declara unos 12 ppm en cada una.
+
+Estado de F0: **en curso**. Siguen pendientes las dos decisiones del responsable: el gate de tamaños de producción desde `2481396` y la repetibilidad de R3-1.
