@@ -1,0 +1,10 @@
+﻿-Werror builds of prj_01 at 7ac9e44 test(prj_01): add sigma_ser to the TREF bound (R4-1), in fresh scratch build dirs (not the presets' build/<preset>), CMAKE_C_FLAGS=-Werror
+selftest-tim (Debug, TIM_DRIVER_SELFTEST=ON): exit=0, lines with 'warning:' or 'error:' = 0; text data bss:
+    39208 136 55816  cm7_firmware.elf
+    6048 24 12560  cm4_firmware.elf
+debug (Debug, TIM_DRIVER_SELFTEST=OFF): exit=0, lines with 'warning:' or 'error:' = 0; text data bss:
+    29304 132 55668  cm7_firmware.elf
+    3456 24 12560  cm4_firmware.elf
+release (Release, TIM_DRIVER_SELFTEST=OFF): exit=0, lines with 'warning:' or 'error:' = 0; text data bss:
+    28356 132 55672  cm7_firmware.elf
+    3112 24 12560  cm4_firmware.elf
