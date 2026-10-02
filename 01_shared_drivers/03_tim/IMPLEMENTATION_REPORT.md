@@ -201,3 +201,38 @@ En las cuatro ejecuciones el e de TREF salta en pasos de una muestra del LA: 40 
 La cota que se decidió, 3·u, solo cuenta la incertidumbre de la verificación cruzada (u ≈ 191 ppm). No cuenta la resolución de TREF. En `e30622b` la diferencia quedó justo en la cota. Por azar, la misma imagen puede fallar en otra ejecución, también en la del auditor (A18).
 
 Propuesta, que no he aplicado porque es un criterio: \|e − cruzada\| ≤ 3·√(u² + r²), donde r es la resolución de TREF de esa misma captura (≈ 253 ppm). Con los datos de esta ejecución daría ≈ 951. Queda pendiente de que lo decida el responsable.
+
+## F0: cota de TREF con la resolución
+
+Estado: entregada para auditoría (`d69508e` código, evidencia en `3fffb50`). Esta sección cierra, por mi parte, la pregunta abierta de la anterior; el hallazgo, si lo hay, lo cierra el auditor.
+
+### Commits
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `d69508e` | test(prj_01): count the TREF resolution in the cross-check bound | — |
+| `3fffb50` | docs(tim): add the F0 capture at d69508e (TREF bound with the resolution) | — |
+| (este) | docs(tim): record the TREF bound with the resolution | — |
+
+### Desviación
+
+| Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- |
+| TREF: \|e\| ≤ 500 ppm (ya cambiado a \|e\| ≤ 2 % con \|e − cruzada\| ≤ 3·u) | \|e\| ≤ 2 % y \|e − cruzada\| ≤ 3·√(u² + r²), donde r es la resolución de TREF de la misma captura | Con 3·u sola, `e30622b` pasó justo en la cota (574 frente a 574), porque e se mueve en pasos de una muestra (unos 254 ppm) | Hector, 2026-10-01: "Usa la cota 3·√(u² + r²) para TREF" |
+
+### Build
+
+- Desde `456a7a7` no cambió ningún archivo C, de cabecera, CMake, preset ni linker script: solo `tools/ad2.py` y `tools/tim_hw_check.py`. Por eso la evidencia de `build_all`, `-Werror` y `.map` de `456a7a7` sigue valiendo.
+- `selftest-tim` en `d69508e`, desde un directorio vacío: salida 0 y 0 avisos (`docs/tim_f0_selftest_build_d69508e.txt`).
+
+### Pruebas
+
+`docs/tim_f0_bench_d69508e.txt` da 14/14, `FW VERDICT=PASS` y `HOST VERDICT=PASS`. Las demás pruebas dan los mismos valores que en `e30622b`.
+
+| ID | Resultado | Valor medido | Control negativo: valor |
+| --- | --- | --- | --- |
+| TREF | PASS | e = +12 914,7 ppm (40 periodos sobre 3949 muestras), r = 253,2 ppm; cruzada +12 846,7 ± 191,7 ppm. \|e − cruzada\| = 68,0 frente a una cota de 952,9 | PA8 en AF1: 0 flancos |
+
+Las cuatro ejecuciones anteriores, con la cota nueva aplicada a mano sobre sus valores impresos, darían 485,8, 40,3, 64,8 y 573,7, todas frente a unos 950. Con la cota de cada una de ellas, `d01061e` y `38d15c1` fallaron por las erratas E1 y E2, no por esta cota.
+
+Observación: al abrir el AD2 se volvió a leer `DIO = 0x2001`, el mismo caso de §5.8: antes del reset por SWD, con OE = 0 y Digital Out deshabilitado.
