@@ -247,3 +247,47 @@ La serie de 10 contradice mi instrucción "una sola ejecución" del prompt de la
 ### Estado de F0
 
 La parte estática y de build pasa, y el criterio de TREF queda validado fuera de la muestra que lo fijó. **Solo falta A18/A27: mi ejecución del banco**, sobre `selftest-tim` compilado en la cabeza de la rama, con la lista de comprobación física confirmada por quien está en el banco. Si pasa, F0 se cierra y el implementador puede empezar F1 (`tim_bm`, con O1 y R3-2).
+
+## F0, auditoría 6: ejecución del banco por el auditor (2026-10-02, en `cae5414`) — **F0 PASA**
+
+Lista de comprobación física confirmada en el chat por el responsable del catálogo (Hector), en el banco: cableado y GND según `00_gpio` §8, sin resistencias en serie, nada en W1/W2/V+/V−, WaveForms cerrado, sin depurador y los dos USB conectados. Antes de ejecutar, `tasklist` no mostraba ningún proceso de WaveForms ni de depuración.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `selftest-tim` desde un directorio vacío, en `cae5414` | 0 avisos |
+| `py tools/flash.py --preset selftest-tim`, con el script del banco parado | "Download verified successfully" y reset |
+| `py tools/tim_hw_check.py --checklist-confirmed Hector --out <scratchpad>`, **una sola ejecución** | **16/16, `FW VERDICT=PASS` y `HOST VERDICT=PASS`**. Captura sin editar: `03_firmware_templates/prj_01_template_dualcore/docs/tim_f0_audit_bench_cae5414.txt` (248 líneas), copiada del scratchpad después de ejecutar para que el árbol estuviera limpio durante la ejecución |
+
+### Contenido de la captura
+
+- **Trazabilidad (A21):** checkout del host `cae5414`, `tree clean`, `Rev` `cae5414` e id `d5f8bbb3e68470f8` iguales en CM7, CM4 y el host, protocolo v2 y REV\_ID `0x2003`.
+- **AD2 (A27):** se abre en S2 (`OE=0x0000 DIO=0x0000 Digital Out enable=0x0000 Zet=0xFFFF`) y se cierra en S2 (`OE=0x0000 enable=0x0000 Zet=0xFFFF`).
+- **T0a:** 13 líneas en pull-up `0x4FFF`/`0x1FFF` y en pull-down `0x0000`, en el AD2 y en el MCU. Walking-1 sin diferencias. El control marca `0x0200` en los dos lados.
+- **TREF\_A:** 8 capturas de 40–41 periodos, separadas ≥ 100,4 ms, con eᵢ de +13 096 a +14 199 ppm. El control da 0 flancos con PA8 en AF1 y TIM1 sin reloj (C1 = C2 = 0). `RCC_CFGR` se restaura (`0x0000001B`).
+- **T0b(a)/(e):** mocks PASS.
+- **T0b(b):** CM7 da 20 rechazos y el control aceptado, con los registros sin tocar. CM4 da `accepted 0x0001` en T0B, `0x0000` entre pasos y `regs changed 0x000` las dos veces (m4 verificado en placa). `bench_safe` de CM4 devuelve PE5 a entrada.
+- **T0b(c):** `0x5A` detectado dos veces. **T0b(d):** timeout con `bench_safe`.
+- **T0b(f):** Digital Out a 1,0000 MHz solo en DIO1, con OE durante la ejecución `0x1000` (S11 d). Con Zet, el bus sigue los dos pulls. El control con Low da `0xFD` en el AD2 y en el MCU (m1 verificado en placa). S2 deja `enable 0x0000` y `Zet 0xFFFF`.
+- **T0b(g):** 13 rechazos y el control aceptado. S5 con PE9/PE11 en AF1 pasa. TIM1 vuelve a los valores de reset.
+- **TREF\_B:** 8 capturas, `RCC_CFGR` restaurado.
+- **CM4:** `timeout 0, aborts 0`.
+- **TREF (R4-1):** ē = +13 106,7 ppm (ē\_A +13 577,6, ē\_B +12 635,8), s\_ef = 653,9; x = +13 071,8 ± 18,2 (11 ráfagas, residuos 0,358 ms). \|ē − x\| = 34,9 ≤ 657,8 → PASS.
+
+### Tabla A de F0, cerrada
+
+| # | Resultado |
+| --- | --- |
+| A1, A16, A17, A19–A23, A26, A28 | Pasan (auditorías 1–5, con la base de producción de R4-2) |
+| A18 | **Pasa**: T0b en verde en la ejecución del auditor |
+| A27 | **Pasa**: guardas S2/S3/S11/S12 en placa y en los mocks |
+
+Hallazgos de F0: m1–m4 cerrados y verificados en placa (m1, m4). O1 (control de sensibilidad de las fotos de registros) pasa a F1.
+
+**Veredicto: F0 pasa.** El implementador puede empezar F1 (`tim_bm`) sobre `driver/tim`.
+
+### Notas que siguen abiertas, fuera del gate
+
+- **N1 (del responsable):** el reloj de la placa va un +1,3 % alto y deriva. En esta misma ejecución, ē\_A − ē\_B = +942 ppm en unos 12 s. Hay que medirlo con un instrumento independiente y revisar el firmware del ST-LINK. En `03_tim`, R3-2 lo neutraliza para las medidas del AD2, pero no el exceso sobre VOS1.
+- **σ\_ser (R4-1)** es de este banco: si cambia la placa o el ST-LINK, se vuelve a medir.
