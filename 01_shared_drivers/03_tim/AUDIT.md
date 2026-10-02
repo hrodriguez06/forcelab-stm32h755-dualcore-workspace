@@ -215,3 +215,8 @@ Con ese criterio, el rms de z de las 17 queda en 1,05, el máximo de \|z\| en 2,
 1. D6 aprobada, y revisión 4 del plan.
 2. El implementador cambia la cota (un commit, sin tocar nada más) y entrega una captura.
 3. A18/A27: mi ejecución del banco sobre esa entrega, con la lista de comprobación física confirmada.
+
+## F0, adenda a la auditoría 4 (2026-10-02)
+
+- **D6 aprobada** por el responsable del catálogo. Está en la revisión 4 del plan: R4-1 (σ\_ser = 145 ppm en la cota de TREF) y R4-2 (base de la producción de `prj_01` en `2481396`; el cambio de SMPS queda como desviación aprobada).
+- **Para que F0 pase:** el implementador aplica R4-1 en un commit y entrega una captura. Después viene mi ejecución del banco (A18/A27), con la lista de comprobación física confirmada.

@@ -2,7 +2,7 @@
 
 Oct 1, 2026 · @Hector
 
-Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 3) de esta carpeta. El trabajo es el driver de timers en tres tiers, `tim_bm` (F1), `tim_ll` (F2) y `tim_hal` (F3), con una fase F0 que prepara el banco del AD2 en `prj_01_template_dualcore`. Otra persona audita cada fase de forma independiente y repite tus pruebas en la placa.
+Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 4) de esta carpeta. El trabajo es el driver de timers en tres tiers, `tim_bm` (F1), `tim_ll` (F2) y `tim_hal` (F3), con una fase F0 que prepara el banco del AD2 en `prj_01_template_dualcore`. Otra persona audita cada fase de forma independiente y repite tus pruebas en la placa.
 
 Este documento dice qué te toca, qué no te toca y qué tienes que entregar. Si algo de aquí choca con el plan, manda el plan, con una excepción: lo que este documento te **prohíbe** sigue prohibido aunque el plan lo mencione.
 
@@ -139,7 +139,7 @@ El auditor revisa todo esto en A27. Un incumplimiento es **bloqueante** aunque t
 
 1. El rango de commits en `driver/tim`, con el árbol limpio.
 2. La salida completa de `.\tools\build_all.ps1 -Clean` (8/8), la de `cmake --build --preset selftest-tim` (0 avisos) y la de una compilación aparte con `CMAKE_C_FLAGS=-Werror` (plan C9, R2-5).
-3. Los tamaños **del `.map` enlazado**, sin contar "Discarded input sections": `.text`, `.data` y `.bss` de cada `tim_*.c.obj` en CM4 y CM7, y los totales de `prj_01` debug/release frente a `e7542dc` (tienen que ser iguales: con la opción apagada nada enlaza el driver).
+3. Los tamaños **del `.map` enlazado**, sin contar "Discarded input sections": `.text`, `.data` y `.bss` de cada `tim_*.c.obj` en CM4 y CM7, y los totales de `prj_01` debug/release frente a `2481396` (plan R4-2; tienen que ser iguales: con la opción apagada nada enlaza el driver).
 4. Las capturas de la fase (§3.4), commiteadas.
 5. **Tu informe actualizado** (§5), con la sección de la fase.
 6. Un aviso al auditor con el hash del último commit. Y a esperar.
@@ -169,7 +169,7 @@ Reglas de redacción:
 ```markdown
 # Informe de implementación 03_tim
 
-Implementador: <nombre> · Rama: driver/tim · Plan: IMPLEMENTATION_PLAN.md revisión 3
+Implementador: <nombre> · Rama: driver/tim · Plan: IMPLEMENTATION_PLAN.md revisión 4
 
 ## Resumen
 <5-10 líneas: qué hay implementado, en qué fase estás, qué falta y qué está bloqueado.
@@ -187,7 +187,7 @@ Implementador: <nombre> · Rama: driver/tim · Plan: IMPLEMENTATION_PLAN.md revi
 
 ### 5.2 Build y tamaños
 - build_all -Clean: 8/8 (salida en <archivo>); selftest-tim: <salida>
-| Imagen | .text | .data | .bss | Δ frente a e7542dc | Fuente (.map) |
+| Imagen | .text | .data | .bss | Δ frente a 2481396 (R4-2) | Fuente (.map) |
 | Objeto | Núcleo | .text | .data | .bss | Fuente (.map) |
 
 ### 5.3 Pruebas
@@ -229,7 +229,7 @@ La lista completa de entregables y gates está en la tabla "Fases" del plan. Aqu
 - **F0:**
   - Lo primero son las guardas de seguridad (§3.6): S11 en `ad2.py`, S2 ampliado, `bench_claim()`/`bench_safe()` en los dos núcleos y la tabla de pasos con versión. Sin eso, nada que use el AD2 más allá de T0a.
   - No hay código del driver ni targets `_tim_*` en F0: cada target entra en su fase (F1, F2 o F3), con su fuente.
-  - Con la opción apagada, las imágenes de producción de `prj_01` tienen que quedar con los mismos tamaños que en `e7542dc`: compruébalo antes de entregar.
+  - Con la opción apagada, las imágenes de producción de `prj_01` tienen que quedar con los mismos tamaños que en `2481396` (plan R4-2): compruébalo antes de entregar.
 - **F1:**
   - Empieza por la tabla de capacidades, con la cita del RM en cada fila. Si un valor del RM difiere del plan, manda el RM: apúntalo en §5.7.
   - Después, la validación (C6) y las funciones puras con T3. Así el host te dice pronto si tu redondeo es el del plan.
