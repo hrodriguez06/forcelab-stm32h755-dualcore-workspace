@@ -1,0 +1,24 @@
+﻿tim_ll.c and tim_bm.c compiled alone at 2d1e525 (arm-none-eabi-gcc 14.3.1).
+Flags, exactly: -std=c11 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wcast-qual -Werror -mcpu=<core> -mthumb -mfpu=<fpu> -mfloat-abi=hard -DSTM32H755xx -DCORE_CMx
+(no -DUSE_HAL_DRIVER, no -DUSE_FULL_LL_DRIVER). Headers: -isystem for the CMSIS and HAL directories of the Cube
+package prj_01 uses (02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7/Drivers: CMSIS/Include,
+CMSIS/Device/ST/STM32H7xx/Include, STM32H7xx_HAL_Driver/Inc), -I for 01_shared_drivers/03_tim.
+
+tim_ll.c CORE_CM7: exit=0 diagnostics=0; text data bss = 4884 0 0
+tim_ll.c CORE_CM4: exit=0 diagnostics=0; text data bss = 4856 0 0
+tim_bm.c CORE_CM7: exit=0 diagnostics=0; text data bss = 7844 0 0
+tim_bm.c CORE_CM4: exit=0 diagnostics=0; text data bss = 7944 0 0
+
+Headers tim_ll.c includes (arm-none-eabi-gcc -M, CM7; newlib and compiler headers left out), relative to the Cube Drivers directory:
+  01_shared_drivers/03_tim\tim_ll.h
+  \CMSIS\Device\ST\STM32H7xx\Include/stm32h7xx.h
+  \CMSIS\Device\ST\STM32H7xx\Include/stm32h755xx.h
+  \CMSIS\Include/core_cm7.h
+  \CMSIS\Include/cmsis_version.h
+  \CMSIS\Include/cmsis_compiler.h
+  \CMSIS\Include/cmsis_gcc.h
+  \CMSIS\Include/mpu_armv7.h
+  \CMSIS\Include/cachel1_armv7.h
+  \CMSIS\Device\ST\STM32H7xx\Include/system_stm32h7xx.h
+  \STM32H7xx_HAL_Driver\Inc/stm32h7xx_ll_tim.h
+  01_shared_drivers/03_tim\tim_bm.h
