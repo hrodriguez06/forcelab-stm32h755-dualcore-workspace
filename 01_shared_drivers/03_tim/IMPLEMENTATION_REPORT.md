@@ -284,3 +284,66 @@ La consecuencia es que la cota actual pasa por poco: 627,5 frente a 760,7. Otra 
 
 - **(a)** Medir e como media de N capturas del LA, con su dispersión medida, y usar esa dispersión en lugar de r.
 - **(b)** Añadir a r un término medido de la variación de MCO1.
+
+## Respuesta a la auditoría 3 (F0; plan revisión 3)
+
+Plan de referencia: revisión 3 (`92983ec`).
+
+**Estado de F0: en curso, no se entrega para auditoría.** La ejecución del banco con el criterio de R3-1 falla en TREF. Como pide el plan, me detengo y lo informo con la captura (`docs/tim_f0_bench_2481396.txt`) sin cambiar el criterio.
+
+### Cambios de la revisión 3
+
+| Cambio | Commit | Qué ejecuté para comprobarlo | Estado |
+| --- | --- | --- | --- |
+| R3-3: `TIM_BENCH_VERSION = 2` y tabla `T0A`, `TREF_A`, `T0B`, `T0B_S5NEG`, `T0B_TIMEOUT`, `T0B_DOUT`, `T0B_S12`, `TREF_B`, `DONE`, igual en `k_tst_steps` y en `STEPS` | `949c39c` | `TREF_B` solo permite PA8 en AF0 (`af1_pa = 0`); `TREF_A` mantiene AF1 para su control; T0B sigue rechazando PA8 AF1. En la captura de `2481396`: protocolo v2 y S7 sin diferencias en los 9 pasos | aplicado en `949c39c`, pendiente de verificación |
+| R3-1, TREF: 8 capturas por grupo, ≥ 40 periodos y ≥ 100 ms entre comienzos; el control solo en `TREF_A`; `RCC_CFGR` guardado y restaurado con read-back en cada grupo; se imprimen cada eᵢ con su rᵢ, ē_A, ē_B, ē, s y s_ef | `9986015` (host) y `949c39c` (`RCC_CFGR` por grupo, en el firmware) | Captura: `TREF_A captures` y `TREF_B captures` en PASS (8 capturas, mínimo 40 periodos, separación mínima de 100,2 y 100,4 ms); control de `TREF_A` con 0 flancos; `RCC_CFGR` restaurado en los dos grupos | aplicado en `9986015`, pendiente de verificación |
+| R3-1, x: una ráfaga de 4 líneas `TICK` cada 50 ms al empezar cada paso, antes de `STEP`, más las de 16 en el banner y en el veredicto; ajuste de las M medias de ráfaga, u = error estándar de la pendiente con M − 2 grados de libertad; se imprime cada media, la pendiente de cada ráfaga, x y u | `abea673` | Captura: 11 ráfagas (16 + 9 × 4 + 16), 9 grados de libertad, x = +9 994,7 ppm, u = 15,4 ppm, dispersión de los residuos 0,304 ms. Con datos sintéticos (x = +13 500, 0,07 ms de jitter y 0,3 ms de latencia añadida a la ráfaga del veredicto), +13 494,8 ± 4,4 | aplicado en `abea673`, pendiente de verificación |
+| R3-1, criterio: \|ē\| ≤ 20 000 ppm y \|ē − x\| ≤ 3·√(u² + s_ef²/16) | `0f9534c` | Fuera de línea: pasa con 28,8 ≤ 247,6 y falla con 328,8 y sin x. En la placa: **falla**, ver abajo | aplicado en `0f9534c`, pendiente de verificación |
+
+### Defecto de `prj_01` encontrado y corregido (decisión del responsable)
+
+Después de un arranque en frío, `prj_01` no arrancaba: `tim_f0_bench_0f9534c.txt` no recibe ninguna línea de consola tras el reset. Lo que leí por SWD, sin parar el núcleo:
+
+- CM7 está en `SystemClock_Config` (`CM7/Core/Src/main.c:187-188`, PC `0x080008EA`/`0x080008EE`), esperando `VOSRDY`.
+- `CFSR = HFSR = 0`, así que no hay ningún fallo.
+- `PWR_CR3 = 0x46` es el valor de reset, y `PWR_CSR1 = 0x4000` tiene `ACTVOSRDY = 0`.
+- `PWR_D3CR = 0xC000`: se pidió VOS 1, pero `VOSRDY = 0`.
+- `RCC_RSR` tiene `PORRSTF`.
+
+Un apagado y encendido no lo arregló.
+
+La causa: `prj_01` nunca configura la alimentación. RM0399 §7.4.1 dice que mientras `ACTVOSRDY` no es válido VOS no puede cambiar. Esa configuración solo se escribe una vez hasta el siguiente arranque en frío, y hasta ahora la había escrito la imagen anterior de la placa.
+
+El responsable decidió el 2026-10-02: "Aplica la opción (a) en un commit propio". `2481396` llama a `HAL_PWREx_ConfigSupply(PWR_DIRECT_SMPS_SUPPLY)` al principio de `SystemClock_Config` y comprueba su retorno. La MB1363 es "internal SMPS only" por defecto (UM2408 Rev 6, §7.4.8, tabla 10), y es lo que hace `prj_04` (`main.c:297`). Con eso la placa arranca después de un arranque en frío (`tim_f0_bench_2481396.txt`).
+
+Esto queda fuera del §2.1 de las instrucciones y cambia la producción de `prj_01`:
+
+| Imagen | e7542dc (.text) | 2481396 (.text) | Δ | Resto de secciones asignadas |
+| --- | --- | --- | --- | --- |
+| debug CM7 | 27740 | 27900 | +160 | iguales |
+| release CM7 | 26824 | 26952 | +128 | iguales |
+| debug CM4 / release CM4 | — | — | 0 | iguales |
+
+Fuente: `docs/tim_f0_map_sizes_2481396.txt`. El crecimiento son `HAL_PWREx_ConfigSupply` (0x94 B) y 16 B más en `SystemClock_Config`. **El gate de F0 "producción con los mismos tamaños que `e7542dc`" no se cumple desde `2481396`, y queda pendiente de que el responsable lo actualice.** Evidencia en `2481396`: `build_all` 8/8 (`tim_f0_build_all_2481396.txt`); `selftest-tim` y los tres builds con `-Werror` a 0 avisos (`tim_f0_selftest_build_2481396.txt`, `tim_f0_werror_2481396.txt`).
+
+### Resultado en la placa (`docs/tim_f0_bench_2481396.txt`)
+
+`Rev` 2481396 e id `934979b06027008b` en el host, CM7 y CM4, árbol limpio y lista de comprobación confirmada por Hector. Pasa todo lo que no es el criterio de TREF: T0a, T0b(a)–(g), las capturas y el control de `TREF_A`, las capturas de `TREF_B`, `RCC_CFGR` restaurado y `FW VERDICT=PASS`. Hay 15/16 comprobaciones del host y `HOST VERDICT=FAIL`, por una sola:
+
+| Magnitud | Valor |
+| --- | --- |
+| eᵢ de TREF_A (ppm) | +10 866,8, +10 611,4, +10 599,0, +11 097,4, +10 599,0, +9 852,2, +10 356,2, +10 349,9 |
+| eᵢ de TREF_B (ppm) | +10 349,9, +10 611,4, +10 349,9, +10 356,2, +10 101,0, +10 101,0, +10 101,0, +10 356,2 |
+| ē_A, ē_B, ē | +10 541,5, +10 290,8, +10 416,2 ppm |
+| s, r̄, r̄/√6, s_ef | 310,9, 249,9, 102,0, 310,9 ppm |
+| x, u (11 ráfagas, 9 g. l., residuos 0,304 ms) | +9 994,7 ± 15,4 ppm |
+| \|ē − x\| frente a la cota | 421,4 > 3·√(u² + s_ef²/16) = 237,7 → **FAIL** |
+
+Hechos que el responsable debería tener en cuenta, sin que yo saque conclusiones:
+
+- **e y x no coinciden, y los dos grupos de TREF caen del mismo lado.** ē_A y ē_B quedan por encima de x, +547 y +296 ppm, cuando según s cada media de 8 capturas tendría una desviación de unos 110 ppm.
+- **Las ventanas cortas medidas con el host también dan más que el ajuste.** La pendiente propia de las dos ráfagas de 16 líneas, de 0,75 s cada una, es +10 228 (banner) y +9 893 (veredicto). La de las ráfagas de 4 líneas va de +9 689 a +11 096. El ajuste de las medias en 14,4 s da +9 995, y sus residuos (0,304 ms) son 4,5 veces la dispersión de la ráfaga larga de `8c4ab93` (0,067 ms).
+- **El reloj de la placa cambió mucho entre sesiones.** x fue +13 571 en `8c4ab93` y +9 995 en `2481396`. Entre medias se desconectó y volvió a conectar el USB del ST-LINK, que es el que genera el HSE. No sé si es la causa.
+- **u puede infravalorar la incertidumbre de x.** u (15,4 ppm) sale de 11 puntos con residuos de unos 0,3 ms y no incluye ninguna deriva de la latencia de llegada a lo largo de la sesión. No he podido separar si la diferencia de 421 ppm es del reloj de la placa (ventanas cortas frente a largas), de las referencias (cristal del AD2 frente al reloj del host) o de la latencia.
+
+No he cambiado el criterio, el número de capturas ni el método. Pido decisión al responsable antes de seguir.
