@@ -1111,7 +1111,7 @@ class Session:
             f_mco = box["mco"]["freq_hz"]
             per = (TIMCLK_PER_MCO1 * f_mco / box["f"] - self.delay) / (psc + 1)
             hi = (TIMCLK_PER_MCO1 * f_mco * box["high_s"] - self.delay) / (psc + 1)
-            ptol = 1 + 0.001 * per
+            ptol = 2 + 0.001 * per         # PWM input: reset and capture both resynchronized (R6-1)
             htol = 2 + 0.001 * hi
             bad = [(a, b) for a, b in zip(pers, his) if abs(a - per) > ptol or abs(b - hi) > htol]
             ok = (ann == (ti, f, duty, psc) and int(m.group(5)) == 1 and len(pers) == 8 and not bad and
