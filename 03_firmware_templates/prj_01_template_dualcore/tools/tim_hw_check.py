@@ -119,11 +119,13 @@ TREF_SPACING_S = 0.100
 # of 2026-10-01; with 3 u alone, tim_f0_bench_e30622b.txt passed at 574 against 574).
 TREF_MAX_PPM = 20000.0
 TREF_XCHK_K = 3.0
-# The cross-check's points: CPU1 prints TICK_BURST_N lines "TICK <banner|verdict> <i>
-# <HAL_GetTick>" at the banner and at the verdict (tick_burst() in
-# CM7/App/Src/tim_selftest.c). u comes from the measured scatter of their arrival
-# times (plan R2-10), not from an assumed jitter.
-TICK_BURST_N = 16
+# The cross-check (plan R3-1): CPU1 prints bursts of lines "TICK <label> <i> <HAL_GetTick>",
+# TICK_BURST_LONG at the banner and at the verdict and TICK_BURST_STEP at the start
+# of every step (tick_burst() in CM7/App/Src/tim_selftest.c). The host fits the
+# burst means by least squares; u is the standard error of the slope (R2-10).
+TICK_BURST_LONG = 16
+TICK_BURST_STEP = 4
+TICK_MIN_BURSTS = 10
 
 DOUT_DIVIDER, DOUT_LOW, DOUT_HIGH = 1, 50, 50          # 100 MHz / 1 / (50 + 50) = 1 MHz
 DOUT_TOL = 0.001                # +-0.1 % (plan, common tolerances; AD2 against itself here)
@@ -304,39 +306,47 @@ def tref_stats(caps_a: list[dict], caps_b: list[dict], log: Callable[[str], None
 
 # ---- TREF cross-check (plan R2-2, R2-10) ----------------------------------------------
 
-def tick_burst_read(con: "Console", label: str, timeout_s: float) -> list[tuple[int, float]]:
-    """The TICK_BURST_N lines of one burst: (HAL_GetTick in ms, host arrival time in s)."""
-    pts = []
-    for i in range(TICK_BURST_N):
-        m, t = con.expect_t(rf"\[tim\] TICK {label} {i} (\d+)\s*$", timeout_s)
-        pts.append((int(m.group(1)), t))
-    return pts
+TICK_RX = re.compile(r"\[tim\] TICK (\S+) (\d+) (\d+)\s*$")
 
 
-def tick_fit(pts: list[tuple[int, float]]) -> dict:
-    """Least squares of the host arrival time t against the board time k/1000:
-    t = a + b k/1000. The board clock against the host's is x = 1/b - 1. The
-    residual scatter sd (n - 2 degrees of freedom) is the measured arrival
-    jitter, and u is the standard error of the slope, sd / sqrt(sum (k - k_mean)^2),
-    turned into ppm of x."""
-    n = len(pts)
-    ks = [k / 1000.0 for k, _ in pts]
-    ts = [t for _, t in pts]
-    km, tm = sum(ks) / n, sum(ts) / n
-    sxx = sum((k - km) ** 2 for k in ks)
-    b = sum((k - km) * (t - tm) for k, t in zip(ks, ts)) / sxx
+def burst_fit(ticks: list[tuple[str, int, int, float]]) -> dict:
+    """x and u from all TICK lines, plan R3-1. Lines are grouped into bursts by
+    label, in order of arrival. For each burst j: kbar_j (board s), tbar_j (host
+    s) and its own slope. Least squares of tbar = a + b kbar over the M bursts:
+    x = 1/b - 1, residual scatter with M - 2 degrees of freedom, and u the
+    standard error of b, se(b) / b^2. A latency that differs between bursts is
+    in the residuals, so u carries it (audit O2)."""
+    bursts: list[dict] = []
+    for label, i, k, t in ticks:
+        if not bursts or bursts[-1]["label"] != label:
+            bursts.append({"label": label, "pts": []})
+        bursts[-1]["pts"].append((k / 1000.0, t))
+    for bj in bursts:
+        ks = [k for k, _ in bj["pts"]]
+        ts = [t for _, t in bj["pts"]]
+        bj["n"] = len(ks)
+        bj["k"], bj["t"] = sum(ks) / len(ks), sum(ts) / len(ts)
+        sxx = sum((k - bj["k"]) ** 2 for k in ks)
+        if len(ks) >= 2 and sxx > 0:
+            bb = sum((k - bj["k"]) * (t - bj["t"]) for k, t in zip(ks, ts)) / sxx
+            bj["x_ppm"] = (1.0 / bb - 1.0) * 1e6
+        else:
+            bj["x_ppm"] = float("nan")
+    m = len(bursts)
+    out = {"bursts": bursts, "m": m}
+    if m < 3:
+        return out
+    km = sum(bj["k"] for bj in bursts) / m
+    tm = sum(bj["t"] for bj in bursts) / m
+    sxx = sum((bj["k"] - km) ** 2 for bj in bursts)
+    b = sum((bj["k"] - km) * (bj["t"] - tm) for bj in bursts) / sxx
     a = tm - b * km
-    sd = math.sqrt(sum((t - (a + b * k)) ** 2 for k, t in zip(ks, ts)) / (n - 2))
+    for bj in bursts:
+        bj["res_s"] = bj["t"] - (a + b * bj["k"])
+    sd = math.sqrt(sum(bj["res_s"] ** 2 for bj in bursts) / (m - 2))
     se_b = sd / math.sqrt(sxx)
-    return {"n": n, "a": a, "b": b, "sd_s": sd, "span_s": ks[-1] - ks[0],
-            "x_ppm": (1.0 / b - 1.0) * 1e6, "u_ppm": se_b / (b * b) * 1e6}
-
-
-def tick_fit_residual_sd(fit: dict, pts: list[tuple[int, float]]) -> float:
-    """Scatter of one burst's residuals around the common fit (informative)."""
-    r = [t - (fit["a"] + fit["b"] * k / 1000.0) for k, t in pts]
-    m = sum(r) / len(r)
-    return math.sqrt(sum((x - m) ** 2 for x in r) / (len(r) - 1))
+    out.update(sd_s=sd, x_ppm=(1.0 / b - 1.0) * 1e6, u_ppm=se_b / (b * b) * 1e6, span_s=bursts[-1]["k"] - bursts[0]["k"])
+    return out
 
 
 # ---- Console reader --------------------------------------------------------------------
@@ -351,6 +361,7 @@ class Console:
         self._q: "queue.Queue[tuple[float, str]]" = queue.Queue()
         self._stop = threading.Event()
         self.fw_abort: Optional[str] = None
+        self.ticks: list[tuple[str, int, int, float]] = []   # (label, i, HAL_GetTick ms, arrival s)
         self._th = threading.Thread(target=self._run, daemon=True)
         self._th.start()
 
@@ -372,6 +383,9 @@ class Console:
                 self._sink(line)
                 if "[tim] ABORT" in line:
                     self.fw_abort = line
+                mt = TICK_RX.search(line)
+                if mt:
+                    self.ticks.append((mt.group(1), int(mt.group(2)), int(mt.group(3)), t))
                 self._q.put((t, line))
 
     def expect_t(self, pattern: str, timeout_s: float) -> tuple[re.Match, float]:
@@ -709,11 +723,11 @@ def main() -> int:
         return 2
 
     verdict_fw = None
+    con_ticks: list[tuple[str, int, int, float]] = []
     session: Optional[Session] = None
     abort: Optional[str] = None
     revs: dict[str, str] = {}
     tref: dict = {}
-    ticks: dict[str, list[tuple[int, float]]] = {"banner": [], "verdict": []}
     if not (guard_a and guard_e):
         abort = "a host guard failed on its mock: the AD2 is not opened"
         stamp(f"[host] ABORT: {abort}")
@@ -743,7 +757,6 @@ def main() -> int:
                 ver = int(con.expect(r"\[tim\] TIM_BENCH v(\d+) idle", 10.0).group(1))
                 if ver != BENCH_VERSION:
                     raise BenchAbort(f"S8: firmware protocol v{ver}, host v{BENCH_VERSION}")
-                ticks["banner"] = tick_burst_read(con, "banner", 10.0)
                 head = git_rev()
                 base = {c: (r[:-len("-dirty")] if r.endswith("-dirty") else r) for c, r in revs.items()}
                 stamp(f"[host] R4-a: cm7 Rev={revs['cm7']} id={ids['cm7']}; cm4 Rev={revs['cm4']} id={ids['cm4']}; "
@@ -772,7 +785,6 @@ def main() -> int:
                 session.set_oe(DIO_REQ)          # HOST_REQ output, low
                 session.req(False)
                 tref = session.run()
-                ticks["verdict"] = tick_burst_read(con, "verdict", 120.0)
                 verdict_fw = con.expect(r"\[tim\] FW VERDICT=(\w+)", 30.0).group(1)
             except (BenchAbort, AD2SafetyViolation, ad2mod.AD2Error, subprocess.CalledProcessError) as e:
                 abort = str(e)
@@ -786,20 +798,30 @@ def main() -> int:
                 ad2.set_safe_state()
                 time.sleep(0.3)
                 con.close()
+            con_ticks = list(con.ticks)
             en, zet = ad2.dout_state()
             stamp(f"[ad2] closing in S2: OE=0x{ad2.get_oe():04X} Digital Out enable=0x{en:04X} Zet=0x{zet:04X}")
 
     xchk: Optional[tuple[float, float]] = None
-    if len(ticks["banner"]) == TICK_BURST_N and len(ticks["verdict"]) == TICK_BURST_N:
-        fit = tick_fit(ticks["banner"] + ticks["verdict"])
-        sd = {b: tick_fit_residual_sd(fit, ticks[b]) for b in ("banner", "verdict")}
-        for b in ("banner", "verdict"):
-            stamp(f"[host] TREF cross-check {b}: " + " ".join(f"{k}@{t:.4f}" for k, t in ticks[b]))
-        stamp(f"[host] TREF cross-check: least squares of host arrival time against HAL_GetTick, "
-              f"{fit['n']} lines over {fit['span_s']:.3f} s; residual scatter measured {fit['sd_s'] * 1e3:.3f} ms "
-              f"(banner {sd['banner'] * 1e3:.3f} ms, verdict {sd['verdict'] * 1e3:.3f} ms); board tick against "
-              f"host clock x={fit['x_ppm']:+.1f} ppm, u={fit['u_ppm']:.1f} ppm (standard error of the slope)")
-        xchk = (fit["x_ppm"], fit["u_ppm"])
+    if con_ticks:
+        fit = burst_fit(con_ticks)
+        for j, bj in enumerate(fit["bursts"]):
+            pts = " ".join(f"{k * 1e3:.0f}@{t:.4f}" for k, t in bj["pts"])
+            stamp(f"[host] TREF cross-check burst {j} {bj['label']}: {bj['n']} lines, mean k={bj['k'] * 1e3:.1f} ms "
+                  f"t={bj['t']:.5f} s, own slope {bj['x_ppm']:+.0f} ppm"
+                  + (f", residual {bj['res_s'] * 1e3:+.3f} ms" if "res_s" in bj else "") + f"; {pts}")
+        lens_ok = (fit["m"] >= 2 and fit["bursts"][0]["label"] == "banner" and fit["bursts"][-1]["label"] == "verdict"
+                   and fit["bursts"][0]["n"] == TICK_BURST_LONG and fit["bursts"][-1]["n"] == TICK_BURST_LONG
+                   and all(bj["n"] == TICK_BURST_STEP for bj in fit["bursts"][1:-1]))
+        if fit["m"] >= TICK_MIN_BURSTS and lens_ok:
+            stamp(f"[host] TREF cross-check: least squares of the {fit['m']} burst means over {fit['span_s']:.3f} s "
+                  f"(M - 2 = {fit['m'] - 2} degrees of freedom): residual scatter {fit['sd_s'] * 1e3:.3f} ms; board "
+                  f"tick against host clock x={fit['x_ppm']:+.1f} ppm, u={fit['u_ppm']:.1f} ppm (standard error "
+                  f"of the slope)")
+            xchk = (fit["x_ppm"], fit["u_ppm"])
+        else:
+            stamp(f"[host] TREF cross-check: {fit['m']} bursts (>= {TICK_MIN_BURSTS} needed), line counts as "
+                  f"expected: {lens_ok}; no x")
     if tref and session is not None:
         session.tref_check(tref, xchk)
     checks = session.checks if session else []
