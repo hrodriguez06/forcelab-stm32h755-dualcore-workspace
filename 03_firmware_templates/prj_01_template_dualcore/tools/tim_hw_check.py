@@ -223,35 +223,41 @@ def _s2_reached(m: _MockDwfDout) -> bool:
 
 def t0b_dout_guard_selftest(log: Callable[[str], None]) -> bool:
     zet, low = ad2mod.DWF_DOUT_IDLE_ZET, ad2mod.DWF_DOUT_IDLE_LOW
-    forbidden = [  # (mask, owner, idle, Digital-IO OE, why)
-        (1 << 0, "AD2", zet, 0, "DIO0 (PE8)"), (1 << 2, "AD2", zet, 0, "DIO2 (PE10)"),
-        (1 << 9, "AD2", zet, 0, "DIO9 (PE5, MCU only)"), (1 << 12, "AD2", zet, 0, "DIO12 (HOST_REQ)"),
-        (1 << 14, "AD2", zet, 0, "DIO14 (PA8, MCU only)"), (DIO_PE9 | (1 << 2), "AD2", zet, 0, "DIO1 with DIO2"),
-        (DIO_PE9, "NONE", zet, 0, "bus = NONE"), (DIO_PE9, "MCU", zet, 0, "bus = MCU"),
-        (DIO_PE11, "MCU", zet, 0, "bus = MCU"),
-        (DIO_PE9, "AD2", ad2mod.DWF_DOUT_IDLE_HIGH, 0, "idle High"),
-        (DIO_PE9, "AD2", ad2mod.DWF_DOUT_IDLE_INIT, 0, "idle Init"),
-        (DIO_PE9, "AD2", zet, DIO_PE9 | DIO_REQ, "Digital-IO OE on DIO1 (S11 d)"),
-        (DIO_PE11, "AD2", zet, DIO_PE11, "Digital-IO OE on DIO3 (S11 d)"),
-        (DIO_PE9 | DIO_PE11, "AD2", zet, DIO_PE11 | DIO_REQ, "DIO1|DIO3 with OE on DIO3 (S11 d)"),
+    dout = ad2mod.AD2_DOUT_IDLE_LOW_STEP     # "T0B_DOUT", the step of the T0b(f) control
+    forbidden = [  # (mask, owner, idle, Digital-IO OE, step, why)
+        (1 << 0, "AD2", zet, 0, dout, "DIO0 (PE8)"), (1 << 2, "AD2", zet, 0, dout, "DIO2 (PE10)"),
+        (1 << 9, "AD2", zet, 0, dout, "DIO9 (PE5, MCU only)"), (1 << 12, "AD2", zet, 0, dout, "DIO12 (HOST_REQ)"),
+        (1 << 14, "AD2", zet, 0, dout, "DIO14 (PA8, MCU only)"),
+        (DIO_PE9 | (1 << 2), "AD2", zet, 0, dout, "DIO1 with DIO2"),
+        (DIO_PE9, "NONE", zet, 0, "T0A", "bus = NONE"), (DIO_PE9, "MCU", zet, 0, "T0B_S5NEG", "bus = MCU"),
+        (DIO_PE11, "MCU", zet, 0, "T0B_S5NEG", "bus = MCU"),
+        (DIO_PE9, "AD2", ad2mod.DWF_DOUT_IDLE_HIGH, 0, dout, "idle High"),
+        (DIO_PE9, "AD2", ad2mod.DWF_DOUT_IDLE_INIT, 0, dout, "idle Init"),
+        (DIO_PE9, "AD2", low, 0, "T0B_S12", "idle Low outside T0B_DOUT (R2-4)"),
+        (DIO_PE9, "AD2", low, 0, None, "idle Low with no step named (R2-4)"),
+        (DIO_PE9, "AD2", zet, DIO_PE9 | DIO_REQ, dout, "Digital-IO OE on DIO1 (S11 d)"),
+        (DIO_PE11, "AD2", zet, DIO_PE11, dout, "Digital-IO OE on DIO3 (S11 d)"),
+        (DIO_PE9 | DIO_PE11, "AD2", zet, DIO_PE11 | DIO_REQ, dout, "DIO1|DIO3 with OE on DIO3 (S11 d)"),
     ]
     ok = True
-    for mask, owner, idle, oe, why in forbidden:
+    for mask, owner, idle, oe, step, why in forbidden:
         m = _MockDwfDout(oe)
         try:
-            ad2mod.ad2_set_dout(m, 1, mask, BUS[owner], idle)
+            ad2mod.ad2_set_dout(m, 1, mask, BUS[owner], idle, step)
             refused = False
         except AD2SafetyViolation:
             refused = True
         good = refused and not _enabling(m.calls) and _s2_reached(m)
         ok = ok and good
-        log(f"[ad2] T0B(e) ad2_set_dout(0x{mask:04X}, bus={owner}, idle={idle}) [{why}]: "
+        log(f"[ad2] T0B(e) ad2_set_dout(0x{mask:04X}, bus={owner}, idle={idle}, step={step}) [{why}]: "
             f"{'refused, S2 reached, no enabling call reached the DLL' if good else 'NOT REFUSED CLEANLY'}")
     # The controls; HOST_REQ (DIO12) enabled in Digital-IO is not a Digital Out line (S11 d).
-    for mask, idle, oe in ((DIO_PE9, zet, 0), (DIO_PE11, zet, 0), (DIO_PE9 | DIO_PE11, zet, 0), (DIO_PE9, low, 0),
-                           (DIO_PE9, zet, DIO_REQ), (DIO_PE9 | DIO_PE11, zet, DIO_REQ)):
+    # Zet is accepted in any "bus = AD2" step; Low only in T0B_DOUT.
+    for mask, idle, oe, step in ((DIO_PE9, zet, 0, dout), (DIO_PE11, zet, 0, dout), (DIO_PE9 | DIO_PE11, zet, 0, dout),
+                                 (DIO_PE9, low, 0, dout), (DIO_PE9, zet, 0, "T0B_S12"),
+                                 (DIO_PE9, zet, DIO_REQ, dout), (DIO_PE9 | DIO_PE11, zet, DIO_REQ, dout)):
         m = _MockDwfDout(oe)
-        ad2mod.ad2_set_dout(m, 1, mask, GPIO_BENCH_BUS_AD2, idle)
+        ad2mod.ad2_set_dout(m, 1, mask, GPIO_BENCH_BUS_AD2, idle, step)
         en = [c for c in range(16) if (mask >> c) & 1]
         order_ok = True
         for c in en:
@@ -261,7 +267,8 @@ def t0b_dout_guard_selftest(log: Callable[[str], None]) -> bool:
         good = (order_ok and m.calls[-1] == ("Configure", 1) and
                 [c[1] for c in _enabling(m.calls) if c[0] == "EnableSet"] == en)
         ok = ok and good
-        log(f"[ad2] T0B(e) control ad2_set_dout(0x{mask:04X}, bus=AD2, idle={idle}, Digital-IO OE=0x{oe:04X}): "
+        log(f"[ad2] T0B(e) control ad2_set_dout(0x{mask:04X}, bus=AD2, idle={idle}, step={step}, "
+            f"Digital-IO OE=0x{oe:04X}): "
             f"{'passed to the DLL, Idle and push-pull before EnableSet(1), Configure(1) last' if good else 'BLOCKED'}")
     return ok
 
@@ -332,6 +339,7 @@ class Session:
         self.con = con
         self.log = log
         self.owner = GPIO_BENCH_BUS_NONE
+        self.step_name: Optional[str] = None
         self.checks: list[tuple[str, bool]] = []
         self.step_idx = 0
         self.la_n = 0
@@ -372,6 +380,7 @@ class Session:
             raise BenchAbort(f"S7: announced {got} bus={bus} v={ver}, host table expects "
                              f"{exp_name} bus={exp_bus} v={BENCH_VERSION}")
         self.step_idx += 1
+        self.step_name = name
         self.ad2.set_safe_state()     # S2: Digital-IO input, Digital Out reset (S11 b)
         self.owner = BUS[bus]
         self.set_oe(DIO_REQ)          # never more than HOST_REQ at a step boundary
@@ -491,7 +500,7 @@ class Session:
         # guard refuses to start if the Digital-IO OE of DIO1 is not 0.
         f_cfg = self.ad2.dout_pulse(1, DOUT_DIVIDER, DOUT_LOW, DOUT_HIGH)
         time.sleep(0.001)                                  # S6
-        self.ad2.set_dout(DIO_PE9, self.owner, idle)       # S11: the guarded path
+        self.ad2.set_dout(DIO_PE9, self.owner, idle, self.step_name)   # S11: the guarded path
         en, zet = self.ad2.dout_state()
         oe_run = self.ad2.get_oe()
         samples, rate = self.la_capture()

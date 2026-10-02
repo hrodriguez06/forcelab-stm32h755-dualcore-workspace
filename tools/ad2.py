@@ -52,6 +52,10 @@ DWF_DOUT_IDLE_ZET         = 3
 DWF_DOUT_OUTPUT_PUSHPULL  = 0
 DWF_DOUT_TYPE_PULSE       = 0
 
+# S11 (c), plan R2-4: Idle = Low is accepted only in the step of the T0b(f)
+# control, whose name the caller passes; in every other step only Zet.
+AD2_DOUT_IDLE_LOW_STEP    = "T0B_DOUT"
+
 
 class AD2Error(RuntimeError):
     """Exception raised for errors in the AD2 DWF library."""
@@ -142,7 +146,7 @@ def ad2_dout_safe(dwf_lib, hdwf: int, strict: bool = True) -> None:
 
 
 def ad2_set_dout(dwf_lib, hdwf: int, mask: int, step_bus_owner: int,
-                 idle: int = DWF_DOUT_IDLE_ZET) -> None:
+                 idle: int = DWF_DOUT_IDLE_ZET, step_name: Optional[str] = None) -> None:
     """Guard S11: the ONLY path that enables or starts a Digital Out channel.
 
     mask != 0: drive the channels of `mask` with the pulse configured before
@@ -150,8 +154,9 @@ def ad2_set_dout(dwf_lib, hdwf: int, mask: int, step_bus_owner: int,
     with AD2SafetyViolation and BEFORE any enabling call reaches the DLL, when:
       - `mask` has a bit outside {DIO1, DIO3};
       - the step is not "bus = AD2";
-      - `idle` is not Zet or Low (Low only exists for the T0b(f) control; it is
-        still a DIO1/DIO3 line in a "bus = AD2" step);
+      - `idle` is not Zet or Low, or is Low in a step other than
+        AD2_DOUT_IDLE_LOW_STEP (`step_name`, the step of the T0b(f) control;
+        plan R2-4, finding m1);
       - the Digital-IO OE does not read 0 on the bits of `mask` (S11 d, applied
         to the Digital Out channels only, owner's decision of 2026-10-01; SDK
         section 8: Digital-IO has priority, and Digital Out applies only where
@@ -175,6 +180,8 @@ def ad2_set_dout(dwf_lib, hdwf: int, mask: int, step_bus_owner: int,
         reason = f"bus_owner={step_bus_owner}, Digital Out needs a 'bus = AD2' step"
     elif mask != 0 and idle not in (DWF_DOUT_IDLE_ZET, DWF_DOUT_IDLE_LOW):
         reason = f"idle={idle} (only Zet, or Low for the T0b(f) control)"
+    elif mask != 0 and idle == DWF_DOUT_IDLE_LOW and step_name != AD2_DOUT_IDLE_LOW_STEP:
+        reason = f"idle=Low in step {step_name!r}: only in {AD2_DOUT_IDLE_LOW_STEP} (S11 c, plan R2-4)"
     elif mask != 0:
         oe = ctypes.c_uint32(0xFFFFFFFF)
         dwf_lib.FDwfDigitalIOOutputEnableGet(h, ctypes.byref(oe))
@@ -376,9 +383,10 @@ class AD2:
     # Configuration only, nothing below enables a channel or starts the
     # instrument: that is ad2_set_dout(), the single guarded path (S11 a).
 
-    def set_dout(self, mask: int, step_bus_owner: int, idle: int = DWF_DOUT_IDLE_ZET) -> None:
+    def set_dout(self, mask: int, step_bus_owner: int, idle: int = DWF_DOUT_IDLE_ZET,
+                 step_name: Optional[str] = None) -> None:
         """S11: start (mask != 0) or stop (mask == 0) Digital Out through the guard."""
-        ad2_set_dout(self._dwf, self._hdwf.value, mask, step_bus_owner, idle)
+        ad2_set_dout(self._dwf, self._hdwf.value, mask, step_bus_owner, idle, step_name)
 
     def dout_clock_hz(self) -> float:
         """SDK section 10.2, FDwfDigitalOutInternalClockInfo: the clock the dividers divide."""
