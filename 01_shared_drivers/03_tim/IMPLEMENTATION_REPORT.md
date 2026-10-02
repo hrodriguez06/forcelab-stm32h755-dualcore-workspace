@@ -347,3 +347,37 @@ Hechos que el responsable debería tener en cuenta, sin que yo saque conclusione
 - **u puede infravalorar la incertidumbre de x.** u (15,4 ppm) sale de 11 puntos con residuos de unos 0,3 ms y no incluye ninguna deriva de la latencia de llegada a lo largo de la sesión. No he podido separar si la diferencia de 421 ppm es del reloj de la placa (ventanas cortas frente a largas), de las referencias (cristal del AD2 frente al reloj del host) o de la latencia.
 
 No he cambiado el criterio, el número de capturas ni el método. Pido decisión al responsable antes de seguir.
+
+## F0: repetición de la ejecución del banco (revisión 3)
+
+El responsable pidió el 2026-10-02 repetir la ejecución "para ver si TREF se repite".
+
+La nueva captura es `docs/tim_f0_bench_89f11b5.txt`. Desde `2481396` solo cambió documentación, y la imagen se recompiló para que su `Rev` sea el de `HEAD`. Resultado: `Rev` 89f11b5 e id `cbcdd2b652baae60` en el host, CM7 y CM4, árbol limpio, lista de comprobación confirmada por Hector, **16/16, `FW VERDICT=PASS` y `HOST VERDICT=PASS`**.
+
+| Magnitud | `2481396` (FAIL) | `89f11b5` (PASS) |
+| --- | --- | --- |
+| ē_A, ē_B | +10 541,5, +10 290,8 | +13 188,6, +12 038,9 |
+| ē, s, s_ef | +10 416,2, 310,9, 310,9 | +12 613,7, 689,8, 689,8 |
+| x, u (11 ráfagas) | +9 994,7 ± 15,4 | +12 549,1 ± 13,1 |
+| Dispersión de los residuos de x | 0,304 ms | 0,258 ms |
+| \|ē − x\| frente a la cota | 421,4 > 237,7 | 64,6 ≤ 518,8 |
+
+El fallo de TREF **no se repite**. Pero en `89f11b5` las dos referencias muestran, de forma independiente, que el reloj de la placa baja durante la sesión:
+
+- **AD2:** las eᵢ de `TREF_A` (al principio) van de +12 845,8 a +13 941,7 ppm; las de `TREF_B` (unos 12 s después), de +11 346,8 a +12 401,9.
+- **Host:** la pendiente propia de cada ráfaga `TICK` baja de +12 736 (banner) y +13 884 (T0A) a +11 502 (DONE) y +11 846 (veredicto).
+
+Es una deriva de unos 1 300 ppm en 14 s. Entre `2481396` y `89f11b5`, x pasó de +9 995 a +12 549 ppm en pocos minutos, sin que cambiara nada del banco.
+
+Lo que se desprende de los datos, sin verificar la causa:
+
+- **En cada momento las dos referencias coinciden.** El cristal del AD2 y el reloj del host dan lo mismo; lo que cambia es el reloj de la placa, es decir, el MCO del ST-LINK. Coincide con la nota N1 de la auditoría.
+- **El criterio de R3-1 depende de la forma de la deriva.** Con una deriva casi lineal, como en `89f11b5`, la media de los extremos (ē) coincide con la pendiente del intervalo (x). Con una deriva no lineal, como parece en `2481396` (ē_A − ē_B de solo 250 ppm y x por debajo de los dos), no coinciden.
+- **La cota crece con la propia deriva**, a través de s. Pasar o no pasar depende del comportamiento del reloj durante esos 14 s, no del firmware.
+
+Las dos capturas quedan en el repositorio sin editar.
+
+Estado de F0: **en curso**. `tim_f0_bench_89f11b5.txt` cumple R3-1, pero hay dos puntos pendientes del responsable:
+
+1. El gate de tamaños de producción, que no se cumple desde `2481396`.
+2. Si un criterio que una ejecución pasa y otra no, con la misma imagen y por el reloj de la placa, sirve para A18.
