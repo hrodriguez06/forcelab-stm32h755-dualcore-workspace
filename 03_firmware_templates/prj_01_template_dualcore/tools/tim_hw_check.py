@@ -12,7 +12,7 @@ wiring and rules S1-S10: 01_shared_drivers/00_gpio/README.md section 8.
     py tools/tim_hw_check.py --allow-dirty    # development only (capture tim_dev_...)
 
 F0 tests: T0a (loose lines, walking 1, control), TREF (MCO1 = HSE/8 on PA8,
-measured by the AD2, |e| <= 2 % and within 3 uncertainties of HAL_GetTick
+measured by the AD2, |e| <= 2 % and within 3 sqrt(u^2 + r^2) of HAL_GetTick
 against the host clock; control PA8 in AF1), T0b(a) and (e) on mock DLLs
 before the AD2 is opened,
 then T0b(b)(c)(d)(f)(g) on the bench.
@@ -48,6 +48,7 @@ Standard library only (ctypes); `py`, not `python`.
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import pathlib
 import queue
@@ -108,7 +109,9 @@ TREF_EXPECTED_HZ = 1e6          # MCO1 = HSE_VALUE (8 MHz) / 8
 # TREF criterion, owner's decision of 2026-10-01 (the plan's 500 ppm cannot hold on
 # this board: its HSE, the ST-LINK MCO, measured +13 171 and +13 685 ppm in
 # tim_f0_bench_d01061e.txt and tim_f0_bench_38d15c1.txt): |e_ppm| <= 2 %, and the
-# AD2 estimate within 3 uncertainties of the HAL_GetTick-against-host cross-check.
+# AD2 estimate within 3 sqrt(u^2 + r^2) of the HAL_GetTick-against-host cross-check:
+# u its uncertainty, r the one-sample resolution of the TREF capture (second decision
+# of 2026-10-01; with 3 u alone, tim_f0_bench_e30622b.txt passed at 574 against 574).
 TREF_MAX_PPM = 20000.0
 TREF_XCHK_K = 3.0
 TREF_XCHK_JITTER_S = 2e-3       # arrival jitter assumed per console line (USB VCP)
@@ -445,19 +448,22 @@ class Session:
 
     def tref_check(self, tref: dict, xchk: Optional[tuple[float, float]]) -> None:
         """TREF criterion (owner's decision, 2026-10-01): |e_ppm| <= 2 % and the
-        TREF e_ppm within 3 uncertainties of the HAL_GetTick cross-check, both
+        TREF e_ppm within 3 sqrt(u^2 + r^2) of the HAL_GetTick cross-check, both
         estimates of the same board clock against two independent references
-        (the AD2 crystal, the host clock)."""
+        (the AD2 crystal, the host clock). u is the cross-check's uncertainty
+        and r the one-sample resolution of this TREF capture."""
         e = tref["e_ppm"]
         if xchk is None:
             self.check("TREF MCO1 = HSE/8 on PA8", False, f"e_ppm={e:+.1f}; no HAL_GetTick cross-check (aborted)")
             return
         x, u = xchk
-        ok = (tref["periods"] > 0 and abs(e) <= TREF_MAX_PPM and abs(e - x) <= TREF_XCHK_K * u)
+        r = tref["res_ppm"]
+        bound = TREF_XCHK_K * math.sqrt(u * u + r * r)
+        ok = (tref["periods"] > 0 and abs(e) <= TREF_MAX_PPM and abs(e - x) <= bound)
         self.check("TREF MCO1 = HSE/8 on PA8", ok,
-                   f"e_ppm={e:+.1f} (|e| <= {TREF_MAX_PPM:.0f}), resolution {tref['res_ppm']:.1f} ppm; cross-check "
-                   f"{x:+.0f} +-{u:.0f} ppm, |e - cross-check| = {abs(e - x):.0f} (<= {TREF_XCHK_K:.0f} x {u:.0f} "
-                   f"= {TREF_XCHK_K * u:.0f})")
+                   f"e_ppm={e:+.1f} (|e| <= {TREF_MAX_PPM:.0f}), resolution r={r:.1f} ppm; cross-check "
+                   f"{x:+.1f} +-{u:.1f} ppm, |e - cross-check| = {abs(e - x):.1f} (<= {TREF_XCHK_K:.0f} x "
+                   f"sqrt(u^2 + r^2) = {bound:.1f})")
 
     def t0b(self) -> None:
         self.step("T0B")
