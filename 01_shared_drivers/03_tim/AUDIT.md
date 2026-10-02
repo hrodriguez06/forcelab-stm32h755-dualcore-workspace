@@ -291,3 +291,64 @@ Hallazgos de F0: m1–m4 cerrados y verificados en placa (m1, m4). O1 (control d
 
 - **N1 (del responsable):** el reloj de la placa va un +1,3 % alto y deriva. En esta misma ejecución, ē\_A − ē\_B = +942 ppm en unos 12 s. Hay que medirlo con un instrumento independiente y revisar el firmware del ST-LINK. En `03_tim`, R3-2 lo neutraliza para las medidas del AD2, pero no el exceso sobre VOS1.
 - **σ\_ser (R4-1)** es de este banco: si cambia la placa o el ST-LINK, se vuelve a medir.
+
+## F1, parte 1: revisión estática, de build y de la captura (2026-10-02, en `43d083a`)
+
+Rango auditado: `708c212..43d083a`. Commit entregado: `f86706c`, con la evidencia en `9e7388c` y el informe en `43d083a`. La parte de código son `tim_bm.h` (419 líneas), `tim_bm.c` (1473), el target CMake, `ad2.py` (patrón custom), los dos `tim_selftest.c`, `tim_selftest_common.c`, `tim_selftest.h` y `tim_hw_check.py`.
+
+**Estado: F1 no pasa todavía.** No hay ningún hallazgo bloqueante en esta parte. Falta A18 (mi ejecución del banco), y la decisión D7 sobre el contenido de la revisión 5 del plan, antes de congelar la API.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| Lectura completa de `tim_bm.h` y `tim_bm.c` contra el contrato del plan (C1–C15, reglas 1–12) | Ver "Driver" |
+| Verificación independiente de `k_tim[]` contra RM0399 (`timers_pwm/40–44_*.txt`, `dma_mdma/18_*.txt` tabla 126, `rcc/09_*.txt`) y `stm32h755xx.h`, campo a campo en las 14 instancias: ancho, canales, ITR, MMS, RCR/BDTR/SMCR/DCR/AF1/AF2/CCR5-6, valores de reset, TISEL, DMAMUX, vectores y bit de RCC | **0 discrepancias.** Las citas de línea de cada fila apuntan a la sección correcta. TS: ITR0–3 = `00000`–`00011` (40.4.3, 42.4.3, 43.5.3) e ITR4–8 = `01000`–`01100` (41.4.3); `itr_mask` impide generar ITR4–8 donde son reservados |
+| Las dos erratas del informe §5.7 | **Confirmadas.** (a) TIM1 `TI1SEL = 0001` es COMP1 (40.4.30, l. 4793) y TIM8 `0001` es COMP2 (40.4.31, l. 4826). (b) DIR es de solo lectura en center-aligned (40.4.1, l. 2933–2937), y 40.3.2 (l. 1619) añade que DIR y CMS no se cambian a la vez. Las dos escrituras de `InitTimeBase` y la RMW de `Deinit` cumplen |
+| `tim_bm.c` aislado, con `arm-none-eabi-gcc` y los flags de CPU/defines de `compile_commands.json`, CMSIS como `-isystem`, `-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wcast-qual -Werror`, CM7 y CM4 | 0 avisos en los dos. Con los vendor headers como `-I`, `-Wconversion` salta en `cachel1_armv7.h` (CMSIS, no el driver): el informe debería decir que usó `-isystem` |
+| Lo mismo **sin `-DUSE_HAL_DRIVER`** | Compila, y `-M` no muestra ningún header `stm32h7xx_hal*`/`_ll*`. Con la opción del proyecto, `stm32h7xx.h` incluye la HAL de forma transitiva, pero el driver no la usa (C8) |
+| `.\tools\build_all.ps1 -Clean` en `43d083a` | 8/8. `prj_01`: CM7 29304/132/55668 y 28356/132/55672, CM4 3456/24/12560 y 3112/24/12560, iguales a la base de R4-2 (A16) |
+| `selftest-tim` desde un directorio vacío | 0 avisos. CM7 85224/140/65828, CM4 16244/24/13816 |
+| `git diff e7542dc 43d083a --name-only` | Nada fuera de lo permitido; `02_firmware_projects` sin cambios (A23). Desde `2481396`, en `prj_01` solo cambian los CMakeLists (dentro de `if(TIM_DRIVER_SELFTEST)`), el selftest, el host y `docs/` |
+| T3 rehecho con mi propia implementación de las "Reglas de cálculo" del plan (Python, enteros con truncado de C) sobre las líneas `T3 CT/DC/KC` de la captura | **234 + 70 + 34 vectores, 0 diferencias** (estado, psc, arr, ticks, error\_ppm; ccr; tabla 59) |
+| `git grep TIM6` en el selftest | Solo comentarios y las listas de solo lectura (`k_all_tims`: `GetCaps` y `GetKernelClockHz`; tablas de `GetIRQn`/`GetDmaRequest`). `k_tims`, la lista que se escribe, no tiene TIM6 (A22) |
+| `docs/tim_f1_bench_f86706c.txt` (1149 líneas) | Checkout `f86706c`, `tree clean`, `Rev` e id `e3df266a1b52e8fc` iguales en CM7, CM4 y el host, protocolo v3, lista confirmada. AD2 abierto y cerrado en S2. **109/109, 0 líneas FAIL, `FW VERDICT=PASS` y `HOST VERDICT=PASS`.** TREF (R4-1): 303,4 ≤ 590,1 |
+
+### Driver
+
+Cumple el contrato. Lo que comprobé, punto por punto:
+
+- **Validación (C6):** el orden es NULL, instancia, canal o evento, capacidad, rango y estado, sin acceso al periférico antes de terminar. Todo dato de silicio sale de `k_tim[]` (C1).
+- **C12:** `ERR_BUSY` con CCxE = 1 (ConfigOutput/ConfigInput), CEN = 1 (InitTimeBase) y SMS ≠ 0 (ConfigSlave y ConfigPwmInput). Read-back en cada escritura de configuración. `Start` no lo hace, de forma justificada (OPM).
+- **C10:** las RMW de CR1, CR2, SMCR, CCMRx, CCER, BDTR, DIER, TISEL y RCC van bajo PRIMASK guardado y restaurado. SR se limpia con una sola escritura (`SR = ~taken`, como `__HAL_TIM_CLEAR_FLAG`). En RCC solo se escribe el banco propio; `D2CFGR` y `CFGR` solo se leen.
+- **C11:** InitTimeBase sigue CR1 → PSC → ARR → RCR → UG con URS = 1 → CR1 → SR = 0. Deinit apaga primero las salidas (MOE, CCER), después el contador y DIER, y por último la imagen de reset con read-back; no genera UG, por TRGO.
+- **C13:** `WaitFlags` está acotada por CYCCNT y detecta un DWT parado.
+- **C15:** las funciones puras se verifican arriba.
+- **TS y SMS:** codificación con SMS[3] y TS[4:3], y secuencia SMS = 0 → TS → SMS.
+- **ES0445 2.16.1:** se rechaza por las tres vías (ConfigMaster, ConfigSlave e InitTimeBase con OPM).
+
+No encontré defectos. Una nota menor: el `@brief` de `InitTimeBase` dice "SR.UIF = 0", pero `SR = 0` limpia todos los flags de la instancia. Conviene decirlo en el README de cierre.
+
+### Pruebas y banco
+
+- **`ad2.py` (`dout_custom`):** solo configura el canal (tipo, divisor y datos, con read-back), rechaza todo canal fuera de DIO1/DIO3 y no habilita nada. La única vía de arranque sigue siendo `ad2_set_dout` (S11), y S2 resetea Digital Out. Pasa A27 en lo estático.
+- **T8, desviación 1:** d = media(diferencias directas) − media(periodos en PWM input), sobre una generación de 1 MHz. Está acotado a 0 ≤ d ≤ 4 ticks por una comprobación del host; en la entrega, d = 1,94. La captura directa queda anclada a MCO1 por otras pruebas independientes (ICPSC = 8, filtro y DMA de T13(b)), así que la corrección solo es autorreferente en el punto de 1 MHz, y d es una magnitud física que RM0399 40.3.26 describe sin valor. Sin d, el punto de 1 MHz fallaría por unos 2 ticks (200/201 frente a 202,65). La acepto. El informe dice que el responsable la aprobó; **falta recogerla en el plan (D7)**.
+- **R3-2:** T6 y T8 juzgan con MCO1 en DIO14 en la misma adquisición. En T8, MCO1 se mide antes y después de las capturas (desviación 2), lo que acota la deriva del reloj. Tabla de pasos v3, con `RCC_CFGR` guardado y restaurado en `T6_TIM1`, `T6_TIM15`, `T8` y `T9`.
+- **O1:** controles de sensibilidad en T0b(b), con `0x00021` en CM7 y `0x440` en CM4, y en T1, con `0x0002040` y `RCC 0x01`, cada uno con la máscara impresa. **O1 cerrado.**
+- **T15:** 0 pérdidas con el driver y 8893 en el control RMW sin PRIMASK.
+- **Desviaciones 2–7 y 9–12 del informe:** procedimiento de medida o detalle que el plan no fija. Las acepto como están documentadas.
+- **Capturas de desarrollo:** siete `tim_dev_f1_*` (3,3 MB), con el nombre de §3.4 y fuera de la evidencia. Aceptadas, aunque pesan; al cierre conviene borrarlas, como los documentos de proceso (decisión abierta 6).
+
+### Decisión D7 del responsable, antes de congelar la API
+
+La revisión 5 del plan tiene que recoger:
+
+1. **R5-1 (T8):** la corrección d de la desviación 1, con la cota 0 ≤ d ≤ 4 ticks, medida en cada sesión, solo para los puntos en PWM input.
+2. **R5-2 (API):** `TIM_BM_CH(n)` entra en la API congelada de `tim_bm` (desviación 8). Lo recomiendo: el contrato usa `ch_mask` sin fijar la codificación, y la macro la fija.
+3. **R5-3 (erratas):** regla 2, TISEL de TIM1/TIM8 (`0001` = COMP1/COMP2), y reglas 3 y 11, DIR/CMS (una escritura que borra CMS antes de la que fija o borra DIR).
+4. **R5-4 (pasos v3):** los pasos `T6_TIM1`, `T6_TIM15`, `T8` y `T9`, y las desviaciones de procedimiento 2–7 de T5, T7, T8, T9 y T10.
+
+### Para que F1 pase
+
+1. D7 aprobada y revisión 5 del plan, que no requiere código.
+2. **A18/A27:** mi ejecución del banco sobre `selftest-tim` compilado en la cabeza de la rama, con la lista de comprobación física confirmada.
