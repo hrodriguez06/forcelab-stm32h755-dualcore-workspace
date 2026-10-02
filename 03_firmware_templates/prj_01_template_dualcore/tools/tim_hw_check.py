@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host side of the 03_tim selftest on prj_01 (preset selftest-tim), phases F0 and F1.
+"""Host side of the 03_tim selftest on prj_01 (preset selftest-tim), phases F0, F1 and F2.
 
 Runs one complete bench session against CM7/App/Src/tim_selftest.c with the
 Analog Discovery 2 and writes ONE capture file: every console line and every
@@ -24,6 +24,10 @@ CCR1) in the T6 steps, T8 (captures of Digital Out) and T13(b) (captures to
 DMA) in the T8 step, and T9 (TIM17 on MCO1). Plan R3-2: every frequency the
 AD2 measures is a ratio with MCO1 (DIO14) in the same acquisition. The other
 F1 tests run in the firmware between the steps and print their verdicts.
+
+F2 tests (tim_ll): T6 and T8 again, through tim_ll, in the steps T6_TIM1_LL,
+T6_TIM15_LL and T8_LL (without T11 and T13, which are tim_bm only), with the
+same criteria; the internal F2 tests run in the firmware.
 
 Image identity (00_gpio README 9.4, R3-a/R3-b/R4-a), checked before any output
 is enabled: Rev(CM7) == Rev(CM4), id(CM7) == id(CM4) (never "unknown"), each
@@ -86,7 +90,7 @@ from monitor import SerialPort, autodetect             # noqa: E402
 from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E402
                            t0b_guard_selftest, tree_record)
 
-BENCH_VERSION = 3          # plan R3-3: TREF_A + TREF_B; v3: the F1 steps (R3-2)
+BENCH_VERSION = 4          # plan R3-3: TREF_A + TREF_B; v3: the F1 steps (R3-2); v4: the F2 steps
 
 # ---- Wiring (00_gpio README section 8) ----------------------------------------
 DIO_BUS = 0x00FF        # DIO0..7  <- PE8..PE15
@@ -111,6 +115,7 @@ STEPS = [
     ("T0A", "NONE"), ("TREF_A", "NONE"), ("T0B", "NONE"), ("T0B_S5NEG", "MCU"), ("T0B_TIMEOUT", "NONE"),
     ("T0B_DOUT", "AD2"), ("T0B_S12", "AD2"),
     ("T6_TIM1", "MCU"), ("T6_TIM15", "NONE"), ("T8", "AD2"), ("T9", "NONE"),
+    ("T6_TIM1_LL", "MCU"), ("T6_TIM15_LL", "NONE"), ("T8_LL", "AD2"),
     ("TREF_B", "NONE"), ("DONE", "NONE"),
 ]
 
@@ -905,18 +910,19 @@ class Session:
                    f"{detail}; MCO1 {f_mco / 1e6:.4f} MHz over {mco['periods']} periods; edges on the other lines "
                    f"{other_edges}")
 
-    def t6_tim1(self) -> None:
-        self.step("T6_TIM1")
-        self.buschk("T6_TIM1 before")
+    def t6_tim1(self, ll: bool = False) -> None:
+        name, tim = ("T6_TIM1_LL", "LL TIM1") if ll else ("T6_TIM1", "TIM1")
+        self.step(name)
+        self.buschk(f"{name} before")
         tim1_bits = [TIM1_CH_DIO[c] for c in (1, 2, 3, 4)]
         quiet = [0, 2, 4, 7, 9, 11]
         for ch in (1, 2, 3, 4):
             for k in range(len(T6_POINTS)):
                 bit = TIM1_CH_DIO[ch]
-                self._t6_point("TIM1", ch, k, bit, [b for b in tim1_bits if b != bit] + quiet,
+                self._t6_point(tim, ch, k, bit, [b for b in tim1_bits if b != bit] + quiet,
                                " center 1" if T6_POINTS[k][5] else "")
         # control: MOE = 0 -> no transition on any TIM1 line, all low (pull-down)
-        self.con.expect(r"\[tim\] T6 TIM1 control", 30.0)
+        self.con.expect(rf"\[tim\] T6 {tim} control", 30.0)
         box: dict = {}
 
         def ctrl() -> None:
@@ -924,11 +930,12 @@ class Session:
             box["edges"] = {b: self._edges(samples, b) for b in tim1_bits}
             box["levels"] = [(samples[0] >> b) & 1 for b in tim1_bits]
         self.sync(pre=ctrl)
-        self.check("T6 TIM1 control MOE=0", sum(box["edges"].values()) == 0 and not any(box["levels"]),
+        self.check(f"T6 {tim} control MOE=0", sum(box["edges"].values()) == 0 and not any(box["levels"]),
                    f"CH1-4 enabled with MOE = 0: edges {box['edges']}, levels {box['levels']} (all 0)")
-        self.t11()
-        self.t13a()
-        self.buschk("T6_TIM1 after (T14)")
+        if not ll:                     # T11 and T13: tim_bm only (plan, their rows)
+            self.t11()
+            self.t13a()
+        self.buschk(f"{name} after (T14)")
 
     def t11(self) -> None:
         self.con.expect(r"\[tim\] T11 TIM1 one-pulse", 30.0)
@@ -1008,14 +1015,15 @@ class Session:
         same = bool(highs) and all(abs(h - 100 * tick) <= T6_HIGH_TOL_S for h in highs)
         self.check("T13(a) control UDE=0", same, f"{len(highs)} periods, all 100 ticks +-15 ns: {same}")
 
-    def t6_tim15(self) -> None:
-        self.step("T6_TIM15")
+    def t6_tim15(self, ll: bool = False) -> None:
+        name, tim = ("T6_TIM15_LL", "LL TIM15") if ll else ("T6_TIM15", "TIM15")
+        self.step(name)
         quiet = [0, 1, 2, 3, 4, 5, 6, 7]
         for ch in (1, 2):
             for k in range(len(T6_POINTS) - 1):
                 bit = TIM15_CH_DIO[ch]
-                self._t6_point("TIM15", ch, k, bit, [TIM15_CH_DIO[3 - ch]] + quiet, "")
-        self.con.expect(r"\[tim\] T6 TIM15 control", 30.0)
+                self._t6_point(tim, ch, k, bit, [TIM15_CH_DIO[3 - ch]] + quiet, "")
+        self.con.expect(rf"\[tim\] T6 {tim} control", 30.0)
         box: dict = {}
 
         def ctrl() -> None:
@@ -1023,7 +1031,7 @@ class Session:
             box["edges"] = {b: self._edges(samples, b) for b in (9, 11)}
             box["levels"] = [(samples[0] >> b) & 1 for b in (9, 11)]
         self.sync(pre=ctrl)
-        self.check("T6 TIM15 control CCxE=0", sum(box["edges"].values()) == 0 and not any(box["levels"]),
+        self.check(f"T6 {tim} control CCxE=0", sum(box["edges"].values()) == 0 and not any(box["levels"]),
                    f"CH1/CH2 configured, CC1E = CC2E = 0: edges {box['edges']}, levels {box['levels']} (0)")
 
     # ---- T8 + T13(b)
@@ -1073,22 +1081,23 @@ class Session:
     def _pwm_values(m: re.Match) -> tuple[list[int], list[int]]:
         return [int(x) for x in m.group(2).split()], [int(x) for x in m.group(3).split()]
 
-    def t8(self) -> None:
-        self.step("T8")
-        self.buschk("T8 before")
-        self.buschk("T8 with PE9/PE11 in AF1 (S12)")
+    def t8(self, ll: bool = False) -> None:
+        name, px = ("T8_LL", "T8 LL") if ll else ("T8", "T8")
+        self.step(name)
+        self.buschk(f"{px} before")
+        self.buschk(f"{px} with PE9/PE11 in AF1 (S12)")
         # The reset delay d of PWM input mode, measured on one 1 MHz generation (owner's
         # decision of 2026-10-02): mean of the direct capture differences minus mean of the
         # PWM-input periods (the captures are integers either side of a fractional period, so
         # the means, not the medians, estimate it). Subtracted from every expected period and
         # high time.
-        self.con.expect(r"\[tim\] T8 DELAY ti=1 f=1000000 duty=50 config 1", 30.0)
+        self.con.expect(rf"\[tim\] {px} DELAY ti=1 f=1000000 duty=50 config 1", 30.0)
         box: dict = {}
         self.sync(pre=lambda: self._t8_on(1, 1000000, 50, box))
 
         def off_delay() -> None:
-            box["pwm"] = self.con.expect(r"\[tim\] T8 RDELAY_PWM n=(\d+) per((?: \d+)*)", 30.0)
-            box["dir"] = self.con.expect(r"\[tim\] T8 RDELAY_DIR n=(\d+) diffs((?: \d+)*)", 30.0)
+            box["pwm"] = self.con.expect(rf"\[tim\] {px} RDELAY_PWM n=(\d+) per((?: \d+)*)", 30.0)
+            box["dir"] = self.con.expect(rf"\[tim\] {px} RDELAY_DIR n=(\d+) diffs((?: \d+)*)", 30.0)
             self._dout_stop()
         self.sync(pre=off_delay)
         pwm_per = [int(x) for x in box["pwm"].group(2).split()]
@@ -1096,17 +1105,17 @@ class Session:
         ok_d = len(pwm_per) == 16 and len(direct) == 16
         d = (statistics.mean(direct) - statistics.mean(pwm_per)) if ok_d else 0.0
         self.delay = d
-        self.check("T8 reset delay", ok_d and 0 <= d <= 4,
+        self.check(f"{px} reset delay", ok_d and 0 <= d <= 4,
                    f"1 MHz on PE9, one Digital Out generation: PWM-input periods {pwm_per}, direct differences "
                    f"{direct}: d = mean(direct) - mean(PWM input) = {d:.2f} ticks (RM0399 40.3.26: reset delayed "
                    f"by the TI1 resynchronization; subtracted below)")
         for k, (ti, f, duty, psc) in enumerate(T8_POINTS):
-            m = self.con.expect(rf"\[tim\] T8 P{k} ti=(\d+) f=(\d+) duty=(\d+) psc=(\d+) config (\d)", 30.0)
+            m = self.con.expect(rf"\[tim\] {px} P{k} ti=(\d+) f=(\d+) duty=(\d+) psc=(\d+) config (\d)", 30.0)
             ann = tuple(int(x) for x in m.groups()[:4])
             box: dict = {}
             ch = 1 if ti == 1 else 3
             self.sync(pre=lambda b=box, c=ch, fr=f, d=duty: self._t8_on(c, fr, d, b))
-            self.sync(pre=lambda b=box, kk=k: self._t8_off(rf"\[tim\] T8 R{kk} n=(\d+) per((?: \d+)*) hi((?: \d+)*)", b))
+            self.sync(pre=lambda b=box, kk=k: self._t8_off(rf"\[tim\] {px} R{kk} n=(\d+) per((?: \d+)*) hi((?: \d+)*)", b))
             pers, his = self._pwm_values(box["res"])
             f_mco = box["mco"]["freq_hz"]
             per = (TIMCLK_PER_MCO1 * f_mco / box["f"] - self.delay) / (psc + 1)
@@ -1116,33 +1125,33 @@ class Session:
             bad = [(a, b) for a, b in zip(pers, his) if abs(a - per) > ptol or abs(b - hi) > htol]
             ok = (ann == (ti, f, duty, psc) and int(m.group(5)) == 1 and len(pers) == 8 and not bad and
                   (box["oe"] & (1 << ch)) == 0 and box["mco"]["periods"] >= 40)
-            self.check(f"T8 TI{ti} {f} Hz {duty} %", ok,
+            self.check(f"{px} TI{ti} {f} Hz {duty} %", ok,
                        f"psc={psc}: periods {pers} ({per:.1f} +-{ptol:.1f} = (200 f_MCO1/f - d)/(PSC+1)), high {his} "
                        f"({hi:.1f} +-{htol:.1f}), out of tolerance {bad}; Digital Out {box['f']:.3f} Hz on DIO{ch}, "
                        f"OE 0x{box['oe']:04X}; MCO1 {f_mco / 1e6:.5f} MHz (mean of {box['mco']['f_before'] / 1e6:.5f} "
                        f"before and {box['mco']['f_after'] / 1e6:.5f} after the captures); d = {self.delay:.2f}")
         # control: inverted polarity
-        self.con.expect(r"\[tim\] T8 INV", 30.0)
+        self.con.expect(rf"\[tim\] {px} INV", 30.0)
         box = {}
         self.sync(pre=lambda: self._t8_on(1, 100000, 25, box))
-        self.sync(pre=lambda: self._t8_off(r"\[tim\] T8 RINV n=(\d+) per((?: \d+)*) hi((?: \d+)*)", box))
+        self.sync(pre=lambda: self._t8_off(rf"\[tim\] {px} RINV n=(\d+) per((?: \d+)*) hi((?: \d+)*)", box))
         pers, his = self._pwm_values(box["res"])
         f_mco = box["mco"]["freq_hz"]
         per = TIMCLK_PER_MCO1 * f_mco / box["f"]
         low = per - TIMCLK_PER_MCO1 * f_mco * box["high_s"] - self.delay
         ltol = 2 + 0.001 * low
-        self.check("T8 control inverted polarity", len(his) == 8 and all(abs(h - low) <= ltol for h in his),
+        self.check(f"{px} control inverted polarity", len(his) == 8 and all(abs(h - low) <= ltol for h in his),
                    f"100 kHz 25 % captured on the falling edge: 'high' {his} ticks = the low time "
                    f"({low:.1f} +-{ltol:.1f}, the complementary duty, d = {self.delay:.1f})")
         # input prescaler 8
-        self.con.expect(r"\[tim\] T8 PSC8", 30.0)
+        self.con.expect(rf"\[tim\] {px} PSC8", 30.0)
         box = {}
         self.sync(pre=lambda: self._t8_on(1, 1000000, 50, box))
-        self.sync(pre=lambda: self._t8_off(r"\[tim\] T8 RPSC8 n=(\d+) diffs((?: \d+)*)", box))
+        self.sync(pre=lambda: self._t8_off(rf"\[tim\] {px} RPSC8 n=(\d+) diffs((?: \d+)*)", box))
         diffs = [int(x) for x in box["res"].group(2).split()]
         per8 = 8 * TIMCLK_PER_MCO1 * box["mco"]["freq_hz"] / box["f"]
         tol8 = 1 + 0.001 * per8
-        self.check("T8 input prescaler 8", len(diffs) >= 8 and all(abs(d - per8) <= tol8 for d in diffs),
+        self.check(f"{px} input prescaler 8", len(diffs) >= 8 and all(abs(d - per8) <= tol8 for d in diffs),
                    f"1 MHz, ICxPSC = /8: capture differences {diffs} ({per8:.1f} +-{tol8:.1f} = 8 periods)")
         # filter: one 10 ns glitch per period
         nmax = self.ad2.dout_data_max(1)
@@ -1154,10 +1163,10 @@ class Session:
         period_bits[3 * plen // 4] = 1
         pattern = period_bits * reps_n
         for icf, label in ((0, "RGLITCH0"), (3, "RGLITCH3")):
-            self.con.expect(rf"\[tim\] T8 GLITCH ti=1 icf={icf}", 30.0)
+            self.con.expect(rf"\[tim\] {px} GLITCH ti=1 icf={icf}", 30.0)
             box = {}
             self.sync(pre=lambda b=box: self._t8_on(1, 0.0, 0, b, custom=pattern))
-            self.sync(pre=lambda b=box, lab=label: self._t8_off(rf"\[tim\] T8 {lab} n=(\d+) diffs((?: \d+)*)", b))
+            self.sync(pre=lambda b=box, lab=label: self._t8_off(rf"\[tim\] {px} {lab} n=(\d+) diffs((?: \d+)*)", b))
             diffs = [int(x) for x in box["res"].group(2).split()]
             ticks_per_bit = TIMCLK_PER_MCO1 * box["mco"]["freq_hz"] / box["f_sample"]
             full = plen * ticks_per_bit
@@ -1165,20 +1174,20 @@ class Session:
             tol = 1 + 0.001 * full
             if icf == 0:
                 seen_glitch = any(abs(d - part) <= tol for d in diffs) and any(abs(d - (full - part)) <= tol for d in diffs)
-                self.check("T8 control without filter", len(diffs) >= 8 and seen_glitch,
+                self.check(f"{px} control without filter", len(diffs) >= 8 and seen_glitch,
                            f"{plen}-bit period at 100 MS/s ({nmax}-bit buffer, FDwfDigitalOutDataInfo) with a 10 ns "
                            f"glitch: differences {diffs[:12]} include {part:.1f} and {full - part:.1f} ticks (glitch captured)")
             else:
-                self.check("T8 filter ICxF=0011", len(diffs) >= 8 and all(abs(d - full) <= tol for d in diffs),
+                self.check(f"{px} filter ICxF=0011", len(diffs) >= 8 and all(abs(d - full) <= tol for d in diffs),
                            f"the same pattern with fCK_INT N = 8 (40 ns): differences {diffs[:12]} all {full:.1f} "
                            f"+-{tol:.1f} ticks (glitch filtered)")
         # overcapture (the firmware judges it)
-        self.con.expect(r"\[tim\] T8 OVR", 30.0)
+        self.con.expect(rf"\[tim\] {px} OVR", 30.0)
         box = {}
         self.sync(pre=lambda: self._t8_on(1, 100000, 50, box))
-        self.sync(pre=lambda: (self.con.expect(r"\[tim\] T8 overcapture", 30.0), self._dout_stop()))
-        # T13(b): 64 captures by DMA, then the control CC1DE = 0
-        for ctl in (False, True):
+        self.sync(pre=lambda: (self.con.expect(rf"\[tim\] {px} overcapture", 30.0), self._dout_stop()))
+        # T13(b): 64 captures by DMA, then the control CC1DE = 0 (tim_bm only)
+        for ctl in (() if ll else (False, True)):
             self.con.expect(r"\[tim\] T13B" + (r" control" if ctl else r" TIM1 CC1"), 30.0)
             box = {}
             self.sync(pre=lambda b=box: self._t8_on(1, 1000000, 50, b))
@@ -1191,7 +1200,7 @@ class Session:
                            f"200 f_MCO1 / 1 MHz)")
             else:
                 self.sync(pre=lambda: (self.con.expect(r"\[tim\] T13\(b\) control", 30.0), self._dout_stop()))
-        self.buschk("T8 after (T14)")
+        self.buschk(f"{px} after (T14)")
 
     def t9(self) -> None:
         self.step("T9")
@@ -1219,6 +1228,9 @@ class Session:
         self.t6_tim15()
         self.t8()
         self.t9()
+        self.t6_tim1(ll=True)              # F2: tim_ll
+        self.t6_tim15(ll=True)
+        self.t8(ll=True)
         caps_b = self.tref("TREF_B", control=False)
         self.step("DONE")
         return tref_stats(caps_a, caps_b, self.log)
@@ -1228,7 +1240,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", help="ST-LINK VCP (default: autodetect)")
     ap.add_argument("--out", type=pathlib.Path,
-                    help="capture file (default: docs/tim_f1_bench_<rev>.txt, tim_dev_f1_bench_<rev>.txt with --allow-dirty)")
+                    help="capture file (default: docs/tim_f2_bench_<rev>.txt, tim_dev_f2_bench_<rev>.txt with --allow-dirty)")
     ap.add_argument("--allow-dirty", action="store_true", help="accept a -dirty Rev (development runs)")
     ap.add_argument("--no-reset", action="store_true", help="do not reset the board; wait for the banner")
     ap.add_argument("--preset", default="selftest-tim", help="configure preset of the image (build id)")
@@ -1249,7 +1261,7 @@ def main() -> int:
     stamp(f"[host] argv: {shlex.join(sys.argv[1:])}")
     stamp(f"[host] options: allow_dirty={args.allow_dirty} preset={args.preset} no_reset={args.no_reset} "
           f"checklist_confirmed={args.checklist_confirmed}")
-    stamp(f"[host] tim_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}, phases F0 and F1")
+    stamp(f"[host] tim_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}, phases F0, F1 and F2")
     procs_ok = checklist(stamp, args.checklist_confirmed)
     tree_record(stamp)
     build_id = host_build_id(args.preset)
@@ -1391,7 +1403,7 @@ def main() -> int:
     out = args.out
     if out is None:
         rev = revs.get("cm7", git_rev())
-        prefix = "tim_dev_f1_bench" if args.allow_dirty else "tim_f1_bench"
+        prefix = "tim_dev_f2_bench" if args.allow_dirty else "tim_f2_bench"
         out = PROJECT / "docs" / f"{prefix}_{rev}.txt"
         n = 2
         while out.exists():
