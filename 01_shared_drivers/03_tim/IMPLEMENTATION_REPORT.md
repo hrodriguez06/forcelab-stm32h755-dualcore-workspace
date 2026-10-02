@@ -638,7 +638,15 @@ Objetos de `selftest-tim`. La columna .text suma `.text` y `.rodata`, como `arm-
 | `tim_selftest.c.obj` | CM4 | 3591 | 0 | 296 | ídem |
 | `tim_selftest_common.c.obj` | CM4 | 3636 | 0 | 956 | ídem |
 
-`.data = .bss = 0` en `tim_bm.c.obj` en los dos núcleos (C7). `tim_bm.c` también compila sin avisos fuera de `prj_01`, con `-Wall -Wextra -Wpedantic -Wconversion -Werror`, para CM7 y para CM4 (mensaje de `1f0fedc`).
+`.data = .bss = 0` en `tim_bm.c.obj` en los dos núcleos (C7).
+
+`tim_bm.c` también compila solo, fuera de `prj_01`, para CM7 y para CM4, con 0 diagnósticos. Para eso, los headers de CMSIS van como `-isystem`, con `-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wcast-qual -Werror`, como en la compilación del auditor (`AUDIT.md`, F1 parte 1). Fuente: `docs/tim_f1_isolated_build_b65fd03.txt`, variante C.
+
+Corrección: esta nota decía antes "con `-Wall -Wextra -Wpedantic -Wconversion -Werror` (mensaje de `1f0fedc`)", y era incompleta:
+
+- La compilación de `1f0fedc` no usó `-isystem`. Pasaba CMSIS como `-I` y llevaba además `-Wshadow` y `-Wno-sign-conversion` (variante A).
+- Con `-I` y sin `-Wno-sign-conversion`, `-Wsign-conversion` salta en `cachel1_armv7.h` en CM7 (16 diagnósticos, todos de CMSIS y ninguno del driver; variante B).
+- El mensaje de `1f0fedc` no nombra ese flag. No reescribo la historia: la corrección queda aquí.
 
 ### 5.3 Pruebas
 
@@ -794,3 +802,43 @@ Vectores de interrupción (`stm32h755xx.h`):
 El evento TRIGGER solo existe con controlador esclavo (TIE en 41.4.4 l. 2625, 42.4.4 l. 1432 y 43.5.4 l. 2010). TIM13/14 tienen solo CC1IE/UIE (42.5.2 l. 2439), TIM16/17 no tienen TIE (43.6.3 l. 3646) y TIM6/7 tienen solo UDE/UIE (44.4.3 l. 496).
 
 Estado de F1: **entregada para auditoría** (`f86706c`; evidencia en `9e7388c`).
+
+## Respuesta a la auditoría de F1 (partes 1 y 2; plan revisión 6)
+
+Plan de referencia: revisión 6 (`294e049`). La parte 1 de la auditoría de F1 (`a9f8c7c`) no tiene hallazgos bloqueantes; su adenda aprueba D7, que es la revisión 5 (R5-1 a R5-4, sin código). La parte 2 (`faeb41e`) da 108/109 en la ejecución del auditor en `70e0181`, por `T8 TI1 1000000 Hz 25 %`: una captura de periodo de 202 frente a 200,6 ± 1,2. Su adenda aprueba D8, que es R6-1 en la revisión 6.
+
+**Estado de F1: entregada para auditoría** (`b65fd03` código, evidencia en `3854edd`). Falta la ejecución del banco por el auditor (A18/A27).
+
+### Cambios de la revisión 6
+
+| Cambio | Commit | Qué ejecuté para comprobarlo | Estado |
+| --- | --- | --- | --- |
+| R6-1: en los puntos de T8 en PWM input (el bucle de `T8_POINTS`), la tolerancia de periodo pasa a `ptol = 2 + 0.001 * per`, igual que la del tiempo en alto. Cambia una línea de `Session.t8()` en `tools/tim_hw_check.py`. La línea de cada punto sigue imprimiendo la tolerancia usada (`+-2.2` a 1 MHz y `+-4.0` a 100 kHz, antes `+-1.2` y `+-3.0`). Las capturas directas mantienen `1 + 0.001 * periodo`: input prescaler 8 (`tol8`), filtro `ICxF` y T13(b). Tampoco cambian el control de polaridad invertida (juzga solo el tiempo en bajo, ya con ±(2 ticks + 0,1 %)), la corrección d de R5-1 (0 ≤ d ≤ 4), los demás criterios ni el firmware | `b65fd03` | `git diff 294e049 b65fd03` cambia solo esa línea. Ejecución del banco: ver abajo | aplicado en `b65fd03`, pendiente de verificación |
+| Nota de §5.2 sobre la compilación aislada de `tim_bm.c` (`AUDIT.md`, F1 parte 1) | `3854edd` (evidencia) y el commit que añade esta sección | Tres variantes, en CM7 y CM4 (`docs/tim_f1_isolated_build_b65fd03.txt`):<br>• A, el comando de `1f0fedc`: `-I` con `-Wno-sign-conversion`, 0 diagnósticos.<br>• B, el conjunto completo con CMSIS como `-I`: CM7 falla por `-Wsign-conversion` en `cachel1_armv7.h`.<br>• C, el conjunto completo con CMSIS como `-isystem`: 0 diagnósticos en los dos núcleos | corregida en §5.2. La compilación de `1f0fedc` usaba `-I`, no `-isystem`; la nota dice ahora qué se ejecutó en cada caso |
+
+Evidencia en `b65fd03`, en `03_firmware_templates/prj_01_template_dualcore/docs/`:
+
+- `build_all -Clean`: 8/8 (`tim_f1_build_all_b65fd03.txt`).
+- `selftest-tim`, compilado desde un directorio vacío: 0 avisos (`tim_f1_selftest_build_b65fd03.txt`).
+- Los tres builds con `-Werror`: 0 avisos (`tim_f1_werror_b65fd03.txt`).
+- `.map`: la producción de `prj_01` es igual a `2481396` en todas las secciones asignadas de CM7 y CM4, en debug y en release (`tim_f1_map_sizes_b65fd03.txt`). Los objetos de `selftest-tim` son iguales a los de `f86706c`.
+- `git diff e7542dc -- 02_firmware_projects` sale vacío.
+
+### Resultado en la placa (`docs/tim_f1_bench_b65fd03.txt`)
+
+Una sola ejecución, sin repetir.
+
+- **Trazabilidad:** `Rev` `b65fd03` e id `9a2a6f192c9ecbd8` iguales en el host, CM7 y CM4. Árbol limpio, protocolo v3 y lista de comprobación física confirmada por Hector.
+- **Resultado:** **109/109 comprobaciones del host, 0 líneas FAIL, `FW VERDICT=PASS` (0 fallos) y `HOST VERDICT=PASS`.**
+
+| Magnitud | Valor |
+| --- | --- |
+| T8, retardo de reset d (R5-1) | 2,31 ticks (0 ≤ d ≤ 4: PASS) |
+| T8, 24 puntos en PWM input | 24/24. Peor residuo de periodo frente a la nueva cota: 0,7 de 2,2 a 1 MHz (32 %), 1,6 de 4,0 a 100 kHz (40 %), 16,3 de 22,3 a 10 kHz (73 %) y 31,9 de 52,7 a 1 kHz (61 %). Peor residuo del tiempo en alto: 1,4 de 2,1 a 1 MHz (67 %) |
+| T8, capturas directas, con ±(1 tick + 0,1 %) | input prescaler 8: 1619–1621 frente a 1620,7 ± 2,6. Filtro: 2073–2075 frente a 2075,1 ± 3,1. T13(b): 202..203 frente a 202,63 ± 1 |
+| T8, control de polaridad invertida | 1517–1520 frente a 1516,8 ± 3,5 |
+| TREF (R4-1) | ē = +13 104,2 ppm (s\_ef 549,9); x = +13 467,0 ± 15,7 ppm; \|ē − x\| = 362,8 ≤ 601,3 |
+
+En esta ejecución, el peor residuo de periodo cabe también en la tolerancia anterior, ±(1 tick + 0,1 %): 0,7 frente a 1,2 a 1 MHz y 1,6 frente a 3,0 a 100 kHz. El fallo del auditor fue una captura de 202 en `70e0181`; aquí, a 1 MHz, todas las capturas en PWM input son 200 o 201. La captura no muestra el caso que R6-1 cubre: solo muestra que el cambio no rompe nada.
+
+No empiezo F2 hasta que `AUDIT.md` diga que F1 pasa.
