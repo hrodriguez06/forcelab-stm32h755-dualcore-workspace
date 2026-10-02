@@ -236,3 +236,51 @@ Estado: entregada para auditoría (`d69508e` código, evidencia en `3fffb50`). E
 Las cuatro ejecuciones anteriores, con la cota nueva aplicada a mano sobre sus valores impresos, darían 485,8, 40,3, 64,8 y 573,7, todas frente a unos 950. Con la cota de cada una de ellas, `d01061e` y `38d15c1` fallaron por las erratas E1 y E2, no por esta cota.
 
 Observación: al abrir el AD2 se volvió a leer `DIO = 0x2001`, el mismo caso de §5.8: antes del reset por SWD, con OE = 0 y Digital Out deshabilitado.
+
+## Respuesta a la auditoría 1 (F0, parte 1 y adenda; plan revisión 2)
+
+Desde esta sección, el plan de referencia es la revisión 2 (`0c8c86d`). Estado de F0: entregada para auditoría (`8c4ab93` código, evidencia en `6f9c1f2`).
+
+### Hallazgos
+
+| Hallazgo | Commit que lo corrige | Qué ejecuté para comprobarlo | Estado |
+| --- | --- | --- | --- |
+| m3: comentarios que llaman LD2 a PE0 | `34de37b` | Releí los cuatro comentarios contra `Common/Inc/board_def.h:56` (LD2 = PE1). Además de los dos señalados, corregí otros dos iguales en `CM7/App/Src/tim_selftest.c` (comentario de `bench_safe` y primera fila de `k_t0b_refuse`). Solo comentarios | corregido en `34de37b`, pendiente de verificación |
+| m4: oráculo de CM4 en T0b(b) basado en un hash | `e9a09c9` | `port_snap()` de CM4 toma `MODER`, `OTYPER`, `OSPEEDR`, `PUPDR`, `AFR[0]` y `AFR[1]` de GPIOA y GPIOE, y `regs_changed` pasa a ser la máscara de registros distintos. La foto de CM7 tampoco tenía `OSPEEDR`; también se lo añadí. Captura: `regs changed 0x000` en los dos casos de CM4 | corregido en `e9a09c9`, pendiente de verificación |
+| m1 / R2-4: `Idle = Low` aceptado en cualquier paso "bus = AD2" | `6a6b5f1` | `ad2_set_dout(…, step_name)`: Low solo con `step_name == "T0B_DOUT"` (`AD2_DOUT_IDLE_LOW_STEP`). Mock de T0b(e): 16 rechazos, entre ellos Low en `T0B_S12` y Low sin paso; 7 controles, entre ellos Zet en `T0B_S12`. `gpio_hw_check.py` T0b(a) sigue pasando | corregido en `6a6b5f1`, pendiente de verificación |
+| m2 / R2-10: u sale de un jitter supuesto de 2 ms | `8c4ab93` | CM7 imprime 16 líneas `TICK` en el banner y 16 en el veredicto, cada 50 ms y justo al cambiar `HAL_GetTick`. El host ajusta por mínimos cuadrados la llegada frente al tick: x es la pendiente, la dispersión de los residuos es la medida y u es el error estándar de la pendiente. En `tim_f0_bench_8c4ab93.txt`: 32 líneas en 12,121 s, dispersión 0,067 ms (banner 0,047, veredicto 0,083), x = +13 571,2 ppm, u = 2,2 ppm. Con datos sintéticos (x = +12 900, 0,6 ms) el ajuste da +12 866,6 ± 17,3 | corregido en `8c4ab93`, pendiente de verificación |
+
+### Evidencia en `8c4ab93`
+
+- `build_all -Clean`: 8/8 (`docs/tim_f0_build_all_8c4ab93.txt`).
+- `selftest-tim` desde un directorio vacío: 0 avisos (`docs/tim_f0_selftest_build_8c4ab93.txt`).
+- `CMAKE_C_FLAGS=-Werror` en `selftest-tim`, `debug` y `release`: salida 0 y 0 avisos (`docs/tim_f0_werror_8c4ab93.txt`).
+- `.map`: `prj_01` debug/release frente a un build nuevo de `e7542dc`, 0 de diferencia en cada sección asignada (`docs/tim_f0_map_sizes_8c4ab93.txt`).
+- Objetos del selftest (`.text+.rodata` / `.data` / `.bss`): CM7 `tim_selftest.c.obj` 8259 / 4 / 138; CM4 `tim_selftest.c.obj` 1039 / 0 / 0.
+- Captura `docs/tim_f0_bench_8c4ab93.txt`: `Rev` 8c4ab93 en los dos núcleos, id `82382834bed143e0` igual en host, CM7 y CM4, árbol limpio, lista de comprobación confirmada por Hector. Resultado: 14/14, `FW VERDICT=PASS`, `HOST VERDICT=PASS`.
+
+### Problema abierto: TREF varía más que su resolución r
+
+Con u medido (2,2 ppm), la cota de R2-2 queda casi entera en r: 3·√(u² + r²) = 760,7. En `8c4ab93`, \|e − x\| = 627,5.
+
+Si se compara, en cada ejecución, el tramo que miden los 40 periodos de TREF con el que predice x (4000 / (1 + x) muestras), sale esto:
+
+| Ejecución | Tramo medido | Tramo según x | Desviación | e − x |
+| --- | --- | --- | --- | --- |
+| `d01061e` | 3948 | 3946,11 | +1,89 muestras | −486 ppm |
+| `38d15c1` | 3946 | 3945,84 | +0,16 | −40 |
+| `456a7a7` | 3948 | 3947,75 | +0,25 | −65 |
+| `e30622b` | 3945 | 3947,23 | −2,23 | +574 |
+| `d69508e` | 3949 | 3949,26 | −0,26 | +68 |
+| `8c4ab93` | 3944 | 3946,44 | −2,44 | +628 |
+
+Las cinco primeras x salen de dos puntos y la última del ajuste; con la dispersión medida, ninguna tiene más de unos 10 ppm de error.
+
+La cuantización de los flancos solo puede mover el tramo menos de una muestra hacia cada lado. Tres de las seis ejecuciones se van más lejos. Por tanto, en una ventana de 40 µs la frecuencia de MCO1 se separa de su media de unos 12 s hasta unas 2,4 muestras, es decir, unos 620 ppm.
+
+Mi hipótesis, que no he verificado, es que el MCO del ST-LINK tiene variación de frecuencia a corto plazo (jitter o *wander*). x también cambia de una ejecución a otra en unos ±400 ppm.
+
+La consecuencia es que la cota actual pasa por poco: 627,5 frente a 760,7. Otra ejecución, también la del auditor (A18), puede fallar por esta variación del reloj y no por un defecto. No he cambiado nada, porque cambiaría cómo se mide TREF o su criterio. Lo pregunto al responsable. Dos opciones posibles:
+
+- **(a)** Medir e como media de N capturas del LA, con su dispersión medida, y usar esa dispersión en lugar de r.
+- **(b)** Añadir a r un término medido de la variación de MCO1.
