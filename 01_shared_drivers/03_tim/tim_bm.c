@@ -555,7 +555,9 @@ TimBm_Status_t TIM_BM_DutyToCompare(uint32_t arr, uint32_t counter_bits, uint32_
  * Time base
  * ========================================================================== */
 
-TimBm_Status_t TIM_BM_CheckTimeBase(const TimBm_TimeBaseConfig_t *cfg)
+/* The checks of TimeBase, returning the instance's row in *pe for the operation (one
+   lookup of the table). */
+static TimBm_Status_t chk_time_base(const TimBm_TimeBaseConfig_t *cfg, const TimEntry_t **pe)
 {
     if (cfg == NULL)
     {
@@ -566,6 +568,7 @@ TimBm_Status_t TIM_BM_CheckTimeBase(const TimBm_TimeBaseConfig_t *cfg)
     {
         return TIM_BM_ERR_PARAM;
     }
+    *pe = e;
     /* capability */
     if ((cfg->count_mode != TIM_BM_COUNT_UP) && (cfg->count_mode <= TIM_BM_COUNT_CENTER3) &&
         ((e->flags & F_UDC) == 0U))
@@ -600,14 +603,20 @@ TimBm_Status_t TIM_BM_CheckTimeBase(const TimBm_TimeBaseConfig_t *cfg)
     return TIM_BM_OK;
 }
 
+TimBm_Status_t TIM_BM_CheckTimeBase(const TimBm_TimeBaseConfig_t *cfg)
+{
+    const TimEntry_t *e = NULL;
+    return chk_time_base(cfg, &e);
+}
+
 TimBm_Status_t TIM_BM_InitTimeBase(const TimBm_TimeBaseConfig_t *cfg)
 {
-    const TimBm_Status_t st = TIM_BM_CheckTimeBase(cfg);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_time_base(cfg, &e);
     if (st != TIM_BM_OK)
     {
         return st;
     }
-    const TimEntry_t *e = entry(cfg->tim);
     TIM_TypeDef *tim = cfg->tim;
 
     uint32_t cr1 = 0U;
@@ -659,13 +668,16 @@ TimBm_Status_t TIM_BM_InitTimeBase(const TimBm_TimeBaseConfig_t *cfg)
     return TIM_BM_OK;
 }
 
-TimBm_Status_t TIM_BM_CheckPeriod(const TIM_TypeDef *tim, uint32_t arr)
+/* The checks of Period, returning the instance's row in *pe for the operation (one
+   lookup of the table). */
+static TimBm_Status_t chk_period(const TIM_TypeDef *tim, uint32_t arr, const TimEntry_t **pe)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
     {
         return TIM_BM_ERR_PARAM;
     }
+    *pe = e;
     if ((arr == 0U) || (arr > counter_max(e)))
     {
         return TIM_BM_ERR_PARAM;
@@ -673,9 +685,16 @@ TimBm_Status_t TIM_BM_CheckPeriod(const TIM_TypeDef *tim, uint32_t arr)
     return TIM_BM_OK;
 }
 
+TimBm_Status_t TIM_BM_CheckPeriod(const TIM_TypeDef *tim, uint32_t arr)
+{
+    const TimEntry_t *e = NULL;
+    return chk_period(tim, arr, &e);
+}
+
 TimBm_Status_t TIM_BM_SetPeriod(TIM_TypeDef *tim, uint32_t arr)
 {
-    const TimBm_Status_t st = TIM_BM_CheckPeriod(tim, arr);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_period(tim, arr, &e);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -841,13 +860,16 @@ static TimBm_Status_t dier_update(TIM_TypeDef *tim, uint32_t bits, bool set)
 
 static uint32_t mux_request(const TimEntry_t *e, uint32_t ev);
 
-TimBm_Status_t TIM_BM_CheckEvents(const TIM_TypeDef *tim, uint32_t ev_mask, uint32_t use)
+/* The checks of Events, returning the instance's row in *pe for the operation (one
+   lookup of the table). */
+static TimBm_Status_t chk_events(const TIM_TypeDef *tim, uint32_t ev_mask, uint32_t use, const TimEntry_t **pe)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
     {
         return TIM_BM_ERR_PARAM;
     }
+    *pe = e;
     if (use == TIM_BM_USE_IRQ)
     {
         return ev_check(e, ev_mask);
@@ -870,9 +892,16 @@ TimBm_Status_t TIM_BM_CheckEvents(const TIM_TypeDef *tim, uint32_t ev_mask, uint
     return TIM_BM_OK;
 }
 
+TimBm_Status_t TIM_BM_CheckEvents(const TIM_TypeDef *tim, uint32_t ev_mask, uint32_t use)
+{
+    const TimEntry_t *e = NULL;
+    return chk_events(tim, ev_mask, use, &e);
+}
+
 static TimBm_Status_t irq_common(TIM_TypeDef *tim, uint32_t ev_mask, bool set)
 {
-    const TimBm_Status_t st = TIM_BM_CheckEvents(tim, ev_mask, TIM_BM_USE_IRQ);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_events(tim, ev_mask, TIM_BM_USE_IRQ, &e);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -908,7 +937,8 @@ static uint32_t mux_request(const TimEntry_t *e, uint32_t ev)
 
 static TimBm_Status_t dmareq_common(TIM_TypeDef *tim, uint32_t ev_mask, bool set)
 {
-    const TimBm_Status_t st = TIM_BM_CheckEvents(tim, ev_mask, TIM_BM_USE_DMA);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_events(tim, ev_mask, TIM_BM_USE_DMA, &e);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -973,7 +1003,8 @@ TimBm_Status_t TIM_BM_WaitFlags(TIM_TypeDef *tim, uint32_t ev_mask, uint32_t max
     {
         return TIM_BM_ERR_PARAM;
     }
-    const TimBm_Status_t st = TIM_BM_CheckEvents(tim, ev_mask, TIM_BM_USE_IRQ);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_events(tim, ev_mask, TIM_BM_USE_IRQ, &e);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -1011,7 +1042,8 @@ TimBm_Status_t TIM_BM_WaitFlags(TIM_TypeDef *tim, uint32_t ev_mask, uint32_t max
 
 TimBm_Status_t TIM_BM_GenerateEvent(TIM_TypeDef *tim, uint32_t ev_mask)
 {
-    const TimBm_Status_t st = TIM_BM_CheckEvents(tim, ev_mask, TIM_BM_USE_IRQ);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_events(tim, ev_mask, TIM_BM_USE_IRQ, &e);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -1073,7 +1105,9 @@ TimBm_Status_t TIM_BM_GetDmaRequest(const TIM_TypeDef *tim, uint32_t ev, uint32_
  * Output compare / PWM
  * ========================================================================== */
 
-TimBm_Status_t TIM_BM_CheckOutput(const TimBm_OcConfig_t *cfg)
+/* The checks of Output, returning the instance's row in *pe for the operation (one
+   lookup of the table). */
+static TimBm_Status_t chk_output(const TimBm_OcConfig_t *cfg, const TimEntry_t **pe)
 {
     if (cfg == NULL)
     {
@@ -1084,6 +1118,7 @@ TimBm_Status_t TIM_BM_CheckOutput(const TimBm_OcConfig_t *cfg)
     {
         return TIM_BM_ERR_PARAM;
     }
+    *pe = e;
     const TimBm_Status_t st = ch_check(e, cfg->channel);
     if (st != TIM_BM_OK)
     {
@@ -1101,9 +1136,16 @@ TimBm_Status_t TIM_BM_CheckOutput(const TimBm_OcConfig_t *cfg)
     return TIM_BM_OK;
 }
 
+TimBm_Status_t TIM_BM_CheckOutput(const TimBm_OcConfig_t *cfg)
+{
+    const TimEntry_t *e = NULL;
+    return chk_output(cfg, &e);
+}
+
 TimBm_Status_t TIM_BM_ConfigOutput(const TimBm_OcConfig_t *cfg)
 {
-    const TimBm_Status_t st = TIM_BM_CheckOutput(cfg);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_output(cfg, &e);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -1132,13 +1174,16 @@ TimBm_Status_t TIM_BM_ConfigOutput(const TimBm_OcConfig_t *cfg)
     return TIM_BM_OK;
 }
 
-TimBm_Status_t TIM_BM_CheckCompare(const TIM_TypeDef *tim, uint32_t channel, uint32_t ccr)
+/* The checks of Compare, returning the instance's row in *pe for the operation (one
+   lookup of the table). */
+static TimBm_Status_t chk_compare(const TIM_TypeDef *tim, uint32_t channel, uint32_t ccr, const TimEntry_t **pe)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
     {
         return TIM_BM_ERR_PARAM;
     }
+    *pe = e;
     const TimBm_Status_t st = ch_check(e, channel);
     if (st != TIM_BM_OK)
     {
@@ -1151,9 +1196,16 @@ TimBm_Status_t TIM_BM_CheckCompare(const TIM_TypeDef *tim, uint32_t channel, uin
     return TIM_BM_OK;
 }
 
+TimBm_Status_t TIM_BM_CheckCompare(const TIM_TypeDef *tim, uint32_t channel, uint32_t ccr)
+{
+    const TimEntry_t *e = NULL;
+    return chk_compare(tim, channel, ccr, &e);
+}
+
 TimBm_Status_t TIM_BM_SetCompare(TIM_TypeDef *tim, uint32_t channel, uint32_t ccr)
 {
-    const TimBm_Status_t st = TIM_BM_CheckCompare(tim, channel, ccr);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_compare(tim, channel, ccr, &e);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -1178,13 +1230,16 @@ static bool channels_are(const TIM_TypeDef *tim, uint32_t ch_mask, bool want_out
     return true;
 }
 
-TimBm_Status_t TIM_BM_CheckChannels(const TIM_TypeDef *tim, uint32_t ch_mask, uint32_t use)
+/* The checks of Channels, returning the instance's row in *pe for the operation (one
+   lookup of the table). */
+static TimBm_Status_t chk_channels(const TIM_TypeDef *tim, uint32_t ch_mask, uint32_t use, const TimEntry_t **pe)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
     {
         return TIM_BM_ERR_PARAM;
     }
+    *pe = e;
     if ((use != TIM_BM_USE_OUTPUT_ON) && (use != TIM_BM_USE_OUTPUT_OFF) && (use != TIM_BM_USE_CAPTURE))
     {
         return TIM_BM_ERR_PARAM;
@@ -1205,14 +1260,20 @@ TimBm_Status_t TIM_BM_CheckChannels(const TIM_TypeDef *tim, uint32_t ch_mask, ui
     return TIM_BM_OK;
 }
 
+TimBm_Status_t TIM_BM_CheckChannels(const TIM_TypeDef *tim, uint32_t ch_mask, uint32_t use)
+{
+    const TimEntry_t *e = NULL;
+    return chk_channels(tim, ch_mask, use, &e);
+}
+
 TimBm_Status_t TIM_BM_OutputEnable(TIM_TypeDef *tim, uint32_t ch_mask)
 {
-    const TimBm_Status_t st = TIM_BM_CheckChannels(tim, ch_mask, TIM_BM_USE_OUTPUT_ON);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_channels(tim, ch_mask, TIM_BM_USE_OUTPUT_ON, &e);
     if (st != TIM_BM_OK)
     {
         return st;
     }
-    const TimEntry_t *e = entry(tim);
     const uint32_t bits = ccer_e_bits(ch_mask);
     const bool bdtr = (e->flags & F_BDTR) != 0U;
     const uint32_t pm = irq_save();
@@ -1231,12 +1292,12 @@ TimBm_Status_t TIM_BM_OutputEnable(TIM_TypeDef *tim, uint32_t ch_mask)
 
 TimBm_Status_t TIM_BM_OutputDisable(TIM_TypeDef *tim, uint32_t ch_mask)
 {
-    const TimBm_Status_t st = TIM_BM_CheckChannels(tim, ch_mask, TIM_BM_USE_OUTPUT_OFF);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_channels(tim, ch_mask, TIM_BM_USE_OUTPUT_OFF, &e);
     if (st != TIM_BM_OK)
     {
         return st;
     }
-    const TimEntry_t *e = entry(tim);
     const uint32_t bits = ccer_e_bits(ch_mask);
     const uint32_t all_e = ccer_e_bits(0xFU);
     const bool bdtr = (e->flags & F_BDTR) != 0U;
@@ -1293,7 +1354,9 @@ static bool tisel_verify(TIM_TypeDef *tim, uint32_t ti, uint32_t value)
     return ((tim->TISEL >> (8U * (ti - 1U))) & 0xFUL) == value;
 }
 
-TimBm_Status_t TIM_BM_CheckInput(const TimBm_IcConfig_t *cfg)
+/* The checks of Input, returning the instance's row in *pe for the operation (one
+   lookup of the table). */
+static TimBm_Status_t chk_input(const TimBm_IcConfig_t *cfg, const TimEntry_t **pe)
 {
     if (cfg == NULL)
     {
@@ -1304,6 +1367,7 @@ TimBm_Status_t TIM_BM_CheckInput(const TimBm_IcConfig_t *cfg)
     {
         return TIM_BM_ERR_PARAM;
     }
+    *pe = e;
     const TimBm_Status_t st = ch_check(e, cfg->channel);
     if (st != TIM_BM_OK)
     {
@@ -1338,9 +1402,16 @@ TimBm_Status_t TIM_BM_CheckInput(const TimBm_IcConfig_t *cfg)
     return TIM_BM_OK;
 }
 
+TimBm_Status_t TIM_BM_CheckInput(const TimBm_IcConfig_t *cfg)
+{
+    const TimEntry_t *e = NULL;
+    return chk_input(cfg, &e);
+}
+
 TimBm_Status_t TIM_BM_ConfigInput(const TimBm_IcConfig_t *cfg)
 {
-    const TimBm_Status_t st = TIM_BM_CheckInput(cfg);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_input(cfg, &e);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -1358,14 +1429,17 @@ TimBm_Status_t TIM_BM_ConfigInput(const TimBm_IcConfig_t *cfg)
     return TIM_BM_OK;
 }
 
-TimBm_Status_t TIM_BM_CheckPwmInput(const TIM_TypeDef *tim, uint32_t ti, uint32_t edge,
-                                    uint32_t prescaler, uint32_t filter, uint32_t tisel)
+/* The checks of PwmInput, returning the instance's row in *pe for the operation (one
+   lookup of the table). */
+static TimBm_Status_t chk_pwm_input(const TIM_TypeDef *tim, uint32_t ti, uint32_t edge,
+                       uint32_t prescaler, uint32_t filter, uint32_t tisel, const TimEntry_t **pe)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
     {
         return TIM_BM_ERR_PARAM;
     }
+    *pe = e;
     if ((ti != 1U) && (ti != 2U))
     {
         return TIM_BM_ERR_PARAM;
@@ -1394,10 +1468,18 @@ TimBm_Status_t TIM_BM_CheckPwmInput(const TIM_TypeDef *tim, uint32_t ti, uint32_
     return TIM_BM_OK;
 }
 
+TimBm_Status_t TIM_BM_CheckPwmInput(const TIM_TypeDef *tim, uint32_t ti, uint32_t edge,
+                                    uint32_t prescaler, uint32_t filter, uint32_t tisel)
+{
+    const TimEntry_t *e = NULL;
+    return chk_pwm_input(tim, ti, edge, prescaler, filter, tisel, &e);
+}
+
 TimBm_Status_t TIM_BM_ConfigPwmInput(TIM_TypeDef *tim, uint32_t ti, uint32_t edge,
                                      uint32_t prescaler, uint32_t filter, uint32_t tisel)
 {
-    const TimBm_Status_t st = TIM_BM_CheckPwmInput(tim, ti, edge, prescaler, filter, tisel);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_pwm_input(tim, ti, edge, prescaler, filter, tisel, &e);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -1430,7 +1512,8 @@ TimBm_Status_t TIM_BM_ConfigPwmInput(TIM_TypeDef *tim, uint32_t ti, uint32_t edg
 
 static TimBm_Status_t capture_common(TIM_TypeDef *tim, uint32_t ch_mask, bool set)
 {
-    const TimBm_Status_t st = TIM_BM_CheckChannels(tim, ch_mask, TIM_BM_USE_CAPTURE);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_channels(tim, ch_mask, TIM_BM_USE_CAPTURE, &e);
     if (st != TIM_BM_OK)
     {
         return st;
@@ -1463,13 +1546,16 @@ TimBm_Status_t TIM_BM_CaptureDisable(TIM_TypeDef *tim, uint32_t ch_mask)
  * Master / slave
  * ========================================================================== */
 
-TimBm_Status_t TIM_BM_CheckMaster(const TIM_TypeDef *tim, uint32_t mms, bool msm)
+/* The checks of Master, returning the instance's row in *pe for the operation (one
+   lookup of the table). */
+static TimBm_Status_t chk_master(const TIM_TypeDef *tim, uint32_t mms, bool msm, const TimEntry_t **pe)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
     {
         return TIM_BM_ERR_PARAM;
     }
+    *pe = e;
     const bool slave = (e->flags & F_SLAVE) != 0U;
     /* capability */
     if (((e->flags & F_MASTER) == 0U) || ((mms <= 7U) && (mms > e->mms_max)) || (msm && !slave))
@@ -1489,14 +1575,21 @@ TimBm_Status_t TIM_BM_CheckMaster(const TIM_TypeDef *tim, uint32_t mms, bool msm
     return TIM_BM_OK;
 }
 
+TimBm_Status_t TIM_BM_CheckMaster(const TIM_TypeDef *tim, uint32_t mms, bool msm)
+{
+    const TimEntry_t *e = NULL;
+    return chk_master(tim, mms, msm, &e);
+}
+
 TimBm_Status_t TIM_BM_ConfigMaster(TIM_TypeDef *tim, uint32_t mms, bool msm)
 {
-    const TimBm_Status_t st = TIM_BM_CheckMaster(tim, mms, msm);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_master(tim, mms, msm, &e);
     if (st != TIM_BM_OK)
     {
         return st;
     }
-    const bool slave = (entry(tim)->flags & F_SLAVE) != 0U;
+    const bool slave = (e->flags & F_SLAVE) != 0U;
     const uint32_t pm = irq_save();
     tim->CR2 = (tim->CR2 & ~CR2_MMS_MSK) | (mms << CR2_MMS_POS);
     if (slave)
@@ -1516,13 +1609,16 @@ static bool sms_valid(uint32_t sms)
     return (sms == TIM_BM_SMS_DISABLED) || ((sms >= TIM_BM_SMS_RESET) && (sms <= TIM_BM_SMS_RESET_TRIGGER));
 }
 
-TimBm_Status_t TIM_BM_CheckSlave(const TIM_TypeDef *tim, uint32_t sms, uint32_t trigger)
+/* The checks of Slave, returning the instance's row in *pe for the operation (one
+   lookup of the table). */
+static TimBm_Status_t chk_slave(const TIM_TypeDef *tim, uint32_t sms, uint32_t trigger, const TimEntry_t **pe)
 {
     const TimEntry_t *e = entry(tim);
     if (e == NULL)
     {
         return TIM_BM_ERR_PARAM;
     }
+    *pe = e;
     /* capability */
     if ((e->flags & F_SLAVE) == 0U)
     {
@@ -1552,9 +1648,16 @@ TimBm_Status_t TIM_BM_CheckSlave(const TIM_TypeDef *tim, uint32_t sms, uint32_t 
     return TIM_BM_OK;
 }
 
+TimBm_Status_t TIM_BM_CheckSlave(const TIM_TypeDef *tim, uint32_t sms, uint32_t trigger)
+{
+    const TimEntry_t *e = NULL;
+    return chk_slave(tim, sms, trigger, &e);
+}
+
 TimBm_Status_t TIM_BM_ConfigSlave(TIM_TypeDef *tim, uint32_t sms, uint32_t trigger)
 {
-    const TimBm_Status_t st = TIM_BM_CheckSlave(tim, sms, trigger);
+    const TimEntry_t *e = NULL;
+    const TimBm_Status_t st = chk_slave(tim, sms, trigger, &e);
     if (st != TIM_BM_OK)
     {
         return st;
