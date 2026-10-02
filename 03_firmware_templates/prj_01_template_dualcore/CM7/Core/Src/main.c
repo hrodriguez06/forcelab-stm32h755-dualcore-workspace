@@ -184,6 +184,18 @@ static void SystemClock_Config(void)
     RCC_OscInitTypeDef osc = {0};
     RCC_ClkInitTypeDef clk = {0};
 
+    /* Supply first. After a power-on reset the system runs with ACTVOSRDY
+       invalid until PWR_CR3 is written, and VOS can only change once it is
+       valid (RM0399 7.4.1): without this the VOSRDY wait below never ends. The
+       configuration is write-once until the next power-on reset, so a warm
+       reset hides the omission when an earlier image wrote it. It must match
+       the board: MB1363 is "internal SMPS only" by default (UM2408 7.4.8,
+       table 10); a mismatch locks the board until BOOT0 recovery. */
+    if (HAL_PWREx_ConfigSupply(PWR_DIRECT_SMPS_SUPPLY) != HAL_OK)
+    {
+        Error_Handler();
+    }
+
     __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
     while (__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY) == 0U)
     {
