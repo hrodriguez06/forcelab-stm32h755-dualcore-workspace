@@ -159,3 +159,59 @@ Además del +1,3 % de desviación media, el reloj de la placa varía de una ejec
 
 - **D5 aprobada.** El responsable del catálogo aprobó la recomendación. Está en la revisión 3 del plan: R3-1 (TREF\_A + TREF\_B, 8 + 8 capturas, x ajustada sobre las medias de ráfaga, criterio \|ē − x\| ≤ 3·√(u² + s\_ef²/16)), R3-2 (desde F1, las medidas del AD2 como cociente con MCO1 en la misma adquisición) y R3-3 (protocolo del banco v2). O2 queda cubierta por R3-1.
 - **Para que F0 pase:** el implementador aplica R3-1 y R3-3 y entrega una captura nueva. Después viene mi ejecución del banco (A18/A27), con la lista de comprobación física confirmada.
+
+## F0, auditoría 4: revisión 3 aplicada, SMPS y la serie de 17 ejecuciones (2026-10-02, en `cf26e4e`)
+
+Rango auditado: `92983ec..cf26e4e`. Código: `949c39c` (R3-3), `9986015`, `abea673` y `0f9534c` (R3-1) y `2481396` (SMPS en `prj_01`). El resto es evidencia: 17 capturas con la revisión 3, una abortada (`0f9534c`), builds y `.map`. El informe declara F0 **en curso, no entregada**: el implementador se detuvo como pide R3-1, porque el criterio falla con la misma imagen.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `git show` de los cinco commits de código, diff completo | Ver la tabla |
+| `git diff e7542dc cf26e4e --name-only` | Nada fuera de `01_shared_drivers/03_tim/`, `prj_01_template_dualcore/` y `tools/ad2.py`. `02_firmware_projects/` sin cambios (A23) |
+| `prj_01` debug y release desde directorios vacíos, en `cf26e4e` | 0 avisos. CM7 debug 29304/132/55668 y release 28356/132/55672, frente a 29144 y 28228 de mi base `e7542dc`: **+160 y +128 B de `.text`**. CM4 igual: 3456/24/12560 y 3112/24/12560. Coincide con `docs/tim_f0_map_sizes_2481396.txt` |
+| `HAL_PWREx_ConfigSupply` en la HAL del repositorio (`stm32h7xx_hal_pwr_ex.c`) | Si la configuración ya está bloqueada y coincide, devuelve `HAL_OK`; si no coincide, `HAL_ERROR` sin escribir nada; si no está bloqueada, la escribe y espera `ACTVOSRDY` con timeout. Un reset en caliente no llega a `Error_Handler` |
+| Las 17 capturas con el criterio de R3-1: extraje con un script propio e, s\_ef, x, u, la cota, ē\_A y ē\_B | Ver "La serie" |
+| `tim_f0_bench_2481396.txt`, `_cd0d613_9` y `_cd0d613_10` | Checkout del host, árbol limpio, `Rev` e id iguales en los tres lados, `FW VERDICT=PASS`. 15/16 (FAIL solo en TREF), 15/16 (ídem) y 16/16 |
+
+### Veredicto de los cambios
+
+| ID | Veredicto | Evidencia |
+| --- | --- | --- |
+| R3-3 | **Aplicado** | `TIM_BENCH_VERSION = 2`. La tabla de pasos es igual en `k_tst_steps` y en `STEPS`. `TREF_B` solo permite PA8 en AF0 (`af1_pa = 0`), y el AF1 sigue siendo exclusivo del control de `TREF_A`. `step_tref(name, control)` guarda y restaura `RCC_CFGR` con read-back en cada grupo |
+| R3-1, capturas | **Aplicado** | 8 por grupo dentro de un handshake, ≥ 40 periodos y ≥ 100 ms entre comienzos, con una comprobación que falla si no se cumple (`TREF_x captures`). Se imprimen eᵢ, rᵢ, ē\_A, ē\_B, ē, s, r̄/√6 y s\_ef |
+| R3-1, x | **Aplicado** | La consola recoge todas las líneas `TICK` con su hora de llegada. Se agrupan por ráfaga y el ajuste se hace sobre las M medias. u = se(b)/b² con M − 2 grados de libertad. Exige M ≥ 10 y el número de líneas esperado por ráfaga (16, 4, …, 16); si no, no hay x y TREF falla |
+| R3-1, criterio | **Aplicado** | `n == 16`, \|ē\| ≤ 20 000 y \|ē − x\| ≤ 3·√(u² + s\_ef²/16) |
+| SMPS, `2481396` | **Correcto, fuera del alcance y aceptado como decisión del responsable** | Está en un commit propio, comentado, con el retorno comprobado y el mismo valor que `prj_04` (`main.c:297`). El diagnóstico por SWD (`PWR_CR3 = 0x46`, `ACTVOSRDY = 0`, `PORRSTF`) cuadra con RM0399 §7.4.1. Es un defecto latente de la producción de `prj_01`, no del banco. **El gate de tamaños de F0 tiene que cambiar de base**: ver D6(b) |
+
+### La serie: el criterio de R3-1 está mal calibrado
+
+Sobre las 17 ejecuciones, con d = ē − x y z = d / (cota/3):
+
+| Magnitud | Valor |
+| --- | --- |
+| Media de d, desviación típica (n − 1) | +36,1 y 184,5 ppm |
+| σ que declara cada ejecución (cota/3), media | 107,5 ppm |
+| rms de z, máximo de \|z\| | **2,00** y 5,32 (`2481396`) |
+| Fallos | 2 de 17 (`2481396`, z = +5,32; `cd0d613_9`, z = +3,47) |
+
+Confirmo los números del informe. Añado un hecho que el informe no separa. El rms de (ē\_A − ē\_B)/(s\_ef·√(2/8)) es **1,51**: dentro de una sesión, las medias de los dos grupos difieren 1,5 veces más de lo que predice la dispersión de sus capturas. Las 8 capturas de un grupo no son independientes, porque el reloj de la placa deriva en escalas de segundos, así que s/√16 infravalora la incertidumbre de ē. Ese factor explica parte del exceso. Si se aplica, el rms de z baja de 2,00 a 1,34; el resto lo atribuyo a x (latencia del VCP a lo largo de la sesión) o a que ē y x promedian el mismo reloj con distinta ponderación en el tiempo. Con estos datos no se puede separar más.
+
+Ninguno de los dos fallos es del firmware: todo lo demás pasa en las 17 ejecuciones, y las dos referencias (el cristal del AD2 y el reloj del host) coinciden con la placa salvo por la deriva.
+
+### Decisión D6 del responsable (bloquea F0)
+
+**(a) Criterio de TREF.** Recomiendo añadir a la cota un término medido de la variación entre ejecuciones, σ\_ser, con el mismo principio de R2-10 (medido, no supuesto). La varianza que las 17 ejecuciones no explican es σ\_ser = √(media(d²) − media(u² + s\_ef²/16)) = **145 ppm**. El criterio queda:
+
+\|ē\| ≤ 20 000 ppm y \|ē − x\| ≤ 3·√(u² + s\_ef²/16 + σ\_ser²), con σ\_ser = 145 ppm, fuente: las 17 capturas de la revisión 3 que se citan en esta sección.
+
+Con ese criterio, el rms de z de las 17 queda en 1,05, el máximo de \|z\| en 2,55 y la peor ejecución (`2481396`) al 85 % de la cota. No falla ninguna. La cota queda entre unos 500 y 700 ppm. Perder sensibilidad no tiene coste: desde R3-2 ninguna medida de F1 en adelante se corrige con TREF, y un error grueso, como un divisor de MCO1 mal o una frecuencia de muestreo del LA mal, es ≥ 0,5 %, más de 7 veces la cota. σ\_ser es de este banco (esta placa y este ST-LINK): se vuelve a medir si cambia cualquiera de los dos.
+
+**(b) Gate de producción.** La base pasa de `e7542dc` a `2481396`: CM7 debug 29304/132/55668 y release 28356/132/55672, CM4 debug 3456/24/12560 y release 3112/24/12560. Desde ahí, ningún commit del 03\_tim puede cambiarlos. El cambio de SMPS queda como desviación aprobada, con su propia fila en el informe de cierre y en el README.
+
+### Para que F0 pase
+
+1. D6 aprobada, y revisión 4 del plan.
+2. El implementador cambia la cota (un commit, sin tocar nada más) y entrega una captura.
+3. A18/A27: mi ejecución del banco sobre esa entrega, con la lista de comprobación física confirmada.
