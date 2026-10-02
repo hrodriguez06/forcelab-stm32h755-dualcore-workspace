@@ -450,6 +450,6 @@ El responsable pidió el 2026-10-02 repetir la ejecución otra vez. La captura e
 
 Todos los valores en ppm. Con la misma imagen, de las seis ejecuciones con el criterio de R3-1, cinco pasan y una falla: la primera después de reconectar el USB del ST-LINK.
 
-En las cinco que pasan, ē − x vale +64,6, +7,3, −125,0, +208,3 y −8,1 ppm: media +29 ppm y desviación típica unos 118 ppm. Las cotas de esas ejecuciones van de 238 a 519 ppm.
+En las cinco que pasan, ē − x vale +64,6, +7,3, −125,0, +208,3 y −8,1 ppm: media +29,4 ppm y desviación típica 121,4 ppm (n − 1). Las cotas de esas ejecuciones van de 238 a 519 ppm.
 
 Estado de F0: **en curso**. Siguen pendientes las dos decisiones del responsable: el gate de tamaños de producción desde `2481396` y la repetibilidad de R3-1.
