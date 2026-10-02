@@ -1,0 +1,144 @@
+[+   0.000s] [host] argv: --checklist-confirmed Hector
+[+   0.000s] [host] options: allow_dirty=False preset=selftest-tim no_reset=False checklist_confirmed=Hector
+[+   0.076s] [host] tim_hw_check.py, host checkout e30622b, protocol v1, phase F0
+[+   0.076s] [host] checklist [x] GND first, then the DIO lines per 00_gpio README 8; nothing on W1/W2/V+/V-; no series resistors; AD2 on USB while the Nucleo is powered: confirmed by Hector (--checklist-confirmed)
+[+   0.076s] [host] checklist [x] selftest-tim flashed with this script stopped: confirmed by Hector (--checklist-confirmed)
+[+   0.825s] [host] checklist [x] WaveForms GUI closed, no debugger attached (tasklist: none of WaveForms.exe, ST-LINK_gdbserver.exe, openocd.exe, STM32CubeProgrammer.exe)
+[+   1.336s] [host] tree clean
+[+   1.950s] [host] build id of this checkout and build/selftest-tim: 0f7a7886a34509b7
+[+   1.950s] [ad2] T0B(a) ad2_set_oe(0x0200, bus=NONE): refused before the DLL
+[+   1.950s] [ad2] T0B(a) ad2_set_oe(0x0800, bus=NONE): refused before the DLL
+[+   1.950s] [ad2] T0B(a) ad2_set_oe(0x2000, bus=NONE): refused before the DLL
+[+   1.950s] [ad2] T0B(a) ad2_set_oe(0x4000, bus=NONE): refused before the DLL
+[+   1.950s] [ad2] T0B(a) ad2_set_oe(0x8000, bus=NONE): refused before the DLL
+[+   1.950s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=NONE): refused before the DLL
+[+   1.950s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=MCU): refused before the DLL
+[+   1.950s] [ad2] T0B(a) ad2_set_oe(0x10FF, bus=MCU): refused before the DLL
+[+   1.950s] [ad2] T0B(a) control ad2_set_oe(0x1000, bus=NONE): passed to the DLL
+[+   1.950s] [ad2] T0B(a) control ad2_set_oe(0x10FF, bus=AD2): passed to the DLL
+[+   1.950s] [ad2] T0B(e) ad2_set_dout(0x0001, bus=AD2, idle=3) [DIO0 (PE8)]: refused, S2 reached, no enabling call reached the DLL
+[+   1.951s] [ad2] T0B(e) ad2_set_dout(0x0004, bus=AD2, idle=3) [DIO2 (PE10)]: refused, S2 reached, no enabling call reached the DLL
+[+   1.951s] [ad2] T0B(e) ad2_set_dout(0x0200, bus=AD2, idle=3) [DIO9 (PE5, MCU only)]: refused, S2 reached, no enabling call reached the DLL
+[+   1.951s] [ad2] T0B(e) ad2_set_dout(0x1000, bus=AD2, idle=3) [DIO12 (HOST_REQ)]: refused, S2 reached, no enabling call reached the DLL
+[+   1.951s] [ad2] T0B(e) ad2_set_dout(0x4000, bus=AD2, idle=3) [DIO14 (PA8, MCU only)]: refused, S2 reached, no enabling call reached the DLL
+[+   1.952s] [ad2] T0B(e) ad2_set_dout(0x0006, bus=AD2, idle=3) [DIO1 with DIO2]: refused, S2 reached, no enabling call reached the DLL
+[+   1.952s] [ad2] T0B(e) ad2_set_dout(0x0002, bus=NONE, idle=3) [bus = NONE]: refused, S2 reached, no enabling call reached the DLL
+[+   1.952s] [ad2] T0B(e) ad2_set_dout(0x0002, bus=MCU, idle=3) [bus = MCU]: refused, S2 reached, no enabling call reached the DLL
+[+   1.952s] [ad2] T0B(e) ad2_set_dout(0x0008, bus=MCU, idle=3) [bus = MCU]: refused, S2 reached, no enabling call reached the DLL
+[+   1.952s] [ad2] T0B(e) ad2_set_dout(0x0002, bus=AD2, idle=2) [idle High]: refused, S2 reached, no enabling call reached the DLL
+[+   1.952s] [ad2] T0B(e) ad2_set_dout(0x0002, bus=AD2, idle=0) [idle Init]: refused, S2 reached, no enabling call reached the DLL
+[+   1.953s] [ad2] T0B(e) ad2_set_dout(0x0002, bus=AD2, idle=3) [Digital-IO OE on DIO1 (S11 d)]: refused, S2 reached, no enabling call reached the DLL
+[+   1.953s] [ad2] T0B(e) ad2_set_dout(0x0008, bus=AD2, idle=3) [Digital-IO OE on DIO3 (S11 d)]: refused, S2 reached, no enabling call reached the DLL
+[+   1.953s] [ad2] T0B(e) ad2_set_dout(0x000A, bus=AD2, idle=3) [DIO1|DIO3 with OE on DIO3 (S11 d)]: refused, S2 reached, no enabling call reached the DLL
+[+   1.953s] [ad2] T0B(e) control ad2_set_dout(0x0002, bus=AD2, idle=3, Digital-IO OE=0x0000): passed to the DLL, Idle and push-pull before EnableSet(1), Configure(1) last
+[+   1.953s] [ad2] T0B(e) control ad2_set_dout(0x0008, bus=AD2, idle=3, Digital-IO OE=0x0000): passed to the DLL, Idle and push-pull before EnableSet(1), Configure(1) last
+[+   1.953s] [ad2] T0B(e) control ad2_set_dout(0x000A, bus=AD2, idle=3, Digital-IO OE=0x0000): passed to the DLL, Idle and push-pull before EnableSet(1), Configure(1) last
+[+   1.953s] [ad2] T0B(e) control ad2_set_dout(0x0002, bus=AD2, idle=1, Digital-IO OE=0x0000): passed to the DLL, Idle and push-pull before EnableSet(1), Configure(1) last
+[+   1.953s] [ad2] T0B(e) control ad2_set_dout(0x0002, bus=AD2, idle=3, Digital-IO OE=0x1000): passed to the DLL, Idle and push-pull before EnableSet(1), Configure(1) last
+[+   1.953s] [ad2] T0B(e) control ad2_set_dout(0x000A, bus=AD2, idle=3, Digital-IO OE=0x1000): passed to the DLL, Idle and push-pull before EnableSet(1), Configure(1) last
+[+   1.953s] [host] T0B(a) S3 guard on the mock: PASS; T0B(e) S11 guard on the mock: PASS
+[+   2.447s] [ad2] opened in S2: OE=0x0000 DIO=0x0000 Digital Out enable=0x0000 Zet=0xFFFF
+[+   2.447s] [ad2] DigitalIn clock 100.000 MHz (la_arm assumes 100), buffer max 4096 samples; DigitalOut clock 100.000 MHz
+[+   2.448s] [host] reset through SWD (STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst), AD2 in S2
+[+   2.615s]  
+[+   2.620s] === STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[+   2.624s] [sys] build rev=e30622b id=0f7a7886a34509b7
+[+   2.627s] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[+   2.630s] [sys] silicon revision id=0x2003
+[+   2.635s] [ipc] shared block at 0x38008000, magic=0x48375353
+[+   2.639s] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[+   2.641s] [tim] CM7 Rev e30622b
+[+   2.644s] [tim] CM7 Build id 0f7a7886a34509b7
+[+   2.646s] [tim] CM4 Rev e30622b
+[+   2.649s] [tim] CM4 Build id 0f7a7886a34509b7
+[+   2.651s] [tim] TIM_BENCH v1 idle
+[+   2.658s] [tim] silicon REV_ID=0x2003, test block at 0x3800B000, CM4 table v1, steps 8
+[+   2.662s] [tim] TICK 44 (HAL_GetTick at the banner)
+[+   2.664s] [tim] STEP T0A bus=NONE v=1
+[+   2.726s] [host] R4-a: cm7 Rev=e30622b id=0f7a7886a34509b7; cm4 Rev=e30622b id=0f7a7886a34509b7; host HEAD=e30622b id=0f7a7886a34509b7
+[+   2.726s] [host] build id host=0f7a7886a34509b7 cm7=0f7a7886a34509b7 cm4=0f7a7886a34509b7
+[+   2.726s] [host] S8: banner v1, Rev cm7=e30622b cm4=e30622b
+[+   2.790s] [ad2] T0A loose lines: 13 lines with MCU pull-up 0x4FFF (0x4FFF), pull-down 0x0000 (0x0000); HOST_REQ/MCU_ACK exercised by every handshake -> PASS
+[+   2.790s] [ad2] T0A walking 1: one line pulled up at a time, the others down: 13 patterns, mismatches [] -> PASS
+[+   2.790s] [ad2] T0A control: firmware pulls DIO9 (PE5) down where the host expects all up: the check flags 0x0200 (0x0200 expected) -> PASS
+[+   2.798s] [tim] T0A MCU IDR of the 13 lines, pull-up 0x1FFF (0x1FFF), pull-down 0x0000 (0x0000) -> PASS
+[+   2.804s] [tim] T0A walking 1 on 13 lines, MCU IDR: lines that differ 0x0000 -> PASS
+[+   2.813s] [tim] T0A control: DIO9 (PE5) pulled down on purpose, MCU check flags 0x0200 (0x0200 expected) -> PASS
+[+   2.816s] [tim] STEP TREF bus=NONE v=1
+[+   2.836s] [tim] TREF MCO1 = HSE/8 on PA8 AF0, 1000000 Hz expected (HSE_VALUE/8), RCC_CFGR=0x00A0001B
+[+   2.854s] [tim] TREF control PA8 AF1 (TIM1_CH1), TIM1EN C1=0 C2=0, RCC_CFGR=0x00A0001B
+[+   2.858s] [ad2] TREF measured: DIO14 1013941.698 Hz over 40 periods (3945 samples of 4096 at 100 MS/s), e_ppm=+13941.7, resolution 253.5 ppm, time high 496.7 ns
+[+   2.858s] [ad2] TREF control: PA8 in AF1 (TIM1_CH1, TIM1 unclocked), MCO1 still HSE/8 in the RCC: 0 rising, 0 falling edges on DIO14 (0 expected) -> PASS
+[+   2.867s] [tim] TREF MCO1 fields read back 0x00A00000 (HSE/8), still 0x00A00000 during the control -> PASS
+[+   2.874s] [tim] TREF control: PA8 AFR=1 (TIM1_CH1), TIM1 clock off in both banks (C1=0 C2=0) -> PASS
+[+   2.881s] [tim] TREF RCC_CFGR restored: before 0x0000001B after 0x0000001B -> PASS
+[+   2.883s] [tim] STEP T0B bus=NONE v=1
+[+   2.909s] [tim] T0B(b) CM7 claim: 20 refusals, accepted by mistake 0x00000000; PA8 AF0 accepted (control) 1; regs untouched 1 -> PASS
+[+   2.918s] [tim] T0B(b) CM4 claim in T0B: 13 cases, accepted 0x0001 (0x0001: PE5 AF4 only), regs changed 0 -> PASS
+[+   2.927s] [tim] T0B(b) CM4 bench_safe: PE5 AF4 MODER=2 AFR=4, after safe MODER=0 AFR=0 PUPDR=0, PE6 MODER=0 -> PASS
+[+   2.937s] [tim] T0B(b) CM4 claim between steps: accepted 0x0000 (0x0000), regs changed 0 -> PASS
+[+   2.939s] [tim] STEP T0B_S5NEG bus=MCU v=1
+[+   2.955s] [ad2] S5 T0B_S5NEG before: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+   2.964s] [ad2] T0B(c) S5 negative control: MCU drives the bus: s5_released() returned [(False, '0x5A'), (False, '0x5A')] (must be False twice, DIO=0x5A) -> PASS
+[+   2.970s] [ad2] S5 T0B_S5NEG after: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+   2.978s] [tim] T0B(c) bus driven to 0x5A during the host check, then released (MODER bus 0x0000) -> PASS
+[+   2.981s] [tim] STEP T0B_TIMEOUT bus=NONE v=1
+[+   2.993s] [ad2] T0B(d) MCU_ACK high: the host deliberately does not raise HOST_REQ
+[+  12.870s] [tim] T0B(d) no HOST_REQ in 10 s -> bench_safe: GPIOE MODER[31:4]=0x00004000 (0x00004000), AFRH=0x00000000 -> PASS
+[+  12.873s] [tim] T0B timeout handled
+[+  12.874s] [ad2] T0B(d) firmware timeout: firmware reported the timeout and MCU_ACK is low -> PASS
+[+  12.875s] [tim] STEP T0B_DOUT bus=AD2 v=1
+[+  12.904s] [ad2] S5 T0B_DOUT before: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  12.934s] [ad2] T0B(f) Idle=Zet: Digital Out ran on DIO1 only: DIO1 1.0000 MHz (configured 1.0000), high 500.0 ns, 40 periods; enable mask 0x0002, Zet mask 0xFFFF; Digital-IO OE while running 0x1000 (HOST_REQ only, 0 on DIO1: S11 d); edges on the other bus lines 0 -> PASS
+[+  12.934s] [ad2] T0B(f) Idle=Zet stopped: enable 0x0002 Zet 0xFFFF OE 0x1000
+[+  12.940s] [ad2] T0B(f) release with Idle=Zet: after Configure(0) the bus follows both MCU pulls: s5_released() up True (DIO=0xFF), down True (DIO=0x00) -> PASS
+[+  12.963s] [ad2] T0B(f) control Idle=Low: Digital Out ran on DIO1 only: DIO1 1.0000 MHz (configured 1.0000), high 500.0 ns, 40 periods; enable mask 0x0002, Zet mask 0xFFFD; Digital-IO OE while running 0x1000 (HOST_REQ only, 0 on DIO1: S11 d); edges on the other bus lines 0 -> PASS
+[+  12.963s] [ad2] T0B(f) control Idle=Low stopped: enable 0x0002 Zet 0xFFFD OE 0x1000
+[+  12.968s] [ad2] T0B(f) control Idle=Low: DIO1 held low by Digital Out against the MCU pull-up: s5_released() up False (DIO=0xFD, 0xFD expected), down True (DIO=0x00); the check that guards every capture would abort here -> PASS
+[+  12.977s] [ad2] T0B(f) S2 after the control: Digital Out enable mask 0x0000 (0x0000), Zet mask 0xFFFF (0xFFFF) -> PASS
+[+  12.984s] [ad2] S5 T0B_DOUT after S2: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  12.984s] [ad2] T0B(f) bus released after S2: the S5 check above passed (else BenchAbort) -> PASS
+[+  12.991s] [tim] T0B(f) Idle=Zet after 1 MHz on DIO1: MCU IDR bus up 0xFF down 0x00 -> PASS
+[+  12.999s] [tim] T0B(f) control Idle=Low: MCU IDR bus up 0xFD (0xFD: PE9 held low) down 0x00 -> PASS
+[+  13.005s] [tim] T0B(f) after the host's S2 the bus follows both pulls again -> PASS
+[+  13.008s] [tim] STEP T0B_S12 bus=AD2 v=1
+[+  13.023s] [ad2] S5 T0B_S12 before: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  13.031s] [tim] T0B(g) cases: CCxS=00 x3, MOE, OSSI, OSSR, CC1NE, CC2NE, CC3E, CC4E, AF2, PE13 AF1, PE8 AF1
+[+  13.040s] [tim] T0B(g) S12 claim: 13 cases refused, accepted by mistake 0x0000, GPIO regs untouched 1 -> PASS
+[+  13.046s] [tim] T0B(g) TIM1 CR1=0x0000 CCMR1=0x00000101 CCER=0x0000 BDTR=0x00000000
+[+  13.054s] [tim] T0B(g) control: CC1S=CC2S=01, CCER=0, BDTR=0 -> claim PE9|PE11 AF1 accepted -> PASS
+[+  13.060s] [tim] T0B(g) GPIOE MODER=0x00884007 AFRH=0x00001010 (PE9, PE11 in AF1)
+[+  13.065s] [ad2] S5 T0B_S12 with PE9/PE11 in AF1: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  13.065s] [ad2] T0B(g) S5 with PE9/PE11 in AF1: the bus followed both MCU pulls with TIM1 CH1/CH2 inputs in AF (else BenchAbort) -> PASS
+[+  13.073s] [tim] T0B(g) S5 with PE9/PE11 in AF1 (MODER=2): MCU IDR bus up 0xFF down 0x00 -> PASS
+[+  13.081s] [tim] T0B(g) TIM1 back to reset values (CR1 CCMR1 CCER BDTR = 0), clock as before (0) -> PASS
+[+  13.086s] [ad2] S5 T0B_S12 after: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  13.088s] [tim] STEP DONE bus=NONE v=1
+[+  13.101s] [tim] bench completed without abort -> PASS
+[+  13.105s] [tim] CM4 finished: timeout 0, aborts 0 -> PASS
+[+  13.109s] [tim] TICK 10631 (HAL_GetTick at the verdict)
+[+  13.113s] [tim] Status_Task stack high-water mark 314 words
+[+  13.116s] [tim] FW VERDICT=PASS failures=0
+[+  13.121s] [sys] cpu2 build rev=e30622b id=0f7a7886a34509b7
+[+  13.124s] [ipc] m7=7 m4=1  (CPU2 alive)
+[+  13.450s] [ad2] closing in S2: OE=0x0000 Digital Out enable=0x0000 Zet=0xFFFF
+[+  13.482s] [host] TREF cross-check: HAL_GetTick advanced 10587 ms in 10.447 s of host time (line arrival): board tick against host clock +13368 ppm, +-191 ppm for 2 ms of arrival jitter
+[+  13.482s] [ad2] TREF MCO1 = HSE/8 on PA8: e_ppm=+13941.7 (|e| <= 20000), resolution 253.5 ppm; cross-check +13368 +-191 ppm, |e - cross-check| = 574 (<= 3 x 191 = 574) -> PASS
+[+  13.482s] [host] T0B(a) host S3 guard: PASS
+[+  13.483s] [host] T0B(e) host S11 guard: PASS
+[+  13.483s] [host] CHECK T0A loose lines: PASS
+[+  13.483s] [host] CHECK T0A walking 1: PASS
+[+  13.483s] [host] CHECK T0A control: PASS
+[+  13.483s] [host] CHECK TREF control: PASS
+[+  13.483s] [host] CHECK T0B(c) S5 negative control: PASS
+[+  13.483s] [host] CHECK T0B(d) firmware timeout: PASS
+[+  13.483s] [host] CHECK T0B(f) Idle=Zet: Digital Out ran on DIO1 only: PASS
+[+  13.483s] [host] CHECK T0B(f) release with Idle=Zet: PASS
+[+  13.483s] [host] CHECK T0B(f) control Idle=Low: Digital Out ran on DIO1 only: PASS
+[+  13.483s] [host] CHECK T0B(f) control Idle=Low: PASS
+[+  13.483s] [host] CHECK T0B(f) S2 after the control: PASS
+[+  13.483s] [host] CHECK T0B(f) bus released after S2: PASS
+[+  13.483s] [host] CHECK T0B(g) S5 with PE9/PE11 in AF1: PASS
+[+  13.483s] [host] CHECK TREF MCO1 = HSE/8 on PA8: PASS
+[+  13.483s] [host] 14/14 host checks passed, FW VERDICT=PASS, abort=None
+[+  13.483s] HOST VERDICT=PASS
