@@ -126,7 +126,7 @@ static const Claim_t k_claims[TST_M4_CLAIM_CASES] = {
     { GPIOE, 1U << 3, A, 4U },                     /*  5 PE3 TIM15_BKIN: AD2-only line             */
     { GPIOE, 1U << 2, O, 0U },                     /*  6 PE2 HOST_REQ                              */
     { GPIOE, 1U << 7, O, 0U },                     /*  7 PE7 MCU_ACK                               */
-    { GPIOE, 1U << 0, O, 0U },                     /*  8 PE0 LD2                                   */
+    { GPIOE, 1U << 0, O, 0U },                     /*  8 PE0: never touched (plan R4)              */
     { GPIOE, 1U << 1, O, 0U },                     /*  9 PE1 LD2                                   */
     { GPIOE, 1U << 9, A, 1U },                     /* 10 PE9: CPU1's bus                           */
     { GPIOA, 1U << 8, A, 0U },                     /* 11 PA8 MCO1: CPU1's line                     */

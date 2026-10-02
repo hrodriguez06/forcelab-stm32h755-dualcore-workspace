@@ -67,7 +67,7 @@ static bool rule_gpioe(uint32_t core, const TstStep_t *s, uint32_t pin, uint32_t
 
     if ((pin <= 1U) || (pin == PE_REQ) || (pin == PE_DIO8) || (pin == PE_DIO10) || (pin == PE_ACK))
     {
-        return false;   /* LD2, the AD2-only lines (PE4 in AF4 = TIM15_CH1N), MCU_ACK */
+        return false;   /* PE0 (R4), PE1 (LD2), the AD2-only lines (PE4 in AF4 = TIM15_CH1N), MCU_ACK */
     }
     if ((pin == PE_T15C1) || (pin == PE_T15C2))
     {

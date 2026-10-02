@@ -123,10 +123,11 @@ static void mco_restore(void)
 
 /* Every wired pin in input without pull (PE2 with pull-down, so HOST_REQ reads
    0 while the AD2 does not drive it), the AF fields of the wired pins at 0,
-   MCU_ACK driven low; PE5/PE6 too, although CPU2 configures them. PE0 and PE1
-   (LD2) are never touched. Raw writes: the safe state must not depend on code
-   under test. The cross-core lock is asked for, and the writes happen even if
-   it is refused, with this core's interrupts masked: safety first. */
+   MCU_ACK driven low; PE5/PE6 too, although CPU2 configures them. PE0 (plan
+   R4) and PE1 (LD2, board_def.h) are never touched. Raw writes: the safe
+   state must not depend on code under test. The cross-core lock is asked
+   for, and the writes happen even if it is refused, with this core's
+   interrupts masked: safety first. */
 static void bench_safe(void)
 {
     GpioBm_Section_t s;
@@ -644,7 +645,7 @@ typedef struct { GPIO_TypeDef *port; uint16_t mask; uint8_t mode; uint8_t af; } 
 #define A  GPIO_BM_MODE_AF
 /* T0b(b), CPU1, step T0B (bus = NONE): every case must be refused. */
 static const Claim_t k_t0b_refuse[] = {
-    { GPIOE, 1U << 0, O, 0U },          { GPIOE, 1U << 1, O, 0U },          /* LD2              */
+    { GPIOE, 1U << 0, O, 0U },          { GPIOE, 1U << 1, O, 0U },          /* PE0 (R4); LD2    */
     { GPIOE, 1U << PE_REQ, O, 0U },     { GPIOE, 1U << PE_DIO8, A, 4U },    /* HOST_REQ, BKIN   */
     { GPIOE, 1U << PE_DIO10, A, 4U },                                       /* TIM15_CH1N       */
     { GPIOE, 1U << PE_ACK, O, 0U },     { GPIOE, 1U << PE_ACK, A, 1U },     /* MCU_ACK, ETR     */
