@@ -17,7 +17,7 @@ no lo sustituye.
 
 | Carpeta | Estado | Notas |
 | :--- | :--- | :--- |
-| `00_gpio` | Hecho (F1), sin auditar | BM, LL, HAL. Validado en `prj_01` con el AD2 (`00_gpio/README.md` §9). F0 auditado (`51a29b7`). Pendiente: F1b en `prj_04` y F2 (EXTI, celda de compensación), `00_gpio/README.md` §13. |
+| `00_gpio` | Hecho (F1) y auditado | BM, LL, HAL. Validado en `prj_01` con el AD2 (`00_gpio/README.md` §9). Auditoría cerrada con la re-auditoría 5 en `75d106a` (veredicto de merge, §12.7); sin auditoría independiente en la placa. Pendiente: F1b en `prj_04` (G1 sigue abierto allí) y F2 (EXTI, celda de compensación), `00_gpio/README.md` §13. |
 | `01_led` | Hecho | `led_bm`. Sin README. |
 | `02_dma` | Hecho y auditado | BM, LL, HAL. BDMA solo validado en M2M. |
 | `03_tim` | **Vacío** | |
