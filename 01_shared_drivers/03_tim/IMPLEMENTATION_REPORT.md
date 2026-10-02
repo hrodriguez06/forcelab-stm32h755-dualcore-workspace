@@ -159,3 +159,45 @@ En F0 ninguna de las seis tiene código detrás. Las anoto con la opción por de
 ## Tabla de capacidades
 
 Pendiente de F1 (instrucciones §6: F1 empieza por ella, con la cita del RM en cada fila). En F0 no he comparado ninguna celda con el RM.
+
+## F0: cambio después de la entrega (S11 d)
+
+Estado: entregada para auditoría (`e30622b` código, evidencia en `6e2494a`). Hay una pregunta abierta sobre la cota de TREF, más abajo. Las secciones anteriores no se tocan; esta sección sustituye a la fila "S11 (d)" de §5.5 y al primer punto de §5.8.
+
+### Commits
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `e30622b` | feat(tools): apply S11 (d) to the Digital Out channels only | — |
+| `6e2494a` | docs(tim): add the F0 capture at e30622b (S11 d on the Digital Out lines) | — |
+| (este) | docs(tim): record the S11 (d) change and the TREF bound question | — |
+
+### Desviación
+
+| Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- |
+| S11 (d): mientras corre Digital Out, el OE de Digital-IO es 0 "en todos los bits" | `ad2_set_dout` rechaza el arranque solo si el OE de Digital-IO lee 1 en un bit de su máscara (DIO1/DIO3). HOST_REQ puede seguir habilitado | T8 (F1) necesita el handshake mientras el AD2 genera. SDK §8: Digital Out se aplica por línea, donde Enable y Output de Digital-IO son 0 | Hector, 2026-10-01: "Aplica S11 (d) solo a los canales de Digital Out" |
+
+### Build
+
+- Desde `456a7a7` solo cambiaron `tools/ad2.py` y `tools/tim_hw_check.py` (`git diff --stat 456a7a7 e30622b`).
+- Por eso `tim_f0_build_all_456a7a7.txt`, `tim_f0_werror_456a7a7.txt` y `tim_f0_map_sizes_456a7a7.txt` siguen describiendo el código C y las imágenes de producción.
+- `selftest-tim` en `e30622b`, desde un directorio vacío: salida 0 y 0 avisos (`docs/tim_f0_selftest_build_e30622b.txt`).
+
+### Pruebas que cambian
+
+Las cifras salen de `docs/tim_f0_bench_e30622b.txt`, que da 14/14, `FW VERDICT=PASS` y `HOST VERDICT=PASS`. Las demás pruebas dan los mismos valores que en `456a7a7`, salvo TREF.
+
+| ID | Resultado | Valor medido | Control negativo: valor |
+| --- | --- | --- | --- |
+| T0b(e) | PASS | 14 rechazos: los 12 de antes, sustituyendo el caso de OE = HOST_REQ por OE en DIO1 (con HOST_REQ), OE en DIO3 y DIO1\|DIO3 con OE en DIO3. En todos, S2 alcanzado y ninguna llamada de habilitación | 6 controles pasan; dos de ellos con OE = HOST_REQ (`0x1000`) |
+| T0b(f) | PASS | DIO1 a 1,0000 MHz, 500,0 ns en alto; OE leído mientras corre: `0x1000` (solo HOST_REQ, 0 en DIO1). Con Idle = Zet, S5 da True arriba y abajo | Idle = Low: `s5_released()` arriba da False con DIO `0xFD` |
+| TREF | PASS, en el límite | e = +13 941,7 ppm, resolución 253,5 ppm; cruzada +13 368 ± 191 ppm. \|e − cruzada\| = 574 frente a una cota 3 × 191 = 574 (los dos valores salen redondeados en la captura) | PA8 en AF1: 0 flancos |
+
+### Problema abierto: la cota de TREF no cuenta la cuantización del AD2
+
+En las cuatro ejecuciones el e de TREF salta en pasos de una muestra del LA: 40 periodos medidos sobre 3948, 3946, 3948 y 3945 muestras, que dan +13 171,2, +13 684,7, +13 171,2 y +13 941,7 ppm. Cada muestra vale unos 254 ppm.
+
+La cota que se decidió, 3·u, solo cuenta la incertidumbre de la verificación cruzada (u ≈ 191 ppm). No cuenta la resolución de TREF. En `e30622b` la diferencia quedó justo en la cota. Por azar, la misma imagen puede fallar en otra ejecución, también en la del auditor (A18).
+
+Propuesta, que no he aplicado porque es un criterio: \|e − cruzada\| ≤ 3·√(u² + r²), donde r es la resolución de TREF de esa misma captura (≈ 253 ppm). Con los datos de esta ejecución daría ≈ 951. Queda pendiente de que lo decida el responsable.
