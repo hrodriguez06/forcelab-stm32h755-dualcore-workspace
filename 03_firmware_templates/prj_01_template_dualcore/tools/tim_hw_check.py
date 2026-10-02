@@ -12,7 +12,9 @@ wiring and rules S1-S10: 01_shared_drivers/00_gpio/README.md section 8.
     py tools/tim_hw_check.py --allow-dirty    # development only (capture tim_dev_...)
 
 F0 tests: T0a (loose lines, walking 1, control), TREF (MCO1 = HSE/8 on PA8,
-measured by the AD2), T0b(a) and (e) on mock DLLs before the AD2 is opened,
+measured by the AD2, |e| <= 2 % and within 3 uncertainties of HAL_GetTick
+against the host clock; control PA8 in AF1), T0b(a) and (e) on mock DLLs
+before the AD2 is opened,
 then T0b(b)(c)(d)(f)(g) on the bench.
 
 Image identity (00_gpio README 9.4, R3-a/R3-b/R4-a), checked before any output
@@ -102,7 +104,13 @@ HS_TIMEOUT_S = 10.0
 LA_RATE_HZ = 100e6
 
 TREF_EXPECTED_HZ = 1e6          # MCO1 = HSE_VALUE (8 MHz) / 8
-TREF_MAX_PPM = 500.0            # plan, TREF
+# TREF criterion, owner's decision of 2026-10-01 (the plan's 500 ppm cannot hold on
+# this board: its HSE, the ST-LINK MCO, measured +13 171 and +13 685 ppm in
+# tim_f0_bench_d01061e.txt and tim_f0_bench_38d15c1.txt): |e_ppm| <= 2 %, and the
+# AD2 estimate within 3 uncertainties of the HAL_GetTick-against-host cross-check.
+TREF_MAX_PPM = 20000.0
+TREF_XCHK_K = 3.0
+TREF_XCHK_JITTER_S = 2e-3       # arrival jitter assumed per console line (USB VCP)
 
 DOUT_DIVIDER, DOUT_LOW, DOUT_HIGH = 1, 50, 50          # 100 MHz / 1 / (50 + 50) = 1 MHz
 DOUT_TOL = 0.001                # +-0.1 % (plan, common tolerances; AD2 against itself here)
@@ -420,14 +428,31 @@ class Session:
         self.sync(pre=lambda: measure("off"))
         (m, rate, n), (c, _, _) = box["on"], box["off"]
         e_ppm = (m["freq_hz"] - TREF_EXPECTED_HZ) / TREF_EXPECTED_HZ * 1e6 if m["freq_hz"] else float("nan")
-        self.check("TREF MCO1 = HSE/8 on PA8", m["periods"] > 0 and abs(e_ppm) <= TREF_MAX_PPM,
-                   f"DIO14 {m['freq_hz']:.3f} Hz over {m['periods']} periods ({m['span_samples']} samples of "
-                   f"{n} at {rate / 1e6:.0f} MS/s), e_ppm={e_ppm:+.1f} (|e| <= {TREF_MAX_PPM:.0f}), resolution "
-                   f"{m['resolution_ppm']:.1f} ppm, time high {m['high_s'] * 1e9:.1f} ns")
+        # The check itself is made at the end of the session (tref_check), when
+        # the HAL_GetTick cross-check it is compared with exists.
+        self.log(f"[ad2] TREF measured: DIO14 {m['freq_hz']:.3f} Hz over {m['periods']} periods "
+                 f"({m['span_samples']} samples of {n} at {rate / 1e6:.0f} MS/s), e_ppm={e_ppm:+.1f}, resolution "
+                 f"{m['resolution_ppm']:.1f} ppm, time high {m['high_s'] * 1e9:.1f} ns")
         self.check("TREF control", c["rises"] == 0 and c["falls"] == 0,
                    f"PA8 in AF1 (TIM1_CH1, TIM1 unclocked), MCO1 still HSE/8 in the RCC: {c['rises']} rising, "
                    f"{c['falls']} falling edges on DIO14 (0 expected)")
-        return {"e_ppm": e_ppm, "res_ppm": m["resolution_ppm"]}
+        return {"e_ppm": e_ppm, "res_ppm": m["resolution_ppm"], "periods": m["periods"]}
+
+    def tref_check(self, tref: dict, xchk: Optional[tuple[float, float]]) -> None:
+        """TREF criterion (owner's decision, 2026-10-01): |e_ppm| <= 2 % and the
+        TREF e_ppm within 3 uncertainties of the HAL_GetTick cross-check, both
+        estimates of the same board clock against two independent references
+        (the AD2 crystal, the host clock)."""
+        e = tref["e_ppm"]
+        if xchk is None:
+            self.check("TREF MCO1 = HSE/8 on PA8", False, f"e_ppm={e:+.1f}; no HAL_GetTick cross-check (aborted)")
+            return
+        x, u = xchk
+        ok = (tref["periods"] > 0 and abs(e) <= TREF_MAX_PPM and abs(e - x) <= TREF_XCHK_K * u)
+        self.check("TREF MCO1 = HSE/8 on PA8", ok,
+                   f"e_ppm={e:+.1f} (|e| <= {TREF_MAX_PPM:.0f}), resolution {tref['res_ppm']:.1f} ppm; cross-check "
+                   f"{x:+.0f} +-{u:.0f} ppm, |e - cross-check| = {abs(e - x):.0f} (<= {TREF_XCHK_K:.0f} x {u:.0f} "
+                   f"= {TREF_XCHK_K * u:.0f})")
 
     def t0b(self) -> None:
         self.step("T0B")
@@ -653,15 +678,17 @@ def main() -> int:
             en, zet = ad2.dout_state()
             stamp(f"[ad2] closing in S2: OE=0x{ad2.get_oe():04X} Digital Out enable=0x{en:04X} Zet=0x{zet:04X}")
 
+    xchk: Optional[tuple[float, float]] = None
     if "banner" in ticks and "verdict" in ticks:
         (k0, h0), (k1, h1) = ticks["banner"], ticks["verdict"]
         span = h1 - h0
-        ppm = ((k1 - k0) / 1000.0 / span - 1.0) * 1e6 if span > 0 else float("nan")
-        stamp(f"[host] info (not a check): HAL_GetTick advanced {k1 - k0} ms in {span:.3f} s of host time "
-              f"(line arrival): board tick against host clock {ppm:+.0f} ppm, +-{2e-3 / span * 1e6:.0f} ppm "
-              f"for 2 ms of arrival jitter")
-    if tref:
-        stamp(f"[host] TREF e_ppm={tref['e_ppm']:+.1f} resolution={tref['res_ppm']:.1f} ppm")
+        if span > 0:
+            xchk = (((k1 - k0) / 1000.0 / span - 1.0) * 1e6, TREF_XCHK_JITTER_S / span * 1e6)
+            stamp(f"[host] TREF cross-check: HAL_GetTick advanced {k1 - k0} ms in {span:.3f} s of host time "
+                  f"(line arrival): board tick against host clock {xchk[0]:+.0f} ppm, +-{xchk[1]:.0f} ppm "
+                  f"for {TREF_XCHK_JITTER_S * 1e3:.0f} ms of arrival jitter")
+    if tref and session is not None:
+        session.tref_check(tref, xchk)
     checks = session.checks if session else []
     stamp(f"[host] T0B(a) host S3 guard: {'PASS' if guard_a else 'FAIL'}")
     stamp(f"[host] T0B(e) host S11 guard: {'PASS' if guard_e else 'FAIL'}")
