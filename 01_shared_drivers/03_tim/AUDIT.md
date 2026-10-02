@@ -442,7 +442,7 @@ Lista de comprobación física confirmada en el chat por el responsable del cat�
 
 - **Trazabilidad (A21):** checkout `3174fef`, `tree clean`, `Rev` `3174fef` e id `7c59ddadb0aa1686` iguales en CM7, CM4 y el host, protocolo v3.
 - **AD2 (A27):** se abre en S2 y se cierra en S2 (`OE=0x0000 enable=0x0000 Zet=0xFFFF`). El `DIO=0x2001` al abrir es N2 de F0 (lectura antes del reset, OE = 0).
-- **T8:** d = 2,06–2,31 en las ejecuciones con el código final, y aquí dentro de 0 ≤ d ≤ 4. El peor residuo frente a su cota (periodo o alto) es 0,48 a 1 MHz, 0,60 a 100 kHz, 0,89 a 10 kHz y 0,66 a 1 kHz.
+- **T8:** d = 1,94 ticks, dentro de 0 ≤ d ≤ 4. En las cuatro ejecuciones con el código final, d va de 1,94 a 2,31. El peor residuo frente a su cota (periodo o alto) es 0,48 a 1 MHz, 0,60 a 100 kHz, 0,89 a 10 kHz y 0,66 a 1 kHz.
 - **T15:** 0 pérdidas con el driver. El `DIER` final es `0x0008`: CC3IE queda a 1 porque la ISR de TIM7 hizo un número impar de cambios (42 451); en la entrega, 42 446, `0x0000`. El control da 8892 pérdidas.
 - **CM4:** `timeout 0, aborts 0`.
 - **TREF (R4-1):** ē = +13 003,1, x = +12 617,3 ± 12,0 y \|ē − x\| = 385,8, dentro de la cota.
