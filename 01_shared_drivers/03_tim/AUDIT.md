@@ -76,3 +76,33 @@ m1–m4 no bloquean el paso de F0, pero se corrigen antes de entregar F1.
 - **N3 confirmada.** El responsable del catálogo confirmó las tres decisiones: el control de TREF con PA8 en AF1, la cota de TREF 3·√(u² + r²) y S11(d) solo en los canales de Digital Out. Están en la revisión 2 del plan como R2-1, R2-2 y R2-3, junto con E1–E4 (R2-5 a R2-9), m1 (R2-4) y m2 (R2-10).
 - **Efecto sobre la entrega.** El código de `d69508e` ya cumple R2-1, R2-2, R2-3, R2-5, R2-6, R2-7 y R2-8. Faltan R2-4 (m1) y R2-10 (m2), y quedan abiertos m3 y m4. Ninguno bloquea F0; los cuatro se corrigen antes de entregar F1.
 - **Para que F0 pase** solo queda A18/A27: la ejecución del banco por el auditor.
+
+## F0, auditoría 2: m3 y m4 (2026-10-01, en `96d3d8d`)
+
+Commits auditados: `34de37b` (m3) y `e9a09c9` (m4). Respuesta del implementador: `IMPLEMENTATION_REPORT.md`, filas m3 y m4. m1 y m2 quedan para otra revisión.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `git show 34de37b` y `git show e9a09c9`, diff completo | Ver la tabla |
+| `grep` de `LD2`, `PE0` y `PE1` en los cinco archivos del selftest y en `tim_hw_check.py` | Solo quedan comentarios correctos: `PE1 LD2` y `PE0 (R4)` |
+| `Common/Inc/board_def.h:56` | `BOARD_LED_YELLOW_PORT GPIOE /* LD2 - PE1 */` |
+| `selftest-tim` desde un directorio vacío, en `96d3d8d` | Configura y compila con 0 líneas `warning:` |
+| `CM4/CMakeLists.txt:112-116` y `CM7/CMakeLists.txt:120-124` | Los dos `tim_selftest.c` solo se compilan con `TIM_DRIVER_SELFTEST`: la producción no cambia |
+| `docs/tim_f0_bench_8c4ab93.txt`, líneas 94–97 | `regs changed 0x000 -> PASS` en los dos casos de CM4 y `regs untouched 1` en CM7 |
+
+### Veredicto
+
+| ID | Veredicto | Evidencia |
+| --- | --- | --- |
+| m3 | **Cerrado** | `34de37b` solo cambia comentarios. Corrige los dos que señalé (`k_claims[8]` de CM4 y `rule_gpioe`) y otros dos iguales en CM7 (comentario de `bench_safe` y la primera fila de `k_t0b_refuse`). "PE0 (R4)" remite bien al plan: PE0 está en la lista "Nunca se tocan" (línea 485), que A22 asocia a R4 |
+| m4 | **Cerrado** | El `port_snap()` de CM4 lee en crudo 12 registros: `MODER`, `OTYPER`, `OSPEEDR`, `PUPDR`, `AFR[0]` y `AFR[1]` de GPIOA y de GPIOE, a través de `__IO` (lecturas volátiles). `port_snap_diff()` compara registro a registro, y `regs_changed` pasa a ser una máscara de 12 bits, impresa con `0x%03lX`. El 0 esperado es correcto también para el caso aceptado (case 0): `bench_claim` solo evalúa y no escribe. CM7 añade `OSPEEDR` a su foto (`r[18]`: 3 puertos × 6 registros) y conserva el `memcmp`. El comentario de `tim_selftest.h` coincide con el código. Mientras CM4 ejecuta los claims, CPU1 espera en `cm4_send`, así que ninguna escritura concurrente puede dar un falso "sin cambios"; una escritura de verdad solo podría dar un falso fallo |
+
+### Observación (no bloquea)
+
+- **O1.** Ninguna de las dos fotos tiene un control de sensibilidad, es decir, un caso que demuestre que el oráculo detecta un cambio. Las dos solo se ejercitan con resultado esperado "sin cambios". Era igual con el hash, así que no es una regresión de m4. Propuesta para F1: en `run_safe()` de CM4, tomar una foto antes y otra después de `pin_cfg(PE5, AF4)` y exigir que la máscara marque exactamente los registros de GPIOE que cambian (`MODER` y `AFR[0]`).
+
+### Pendiente
+
+La captura con `0x000` es de la entrega; en placa lo verifico en mi ejecución del banco (A18/A27). Siguen abiertos m1 y m2.
