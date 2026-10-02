@@ -106,3 +106,51 @@ Commits auditados: `34de37b` (m3) y `e9a09c9` (m4). Respuesta del implementador:
 ### Pendiente
 
 La captura con `0x000` es de la entrega; en placa lo verifico en mi ejecución del banco (A18/A27). Siguen abiertos m1 y m2.
+
+## F0, auditoría 3: m1 y m2 (2026-10-01, en `157fa16`)
+
+Commits auditados: `6a6b5f1` (m1) y `8c4ab93` (m2). Respuesta del implementador: `IMPLEMENTATION_REPORT.md`, filas m1 y m2 y la sección "Problema abierto: TREF varía más que su resolución r".
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `git show 6a6b5f1` y `git show 8c4ab93`, diff completo | Ver la tabla |
+| `t0b_dout_guard_selftest()` importado de `tim_hw_check.py` y ejecutado en mi máquina, sobre el mock | PASS: 23 líneas, 16 rechazos ("refused, S2 reached") y 7 controles ("passed to the DLL") |
+| Ajuste por mínimos cuadrados rehecho por mi cuenta con los 32 puntos impresos en `docs/tim_f0_bench_8c4ab93.txt` (líneas 158–159) | x = +13 571,8 ppm, u = 2,18 ppm y dispersión de 0,068 ms. La captura dice +13 571,2, 2,2 y 0,067: la diferencia se explica porque la captura imprime las marcas redondeadas a 0,1 ms. Con un segundo estimador (diferencia de las medias de las dos ráfagas) sale +13 572,2 |
+| Pendiente de cada ráfaga por separado | banner +13 467 ppm, veredicto +13 256 ppm (ver O2) |
+| `e` a partir del tramo impreso (3944 muestras para 40 periodos) | 4000/3944 − 1 = +14 198,8 ppm, igual que en la captura. Según x, el tramo esperado es 4000/(1 + x) = 3946,44 muestras |
+| `time.get_clock_info('monotonic')` con el `py` del banco (3.14.6) | `QueryPerformanceCounter()`, resolución de 0,1 µs. Las marcas del host no están cuantizadas a 15,6 ms |
+| `grep` de `IWDG`/`WWDG` en `prj_01` | Sin watchdog: la espera activa de `tick_burst()` (unos 0,8 s, dos veces) no tiene efecto fuera del selftest |
+
+### Veredicto
+
+| ID | Veredicto | Evidencia |
+| --- | --- | --- |
+| m1 | **Cerrado** | La guarda rechaza `Idle = Low` si `step_name != "T0B_DOUT"`. Esa comprobación va después de la de idle y antes de la lectura del OE y de cualquier llamada que habilite; el rechazo pasa por S2, igual que los demás. `step_name` solo lo asigna `Session.step()`, después de validar con S7 el nombre que anuncia el firmware contra la tabla `STEPS` del host. El valor por defecto `None` hace que cualquier llamada que no nombre el paso tenga Low rechazado. Es el único llamador fuera del mock (`grep`). El mock cubre Low en otro paso, Low sin paso y, como control, Zet en `T0B_S12`. Captura `8c4ab93`, líneas 19–41 |
+| m2 | **Cerrado** | `TREF_XCHK_JITTER_S` desaparece. La cuenta es correcta: con t = a + b·k, la tabla da x = 1/b − 1 y u = se(b)/b². La dispersión se calcula con n − 2 grados de libertad. La captura imprime los 32 puntos, la dispersión de cada ráfaga y la global, x y u. El firmware imprime el valor que devuelve `HAL_GetTick()` en el momento, no el objetivo, así que un retraso del `LOG` no sesga k. La cota R2-2 no cambia |
+
+### Observación (no bloquea)
+
+- **O2.** u es solo el error estadístico de la pendiente. Supone que el retardo de llegada es ruido independiente de una línea a otra. Una diferencia de latencia constante entre las dos ráfagas no aparece en los residuos: 1 ms de diferencia equivale a unos 80 ppm en 12 s. Además, las pendientes de cada ráfaga por separado (+13 467 y +13 256) se separan de x en unas 1 y 3 desviaciones típicas de su propia pendiente, que es de unos 100 ppm. Hoy no tiene consecuencias, porque la cota queda dominada por r. Si el plan cambia la cota (ver D5), u tiene que incluir este término o justificar que se puede despreciar.
+
+### Problema abierto de TREF: decisión D5 del responsable (bloquea F0)
+
+Confirmo la cuenta del implementador. En `8c4ab93`, el tramo de 40 periodos mide 3944 muestras frente a las 3946,44 que predice x: −2,44 muestras. La cuantización de los dos flancos extremos solo puede explicar menos de ±1 muestra. En tres de las seis capturas la diferencia es mayor (+1,89, −2,23 y −2,44). Además, x pasa de +12 847 (`d69508e`) a +13 571 ppm (`8c4ab93`) entre una ejecución y otra.
+
+Mi lectura es que el reloj de la placa tiene variación propia de cientos de ppm a corto plazo (40 µs frente a 12 s) y de una ejecución a otra. Con el u medido, la cota se reduce a ≈ 3r ≈ 760 ppm, y la entrega pasó con 627,5. Mi ejecución del banco (A18) puede fallar por el reloj y no por el firmware. **Hay que decidir el criterio antes de que yo ejecute el banco.**
+
+Recomendación:
+
+1. **TREF en F0: la opción (a) del implementador, con las capturas repartidas en el tiempo.** Se toman N capturas de 40 periodos (por ejemplo, 8 junto a la ráfaga `TICK` del banner y 8 junto a la del veredicto). Así e y x cubren el mismo intervalo. ē es la media y s su dispersión medida, que ya incluye r. Criterio: |ē| ≤ 20 000 ppm y |ē − x| ≤ 3·√(u² + s²/N + u_lat²), donde u_lat es el término de O2. Cambia la tabla de pasos (TREF al final), así que `TIM_BENCH_VERSION` pasa a 2.
+2. **De F1 en adelante: medidas de frecuencia relativas a MCO1 en la misma captura.** MCO1 (PA8, DIO14) es HSE/8 y sale de la misma fuente que los temporizadores. Si cada medida del LA sobre un canal de TIM se divide por la frecuencia de DIO14 medida en la misma adquisición, la variación del reloj se cancela. Esto sustituye "corregido con TREF" de R2-9: un único TREF al principio arrastra hasta unos 600 ppm de error. Va en la revisión 3 del plan.
+
+### N1, actualizada
+
+Además del +1,3 % de desviación media, el reloj de la placa varía de una ejecución a otra unos ±400 ppm, y en una ventana de 40 µs se aleja hasta unos 600 ppm de su media de 12 s. Eso es compatible con un HSE que no sale de un cristal, sino de un oscilador RC o de una cadena de PLL sin referencia de cristal en el ST-LINK. Es una hipótesis que no he verificado. Refuerza la recomendación de medir el MCO del ST-LINK con un instrumento independiente. Si se confirma, cambiar a otra fuente de HSE es una decisión de la placa y del catálogo, fuera de `03_tim`.
+
+### Pendiente para que F0 pase
+
+1. Decisión D5 del responsable y revisión 3 del plan.
+2. El implementador aplica D5 y entrega una captura nueva.
+3. A18/A27: mi ejecución del banco sobre esa entrega, con la lista de comprobación física confirmada.
