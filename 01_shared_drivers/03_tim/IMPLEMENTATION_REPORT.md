@@ -539,3 +539,32 @@ Una sola ejecución, como pide la revisión 4. `Rev` 7ac9e44 e id `e890fb1c2f192
 | \|ē − x\| frente a la cota | 128,2 ≤ 3·√(u² + s_ef²/16 + σ_ser²) = 615,7 → PASS |
 
 Con el criterio de R3-1, esta ejecución también habría pasado: la cota era 3·√(u² + s_ef²/16) = 435,7. No empiezo F1 hasta que `AUDIT.md` diga que F0 pasa.
+
+## F0: serie de 10 ejecuciones con la misma imagen (revisión 4)
+
+El responsable pidió el 2026-10-02 "repetir la ejecución del banco 10 veces para ver si TREF se repite". Esta serie no sustituye a la ejecución entregada (`tim_f0_bench_7ac9e44.txt`): se hizo a petición expresa del responsable y no cambia nada del código.
+
+Una sola imagen, compilada en `2a78fe5` y flasheada una vez, con 10 ejecuciones seguidas de `tim_hw_check.py`; cada una resetea la placa por SWD. Entre `7ac9e44` y `2a78fe5` solo cambió documentación, y la imagen se recompiló para que su `Rev` sea el de `HEAD`. El árbol estuvo limpio en todas. `Rev` 2a78fe5 e id `844b5a8f2376c415` coinciden en el host, CM7 y CM4. Capturas: `docs/tim_f0_bench_2a78fe5.txt` y de `_2` a `_10`.
+
+| Ejecución | ē | s_ef | x ± u | ē − x | Cota R4-1 | \|ē − x\| / cota | Resultado |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `2a78fe5` | +13 153,9 | 505,3 | +13 033,2 ± 15,5 | +120,7 | 578,8 | 0,21 | PASS |
+| `2a78fe5_2` | +13 549,8 | 330,9 | +13 374,9 ± 11,1 | +174,9 | 501,9 | 0,35 | PASS |
+| `2a78fe5_3` | +13 624,3 | 483,0 | +13 387,1 ± 13,7 | +237,2 | 567,6 | 0,42 | PASS |
+| `2a78fe5_4` | +13 500,1 | 740,9 | +13 651,0 ± 25,7 | −150,9 | 709,9 | 0,21 | PASS |
+| `2a78fe5_5` | +13 486,5 | 533,2 | +13 556,2 ± 18,7 | −69,7 | 593,5 | 0,12 | PASS |
+| `2a78fe5_6` | +13 597,2 | 434,1 | +13 233,7 ± 16,4 | +363,5 | 545,6 | 0,67 | PASS |
+| `2a78fe5_7` | +13 789,1 | 451,8 | +13 864,7 ± 12,5 | −75,6 | 552,7 | 0,14 | PASS |
+| `2a78fe5_8` | +13 559,0 | 603,8 | +13 587,9 ± 13,9 | −28,9 | 629,3 | 0,05 | PASS |
+| `2a78fe5_9` | +12 964,9 | 386,3 | +12 976,5 ± 12,9 | −11,6 | 524,1 | 0,02 | PASS |
+| `2a78fe5_10` | +12 876,5 | 446,4 | +12 797,8 ± 11,1 | +78,7 | 549,9 | 0,14 | PASS |
+
+Todos los valores en ppm. **Pasan las 10:** 16/16, `FW VERDICT=PASS` y `HOST VERDICT=PASS` en todas.
+
+- **ē − x:** media +63,8 ppm y desviación típica 161,0 ppm (n − 1). En la revisión 3 fueron +36,1 y 184,5.
+- **z = (ē − x)/(cota/3):** rms 0,89 y máximo de \|z\| 2,00 (`2a78fe5_6`). Con una cota de 3σ bien calibrada, el rms debería estar cerca de 1.
+- **σ_ser medida solo con estas 10**, con la misma fórmula de R4-1: 106,3 ppm, por debajo de los 145 ppm de la constante. No la cambio: la fija el plan.
+- **Con el criterio de R3-1**, `2a78fe5_6` habría fallado (363,5 > 329,3), y el rms de z habría sido 1,48.
+- x va de +12 798 a +13 865 ppm entre ejecuciones, y ē de +12 877 a +13 789: el reloj de la placa sigue derivando en cientos de ppm.
+
+Estado de F0: **entregada para auditoría**. Falta la ejecución del banco por el auditor (A18/A27). F1 no se ha empezado.
