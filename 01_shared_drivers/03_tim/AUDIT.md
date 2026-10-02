@@ -399,3 +399,29 @@ No repetí la ejecución: el resultado de A18 es esta captura. Con D8 aprobada, 
 
 - **D8 aprobada** por el responsable del catálogo. Está en la revisión 6 del plan como R6-1: tolerancia de periodo de ±(2 ticks + 0,1 %) en los puntos de T8 en PWM input.
 - **Para que F1 pase:** el implementador aplica R6-1 en un commit y entrega una captura. Después repito A18/A27 sobre esa entrega, con la lista de comprobación física confirmada.
+
+## F1, parte 3: R6-1 (2026-10-02, en `9b5bf9f`)
+
+Rango auditado: `294e049..9b5bf9f`. Código: `b65fd03`, que cambia una línea de `tools/tim_hw_check.py`. El resto es evidencia (captura, builds, `.map` y compilación aislada) y el informe.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `git show b65fd03` | En `Session.t8()`, bucle de `T8_POINTS`: `ptol = 1 + 0.001 * per` pasa a `2 + 0.001 * per`, con un comentario que cita R6-1. Las capturas directas (`tol8`, filtro y T13(b)) siguen en `1 + 0.001 *`. La corrección d y su cota no cambian |
+| `git diff --name-only 43d083a 9b5bf9f`, sin `.md` ni `docs/` | Solo `tim_hw_check.py`. El firmware y la producción son los que auditó la parte 1 (8/8, producción igual a `2481396`, `selftest-tim` con 0 avisos) |
+| `docs/tim_f1_bench_b65fd03.txt` | Checkout `b65fd03`, `tree clean`, `Rev` e id `9a2a6f192c9ecbd8` iguales en CM7, CM4 y el host. AD2 abierto y cerrado en S2. **109/109, 0 FAIL, `FW`/`HOST VERDICT=PASS`.** El punto de 1 MHz y 25 % imprime `+-2.2` |
+| `docs/tim_f1_isolated_build_b65fd03.txt` | Las tres variantes coinciden con la mía de la parte 1. La A (`-I`, `-Wno-sign-conversion`, el comando de `1f0fedc`) da 0 diagnósticos. La B (`-I`, juego completo) da 16 diagnósticos de CMSIS en CM7. La C (`-isystem`, juego completo) da 0 en los dos núcleos. La nota de §5.2 queda corregida, sin reescribir la historia |
+
+### Veredicto
+
+| ID | Veredicto |
+| --- | --- |
+| R6-1 | **Aplicado**, exactamente en el alcance aprobado |
+| Nota de la compilación aislada (parte 1) | **Corregida** |
+
+El informe reconoce que la captura entregada no reproduce el caso que R6-1 cubre: a 1 MHz, todas sus capturas en PWM input son 200 o 201. Es correcto: R6-1 se apoya en la distribución de las 432 capturas de la parte 2, no en esta ejecución.
+
+### Para que F1 pase
+
+Solo queda A18/A27: mi ejecución del banco sobre `selftest-tim` compilado en la cabeza de la rama, con la lista de comprobación física confirmada.
