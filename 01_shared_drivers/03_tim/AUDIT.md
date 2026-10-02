@@ -220,3 +220,30 @@ Con ese criterio, el rms de z de las 17 queda en 1,05, el máximo de \|z\| en 2,
 
 - **D6 aprobada** por el responsable del catálogo. Está en la revisión 4 del plan: R4-1 (σ\_ser = 145 ppm en la cota de TREF) y R4-2 (base de la producción de `prj_01` en `2481396`; el cambio de SMPS queda como desviación aprobada).
 - **Para que F0 pase:** el implementador aplica R4-1 en un commit y entrega una captura. Después viene mi ejecución del banco (A18/A27), con la lista de comprobación física confirmada.
+
+## F0, auditoría 5: R4-1 y la serie de validación (2026-10-02, en `0adffa9`)
+
+Rango auditado: `336180b..0adffa9`. Código: `7ac9e44` (R4-1), un solo commit. El resto es evidencia: la ejecución entregada (`tim_f0_bench_7ac9e44.txt`), una serie de 10 con la imagen de `2a78fe5` (pedida por el responsable, según el informe), builds y `.map`.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `git show 7ac9e44` | Ver la tabla |
+| `git diff 2481396 0adffa9`, sin `docs/` ni `tools/` de `prj_01` | Vacío: desde la base de R4-2 no cambió ningún archivo de firmware. Las imágenes de producción y de `selftest-tim` son las de `2481396` |
+| `git diff e7542dc 0adffa9 -- 02_firmware_projects` | Vacío (A23) |
+| `.\tools\build_all.ps1 -Clean` en `0adffa9` | 8/8 PASS. `prj_01`: CM7 debug 29304/132/55668, CM4 debug 3456/24/12560, CM7 release 28356/132/55672 y CM4 release 3112/24/12560, iguales a la base de R4-2 (A16) |
+| Script propio sobre las 11 capturas: e, s\_ef, x, u, σ\_ser y la cota, recalculada; cabecera (`tree clean`, `Rev` e id iguales en CM7, CM4 y el host, 16/16, `FW`/`HOST VERDICT=PASS`) | Las 11 cotas coinciden con la mía al 0,1 ppm. Las 11 pasan, con las cabeceras completas |
+
+### Veredicto
+
+| ID | Veredicto | Evidencia |
+| --- | --- | --- |
+| R4-1 | **Aplicado** | `TREF_SIGMA_SER_PPM = 145.0`, con un comentario que cita su fuente (las 17 capturas, plan R4-1, auditoría 4). La cota es 3·√(u² + s\_ef²/n + σ\_ser²). Siguen `n == 16` y \|ē\| ≤ 20 000. La captura imprime σ\_ser y su fuente. No cambia nada más: el diff solo toca la constante, el docstring y la línea del criterio |
+| Validación del criterio | **Pasa** | La serie de `2a78fe5` (10 ejecuciones) es independiente de la que fijó σ\_ser. Con R4-1: 10/10 pasan, rms de z = 0,89 y máximo \|z\| = 2,00 (`_6`, al 67 % de la cota). σ\_ser medido solo con esa serie da 106 ppm: la constante de 145 queda del lado conservador. Con el criterio de R3-1, `_6` habría fallado |
+
+La serie de 10 contradice mi instrucción "una sola ejecución" del prompt de la revisión 4. El informe la presenta como una petición del responsable, separada de la ejecución entregada, y no cambia el código; la acepto como evidencia de validación, no como entrega.
+
+### Estado de F0
+
+La parte estática y de build pasa, y el criterio de TREF queda validado fuera de la muestra que lo fijó. **Solo falta A18/A27: mi ejecución del banco**, sobre `selftest-tim` compilado en la cabeza de la rama, con la lista de comprobación física confirmada por quien está en el banco. Si pasa, F0 se cierra y el implementador puede empezar F1 (`tim_bm`, con O1 y R3-2).
