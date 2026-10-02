@@ -1,0 +1,26 @@
+03_tim F0: linked .map sizes of prj_01 ("Discarded input sections" excluded: parsing starts at
+"Linker script and memory map"). e7542dc: a detached worktree of e7542dc, configured with the cache values
+of its debug/release presets; 456a7a7: build/<preset> of tools/build_all.ps1 -Clean. Allocated output sections
+only: .debug_* change with the build path and are not part of the image.
+text = .isr_vector+.text+.rodata+.ARM, data = .data+.init_array+.fini_array,
+bss = .bss+._user_heap_stack+.shared_ram (the grouping arm-none-eabi-size and build_all.ps1 report)
+
+image        commit    .isr_vector       .text     .rodata        .ARM   .init_arr   .fini_arr       .data        .bss  ._heap_stk .shared_ram    text  data    bss
+debug CM7    e7542dc           664       27740         732           8           4           4         124       30868       24576         224   29144   132  55668
+debug CM7    456a7a7           664       27740         732           8           4           4         124       30868       24576         224   29144   132  55668
+             delta    0 in every allocated section
+debug CM4    e7542dc           664        2736          56           0           4           4          16          44       12292         224    3456    24  12560
+debug CM4    456a7a7           664        2736          56           0           4           4          16          44       12292         224    3456    24  12560
+             delta    0 in every allocated section
+release CM7  e7542dc           664       26824         732           8           4           4         124       30872       24576         224   28228   132  55672
+release CM7  456a7a7           664       26824         732           8           4           4         124       30872       24576         224   28228   132  55672
+             delta    0 in every allocated section
+release CM4  e7542dc           664        2392          56           0           4           4          16          44       12292         224    3112    24  12560
+release CM4  456a7a7           664        2392          56           0           4           4          16          44       12292         224    3112    24  12560
+             delta    0 in every allocated section
+
+selftest-tim (456a7a7): objects of the selftest; F0 has no driver object (tim_*.c.obj of 03_tim):
+  CM7 tim_selftest.c.obj           .text+.rodata= 8245  .data=  4  .bss= 138
+  CM7 tim_selftest_common.c.obj    .text+.rodata=  629  .data=  0  .bss=   0
+  CM4 tim_selftest.c.obj           .text+.rodata=  979  .data=  0  .bss=   0
+  CM4 tim_selftest_common.c.obj    .text+.rodata=  601  .data=  0  .bss=   0

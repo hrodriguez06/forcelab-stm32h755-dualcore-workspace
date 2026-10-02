@@ -1,0 +1,10 @@
+﻿-Werror builds of prj_01 at 456a7a7 test(prj_01): judge TREF at |e| <= 2 % plus the HAL_GetTick cross-check, in fresh scratch build dirs (not the presets' build/<preset>), CMAKE_C_FLAGS=-Werror
+selftest-tim (Debug, TIM_DRIVER_SELFTEST=ON): exit=0, lines with 'warning:' or 'error:' = 0; text data bss:
+    38932 136 55816  cm7_firmware.elf
+    5960 24 12560  cm4_firmware.elf
+debug (Debug, TIM_DRIVER_SELFTEST=OFF): exit=0, lines with 'warning:' or 'error:' = 0; text data bss:
+    29144 132 55668  cm7_firmware.elf
+    3456 24 12560  cm4_firmware.elf
+release (Release, TIM_DRIVER_SELFTEST=OFF): exit=0, lines with 'warning:' or 'error:' = 0; text data bss:
+    28228 132 55672  cm7_firmware.elf
+    3112 24 12560  cm4_firmware.elf
