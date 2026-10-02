@@ -2,7 +2,7 @@
 
 Oct 1, 2026 · @Hector
 
-Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 5) de esta carpeta. El trabajo es el driver de timers en tres tiers, `tim_bm` (F1), `tim_ll` (F2) y `tim_hal` (F3), con una fase F0 que prepara el banco del AD2 en `prj_01_template_dualcore`. Otra persona audita cada fase de forma independiente y repite tus pruebas en la placa.
+Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 6) de esta carpeta. El trabajo es el driver de timers en tres tiers, `tim_bm` (F1), `tim_ll` (F2) y `tim_hal` (F3), con una fase F0 que prepara el banco del AD2 en `prj_01_template_dualcore`. Otra persona audita cada fase de forma independiente y repite tus pruebas en la placa.
 
 Este documento dice qué te toca, qué no te toca y qué tienes que entregar. Si algo de aquí choca con el plan, manda el plan, con una excepción: lo que este documento te **prohíbe** sigue prohibido aunque el plan lo mencione.
 
@@ -169,7 +169,7 @@ Reglas de redacción:
 ```markdown
 # Informe de implementación 03_tim
 
-Implementador: <nombre> · Rama: driver/tim · Plan: IMPLEMENTATION_PLAN.md revisión 5
+Implementador: <nombre> · Rama: driver/tim · Plan: IMPLEMENTATION_PLAN.md revisión 6
 
 ## Resumen
 <5-10 líneas: qué hay implementado, en qué fase estás, qué falta y qué está bloqueado.

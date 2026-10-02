@@ -394,3 +394,8 @@ En PWM input, el periodo es la distancia entre el reset del contador por un flan
 Recomiendo: **en los puntos en PWM input de T8, la tolerancia de periodo pasa a ±(2 ticks + 0,1 %), igual que la del tiempo en alto.** Las capturas directas (ICPSC = 8, filtro y T13(b)) mantienen ±(1 tick + 0,1 %). Con eso, en las 432 capturas el peor residuo de periodo queda en el 64 % de la cota a 1 MHz (1,4/2,2) y en el 67 % a 100 kHz (2,7/4,03). La sensibilidad no se pierde: un error del driver en la configuración de la captura (PSC del timer, prescaler de entrada, canal, flanco o TISEL) cambia la medida en un factor ≥ 2, en el duty o en el periodo completo, muy por encima de ±2 ticks. El valor exacto de ARR y PSC lo comprueban ya T2 (imagen de registros) y T5 (base de tiempo frente a CYCCNT).
 
 No repetí la ejecución: el resultado de A18 es esta captura. Con D8 aprobada, el implementador cambia la tolerancia en `tim_hw_check.py` (un commit, sin tocar nada más) y yo repito A18 sobre esa entrega.
+
+## F1, adenda a la parte 2 (2026-10-02)
+
+- **D8 aprobada** por el responsable del catálogo. Está en la revisión 6 del plan como R6-1: tolerancia de periodo de ±(2 ticks + 0,1 %) en los puntos de T8 en PWM input.
+- **Para que F1 pase:** el implementador aplica R6-1 en un commit y entrega una captura. Después repito A18/A27 sobre esa entrega, con la lista de comprobación física confirmada.
