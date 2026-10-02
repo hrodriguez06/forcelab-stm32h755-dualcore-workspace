@@ -553,10 +553,13 @@ static void step_t0a(void)
     step_end();
 }
 
-/* TREF: MCO1 = HSE/8 on PA8 (AF0) for the AD2 to measure; control MCO1PRE =
-   0000 ("prescaler disabled", RM0399 RCC_CFGR): no edges. RCC_CFGR is saved
-   and restored with read-back; the first ms after each change is not shown to
-   the host (RM0399 9.5.4: changing MCO1 may glitch). */
+/* TREF: MCO1 = HSE/8 on PA8 (AF0) for the AD2 to measure. Control: MCO1 left
+   at HSE/8 in the RCC, PA8 moved to AF1 (TIM1_CH1) with TIM1 unclocked in both
+   RCC banks: MCO1 no longer reaches the pin, so the AD2 must see no edge (the
+   T10 control of 00_gpio). MCO1PRE = 0000 is not a control on this silicon: it
+   passes HSE undivided (docs/tim_f0_bench_d01061e.txt). RCC_CFGR is saved and
+   restored with read-back; the first ms after each change is not shown to the
+   host (RM0399 9.5.4: changing MCO1 may glitch). */
 static void step_tref(void)
 {
     if (!step_begin("TREF"))
@@ -580,10 +583,18 @@ static void step_tref(void)
     {
         return;
     }
-    MODIFY_REG(RCC->CFGR, RCC_CFGR_MCO1PRE, 0U);
-    const uint32_t mco_off = RCC->CFGR & (RCC_CFGR_MCO1 | RCC_CFGR_MCO1PRE);
+    /* An unclocked TIM1 cannot run: its enable bit in both RCC banks, raw. */
+    const uint32_t tim1_c1 = RCC_C1->APB2ENR & RCC_APB2ENR_TIM1EN;
+    const uint32_t tim1_c2 = RCC_C2->APB2ENR & RCC_APB2ENR_TIM1EN;
+    if (!pin_cfg(GPIOA, PA_MCO, GPIO_BM_MODE_AF, TST_AF_TIM1, GPIO_BM_PULL_NONE, 0U))
+    {
+        return;
+    }
+    const uint32_t mco_ctrl  = RCC->CFGR & (RCC_CFGR_MCO1 | RCC_CFGR_MCO1PRE);
+    const uint32_t af_ctrl   = (GPIOA->AFR[1] >> ((PA_MCO - 8U) * 4U)) & 0xFUL;
     delay_ms(2U);
-    LOG("TREF control MCO1PRE=0000, RCC_CFGR=0x%08lX", (unsigned long)RCC->CFGR);
+    LOG("TREF control PA8 AF%lu (TIM1_CH1), TIM1EN C1=%lu C2=%lu, RCC_CFGR=0x%08lX",
+        (unsigned long)af_ctrl, (unsigned long)tim1_c1, (unsigned long)tim1_c2, (unsigned long)RCC->CFGR);
     if (!sync0())          /* host: no edge on DIO14 */
     {
         return;
@@ -594,9 +605,12 @@ static void step_tref(void)
     }
     mco_restore();
     const uint32_t cfgr_after = RCC->CFGR;
-    verdict((mco_on == (RCC_CFGR_MCO1_1 | RCC_CFGR_MCO1PRE_3)) && (mco_off == RCC_CFGR_MCO1_1),
-            "TREF MCO1 fields read back 0x%08lX (HSE/8), control 0x%08lX (prescaler disabled)",
-            (unsigned long)mco_on, (unsigned long)mco_off);
+    verdict((mco_on == (RCC_CFGR_MCO1_1 | RCC_CFGR_MCO1PRE_3)) && (mco_ctrl == mco_on),
+            "TREF MCO1 fields read back 0x%08lX (HSE/8), still 0x%08lX during the control",
+            (unsigned long)mco_on, (unsigned long)mco_ctrl);
+    verdict((af_ctrl == TST_AF_TIM1) && (tim1_c1 == 0U) && (tim1_c2 == 0U),
+            "TREF control: PA8 AFR=%lu (TIM1_CH1), TIM1 clock off in both banks (C1=%lu C2=%lu)",
+            (unsigned long)af_ctrl, (unsigned long)tim1_c1, (unsigned long)tim1_c2);
     verdict(cfgr_after == cfgr_before, "TREF RCC_CFGR restored: before 0x%08lX after 0x%08lX",
             (unsigned long)cfgr_before, (unsigned long)cfgr_after);
     step_end();

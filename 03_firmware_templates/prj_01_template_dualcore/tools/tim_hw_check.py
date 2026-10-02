@@ -425,8 +425,8 @@ class Session:
                    f"{n} at {rate / 1e6:.0f} MS/s), e_ppm={e_ppm:+.1f} (|e| <= {TREF_MAX_PPM:.0f}), resolution "
                    f"{m['resolution_ppm']:.1f} ppm, time high {m['high_s'] * 1e9:.1f} ns")
         self.check("TREF control", c["rises"] == 0 and c["falls"] == 0,
-                   f"MCO1PRE=0000 (prescaler disabled): {c['rises']} rising, {c['falls']} falling edges on DIO14 "
-                   f"(0 expected)")
+                   f"PA8 in AF1 (TIM1_CH1, TIM1 unclocked), MCO1 still HSE/8 in the RCC: {c['rises']} rising, "
+                   f"{c['falls']} falling edges on DIO14 (0 expected)")
         return {"e_ppm": e_ppm, "res_ppm": m["resolution_ppm"]}
 
     def t0b(self) -> None:

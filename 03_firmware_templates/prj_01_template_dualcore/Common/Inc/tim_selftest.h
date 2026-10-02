@@ -32,9 +32,10 @@ void TIM_Selftest_CM4_Run(void);          /* CPU2, after Shared_GpioLockInstall(
 
 /* ---- Step table (S4, S7) ------------------------------------------------------ *
  * One table for both cores, so CPU2's bench_claim() judges a claim against the
- * same permissions CPU1 announced. TIM_BENCH_VERSION is printed in the banner
- * and in every STEP line; tools/tim_hw_check.py keeps its own copy of names and
- * bus owners and aborts on any difference. Change the table: bump the version. */
+ * same permissions CPU1 announced. TIM_BENCH_VERSION is the version of the bench
+ * protocol: printed in the banner and in every STEP line, and checked by
+ * tools/tim_hw_check.py, which keeps its own copy of the step names, their bus
+ * owners and their handshakes. Bump it when any of those change.             */
 #define TIM_BENCH_VERSION    1U
 
 typedef enum
@@ -51,6 +52,8 @@ typedef struct
     uint16_t    out_pe;    /* GPIOE pins the MCU may make GPIO outputs in this step      */
     uint16_t    af_pe;     /* GPIOE pins the MCU may put in their bench AF in this step  */
     uint16_t    af_pa;     /* GPIOA pins ditto (PA8 = MCO1, AF0)                         */
+    uint16_t    af1_pa;    /* GPIOA pins the MCU may put in AF1 (PA8 = TIM1_CH1: the TREF
+                              control, TIM1 stopped, so nothing drives the pin)          */
 } TstStep_t;
 
 extern const TstStep_t k_tst_steps[];
@@ -74,7 +77,7 @@ bool tst_line_rule(uint32_t core, uint32_t step, const GPIO_TypeDef *port, uint3
 /* Bench AF per wired pin (DS12923 table 9, STM32H755_Alternate_Functions.md). */
 #define TST_AF_TIM1          1U    /* PE9, PE11, PE13, PE14: TIM1_CH1..CH4 */
 #define TST_AF_TIM15         4U    /* PE5, PE6: TIM15_CH1, TIM15_CH2       */
-#define TST_AF_MCO1          0U    /* PA8: MCO1                            */
+#define TST_AF_MCO1          0U    /* PA8: MCO1 (in AF1, TIM1_CH1: TREF control) */
 
 /* ---- SRAM4 block (outside g_shared, fixed address) ------------------------------ *
  * 0x3800B000, 4 KB: inside the RAM_SHARED region of both linker scripts

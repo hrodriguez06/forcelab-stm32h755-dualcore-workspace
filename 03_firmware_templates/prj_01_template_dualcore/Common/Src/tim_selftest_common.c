@@ -32,17 +32,19 @@
 
 /* The single table of permissions (S4). Plan "Banco de pruebas": PE8, PE10,
    PE12 and PE15 are never in AF; PE9/PE11 in AF1 with the AD2 driving only
-   under S12; PE5/PE6 in AF4 only on CPU2; PA8 in AF0 only on CPU1. */
+   under S12; PE5/PE6 in AF4 only on CPU2; PA8 in AF0 only on CPU1, and in AF1
+   (TIM1_CH1, TIM1 stopped) only for the TREF control. PA8 is an MCU-only
+   line: the AD2 never drives DIO14. */
 const TstStep_t k_tst_steps[] = {
-    /* name            bus            out_pe        af_pe                         af_pa       */
-    { "T0A",           TST_BUS_NONE,  0U,           0U,                           0U          },
-    { "TREF",          TST_BUS_NONE,  0U,           0U,                           E(PA_MCO)   },
-    { "T0B",           TST_BUS_NONE,  0U,           E(PE_T15C1),                  E(PA_MCO)   },  /* the accepted controls */
-    { "T0B_S5NEG",     TST_BUS_MCU,   PE_BUS_MASK,  0U,                           0U          },  /* 00_gpio T0b(c) */
-    { "T0B_TIMEOUT",   TST_BUS_NONE,  0U,           0U,                           0U          },
-    { "T0B_DOUT",      TST_BUS_AD2,   0U,           0U,                           0U          },  /* S11: MCU inputs only */
-    { "T0B_S12",       TST_BUS_AD2,   0U,           PE_BUS_CAPTURE,               0U          },  /* S12 */
-    { "DONE",          TST_BUS_NONE,  0U,           0U,                           0U          },
+    /* name            bus            out_pe        af_pe            af_pa       af1_pa     */
+    { "T0A",           TST_BUS_NONE,  0U,           0U,              0U,         0U         },
+    { "TREF",          TST_BUS_NONE,  0U,           0U,              E(PA_MCO),  E(PA_MCO)  },  /* control: PA8 AF1 */
+    { "T0B",           TST_BUS_NONE,  0U,           E(PE_T15C1),     E(PA_MCO),  0U         },  /* the accepted controls */
+    { "T0B_S5NEG",     TST_BUS_MCU,   PE_BUS_MASK,  0U,              0U,         0U         },  /* 00_gpio T0b(c) */
+    { "T0B_TIMEOUT",   TST_BUS_NONE,  0U,           0U,              0U,         0U         },
+    { "T0B_DOUT",      TST_BUS_AD2,   0U,           0U,              0U,         0U         },  /* S11: MCU inputs only */
+    { "T0B_S12",       TST_BUS_AD2,   0U,           PE_BUS_CAPTURE,  0U,         0U         },  /* S12 */
+    { "DONE",          TST_BUS_NONE,  0U,           0U,              0U,         0U         },
 };
 
 const uint32_t k_tst_step_count = (uint32_t)(sizeof(k_tst_steps) / sizeof(k_tst_steps[0]));
@@ -125,9 +127,13 @@ bool tst_line_rule(uint32_t core, uint32_t step, const GPIO_TypeDef *port, uint3
     const TstStep_t *s = &k_tst_steps[step];
     if (port == GPIOA)
     {
-        /* PA8: MCO1 in AF0, CPU1 only (TREF; TIM1_CH1 in AF1 is never used). */
-        return (core == 0U) && (mode == GPIO_BM_MODE_AF) && (af == TST_AF_MCO1) &&
-               ((s->af_pa & (1U << PA_MCO)) != 0U);
+        /* PA8, CPU1 only: MCO1 in AF0, or TIM1_CH1 in AF1 for the TREF control. */
+        if ((core != 0U) || (mode != GPIO_BM_MODE_AF))
+        {
+            return false;
+        }
+        return ((af == TST_AF_MCO1) && ((s->af_pa & (1U << PA_MCO)) != 0U)) ||
+               ((af == TST_AF_TIM1) && ((s->af1_pa & (1U << PA_MCO)) != 0U));
     }
     return rule_gpioe(core, s, pin, mode, af);
 }
