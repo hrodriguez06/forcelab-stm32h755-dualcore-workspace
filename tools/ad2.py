@@ -51,6 +51,7 @@ DWF_DOUT_IDLE_HIGH        = 2
 DWF_DOUT_IDLE_ZET         = 3
 DWF_DOUT_OUTPUT_PUSHPULL  = 0
 DWF_DOUT_TYPE_PULSE       = 0
+DWF_DOUT_TYPE_CUSTOM      = 1          # dwf.h DwfDigitalOutTypeCustom
 
 # S11 (c), plan R2-4: Idle = Low is accepted only in the step of the T0b(f)
 # control, whose name the caller passes; in every other step only Zet.
@@ -428,6 +429,43 @@ class AD2:
             raise AD2Error(f"Digital Out ch{channel} read-back: type={typ.value} divider={div.value} "
                            f"low={lo.value} high={hi.value}")
         return self.dout_clock_hz() / divider / (low + high)
+
+    def dout_data_max(self, channel: int) -> int:
+        """SDK section 10.2, FDwfDigitalOutDataInfo: the custom buffer of the channel, in bits."""
+        n = ctypes.c_uint()
+        self._dwf.FDwfDigitalOutDataInfo(self._hdwf, ctypes.c_int(channel), ctypes.byref(n))
+        return n.value
+
+    def dout_custom(self, channel: int, divider: int, bits: list[int]) -> float:
+        """Configure a custom bit pattern on one Digital Out channel; returns the sample rate in Hz.
+
+        SDK section 10.2: FDwfDigitalOutTypeSet(Custom), FDwfDigitalOutDividerInitSet(0),
+        FDwfDigitalOutDividerSet(divider), FDwfDigitalOutDataSet(rgBits, countOfBits) (bits
+        LSB first; it also sets the counters to the number of bits), type and divider read
+        back. The length must not exceed FDwfDigitalOutDataInfo (dout_data_max). Sample rate =
+        internal clock / divider (FDwfDigitalOutTypeInfo, "Custom"). Does not enable the
+        channel: only ad2_set_dout() does (S11); only DIO1 and DIO3 can be configured.
+        """
+        if not (0 <= channel < AD2_DOUT_CHANNELS) or not ((AD2_DOUT_ALLOWED >> channel) & 1):
+            raise AD2SafetyViolation(f"S11: Digital Out channel {channel} is not DIO1 or DIO3")
+        nmax = self.dout_data_max(channel)
+        if not (1 <= len(bits) <= nmax):
+            raise AD2Error(f"Digital Out custom pattern of {len(bits)} bits (buffer {nmax})")
+        ch = ctypes.c_int(channel)
+        buf = (ctypes.c_ubyte * ((len(bits) + 7) // 8))()
+        for i, v in enumerate(bits):
+            if v:
+                buf[i // 8] |= 1 << (i % 8)
+        self._dwf.FDwfDigitalOutTypeSet(self._hdwf, ch, ctypes.c_int(DWF_DOUT_TYPE_CUSTOM))
+        self._dwf.FDwfDigitalOutDividerInitSet(self._hdwf, ch, ctypes.c_uint(0))
+        self._dwf.FDwfDigitalOutDividerSet(self._hdwf, ch, ctypes.c_uint(divider))
+        self._dwf.FDwfDigitalOutDataSet(self._hdwf, ch, buf, ctypes.c_uint(len(bits)))
+        typ, div = ctypes.c_int(-1), ctypes.c_uint()
+        self._dwf.FDwfDigitalOutTypeGet(self._hdwf, ch, ctypes.byref(typ))
+        self._dwf.FDwfDigitalOutDividerGet(self._hdwf, ch, ctypes.byref(div))
+        if (typ.value, div.value) != (DWF_DOUT_TYPE_CUSTOM, divider):
+            raise AD2Error(f"Digital Out ch{channel} read-back: type={typ.value} divider={div.value}")
+        return self.dout_clock_hz() / divider
 
     def dout_state(self) -> tuple[int, int]:
         """(enable mask, idle-Zet mask) of the 16 Digital Out channels, read back
