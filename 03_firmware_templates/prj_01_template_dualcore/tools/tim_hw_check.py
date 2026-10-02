@@ -114,7 +114,11 @@ TREF_EXPECTED_HZ = 1e6          # MCO1 = HSE_VALUE (8 MHz) / 8
 # of 2026-10-01; with 3 u alone, tim_f0_bench_e30622b.txt passed at 574 against 574).
 TREF_MAX_PPM = 20000.0
 TREF_XCHK_K = 3.0
-TREF_XCHK_JITTER_S = 2e-3       # arrival jitter assumed per console line (USB VCP)
+# The cross-check's points: CPU1 prints TICK_BURST_N lines "TICK <banner|verdict> <i>
+# <HAL_GetTick>" at the banner and at the verdict (tick_burst() in
+# CM7/App/Src/tim_selftest.c). u comes from the measured scatter of their arrival
+# times (plan R2-10), not from an assumed jitter.
+TICK_BURST_N = 16
 
 DOUT_DIVIDER, DOUT_LOW, DOUT_HIGH = 1, 50, 50          # 100 MHz / 1 / (50 + 50) = 1 MHz
 DOUT_TOL = 0.001                # +-0.1 % (plan, common tolerances; AD2 against itself here)
@@ -271,6 +275,43 @@ def t0b_dout_guard_selftest(log: Callable[[str], None]) -> bool:
             f"Digital-IO OE=0x{oe:04X}): "
             f"{'passed to the DLL, Idle and push-pull before EnableSet(1), Configure(1) last' if good else 'BLOCKED'}")
     return ok
+
+
+# ---- TREF cross-check (plan R2-2, R2-10) ----------------------------------------------
+
+def tick_burst_read(con: "Console", label: str, timeout_s: float) -> list[tuple[int, float]]:
+    """The TICK_BURST_N lines of one burst: (HAL_GetTick in ms, host arrival time in s)."""
+    pts = []
+    for i in range(TICK_BURST_N):
+        m, t = con.expect_t(rf"\[tim\] TICK {label} {i} (\d+)\s*$", timeout_s)
+        pts.append((int(m.group(1)), t))
+    return pts
+
+
+def tick_fit(pts: list[tuple[int, float]]) -> dict:
+    """Least squares of the host arrival time t against the board time k/1000:
+    t = a + b k/1000. The board clock against the host's is x = 1/b - 1. The
+    residual scatter sd (n - 2 degrees of freedom) is the measured arrival
+    jitter, and u is the standard error of the slope, sd / sqrt(sum (k - k_mean)^2),
+    turned into ppm of x."""
+    n = len(pts)
+    ks = [k / 1000.0 for k, _ in pts]
+    ts = [t for _, t in pts]
+    km, tm = sum(ks) / n, sum(ts) / n
+    sxx = sum((k - km) ** 2 for k in ks)
+    b = sum((k - km) * (t - tm) for k, t in zip(ks, ts)) / sxx
+    a = tm - b * km
+    sd = math.sqrt(sum((t - (a + b * k)) ** 2 for k, t in zip(ks, ts)) / (n - 2))
+    se_b = sd / math.sqrt(sxx)
+    return {"n": n, "a": a, "b": b, "sd_s": sd, "span_s": ks[-1] - ks[0],
+            "x_ppm": (1.0 / b - 1.0) * 1e6, "u_ppm": se_b / (b * b) * 1e6}
+
+
+def tick_fit_residual_sd(fit: dict, pts: list[tuple[int, float]]) -> float:
+    """Scatter of one burst's residuals around the common fit (informative)."""
+    r = [t - (fit["a"] + fit["b"] * k / 1000.0) for k, t in pts]
+    m = sum(r) / len(r)
+    return math.sqrt(sum((x - m) ** 2 for x in r) / (len(r) - 1))
 
 
 # ---- Console reader --------------------------------------------------------------------
@@ -619,7 +660,7 @@ def main() -> int:
     abort: Optional[str] = None
     revs: dict[str, str] = {}
     tref: dict = {}
-    ticks: dict[str, tuple[int, float]] = {}
+    ticks: dict[str, list[tuple[int, float]]] = {"banner": [], "verdict": []}
     if not (guard_a and guard_e):
         abort = "a host guard failed on its mock: the AD2 is not opened"
         stamp(f"[host] ABORT: {abort}")
@@ -649,8 +690,7 @@ def main() -> int:
                 ver = int(con.expect(r"\[tim\] TIM_BENCH v(\d+) idle", 10.0).group(1))
                 if ver != BENCH_VERSION:
                     raise BenchAbort(f"S8: firmware protocol v{ver}, host v{BENCH_VERSION}")
-                m, t_tick = con.expect_t(r"\[tim\] TICK (\d+) \(HAL_GetTick at the banner\)", 10.0)
-                ticks["banner"] = (int(m.group(1)), t_tick)
+                ticks["banner"] = tick_burst_read(con, "banner", 10.0)
                 head = git_rev()
                 base = {c: (r[:-len("-dirty")] if r.endswith("-dirty") else r) for c, r in revs.items()}
                 stamp(f"[host] R4-a: cm7 Rev={revs['cm7']} id={ids['cm7']}; cm4 Rev={revs['cm4']} id={ids['cm4']}; "
@@ -679,8 +719,7 @@ def main() -> int:
                 session.set_oe(DIO_REQ)          # HOST_REQ output, low
                 session.req(False)
                 tref = session.run()
-                m, t_tick = con.expect_t(r"\[tim\] TICK (\d+) \(HAL_GetTick at the verdict\)", 120.0)
-                ticks["verdict"] = (int(m.group(1)), t_tick)
+                ticks["verdict"] = tick_burst_read(con, "verdict", 120.0)
                 verdict_fw = con.expect(r"\[tim\] FW VERDICT=(\w+)", 30.0).group(1)
             except (BenchAbort, AD2SafetyViolation, ad2mod.AD2Error, subprocess.CalledProcessError) as e:
                 abort = str(e)
@@ -698,14 +737,16 @@ def main() -> int:
             stamp(f"[ad2] closing in S2: OE=0x{ad2.get_oe():04X} Digital Out enable=0x{en:04X} Zet=0x{zet:04X}")
 
     xchk: Optional[tuple[float, float]] = None
-    if "banner" in ticks and "verdict" in ticks:
-        (k0, h0), (k1, h1) = ticks["banner"], ticks["verdict"]
-        span = h1 - h0
-        if span > 0:
-            xchk = (((k1 - k0) / 1000.0 / span - 1.0) * 1e6, TREF_XCHK_JITTER_S / span * 1e6)
-            stamp(f"[host] TREF cross-check: HAL_GetTick advanced {k1 - k0} ms in {span:.3f} s of host time "
-                  f"(line arrival): board tick against host clock {xchk[0]:+.0f} ppm, +-{xchk[1]:.0f} ppm "
-                  f"for {TREF_XCHK_JITTER_S * 1e3:.0f} ms of arrival jitter")
+    if len(ticks["banner"]) == TICK_BURST_N and len(ticks["verdict"]) == TICK_BURST_N:
+        fit = tick_fit(ticks["banner"] + ticks["verdict"])
+        sd = {b: tick_fit_residual_sd(fit, ticks[b]) for b in ("banner", "verdict")}
+        for b in ("banner", "verdict"):
+            stamp(f"[host] TREF cross-check {b}: " + " ".join(f"{k}@{t:.4f}" for k, t in ticks[b]))
+        stamp(f"[host] TREF cross-check: least squares of host arrival time against HAL_GetTick, "
+              f"{fit['n']} lines over {fit['span_s']:.3f} s; residual scatter measured {fit['sd_s'] * 1e3:.3f} ms "
+              f"(banner {sd['banner'] * 1e3:.3f} ms, verdict {sd['verdict'] * 1e3:.3f} ms); board tick against "
+              f"host clock x={fit['x_ppm']:+.1f} ppm, u={fit['u_ppm']:.1f} ppm (standard error of the slope)")
+        xchk = (fit["x_ppm"], fit["u_ppm"])
     if tref and session is not None:
         session.tref_check(tref, xchk)
     checks = session.checks if session else []

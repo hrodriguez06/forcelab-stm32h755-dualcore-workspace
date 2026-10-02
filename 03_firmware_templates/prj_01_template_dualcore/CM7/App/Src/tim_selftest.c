@@ -939,6 +939,33 @@ static void step_t0b_s12(void)
 }
 
 /* ==========================================================================================
+ * TREF cross-check: HAL_GetTick against the host clock (plan R2-2, R2-10)
+ * ========================================================================================== */
+
+/* A burst of TICK_BURST_N lines, one every TICK_BURST_STEP_MS, each printed
+   right after HAL_GetTick() reaches its value (so the value is the start of
+   that ms, not up to 1 ms old). The host fits its arrival times of the lines
+   of both bursts against these values: the slope is the cross-check x, and
+   the scatter of the residuals, measured, gives its uncertainty u. The first
+   line waits TICK_BURST_START_MS so the console has sent the lines before. */
+#define TICK_BURST_N          16U
+#define TICK_BURST_STEP_MS    50U
+#define TICK_BURST_START_MS   20U
+
+static void tick_burst(const char *label)
+{
+    const uint32_t t0 = HAL_GetTick() + TICK_BURST_START_MS;
+    for (uint32_t i = 0U; i < TICK_BURST_N; i++)
+    {
+        const uint32_t target = t0 + (i * TICK_BURST_STEP_MS);
+        while ((int32_t)(HAL_GetTick() - target) < 0)
+        {
+        }
+        LOG("TICK %s %lu %lu", label, (unsigned long)i, (unsigned long)HAL_GetTick());
+    }
+}
+
+/* ==========================================================================================
  * Entry points
  * ========================================================================================== */
 
@@ -992,7 +1019,7 @@ void TIM_Selftest_CM7_Run(void)
     LOG("silicon REV_ID=0x%04lX, test block at 0x%08lX, CM4 table v%lu, steps %lu",
         (unsigned long)((DBGMCU->IDCODE & DBGMCU_IDCODE_REV_ID_Msk) >> DBGMCU_IDCODE_REV_ID_Pos),
         (unsigned long)TST_AREA_ADDR, (unsigned long)a->m4_version, (unsigned long)k_tst_step_count);
-    LOG("TICK %lu (HAL_GetTick at the banner)", (unsigned long)HAL_GetTick());
+    tick_burst("banner");
 
     step_t0a();
     step_tref();
@@ -1009,7 +1036,7 @@ void TIM_Selftest_CM7_Run(void)
     (void)cm4_send(TST_CMD_DONE, 0U);
     verdict((a->m4_timeout == 0U) && (a->m4_aborts == 0U), "CM4 finished: timeout %lu, aborts %lu",
             (unsigned long)a->m4_timeout, (unsigned long)a->m4_aborts);
-    LOG("TICK %lu (HAL_GetTick at the verdict)", (unsigned long)HAL_GetTick());
+    tick_burst("verdict");
     LOG("Status_Task stack high-water mark %lu words", (unsigned long)uxTaskGetStackHighWaterMark(NULL));
     LOG("FW VERDICT=%s failures=%lu", (s_fail == 0U) ? "PASS" : "FAIL", (unsigned long)s_fail);
 
