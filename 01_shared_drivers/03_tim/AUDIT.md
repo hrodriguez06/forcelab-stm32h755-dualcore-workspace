@@ -425,3 +425,42 @@ El informe reconoce que la captura entregada no reproduce el caso que R6-1 cubre
 ### Para que F1 pase
 
 Solo queda A18/A27: mi ejecución del banco sobre `selftest-tim` compilado en la cabeza de la rama, con la lista de comprobación física confirmada.
+
+## F1, parte 4: ejecución del banco por el auditor (2026-10-02, en `3174fef`) — **F1 PASA**
+
+Lista de comprobación física confirmada en el chat por el responsable del catálogo (Hector). `Get-Process` no mostraba WaveForms ni ningún servidor de depuración.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `selftest-tim` desde un directorio vacío, en `3174fef` | 0 avisos |
+| `py tools/flash.py --preset selftest-tim`, con el script parado | "Download verified successfully" |
+| `py tools/tim_hw_check.py --checklist-confirmed Hector --out <scratchpad>`, **una sola ejecución** | **109/109, 0 líneas FAIL, `FW VERDICT=PASS` y `HOST VERDICT=PASS`.** Captura sin editar: `03_firmware_templates/prj_01_template_dualcore/docs/tim_f1_audit_bench_3174fef.txt` (1149 líneas) |
+
+### Contenido de la captura
+
+- **Trazabilidad (A21):** checkout `3174fef`, `tree clean`, `Rev` `3174fef` e id `7c59ddadb0aa1686` iguales en CM7, CM4 y el host, protocolo v3.
+- **AD2 (A27):** se abre en S2 y se cierra en S2 (`OE=0x0000 enable=0x0000 Zet=0xFFFF`). El `DIO=0x2001` al abrir es N2 de F0 (lectura antes del reset, OE = 0).
+- **T8:** d = 2,06–2,31 en las ejecuciones con el código final, y aquí dentro de 0 ≤ d ≤ 4. El peor residuo frente a su cota (periodo o alto) es 0,48 a 1 MHz, 0,60 a 100 kHz, 0,89 a 10 kHz y 0,66 a 1 kHz.
+- **T15:** 0 pérdidas con el driver. El `DIER` final es `0x0008`: CC3IE queda a 1 porque la ISR de TIM7 hizo un número impar de cambios (42 451); en la entrega, 42 446, `0x0000`. El control da 8892 pérdidas.
+- **CM4:** `timeout 0, aborts 0`.
+- **TREF (R4-1):** ē = +13 003,1, x = +12 617,3 ± 12,0 y \|ē − x\| = 385,8, dentro de la cota.
+
+### Tabla A de F1, cerrada
+
+| # | Resultado |
+| --- | --- |
+| A1–A17, A19–A26, A28 | Pasan (partes 1 y 3: driver contra el contrato, tabla de capacidades contra el RM sin discrepancias, T3 rehecho, builds, alcance, TIM6, controles y trazabilidad) |
+| A18 | **Pasa** en esta ejecución. La anterior (`70e0181`, 108/109) llevó a D8 y R6-1 |
+| A27 | **Pasa** |
+
+Hallazgos y observaciones: O1 cerrada. No hay hallazgos abiertos de F1. Las desviaciones del informe de F1 están recogidas en las revisiones 5 (R5-1 a R5-4) y 6 (R6-1).
+
+**Veredicto: F1 pasa.** **La API de `tim_bm` queda congelada en `tim_bm.h` de `3174fef`** (C2): desde aquí, `git diff 3174fef -- 01_shared_drivers/03_tim/tim_bm.h` solo puede añadir. El implementador puede empezar F2 (`tim_ll`).
+
+### Notas que siguen abiertas, fuera del gate
+
+- **N1 (del responsable):** el reloj de la placa va un +1,3 % alto y deriva.
+- **Nota menor de la parte 1:** el `@brief` de `InitTimeBase` dice "SR.UIF = 0", pero `SR = 0` limpia todos los flags. Va al README de cierre, sin tocar la API.
+- **Capturas de desarrollo** `tim_dev_f1_*` (3,3 MB): se borran al cierre (decisión abierta 6).
