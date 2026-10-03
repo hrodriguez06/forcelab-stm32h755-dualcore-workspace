@@ -464,3 +464,69 @@ Hallazgos y observaciones: O1 cerrada. No hay hallazgos abiertos de F1. Las desv
 - **N1 (del responsable):** el reloj de la placa va un +1,3 % alto y deriva.
 - **Nota menor de la parte 1:** el `@brief` de `InitTimeBase` dice "SR.UIF = 0", pero `SR = 0` limpia todos los flags. Va al README de cierre, sin tocar la API.
 - **Capturas de desarrollo** `tim_dev_f1_*` (3,3 MB): se borran al cierre (decisión abierta 6).
+
+## F2, parte 1: revisión intermedia de una fase parada (2026-10-02, en `b0f1706`)
+
+Rango auditado: `ec0a6bc..b0f1706`. El implementador declara F2 **parada por un caso de §7 y no entregada**: no hay captura de evidencia. Reviso el código y la evidencia de build, y verifico los datos del problema que motiva la parada.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `git diff 3174fef b0f1706 -- tim_bm.h` | +24/−0: los diez `TIM_BM_Check*` y los cinco `TIM_BM_USE_*`. La API congelada solo se amplía (C2) |
+| `git diff 3174fef b0f1706 -- tim_bm.c`, completo | Refactor sin cambio de comportamiento. Los chequeos de cada operación pasan a un `chk_*` estático, que usan la operación y su `TIM_BM_Check*`, con el mismo orden C6 y los mismos estados. Las operaciones recalculan lo que el chequeo ya validó (`prescaler_code`, `ts_code`) y escriben como en F1. `ccxs()` pasa a leer CCMR por valor (`const`) |
+| Lectura completa de `tim_ll.h` y `tim_ll.c` (789 líneas) | Ver "tim\_ll" |
+| `.\tools\build_all.ps1 -Clean` en `b0f1706` | 8/8. Producción de `prj_01` igual a `2481396` (A16) |
+| `selftest-tim` desde un directorio vacío | 0 avisos |
+| `tim_ll.c` y `tim_bm.c` aislados, CMSIS/HAL como `-isystem`, sin `USE_HAL_DRIVER` ni `USE_FULL_LL_DRIVER`, `-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wcast-qual -Werror`, CM7 y CM4 | 0 diagnósticos en los cuatro casos. `-M`: `tim_ll.c` solo incluye `stm32h7xx_ll_tim.h` de la HAL, y `tim_bm.c` nada (C8) |
+| `git grep` de `LL_TIM_Init`, `USE_FULL_LL_DRIVER`, `ll_bus` y `stm32h7xx_hal` en `tim_ll.[ch]`, fuera de comentarios | 0 líneas |
+| `git diff e7542dc b0f1706 -- 02_firmware_projects` | Vacío (A23) |
+| Script propio sobre las 12 capturas de F1 y F2 (5 de F1 con el código final, 7 de desarrollo de F2): MCO1 antes y después de cada punto de T8, y residuos de T8 | Ver "El problema de T8/T13(b)" |
+
+### tim\_ll
+
+Cumple el contrato. Lo que comprobé:
+
+- **Validación:** cada función traduce sus constantes LL y valida con `TIM_BM_Check*` antes de escribir. Toda constante desconocida cae en un valor que `tim_bm` rechaza con `ERR_PARAM`, en el lugar del orden C6 que le toca. Las comprobé una a una: `bm_count_mode`, `bm_oc_mode` (OCxM[3] → 8), `bm_ic_selection`, `bm_edge`, `bm_ic_prescaler`, `bm_filter`, `bm_tisel`, `bm_mms`, `bm_sms` y `bm_trigger`, con ETRF e ITR9–13 rechazados.
+- **Orden:** escribe con los inlines LL en el orden de las reglas 3–11, R5-3 incluida (`SetCounterMode(UP)` antes del modo), bajo PRIMASK, con read-back de los mismos campos que BM.
+- **Paridad (cuidada donde LL no lo da hecho):**
+  - CCxNP se borra con `LL_TIM_IC_SetPolarity`.
+  - OCxM[3] se borra al configurar una entrada con `OC_SetMode(FROZEN)`, con CCxE = 0.
+  - TISEL conserva los otros tres campos.
+  - CKD, UDIS y UIFREMAP quedan a 0, como en el `CR1 = …` de BM.
+- **Delegación en `tim_bm`:** reloj, `Deinit`, `TakeFlags`, `WaitFlags`, `GetIRQn` y `GetDmaRequest`, sin segunda copia de la tabla ni de la imagen de reset.
+- **Valores fijos:** `.data = .bss = 0` (`.map` del informe).
+
+No encontré defectos. `has_bdtr()` y `GetCaps` añaden búsquedas en la tabla (el coste de B1 del informe); no afecta al contrato.
+
+### Pruebas
+
+- **Verificado en el código:** T2 compara cada imagen LL con la de `tim_bm` de la misma configuración (todo registro salvo CNT), además de con la tabla a mano, con controles alterados para los dos oráculos.
+- **Cambio en T9 de F1 (`a1c537b`):** el bucle de capturas consulta `TakeFlags` con PRIMASK durante unos 0,4 ms. Un tick de la HAL puede retrasarse, pero no perderse. Es aceptable como procedimiento.
+- **Pendiente:** el resto de la tabla §5.3 lo verificaré sobre la captura de evidencia, cuando la haya.
+
+### El problema de T8/T13(b): confirmado
+
+| Medida (12 capturas) | Valor |
+| --- | --- |
+| \|MCO1 después − MCO1 antes\| alrededor de cada punto de T8, 456 pares | mediana 257 ppm, p95 917 ppm, máximo 1728 ppm |
+| Residuo de T8 más allá del término en ticks, peor caso por frecuencia | 1 kHz 863 ppm, 10 kHz 1215 ppm, 100 kHz 593 ppm (1 MHz, dominado por los ticks) |
+| T13(b) en `tim_dev_f2_series_2d1e525_1` | 202..204 frente a 202,69 ± 1 tick, sin término relativo |
+
+Los fallos de F2 (2 de T8 BM, 1 de T8 LL, 1 de T13(b) BM y 2 de T9 antes de `a1c537b`) son de la referencia, no del código. Ninguno es de `tim_ll` ni de `tim_bm`: los mismos puntos pasan en otras ejecuciones de la misma imagen, y el firmware da PASS. La tolerancia común de ±0,1 % supone una referencia simultánea, como en T6, que mide MCO1 y la salida en la misma adquisición del LA y no ha fallado nunca. En T8 y T13(b), MCO1 se mide en ventanas de 41 µs antes y después de capturas que duran milisegundos, y el reloj de la placa se mueve hasta unos 1700 ppm entre ellas (N1).
+
+La opción (a) del informe, una referencia simultánea, no es viable en este banco. La ventana del LA (41 µs a 100 MS/s) no cubre los milisegundos de captura, y una referencia medida dentro de la placa (TIM17 con `TI1SEL = MCO1`) mide el reloj contra sí mismo y siempre da 200.
+
+### Decisión D9 del responsable (bloquea F2)
+
+Recomiendo una revisión 7 del plan con:
+
+1. **R7-1 (tolerancia):** en las pruebas de captura juzgadas contra MCO1 medido en otras ventanas, el término relativo pasa de 0,1 % a **0,5 %**, y los términos en ticks no cambian. Son T8, en BM y en LL: los puntos en PWM input (±(2 ticks + 0,5 %)), su control de polaridad invertida, ICPSC = 8 y el filtro (±(1 tick + 0,5 %)), y T13(b) (±(1 tick + 0,5 %), antes ±1 tick).
+   - **No cambian:** T6, porque usa la misma adquisición, y T9 y T11, porque son cocientes con MCO1 o ticks de la placa.
+   - **Margen:** el peor residuo observado (1215 ppm) queda al 24 % de la cota, y el mayor salto de MCO1 (1728 ppm), al 35 %.
+   - **Sensibilidad:** un error del driver en la ruta de captura (PSC del timer, ICPSC, canal, flanco, TISEL o filtro) cambia la medida en un factor ≥ 2, en el duty complementario o en el glitch completo, todo ≥ 25 %. PSC y ARR exactos los comprueban T2 y T5.
+2. **R7-2 (API de `tim_bm`):** los diez `TIM_BM_Check*` y los `TIM_BM_USE_*`, que ya aprobaste, y la delegación de `tim_ll` en `tim_bm` (desviaciones 1 y 2).
+3. **R7-3 (API de `tim_ll`, antes de congelarla):** sin copias LL de las funciones puras ni de `GetCaps`/`GetKernelClockHz` (desviación 3), y C8 admite las macros `LL_TIM_WriteReg`/`LL_TIM_ReadReg` de la misma cabecera (desviación 5). Recomiendo aceptar las dos.
+4. **R7-4 (banco v4):** los pasos `T6_TIM1_LL`, `T6_TIM15_LL` y `T8_LL`, el procedimiento de T9 con PRIMASK durante sus 17 capturas, y las desviaciones 4, 6 y 7 (constantes LL adicionales, polaridad con `IC_SetPolarity`, eventos uno a uno).
+
+Con D9, el implementador cambia las tolerancias en `tim_hw_check.py` (un commit), toma la captura de evidencia y entrega F2. Después hago yo A18.
