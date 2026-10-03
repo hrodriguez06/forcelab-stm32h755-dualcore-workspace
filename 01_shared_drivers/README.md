@@ -24,7 +24,7 @@ because it needs both cores already running.
 ├── 00_gpio/                    # Pin configuration, pin ops, LCKR, cross-core section (gpio_bm, gpio_ll, gpio_hal). Everything that drives a pin links gpio_bm
 ├── 01_led/                     # Board status and 3-bit boot diagnosis - works before the clock tree
 ├── 02_dma/                     # DMA1, DMA2, BDMA (D3), reachability, cache helpers (dma_bm, dma_ll, dma_hal)
-├── 03_tim/                     # General, Advanced, Basic & Low-Power Timers - time base
+├── 03_tim/                     # TIM1-8, TIM12-17: time base, PWM, input capture, master/slave, IRQ and DMA requests (tim_bm, tim_ll, tim_hal). LPTIM and HRTIM not covered
 ├── 04_uart/                    # USART1 - USART8, LPUART1 - console / log, first thing you want talking
 ├── 05_i2c/                     # I2C1 - I2C4 sensor interfaces
 ├── 06_spi/                     # SPI1 - SPI6 high-speed serial
