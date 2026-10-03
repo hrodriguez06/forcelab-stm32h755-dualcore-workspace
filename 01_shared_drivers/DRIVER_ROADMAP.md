@@ -20,7 +20,7 @@ no lo sustituye.
 | `00_gpio` | Hecho (F1) y auditado | BM, LL, HAL. Validado en `prj_01` con el AD2 (`00_gpio/README.md` §9). Auditoría cerrada con la re-auditoría 5 en `75d106a` (veredicto de merge, §12.7); sin auditoría independiente en la placa. Pendiente: F1b en `prj_04` (G1 sigue abierto allí) y F2 (EXTI, celda de compensación), `00_gpio/README.md` §13. |
 | `01_led` | Hecho | `led_bm`. Sin README. |
 | `02_dma` | Hecho y auditado | BM, LL, HAL. BDMA solo validado en M2M. |
-| `03_tim` | **Vacío** | |
+| `03_tim` | Hecho (F0–F3) y auditado | BM, LL, HAL (TIM1–8, TIM12–17). Validado en `prj_01` con el AD2 (`03_tim/README.md` §9). Cada fase pasó una auditoría independiente con ejecución propia del auditor en la placa (la última, F3 en `70b2062`: 259/259); cierre auditado en `1cf8ad4`. Pendiente: migrar TIM3/TIM7 de `prj_03`/`prj_04` (siguen a mano); TRGO → ADC/DAC no validado; LPTIM y HRTIM fuera (`03_tim/README.md` §9.5, §11). Abierto fuera del driver: el reloj de la placa va un +1,3 % alto (HSE del MCO del ST-LINK), por encima de VOS1 (§10.5). |
 | `04_uart` | Hecho | BM, LL, HAL. |
 | `05_i2c` | **Vacío** | |
 | `06_spi` | **Vacío** | |
