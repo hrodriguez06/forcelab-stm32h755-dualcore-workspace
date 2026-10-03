@@ -805,3 +805,12 @@ Lo que queda:
    - merge de `driver/tim` en `main` y borrado de la rama.
 
    **N1 sigue abierta, fuera del driver:** el reloj de la placa va un +1,3 % alto, por encima de VOS1.
+
+## Cierre, adenda: m6 (2026-10-03, en `164659e`) — **CIERRE TERMINADO**
+
+| Qué | Resultado |
+| --- | --- |
+| `git diff 8eda32f 164659e` | Solo `01_shared_drivers/03_tim/README.md`: §7 añade "(CMSIS/HAL headers as `-isystem`)"; §13 cita los cuatro documentos de proceso como `git show $(git log -1 --format=%h --diff-filter=D -- <ruta>)^:<ruta>`, sin hashes fijos |
+| `wc -l README.md` | 599 (≤ 600) |
+
+**m6 cerrado.** No quedan hallazgos abiertos de `03_tim`. **Veredicto de cierre: el driver `03_tim` (F0–F3 y README) queda auditado y listo para el merge.** Este es el último texto de `AUDIT.md`: el responsable del catálogo borra los documentos de proceso a continuación. N1 (reloj de la placa) sigue abierta, fuera del driver.
