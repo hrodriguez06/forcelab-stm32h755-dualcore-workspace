@@ -601,3 +601,57 @@ No hay hallazgos abiertos de F2. Las desviaciones del informe de F2 están recog
 
 - **N1 (del responsable):** el reloj de la placa va un +1,3 % alto y deriva hasta unos 1700 ppm entre ventanas de milisegundos.
 - **Al cierre:** borrar las capturas de desarrollo `tim_dev_f1_*` y `tim_dev_f2_*`; en el README, la nota de `InitTimeBase` (`SR = 0` limpia todos los flags).
+
+## F3, parte 1: revisión estática, de build y de la captura (2026-10-03, en `257ab98`)
+
+Rango auditado: `8e968c1..257ab98`. Commit entregado: `d33d9e5`, con la evidencia en `1f0e8aa`, la ejecución de desarrollo en `81cb614` y el informe en `257ab98`. Código: `tim_hal.h` (105 líneas), `tim_hal.c` (535), el target, el selftest de CM7 y el host.
+
+**Estado: F3 no pasa todavía.** No hay ningún hallazgo bloqueante. Falta A18 (mi ejecución del banco) y la decisión D10, que solo pide recoger en el plan cosas que no requieren código.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| Lectura completa de `tim_hal.h` y `tim_hal.c` contra el contrato de `tim_hal` (revisión 7) | Ver "tim\_hal" |
+| 19 referencias de línea de `stm32h7xx_hal_tim.c` (y `_tim_ex.c`) de la tabla de diferencias por diseño del informe, contra la HAL del repositorio | Las 19 coinciden: 1494, 1534, 2158, 4294, 4297, 5655, 5658, 6937, 6943, 6947, 6977, 7005, 7006, 7015, 7036, 7386, 7434, 7553 y la 2018 de `_tim_ex`. `IS_TIM_CLOCK_DIVISION_INSTANCE` deja fuera a TIM12–14 (`stm32h755xx.h`, l. 27474), como dice la fila 3 |
+| `grep` de `HAL_TIM_*_MspInit` en `prj_01` | Ninguna definición: `HAL_TIM_Base_Init` llama a la débil de la HAL, que está vacía |
+| `.\tools\build_all.ps1 -Clean` en `257ab98` | 8/8. Producción de `prj_01` igual a `2481396` (A16) |
+| `selftest-tim` desde un directorio vacío | 0 avisos |
+| `tim_hal.c` aislado con los flags de `compile_commands.json` (los vendor headers y el `Core/Inc` del núcleo como `-isystem`), `-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wcast-qual -Werror` | CM7: 0 diagnósticos, 9 símbolos `TIM_HAL_*` y 2800/0/0 B. CM4 (sin `HAL_TIM_MODULE_ENABLED`): 0 diagnósticos y objeto vacío (C8) |
+| `git diff 071bddb 257ab98 -- tim_bm.h tim_ll.h` | Vacío: las APIs congeladas no cambian (C2) |
+| `git diff e7542dc 257ab98` | Nada fuera de lo permitido; `02_firmware_projects` sin cambios (A23) |
+| `docs/tim_f3_bench_d33d9e5.txt` (2045 líneas) | Checkout `d33d9e5`, `tree clean`, `Rev` e id `4e15f9841b7cb7cc` iguales en CM7, CM4 y el host, protocolo v5, lista confirmada. AD2 abierto y cerrado en S2. **259/259, 0 FAIL, `FW`/`HOST VERDICT=PASS`** |
+| Líneas de F3 en esa captura | T1 HAL: 42 rechazos con estado, foto y handle sin cambios, y la prueba de los estados del handle. **T2 HAL: paridad 6008/6008 con `tim_bm`, con las imágenes alteradas detectadas en las 12 instancias.** Diferencias por diseño: cada caso difiere exactamente en los bits listados (`0x802`, `0x2`, `0x200`, `0x84`, `0x80`, `0x8`, `0x100`…) y en nada más; los casos con 0 bits dan 0. T9 HAL: 199..201 ticks y control con CC1IF 0. **TIM6: 5/5 comprobaciones de 100 ms de `HAL_GetTick` frente a CYCCNT** (antes, entre T1/T2/T5/B1, tras `T6_TIM1_HAL`, tras `T8_HAL` y al final) |
+| `docs/tim_dev_f3_bench_d33d9e5.txt` | La misma imagen, ejecutada antes con `--allow-dirty` (árbol limpio): 259/259 y PASS |
+
+### tim\_hal
+
+Cumple el contrato:
+
+- **Validación:** primero el handle (`NULL`, `cfg` `NULL`, `Instance` que no es un timer, `Instance ≠ cfg->tim`, todo con `ERR_PARAM` sin acceso), después `TIM_BM_Check*` y solo entonces la HAL.
+- **Read-back:** de los campos que escribe cada llamada, con las condiciones de la propia HAL (`IS_TIM_*_INSTANCE`): `ERR_HAL` o `ERR_VERIFY`.
+- **Sin callbacks ni MSP (C14):** `Deinit` usa `TIM_BM_Deinit` y deja el handle como `HAL_TIM_Base_DeInit`, sin la MSP.
+- **R5-3:** un `Base_Init` previo en modo up si CMS ≠ 00.
+- **`ConfigSlave`:** una llamada por paso SMS = 0 → TS → SMS, pasando a la etapa de entrada los valores que ya tiene.
+- **C7 y C8:** `.data = .bss = 0`, y sin `HAL_TIM_MODULE_ENABLED` no compila nada.
+
+No encontré defectos.
+
+### Observaciones (no bloquean; van al README de cierre)
+
+- **O3, procedimiento.** Antes de la captura de evidencia hubo una ejecución de la misma imagen limpia con `--allow-dirty`. Las dos pasan igual, así que no hay selección de resultado. Pero la primera ejecución de la imagen entregada es la que debe contar como evidencia (§3.4, "una sola ejecución"). Para el cierre: no se repite.
+- **O4, `TIM_HAL_ConfigSlave` con un trigger TI1FP1, TI1F\_ED o TI2FP2.** `TIM_TI1_ConfigInputStage` (l. 7586, y su par de TI2) pone CC1E/CC1NE a 0 y luego restaura CCER. Si la captura de ese canal está en marcha, durante esos ciclos, con PRIMASK, se puede perder un flanco. `tim_bm` no toca CCER en `ConfigSlave`. El README tiene que decir que se llame con la captura deshabilitada.
+- **Desviación 4 del informe (excepción a C10).** `HAL_TIM_Base_Init` y `HAL_TIM_OnePulse_Init` hacen su RMW de CR1 sin PRIMASK, porque pueden llamar a la MSP del proyecto, y una MSP que espere al tick no saldría con las interrupciones bloqueadas. La acepto, con una nota en el README: `TIM_HAL_InitTimeBase` no protege CR1 frente a una ISR que escriba en el mismo timer a la vez.
+
+### Decisión D10 del responsable, antes de congelar la API de `tim_hal`
+
+Solo pide recogerlo en el plan; no requiere código. Revisión 8:
+
+1. **R8-1:** las desviaciones 1–3 y 5–8 del informe de F3: estados del handle en `Deinit`, read-back según las condiciones de la HAL, las llamadas HAL añadidas, el tier HAL de la prueba sobre el mismo handle, el protocolo v5, la comprobación de TIM6 y los nombres de las capturas.
+2. **R8-2:** la excepción a C10 de la desviación 4, con su nota en el README.
+3. **R8-3:** el README de cierre incluye la tabla de diferencias por diseño de `tim_hal` frente a `tim_bm` (16 filas, con su línea de la HAL) y O4.
+
+### Para que F3 pase
+
+1. D10 aprobada.
+2. **A18/A27:** mi ejecución del banco sobre `selftest-tim` compilado en la cabeza de la rama, con la lista de comprobación física confirmada.
