@@ -763,3 +763,45 @@ Hallazgos: m5 cerrado. Observaciones O3 y O4 y la excepción R8-2, para el READM
 - **Responsable del catálogo:** `DRIVER_ROADMAP.md`, el borrado de los documentos de proceso, el merge y el borrado de la rama.
 - **Auditoría de cierre:** cada afirmación del README contra el código o una captura con hash.
 - **Fuera del driver:** N1 (reloj de la placa +1,3 % alto, con deriva) sigue abierta.
+
+## Cierre: auditoría del README (2026-10-03, en `b85a419`)
+
+Rango auditado: `27ef8cf..b85a419`.
+
+- `e778ba7` borra las capturas de desarrollo.
+- `b85a419` añade `01_shared_drivers/03_tim/README.md` (598 líneas) y la línea de `03_tim` en `01_shared_drivers/README.md`.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `git show --name-status e778ba7` | 15 borrados, todos `tim_dev_f1_*`, `tim_dev_f2_*` y `tim_dev_f3_*`; ningún otro archivo. `git ls-files … | grep tim_dev_` da 0 |
+| `git diff 27ef8cf b85a419 -- 01_shared_drivers/README.md` | Solo la línea de `03_tim`, con el estilo de la de `00_gpio` (tiers entre paréntesis, LPTIM y HRTIM fuera). `DRIVER_ROADMAP.md`, el plan, `AUDIT.md`, el código y `02_firmware_projects` sin cambios |
+| `wc -l README.md` | 598 (≤ 600). Las secciones van en el orden de "README de cierre" (Tiers, API, Configuration, Project contract, Rules, Silicon facts, Examples, Test bench, Validation, Known limitations, Consumers, Changing, History) |
+| Script propio sobre `docs/tim_f3_audit_bench_70b2062.txt` | Coinciden todos los números del README que salen de esa captura: TREF (ē +13 273,1, x +13 110,4 ± 6,2, 162,7 ≤ 513,7); T1 39 + 10, 47 + 12 y 42; T5, peor \|e\| 3/2/4 ppm; T6, peor 444 ppm y 10,6 ns; T7; d = 2,06/2,00/1,94; T11, control con 60 pulsos; T13(b) 202,52 ± 2,01; T14, 206 comprobaciones; T15 47 390 ISR y 9483 pérdidas en el control; las cuatro filas de B1 y `CalcTimeBase` en 1061 ciclos; T12 `0/1000` y `396/1000` |
+| Los ejemplos A–D del README extraídos del markdown y compilados: A, B y D en CM4 con `tim_bm.h`, `tim_ll.h` y `gpio_bm.h`; C en CM7 con `tim_hal.h` (flags de `compile_commands.json`, vendor headers como `-isystem`, `-Wall -Wextra -Wpedantic -Wconversion -Werror`) | Compilan los cuatro, con 0 diagnósticos |
+| Tabla de líneas y diagrama del banco frente a la tabla de líneas del plan | Coinciden (DIO8/DIO10 = PE3/PE4, nunca AF; DIO9/DIO11 = PE5/PE6 TIM15; DIO12/13 = PE2/PE7; DIO14 = PA8) |
+| Las 21 referencias de commit de "History" y §9.1 | Existen todas. Las "auditor's run" son los commits en los que compilé y ejecuté cada imagen |
+| Referencias a archivos del README | `stm32h7xx_hal_timebase_tim.c` con `HAL_TIM_PeriodElapsedCallback` (l. 75); los tres archivos de `prj_04` con TIM3/TIM7 existen; las capturas de §9.1 y `tim_f3_map_sizes_1680350.txt` existen |
+| Contenido exigido por R8-3 y §6.1 | Está: R8-2 (§10.1), O4 (§10.2), las 16 diferencias por diseño con su línea de la HAL (§10.3), los vectores compartidos y m5 (§10.4), `SR = 0` en `InitTimeBase`, el retardo de PWM input, N1 con R3-2/R7-1 (§10.5), las erratas 2.16.1–2.16.4 (§6.2), la tabla de capacidades (§6.1, igual a la que verifiqué contra el RM en F1), la guía de configuración, los comandos de reproducción y lo no ejercitado (§9.5) |
+
+### Hallazgo
+
+| ID | Clase | Dónde | Hallazgo | Acción |
+| --- | --- | --- | --- | --- |
+| m6 | Menor (texto) | README §13 y §7 | (a) "History" fija la última versión de `AUDIT.md` en `27ef8cf`, pero esta auditoría de cierre la cambia, y cualquier hash fijo quedaría viejo con el siguiente commit de auditoría. (b) §7 dice que los ejemplos compilan con `-Wconversion -Werror`, lo que solo es cierto con los vendor headers como `-isystem`: con `-I`, `-Wconversion` (que en C incluye `-Wsign-conversion`) salta en `cachel1_armv7.h` en CM7, como en la nota de F1 | (a) Las cuatro líneas de los documentos de proceso pasan a una forma que no envejece: `git show $(git log -1 --format=%h --diff-filter=D -- <ruta>)^:<ruta>` ("the parent of the commit that removes it"), como ya hace la línea de las capturas de desarrollo. (b) Añadir "(CMSIS/HAL headers as `-isystem`)" |
+
+### Veredicto
+
+**El README pasa la auditoría de cierre, con m6 pendiente.** Todo lo que afirma sale del código o de una captura con hash, y lo comprobé. m6 son dos frases y no cambia nada técnico.
+
+Lo que queda:
+
+1. **Implementador:** m6, en un commit `docs(tim): …` que solo toque el README.
+2. **Auditor:** verificar m6 y dar el cierre por terminado.
+3. **Responsable del catálogo:**
+   - en `DRIVER_ROADMAP.md`, fila `03_tim`: "Hecho y auditado (F0–F3)", con el commit de cierre;
+   - borrar `IMPLEMENTATION_PLAN.md`, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md` y `AUDIT.md` en un commit;
+   - merge de `driver/tim` en `main` y borrado de la rama.
+
+   **N1 sigue abierta, fuera del driver:** el reloj de la placa va un +1,3 % alto, por encima de VOS1.
