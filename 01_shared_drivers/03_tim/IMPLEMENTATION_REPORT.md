@@ -1235,3 +1235,32 @@ Ninguna.
 La tabla de capacidades no cambia (F1).
 
 Estado de F3: **entregada para auditoría** (`d33d9e5`; evidencia en `1f0e8aa`).
+
+## Respuesta a la auditoría de F3 (partes 1 y 2; plan revisión 8)
+
+La parte 1 (`c050548`) no encuentra defectos en `tim_hal` y deja D10, que el responsable aprobó como revisión 8 (`3b5dc5e`) sin cambios de código. La parte 2 (`859ea87`) es la ejecución del auditor en `3b5dc5e`: 259/259 en el host, pero `FW VERDICT=FAIL` por T12 LL(a) en el grupo combinado, con 671 llamadas a ISR sin flag. El hallazgo es m5, en la prueba.
+
+| Hallazgo | Commit que lo corrige | Qué ejecuté para comprobarlo | Estado |
+| --- | --- | --- | --- |
+| m5: T12(a) exigía 0 llamadas a ISR sin flag, en un contador global (`IQ_SPUR`), también en `TIM8_UP_TIM13` con TIM8 y TIM13 activos a la vez | `1680350`, solo en `CM7/App/Src/tim_selftest.c`:<br>• las llamadas vacías se cuentan por vector (`s_irq_empty[]`);<br>• `TIM8_UP_TIM13_IRQHandler` cuenta además las llamadas que se llevan los dos flags (`s_irq_both`, `n == 2`);<br>• veredicto: cada contador 1000 ± 1 y sin cruces, como antes; 0 llamadas vacías en todo vector con una sola fuente; en `TIM8_UP_TIM13` con dos fuentes, vacías ≤ dobles;<br>• la línea imprime los dos recuentos por vector. La ISR es la misma para BM y LL | Builds en `1680350`:<br>• `build_all -Clean` 8/8;<br>• `selftest-tim` desde vacío y las tres `-Werror`, 0 avisos;<br>• producción igual a `2481396` en el `.map`;<br>• `git diff 071bddb -- tim_bm.h tim_ll.h` vacío.<br>Captura `docs/tim_f3_bench_1680350.txt` (`653fbdc`): primera y única ejecución de esa imagen (O3), 259/259, `FW VERDICT=PASS` (0 fallos), `HOST VERDICT=PASS` | corregido en `1680350`, pendiente de verificación |
+
+El driver, el plan y los demás criterios no cambian.
+
+**Recuentos de T12(a) en `docs/tim_f3_bench_1680350.txt`**, llamadas vacías / llamadas que se llevan los dos flags:
+
+| Grupo | BM | LL |
+| --- | --- | --- |
+| Los 12 grupos de una sola fuente (TIM1\_UP, TIM1\_CC, TIM2, TIM3, TIM4, TIM5, TIM7, TIM8 solo, TIM13 solo, TIM12 solo, TIM14 solo, TIM8\_CC solo), TIM16 y TIM17 | 0/0 en su vector | 0/0 en su vector |
+| Combinado, `TIM8_UP_TIM13` (TIM8 y TIM13) | 0/1000 | 0/1000 |
+| Combinado, `TIM8_BRK_TIM12`, `TIM8_TRG_COM_TIM14` y `TIM8_CC` | 0/0 cada uno | 0/0 cada uno |
+
+Los contadores de cada fuente dan 1000 en todos los grupos.
+
+- **En esta captura no hay llamadas vacías.** En el grupo combinado, las 1000 entradas de `TIM8_UP_TIM13` se llevan los dos flags en las dos ejecuciones (BM y LL). Los dos updates estaban pendientes antes de entrar en la ISR, y ninguno llegó durante ella.
+- **En la captura del auditor (`3b5dc5e`), el grupo LL dio 671 llamadas vacías**, y esa versión de la prueba no contaba los dobles.
+- **Ninguna llamada vacía queda sin una doble que la explique.** Por eso no hay motivo para parar (instrucciones del auditor).
+- **No he comprobado que el desfase entre TIM8 y TIM13 dependa del momento de arranque.** Es la explicación de m5. Esta captura muestra un desfase en el que coinciden los dos updates; no muestra la variación entre ejecuciones.
+
+O3, O4 y la nota de la desviación 4 son para el README de cierre (R8-2, R8-3). No cambian código.
+
+Estado de F3: **entregada para auditoría** (`1680350`; evidencia en `653fbdc`).
