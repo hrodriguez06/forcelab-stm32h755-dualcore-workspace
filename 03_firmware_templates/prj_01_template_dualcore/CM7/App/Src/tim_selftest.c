@@ -2261,12 +2261,24 @@ static void test_t10(void)
  * ========================================================================================== */
 
 enum { IQ_T1UP, IQ_T1CC, IQ_T2, IQ_T3, IQ_T4, IQ_T5, IQ_T7, IQ_T8UP, IQ_T13, IQ_T12, IQ_T14, IQ_T8CC, IQ_T16, IQ_T17,
-       IQ_SPUR, IQ_N };
+       IQ_N };
 static volatile uint32_t s_irq[IQ_N];
+
+/* The vectors of the test ISRs. A call that takes no flag is counted on its vector (m5):
+   on TIM8_UP_TIM13, with TIM8 and TIM13 both running, a call that takes the two flags
+   leaves the vector pending again, and the next entry finds nothing (s_irq_both). */
+enum { VQ_T1UP, VQ_T1CC, VQ_T2, VQ_T3, VQ_T4, VQ_T5, VQ_T7, VQ_T8UP_T13, VQ_T8BRK_T12, VQ_T8TRG_T14, VQ_T8CC, VQ_T16,
+       VQ_T17, VQ_N };
+static const char *const k_vq_name[VQ_N] = {
+    "TIM1_UP", "TIM1_CC", "TIM2", "TIM3", "TIM4", "TIM5", "TIM7", "TIM8_UP_TIM13", "TIM8_BRK_TIM12",
+    "TIM8_TRG_COM_TIM14", "TIM8_CC", "TIM16", "TIM17",
+};
+static volatile uint32_t s_irq_empty[VQ_N];   /* ISR calls that took no flag, per vector             */
+static volatile uint32_t s_irq_both;          /* TIM8_UP_TIM13 calls that took both flags (n == 2)   */
 static volatile uint32_t s_t15_on;    /* TIM7's vector serves T15 instead of T12 */
 static void t15_isr(void);
 
-static void count_irq(TIM_TypeDef *t, uint32_t ev, uint32_t idx)
+static void count_irq(TIM_TypeDef *t, uint32_t ev, uint32_t idx, uint32_t vq)
 {
     if (s_tr->take_flags(t, ev) != 0U)
     {
@@ -2274,19 +2286,19 @@ static void count_irq(TIM_TypeDef *t, uint32_t ev, uint32_t idx)
     }
     else
     {
-        s_irq[IQ_SPUR]++;
+        s_irq_empty[vq]++;
     }
 }
 
-void TIM1_UP_IRQHandler(void)  { count_irq(TIM1, TIM_BM_EV_UPDATE, IQ_T1UP); }
-void TIM1_CC_IRQHandler(void)  { count_irq(TIM1, TIM_BM_EV_CC1, IQ_T1CC); }
-void TIM2_IRQHandler(void)     { count_irq(TIM2, TIM_BM_EV_UPDATE, IQ_T2); }
-void TIM3_IRQHandler(void)     { count_irq(TIM3, TIM_BM_EV_UPDATE, IQ_T3); }
-void TIM4_IRQHandler(void)     { count_irq(TIM4, TIM_BM_EV_UPDATE, IQ_T4); }
-void TIM5_IRQHandler(void)     { count_irq(TIM5, TIM_BM_EV_UPDATE, IQ_T5); }
-void TIM8_CC_IRQHandler(void)  { count_irq(TIM8, TIM_BM_EV_CC1, IQ_T8CC); }
-void TIM16_IRQHandler(void)    { count_irq(TIM16, TIM_BM_EV_UPDATE, IQ_T16); }
-void TIM17_IRQHandler(void)    { count_irq(TIM17, TIM_BM_EV_UPDATE, IQ_T17); }
+void TIM1_UP_IRQHandler(void)  { count_irq(TIM1, TIM_BM_EV_UPDATE, IQ_T1UP, VQ_T1UP); }
+void TIM1_CC_IRQHandler(void)  { count_irq(TIM1, TIM_BM_EV_CC1, IQ_T1CC, VQ_T1CC); }
+void TIM2_IRQHandler(void)     { count_irq(TIM2, TIM_BM_EV_UPDATE, IQ_T2, VQ_T2); }
+void TIM3_IRQHandler(void)     { count_irq(TIM3, TIM_BM_EV_UPDATE, IQ_T3, VQ_T3); }
+void TIM4_IRQHandler(void)     { count_irq(TIM4, TIM_BM_EV_UPDATE, IQ_T4, VQ_T4); }
+void TIM5_IRQHandler(void)     { count_irq(TIM5, TIM_BM_EV_UPDATE, IQ_T5, VQ_T5); }
+void TIM8_CC_IRQHandler(void)  { count_irq(TIM8, TIM_BM_EV_CC1, IQ_T8CC, VQ_T8CC); }
+void TIM16_IRQHandler(void)    { count_irq(TIM16, TIM_BM_EV_UPDATE, IQ_T16, VQ_T16); }
+void TIM17_IRQHandler(void)    { count_irq(TIM17, TIM_BM_EV_UPDATE, IQ_T17, VQ_T17); }
 
 void TIM7_IRQHandler(void)
 {
@@ -2296,7 +2308,7 @@ void TIM7_IRQHandler(void)
     }
     else
     {
-        count_irq(TIM7, TIM_BM_EV_UPDATE, IQ_T7);
+        count_irq(TIM7, TIM_BM_EV_UPDATE, IQ_T7, VQ_T7);
     }
 }
 
@@ -2306,29 +2318,37 @@ void TIM8_UP_TIM13_IRQHandler(void)
     uint32_t n = 0U;
     if (s_tr->take_flags(TIM8, TIM_BM_EV_UPDATE) != 0U)  { s_irq[IQ_T8UP]++; n++; }
     if (s_tr->take_flags(TIM13, TIM_BM_EV_UPDATE) != 0U) { s_irq[IQ_T13]++; n++; }
-    if (n == 0U) { s_irq[IQ_SPUR]++; }
+    if (n == 0U) { s_irq_empty[VQ_T8UP_T13]++; }
+    if (n == 2U) { s_irq_both++; }
 }
 
 void TIM8_BRK_TIM12_IRQHandler(void)
 {
-    if (s_tr->take_flags(TIM12, TIM_BM_EV_UPDATE) != 0U) { s_irq[IQ_T12]++; } else { s_irq[IQ_SPUR]++; }
+    if (s_tr->take_flags(TIM12, TIM_BM_EV_UPDATE) != 0U) { s_irq[IQ_T12]++; } else { s_irq_empty[VQ_T8BRK_T12]++; }
 }
 
 void TIM8_TRG_COM_TIM14_IRQHandler(void)
 {
-    if (s_tr->take_flags(TIM14, TIM_BM_EV_UPDATE) != 0U) { s_irq[IQ_T14]++; } else { s_irq[IQ_SPUR]++; }
+    if (s_tr->take_flags(TIM14, TIM_BM_EV_UPDATE) != 0U) { s_irq[IQ_T14]++; } else { s_irq_empty[VQ_T8TRG_T14]++; }
 }
 
 /* The vectors, by hand from stm32h755xx.h (the T12(c) oracle). */
-typedef struct { TIM_TypeDef *tim; uint32_t ev; IRQn_Type irq; uint32_t idx; } IrqRow_t;
+typedef struct { TIM_TypeDef *tim; uint32_t ev; IRQn_Type irq; uint32_t idx; uint32_t vq; } IrqRow_t;
 static const IrqRow_t k_irq_rows[] = {
-    { TIM1, TIM_BM_EV_UPDATE, TIM1_UP_IRQn, IQ_T1UP },          { TIM1, TIM_BM_EV_CC1, TIM1_CC_IRQn, IQ_T1CC },
-    { TIM2, TIM_BM_EV_UPDATE, TIM2_IRQn, IQ_T2 },               { TIM3, TIM_BM_EV_UPDATE, TIM3_IRQn, IQ_T3 },
-    { TIM4, TIM_BM_EV_UPDATE, TIM4_IRQn, IQ_T4 },               { TIM5, TIM_BM_EV_UPDATE, TIM5_IRQn, IQ_T5 },
-    { TIM7, TIM_BM_EV_UPDATE, TIM7_IRQn, IQ_T7 },               { TIM8, TIM_BM_EV_UPDATE, TIM8_UP_TIM13_IRQn, IQ_T8UP },
-    { TIM13, TIM_BM_EV_UPDATE, TIM8_UP_TIM13_IRQn, IQ_T13 },    { TIM12, TIM_BM_EV_UPDATE, TIM8_BRK_TIM12_IRQn, IQ_T12 },
-    { TIM14, TIM_BM_EV_UPDATE, TIM8_TRG_COM_TIM14_IRQn, IQ_T14 }, { TIM8, TIM_BM_EV_CC1, TIM8_CC_IRQn, IQ_T8CC },
-    { TIM16, TIM_BM_EV_UPDATE, TIM16_IRQn, IQ_T16 },            { TIM17, TIM_BM_EV_UPDATE, TIM17_IRQn, IQ_T17 },
+    { TIM1, TIM_BM_EV_UPDATE, TIM1_UP_IRQn, IQ_T1UP, VQ_T1UP },
+    { TIM1, TIM_BM_EV_CC1, TIM1_CC_IRQn, IQ_T1CC, VQ_T1CC },
+    { TIM2, TIM_BM_EV_UPDATE, TIM2_IRQn, IQ_T2, VQ_T2 },
+    { TIM3, TIM_BM_EV_UPDATE, TIM3_IRQn, IQ_T3, VQ_T3 },
+    { TIM4, TIM_BM_EV_UPDATE, TIM4_IRQn, IQ_T4, VQ_T4 },
+    { TIM5, TIM_BM_EV_UPDATE, TIM5_IRQn, IQ_T5, VQ_T5 },
+    { TIM7, TIM_BM_EV_UPDATE, TIM7_IRQn, IQ_T7, VQ_T7 },
+    { TIM8, TIM_BM_EV_UPDATE, TIM8_UP_TIM13_IRQn, IQ_T8UP, VQ_T8UP_T13 },
+    { TIM13, TIM_BM_EV_UPDATE, TIM8_UP_TIM13_IRQn, IQ_T13, VQ_T8UP_T13 },
+    { TIM12, TIM_BM_EV_UPDATE, TIM8_BRK_TIM12_IRQn, IQ_T12, VQ_T8BRK_T12 },
+    { TIM14, TIM_BM_EV_UPDATE, TIM8_TRG_COM_TIM14_IRQn, IQ_T14, VQ_T8TRG_T14 },
+    { TIM8, TIM_BM_EV_CC1, TIM8_CC_IRQn, IQ_T8CC, VQ_T8CC },
+    { TIM16, TIM_BM_EV_UPDATE, TIM16_IRQn, IQ_T16, VQ_T16 },
+    { TIM17, TIM_BM_EV_UPDATE, TIM17_IRQn, IQ_T17, VQ_T17 },
 };
 #define N_IRQ_ROWS   (sizeof(k_irq_rows) / sizeof(k_irq_rows[0]))
 
@@ -2366,6 +2386,11 @@ static void t12_group(uint32_t set, const char *what)
     {
         s_irq[k] = 0U;
     }
+    for (uint32_t v = 0U; v < VQ_N; v++)
+    {
+        s_irq_empty[v] = 0U;
+    }
+    s_irq_both = 0U;
     for (uint32_t k = 0U; k < N_IRQ_ROWS; k++)
     {
         if ((set & (1UL << k)) != 0U)
@@ -2417,8 +2442,34 @@ static void t12_group(uint32_t set, const char *what)
                             (unsigned long)s_irq[k_irq_rows[k].idx]);
         }
     }
-    verdict(ok && (s_irq[IQ_SPUR] == 0U), "T12%s(a) %s, 10 kHz for 100 ms:%s (1000 +-1), others 0, ISR calls that took "
-            "nothing %lu", s_tr->tag, what, buf, (unsigned long)s_irq[IQ_SPUR]);
+    /* m5: calls that took no flag, per vector. 0 on every vector with at most one source
+       running; on a vector with two (TIM8_UP_TIM13 with TIM8 and TIM13), no more than the
+       calls that took both flags. Both counts are printed for each vector of the set. */
+    static uint32_t sources[VQ_N];    /* static: the Status_Task stack is 512 words */
+    memset(sources, 0, sizeof(sources));
+    for (uint32_t k = 0U; k < N_IRQ_ROWS; k++)
+    {
+        if ((set & (1UL << k)) != 0U)
+        {
+            sources[k_irq_rows[k].vq]++;
+        }
+    }
+    bool empty_ok = true;
+    static char ebuf[200];
+    int elen = 0;
+    for (uint32_t v = 0U; v < VQ_N; v++)
+    {
+        const uint32_t e = s_irq_empty[v];
+        const uint32_t both = (v == VQ_T8UP_T13) ? s_irq_both : 0U;
+        empty_ok = empty_ok && ((sources[v] >= 2U) ? (e <= both) : (e == 0U));
+        if ((sources[v] != 0U) && (elen < 180))
+        {
+            elen += snprintf(&ebuf[elen], sizeof(ebuf) - (size_t)elen, " %s %lu/%lu", k_vq_name[v], (unsigned long)e,
+                             (unsigned long)both);
+        }
+    }
+    verdict(ok && empty_ok, "T12%s(a) %s, 10 kHz for 100 ms:%s (1000 +-1), others 0; calls that took nothing/took both "
+            "flags per vector:%s (nothing 0 with one source, nothing <= both with two)", s_tr->tag, what, buf, ebuf);
     for (uint32_t k = 0U; k < N_IRQ_ROWS; k++)
     {
         if ((set & (1UL << k)) != 0U)
@@ -2449,7 +2500,6 @@ static void test_t12(void)
 
     /* (b) no spurious IRQ: EnableIrq(UPDATE) right after InitTimeBase, no Start, 10 ms. */
     s_irq[IQ_T2] = 0U;
-    s_irq[IQ_SPUR] = 0U;
     TimBm_TimeBaseConfig_t c = tb_cfg(TIM2, 199U, 99U, TIM_BM_COUNT_UP, false);
     (void)s_tr->init_tb(&c);
     (void)s_tr->enable_irq(TIM2, TIM_BM_EV_UPDATE);
