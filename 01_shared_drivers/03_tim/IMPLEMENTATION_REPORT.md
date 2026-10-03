@@ -1044,3 +1044,194 @@ Decisiones del responsable de esta fase:
 - D9, aprobada como revisión 7 (`AUDIT.md`, F2 adenda a la parte 1).
 
 Estado de F2: **entregada para auditoría** (`b63204a`; evidencia en `fe8a07c`).
+
+## F3 (tim_hal)
+
+Plan de referencia: revisión 7 (`9611ada`). F3 empieza sobre `8e968c1`. `AUDIT.md`, F2 parte 3, dice que F2 pasa y congela la API de `tim_ll` en `tim_ll.h` de `071bddb`, junto con los añadidos R7-2 de `tim_bm.h`.
+
+### Resumen
+
+- `tim_hal` implementa el contrato de F3 en `01_shared_drivers/03_tim/tim_hal.{h,c}`: las nueve funciones del plan sobre un `TIM_HandleTypeDef` del llamador, con los valores de `tim_bm` (sus estructuras, canal 1..4, `TIM_BM_MMS_*`, `TIM_BM_SMS_*`, `TIM_BM_TRG_*`).
+- Cada función valida el handle y luego llama a `TIM_BM_Check*` antes de la HAL. Después de cada llamada a la HAL hace read-back de los campos que esa llamada escribe: `ERR_HAL` o `ERR_VERIFY`.
+- Sin callbacks ni MSP (C14). Sin `HAL_TIM_MODULE_ENABLED` no compila nada (C8).
+- El target es `stm32h7_driver_tim_hal`, que enlaza `_tim_bm`, sin target sin sufijo y fuera del paraguas. `prj_01` lo enlaza solo en CM7 y solo con `TIM_DRIVER_SELFTEST`.
+- Pruebas HAL en CM7: T1, T2 (paridad con `tim_bm` y 15 casos de diferencias por diseño), T5, T6, T8, T9, T14 y B1. TIM6 se comprueba antes, entre y después de las pruebas HAL. El protocolo del banco pasa a v5, con tres pasos nuevos: `T6_TIM1_HAL`, `T8_HAL` y `T9_HAL`.
+- **La captura de evidencia es `docs/tim_f3_bench_d33d9e5.txt`.** Una sola ejecución: 259/259 comprobaciones del host, `FW VERDICT=PASS` (0 fallos) y `HOST VERDICT=PASS`. Antes hubo una ejecución de desarrollo con la misma imagen (`docs/tim_dev_f3_bench_d33d9e5.txt`, `81cb614`), con el mismo resultado.
+- `git diff 071bddb -- tim_bm.h tim_ll.h` sale vacío.
+- El cierre no ha empezado: espera a que `AUDIT.md` diga que F3 pasa y a que el auditor lo pida.
+
+| Fase | Estado | Último commit | Captura |
+| --- | --- | --- | --- |
+| F0 | pasa (`AUDIT.md`, auditoría 6) | `cae5414` | `docs/tim_f0_audit_bench_cae5414.txt` |
+| F1 | pasa (`AUDIT.md`, F1 parte 4) | `3174fef` | `docs/tim_f1_audit_bench_3174fef.txt` |
+| F2 | pasa (`AUDIT.md`, F2 parte 3) | `071bddb` | `docs/tim_f2_audit_bench_071bddb.txt` |
+| F3 | entregada para auditoría (`d33d9e5`; evidencia en `1f0e8aa`) | el commit que añade esta sección | `03_firmware_templates/prj_01_template_dualcore/docs/tim_f3_bench_d33d9e5.txt` |
+
+### 5.1 Commits
+
+Rango de la entrega: `8e968c1..` el commit que añade esta sección.
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `f29d578` | feat(tim): add tim_hal, the HAL timer tier | — |
+| `0610f74` | build(tim): add the stm32h7_driver_tim_hal target | — |
+| `3a804ea` | build(tim): link tim_hal into selftest-tim on CPU1 | — |
+| `765874e` | test(prj_01): the F3 tests of tim_hal on CPU1, bench protocol v5 | — |
+| `d33d9e5` | test(prj_01): the host side of the F3 bench, protocol v5 | — |
+| `1f0e8aa` | docs(tim): add the F3 evidence at d33d9e5 | — |
+| `81cb614` | docs(tim): add the F3 development run (not evidence) | — |
+
+### 5.2 Build y tamaños
+
+Evidencia en `03_firmware_templates/prj_01_template_dualcore/docs/`, todo en `d33d9e5` con el árbol limpio:
+
+- `build_all -Clean`: 8/8 (`tim_f3_build_all_d33d9e5.txt`).
+- `selftest-tim` compilado desde un directorio vacío: 0 avisos (`tim_f3_selftest_build_d33d9e5.txt`).
+- La compilación aparte con `CMAKE_C_FLAGS=-Werror` de `selftest-tim`, `debug` y `release`: 0 avisos en las tres (`tim_f3_werror_d33d9e5.txt`).
+- `git diff 071bddb d33d9e5 -- tim_bm.h tim_ll.h`: 0 líneas quitadas y 0 añadidas (`tim_f3_api_diff_d33d9e5.txt`).
+- `git diff e7542dc -- 02_firmware_projects` sale vacío. El alcance desde `e7542dc` sigue siendo `01_shared_drivers/03_tim`, `01_shared_drivers/CMakeLists.txt`, `03_firmware_templates/prj_01_template_dualcore` y `tools/ad2.py`.
+- **Compilación aislada** (`tim_f3_isolated_build_d33d9e5.txt`): 0 diagnósticos para `tim_hal.c`, `tim_ll.c` y `tim_bm.c`, en CM7 y en CM4.
+  - Flags exactos, los de `10c808e`: `arm-none-eabi-gcc 14.3.1 -c -std=c11 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wcast-qual -Werror -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -DSTM32H755xx -DCORE_CM7` (en CM4, `-mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -DCORE_CM4`).
+  - Includes: `-isystem` para `CMSIS/Include`, `CMSIS/Device/ST/STM32H7xx/Include` y `STM32H7xx_HAL_Driver/Inc` del Cube que usa `prj_01`, e `-I` para `01_shared_drivers/03_tim`.
+  - Solo para `tim_hal.c`, además: `-DUSE_HAL_DRIVER` e `-isystem` para el `Core/Inc` de `prj_01` del núcleo, donde está su `stm32h7xx_hal_conf.h`, que incluye `stm32h7xx_hal.h`.
+  - CM7, con `HAL_TIM_MODULE_ENABLED`: el objeto define las nueve funciones `TIM_HAL_*`, 2800 B de `.text` y `.data = .bss = 0`.
+  - CM4, sin `HAL_TIM_MODULE_ENABLED`: objeto vacío, sin símbolos (C8).
+  - `-M` de `tim_hal.c` (CM7): `tim_hal.h`, `tim_bm.h`, CMSIS, `stm32h7xx_hal.h`, `stm32h7xx_hal_conf.h` de `prj_01` y los headers de los módulos HAL que activa esa configuración (`def`, `rcc`/`rcc_ex`, `gpio`/`gpio_ex`, `dma`/`dma_ex`, `mdma`, `cortex`, `exti`, `flash`/`flash_ex`, `hsem`, `pwr`/`pwr_ex`, `tim`/`tim_ex`, `uart`/`uart_ex`, `Legacy/stm32_hal_legacy.h`). Ni FreeRTOS ni otro header del proyecto.
+
+Producción de `prj_01` frente a `2481396` (R4-2), de `tim_f3_map_sizes_d33d9e5.txt`: 0 de diferencia en todas las secciones asignadas de CM7 y CM4, en debug y en release. CM7 da 29304/132/55668 y 28356/132/55672; CM4, 3456/24/12560 y 3112/24/12560.
+
+Objetos de `selftest-tim`; la columna .text suma `.text` y `.rodata`:
+
+| Objeto | Núcleo | .text | .data | .bss | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| `tim_hal.c.obj` | CM7 | 3038 | 0 | 0 | `tim_f3_map_sizes_d33d9e5.txt` |
+| `tim_ll.c.obj` | CM7 | 4224 | 0 | 0 | ídem (F2: 4224) |
+| `tim_ll.c.obj` | CM4 | 4122 | 0 | 0 | ídem (F2: 4122) |
+| `tim_bm.c.obj` | CM7 | 6532 | 0 | 0 | ídem (F2: 6532) |
+| `tim_bm.c.obj` | CM4 | 5882 | 0 | 0 | ídem (F2: 5882) |
+| `tim_selftest.c.obj` | CM7 | 59427 | 12 | 10354 | ídem |
+| `tim_selftest_common.c.obj` | CM7 | 5438 | 0 | 1064 | ídem |
+| `tim_selftest.c.obj` | CM4 | 4719 | 4 | 324 | ídem |
+| `tim_selftest_common.c.obj` | CM4 | 5416 | 0 | 1064 | ídem |
+
+`.data = .bss = 0` en los tres objetos del driver (C7). Los 10 354 B de `.bss` de `tim_selftest.c.obj` incluyen los handles de la prueba, uno por instancia de CPU1. El handle es del llamador.
+
+Greps del plan sobre `tim_hal.[ch]`: A2, A9 y A13 dan 0 líneas, y la regla 12 también. A4 solo encuentra, en comentarios, la ruta del plan. El único `#include` de `tim_hal.c` es `tim_hal.h`, que incluye `stm32h7xx_hal.h` y `tim_bm.h`.
+
+`git grep -n TIM6` en los `tim_selftest.c`: ninguna escritura. Son lecturas (`tim6_snap`), comentarios y las tablas de `GetIRQn`/`GetDmaRequest` de F1.
+
+### 5.3 Pruebas
+
+Todos los valores salen de `docs/tim_f3_bench_d33d9e5.txt`:
+
+- una sola ejecución (2045 líneas);
+- checkout `d33d9e5`, `tree clean`; `Rev` `d33d9e5` e id `4e15f9841b7cb7cc` iguales en el host, CM7 y CM4; protocolo v5; lista de comprobación física confirmada por Hector;
+- **259/259, 0 líneas FAIL, `FW VERDICT=PASS` (0 fallos) y `HOST VERDICT=PASS`**.
+
+| ID | Tier | Núcleo | Resultado | Valor medido | Control negativo: valor | Oráculo |
+| --- | --- | --- | --- | --- | --- | --- |
+| Regresión F0 | banco | CM7 | PASS | T0a, T0b(a)–(g); TREF\_A/TREF\_B: ē = +12 005,8 ppm (s\_ef 427,8), x = +12 072,0 ± 8,2 ppm, \|ē − x\| = 66,2 ≤ 541,1 (R4-1) | los de F0 | los de F0 |
+| Regresión F1 | BM | CM7, CM4 | PASS | todas las pruebas de F1: T6 BM 36/36 y 16/16; T8 BM 24/24 con d = 2,00 ticks; T9 16 periodos de 199..201 ticks; T13(b) 202..203 frente a 202,27 ± 2,01 (R7-1); T15 0 pérdidas contra 48 364 ISR | los de F1 (T15: 9067 pérdidas) | los de F1 |
+| Regresión F2 | LL | CM7, CM4 | PASS | todas las pruebas de F2: T2 LL paridad 6008/6008 y 1313/1313; T6 LL 36/36 y 16/16; T8 LL 24/24 con d = 1,88 ticks | los de F2 | los de F2 |
+| T1 | HAL | CM7 | PASS | 42 rechazos por `tim_hal`, con el estado esperado en los 42. En cada uno, sin cambios las fotos de 6 timers, de los dos bancos de RCC y del handle. Incluyen:<br>• los propios del handle (`ERR_PARAM`): h o cfg `NULL`, `Instance` USART3 o TIM1 + 4, `Instance` ≠ `cfg->tim`;<br>• los de `tim_bm` a través de `tim_hal`: canal, capacidad, rango, 2.16.1, `ERR_BUSY`;<br>• `StartPwm`/`StartCapture` sobre un canal de la otra dirección;<br>• un rechazo de la propia HAL: `StartPwm` dos veces, `ERR_HAL` sin escribir nada (canal en `BUSY`) | O1: `TIM_HAL_ConfigOutput(TIM2 CH1)` cambia exactamente CCMR1 y CCR1 (`0x0002040`) | registros y handle leídos en crudo |
+| T1 (handle) | HAL | CM7 | PASS | `InitTimeBase` → `State` READY y los canales READY; `StartPwm` → canal BUSY; `StopPwm` → READY; `Deinit` → `State`, canales y ráfaga DMA RESET, desbloqueado | — | campos del handle |
+| T2 | HAL | CM7 | PASS | 6008 imágenes de 12 instancias por `tim_hal`: 0 diferencias con la codificación del RM a mano, 0 llamadas con error. **Paridad:** las 6008 bit a bit (todo registro salvo CNT) contra `tim_bm`: 0 diferencias | por instancia, una imagen esperada alterada se detecta, y una de `tim_bm` alterada (ARR ^ 1) también | campos del RM a mano + imagen de BM |
+| T2 (por diseño) | HAL | CM7 | PASS | 15 casos desde una imagen que no es la de reset, por `tim_bm` y por `tim_hal`: en cada uno las imágenes difieren exactamente en los bits listados (tabla siguiente) y en nada más | 3 casos con 0 bits listados (R5-3, CC1NP en TIM1 CH1, la etapa de entrada en `ConfigSlave`): sin diferencia | imágenes de BM leídas en crudo |
+| T2 (HAL cruda) | — | CM7 | registro | la prueba de F1 con `HAL_TIM_*` sin el driver: 17 entradas, todas OCxPE (`0x808` en CCMR1/CCMR2 de TIM1–5, 8 y 12; `0x8` en CCMR1 de TIM13, 14, 16 y 17). `HAL_TIM_PWM_ConfigChannel` pone siempre OCxPE (línea 4294); `tim_hal` lo deja como pide `preload` | — | — |
+| T5 | HAL | CM7 | PASS | (a)–(d) de F1 en las 12 instancias de CPU1, 22 medidas de −1 a +3 ppm (\|e\| ≤ 100). (e) es solo BM | PSC + 1, sin RCR, 16 bits y edge en vez de center: fuera de tolerancia (el menor, 1994 ppm) | `CYCCNT` |
+| T6 | HAL | CM7 | PASS | `T6_TIM1_HAL`: TIM1 CH1–CH4 × 9 puntos, 36/36. Peor error de f/f\_MCO1: 378 ppm (±1000). Peor error del tiempo en alto: 10,6 ns (±15). BM y LL en la misma captura: 362 y 337 ppm, 7,5 y 7,3 ns | MOE = 0 con los 4 canales: 0 flancos, nivel 0 | LA con DIO14 en la misma adquisición (R3-2) |
+| T8 | HAL | CM7 | PASS | `T8_HAL`, con R5-1, R6-1 y R7-1:<br>• d = 2,00 ticks (0 ≤ d ≤ 4);<br>• 24/24 puntos en PWM input;<br>• prescaler 8: 1618–1619 frente a 1619,0 ± 9,1;<br>• filtro: 2070–2072 frente a 2071,8 ± 11,4;<br>• overcapture: `CC1OF` 1 y luego 0 | polaridad invertida: 1515–1517 frente a 1515,3 ± 9,6; CC1E = 0: CC1IF 0; sin filtro, el glitch se captura (518 y 1554) | Digital Out y MCO1 en DIO14 en la misma generación |
+| T9 | HAL | CM7 | PASS | `T9_HAL`: TIM17 `TI1SEL = 0011` (MCO1), 16 periodos de 199..201 ticks (200 ± 1); MCO1 en PA8: 1,0124 MHz | `TI1SEL = 0000` (PF7 sin cablear, pull-down) durante 1 ms: CC1IF 0 | `CCR1` por `tim_bm`; AD2 en DIO14 |
+| T14 | HAL | CM7 | PASS | 206 Deinit en CM7 con su imagen de reset exacta (F1, F2 y F3), 0 fallos; S5 en verde al final de `T6_TIM1_HAL` y de `T8_HAL` | el control de F1 (TIM2 sin Deinit) se detecta | tabla de reset del RM a mano |
+| TIM6 | — | CM7 | PASS | `HAL_GetTick` contra 100 ms de `CYCCNT`: 100 ms antes de las pruebas HAL, después de T1/T2/T5/B1 HAL, después de `T6_TIM1_HAL`, después de `T8_HAL` y al final; 5/5. CR1, CR2, DIER, PSC y ARR de TIM6 iguales antes y después (`0x0001`, `0x0000`, `0x0001`, 199, 999). Las ráfagas `TICK` de `T6_TIM1_HAL`, `T8_HAL` y `T9_HAL` dan, contra el reloj del host, +12 298, +11 723 y +11 928 ppm (la deriva de la placa, N1), dentro del ajuste de las 21 ráfagas | — | `CYCCNT` (mismo PLL1) y reloj del host |
+| B1 | HAL | CM7 | registro | §5.4 | — | `.map` y DWT |
+
+**Diferencias de `tim_hal` frente a `tim_bm` por diseño.** Desde la imagen de reset no hay ninguna (paridad 6008/6008). Desde otra imagen, la HAL deja o borra bits de otra forma que `tim_bm`. Líneas de `Src/stm32h7xx_hal_tim.c` (y `_tim_ex.c` en la fila 11) del Cube `8ec3113`, HAL `e3c518e` (V1.11.6). La última columna es el caso de T2 que lo muestra en la captura:
+
+| # | Función | Bits | La HAL | `tim_bm` | Caso de T2 (bits que difieren) |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `InitTimeBase` | CR1 UDIS, UIFREMAP | `TIM_Base_SetConfig` parte de CR1 (6937) y solo cambia DIR/CMS (6943), CKD y ARPE antes de escribirlo (6977): los conserva. Con UDIS = 1 el UG no carga PSC ni ARR (RM0399 40.4.1) | escribe 0 | 0: CR1 `0x0802` |
+| 2 | `InitTimeBase` | SR salvo UIF | no toca SR. `tim_hal` borra UIF con `__HAL_TIM_CLEAR_FLAG` (C11) | SR = 0 (regla 3) | 1: SR `0x0002` |
+| 3 | `InitTimeBase` | CR1 CKD en TIM12–14 | escribe CKD solo si `IS_TIM_CLOCK_DIVISION_INSTANCE` (6947), y esa macro deja fuera TIM12–14, que sí tienen CKD (RM0399 42.4.1, 42.5.1) | escribe 0 | 2: CR1 `0x0200` |
+| 4 | `InitTimeBase` | DIR y CMS | los escribe en la misma escritura (6943, 6977). `tim_hal` hace antes un `HAL_TIM_Base_Init` en modo up si CMS ≠ 00 (R5-3) | CMS = 00 primero | 3: ninguno |
+| 5 | `ConfigOutput` | OCxCE; OCxFE en los modos que no son PWM | `TIM_OC1_SetConfig` borra solo OC1M y CC1S (7005–7006). `HAL_TIM_PWM_ConfigChannel` borra OCxFE (4297) | escribe el campo entero | 4: CCMR1 `0x0084`; 5: CCMR1 `0x0080` |
+| 6 | `ConfigOutput` | CCxNP en los canales sin salida complementaria (TIM2–5, TIM12–14, CH4 de TIM1/TIM8, CH2 de TIM15) | lo escribe solo si `IS_TIM_CCXN_INSTANCE` (7015, 7024) | CCxNP = 0 | 6 (TIM2 CH1): CCER `0x0008`; 7 (TIM1 CH1): ninguno |
+| 7 | `ConfigOutput` | CR2 OISx/OISxN en TIM1, TIM8 y TIM15–17 | los pone a 0, porque `tim_hal` pasa `OCIdleState`/`OCNIdleState` RESET (7036) | no toca CR2 | 8: CR2 `0x0100` |
+| 8 | `ConfigOutput`, `ConfigInput` | CCxNE de los canales con salida complementaria | lo borra (7021, 7544) | no lo toca; este driver nunca lo pone | no alcanzable con este driver |
+| 9 | `ConfigInput` | OCxM[3] (bit 16 o 24 de CCMRx) | `TIM_TI1_SetConfig` cambia solo CC1S e IC1F (7553, 7562); ICxPSC lo escribe aparte | escribe el campo entero | no ejercitado (§5.8) |
+| 10 | `ConfigSlave` | DIER TIE y TDE | `HAL_TIM_SlaveConfigSynchro` los borra (5655, 5658) | no toca DIER | 10: DIER `0x4040` |
+| 11 | `ConfigMaster` | CR2 MMS2 en TIM1/TIM8 | `MasterOutputTrigger2 = TIM_TRGO2_RESET` (`stm32h7xx_hal_tim_ex.c`, 2018) | no toca MMS2 | 9: CR2 `0x00100000` |
+| 12 | `ConfigSlave` | etapa de entrada de TI1/TI2 (CCxP/CCxNP, ICxF) | `TIM_SlaveTimer_SetConfig` la reescribe con `TriggerPolarity`/`TriggerFilter` (7386). `tim_hal` le pasa los valores que ya hay | no la toca | 11: ninguno |
+| 13 | `ConfigSlave` | TS y SMS | los escribe en la misma escritura (7398–7408). `tim_hal` hace una llamada por paso: SMS = 0, TS, SMS (40.4.3) | SMS = 0 → TS → SMS | secuencia, no imagen |
+| 14 | `StartCapture` | CR1 CEN | `HAL_TIM_IC_Start` pone CEN salvo en los modos trigger (2158, 2163) | `CaptureEnable` no toca CEN | 12: CR1 `0x0001` |
+| 15 | `StartPwm` | CR1 CEN | `HAL_TIM_PWM_Start` pone CEN salvo en los modos trigger (1494, 1499) | `OutputEnable` no toca CEN | 13: CR1 `0x0001` |
+| 16 | `StopPwm` | CR1 CEN | `__HAL_TIM_DISABLE` cuando no queda ningún CCxE/CCxNE (1534) | `OutputDisable` no toca CEN | 14: CR1 `0x0001` |
+
+El read-back de `tim_hal` mira los campos que escribe la llamada a la HAL. Los bits que la HAL no escribe (filas 1, 2 salvo UIF, 3, 5, 6 y 9) no dan `ERR_VERIFY`.
+
+**Margen de T8 con R7-1.** Peor residuo frente a su cota en la captura de evidencia (periodo o alto, de las 8 capturas de cada punto):
+
+| Frecuencia | BM | LL | HAL |
+| --- | --- | --- | --- |
+| 1 kHz | 0,20 | 0,16 | 0,18 |
+| 10 kHz | 0,15 | 0,21 | 0,21 |
+| 100 kHz | 0,27 | 0,30 | 0,27 |
+| 1 MHz | 0,32 | 0,33 | 0,32 |
+
+### 5.4 Medidas (B1)
+
+Ciclos de una llamada en frío, con DWT y PRIMASK, en `docs/tim_f3_bench_d33d9e5.txt`. Instancia: TIM2 en CM7 (400 MHz).
+
+| Función | BM | LL | HAL |
+| --- | --- | --- | --- |
+| `TakeFlags` | 200 | 227 | — (`tim_hal` no la tiene) |
+| `OutputEnable` | 348 | 673 | `StartPwm` (CCxE y CEN): 820 |
+| `ConfigOutput` | 469 | 926 | 1064 |
+| `InitTimeBase` | 456 | 982 | 763 con `State` RESET (incluye el hook MSP del proyecto); 652 con `State` READY |
+
+- **Coste de HAL:** `TIM_BM_Check*`, la llamada a la HAL con su `__HAL_LOCK` y el read-back.
+- **Peor caso de `CalcTimeBase` (T3):** 1057 ciclos en CM7.
+- **Pila de Status\_Task:** quedan libres 238 palabras de 512, como en F2.
+
+### 5.5 Desviaciones del plan
+
+| # | Qué dice el plan (revisión 7) | Qué hice | Por qué | ¿Consultado? |
+| --- | --- | --- | --- | --- |
+| 1 | `TIM_HAL_Deinit` "llama a `TIM_BM_Deinit` y pone `h->State = HAL_TIM_STATE_RESET`" | Además pone en RESET los estados de canal, los de canal N y el de ráfaga DMA, y desbloquea el handle, como `HAL_TIM_Base_DeInit` (329), sin su llamada a la MSP | Sin eso, después de `Deinit` un canal se queda en `BUSY` y `HAL_TIM_PWM_Start`/`IC_Start` lo rechazan hasta el siguiente `HAL_TIM_Base_Init` | No |
+| 2 | Read-back "de los registros que esa llamada escribe" | Se comparan los campos que escribe esa llamada a la HAL, con las condiciones de la propia HAL (las macros `IS_TIM_*_INSTANCE` de CMSIS que usa). Los bits que la HAL deja como estaban no se comparan | Así lo dice la regla. Lo que la HAL deja distinto de `tim_bm` está en la tabla de diferencias por diseño | No |
+| 3 | `tim_hal`: envoltorio fino de la HAL | Llamadas añadidas, todas de la HAL:<br>• un `HAL_TIM_Base_Init` previo en modo up si CMS ≠ 00 (R5-3, regla 3);<br>• `HAL_TIM_OnePulse_Init` cuando OPM tiene que cambiar;<br>• `__HAL_TIM_URS_ENABLE/DISABLE`;<br>• `__HAL_TIM_CLEAR_FLAG(UPDATE)` (C11);<br>• `__HAL_TIM_ENABLE/DISABLE_OCxPRELOAD`;<br>• hasta tres `HAL_TIM_SlaveConfigSynchro`, una por paso de la nota de TS (40.4.3), con la polaridad y el filtro que ya tiene la etapa de entrada | `HAL_TIM_Base_Init` no escribe OPM ni URS y escribe DIR y CMS a la vez. `HAL_TIM_PWM_ConfigChannel` pone siempre OCxPE. `TIM_SlaveTimer_SetConfig` escribe TS y SMS a la vez y reescribe la etapa de entrada | No |
+| 4 | C10: las RMW de DIER, CCER y BDTR con PRIMASK | Las llamadas a la HAL que las hacen van dentro de PRIMASK guardado y restaurado. `HAL_TIM_Base_Init` y `HAL_TIM_OnePulse_Init` no: solo tocan CR1, PSC, ARR, RCR y EGR, y pueden llamar a la MSP del proyecto, que puede esperar al tick | Un `HAL_Delay` en una MSP con PRIMASK no saldría nunca | No |
+| 5 | Pruebas HAL: T1, T2, T5, T6, T8, T9 y T14 | El tier HAL de la prueba llama a `tim_hal` con un handle por instancia de CPU1. Para lo que el contrato de `tim_hal` no tiene usa la HAL sobre el mismo handle (`HAL_TIM_Base_Start`/`Stop`, `HAL_TIM_IC_Stop`) y `tim_bm` para los flags y los registros de captura, que son el lado del oráculo. T1 HAL cubre las funciones de `tim_hal`; los casos de T1 de funciones que `tim_hal` no tiene (`DutyToCompare`, `EnableClock`, `EnableIrq`, …) siguen en BM. T5(e) es solo BM. T9 pasa por el tier también en BM, con las mismas llamadas de antes | El plan no da a `tim_hal` arranque, parada ni flags, y una función pública más necesitaría aprobación (§7). Con la HAL en el mismo handle, sus estados siguen siendo los de la HAL | No |
+| 6 | Banco: pasos de T6, T8 y T9 | Protocolo v5, con tres pasos nuevos: `T6_TIM1_HAL`, `T8_HAL` y `T9_HAL`. Llevan los permisos de sus pasos BM (MCO1 en PA8 y `RCC_CFGR` como en R3-2). `T8_HAL` mide su propia d (R5-1) y no repite T13(b). No hay paso de TIM15 (CPU2 sin `tim_hal`) | Como R7-4 para LL: un paso por tier deja cada captura del LA atribuida a un tier | No; es el mismo esquema que R7-4 aceptó para LL |
+| 7 | "La captura tiene que mostrar `HAL_GetTick` avanzando 1 ms por ms durante y después de las pruebas HAL" | Cinco comprobaciones de 100 ms de `CYCCNT` (antes, entre las pruebas internas y los pasos, entre los pasos HAL y al final), más una foto de los registros de TIM6, que solo se leen, antes y después. Las ráfagas `TICK` de cada paso las ajusta el host contra su reloj | `CYCCNT` y TIM6 salen del mismo PLL1: 1 ms por ms del reloj de la placa. Contra el host, la placa va un +1,2 % rápida (N1) | No |
+| 8 | Captura `tim_<fase>_<prueba>_<hash>.txt` | `docs/tim_f3_bench_d33d9e5.txt`; la de desarrollo, `docs/tim_dev_f3_bench_d33d9e5.txt` | Como en F1 y F2 | No |
+
+### 5.6 Respuesta a la auditoría de F3
+
+No hay auditoría de F3 todavía.
+
+### 5.7 Erratas del plan encontradas
+
+Ninguna.
+
+### 5.8 Problemas abiertos y no ejercitado
+
+- **`tim_hal` en CM4:** no se ejercita. `HAL_TIM_MODULE_ENABLED` está desactivado en `CM4/Core/Inc/stm32h7xx_hal_conf.h` (decisión abierta 5, opción por defecto). Compila sin símbolos (§5.2).
+- **OCxM[3] en `ConfigInput` (fila 9):** sale de la lectura del código de la HAL, y no está en T2. RM0399 no da ese bit en el modo de captura, así que no sé qué lee el registro cuando CCxS ≠ 00, y no he puesto un caso cuyo resultado no puedo predecir.
+- **`ERR_VERIFY`** no lo produce ninguna prueba. Tampoco lo producía en BM ni en LL. Lo he revisado en el código.
+- **Lo que la HAL rechaza después de escribir:** `TIM_SlaveTimer_SetConfig` devuelve `HAL_ERROR` en gated sobre TI1F\_ED después de escribir SMCR (7434). Con `tim_hal` no se llega: `tim_bm` lo rechaza antes con `ERR_PARAM` (T1 HAL caso 25).
+- **No ejercitado con HAL:**
+  - `TIM_HAL_ConfigMaster`, salvo en T2 (todos los MMS) y en el caso 9 de las diferencias por diseño: T10 no está en las filas de F3;
+  - `TIM_HAL_StopPwm`, salvo en T1 (el rechazo y la prueba del handle) y en el caso 14;
+  - T3, T7, T10, T11, T12, T13, T15 y T16, que el plan no pide para HAL.
+- **Lo no ejercitado de F1 y F2** sigue igual (F1 §5.8, F2 §5.8).
+
+## Decisiones abiertas usadas (F3)
+
+| # | Opción usada | Consultada |
+| --- | --- | --- |
+| 1–6 | Las de F1, sin cambios. La 5, `tim_hal` no se ejercita en CM4 | No (por defecto) |
+
+La tabla de capacidades no cambia (F1).
+
+Estado de F3: **entregada para auditoría** (`d33d9e5`; evidencia en `1f0e8aa`).
