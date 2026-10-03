@@ -535,3 +535,29 @@ Con D9, el implementador cambia las tolerancias en `tim_hw_check.py` (un commit)
 
 - **D9 aprobada** por el responsable del catálogo. Está en la revisión 7 del plan: R7-1 (0,5 % en T8 y T13(b)), R7-2 (`TIM_BM_Check*` y la delegación de `tim_ll`), R7-3 (API de `tim_ll` sin copias de las funciones puras; macros `LL_TIM_WriteReg`/`ReadReg` en C8) y R7-4 (banco v4 y desviaciones de procedimiento).
 - **Para que F2 pase:** el implementador aplica R7-1, toma la captura de evidencia y entrega. Después hago yo A18/A27.
+
+## F2, parte 2: R7-1 y la entrega (2026-10-02, en `ffa40e0`)
+
+Rango auditado: `9611ada..ffa40e0`. Código: `b63204a`, que solo toca `tools/tim_hw_check.py`. Evidencia en `fe8a07c` e informe en `ffa40e0`. F2 queda **entregada para auditoría**.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `git show b63204a` | Una constante, `CAP_REL_TOL = 0.005`, con un comentario que cita R7-1. Se usa en los puntos de T8 en PWM input (periodo y alto, `2 + …`), en la polaridad invertida (`2 + …`), en ICPSC = 8 y en el filtro (`1 + …`), en BM y en LL, y en T13(b) (`1 + 0.005·periodo`, antes ±1). T6, T9, T11 y d no cambian. Cada línea imprime su tolerancia |
+| `git diff --name-only b0f1706 ffa40e0`, sin `.md` ni `docs/` | Solo `tim_hw_check.py`. El firmware, `tim_bm` y `tim_ll` son los de la parte 1, con los builds, la compilación aislada y la producción que verifiqué entonces |
+| `docs/tim_f2_bench_b63204a.txt` (1626 líneas) | Checkout `b63204a`, `tree clean`, `Rev` e id `09b6373620b56df8` iguales en CM7, CM4 y el host, protocolo v4, lista confirmada. AD2 abierto y cerrado en S2. **192/192, 0 FAIL, `FW`/`HOST VERDICT=PASS`** |
+| Líneas de F2 en esa captura | T1 LL: 47 rechazos en CM7 y 12 en CM4, con el control O1. **T2 LL: 6008 imágenes de 12 instancias, 0 diferencias con la mano, paridad bit a bit con `tim_bm` 6008/6008 y la imagen alterada de `tim_bm` detectada en cada instancia.** T5 LL entre −1 y +3 ppm, con sus controles. T10 LL(a) CNT = 1000 exactos y (b) 20 000, con controles a 0. T12 LL: 1000 por vector, 0 sin flag, `GetIRQn` 84/84. T14 LL, con S5 tras `T6_TIM1_LL` y `T8_LL`. T8 LL: d = 2,00 y 24/24 puntos |
+| Control sin filtro (`icf = 0`), que el implementador deja con 1 tick + 0,1 % | Su tolerancia se calcula sobre el periodo completo (±3,1 ticks). En 17 capturas de F1 y F2, las diferencias del glitch (518–520 y 1553–1558) quedan a ≤ 1,5 ticks de lo esperado. Es un control (busca la presencia del glitch): una cota estrecha solo puede dar un falso fallo, y el margen sobra. La lectura literal de R7-1 se acepta |
+
+### Veredicto de la parte estática
+
+| ID | Veredicto |
+| --- | --- |
+| R7-1 | **Aplicado** en el alcance aprobado |
+| R7-2, R7-3, R7-4 | Recogidos en el plan; el código ya los cumplía (parte 1) |
+| A1–A17, A19–A26, A28 de F2 | Pasan (partes 1 y 2) |
+
+### Para que F2 pase
+
+Solo queda A18/A27: mi ejecución del banco sobre `selftest-tim` compilado en la cabeza de la rama, con la lista de comprobación física confirmada. Si pasa, la API de `tim_ll` queda congelada (C2).
