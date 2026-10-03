@@ -701,3 +701,24 @@ Si con el recuento de dobles aparecen llamadas vacías sin dobles que las expliq
 
 1. El implementador corrige m5 (un commit, solo la prueba) y entrega una captura nueva.
 2. A18/A27: repito mi ejecución del banco sobre esa entrega, con la lista de comprobación física confirmada.
+
+## F3, parte 3: m5 (2026-10-03, en `d6b74b0`)
+
+Rango auditado: `859ea87..d6b74b0`. Código: `1680350`, que solo toca `CM7/App/Src/tim_selftest.c`. Evidencia en `653fbdc` e informe en `d6b74b0`.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `git show 1680350` | `IQ_SPUR` desaparece. `s_irq_empty[VQ_N]` cuenta por vector las llamadas que no se llevan flag, y `s_irq_both` las de `TIM8_UP_TIM13` que se llevan los dos (`n == 2`). La fila de cada fuente lleva su vector. Veredicto: el criterio del plan (1000 ± 1, sin cruces) sin cambios; 0 vacías en todo vector con 0 o 1 fuente activa; con 2 fuentes, vacías ≤ dobles. La línea imprime `vacías/dobles` por vector. T12(b) no cambia |
+| `git diff --name-only 3b5dc5e d6b74b0`, sin `.md` ni `docs/` | Solo `tim_selftest.c`. El driver y el host no cambian. `git diff 071bddb -- tim_bm.h tim_ll.h` vacío |
+| `docs/tim_f3_bench_1680350.txt` | Checkout `1680350`, `tree clean`, `Rev` e id `7cbf3f7f53423b0d` iguales en CM7, CM4 y el host, AD2 en S2 al abrir y al cerrar. **259/259, 0 FAIL, `FW`/`HOST VERDICT=PASS`.** Es la única captura de esa imagen en `docs/` (O3) |
+| Grupo combinado de T12(a), BM y LL | Los cinco contadores en 1000, y `TIM8_UP_TIM13 0/1000`, `TIM8_BRK_TIM12 0/0`, `TIM8_TRG_COM_TIM14 0/0` y `TIM8_CC 0/0` en los dos tiers. Los grupos de una sola fuente dan `0/0` |
+
+### Veredicto
+
+**m5 cerrado.** En esta ejecución, los updates de TIM8 y TIM13 coinciden: las 1000 llamadas se llevan los dos flags y ninguna queda vacía. En la ejecución del auditor de `3b5dc5e` hubo 671 vacías. La diferencia es la fase relativa entre los dos timers, como suponía m5: el recuento de dobles confirma que las dos fuentes comparten llamadas. Ahora la prueba admite el caso legítimo y sigue rechazando una llamada vacía sin explicación.
+
+### Para que F3 pase
+
+Solo queda A18/A27: mi ejecución del banco sobre `selftest-tim` compilado en la cabeza de la rama, con la lista de comprobación física confirmada.
