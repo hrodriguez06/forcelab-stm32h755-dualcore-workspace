@@ -8,6 +8,16 @@ Cada fase pasa una auditoría independiente antes de empezar la siguiente, con l
 
 Base: `8901b77` de `main` (cierre de `03_tim`), árbol limpio, rama `driver/spi`.
 
+**Estado al entregar este plan (2026-10-03):**
+
+- El responsable del catálogo aprobó las decisiones abiertas 1–8 con su opción por defecto.
+- **J1 está colocado y verificado**, sin flashear nada. Con los dos núcleos detenidos por SWD y los cuatro pines en entrada, sin ningún pin en salida, se alternó el pull de un extremo del puente y se leyó el otro.
+  - El pull de PB5 fija PA6, y el de PA6 fija PB5, a 1 y a 0.
+  - PA5 y PB4, con el pull contrario, siguen el suyo.
+  - Los registros se restauraron (read-back igual al inicial).
+- Que un pull interno lleve la línea a los dos niveles prueba que ningún otro conductor (PA7 por SB56, el PHY) está en la línea. Por eso la comprobación visual de SB52, SB56 y SB57 que pide F0 queda cubierta para J1.
+- T0c sigue siendo obligatoria en cada sesión.
+
 ## Encargo
 
 Texto del responsable del catálogo, 2026-10-03 (el mismo encargo de `03_tim`, aplicado al paso siguiente de la hoja de ruta):
@@ -422,7 +432,7 @@ Todo va en la rama `driver/spi`. Commits del estilo del repo: `build(spi)`, `fea
 
 | Fase | Entregable | Gate (lo comprueba el auditor) |
 | --- | --- | --- |
-| **F0: banco** | **Requisito previo: J1 colocado y confirmado por el responsable**, con SB52/SB56/SB57 vistos. Sin código del driver ni targets. Opción, preset y esqueleto del selftest (Rev, id, veredicto, área SRAM4, tabla de pasos). `spi_hw_check.py` con S2–S8, S13 y S14 **desde el primer commit**. **T0a, T0b(a)–(f) y T0c** (protocolo v1) | 8/8 y C9. Producción de `prj_01` con los tamaños de `2481396`. **T0b y T0c en verde en la ejecución del auditor antes de cualquier prueba que mueva el bus o los pines de J1.** `git diff 8901b77 -- 02_firmware_projects` vacío |
+| **F0: banco** | **Requisito previo: J1 colocado y confirmado por el responsable** (hecho el 2026-10-03; ver la cabecera). Sin código del driver ni targets. Opción, preset y esqueleto del selftest (Rev, id, veredicto, área SRAM4, tabla de pasos). `spi_hw_check.py` con S2–S8, S13 y S14 **desde el primer commit**. **T0a, T0b(a)–(f) y T0c** (protocolo v1) | 8/8 y C9. Producción de `prj_01` con los tamaños de `2481396`. **T0b y T0c en verde en la ejecución del auditor antes de cualquier prueba que mueva el bus o los pines de J1.** `git diff 8901b77 -- 02_firmware_projects` vacío |
 | **F1: `spi_bm`** | Contrato completo de `spi_bm`. Pruebas BM en los dos núcleos: T1–T14 y B1 | A1–A28. **API de `spi_bm` congelada** |
 | **F2: `spi_ll`** | Contrato de `spi_ll`. T1, T2, T4, T5(a), T6, T7(a)(b) y T14 con LL en los dos núcleos | A1–A28. Paridad LL = BM bit a bit (T2). `spi_bm.h` solo añade. **API de `spi_ll` congelada** |
 | **F3: `spi_hal`** | Contrato de `spi_hal`. `HAL_SPI_MODULE_ENABLED` en CM7 solo con la opción. T1, T2, T4, T5(a), T6, T7(b)(c) y T14 con HAL en CM7 | A1–A28. Paridad HAL contra BM con las diferencias listadas. `HAL_GetTick` sigue avanzando. **API de `spi_hal` congelada** |

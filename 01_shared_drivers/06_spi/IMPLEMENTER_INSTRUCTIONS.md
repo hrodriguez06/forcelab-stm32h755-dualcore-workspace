@@ -226,7 +226,7 @@ cada valor. Marca toda celda que difiera del plan.
 La lista completa de entregables y gates está en la tabla "Fases" del plan. Aquí van los puntos donde es fácil equivocarse.
 
 - **F0:**
-  - Antes de nada, confirma con el responsable que J1 está colocado y que vio SB52, SB56 y SB57. Sin eso no hay ejecución de F0.
+  - J1 está colocado y verificado desde el 2026-10-03 (cabecera del plan). Si al empezar una sesión T0c falla, para y avisa: no lo recoloques tú.
   - Lo primero del código son las guardas (§3.6): S13 y S14 en `bench_claim()`/`bench_safe()` de los dos núcleos, la tabla de pasos con versión y `spi_hw_check.py` con S2–S8 sin Digital Out.
   - No hay código del driver ni targets `_spi_*` en F0: cada target entra en su fase.
   - Con la opción apagada, la producción de `prj_01` tiene los tamaños de `2481396`: compruébalo antes de entregar.
