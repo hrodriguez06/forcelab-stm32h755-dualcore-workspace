@@ -291,6 +291,10 @@ T6_POINTS = [(0, 199, OC_PWM1, 100, 0, 0), (9, 199, OC_PWM1, 1, 0, 0), (9, 199, 
              (9, 199, OC_PWM1, 50, 0, 0), (9, 199, OC_PWM1, 100, 0, 0), (9, 199, OC_PWM1, 200, 0, 0),
              (9, 199, OC_PWM1, 50, 1, 0), (9, 199, OC_PWM2, 50, 0, 0), (0, 199, OC_PWM1, 50, 0, 1)]
 T6_FREQ_TOL = 0.001          # +-0.1 % on the ratio with MCO1 (plan, common tolerances; R3-2)
+# Plan R7-1: the captures judged against MCO1 measured in other windows (T8 and T13(b): MCO1
+# before and after captures that take milliseconds) use 0.5 % as their relative term; the
+# terms in ticks do not change.
+CAP_REL_TOL = 0.005
 T6_HIGH_TOL_S = 15e-9        # +-15 ns
 TIMCLK_PER_MCO1 = 200        # f_timclk = 200 f_MCO1 in prj_01 (plan R3-2)
 T11_CCR1, T11_ARR, T11_PULSES = 40, 139, 10
@@ -1120,8 +1124,8 @@ class Session:
             f_mco = box["mco"]["freq_hz"]
             per = (TIMCLK_PER_MCO1 * f_mco / box["f"] - self.delay) / (psc + 1)
             hi = (TIMCLK_PER_MCO1 * f_mco * box["high_s"] - self.delay) / (psc + 1)
-            ptol = 2 + 0.001 * per         # PWM input: reset and capture both resynchronized (R6-1)
-            htol = 2 + 0.001 * hi
+            ptol = 2 + CAP_REL_TOL * per   # PWM input: reset and capture both resynchronized (R6-1, R7-1)
+            htol = 2 + CAP_REL_TOL * hi
             bad = [(a, b) for a, b in zip(pers, his) if abs(a - per) > ptol or abs(b - hi) > htol]
             ok = (ann == (ti, f, duty, psc) and int(m.group(5)) == 1 and len(pers) == 8 and not bad and
                   (box["oe"] & (1 << ch)) == 0 and box["mco"]["periods"] >= 40)
@@ -1139,7 +1143,7 @@ class Session:
         f_mco = box["mco"]["freq_hz"]
         per = TIMCLK_PER_MCO1 * f_mco / box["f"]
         low = per - TIMCLK_PER_MCO1 * f_mco * box["high_s"] - self.delay
-        ltol = 2 + 0.001 * low
+        ltol = 2 + CAP_REL_TOL * low                       # R7-1
         self.check(f"{px} control inverted polarity", len(his) == 8 and all(abs(h - low) <= ltol for h in his),
                    f"100 kHz 25 % captured on the falling edge: 'high' {his} ticks = the low time "
                    f"({low:.1f} +-{ltol:.1f}, the complementary duty, d = {self.delay:.1f})")
@@ -1150,7 +1154,7 @@ class Session:
         self.sync(pre=lambda: self._t8_off(rf"\[tim\] {px} RPSC8 n=(\d+) diffs((?: \d+)*)", box))
         diffs = [int(x) for x in box["res"].group(2).split()]
         per8 = 8 * TIMCLK_PER_MCO1 * box["mco"]["freq_hz"] / box["f"]
-        tol8 = 1 + 0.001 * per8
+        tol8 = 1 + CAP_REL_TOL * per8                      # R7-1
         self.check(f"{px} input prescaler 8", len(diffs) >= 8 and all(abs(d - per8) <= tol8 for d in diffs),
                    f"1 MHz, ICxPSC = /8: capture differences {diffs} ({per8:.1f} +-{tol8:.1f} = 8 periods)")
         # filter: one 10 ns glitch per period
@@ -1171,7 +1175,8 @@ class Session:
             ticks_per_bit = TIMCLK_PER_MCO1 * box["mco"]["freq_hz"] / box["f_sample"]
             full = plen * ticks_per_bit
             part = (plen // 4) * ticks_per_bit
-            tol = 1 + 0.001 * full
+            # R7-1 covers the filter check; the control without filter keeps 1 tick + 0.1 %
+            tol = (1 + 0.001 * full) if icf == 0 else (1 + CAP_REL_TOL * full)
             if icf == 0:
                 seen_glitch = any(abs(d - part) <= tol for d in diffs) and any(abs(d - (full - part)) <= tol for d in diffs)
                 self.check(f"{px} control without filter", len(diffs) >= 8 and seen_glitch,
@@ -1195,9 +1200,11 @@ class Session:
                 self.sync(pre=lambda b=box: self._t8_off(r"\[tim\] T13B R remaining=(\d+) diffs=(\d+) min=(\d+) max=(\d+)", b))
                 rem, nd, dmin, dmax = (int(x) for x in box["res"].groups())
                 per = TIMCLK_PER_MCO1 * box["mco"]["freq_hz"] / box["f"]
-                self.check("T13(b) CCR1 -> DMA", rem == 0 and nd == 63 and abs(dmin - per) <= 1 and abs(dmax - per) <= 1,
-                           f"64 captures by DMA (NDTR left {rem}): differences {dmin}..{dmax} ticks ({per:.2f} +-1 = "
-                           f"200 f_MCO1 / 1 MHz)")
+                tol13 = 1 + CAP_REL_TOL * per                  # R7-1 (was +-1 tick)
+                self.check("T13(b) CCR1 -> DMA",
+                           rem == 0 and nd == 63 and abs(dmin - per) <= tol13 and abs(dmax - per) <= tol13,
+                           f"64 captures by DMA (NDTR left {rem}): differences {dmin}..{dmax} ticks ({per:.2f} "
+                           f"+-{tol13:.2f} = 200 f_MCO1 / 1 MHz)")
             else:
                 self.sync(pre=lambda: (self.con.expect(r"\[tim\] T13\(b\) control", 30.0), self._dout_stop()))
         self.buschk(f"{px} after (T14)")
