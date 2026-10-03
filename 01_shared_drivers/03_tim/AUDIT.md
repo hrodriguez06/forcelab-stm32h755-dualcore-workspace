@@ -722,3 +722,44 @@ Rango auditado: `859ea87..d6b74b0`. Código: `1680350`, que solo toca `CM7/App/S
 ### Para que F3 pase
 
 Solo queda A18/A27: mi ejecución del banco sobre `selftest-tim` compilado en la cabeza de la rama, con la lista de comprobación física confirmada.
+
+## F3, parte 4: ejecución del banco por el auditor (2026-10-03, en `70b2062`) — **F3 PASA**
+
+Lista de comprobación física confirmada en el chat por el responsable del catálogo ("Yes, bench is ready"). `Get-Process` no mostraba WaveForms ni ningún servidor de depuración.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `selftest-tim` desde un directorio vacío, en `70b2062` | 0 avisos |
+| `py tools/flash.py --preset selftest-tim`, con el script parado | "Download verified successfully" |
+| `py tools/tim_hw_check.py --checklist-confirmed Hector --out <scratchpad>`, **una sola ejecución** | **259/259, 0 líneas FAIL, `FW VERDICT=PASS` y `HOST VERDICT=PASS`.** Captura sin editar: `03_firmware_templates/prj_01_template_dualcore/docs/tim_f3_audit_bench_70b2062.txt` (2075 líneas) |
+
+### Contenido de la captura
+
+- **Trazabilidad (A21):** checkout `70b2062`, `tree clean`, `Rev` `70b2062` e id `95f77696956d7590` iguales en CM7, CM4 y el host, protocolo v5.
+- **AD2 (A27):** se abre y se cierra en S2. El `DIO=0x2001` al abrir es N2 de F0.
+- **TIM6:** 5/5 comprobaciones de `HAL_GetTick` (100 ms en 100 ms de CYCCNT) antes, durante y después de las pruebas HAL.
+- **T2 HAL y LL:** paridad con 0 instancias con fallo. Los 15 casos de diferencias por diseño pasan.
+- **T8 (BM, LL y HAL):** peor residuo frente a su cota de 0,23 a 1 kHz, 0,21 a 10 kHz, 0,26 a 100 kHz y 0,39 a 1 MHz.
+- **T12(a), grupo combinado:** BM `TIM8_UP_TIM13 0/1000`; **LL `TIM8_UP_TIM13 396/1000`**, y los demás vectores 0/0. Es el caso de m5 reproducido en la placa: las llamadas vacías aparecen solo en el vector compartido y siempre por debajo de las llamadas que se llevan los dos flags. Confirma la causa de m5, y la prueba corregida lo acepta.
+- **CM4:** `timeout 0, aborts 0`.
+
+### Tabla A de F3, cerrada
+
+| # | Resultado |
+| --- | --- |
+| A1–A17, A19–A26, A28 | Pasan (partes 1 y 3: `tim_hal` contra el contrato, las 19 referencias de la HAL comprobadas, C7/C8, builds, alcance, APIs congeladas sin cambios, paridad y diferencias por diseño, TIM6) |
+| A18 | **Pasa** en esta ejecución. La anterior (`3b5dc5e`) llevó a m5 |
+| A27 | **Pasa** |
+
+Hallazgos: m5 cerrado. Observaciones O3 y O4 y la excepción R8-2, para el README de cierre (R8-3).
+
+**Veredicto: F3 pasa.** **La API de `tim_hal` queda congelada en `tim_hal.h` de `70b2062`** (C2). Las tres APIs (`tim_bm.h`, `tim_ll.h` y `tim_hal.h`) solo pueden recibir añadidos desde aquí. Pido al implementador el cierre (plan, fila "Cierre"; instrucciones §6.1).
+
+### Lo que queda para el cierre
+
+- **Implementador:** `03_tim/README.md` según "README de cierre" (revisión 8, con R8-3) y la línea de `03_tim` en `01_shared_drivers/README.md`.
+- **Responsable del catálogo:** `DRIVER_ROADMAP.md`, el borrado de los documentos de proceso, el merge y el borrado de la rama.
+- **Auditoría de cierre:** cada afirmación del README contra el código o una captura con hash.
+- **Fuera del driver:** N1 (reloj de la placa +1,3 % alto, con deriva) sigue abierta.
