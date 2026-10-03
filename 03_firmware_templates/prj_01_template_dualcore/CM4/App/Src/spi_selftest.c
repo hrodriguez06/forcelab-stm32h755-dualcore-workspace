@@ -118,3 +118,186 @@ static bool pin_cfg(GPIO_TypeDef *port, uint32_t pin, uint32_t mode, uint32_t af
     }
     return true;
 }
+
+/* ---- T0b(b)(f) on CPU2 --------------------------------------------------------------- */
+
+typedef struct { GPIO_TypeDef *port; uint16_t mask; uint8_t mode; uint8_t af; } Claim_t;
+
+#define O  GPIO_BM_MODE_OUTPUT
+#define A  GPIO_BM_MODE_AF
+/* Case k sets bit k of the result when accepted. Expected, by hand, in
+   spi_selftest.h: cases 0..3 in step T0B (J1 = CPU2), none between steps, none
+   in step T0B_S14 (J1 = CPU1). */
+static const Claim_t k_claims[SST_M4_CLAIM_CASES] = {
+    { GPIOA, 1U << PA_J1_SCK, A, 5U },             /*  0 PA5 SPI1_SCK                              */
+    { GPIOA, 1U << PA_J1_MISO, A, 5U },            /*  1 PA6 SPI1_MISO (J1-B)                      */
+    { GPIOB, 1U << PB_J1_MISO, A, 5U },            /*  2 PB4 SPI1_MISO (the D2 control)            */
+    { GPIOB, 1U << PB_J1_MOSI, A, 5U },            /*  3 PB5 SPI1_MOSI (J1-A)                      */
+    { GPIOA, 1U << PA_J1_MISO, O, 0U },            /*  4 PA6 output: never (S14)                   */
+    { GPIOB, 1U << PB_J1_MISO, O, 0U },            /*  5 PB4 output: never (S14)                   */
+    { GPIOB, 1U << PB_J1_MOSI, O, 0U },            /*  6 PB5 output: T0C only, CPU1                */
+    { GPIOA, 1U << PA_J1_SCK, O, 0U },             /*  7 PA5 output: never                         */
+    { GPIOA, 1U << PA_J1_MISO, A, 8U },            /*  8 PA6 AF8 (SPI6): CPU1's AF                 */
+    { GPIOB, 1U << PB_J1_MOSI, A, 8U },            /*  9 PB5 AF8                                   */
+    { GPIOB, 1U << PB_J1_MISO, A, 0U },            /* 10 PB4 AF0 (NJTRST): wrong AF                */
+    { GPIOA, 1U << 7, A, 5U },                     /* 11 PA7 (RMII_CRS_DV): never                  */
+    { GPIOA, 1U << 4, A, 5U },                     /* 12 PA4 (SPI1_NSS): never touched (R4)        */
+    { GPIOE, 1U << 12, A, 5U },                    /* 13 PE12 SPI4_SCK: CPU1's bus                 */
+    { GPIOE, 1U << 5, A, 5U },                     /* 14 PE5: PE0..PE7 never (S13)                 */
+    { GPIOA, 1U << 8, A, 0U },                     /* 15 PA8 MCO1: CPU1's line                     */
+    { GPIOE, 1U << 7, O, 0U },                     /* 16 PE7 MCU_ACK                               */
+    { GPIOA, (1U << PA_J1_SCK) | (1U << 7), A, 5U },/* 17 mixed: PA5 with PA7                       */
+    { GPIOG, 1U << 13, A, 5U },                    /* 18 PG13 (RMII_TXD0): never                   */
+};
+#undef O
+#undef A
+
+/* The configuration registers of GPIOA, GPIOB and GPIOE, read raw: a refused
+   claim writes none of them (the same oracle as CPU1's port_snap). */
+#define SNAP_REGS   18U
+typedef struct { uint32_t r[SNAP_REGS]; } PortSnap_t;
+
+static void port_snap(PortSnap_t *s)
+{
+    const GPIO_TypeDef *const ports[3] = { GPIOA, GPIOB, GPIOE };
+    uint32_t i = 0U;
+    for (uint32_t k = 0U; k < 3U; k++)
+    {
+        s->r[i++] = ports[k]->MODER;
+        s->r[i++] = ports[k]->OTYPER;
+        s->r[i++] = ports[k]->OSPEEDR;
+        s->r[i++] = ports[k]->PUPDR;
+        s->r[i++] = ports[k]->AFR[0];
+        s->r[i++] = ports[k]->AFR[1];
+    }
+}
+
+/* Bit k set = register k of the snapshot differs. */
+static uint32_t port_snap_diff(const PortSnap_t *a, const PortSnap_t *b)
+{
+    uint32_t diff = 0U;
+    for (uint32_t k = 0U; k < SNAP_REGS; k++)
+    {
+        if (a->r[k] != b->r[k])
+        {
+            diff |= 1UL << k;
+        }
+    }
+    return diff;
+}
+
+static void run_claims(SstClaimResult_t *r)
+{
+    PortSnap_t before;
+    PortSnap_t after;
+    port_snap(&before);
+    uint32_t acc = 0U;
+    r->step_seen = SST_AREA->step;
+    for (uint32_t k = 0U; k < SST_M4_CLAIM_CASES; k++)
+    {
+        if (bench_claim(k_claims[k].port, k_claims[k].mask, k_claims[k].mode, k_claims[k].af))
+        {
+            acc |= 1UL << k;
+        }
+    }
+    r->accepted     = acc;
+    r->cases        = SST_M4_CLAIM_CASES;
+    port_snap(&after);
+    r->regs_changed = port_snap_diff(&before, &after);
+}
+
+/* MODER/PUPDR fields of PA5 | PA6 << 2 | PB4 << 4 | PB5 << 6. */
+static uint32_t j1_field2(uint32_t ra, uint32_t rb)
+{
+    return ((ra >> (PA_J1_SCK * 2U)) & 0xFUL) | (((rb >> (PB_J1_MISO * 2U)) & 0xFUL) << 4);
+}
+
+/* PA5 to AF5 through the claim (allowed in step T0B, whose J1 owner is CPU2;
+   PA5 is unwired, CN7-10, and SPI1 is at its reset values, so nothing drives
+   it), PA6 pull-down and PB4 pull-up as inputs; then bench_safe() must bring
+   the four J1 pins back to input without pull and AF0. */
+static void run_safe(SstSafeResult_t *r)
+{
+    r->claim_ok = pin_cfg(GPIOA, PA_J1_SCK, GPIO_BM_MODE_AF, SST_AF_SPI1, GPIO_BM_PULL_NONE) ? 1U : 0U;
+    r->af_moder = (GPIOA->MODER >> (PA_J1_SCK * 2U)) & 3UL;
+    r->af_afr   = (GPIOA->AFR[0] >> (PA_J1_SCK * 4U)) & 0xFUL;
+    (void)pin_cfg(GPIOA, PA_J1_MISO, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_DOWN);
+    (void)pin_cfg(GPIOB, PB_J1_MISO, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_UP);
+    r->pull_pupdr = ((GPIOA->PUPDR >> (PA_J1_MISO * 2U)) & 3UL) | (((GPIOB->PUPDR >> (PB_J1_MISO * 2U)) & 3UL) << 2);
+    bench_safe();
+    r->safe_moder = j1_field2(GPIOA->MODER, GPIOB->MODER);
+    r->safe_pupdr = j1_field2(GPIOA->PUPDR, GPIOB->PUPDR);
+    r->safe_afr   = ((GPIOA->AFR[0] >> (PA_J1_SCK * 4U)) & 0xFFUL) | (((GPIOB->AFR[0] >> (PB_J1_MISO * 4U)) & 0xFFUL) << 8);
+}
+
+static void copy_str(volatile char *dst, uint32_t n, const char *src)
+{
+    uint32_t i = 0U;
+    for (; (i + 1U < n) && (src[i] != '\0'); i++)
+    {
+        dst[i] = src[i];
+    }
+    for (; i < n; i++)
+    {
+        dst[i] = '\0';
+    }
+}
+
+void SPI_Selftest_CM4_Run(void)
+{
+    SstArea_t *a = SST_AREA;
+
+    /* CPU1 opened the session before releasing this core. */
+    if (a->magic != SST_AREA_MAGIC)
+    {
+        return;
+    }
+    const uint32_t session = a->session;
+    bench_safe();
+    copy_str(a->m4_rev, sizeof(a->m4_rev), FW_GIT_REV);
+    copy_str(a->m4_build_id, sizeof(a->m4_build_id), FW_BUILD_ID);
+    a->m4_version = SPI_BENCH_VERSION;
+    uint32_t last_seq = a->cmd_seq;
+    __DMB();
+    a->m4_ready = session;
+
+    for (;;)
+    {
+        const uint32_t t0 = HAL_GetTick();
+        while (a->cmd_seq == last_seq)
+        {
+            if ((HAL_GetTick() - t0) > SST_CM4_IDLE_TIMEOUT_MS)
+            {
+                a->m4_timeout = 1U;
+                bench_safe();
+                return;
+            }
+        }
+        __DMB();
+        last_seq = a->cmd_seq;
+        const uint32_t cmd = a->cmd;
+        const uint32_t a0  = a->arg0;
+
+        switch (cmd)
+        {
+        case SST_CMD_CLAIMS:
+            if (a0 < SST_M4_SLOTS)
+            {
+                run_claims(&a->m4_claims[a0]);
+            }
+            break;
+        case SST_CMD_SAFE:
+            run_safe(&a->m4_safe);
+            break;
+        case SST_CMD_DONE:
+            bench_safe();
+            __DMB();
+            a->ack_seq = last_seq;
+            return;
+        default:
+            break;
+        }
+        __DMB();
+        a->ack_seq = last_seq;
+    }
+}
