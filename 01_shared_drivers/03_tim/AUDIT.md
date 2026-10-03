@@ -660,3 +660,44 @@ Solo pide recogerlo en el plan; no requiere código. Revisión 8:
 
 - **D10 aprobada** por el responsable del catálogo. Está en la revisión 8 del plan: R8-1 (procedimiento de `tim_hal` aceptado), R8-2 (excepción a C10 en `HAL_TIM_Base_Init`/`OnePulse_Init`) y R8-3 (contenido añadido al README de cierre).
 - **Para que F3 pase:** solo queda A18/A27, mi ejecución del banco, con la lista de comprobación física confirmada.
+
+## F3, parte 2: ejecución del banco por el auditor (2026-10-03, en `3b5dc5e`) — **F3 no pasa: m5**
+
+Lista de comprobación física confirmada en el chat por el responsable del catálogo ("The bench is ready", tras la lista de cuatro puntos). `Get-Process` no mostraba WaveForms ni ningún servidor de depuración.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `selftest-tim` desde un directorio vacío, en `3b5dc5e` | 0 avisos |
+| `py tools/flash.py --preset selftest-tim`, con el script parado | "Download verified successfully" |
+| `py tools/tim_hw_check.py --checklist-confirmed Hector --out <scratchpad>`, **una sola ejecución** | **259/259 del host, `FW VERDICT=FAIL failures=1`, `HOST VERDICT=FAIL`.** Captura sin editar: `03_firmware_templates/prj_01_template_dualcore/docs/tim_f3_audit_bench_3b5dc5e.txt` |
+
+Trazabilidad: `tree clean` y `Rev` e id iguales en los tres lados; el AD2 se abre y se cierra en S2. Todo lo de F3 (T1/T2/T5/T6/T8/T9/T14 HAL, las diferencias por diseño y TIM6 5/5) pasa.
+
+### El fallo
+
+Línea 833–834: `T12 LL(a) TIM8 UP/CC with TIM12, TIM13, TIM14 together`. Los cinco contadores dan 1000 (TIM8 UP, TIM13, TIM12, TIM14 y TIM8 CC), pero **671 llamadas a una ISR no se llevaron ningún flag** (`IQ_SPUR`), y el veredicto exige 0. En la misma ejecución, el mismo grupo en BM da 0.
+
+**Historia:** en las 24 capturas anteriores de F1, F2 y F3 (37 resultados de ese grupo, BM y LL), el recuento fue siempre 0. Esta es la primera vez.
+
+**Causa más probable** (no la puedo probar con esta captura, que no cuenta los dobles): en el grupo combinado, TIM8 y TIM13 comparten `TIM8_UP_TIM13_IRQHandler` y van los dos a 10 kHz, con un desfase fijo que depende de cuándo se arrancó cada uno. Si el update de TIM13 llega mientras la ISR atiende el de TIM8, esa llamada se lleva los dos flags (`TIM8_UP_TIM13_IRQHandler` los consulta los dos), pero el segundo flag ya ha vuelto a dejar pendiente el vector en el NVIC. La siguiente entrada no encuentra nada y cuenta como `IQ_SPUR`.
+
+- **Es un comportamiento legítimo** de un vector compartido con dos fuentes activas.
+- **El desfase depende del momento del arranque:** una interrupción (el tick de TIM6, la consola) entre `start(TIM8)` y `start(TIM13)` lo cambia. Eso explicaría por qué aparece tan pocas veces y por qué lo vio el tier LL y no el BM en la misma ejecución.
+- **No es una diferencia del driver:** la ISR usa `TIM_LL_TakeFlags`, que es `TIM_BM_TakeFlags`.
+
+**No es un defecto del driver, sino de la prueba (m5).** El plan pide en T12(a) "1000 ± 1 por vector, sin cruces entre TIM8 y TIM12/13/14", y eso se cumple. El "0 llamadas sin flag" es un criterio añadido por la prueba, y es incorrecto para un vector con dos fuentes activas a la vez.
+
+### Hallazgo
+
+| ID | Clase | Dónde | Hallazgo | Acción |
+| --- | --- | --- | --- | --- |
+| m5 | Menor (prueba; bloquea A18) | `CM7/App/Src/tim_selftest.c`, `TIM8_UP_TIM13_IRQHandler` y `t12_group()` | El veredicto de T12(a) exige `IQ_SPUR == 0` también en el grupo combinado, donde una llamada que se lleva los flags de TIM8 y TIM13 deja una entrada vacía legítima | Contar por vector las llamadas vacías y, en `TIM8_UP_TIM13`, las llamadas que se llevan los dos flags (`n == 2`). Criterio: 0 llamadas vacías en los grupos de una sola fuente y en todo vector de una sola fuente; en `TIM8_UP_TIM13`, llamadas vacías ≤ llamadas dobles. Imprimir los dos recuentos. Lo mismo en BM y en LL (la ISR es común). El criterio del plan (1000 ± 1, sin cruces) no cambia |
+
+Si con el recuento de dobles aparecen llamadas vacías sin dobles que las expliquen, la causa no es esta: el implementador se detiene e informa.
+
+### Para que F3 pase
+
+1. El implementador corrige m5 (un commit, solo la prueba) y entrega una captura nueva.
+2. A18/A27: repito mi ejecución del banco sobre esa entrega, con la lista de comprobación física confirmada.
