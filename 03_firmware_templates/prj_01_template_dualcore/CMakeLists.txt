@@ -37,6 +37,17 @@ if(GPIO_DRIVER_SELFTEST AND TIM_DRIVER_SELFTEST)
         "AD2 bench lines through its own step table. Configure one of them (presets "
         "selftest-gpio or selftest-tim).")
 endif()
+# 06_spi: the Analog Discovery 2 bench and the J1 jumper of 01_shared_drivers/
+# 06_spi/IMPLEMENTATION_PLAN.md. Preset selftest-spi; never in a product image.
+# It drives the same bench lines from its own step table, so one image never
+# carries it together with another selftest.
+option(SPI_DRIVER_SELFTEST "Build the 06_spi selftest (needs the AD2 bench and J1)" OFF)
+if(SPI_DRIVER_SELFTEST AND (GPIO_DRIVER_SELFTEST OR TIM_DRIVER_SELFTEST))
+    message(FATAL_ERROR
+        "SPI_DRIVER_SELFTEST is incompatible with GPIO_DRIVER_SELFTEST and TIM_DRIVER_SELFTEST: "
+        "each owns the AD2 bench lines through its own step table. Configure one of them "
+        "(presets selftest-gpio, selftest-tim or selftest-spi).")
+endif()
 
 # Every selftest capture starts with the revision it was built from, and says
 # -dirty when tracked files differ from it, so a capture can be traced to a

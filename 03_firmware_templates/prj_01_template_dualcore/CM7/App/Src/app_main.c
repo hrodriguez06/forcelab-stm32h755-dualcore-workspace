@@ -36,6 +36,9 @@
 #if defined(TIM_DRIVER_SELFTEST)
 #include "tim_selftest.h"
 #endif
+#if defined(SPI_DRIVER_SELFTEST)
+#include "spi_selftest.h"
+#endif
 
 #include <stdbool.h>
 
@@ -137,6 +140,11 @@ static void Status_Task(void *arg)
 #if defined(TIM_DRIVER_SELFTEST)
     /* Once, before the status loop: 01_shared_drivers/03_tim. */
     TIM_Selftest_CM7_Run();
+    last = xTaskGetTickCount();
+#endif
+#if defined(SPI_DRIVER_SELFTEST)
+    /* Once, before the status loop: 01_shared_drivers/06_spi. */
+    SPI_Selftest_CM7_Run();
     last = xTaskGetTickCount();
 #endif
 

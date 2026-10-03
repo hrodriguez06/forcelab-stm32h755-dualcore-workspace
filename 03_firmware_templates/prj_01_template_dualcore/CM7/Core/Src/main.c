@@ -31,6 +31,9 @@
 #if defined(TIM_DRIVER_SELFTEST)
 #include "tim_selftest.h"
 #endif
+#if defined(SPI_DRIVER_SELFTEST)
+#include "spi_selftest.h"
+#endif
 
 static void SystemClock_Config(void);
 static void PeripheralClock_Config(void);
@@ -117,6 +120,10 @@ int main(void)
 #if defined(TIM_DRIVER_SELFTEST)
     /* Same for the 03_tim selftest block (01_shared_drivers/03_tim). */
     TIM_Selftest_CM7_PreRelease();
+#endif
+#if defined(SPI_DRIVER_SELFTEST)
+    /* Same for the 06_spi selftest block (01_shared_drivers/06_spi). */
+    SPI_Selftest_CM7_PreRelease();
 #endif
 
     /* The clock tree is up and shared memory is ready: release CPU2. */
