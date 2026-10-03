@@ -1,12 +1,22 @@
 # Plan del driver TIM 03\_tim
 
-Oct 2, 2026 · @Hector · revisión 7 (sustituye a la revisión 6, `294e049`)
+Oct 3, 2026 · @Hector · revisión 8 (sustituye a la revisión 7, `9611ada`)
 
 Este plan cubre el paso 3 de `DRIVER_ROADMAP.md`: el driver de timers `03_tim` en sus tres tiers, `tim_bm`, `tim_ll` y `tim_hal`. Tiene una fase F0 de preparación del banco, tres fases de implementación (F1 BM, F2 LL, F3 HAL) y una de cierre.
 
 Cada fase pasa una auditoría independiente antes de empezar la siguiente, con las reglas de [Protocolo de auditoría](#protocolo-de-auditoría). Las reglas del implementador están en [`IMPLEMENTER_INSTRUCTIONS.md`](IMPLEMENTER_INSTRUCTIONS.md).
 
 Base: `e7542dc` de `main` (merge de `00_gpio` F1), árbol limpio, rama `driver/tim`.
+
+## Cambios respecto a la revisión 7
+
+Salen de la parte 1 de la auditoría de F3 (`AUDIT.md`, `c050548`, decisión D10) y de la sección F3 del informe. El responsable del catálogo aprobó D10 el 2026-10-03. No cambian código ni criterios.
+
+| # | Cambio | Por qué |
+| --- | --- | --- |
+| R8-1 | **`tim_hal`, procedimiento aceptado** (informe de F3, §5.5, desviaciones 1–3 y 5–8): (1) `TIM_HAL_Deinit` también deja en RESET los estados de canal, de canal N y de ráfaga DMA, y desbloquea el handle, como `HAL_TIM_Base_DeInit` sin la MSP; (2) el read-back compara los campos que escribe cada llamada a la HAL, con las condiciones `IS_TIM_*_INSTANCE` de la propia HAL; (3) llamadas HAL añadidas: un `HAL_TIM_Base_Init` previo en modo up si CMS ≠ 00 (R5-3), `HAL_TIM_OnePulse_Init` cuando OPM cambia, `__HAL_TIM_URS_*`, `__HAL_TIM_CLEAR_FLAG(UPDATE)`, `__HAL_TIM_*_OCxPRELOAD` y una `HAL_TIM_SlaveConfigSynchro` por paso de la nota de TS; (5) el tier HAL de la prueba usa la HAL sobre el mismo handle para arrancar y parar, y `tim_bm` para flags y capturas; (6) protocolo del banco v5, con los pasos `T6_TIM1_HAL`, `T8_HAL` y `T9_HAL`; (7) TIM6 se comprueba con 100 ms de `CYCCNT` antes, durante y después de las pruebas HAL, más una foto de sus registros; (8) nombres de captura como en F1 y F2 | Auditoría de F3, parte 1 |
+| R8-2 | **Excepción a C10 en `tim_hal`:** `HAL_TIM_Base_Init` y `HAL_TIM_OnePulse_Init` hacen su read-modify-write de CR1 sin PRIMASK, porque pueden llamar a la MSP del proyecto, y una MSP que espere al tick no saldría con las interrupciones bloqueadas. Las demás llamadas a la HAL que hacen RMW de CCER, DIER, BDTR, SMCR, CR2 o TISEL van con PRIMASK. El README lo dice: `TIM_HAL_InitTimeBase` no protege CR1 frente a una ISR que escriba en el mismo timer a la vez | Desviación 4 del informe de F3 |
+| R8-3 | **README de cierre, contenido añadido:** la tabla de diferencias por diseño de `tim_hal` frente a `tim_bm` (16 filas, con la línea de `stm32h7xx_hal_tim.c` de cada una); O4: con un trigger TI1FP1, TI1F\_ED o TI2FP2, `TIM_HAL_ConfigSlave` pone CC1E/CC1NE (o CC2E) a 0 durante la reescritura de la etapa de entrada (`TIM_TI1_ConfigInputStage`, l. 7586), así que se llama con la captura deshabilitada; R8-2; y la nota de `InitTimeBase` de `tim_bm` (`SR = 0` limpia todos los flags) | Auditoría de F1, parte 1, y de F3, parte 1 |
 
 ## Cambios respecto a la revisión 6
 
@@ -127,7 +137,7 @@ Estos 15 criterios se auditan en cada fase. La columna Origen dice de qué fuent
 | C7 | **Sin estado en RAM.** `.data = 0` y `.bss = 0` en `tim_bm.c.obj`, `tim_ll.c.obj` y `tim_hal.c.obj`, medido en el `.map`. El `TIM_HandleTypeDef` lo pone el llamador | C7 de `10_hsem` |
 | C8 | **Dependencias hacia abajo.** `tim_bm` usa solo `stm32h7xx.h`, `<stdint.h>` y `<stdbool.h>`. `tim_ll` añade solo funciones `static inline` de `stm32h7xx_ll_tim.h`, y sus macros `LL_TIM_WriteReg`/`LL_TIM_ReadReg` (R7-3): sin `USE_FULL_LL_DRIVER` y sin `LL_TIM_Init`. `tim_hal` añade `stm32h7xx_hal.h` y no compila nada sin `HAL_TIM_MODULE_ENABLED`. Ningún tier usa FreeRTOS | `00_gpio/README.md` §1 |
 | C9 | **Evidencia.** `tools/build_all.ps1 -Clean` da 8/8. `prj_01` no lleva `-Werror` en sus flags (R2-5): sus imágenes, también `selftest-tim`, compilan con 0 avisos, y una compilación aparte con `CMAKE_C_FLAGS=-Werror` sale con 0. Cada captura lleva `Rev` e id de build limpios, y los tamaños salen del `.map` enlazado | Hoja de ruta §6.3, R2 y R3 |
-| C10 | **Propiedad y concurrencia.** Cada instancia tiene un único núcleo dueño, y el driver no toma locks entre núcleos. En RCC solo escribe el banco del núcleo que llama (`RCC->APB1LENR` para TIM2–7 y 12–14, `RCC->APB2ENR` para TIM1, 8 y 15–17; RM0399 §9.5.10). Nunca escribe `RCC_APBxRSTR`, que es compartido, ni `RCC_CFGR` o `RCC_D2CFGR`, que solo lee. Dentro de un núcleo: `SR` se borra con una sola escritura (`SR = ~mask`, bits rc_w0), nunca con RMW. Los RMW de `DIER`, `CCER` y `BDTR` van con PRIMASK guardado y restaurado con `__set_PRIMASK(saved)`, sin `__enable_irq()` | RM0399 §9.5.10; T15 de `00_gpio` |
+| C10 | **Propiedad y concurrencia.** Cada instancia tiene un único núcleo dueño, y el driver no toma locks entre núcleos. En RCC solo escribe el banco del núcleo que llama (`RCC->APB1LENR` para TIM2–7 y 12–14, `RCC->APB2ENR` para TIM1, 8 y 15–17; RM0399 §9.5.10). Nunca escribe `RCC_APBxRSTR`, que es compartido, ni `RCC_CFGR` o `RCC_D2CFGR`, que solo lee. Dentro de un núcleo: `SR` se borra con una sola escritura (`SR = ~mask`, bits rc_w0), nunca con RMW. Los RMW de `DIER`, `CCER` y `BDTR` van con PRIMASK guardado y restaurado con `__set_PRIMASK(saved)`, sin `__enable_irq()`. Excepción en `tim_hal`: `HAL_TIM_Base_Init` y `HAL_TIM_OnePulse_Init`, que pueden llamar a la MSP (R8-2) | RM0399 §9.5.10; T15 de `00_gpio` |
 | C11 | **Sin glitch ni eventos espurios.** La configuración se hace con `CEN = 0`. El `UG` que carga PSC se hace con `URS = 1` temporal, como la HAL (`TIM_Base_SetConfig`), o borrando `UIF` justo después, así que tras la init `SR.UIF = 0`. Un canal se configura entero (modo, `CCR`, polaridad) antes de `CCxE`. `MOE` va el último. La deinit libera primero las salidas (`MOE = 0`, `CCER = 0`) | RM0399 §40.3.1; HAL V1.11.6 |
 | C12 | **Honestidad.** Después de escribir hay read-back de cada registro de configuración: si no coincide, `ERR_VERIFY`. Una escritura que el hardware ignoraría se rechaza con `ERR_BUSY` sin escribir: `CCxS` con `CCxE = 1`, `TS` con `SMS ≠ 0` o `PSC`/modo con `CEN = 1`. La frecuencia que devuelve el cálculo es la real, no la pedida | C11 de `10_hsem`; RM0399 §40.4.3 (nota de `TS`) |
 | C13 | **Esperas acotadas.** La única espera del driver (`TIM_BM_WaitFlags`) tiene un límite en ciclos DWT que pasa el llamador. Si `CYCCNT` no avanza, devuelve `ERR_TIMEOUT`. No hay ningún bucle sin salida | C13 de `00_gpio` |
@@ -681,7 +691,7 @@ Lo escribe el implementador **solo cuando el auditor lo pida**, después de que 
 8. **Examples:** PWM BM en CM4; captura PWM input LL; base de tiempo HAL en CM7; maestro/esclavo.
 9. **Test bench (Analog Discovery 2):** diagrama ASCII y tabla de líneas usadas por las pruebas de TIM (sección [Banco de pruebas](#banco-de-pruebas)), S1–S12 resumidas, procedimiento.
 10. **Validation:** tabla de pruebas con resultado y captura de origen; cómo reproducirlo (comandos); no ejercitado.
-11. **Known limitations**, **Consumers** (`prj_01` selftest; `prj_04` TIM3/TIM7 esperando, D1), **Changing this driver**, **History** (hashes de los documentos de proceso borrados).
+11. **Known limitations** (incluye R8-2, O4 y la tabla de diferencias por diseño de `tim_hal`, R8-3), **Consumers** (`prj_01` selftest; `prj_04` TIM3/TIM7 esperando, D1), **Changing this driver**, **History** (hashes de los documentos de proceso borrados).
 
 ## Riesgos
 

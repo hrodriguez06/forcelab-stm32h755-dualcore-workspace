@@ -655,3 +655,8 @@ Solo pide recogerlo en el plan; no requiere código. Revisión 8:
 
 1. D10 aprobada.
 2. **A18/A27:** mi ejecución del banco sobre `selftest-tim` compilado en la cabeza de la rama, con la lista de comprobación física confirmada.
+
+## F3, adenda a la parte 1 (2026-10-03)
+
+- **D10 aprobada** por el responsable del catálogo. Está en la revisión 8 del plan: R8-1 (procedimiento de `tim_hal` aceptado), R8-2 (excepción a C10 en `HAL_TIM_Base_Init`/`OnePulse_Init`) y R8-3 (contenido añadido al README de cierre).
+- **Para que F3 pase:** solo queda A18/A27, mi ejecución del banco, con la lista de comprobación física confirmada.
