@@ -1,0 +1,38 @@
+git diff 3174fef b63204a -- 01_shared_drivers/03_tim/tim_bm.h (3174fef: the tim_bm API frozen at the end of F1,
+AUDIT.md F1 part 4). Lines removed: 0; lines added: 24.
+
+diff --git a/01_shared_drivers/03_tim/tim_bm.h b/01_shared_drivers/03_tim/tim_bm.h
+index e13986d..69a5520 100644
+--- a/01_shared_drivers/03_tim/tim_bm.h
++++ b/01_shared_drivers/03_tim/tim_bm.h
+@@ -412,6 +412,30 @@ TimBm_Status_t TIM_BM_ConfigMaster(TIM_TypeDef *tim, uint32_t mms, bool msm);
+   */
+ TimBm_Status_t TIM_BM_ConfigSlave(TIM_TypeDef *tim, uint32_t sms, uint32_t trigger);
+ 
++/* ---- Validation only (added in F2) ---------------------------------------------- */
++/* Each TIM_BM_Check* runs the checks of the operation it names, in the same order
++   (C6) and with the same status, and writes nothing. Like the operation, it reads the
++   peripheral only for the state checks (ERR_BUSY, ES0445 2.16.1, CCxS of a channel
++   mask). The operation calls it, so there is one copy of each check; tim_ll calls it
++   before it writes through the LL inlines. OK means the operation would write. */
++#define TIM_BM_USE_IRQ         0U   /* Enable/DisableIrq, GenerateEvent, WaitFlags          */
++#define TIM_BM_USE_DMA         1U   /* Enable/DisableDmaRequest                             */
++#define TIM_BM_USE_OUTPUT_ON   2U   /* OutputEnable: every channel an output (CCxS = 00)    */
++#define TIM_BM_USE_OUTPUT_OFF  3U   /* OutputDisable: the mask only                         */
++#define TIM_BM_USE_CAPTURE     4U   /* CaptureEnable/Disable: every channel an input        */
++
++TimBm_Status_t TIM_BM_CheckTimeBase(const TimBm_TimeBaseConfig_t *cfg);              /* InitTimeBase  */
++TimBm_Status_t TIM_BM_CheckPeriod(const TIM_TypeDef *tim, uint32_t arr);             /* SetPeriod     */
++TimBm_Status_t TIM_BM_CheckOutput(const TimBm_OcConfig_t *cfg);                      /* ConfigOutput  */
++TimBm_Status_t TIM_BM_CheckCompare(const TIM_TypeDef *tim, uint32_t channel, uint32_t ccr); /* SetCompare */
++TimBm_Status_t TIM_BM_CheckChannels(const TIM_TypeDef *tim, uint32_t ch_mask, uint32_t use);
++TimBm_Status_t TIM_BM_CheckInput(const TimBm_IcConfig_t *cfg);                       /* ConfigInput   */
++TimBm_Status_t TIM_BM_CheckPwmInput(const TIM_TypeDef *tim, uint32_t ti, uint32_t edge,
++                                    uint32_t prescaler, uint32_t filter, uint32_t tisel);
++TimBm_Status_t TIM_BM_CheckEvents(const TIM_TypeDef *tim, uint32_t ev_mask, uint32_t use);
++TimBm_Status_t TIM_BM_CheckMaster(const TIM_TypeDef *tim, uint32_t mms, bool msm);   /* ConfigMaster  */
++TimBm_Status_t TIM_BM_CheckSlave(const TIM_TypeDef *tim, uint32_t sms, uint32_t trigger); /* ConfigSlave */
++
+ #ifdef __cplusplus
+ }
+ #endif
