@@ -36,9 +36,10 @@ void TIM_Selftest_CM4_Run(void);          /* CPU2, after Shared_GpioLockInstall(
  * protocol: printed in the banner and in every STEP line, and checked by
  * tools/tim_hw_check.py, which keeps its own copy of the step names, their bus
  * owners and their handshakes. Bump it when any of those change.             */
-#define TIM_BENCH_VERSION    4U    /* v2: TREF_A + TREF_B (plan R3-3); v3: the F1 steps,
+#define TIM_BENCH_VERSION    5U    /* v2: TREF_A + TREF_B (plan R3-3); v3: the F1 steps,
                                       MCO1 on PA8 in T6/T8 (plan R3-2); v4: the F2 steps
-                                      T6_TIM1_LL, T6_TIM15_LL and T8_LL (tim_ll) */
+                                      T6_TIM1_LL, T6_TIM15_LL and T8_LL (tim_ll); v5: the F3
+                                      steps T6_TIM1_HAL, T8_HAL and T9_HAL (tim_hal) */
 
 typedef enum
 {
@@ -123,12 +124,13 @@ bool     tst_reset_ok(const TIM_TypeDef *tim, uint32_t *bad_idx, uint32_t *got, 
 /* The capability table typed by hand (plan rule 2, RM0399; TIM1/TIM8 TI1SEL as the RM). */
 bool     tst_hand_caps(const TIM_TypeDef *tim, TimBm_Caps_t *caps);
 
-/* ---- The tier under test (F2) ---------------------------------------------------- *
+/* ---- The tier under test (F2, F3) ------------------------------------------------ *
  * The tests take tim_bm's configurations and values; a tier applies them. BM calls
  * tim_bm. LL translates each value to the constant of stm32h7xx_ll_tim.h with its own
  * table, typed by hand from that header (never from tim_ll.c), and calls tim_ll; a
  * value with no LL constant becomes a word no LL constant has, which tim_ll must
- * refuse. Event masks are the same bits in both (LL_TIM_DIER_* = TIM_BM_EV_*).      */
+ * refuse. Event masks are the same bits in both (LL_TIM_DIER_* = TIM_BM_EV_*). The HAL
+ * tier (F3, CPU1 only: tim_hal on a TIM_HandleTypeDef) is in CM7/App/Src/tim_selftest.c. */
 typedef struct
 {
     const char *name;                     /* "BM" or "LL"                              */

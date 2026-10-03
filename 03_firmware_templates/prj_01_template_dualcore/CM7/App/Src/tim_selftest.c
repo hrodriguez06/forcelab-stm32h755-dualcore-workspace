@@ -2,7 +2,8 @@
   ******************************************************************************
   * @file    tim_selftest.c
   * @brief   03_tim selftest, CPU1 side (preset selftest-tim): the Analog
-  *          Discovery 2 bench (F0), the tests of tim_bm (F1) and of tim_ll (F2).
+  *          Discovery 2 bench (F0), the tests of tim_bm (F1), of tim_ll (F2) and
+  *          of tim_hal (F3).
   *
   *          Prints Rev and build id of both cores, then runs the bench steps
   *          T0a, TREF_A and T0b(b)(c)(d)(f)(g) with the host
@@ -11,8 +12,12 @@
   *          the SRAM4 block), the F1 bench steps T6_TIM1 (T6, T11, T13a),
   *          T6_TIM15, T8 (T8, T13b) and T9, the internal F2 tests through tim_ll
   *          (T1, T2 with the parity against tim_bm, T5, T10(a)(b), T12, T14, B1) and
-  *          the F2 bench steps T6_TIM1_LL, T6_TIM15_LL and T8_LL, then TREF_B, and
-  *          prints the global verdict, CPU2's results included. Plan and meaning of every test:
+  *          the F2 bench steps T6_TIM1_LL, T6_TIM15_LL and T8_LL, the internal F3
+  *          tests through tim_hal (T1, T2 with the parity against tim_bm and the HAL's
+  *          by-design differences, T5, T14, B1) and the F3 bench steps T6_TIM1_HAL,
+  *          T8_HAL and T9_HAL, with HAL_GetTick (TIM6) checked against CYCCNT before,
+  *          between and after them, then TREF_B, and prints the global verdict,
+  *          CPU2's results included. Plan and meaning of every test:
   *          01_shared_drivers/03_tim/IMPLEMENTATION_PLAN.md.
   *
   *          Electrical safety (no series resistors on the bench):
@@ -37,6 +42,7 @@
 #include "gpio_bm.h"
 #include "tim_bm.h"
 #include "tim_ll.h"
+#include "tim_hal.h"
 #include "dma_bm.h"
 #include "app_log.h"
 #include "stm32h7xx_hal.h"
@@ -1063,6 +1069,19 @@ static const TimRef_t k_all_tims[] = {
 /* F2: the tier the shared tests go through: k_tst_tier_bm for F1's tests, k_tst_tier_ll
    for F2's. Its tag (" LL") goes into their lines, so a BM line reads as in F1. */
 static const TstTier_t *s_tr = &k_tst_tier_bm;
+
+/* The bench step of the current tier: "T8", "T8_LL", "T8_HAL". One buffer: each step
+   asks once, at its start. */
+static const char *tier_step(const char *bm_name)
+{
+    static char buf[24];
+    if (s_tr == &k_tst_tier_bm)
+    {
+        return bm_name;
+    }
+    (void)snprintf(buf, sizeof(buf), "%s_%s", bm_name, s_tr->name);
+    return buf;
+}
 
 static const char *tim_name(const TIM_TypeDef *t)
 {
@@ -3244,6 +3263,664 @@ static void f2_internal(void)
 }
 
 /* ==========================================================================================
+ * F3: tim_hal (plan "Plan de pruebas", the F3 rows: T1, T2, T5, T6, T8, T9, T14; B1). CPU1
+ * only: CPU2's HAL configuration has no HAL_TIM_MODULE_ENABLED (plan decision 5).
+ *
+ * tim_hal works on a TIM_HandleTypeDef: the HAL tier keeps one per CPU1 instance (s_hh) and
+ * passes it to tim_hal. tim_hal has no counter start/stop and no capture disable: for those
+ * the tier calls the HAL on the same handle (HAL_TIM_Base_Start, HAL_TIM_Base_Stop,
+ * HAL_TIM_IC_Stop), so the handle states stay the HAL's own. The flags, the interrupt
+ * enables and the capture registers go through tim_bm, as in the other tiers' oracles.
+ * T1 calls tim_hal by hand; T2, T5 and T14 are F1's tests through the HAL tier, and T2 adds
+ * the parity against tim_bm and the HAL's by-design differences. T6, T8 and T9 are the bench
+ * steps T6_TIM1_HAL, T8_HAL and T9_HAL. TIM6 is CPU1's HAL tick: HAL_GetTick is checked
+ * against CYCCNT before, between and after the HAL tests, and TIM6's registers are only read.
+ * ========================================================================================== */
+
+static TIM_HandleTypeDef s_hh[N_TIMS];
+static TIM_HandleTypeDef s_hx;            /* any other address */
+
+static TIM_HandleTypeDef *hh(TIM_TypeDef *t)
+{
+    for (uint32_t i = 0U; i < N_TIMS; i++)
+    {
+        if (k_tims[i].tim == t)
+        {
+            s_hh[i].Instance = t;
+            return &s_hh[i];
+        }
+    }
+    s_hx.Instance = t;
+    return &s_hx;
+}
+
+static TimBm_Status_t hal_st(HAL_StatusTypeDef hs)
+{
+    return (hs == HAL_OK) ? TIM_BM_OK : TIM_BM_ERR_HAL;
+}
+
+static TimBm_Status_t hal_init_tb(const TimBm_TimeBaseConfig_t *c)
+{
+    return TIM_HAL_InitTimeBase(hh(c->tim), c);
+}
+
+static TimBm_Status_t hal_start(TIM_TypeDef *t)  { return hal_st(HAL_TIM_Base_Start(hh(t))); }
+static TimBm_Status_t hal_stop(TIM_TypeDef *t)   { return hal_st(HAL_TIM_Base_Stop(hh(t))); }
+static TimBm_Status_t hal_deinit(TIM_TypeDef *t) { return TIM_HAL_Deinit(hh(t)); }
+
+static TimBm_Status_t hal_config_output(const TimBm_OcConfig_t *c)
+{
+    return TIM_HAL_ConfigOutput(hh(c->tim), c);
+}
+
+/* fn on every channel of a TIM_BM_CH() mask, in channel order, up to the first error. */
+static TimBm_Status_t hal_each(TIM_TypeDef *t, uint32_t m, TimBm_Status_t (*fn)(TIM_HandleTypeDef *, uint32_t))
+{
+    TimBm_Status_t st = (m == 0U) ? TIM_BM_ERR_PARAM : TIM_BM_OK;
+    for (uint32_t ch = 1U; (ch <= 4U) && (st == TIM_BM_OK); ch++)
+    {
+        if ((m & TIM_BM_CH(ch)) != 0U)
+        {
+            st = fn(hh(t), ch);
+        }
+    }
+    return st;
+}
+
+static TimBm_Status_t hal_output_enable(TIM_TypeDef *t, uint32_t m)  { return hal_each(t, m, TIM_HAL_StartPwm); }
+static TimBm_Status_t hal_output_disable(TIM_TypeDef *t, uint32_t m) { return hal_each(t, m, TIM_HAL_StopPwm); }
+static TimBm_Status_t hal_capture_enable(TIM_TypeDef *t, uint32_t m) { return hal_each(t, m, TIM_HAL_StartCapture); }
+
+static TimBm_Status_t hal_capture_disable(TIM_TypeDef *t, uint32_t m)
+{
+    TimBm_Status_t st = (m == 0U) ? TIM_BM_ERR_PARAM : TIM_BM_OK;
+    for (uint32_t ch = 1U; (ch <= 4U) && (st == TIM_BM_OK); ch++)
+    {
+        if ((m & TIM_BM_CH(ch)) != 0U)
+        {
+            st = hal_st(HAL_TIM_IC_Stop(hh(t), (ch - 1U) * 4U));
+        }
+    }
+    return st;
+}
+
+static TimBm_Status_t hal_config_input(const TimBm_IcConfig_t *c)
+{
+    return TIM_HAL_ConfigInput(hh(c->tim), c);
+}
+
+/* PWM input the HAL way (RM0399 40.3.8): TIti direct, the other channel indirect on the
+   opposite edge, then the slave controller in reset mode on TIxFPx. */
+static TimBm_Status_t hal_config_pwm_input(TIM_TypeDef *tim, uint32_t ti, uint32_t edge, uint32_t prescaler,
+                                           uint32_t filter, uint32_t tisel)
+{
+    const TimBm_IcConfig_t a = { tim, ti, TIM_BM_IC_DIRECT, edge, prescaler, filter, tisel };
+    const TimBm_IcConfig_t b = { tim, (ti == 1U) ? 2U : 1U, TIM_BM_IC_INDIRECT,
+                                 (edge == TIM_BM_EDGE_RISING) ? TIM_BM_EDGE_FALLING : TIM_BM_EDGE_RISING,
+                                 prescaler, filter, 0U };
+    TimBm_Status_t st = TIM_HAL_ConfigInput(hh(tim), &a);
+    if (st == TIM_BM_OK)
+    {
+        st = TIM_HAL_ConfigInput(hh(tim), &b);
+    }
+    if (st == TIM_BM_OK)
+    {
+        st = TIM_HAL_ConfigSlave(hh(tim), TIM_BM_SMS_RESET, (ti == 1U) ? TIM_BM_TRG_TI1FP1 : TIM_BM_TRG_TI2FP2);
+    }
+    return st;
+}
+
+static uint32_t hal_read_capture(TIM_TypeDef *t, uint32_t channel)
+{
+    return TIM_BM_ReadCapture(t, channel);
+}
+
+static TimBm_Status_t hal_config_master(TIM_TypeDef *t, uint32_t mms, bool msm)
+{
+    return TIM_HAL_ConfigMaster(hh(t), mms, msm);
+}
+
+static TimBm_Status_t hal_config_slave(TIM_TypeDef *t, uint32_t sms, uint32_t trigger)
+{
+    return TIM_HAL_ConfigSlave(hh(t), sms, trigger);
+}
+
+static const TstTier_t k_tier_hal = {
+    "HAL", " HAL",
+    hal_init_tb, hal_start, hal_stop, hal_deinit, TIM_BM_EnableIrq, TIM_BM_DisableIrq,
+    TIM_BM_TakeFlags, TIM_BM_TakeOvercapture, TIM_BM_WaitFlags, hal_config_output, hal_output_enable,
+    hal_output_disable, hal_config_input, hal_config_pwm_input, hal_capture_enable, hal_capture_disable,
+    hal_read_capture, hal_config_master, hal_config_slave,
+};
+
+/* ---- TIM6, the HAL tick of CPU1 (plan F3 gate, A22) ------------------------------------ */
+
+/* Over 100 ms of CYCCNT (both clocks from PLL1), HAL_GetTick must advance 100 +-1 ms. */
+static void hal_tick_check(const char *when)
+{
+    const uint32_t c0 = DWT->CYCCNT;
+    const uint32_t t0 = HAL_GetTick();
+    while ((DWT->CYCCNT - c0) < (100U * CYC_PER_MS))
+    {
+    }
+    const uint32_t d = HAL_GetTick() - t0;
+    verdict((d >= 99U) && (d <= 101U), "TIM6 tick %s: HAL_GetTick advanced %lu ms in 100 ms of CYCCNT (100 +-1)", when,
+            (unsigned long)d);
+}
+
+typedef struct { uint32_t cr1, cr2, dier, psc, arr; } Tim6Snap_t;
+static Tim6Snap_t s_tim6_f3;
+
+static void tim6_snap(Tim6Snap_t *s)           /* reads only */
+{
+    s->cr1  = TIM6->CR1;
+    s->cr2  = TIM6->CR2;
+    s->dier = TIM6->DIER;
+    s->psc  = TIM6->PSC;
+    s->arr  = TIM6->ARR;
+}
+
+/* ---- T1 through tim_hal --------------------------------------------------------------- */
+
+static const T1Case_t k_t1_hal[] = {
+    /*  0 */ { "InitTimeBase(h NULL)",                                         TIM_BM_ERR_PARAM,       0U },
+    /*  1 */ { "InitTimeBase(cfg NULL)",                                       TIM_BM_ERR_PARAM,       0U },
+    /*  2 */ { "InitTimeBase(h->Instance USART3)",                             TIM_BM_ERR_PARAM,       0U },
+    /*  3 */ { "InitTimeBase(h->Instance TIM1 + 4)",                           TIM_BM_ERR_PARAM,       0U },
+    /*  4 */ { "InitTimeBase(h->Instance TIM2, cfg->tim TIM4)",                TIM_BM_ERR_PARAM,       0U },
+    /*  5 */ { "ConfigOutput(h->Instance TIM2, cfg->tim TIM4)",                TIM_BM_ERR_PARAM,       0U },
+    /*  6 */ { "ConfigInput(h->Instance TIM2, cfg->tim TIM4)",                 TIM_BM_ERR_PARAM,       0U },
+    /*  7 */ { "ConfigOutput(cfg NULL)",                                       TIM_BM_ERR_PARAM,       0U },
+    /*  8 */ { "StartPwm(h NULL)",                                             TIM_BM_ERR_PARAM,       0U },
+    /*  9 */ { "StartCapture(h->Instance TIM1 + 4)",                           TIM_BM_ERR_PARAM,       0U },
+    /* 10 */ { "ConfigMaster(h->Instance USART3)",                             TIM_BM_ERR_PARAM,       0U },
+    /* 11 */ { "ConfigSlave(h NULL)",                                          TIM_BM_ERR_PARAM,       0U },
+    /* 12 */ { "Deinit(h NULL)",                                               TIM_BM_ERR_PARAM,       0U },
+    /* 13 */ { "Deinit(h->Instance USART3)",                                   TIM_BM_ERR_PARAM,       0U },
+    /* 14 */ { "ConfigOutput(TIM2 channel 0)",                                 TIM_BM_ERR_PARAM,       0U },
+    /* 15 */ { "ConfigOutput(TIM2 channel 5)",                                 TIM_BM_ERR_PARAM,       0U },
+    /* 16 */ { "ConfigOutput(TIM12 channel 3)",                                TIM_BM_ERR_UNSUPPORTED, 0U },
+    /* 17 */ { "ConfigOutput(TIM7 channel 1): PWM on TIM7",                    TIM_BM_ERR_UNSUPPORTED, 0U },
+    /* 18 */ { "InitTimeBase(TIM2 ARR = 0)",                                   TIM_BM_ERR_PARAM,       0U },
+    /* 19 */ { "InitTimeBase(TIM4 ARR = 0x10000, 16 bits)",                    TIM_BM_ERR_PARAM,       0U },
+    /* 20 */ { "InitTimeBase(TIM2 PSC = 65536)",                               TIM_BM_ERR_PARAM,       0U },
+    /* 21 */ { "InitTimeBase(TIM17 repetition = 0x100, 8-bit RCR)",            TIM_BM_ERR_PARAM,       0U },
+    /* 22 */ { "InitTimeBase(TIM12 center 1)",                                 TIM_BM_ERR_UNSUPPORTED, 0U },
+    /* 23 */ { "ConfigSlave(TIM4 trigger ITR5)",                               TIM_BM_ERR_UNSUPPORTED, 0U },
+    /* 24 */ { "ConfigSlave(TIM2 trigger 19: no ETRF value)",                  TIM_BM_ERR_PARAM,       0U },
+    /* 25 */ { "ConfigSlave(TIM2 gated on TI1F_ED)",                           TIM_BM_ERR_PARAM,       0U },
+    /* 26 */ { "ConfigInput(TIM17 TI1SEL = 0001, reserved)",                   TIM_BM_ERR_UNSUPPORTED, 0U },
+    /* 27 */ { "2.16.1 ConfigMaster(TIM2 MSM) with OPM, reset+trigger",        TIM_BM_ERR_UNSUPPORTED, 0U },
+    /* 28 */ { "2.16.1 ConfigSlave(TIM2 reset+trigger) with OPM, MSM",         TIM_BM_ERR_UNSUPPORTED, 0U },
+    /* 29 */ { "2.16.1 InitTimeBase(TIM2 OPM) with MSM, reset+trigger",        TIM_BM_ERR_UNSUPPORTED, 0U },
+    /* 30 */ { "ConfigOutput(TIM2 CH1) with CC1E = 1 (StartPwm)",              TIM_BM_ERR_BUSY,        1U },
+    /* 31 */ { "ConfigInput(TIM2 CH2) with CC2E = 1 (StartCapture)",           TIM_BM_ERR_BUSY,        1U },
+    /* 32 */ { "InitTimeBase(TIM2) with CEN = 1",                              TIM_BM_ERR_BUSY,        1U },
+    /* 33 */ { "ConfigSlave(TIM2 trigger) with SMS = gated",                   TIM_BM_ERR_BUSY,        0U },
+    /* 34 */ { "StartPwm(TIM2 CH1) on an input",                               TIM_BM_ERR_PARAM,       0U },
+    /* 35 */ { "StartCapture(TIM2 CH1) on an output",                          TIM_BM_ERR_PARAM,       0U },
+    /* 36 */ { "StartPwm(TIM2 channel 0)",                                     TIM_BM_ERR_PARAM,       0U },
+    /* 37 */ { "StopPwm(TIM2 channel 5)",                                      TIM_BM_ERR_PARAM,       0U },
+    /* 38 */ { "StartCapture(TIM7 CH1): no channel",                           TIM_BM_ERR_UNSUPPORTED, 0U },
+    /* 39 */ { "ConfigMaster(TIM12 OC3REF > MMS 5)",                           TIM_BM_ERR_UNSUPPORTED, 0U },
+    /* 40 */ { "ConfigMaster(TIM13: no TRGO)",                                 TIM_BM_ERR_UNSUPPORTED, 0U },
+    /* 41 */ { "StartPwm(TIM2 CH1) again: HAL_TIM_PWM_Start refuses (channel BUSY)", TIM_BM_ERR_HAL,  1U },
+};
+#define T1_HAL_CASES   (sizeof(k_t1_hal) / sizeof(k_t1_hal[0]))
+
+static TIM_HandleTypeDef  s_t1_hb;      /* the case's handle before and after the call */
+static TIM_HandleTypeDef  s_t1_ha;
+static TIM_HandleTypeDef  s_t1_bad;     /* a handle on something that is not a timer */
+static TIM_HandleTypeDef *s_t1_hp;      /* the case's handle, NULL if it has none */
+
+static TimBm_Status_t t1_hal_case(uint32_t k)
+{
+    TimBm_TimeBaseConfig_t tb = tb_cfg(TIM2, 0U, 999U, TIM_BM_COUNT_UP, false);
+    TimBm_OcConfig_t oc = { TIM2, 1U, TIM_BM_OC_PWM1, 100U, false, true };
+    TimBm_IcConfig_t ic = { TIM2, 2U, TIM_BM_IC_DIRECT, TIM_BM_EDGE_RISING, 1U, 0U, 0U };
+    TIM_HandleTypeDef *const h2 = hh(TIM2);
+    TimBm_Status_t st = TIM_BM_OK;
+    memset(&s_t1_bad, 0, sizeof(s_t1_bad));
+#define T1H_CALL(hp, expr)                                                                   \
+    do {                                                                                     \
+        s_t1_hp = (hp);                                                                      \
+        if (s_t1_hp != NULL) { memcpy(&s_t1_hb, s_t1_hp, sizeof(s_t1_hb)); }                 \
+        t1_snap(&s_t1_b);                                                                    \
+        st = (expr);                                                                         \
+        t1_snap(&s_t1_a);                                                                    \
+        if (s_t1_hp != NULL) { memcpy(&s_t1_ha, s_t1_hp, sizeof(s_t1_ha)); }                 \
+    } while (0)
+    switch (k)
+    {
+    case 0:  T1H_CALL(NULL, TIM_HAL_InitTimeBase(NULL, &tb)); break;
+    case 1:  T1H_CALL(h2, TIM_HAL_InitTimeBase(h2, NULL)); break;
+    case 2:
+        s_t1_bad.Instance = (TIM_TypeDef *)USART3; tb.tim = s_t1_bad.Instance;
+        T1H_CALL(&s_t1_bad, TIM_HAL_InitTimeBase(&s_t1_bad, &tb));
+        break;
+    case 3:
+        s_t1_bad.Instance = (TIM_TypeDef *)(TIM1_BASE + 4U); tb.tim = s_t1_bad.Instance;
+        T1H_CALL(&s_t1_bad, TIM_HAL_InitTimeBase(&s_t1_bad, &tb));
+        break;
+    case 4:  tb.tim = TIM4; T1H_CALL(h2, TIM_HAL_InitTimeBase(h2, &tb)); break;
+    case 5:  oc.tim = TIM4; T1H_CALL(h2, TIM_HAL_ConfigOutput(h2, &oc)); break;
+    case 6:  ic.tim = TIM4; T1H_CALL(h2, TIM_HAL_ConfigInput(h2, &ic)); break;
+    case 7:  T1H_CALL(h2, TIM_HAL_ConfigOutput(h2, NULL)); break;
+    case 8:  T1H_CALL(NULL, TIM_HAL_StartPwm(NULL, 1U)); break;
+    case 9:
+        s_t1_bad.Instance = (TIM_TypeDef *)(TIM1_BASE + 4U);
+        T1H_CALL(&s_t1_bad, TIM_HAL_StartCapture(&s_t1_bad, 1U));
+        break;
+    case 10:
+        s_t1_bad.Instance = (TIM_TypeDef *)USART3;
+        T1H_CALL(&s_t1_bad, TIM_HAL_ConfigMaster(&s_t1_bad, TIM_BM_MMS_UPDATE, false));
+        break;
+    case 11: T1H_CALL(NULL, TIM_HAL_ConfigSlave(NULL, TIM_BM_SMS_RESET, TIM_BM_TRG_ITR(0))); break;
+    case 12: T1H_CALL(NULL, TIM_HAL_Deinit(NULL)); break;
+    case 13:
+        s_t1_bad.Instance = (TIM_TypeDef *)USART3;
+        T1H_CALL(&s_t1_bad, TIM_HAL_Deinit(&s_t1_bad));
+        break;
+    case 14: oc.channel = 0U; T1H_CALL(h2, TIM_HAL_ConfigOutput(h2, &oc)); break;
+    case 15: oc.channel = 5U; T1H_CALL(h2, TIM_HAL_ConfigOutput(h2, &oc)); break;
+    case 16: oc.tim = TIM12; oc.channel = 3U; T1H_CALL(hh(TIM12), TIM_HAL_ConfigOutput(hh(TIM12), &oc)); break;
+    case 17: oc.tim = TIM7; T1H_CALL(hh(TIM7), TIM_HAL_ConfigOutput(hh(TIM7), &oc)); break;
+    case 18: tb.arr = 0U; T1H_CALL(h2, TIM_HAL_InitTimeBase(h2, &tb)); break;
+    case 19: tb.tim = TIM4; tb.arr = 0x10000U; T1H_CALL(hh(TIM4), TIM_HAL_InitTimeBase(hh(TIM4), &tb)); break;
+    case 20: tb.psc = 65536U; T1H_CALL(h2, TIM_HAL_InitTimeBase(h2, &tb)); break;
+    case 21: tb.tim = TIM17; tb.repetition = 0x100U; T1H_CALL(hh(TIM17), TIM_HAL_InitTimeBase(hh(TIM17), &tb)); break;
+    case 22:
+        tb.tim = TIM12; tb.count_mode = TIM_BM_COUNT_CENTER1;
+        T1H_CALL(hh(TIM12), TIM_HAL_InitTimeBase(hh(TIM12), &tb));
+        break;
+    case 23: T1H_CALL(hh(TIM4), TIM_HAL_ConfigSlave(hh(TIM4), TIM_BM_SMS_TRIGGER, TIM_BM_TRG_ITR(5))); break;
+    case 24: T1H_CALL(h2, TIM_HAL_ConfigSlave(h2, TIM_BM_SMS_TRIGGER, 19U)); break;
+    case 25: T1H_CALL(h2, TIM_HAL_ConfigSlave(h2, TIM_BM_SMS_GATED, TIM_BM_TRG_TI1F_ED)); break;
+    case 26:
+        ic.tim = TIM17; ic.channel = 1U; ic.tisel = 1U;
+        T1H_CALL(hh(TIM17), TIM_HAL_ConfigInput(hh(TIM17), &ic));
+        break;
+    case 27:
+        tb.one_pulse = true;
+        (void)TIM_HAL_InitTimeBase(h2, &tb);
+        (void)TIM_HAL_ConfigSlave(h2, TIM_BM_SMS_RESET_TRIGGER, TIM_BM_TRG_ITR(0));
+        T1H_CALL(h2, TIM_HAL_ConfigMaster(h2, TIM_BM_MMS_RESET, true));
+        break;
+    case 28:
+        tb.one_pulse = true;
+        (void)TIM_HAL_InitTimeBase(h2, &tb);
+        (void)TIM_HAL_ConfigMaster(h2, TIM_BM_MMS_RESET, true);
+        T1H_CALL(h2, TIM_HAL_ConfigSlave(h2, TIM_BM_SMS_RESET_TRIGGER, TIM_BM_TRG_ITR(0)));
+        break;
+    case 29:
+        (void)TIM_HAL_InitTimeBase(h2, &tb);
+        (void)TIM_HAL_ConfigMaster(h2, TIM_BM_MMS_RESET, true);
+        (void)TIM_HAL_ConfigSlave(h2, TIM_BM_SMS_RESET_TRIGGER, TIM_BM_TRG_ITR(0));
+        tb.one_pulse = true;
+        T1H_CALL(h2, TIM_HAL_InitTimeBase(h2, &tb));
+        break;
+    case 30:
+        (void)TIM_HAL_InitTimeBase(h2, &tb);
+        (void)TIM_HAL_ConfigOutput(h2, &oc);
+        (void)TIM_HAL_StartPwm(h2, 1U);
+        T1H_CALL(h2, TIM_HAL_ConfigOutput(h2, &oc));
+        break;
+    case 31:
+        (void)TIM_HAL_InitTimeBase(h2, &tb);
+        (void)TIM_HAL_ConfigInput(h2, &ic);
+        (void)TIM_HAL_StartCapture(h2, 2U);
+        T1H_CALL(h2, TIM_HAL_ConfigInput(h2, &ic));
+        break;
+    case 32:
+        (void)TIM_HAL_InitTimeBase(h2, &tb);
+        (void)TIM_BM_Start(TIM2);              /* tim_hal has no Start of the time base */
+        T1H_CALL(h2, TIM_HAL_InitTimeBase(h2, &tb));
+        break;
+    case 33:
+        (void)TIM_HAL_ConfigSlave(h2, TIM_BM_SMS_GATED, TIM_BM_TRG_ITR(0));
+        T1H_CALL(h2, TIM_HAL_ConfigSlave(h2, TIM_BM_SMS_TRIGGER, TIM_BM_TRG_ITR(1)));
+        break;
+    case 34:
+        ic.channel = 1U;
+        (void)TIM_HAL_ConfigInput(h2, &ic);
+        T1H_CALL(h2, TIM_HAL_StartPwm(h2, 1U));
+        break;
+    case 35:
+        (void)TIM_HAL_ConfigOutput(h2, &oc);
+        T1H_CALL(h2, TIM_HAL_StartCapture(h2, 1U));
+        break;
+    case 36: T1H_CALL(h2, TIM_HAL_StartPwm(h2, 0U)); break;
+    case 37: T1H_CALL(h2, TIM_HAL_StopPwm(h2, 5U)); break;
+    case 38: T1H_CALL(hh(TIM7), TIM_HAL_StartCapture(hh(TIM7), 1U)); break;
+    case 39: T1H_CALL(hh(TIM12), TIM_HAL_ConfigMaster(hh(TIM12), TIM_BM_MMS_OC3REF, false)); break;
+    case 40: T1H_CALL(hh(TIM13), TIM_HAL_ConfigMaster(hh(TIM13), TIM_BM_MMS_UPDATE, false)); break;
+    default:
+        (void)TIM_HAL_InitTimeBase(h2, &tb);
+        (void)TIM_HAL_ConfigOutput(h2, &oc);
+        (void)TIM_HAL_StartPwm(h2, 1U);
+        T1H_CALL(h2, TIM_HAL_StartPwm(h2, 1U));
+        break;
+    }
+#undef T1H_CALL
+    return st;
+}
+
+static void test_t1_hal(void)
+{
+    uint64_t bad = 0U;
+    uint64_t touched = 0U;
+    uint64_t hchg = 0U;
+    for (uint32_t k = 0U; k < T1_HAL_CASES; k++)
+    {
+        uint32_t tm[T1_NT];
+        uint32_t rcc = 0U;
+        const TimBm_Status_t st = t1_hal_case(k);
+        t1_diff(tm, &rcc, k_t1_hal[k].running != 0U);
+        bool same = (rcc == 0U);
+        for (uint32_t j = 0U; j < T1_NT; j++)
+        {
+            same = same && (tm[j] == 0U);
+        }
+        const bool hsame = (s_t1_hp == NULL) || (memcmp(&s_t1_hb, &s_t1_ha, sizeof(s_t1_hb)) == 0);
+        if (st != (TimBm_Status_t)k_t1_hal[k].expect)
+        {
+            bad |= 1ULL << k;
+        }
+        if (!same)
+        {
+            touched |= 1ULL << k;
+        }
+        if (!hsame)
+        {
+            hchg |= 1ULL << k;
+        }
+        LOG("T1 HAL %lu %s: status %u (expected %u), registers and RCC banks unchanged %u, handle unchanged %u",
+            (unsigned long)k, k_t1_hal[k].what, (unsigned)st, (unsigned)k_t1_hal[k].expect, (unsigned)same,
+            (unsigned)hsame);
+        for (uint32_t j = 0U; j < T1_NT; j++)
+        {
+            (void)TIM_HAL_Deinit(hh(k_t1_tims[j]));
+        }
+        (void)TIM_HAL_Deinit(hh(TIM13));
+    }
+    verdict((bad == 0U) && (touched == 0U) && (hchg == 0U),
+            "T1 HAL CM7 %u refusals: wrong status 0x%08lX%08lX, snapshot changed 0x%08lX%08lX, handle changed "
+            "0x%08lX%08lX", (unsigned)T1_HAL_CASES, (unsigned long)(bad >> 32), (unsigned long)(bad & 0xFFFFFFFFU),
+            (unsigned long)(touched >> 32), (unsigned long)(touched & 0xFFFFFFFFU), (unsigned long)(hchg >> 32),
+            (unsigned long)(hchg & 0xFFFFFFFFU));
+
+    /* O1: the valid call changes exactly CCMR1 and CCR1 of TIM2 */
+    uint32_t tm[T1_NT];
+    uint32_t rcc = 0U;
+    TIM_HandleTypeDef *const h = hh(TIM2);
+    const TimBm_OcConfig_t oc = { TIM2, 1U, TIM_BM_OC_PWM1, 100U, false, true };
+    t1_snap(&s_t1_b);
+    const TimBm_Status_t st1 = TIM_HAL_ConfigOutput(h, &oc);
+    t1_snap(&s_t1_a);
+    t1_diff(tm, &rcc, false);
+    const uint32_t exp_tim2 = (1UL << TST_RI_CCMR1) | (1UL << TST_RI_CCR1);
+    const uint32_t others = tm[0] | tm[2] | tm[3] | tm[4] | tm[5] | rcc;
+    verdict((st1 == TIM_BM_OK) && (tm[1] == exp_tim2) && (others == 0U),
+            "T1 HAL control (O1): ConfigOutput(TIM2 CH1 PWM1 CCR 100 preload) status %u changes TIM2 words 0x%07lX "
+            "(0x%07lX: CCMR1, CCR1), other timers and RCC 0x%lX (0)", (unsigned)st1, (unsigned long)tm[1],
+            (unsigned long)exp_tim2, (unsigned long)others);
+    (void)TIM_HAL_Deinit(h);
+
+    /* The handle: the states the HAL keeps in it, through tim_hal. */
+    const TimBm_TimeBaseConfig_t tb = tb_cfg(TIM2, 0U, 999U, TIM_BM_COUNT_UP, false);
+    const TimBm_Status_t sa = TIM_HAL_InitTimeBase(h, &tb);
+    const uint32_t s_init = h->State;
+    bool ch_ready = true;
+    for (uint32_t i = 0U; i < 4U; i++)
+    {
+        ch_ready = ch_ready && (h->ChannelState[i] == HAL_TIM_CHANNEL_STATE_READY) &&
+                   (h->ChannelNState[i] == HAL_TIM_CHANNEL_STATE_READY);
+    }
+    const TimBm_Status_t sb = TIM_HAL_ConfigOutput(h, &oc);
+    const TimBm_Status_t sc = TIM_HAL_StartPwm(h, 1U);
+    const uint32_t c_on = h->ChannelState[0];
+    const TimBm_Status_t sd = TIM_HAL_StopPwm(h, 1U);
+    const uint32_t c_off = h->ChannelState[0];
+    const TimBm_Status_t se = TIM_HAL_Deinit(h);
+    bool reset = (h->State == HAL_TIM_STATE_RESET) && (h->DMABurstState == HAL_DMA_BURST_STATE_RESET) &&
+                 (h->Lock == HAL_UNLOCKED);
+    for (uint32_t i = 0U; i < 4U; i++)
+    {
+        reset = reset && (h->ChannelState[i] == HAL_TIM_CHANNEL_STATE_RESET) &&
+                (h->ChannelNState[i] == HAL_TIM_CHANNEL_STATE_RESET);
+    }
+    verdict((sa == TIM_BM_OK) && (s_init == HAL_TIM_STATE_READY) && ch_ready && (sb == TIM_BM_OK) && (sc == TIM_BM_OK) &&
+            (c_on == HAL_TIM_CHANNEL_STATE_BUSY) && (sd == TIM_BM_OK) && (c_off == HAL_TIM_CHANNEL_STATE_READY) &&
+            (se == TIM_BM_OK) && reset,
+            "T1 HAL handle (TIM2): InitTimeBase %u -> State %lu (READY 1), channels READY %u; ConfigOutput %u; StartPwm "
+            "CH1 %u -> channel state %lu (BUSY 2); StopPwm %u -> %lu (READY 1); Deinit %u -> State, channels, DMA burst "
+            "RESET and unlocked %u", (unsigned)sa, (unsigned long)s_init, (unsigned)ch_ready, (unsigned)sb,
+            (unsigned)sc, (unsigned long)c_on, (unsigned)sd, (unsigned long)c_off, (unsigned)se, (unsigned)reset);
+}
+
+/* ---- T2 through tim_hal: parity, then the HAL's by-design differences ------------------ */
+
+/* Each case runs from the same image twice, through tim_bm and through tim_hal: Deinit, a
+   preparation through the same tier and, where the difference needs it, a register written
+   by hand, then the operation. Every bit in which the two images differ must be the one
+   listed for the case (CNT aside): a bit the HAL leaves or clears where tim_bm writes the
+   reset value, or the counter the HAL start/stop functions also drive. */
+typedef struct { const char *what; TIM_TypeDef *tim; uint8_t word; uint32_t bits; } T2dCase_t;
+
+static const T2dCase_t k_t2d[] = {
+    /*  0 */ { "InitTimeBase over CR1 UDIS = UIFREMAP = 1 (TIM_Base_SetConfig keeps them)", TIM2, TST_RI_CR1,
+               TIM_CR1_UDIS | TIM_CR1_UIFREMAP },
+    /*  1 */ { "InitTimeBase over SR.CC1IF = 1 (tim_hal clears UIF only; tim_bm SR = 0)", TIM2, TST_RI_SR, TIM_SR_CC1IF },
+    /*  2 */ { "InitTimeBase over TIM12 CR1 CKD = 10 (no IS_TIM_CLOCK_DIVISION_INSTANCE)", TIM12, TST_RI_CR1,
+               TIM_CR1_CKD_1 },
+    /*  3 */ { "InitTimeBase down over center 1 (R5-3: a first Base_Init in up mode)", TIM2, TST_RI_CR1, 0U },
+    /*  4 */ { "ConfigOutput toggle over OC1CE = OC1FE = 1 (TIM_OC1_SetConfig keeps them)", TIM2, TST_RI_CCMR1,
+               TIM_CCMR1_OC1CE | TIM_CCMR1_OC1FE },
+    /*  5 */ { "ConfigOutput PWM1 over OC1CE = 1 (the PWM call clears OC1FE only)", TIM2, TST_RI_CCMR1, TIM_CCMR1_OC1CE },
+    /*  6 */ { "ConfigOutput over CC1NP = 1, TIM2 CH1 (no complementary output)", TIM2, TST_RI_CCER, TIM_CCER_CC1NP },
+    /*  7 */ { "ConfigOutput over CC1NP = 1, TIM1 CH1 (complementary output: cleared)", TIM1, TST_RI_CCER, 0U },
+    /*  8 */ { "ConfigOutput over CR2 OIS1 = 1, TIM1 (break instance: OISx cleared)", TIM1, TST_RI_CR2, TIM_CR2_OIS1 },
+    /*  9 */ { "ConfigMaster over CR2 MMS2 = 0001, TIM1 (MasterOutputTrigger2 = 0)", TIM1, TST_RI_CR2, TIM_CR2_MMS2_0 },
+    /* 10 */ { "ConfigSlave over DIER TIE = TDE = 1 (HAL_TIM_SlaveConfigSynchro clears them)", TIM2, TST_RI_DIER,
+               TIM_DIER_TIE | TIM_DIER_TDE },
+    /* 11 */ { "ConfigSlave reset on TI1FP1 over CH1 input, falling, filter 7 (stage kept)", TIM2, TST_RI_CCER, 0U },
+    /* 12 */ { "StartCapture CH1 against CaptureEnable (HAL_TIM_IC_Start sets CEN)", TIM2, TST_RI_CR1, TIM_CR1_CEN },
+    /* 13 */ { "StartPwm CH1 against OutputEnable (HAL_TIM_PWM_Start sets CEN)", TIM2, TST_RI_CR1, TIM_CR1_CEN },
+    /* 14 */ { "StopPwm CH1 against OutputDisable, TIM1 (no channel left: CEN cleared)", TIM1, TST_RI_CR1, TIM_CR1_CEN },
+};
+#define T2D_CASES   (sizeof(k_t2d) / sizeof(k_t2d[0]))
+
+static TimBm_Status_t t2d_apply(uint32_t k, const TstTier_t *tier)
+{
+    TIM_TypeDef *t = k_t2d[k].tim;
+    const TimBm_TimeBaseConfig_t tb = tb_cfg(t, 7U, 999U, TIM_BM_COUNT_UP, false);
+    const TimBm_TimeBaseConfig_t slow = tb_cfg(t, 65535U, 0xFFFFU, TIM_BM_COUNT_UP, false);   /* no update for 21 s */
+    TimBm_OcConfig_t oc = { t, 1U, TIM_BM_OC_PWM1, 0x1234U, false, true };
+    TimBm_IcConfig_t ic = { t, 1U, TIM_BM_IC_DIRECT, TIM_BM_EDGE_RISING, 1U, 0U, 0U };
+    (void)tier->deinit(t);
+    switch (k)
+    {
+    case 0:  t->CR1 = TIM_CR1_UDIS | TIM_CR1_UIFREMAP; return tier->init_tb(&tb);
+    case 1:  t->EGR = TIM_EGR_CC1G; return tier->init_tb(&tb);     /* CC1 an output: CC1G sets CC1IF */
+    case 2:  t->CR1 = TIM_CR1_CKD_1; return tier->init_tb(&tb);
+    case 3:
+    {
+        const TimBm_TimeBaseConfig_t c1 = tb_cfg(t, 7U, 999U, TIM_BM_COUNT_CENTER1, false);
+        const TimBm_TimeBaseConfig_t dn = tb_cfg(t, 7U, 999U, TIM_BM_COUNT_DOWN, false);
+        (void)tier->init_tb(&c1);
+        return tier->init_tb(&dn);
+    }
+    case 4:  t->CCMR1 = TIM_CCMR1_OC1CE | TIM_CCMR1_OC1FE; oc.mode = TIM_BM_OC_TOGGLE; oc.preload = false;
+             return tier->config_output(&oc);
+    case 5:  t->CCMR1 = TIM_CCMR1_OC1CE; return tier->config_output(&oc);
+    case 6:
+    case 7:  t->CCER = TIM_CCER_CC1NP; return tier->config_output(&oc);
+    case 8:  t->CR2 = TIM_CR2_OIS1; return tier->config_output(&oc);
+    case 9:  t->CR2 = TIM_CR2_MMS2_0; return tier->config_master(t, TIM_BM_MMS_UPDATE, false);
+    case 10: t->DIER = TIM_DIER_TIE | TIM_DIER_TDE; return tier->config_slave(t, TIM_BM_SMS_TRIGGER, TIM_BM_TRG_ITR(0));
+    case 11:
+        ic.edge = TIM_BM_EDGE_FALLING; ic.filter = 7U;
+        (void)tier->config_input(&ic);
+        return tier->config_slave(t, TIM_BM_SMS_RESET, TIM_BM_TRG_TI1FP1);
+    case 12:
+        (void)tier->init_tb(&slow);
+        (void)tier->config_input(&ic);
+        return tier->capture_enable(t, TIM_BM_CH(1));
+    case 13:
+        (void)tier->init_tb(&slow);
+        (void)tier->config_output(&oc);
+        return tier->output_enable(t, TIM_BM_CH(1));
+    default:
+        (void)tier->init_tb(&slow);
+        (void)tier->config_output(&oc);
+        (void)tier->output_enable(t, TIM_BM_CH(1));
+        (void)tier->start(t);
+        return tier->output_disable(t, TIM_BM_CH(1));
+    }
+}
+
+static void t2_hal_design(void)
+{
+    static TstImg_t bm;
+    static TstImg_t hal;
+    uint32_t bad = 0U;
+    for (uint32_t k = 0U; k < T2D_CASES; k++)
+    {
+        const T2dCase_t *c = &k_t2d[k];
+        const TimBm_Status_t sb = t2d_apply(k, &k_tst_tier_bm);
+        tst_img_read(c->tim, &bm);
+        (void)TIM_BM_Deinit(c->tim);
+        const TimBm_Status_t sh = t2d_apply(k, &k_tier_hal);
+        tst_img_read(c->tim, &hal);
+        (void)TIM_HAL_Deinit(hh(c->tim));
+        uint32_t got = 0U;
+        uint32_t other_w = TST_RI_N;        /* first word other than the listed one that differs */
+        for (uint32_t i = 0U; i < TST_RI_N; i++)
+        {
+            const uint32_t x = bm.v[i] ^ hal.v[i];
+            if (i == c->word)
+            {
+                got = x;
+            }
+            else if ((i != TST_RI_CNT) && (x != 0U) && (other_w == TST_RI_N))
+            {
+                other_w = i;
+            }
+        }
+        const bool ok = (sb == TIM_BM_OK) && (sh == TIM_BM_OK) && (got == c->bits) && (other_w == TST_RI_N);
+        if (!ok)
+        {
+            bad |= 1UL << k;
+        }
+        verdict(ok, "T2 HAL by design %lu, %s %s: tim_bm %u, tim_hal %u; %s differs in 0x%08lX (listed 0x%08lX), other "
+                "words differing: %s", (unsigned long)k, tim_name(c->tim), c->what, (unsigned)sb, (unsigned)sh,
+                k_ri_name[c->word], (unsigned long)got, (unsigned long)c->bits,
+                (other_w == TST_RI_N) ? "none" : k_ri_name[other_w]);
+    }
+    logw("T2 HAL by design: %lu cases from a non-reset image, failing 0x%04lX", (unsigned long)T2D_CASES,
+        (unsigned long)bad);
+}
+
+static void test_t2_hal(void)
+{
+    uint32_t total = 0U;
+    uint32_t par = 0U;
+    uint32_t bad = 0U;
+    for (uint32_t i = 0U; i < N_TIMS; i++)
+    {
+        TstT2Result_t r;
+        tst_t2_run(k_tims[i].tim, &k_tier_hal, NULL, &r);
+        total += r.configs;
+        par += r.par_configs;
+        const bool ok = (r.mismatches == 0U) && (r.calls_bad == 0U) && (r.ctrl_detected == 1U) && (r.configs > 0U) &&
+                        (r.par_configs == r.configs) && (r.par_mismatches == 0U) && (r.par_ctrl == 1U);
+        if (!ok)
+        {
+            bad |= 1UL << i;
+        }
+        logw("T2 HAL %s: %lu images (time base %lu, OC %lu, IC %lu, master %lu, slave %lu), hand mismatches %lu, calls "
+            "not OK %lu, altered image flagged %lu; parity with tim_bm: %lu compared, %lu differ, altered tim_bm image "
+            "flagged %lu%s", k_tims[i].name, (unsigned long)r.configs, (unsigned long)r.per_class[0],
+            (unsigned long)r.per_class[1], (unsigned long)r.per_class[2], (unsigned long)r.per_class[3],
+            (unsigned long)r.per_class[4], (unsigned long)r.mismatches, (unsigned long)r.calls_bad,
+            (unsigned long)r.ctrl_detected, (unsigned long)r.par_configs, (unsigned long)r.par_mismatches,
+            (unsigned long)r.par_ctrl, ok ? "" : " <-");
+        if (r.mismatches != 0U)
+        {
+            logw("T2 HAL %s first hand mismatch: %s image %lu, %s reads 0x%08lX, hand encoding 0x%08lX", k_tims[i].name,
+                k_cls_name[r.first_cls], (unsigned long)r.first_cfg, k_ri_name[r.first_idx], (unsigned long)r.first_got,
+                (unsigned long)r.first_exp);
+        }
+        if (r.par_mismatches != 0U)
+        {
+            logw("T2 HAL %s first parity difference: image %lu, %s tim_hal 0x%08lX, tim_bm 0x%08lX", k_tims[i].name,
+                (unsigned long)r.par_first_cfg, k_ri_name[r.par_first_idx], (unsigned long)r.par_first_tier,
+                (unsigned long)r.par_first_bm);
+        }
+        (void)t14(k_tims[i].tim, "T2");
+    }
+    verdict(bad == 0U, "T2 HAL CM7 register images: %lu configurations on 12 instances against the hand encoding, %lu "
+            "compared bit for bit with tim_bm's (parity), instances failing 0x%04lX", (unsigned long)total,
+            (unsigned long)par, (unsigned long)bad);
+    t2_hal_design();
+}
+
+/* ---- B1 through tim_hal (log only) ---------------------------------------------------- */
+
+static TimBm_Status_t b1h_sp(void) { return TIM_HAL_StartPwm(hh(TIM2), 1U); }
+static TimBm_Status_t b1h_oc(void)
+{
+    const TimBm_OcConfig_t oc = { TIM2, 1U, TIM_BM_OC_PWM1, 100U, false, true };
+    return TIM_HAL_ConfigOutput(hh(TIM2), &oc);
+}
+static TimBm_Status_t b1h_tb(void)
+{
+    const TimBm_TimeBaseConfig_t c = { TIM2, 0U, 999U, TIM_BM_COUNT_UP, 0U, true, false, false };
+    return TIM_HAL_InitTimeBase(hh(TIM2), &c);
+}
+
+static void test_b1_hal(void)
+{
+    (void)TIM_HAL_Deinit(hh(TIM2));
+    const uint32_t tb0 = cycles_of(b1h_tb);    /* State RESET: the project's MSP hook runs */
+    const uint32_t tb = cycles_of(b1h_tb);     /* State READY                               */
+    const uint32_t oc = cycles_of(b1h_oc);
+    const uint32_t sp = cycles_of(b1h_sp);
+    (void)t14(TIM2, "B1");
+    logw("B1 HAL CM7 cycles (400 MHz): InitTimeBase %lu (first, State RESET) and %lu (State READY), ConfigOutput %lu, "
+        "StartPwm (OutputEnable and Start) %lu; TakeFlags: none in tim_hal (tim_bm's)", (unsigned long)tb0,
+        (unsigned long)tb, (unsigned long)oc, (unsigned long)sp);
+}
+
+/* The internal F3 tests, after F2's and before the AD2 steps. No wired pin moves. */
+static void f3_internal(void)
+{
+    tim6_snap(&s_tim6_f3);
+    hal_tick_check("before the HAL tests");
+    s_tr = &k_tier_hal;
+    test_t1_hal();
+    test_t2_hal();
+    test_t5();
+    test_b1_hal();
+    s_tr = &k_tst_tier_bm;
+    hal_tick_check("during the HAL tests (after T1, T2, T5 and B1 through tim_hal)");
+}
+
+/* After the HAL bench steps: the tick still runs, TIM6 as it was. */
+static void f3_after(void)
+{
+    hal_tick_check("after the HAL tests");
+    Tim6Snap_t now;
+    tim6_snap(&now);
+    verdict(memcmp(&now, &s_tim6_f3, sizeof(now)) == 0,
+            "TIM6 (CPU1 HAL tick) across the F3 tests: CR1 0x%04lX CR2 0x%04lX DIER 0x%04lX PSC %lu ARR %lu, before "
+            "CR1 0x%04lX CR2 0x%04lX DIER 0x%04lX PSC %lu ARR %lu", (unsigned long)now.cr1, (unsigned long)now.cr2,
+            (unsigned long)now.dier, (unsigned long)now.psc, (unsigned long)now.arr, (unsigned long)s_tim6_f3.cr1,
+            (unsigned long)s_tim6_f3.cr2, (unsigned long)s_tim6_f3.dier, (unsigned long)s_tim6_f3.psc,
+            (unsigned long)s_tim6_f3.arr);
+}
+
+/* ==========================================================================================
  * The AD2 steps of F1. R3-2: MCO1 = HSE/8 on PA8 (AF0) in the T6 and T8 steps (and in T9),
  * so every frequency the AD2 measures is a ratio with MCO1 in the same acquisition; RCC_CFGR
  * is saved before and restored with read-back after. T11 and T13(a) run inside the T6 step
@@ -3436,7 +4113,7 @@ static bool t6_tim1_t11_t13a(void)
 
 static void step_t6_tim1(void)
 {
-    const char *const name = (s_tr == &k_tst_tier_bm) ? "T6_TIM1" : "T6_TIM1_LL";
+    const char *const name = tier_step("T6_TIM1");
     if (!step_begin(name) || !buschk() || !mco1_on(name))
     {
         return;
@@ -3516,7 +4193,7 @@ static void step_t6_tim1(void)
 static void step_t6_tim15(void)
 {
     TstArea_t *a = TST_AREA;
-    const char *const name = (s_tr == &k_tst_tier_bm) ? "T6_TIM15" : "T6_TIM15_LL";
+    const char *const name = tier_step("T6_TIM15");
     const uint32_t ll = (s_tr == &k_tst_tier_bm) ? 0U : TST_T6_LL;
     if (!step_begin(name) || !mco1_on(name))
     {
@@ -3705,7 +4382,7 @@ static void t8_log_diffs(const char *what, uint32_t n)
 
 static void step_t8(void)
 {
-    const char *const name = (s_tr == &k_tst_tier_bm) ? "T8" : "T8_LL";
+    const char *const name = tier_step("T8");
     const char *const tg = s_tr->tag;
     char tag[24];
     if (!step_begin(name) || !buschk() || !mco1_on(name))
@@ -3990,42 +4667,46 @@ static void t9_capture(void *arg)
     __set_PRIMASK(pm);
 }
 
+/* T9 through the tier (F1 tim_bm, F3 tim_hal): the configuration, the start and the stop go
+   through s_tr; the 16 captures are read with tim_bm (t9_capture), the oracle. */
 static void step_t9(void)
 {
-    if (!step_begin("T9") || !mco1_on("T9"))
+    const char *const name = tier_step("T9");
+    const char *const tg = s_tr->tag;
+    if (!step_begin(name) || !mco1_on(name))
     {
         return;
     }
     const TimBm_TimeBaseConfig_t c = { TIM17, 0U, 0xFFFFU, TIM_BM_COUNT_UP, 0U, false, false, false };
     const TimBm_IcConfig_t ic = { TIM17, 1U, TIM_BM_IC_DIRECT, TIM_BM_EDGE_RISING, 1U, 0U, 3U };   /* MCO1 */
-    const bool ok = (TIM_BM_Deinit(TIM17) == TIM_BM_OK) && (TIM_BM_InitTimeBase(&c) == TIM_BM_OK) &&
-                    (TIM_BM_ConfigInput(&ic) == TIM_BM_OK) && (TIM_BM_CaptureEnable(TIM17, TIM_BM_CH(1)) == TIM_BM_OK) &&
-                    (TIM_BM_Start(TIM17) == TIM_BM_OK);
-    LOG("T9 TIM17 TI1SEL = 0011 (MCO1), input prescaler 1, config %u", (unsigned)ok);
+    const bool ok = (s_tr->deinit(TIM17) == TIM_BM_OK) && (s_tr->init_tb(&c) == TIM_BM_OK) &&
+                    (s_tr->config_input(&ic) == TIM_BM_OK) && (s_tr->capture_enable(TIM17, TIM_BM_CH(1)) == TIM_BM_OK) &&
+                    (s_tr->start(TIM17) == TIM_BM_OK);
+    LOG("T9%s TIM17 TI1SEL = 0011 (MCO1), input prescaler 1, config %u", tg, (unsigned)ok);
     if (!sync_act(t9_capture, NULL))           /* host: LA on DIO14 at the same time */
     {
         return;
     }
     verdict(ok && (s_t9_n == 16U) && (s_t9_min >= 199U) && (s_t9_max <= 201U),
-            "T9 TIM17 captures MCO1 (TI1SEL = 0011): %lu periods, %lu..%lu ticks (200 +-1)", (unsigned long)s_t9_n,
-            (unsigned long)s_t9_min, (unsigned long)s_t9_max);
+            "T9%s TIM17 captures MCO1 (TI1SEL = 0011): %lu periods, %lu..%lu ticks (200 +-1)", tg,
+            (unsigned long)s_t9_n, (unsigned long)s_t9_min, (unsigned long)s_t9_max);
     /* control: TI1SEL = 0000, PF7 (unwired) in AF1 with pull-down -> no capture */
-    (void)TIM_BM_CaptureDisable(TIM17, TIM_BM_CH(1));
-    (void)TIM_BM_Stop(TIM17);
+    (void)s_tr->capture_disable(TIM17, TIM_BM_CH(1));
+    (void)s_tr->stop(TIM17);
     TimBm_IcConfig_t ic0 = ic;
     ic0.tisel = 0U;
     (void)pin_cfg(GPIOF, 7U, GPIO_BM_MODE_AF, 1U, GPIO_BM_PULL_DOWN, 0U);
-    const bool ok0 = (TIM_BM_ConfigInput(&ic0) == TIM_BM_OK) && (TIM_BM_CaptureEnable(TIM17, TIM_BM_CH(1)) == TIM_BM_OK);
+    const bool ok0 = (s_tr->config_input(&ic0) == TIM_BM_OK) && (s_tr->capture_enable(TIM17, TIM_BM_CH(1)) == TIM_BM_OK);
     (void)TIM_BM_TakeFlags(TIM17, TIM_BM_EV_CC1);
-    (void)TIM_BM_Start(TIM17);
+    (void)s_tr->start(TIM17);
     delay_ms(1U);
     const uint32_t caps = TIM_BM_TakeFlags(TIM17, TIM_BM_EV_CC1);
-    (void)TIM_BM_Stop(TIM17);
-    verdict(ok0 && (caps == 0U), "T9 control: TI1SEL = 0000 (PF7 unwired, pull-down) for 1 ms: CC1IF %lu (0)",
+    (void)s_tr->stop(TIM17);
+    verdict(ok0 && (caps == 0U), "T9%s control: TI1SEL = 0000 (PF7 unwired, pull-down) for 1 ms: CC1IF %lu (0)", tg,
             (unsigned long)(caps != 0U));
     (void)pin_cfg(GPIOF, 7U, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_NONE, 0U);
     (void)t14(TIM17, "T9");
-    mco1_off("T9");
+    mco1_off(name);
     step_end();
 }
 
@@ -4120,6 +4801,7 @@ void TIM_Selftest_CM7_Run(void)
     {
         f1_internal();
         f2_internal();
+        f3_internal();
         step_t6_tim1();
         step_t6_tim15();
         step_t8();
@@ -4128,7 +4810,14 @@ void TIM_Selftest_CM7_Run(void)
         step_t6_tim1();
         step_t6_tim15();
         step_t8();
+        s_tr = &k_tier_hal;                    /* F3: T6 (TIM1), T8 and T9 through tim_hal */
+        step_t6_tim1();
+        hal_tick_check("during the HAL tests (after T6_TIM1_HAL)");
+        step_t8();
+        hal_tick_check("during the HAL tests (after T8_HAL)");
+        step_t9();
         s_tr = &k_tst_tier_bm;
+        f3_after();
         f1_clocks_restore();
         verdict(s_t14_bad == 0U, "T14 %lu Deinit checks against the reset image of RM0399: %lu failed",
                 (unsigned long)s_t14_n, (unsigned long)s_t14_bad);

@@ -65,6 +65,11 @@ const TstStep_t k_tst_steps[] = {
     { "T6_TIM1_LL",    TST_BUS_MCU,   0U,           PE_BUS_TIM1,     E(PA_MCO),  0U         },  /* PWM, CPU1 */
     { "T6_TIM15_LL",   TST_BUS_NONE,  0U,           E(PE_T15C1) | E(PE_T15C2), E(PA_MCO), 0U },  /* PWM, CPU2 */
     { "T8_LL",         TST_BUS_AD2,   0U,           PE_BUS_CAPTURE,  E(PA_MCO),  0U         },  /* capture, S11 + S12 */
+    /* F3 (protocol v5): T6 (TIM1), T8 and T9 again through tim_hal, CPU1 only, with the
+       permissions of the F1 steps they repeat (MCO1 on PA8, R3-2). */
+    { "T6_TIM1_HAL",   TST_BUS_MCU,   0U,           PE_BUS_TIM1,     E(PA_MCO),  0U         },  /* PWM, CPU1 */
+    { "T8_HAL",        TST_BUS_AD2,   0U,           PE_BUS_CAPTURE,  E(PA_MCO),  0U         },  /* capture, S11 + S12 */
+    { "T9_HAL",        TST_BUS_NONE,  0U,           0U,              E(PA_MCO),  0U         },  /* TISEL = MCO1 */
     { "TREF_B",        TST_BUS_NONE,  0U,           0U,              E(PA_MCO),  0U         },  /* no control: AF0 only */
     { "DONE",          TST_BUS_NONE,  0U,           0U,              0U,         0U         },
 };
