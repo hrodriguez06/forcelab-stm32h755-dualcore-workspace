@@ -845,72 +845,72 @@ No empiezo F2 hasta que `AUDIT.md` diga que F1 pasa.
 
 ## F2 (tim_ll)
 
-Plan de referencia: revisión 6 (`294e049`). F2 empieza sobre `ec0a6bc`. `AUDIT.md`, F1 parte 4 (`d1bdcca`), dice que F1 pasa y congela la API de `tim_bm` en `tim_bm.h` de `3174fef`.
+Plan de referencia: revisión 7 (`9611ada`). F2 empieza sobre `ec0a6bc`, con la revisión 6. `AUDIT.md`, F1 parte 4 (`d1bdcca`), dice que F1 pasa y congela la API de `tim_bm` en `tim_bm.h` de `3174fef`.
 
 ### Resumen
 
 - `tim_ll` implementa el contrato de F2 en `01_shared_drivers/03_tim/tim_ll.{h,c}`: las operaciones de `tim_bm` (`TIM_LL_*`) con las constantes de `stm32h7xx_ll_tim.h`.
-- Valida llamando a `tim_bm`. Para eso, `tim_bm.h` gana diez funciones de solo validación, `TIM_BM_Check*`, que el responsable aprobó el 2026-10-02 (§5.5, fila 1). Hay una sola copia de los chequeos y de la tabla de capacidades.
+- Valida llamando a `tim_bm`. Para eso, `tim_bm.h` gana diez funciones de solo validación, `TIM_BM_Check*` (R7-2). Hay una sola copia de los chequeos y de la tabla de capacidades.
 - El target es `stm32h7_driver_tim_ll`, que enlaza `_tim_bm`, sin target sin sufijo y fuera del paraguas. `prj_01` lo enlaza solo con `TIM_DRIVER_SELFTEST`.
-- Las pruebas LL corren en los dos núcleos: T1, T2 (con la paridad bit a bit contra `tim_bm`), T5, T6, T8, T10(a)(b), T12 y T14. El protocolo del banco pasa a v4, con tres pasos nuevos: `T6_TIM1_LL`, `T6_TIM15_LL` y `T8_LL`.
-- **F2 no está entregada: está parada en un caso de §7** (§5.8, primer punto). T8 y T13(b) son criterios de F1 que juzgan contra MCO1, y MCO1 deriva en la placa. En 7 sesiones de F2, 3 fallaron una o dos comprobaciones del host, siempre de `tim_bm` (salvo una de T8 LL) y siempre por la referencia. Con eso, una sola ejecución de evidencia pasa en torno al 55–60 % de las veces, y la A18 del auditor tiene el mismo riesgo.
-- El responsable eligió el 2026-10-02 parar para una decisión del plan antes de la captura de evidencia. **No hay captura de evidencia de F2.** Las siete capturas están en `docs/` como desarrollo: dos de la imagen `95fa214-dirty` y cinco seguidas de `2d1e525`.
-- Todo lo demás de la entrega está hecho, en `2d1e525`, con la evidencia en `10c808e`:
-  - `build_all -Clean` da 8/8;
-  - `selftest-tim` y los tres builds con `-Werror` dan 0 avisos;
-  - la compilación aislada de `tim_ll.c` da 0 diagnósticos;
-  - el `.map` da la producción igual a `2481396`;
-  - `git diff 3174fef -- tim_bm.h` solo añade.
-- F3 no ha empezado.
+- Las pruebas LL corren en los dos núcleos: T1, T2 (con la paridad bit a bit contra `tim_bm`), T5, T6, T8, T10(a)(b), T12 y T14. El protocolo del banco pasa a v4, con tres pasos nuevos: `T6_TIM1_LL`, `T6_TIM15_LL` y `T8_LL` (R7-4).
+- **Historia de la fase:**
+  - La fase se paró el 2026-10-02 en un caso de §7 (`b0f1706`): T8 y T13(b) fallaban en 3 de 7 sesiones por la deriva de MCO1 entre ventanas.
+  - La parte 1 de la auditoría de F2 (`0853663`) no encontró defectos y propuso D9.
+  - El responsable aprobó D9 como revisión 7. R7-1 es la tolerancia de 0,5 %, aplicada en `b63204a`.
+- **La captura de evidencia es `docs/tim_f2_bench_b63204a.txt`.** Una sola ejecución, sin repetir: 192/192 comprobaciones del host, `FW VERDICT=PASS` (0 fallos) y `HOST VERDICT=PASS`.
+- F3 no ha empezado: espera a que `AUDIT.md` diga que F2 pasa.
 
 | Fase | Estado | Último commit | Captura |
 | --- | --- | --- | --- |
 | F0 | pasa (`AUDIT.md`, auditoría 6) | `cae5414` | `docs/tim_f0_audit_bench_cae5414.txt` |
 | F1 | pasa (`AUDIT.md`, F1 parte 4) | `3174fef` | `docs/tim_f1_audit_bench_3174fef.txt` |
-| F2 | parada (§7, decisión pendiente sobre T8/T13(b)); código en `2d1e525` y evidencia de build en `10c808e` | el commit que añade esta sección | ninguna de evidencia; desarrollo: `docs/tim_dev_f2_series_2d1e525_1.txt` a `_5.txt` |
+| F2 | entregada para auditoría (`b63204a`; evidencia en `fe8a07c`) | el commit que actualiza esta sección | `03_firmware_templates/prj_01_template_dualcore/docs/tim_f2_bench_b63204a.txt` |
 | F3 | sin empezar | — | — |
 
 ### 5.1 Commits
 
-Rango: `ec0a6bc..` el commit que añade esta sección.
+Rango de la entrega: `ec0a6bc..` el commit que actualiza esta sección. Los commits de `0853663` y `9611ada` son del auditor y del responsable.
 
 | Commit | Asunto | Hallazgo |
 | --- | --- | --- |
-| `916a3d4` | feat(tim): add TIM_BM_Check*, the validation-only entry points | — (decisión del responsable, §5.5 fila 1) |
+| `916a3d4` | feat(tim): add TIM_BM_Check*, the validation-only entry points | — (decisión del responsable; R7-2) |
 | `bb7de38` | feat(tim): add tim_ll, the LL timer tier | — |
 | `3c47a3c` | build(tim): add the stm32h7_driver_tim_ll target | — |
 | `95fa214` | build(tim): link tim_ll into selftest-tim on CPU1 and CPU2 | — |
 | `3652bdf` | fix(tim): one capability-table lookup per tim_bm operation again | propio: `916a3d4` buscaba la instancia dos veces por llamada (B1, §5.4) |
 | `5c4fe1c` | test(prj_01): the F2 tests of tim_ll on CPU1 and CPU2, bench protocol v4 | — |
-| `a1c537b` | test(prj_01): T9 polls TakeFlags under PRIMASK for its 16 captures | propio: T9 de F1 perdía una captura (§5.5 fila 8) |
+| `a1c537b` | test(prj_01): T9 polls TakeFlags under PRIMASK for its 16 captures | propio: T9 de F1 perdía una captura (§5.5 fila 8; R7-4) |
 | `2d1e525` | test(prj_01): the host side of the F2 bench, protocol v4 | — |
 | `6d71ece` | docs(tim): add the seven F2 development runs (not evidence) | — |
 | `10c808e` | docs(tim): add the F2 build evidence at 2d1e525 | — |
+| `b0f1706` | docs(tim): add the F2 section of the report (stopped, not delivered) | — (§7) |
+| `b63204a` | test(prj_01): R7-1, 0.5 % relative term in T8 and T13(b) | R7-1 |
+| `fe8a07c` | docs(tim): add the F2 evidence at b63204a (R7-1) | — |
 
 Errata del mensaje de `bb7de38`: dice "Two whole-register writes use the header's LL_TIM_WriteReg: SR = 0 in InitTimeBase (rule 3) and nothing else". Es una sola: `SR = 0` en `TIM_LL_InitTimeBase`. No reescribo la historia.
 
 ### 5.2 Build y tamaños
 
-Evidencia en `03_firmware_templates/prj_01_template_dualcore/docs/`, todo en `2d1e525`:
+Evidencia en `03_firmware_templates/prj_01_template_dualcore/docs/`, todo en `b63204a`. Los mismos archivos en `2d1e525` (`10c808e`) dan los mismos valores: `b63204a` solo cambia el host.
 
-- `build_all -Clean`: 8/8 (`tim_f2_build_all_2d1e525.txt`).
-- `selftest-tim` compilado desde un directorio vacío: 0 avisos (`tim_f2_selftest_build_2d1e525.txt`).
-- La compilación aparte con `CMAKE_C_FLAGS=-Werror` de `selftest-tim`, `debug` y `release`: 0 avisos en las tres (`tim_f2_werror_2d1e525.txt`).
+- `build_all -Clean`: 8/8 (`tim_f2_build_all_b63204a.txt`).
+- `selftest-tim` compilado desde un directorio vacío: 0 avisos (`tim_f2_selftest_build_b63204a.txt`).
+- La compilación aparte con `CMAKE_C_FLAGS=-Werror` de `selftest-tim`, `debug` y `release`: 0 avisos en las tres (`tim_f2_werror_b63204a.txt`).
 - `git diff e7542dc -- 02_firmware_projects` sale vacío. El alcance desde `e7542dc` sigue siendo `01_shared_drivers/03_tim`, `01_shared_drivers/CMakeLists.txt`, `03_firmware_templates/prj_01_template_dualcore` y `tools/ad2.py`.
-- `git diff 3174fef -- 01_shared_drivers/03_tim/tim_bm.h`: 0 líneas quitadas, 24 añadidas (`tim_f2_tim_bm_h_diff_2d1e525.txt`). Son los diez `TIM_BM_Check*` y los cinco selectores `TIM_BM_USE_*`.
-- **Compilación aislada** (`tim_f2_isolated_build_2d1e525.txt`): 0 diagnósticos para `tim_ll.c` y `tim_bm.c`, en CM7 y en CM4.
+- `git diff 3174fef -- 01_shared_drivers/03_tim/tim_bm.h`: 0 líneas quitadas, 24 añadidas (`tim_f2_tim_bm_h_diff_b63204a.txt`). Son los diez `TIM_BM_Check*` y los cinco selectores `TIM_BM_USE_*` (R7-2).
+- **Compilación aislada** (`tim_f2_isolated_build_b63204a.txt`): 0 diagnósticos para `tim_ll.c` y `tim_bm.c`, en CM7 y en CM4.
   - Flags exactos: `arm-none-eabi-gcc 14.3.1 -c -std=c11 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wcast-qual -Werror -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -DSTM32H755xx -DCORE_CM7` (en CM4, `-mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -DCORE_CM4`).
   - Includes: `-isystem` para `CMSIS/Include`, `CMSIS/Device/ST/STM32H7xx/Include` y `STM32H7xx_HAL_Driver/Inc` del paquete Cube que usa `prj_01` (`02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7/Drivers`, solo lectura), e `-I` para `01_shared_drivers/03_tim`.
   - Sin `-DUSE_HAL_DRIVER` ni `-DUSE_FULL_LL_DRIVER`.
-  - `-M` muestra que `tim_ll.c` incluye solo CMSIS, `stm32h7xx_ll_tim.h` (ningún otro header del directorio de la HAL), `tim_bm.h` y `tim_ll.h` (A8).
+  - `-M` muestra que `tim_ll.c` incluye solo CMSIS, `stm32h7xx_ll_tim.h` (ningún otro header del directorio de la HAL), `tim_bm.h` y `tim_ll.h` (A8, C8 con R7-3).
 
-Producción de `prj_01` frente a `2481396` (R4-2), de `tim_f2_map_sizes_2d1e525.txt`: 0 de diferencia en todas las secciones asignadas de CM7 y CM4, en debug y en release. CM7 da 29304/132/55668 y 28356/132/55672; CM4, 3456/24/12560 y 3112/24/12560.
+Producción de `prj_01` frente a `2481396` (R4-2), de `tim_f2_map_sizes_b63204a.txt`: 0 de diferencia en todas las secciones asignadas de CM7 y CM4, en debug y en release. CM7 da 29304/132/55668 y 28356/132/55672; CM4, 3456/24/12560 y 3112/24/12560.
 
 Objetos de `selftest-tim`; la columna .text suma `.text` y `.rodata`:
 
 | Objeto | Núcleo | .text | .data | .bss | Fuente (.map) |
 | --- | --- | --- | --- | --- | --- |
-| `tim_ll.c.obj` | CM7 | 4224 | 0 | 0 | `tim_f2_map_sizes_2d1e525.txt` |
+| `tim_ll.c.obj` | CM7 | 4224 | 0 | 0 | `tim_f2_map_sizes_b63204a.txt` |
 | `tim_ll.c.obj` | CM4 | 4122 | 0 | 0 | ídem |
 | `tim_bm.c.obj` | CM7 | 6532 | 0 | 0 | ídem (F1: 5992) |
 | `tim_bm.c.obj` | CM4 | 5882 | 0 | 0 | ídem (F1: 4514) |
@@ -923,26 +923,24 @@ Objetos de `selftest-tim`; la columna .text suma `.text` y `.rodata`:
 
 ### 5.3 Pruebas
 
-**No son evidencia.** Ninguna de las capturas de F2 es la ejecución de evidencia que pide el encargo (§5.8). Los valores de esta tabla salen de `docs/tim_dev_f2_series_2d1e525_2.txt`:
+Todos los valores salen de `docs/tim_f2_bench_b63204a.txt`:
 
-- una ejecución de la imagen limpia `2d1e525`, la segunda de la serie de diagnóstico;
-- `Rev` `2d1e525` e id `60e091fc69924bb9` iguales en el host, CM7 y CM4; árbol limpio y lista de comprobación confirmada por Hector;
-- **192/192, 0 líneas FAIL, `FW VERDICT=PASS` y `HOST VERDICT=PASS`**.
-
-Las otras seis capturas, con sus fallos, están en la tabla que sigue a esta.
+- una sola ejecución, sin repetir (1626 líneas);
+- checkout `b63204a`, `tree clean`; `Rev` `b63204a` e id `09b6373620b56df8` iguales en el host, CM7 y CM4; protocolo v4; lista de comprobación física confirmada por Hector;
+- **192/192, 0 líneas FAIL, `FW VERDICT=PASS` (0 fallos) y `HOST VERDICT=PASS`**.
 
 | ID | Tier | Núcleo | Resultado | Valor medido | Control negativo: valor | Oráculo |
 | --- | --- | --- | --- | --- | --- | --- |
-| Regresión F0 | banco | CM7 | PASS | T0a, T0b(a)–(g), TREF\_A/TREF\_B: \|ē − x\| = 199,9 ≤ 598,3 (R4-1) | los de F0 | los de F0 |
-| Regresión F1 | BM | CM7, CM4 | PASS | todas las pruebas de F1, incluidas T6/T8 BM (36/36, 16/16, 24/24 puntos), T9 (16 periodos, 200 ± 1) y T13(b) | los de F1 | los de F1 |
+| Regresión F0 | banco | CM7 | PASS | T0a: pull-up `0x1FFF`, pull-down `0x0000`; T0b(a)–(g); TREF\_A/TREF\_B: ē = +12 464,9 ppm (s\_ef 377,8), x = +12 111,9 ± 9,0 ppm, \|ē − x\| = 353,0 ≤ 519,8 (R4-1) | los de F0 | los de F0 |
+| Regresión F1 | BM | CM7, CM4 | PASS | todas las pruebas de F1: T6 BM 36/36 y 16/16; T8 BM 24/24 con d = 2,12 ticks; T9 16 periodos de 200..200 ticks; T13(b) 202..203 frente a 202,38 ± 2,01 (R7-1); T15 0 pérdidas contra 46 686 ISR (control: 9536) | los de F1 | los de F1 |
 | T1 | LL | CM7 | PASS | 47 rechazos con constantes LL, estado esperado en los 47, fotos (6 timers y los dos bancos de RCC) sin cambios. Incluyen constantes desconocidas (`ERR_PARAM`), constantes LL fuera de la API (`LL_TIM_OCMODE_RETRIG_OPM1`, `LL_TIM_TS_ETRF`, `LL_TIM_TS_ITR9`, `LL_TIM_TRGO2_UPDATE`, `LL_TIM_CLOCKSOURCE_EXT_MODE2`, `COMIE`, `BIE`), `LL_TIM_TIM17_TI1_RMP_SPDIF_FS` (`ERR_UNSUPPORTED`, §5.8) y el orden de C6 (TRC en TIM13 con un filtro desconocido: `ERR_UNSUPPORTED`) | O1: `TIM_LL_ConfigOutput(TIM2 CH1)` cambia exactamente CCMR1 y CCR1 (`0x0002040`) | registros leídos en crudo |
 | T1 | LL | CM4 | PASS | 12 rechazos de TIM15, estados esperados, foto sin cambios | O1: `0x0002040` (CCMR1, CCR1) | ídem |
 | T2 | LL | CM7 | PASS | 6008 imágenes de 12 instancias por LL: 0 diferencias con la codificación del RM a mano, 0 llamadas con error. **Paridad:** las 6008 comparadas bit a bit (todo registro salvo CNT) con la imagen de la misma configuración por `tim_bm`: 0 diferencias | por instancia, una imagen esperada alterada se detecta, y una imagen de `tim_bm` alterada (ARR ^ 1) también | campos del RM a mano + imagen de BM |
 | T2 | LL | CM4 | PASS | TIM15: 1313 imágenes, 0 diferencias con la mano; paridad 1313/1313, 0 diferencias | ídem | ídem |
-| T5 | LL | CM7, CM4 | PASS | (a)–(d) como en F1 en las 12 instancias (más TIM15 (a)(b) en CM4): de −3 a +4 ppm, \|e\| ≤ 100 | PSC + 1 / sin RCR / 16 bits: fuera de tolerancia, como en F1 | `CYCCNT` |
+| T5 | LL | CM7, CM4 | PASS | (a)–(d) como en F1 en las 12 instancias de CPU1 y TIM15 (a)(b) en CM4, 24 medidas: de −6 a +3 ppm, \|e\| ≤ 100 | PSC + 1 / sin RCR / 16 bits: fuera de tolerancia, como en F1 | `CYCCNT` |
 | T6 | LL | CM7 | PASS | `T6_TIM1_LL`: TIM1 CH1–CH4 × 9 puntos, 36/36 dentro de ±0,1 % sobre f/f\_MCO1 y de ±15 ns en alto | MOE = 0 con los 4 canales: 0 flancos, nivel 0 | LA con DIO14 en la misma adquisición (R3-2) |
 | T6 | LL | CM4 | PASS | `T6_TIM15_LL`: TIM15 CH1/CH2 × 8 puntos, 16/16 | CC1E = CC2E = 0: 0 flancos, nivel 0 | ídem |
-| T8 | LL | CM7 | PASS | `T8_LL`: d = 2,06 ticks (0 ≤ d ≤ 4, R5-1); 24/24 puntos en PWM input con R6-1; prescaler 8, 1620–1621 frente a 1620,8 ± 2,6; filtro, 2074–2075 frente a 2074,7 ± 3,1; overcapture `CC1OF` 1 y luego 0 | polaridad invertida 1518–1519 frente a 1518,2 ± 3,5; CC1E = 0: CC1IF 0; sin filtro, el glitch se captura (518–519 y 1555–1558) | Digital Out y MCO1 en DIO14 en la misma generación |
+| T8 | LL | CM7 | PASS | `T8_LL`, con R5-1, R6-1 y R7-1:<br>• d = 2,00 ticks (0 ≤ d ≤ 4);<br>• 24/24 puntos en PWM input;<br>• prescaler 8: 1618–1620 frente a 1620,4 ± 9,1;<br>• filtro: 2072–2074 frente a 2073,9 ± 11,4;<br>• overcapture: `CC1OF` 1 y luego 0 | polaridad invertida: 1515–1516 frente a 1516,6 ± 9,6; CC1E = 0: CC1IF 0; sin filtro, el glitch se captura (518–519 y 1555–1556) | Digital Out y MCO1 en DIO14 en la misma generación |
 | T10(a) | LL | CM7 | PASS | TIM3 → TIM2 external clock 1 (`LL_TIM_CLOCKSOURCE_EXT_MODE1`, ITR2): CNT = 1000 exactos | ITR1 (TIM8 parado): CNT = 0 | `CNT` del esclavo |
 | T10(b) | LL | CM7 | PASS | TIM2 OC1REF → TIM4 gated (ITR1): CNT = 20 000 = N·CCR | ITR3 (TIM8 parado): CNT = 0 | ídem |
 | T12 | LL | CM7 | PASS | (a) los 14 grupos de F1 a 10 kHz durante 100 ms, 1000 en cada vector, 0 ISR sin flag; (b) 0 IRQ espurias; (c) `TIM_LL_GetIRQn`, 84 pares, 0 diferencias | UIE = 0: 0 IRQ; a mano (UG con URS = 0): 1 IRQ | contadores de ISR, tabla a mano |
@@ -950,7 +948,18 @@ Las otras seis capturas, con sus fallos, están en la tabla que sigue a esta.
 | T14 | LL | CM7, CM4 | PASS | 168 Deinit en CM7 con su imagen de reset exacta (F1 y F2); TIM15 tras T5, T6 y T12 por LL; S5 en verde al final de `T6_TIM1_LL` y de `T8_LL` | el control de F1 (TIM2 sin Deinit) se detecta | tabla de reset del RM a mano |
 | B1 | LL | CM7, CM4 | registro | §5.4 | — | `.map` y DWT |
 
-Las siete ejecuciones de F2, todas sin editar, en `docs/`:
+**Margen de T8 con R7-1.** Peor residuo frente a su cota en la captura de evidencia (periodo o alto, de las 8 capturas de cada punto):
+
+| Frecuencia | BM | LL |
+| --- | --- | --- |
+| 1 kHz | 0,17 | 0,13 |
+| 10 kHz | 0,16 | 0,15 |
+| 100 kHz | 0,31 | 0,31 |
+| 1 MHz | 0,52 | 0,33 |
+
+A 1 MHz manda el término en ticks, que R7-1 no cambia.
+
+Las siete ejecuciones de desarrollo de F2 (`6d71ece`), sin editar, en `docs/`, anteriores a R7-1 (tolerancias de la revisión 6):
 
 | Captura | Imagen | Host | FW | Fallos |
 | --- | --- | --- | --- | --- |
@@ -964,39 +973,49 @@ Las siete ejecuciones de F2, todas sin editar, en `docs/`:
 
 ### 5.4 Medidas (B1)
 
-Ciclos de una llamada en frío, con DWT y PRIMASK, en `docs/tim_dev_f2_series_2d1e525_2.txt` (desarrollo). Instancias: TIM2 en CM7 (400 MHz) y TIM15 en CM4 (200 MHz).
+Ciclos de una llamada en frío, con DWT y PRIMASK, en `docs/tim_f2_bench_b63204a.txt`. Instancias: TIM2 en CM7 (400 MHz) y TIM15 en CM4 (200 MHz).
 
 | Función | BM CM7 | LL CM7 | BM CM4 | LL CM4 | BM en F1 (CM7 / CM4) |
 | --- | --- | --- | --- | --- | --- |
-| `TakeFlags` | 174 | 214 | 276 | 301 | 152 / 280 |
-| `OutputEnable` | 404 | 638 | 526 | 1116 | 348 / 489 |
-| `ConfigOutput` | 530 | 878 | 568 | 1166 | 442 / 514 |
-| `InitTimeBase` | 453 | 876 | 544 | 1138 | 404 / 511 |
+| `TakeFlags` | 186 | 213 | 276 | 301 | 152 / 280 |
+| `OutputEnable` | 393 | 614 | 526 | 1116 | 348 / 489 |
+| `ConfigOutput` | 533 | 916 | 568 | 1166 | 442 / 514 |
+| `InitTimeBase` | 455 | 881 | 544 | 1138 | 404 / 511 |
 
 - **Coste de LL:** `tim_ll` llama a `TIM_BM_Check*` y escribe campo a campo con los inlines de LL. Cada inline es una read-modify-write propia, así que un registro que `tim_bm` escribe una vez, LL lo escribe varias.
 - **Primeras ejecuciones (antes de `3652bdf`):** cada operación de `tim_bm` buscaba la instancia dos veces. Con eso, `OutputEnable` en CM4 llegaba a 704 ciclos e `InitTimeBase` a 678 (capturas `95fa214-dirty`). Con `3652bdf` CM4 vuelve a estar cerca de F1.
-- **CM7, en frío:** sigue entre 20 y 90 ciclos por encima de F1. La medida es de una llamada en frío y depende de la caché de instrucciones y de la posición del código.
-- **Peor caso de `CalcTimeBase` (T3):** 1127 ciclos en CM7.
+- **CM7, en frío:** sigue entre 30 y 90 ciclos por encima de F1. La medida es de una llamada en frío y depende de la caché de instrucciones y de la posición del código.
+- **Peor caso de `CalcTimeBase` (T3):** 1141 ciclos en CM7.
 - **Pila de Status\_Task:** quedan libres 238 palabras de 512.
 
 ### 5.5 Desviaciones del plan
 
-| # | Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+Todas quedan recogidas en la revisión 7 del plan (columna de la derecha).
+
+| # | Qué decía el plan (revisión 6) | Qué hice | Por qué | Consulta y revisión 7 |
 | --- | --- | --- | --- | --- |
-| 1 | `tim_ll` "valida llamando a `tim_bm`", con una sola copia; la API de `tim_bm` está congelada y solo se añade | Diez funciones nuevas en `tim_bm.h`: `TIM_BM_CheckTimeBase`, `CheckPeriod`, `CheckOutput`, `CheckCompare`, `CheckChannels`, `CheckInput`, `CheckPwmInput`, `CheckEvents`, `CheckMaster` y `CheckSlave`, con los selectores `TIM_BM_USE_*`. Cada una hace los chequeos de su operación, en el orden de C6 y con los mismos estados, sin escribir nada; solo lee los registros de estado (`ERR_BUSY`, 2.16.1, CCxS), como la operación. La operación de `tim_bm` las usa (`3652bdf`: a través de un `chk_*` estático, con una sola búsqueda) | Las funciones congeladas validan y escriben a la vez: sin una entrada de solo validación, LL no puede validar con `tim_bm` y escribir con los inlines de LL. Es el patrón de `GPIO_BM_CheckConfig`, `HSEM_BM_CheckInit` y `DMA_BM_Check*`. `CheckChannels` lleva un selector en vez del `bool` del ejemplo aprobado, porque `OutputDisable` comprueba solo la máscara | Sí: el responsable (Hector), en el chat de esta sesión, el 2026-10-02, opción "Add TIM_BM_Check*" (instrucciones §7: una función pública que el plan no lista). Queda para el plan y para la API congelada de F2 |
-| 2 | `tim_ll` escribe con los inlines de `stm32h7xx_ll_tim.h` | `TIM_LL_EnableClock/DisableClock`, `TIM_LL_Deinit`, `TakeFlags`, `TakeOvercapture` (traduce la máscara de canales), `WaitFlags`, `GetIRQn` y `GetDmaRequest` llaman a `tim_bm` | `stm32h7xx_ll_tim.h` no tiene el banco de RCC (está en `ll_bus.h`, fuera de C8). La imagen de reset por instancia es parte de la tabla de capacidades, y otra copia sería un hallazgo. `SR = ~taken` queda en un solo sitio. Es lo que el plan ya dice para `TIM_HAL_Deinit` | Sí: el responsable, 2026-10-02, opción "Delegate to BM" |
-| 3 | "Mismas operaciones que `tim_bm`" | Sin versión LL de las funciones que no llevan constantes LL: `IsValidInstance`, `GetCaps`, `KernelClockFromFields`, `GetKernelClockHz`, `CalcTimeBase`, `DutyToCompare` y los `Check*`. `tim_ll.h` incluye `tim_bm.h`, así que se usan como `TIM_BM_*`. `TIM_LL_GetCounter`, `TIM_LL_WriteCcr` y `TIM_LL_ReadCapture` son `static inline` sobre los getters/setters de LL | Una copia LL de una función pura no traduciría nada | No: pregunto aquí si se acepta antes de congelar la API de `tim_ll` |
-| 4 | Constantes LL (`LL_TIM_COUNTERMODE_*`, `LL_TIM_OCMODE_*`, `LL_TIM_CHANNEL_CH1..4`, `LL_TIM_IC_POLARITY_*`, `LL_TIM_TS_*`) | Además, `LL_TIM_ACTIVEINPUT_*`, `LL_TIM_ICPSC_*`, `LL_TIM_IC_FILTER_*`, `LL_TIM_TRGO_*` y `LL_TIM_SLAVEMODE_*`; external clock 1 es `LL_TIM_CLOCKSOURCE_EXT_MODE1` (la cabecera no tiene un `LL_TIM_SLAVEMODE_` para SMS = 0111). TISEL es una `LL_TIM_TIMx_TIy_RMP_*` de la entrada del canal. Las máscaras de eventos (IRQ, DMA, flags, EGR) usan `LL_TIM_DIER_UIE/CCxIE/TIE`, que son los bits de `TIM_BM_EV_*`; la cabecera no tiene constantes de petición DMA. ARPE, OPM, URS, la polaridad de OC y el preload siguen siendo `bool`. Una constante desconocida se traduce a un valor que `tim_bm` rechaza en su chequeo de rango, de modo que da `ERR_PARAM` en el lugar del orden C6 que le toca (T1 caso 24) | Una constante para cada campo enumerado; el orden de los rechazos lo fija `tim_bm` | No |
-| 5 | C8: solo funciones `static inline` de `stm32h7xx_ll_tim.h` | Un macro de la misma cabecera: `LL_TIM_WriteReg(tim, SR, 0U)`, el `SR = 0` de la regla 3. `LL_TIM_ReadReg` para los read-back de registros enteros | No hay ningún inline que borre todos los flags en una escritura; `LL_TIM_ClearFlag_*` borra uno por escritura | No: pregunto aquí si el macro se acepta |
-| 6 | Paridad bit a bit con BM | CCxP y CCxNP de una salida se escriben con `LL_TIM_IC_SetPolarity` (una RMW de los dos bits), y la configuración de entrada pone primero `LL_TIM_OC_SetMode(FROZEN)` para borrar OCxM[3] | `LL_TIM_OC_SetPolarity` deja CCxNP y la cabecera no tiene `LL_TIM_CHANNEL_CH4N`. `LL_TIM_IC_Config` no toca OCxM[3]. Sin eso, la imagen difiere de la de `tim_bm` cuando el estado anterior tenía esos bits; T2 lo mide | No |
-| 7 | `GenerateEvent`: `EGR = ev_mask` | `TIM_LL_GenerateEvent` genera los eventos uno a uno, en orden de bit (`LL_TIM_GenerateEvent_*`) | Cada inline escribe un bit de EGR | No |
-| 8 | T9 (F1): 16 periodos de 200 ± 1 ticks | `a1c537b`: el bucle de captura de T9 consulta `TIM_BM_TakeFlags` con PRIMASK durante las 17 capturas (como mucho unos 0,4 ms), en vez de una llamada a `WaitFlags` por captura con las interrupciones habilitadas. El criterio y el oráculo no cambian | Con el código de F2, T9 perdió una captura en las dos primeras ejecuciones: 200..400 y, ya con PRIMASK, 199..401. Una captura cada 1 µs son 400 ciclos y el bucle de `WaitFlags` ya no tenía margen. En las cinco de la serie, T9 da 199..201 | No: es el procedimiento de medida. Lo apunto porque cambia una prueba de F1 que ya pasó |
-| 9 | T6 y T8 con LL; T11 y T13 solo en F1 BM | Pasos nuevos `T6_TIM1_LL`, `T6_TIM15_LL` y `T8_LL` (protocolo v4, mismos permisos que los pasos BM, MCO1 y `RCC_CFGR` como en R3-2). T11, T13(a) y T13(b) quedan en los pasos BM. `T8_LL` mide su propia d (R5-1). T5(e) queda en BM (`GetKernelClockHz` no tiene versión LL) | Un paso por tier deja cada captura del LA atribuida a un tier | No |
-| 10 | Captura `tim_<fase>_<prueba>_<hash>.txt` | Desarrollo: `docs/tim_dev_f2_bench_<rev>.txt` y `docs/tim_dev_f2_series_2d1e525_<n>.txt`; la de evidencia sería `docs/tim_f2_bench_<rev>.txt` | Como en F1 | No |
+| 1 | `tim_ll` "valida llamando a `tim_bm`", con una sola copia; la API de `tim_bm` está congelada y solo se añade | Diez funciones nuevas en `tim_bm.h`: `TIM_BM_CheckTimeBase`, `CheckPeriod`, `CheckOutput`, `CheckCompare`, `CheckChannels`, `CheckInput`, `CheckPwmInput`, `CheckEvents`, `CheckMaster` y `CheckSlave`, con los selectores `TIM_BM_USE_*`. Cada una hace los chequeos de su operación, en el orden de C6 y con los mismos estados, sin escribir nada; solo lee los registros de estado (`ERR_BUSY`, 2.16.1, CCxS), como la operación. La operación de `tim_bm` las usa (`3652bdf`: a través de un `chk_*` estático, con una sola búsqueda) | Las funciones congeladas validan y escriben a la vez: sin una entrada de solo validación, LL no puede validar con `tim_bm` y escribir con los inlines de LL. Es el patrón de `GPIO_BM_CheckConfig`, `HSEM_BM_CheckInit` y `DMA_BM_Check*`. `CheckChannels` lleva un selector en vez del `bool` del ejemplo aprobado, porque `OutputDisable` comprueba solo la máscara | El responsable, en el chat, el 2026-10-02 (instrucciones §7). **R7-2** |
+| 2 | `tim_ll` escribe con los inlines de `stm32h7xx_ll_tim.h` | `TIM_LL_EnableClock/DisableClock`, `TIM_LL_Deinit`, `TakeFlags`, `TakeOvercapture` (traduce la máscara de canales), `WaitFlags`, `GetIRQn` y `GetDmaRequest` llaman a `tim_bm` | `stm32h7xx_ll_tim.h` no tiene el banco de RCC (está en `ll_bus.h`, fuera de C8). La imagen de reset por instancia es parte de la tabla de capacidades, y otra copia sería un hallazgo. `SR = ~taken` queda en un solo sitio | El responsable, 2026-10-02. **R7-2** |
+| 3 | "Mismas operaciones que `tim_bm`" | Sin versión LL de las funciones que no llevan constantes LL: `IsValidInstance`, `GetCaps`, `KernelClockFromFields`, `GetKernelClockHz`, `CalcTimeBase`, `DutyToCompare` y los `Check*`; se usan como `TIM_BM_*` a través de `tim_ll.h`. `TIM_LL_GetCounter`, `TIM_LL_WriteCcr` y `TIM_LL_ReadCapture` son `static inline` sobre los getters/setters de LL | Una copia LL de una función pura no traduciría nada | **R7-3 (a)** |
+| 4 | Constantes LL (`LL_TIM_COUNTERMODE_*`, `LL_TIM_OCMODE_*`, `LL_TIM_CHANNEL_CH1..4`, `LL_TIM_IC_POLARITY_*`, `LL_TIM_TS_*`) | Además, `LL_TIM_ACTIVEINPUT_*`, `LL_TIM_ICPSC_*`, `LL_TIM_IC_FILTER_*`, `LL_TIM_TRGO_*` y `LL_TIM_SLAVEMODE_*`; external clock 1 es `LL_TIM_CLOCKSOURCE_EXT_MODE1`. TISEL es una `LL_TIM_TIMx_TIy_RMP_*`. Las máscaras de eventos usan `LL_TIM_DIER_UIE/CCxIE/TIE`. ARPE, OPM, URS, la polaridad de OC y el preload son `bool`. Una constante desconocida da `ERR_PARAM` en el lugar del orden C6 que le toca (T1 caso 24) | Una constante para cada campo enumerado; el orden de los rechazos lo fija `tim_bm` | **R7-4** |
+| 5 | C8: solo funciones `static inline` de `stm32h7xx_ll_tim.h` | Un macro de la misma cabecera: `LL_TIM_WriteReg(tim, SR, 0U)`, el `SR = 0` de la regla 3. `LL_TIM_ReadReg` para los read-back de registros enteros | No hay ningún inline que borre todos los flags en una escritura | **R7-3 (b)**, C8 |
+| 6 | Paridad bit a bit con BM | CCxP y CCxNP de una salida se escriben con `LL_TIM_IC_SetPolarity` (una RMW de los dos bits), y la configuración de entrada pone primero `LL_TIM_OC_SetMode(FROZEN)` para borrar OCxM[3] | `LL_TIM_OC_SetPolarity` deja CCxNP y la cabecera no tiene `LL_TIM_CHANNEL_CH4N`. `LL_TIM_IC_Config` no toca OCxM[3] | **R7-4** |
+| 7 | `GenerateEvent`: `EGR = ev_mask` | `TIM_LL_GenerateEvent` genera los eventos uno a uno, en orden de bit | Cada inline escribe un bit de EGR | **R7-4** |
+| 8 | T9 (F1): 16 periodos de 200 ± 1 ticks | `a1c537b`: el bucle de captura de T9 consulta `TIM_BM_TakeFlags` con PRIMASK durante las 17 capturas (como mucho unos 0,4 ms). El criterio y el oráculo no cambian | Con el código de F2, T9 perdió una captura en las dos primeras ejecuciones (200..400 y 199..401). En las cinco de la serie y en la de evidencia, T9 da 199..201 o 200..200 | **R7-4** |
+| 9 | T6 y T8 con LL; T11 y T13 solo en F1 BM | Pasos nuevos `T6_TIM1_LL`, `T6_TIM15_LL` y `T8_LL` (protocolo v4). T11, T13(a) y T13(b) quedan en los pasos BM. `T8_LL` mide su propia d (R5-1). T5(e) queda en BM | Un paso por tier deja cada captura del LA atribuida a un tier | **R7-4** |
+| 10 | Captura `tim_<fase>_<prueba>_<hash>.txt` | `docs/tim_f2_bench_b63204a.txt`; las de desarrollo, `docs/tim_dev_f2_*` | Como en F1 | No |
+| 11 | T8 y T13(b): término relativo 0,1 % (T13(b): ±1 tick) | `b63204a`: 0,5 % (`CAP_REL_TOL`) en los puntos en PWM input, la polaridad invertida, ICPSC = 8, el filtro y T13(b). El control sin filtro comparte el código del filtro y mantiene 1 tick + 0,1 %, porque R7-1 no lo nombra | La deriva de MCO1 entre ventanas (§5.8) | **R7-1** |
 
-### 5.6 Respuesta a la auditoría
+### 5.6 Respuesta a la auditoría de F2 (parte 1 y adenda; plan revisión 7)
 
-No hay todavía auditoría de F2.
+La parte 1 de la auditoría de F2 (`0853663`) no encuentra defectos en `tim_ll` ni en el refactor de `tim_bm`, y confirma el problema de T8/T13(b). Su adenda aprueba D9, que es la revisión 7 del plan (`9611ada`). Con ella, la parada de §7 queda resuelta.
+
+| Cambio | Commit | Qué ejecuté para comprobarlo | Estado |
+| --- | --- | --- | --- |
+| R7-1: término relativo de 0,5 % en T8, en BM y en LL (puntos en PWM input, periodo y alto, `2 + 0.005 * valor`; polaridad invertida, `2 + 0.005 * valor`; ICPSC = 8 y filtro, `1 + 0.005 * valor`) y en T13(b) (`1 + 0.005 * periodo`, antes ±1 tick). Cada línea imprime la tolerancia usada. T6, T9, T11, la d de R5-1, los demás criterios y el firmware no cambian | `b63204a` | `git diff 2d1e525 b63204a`: solo `tools/tim_hw_check.py`, con 0,005 en `CAP_REL_TOL` y sus seis usos. En la captura, las líneas imprimen las cotas nuevas: a 50 %, el periodo `+-255.1` (1 kHz), `+-103.2` (10 kHz), `+-12.1` (100 kHz) y `+-3.0` (1 MHz); además, `+-9.6` (polaridad invertida), `+-9.1` (ICPSC 8), `+-11.4` (filtro) y `+-2.01` (T13(b)). La captura de evidencia da 192/192 | aplicado en `b63204a`, pendiente de verificación |
+| R7-2: `TIM_BM_Check*`, `TIM_BM_USE_*` y la delegación de `tim_ll` en `tim_bm` | — (ya en `916a3d4`, `3652bdf` y `bb7de38`) | `git diff 3174fef -- tim_bm.h`: +24/−0 | sin cambios de código |
+| R7-3: API de `tim_ll` sin copias de las funciones puras, y las macros `LL_TIM_WriteReg`/`ReadReg` en C8 | — (ya en `bb7de38`) | `-M` de la compilación aislada | sin cambios de código |
+| R7-4: banco v4, T9 con PRIMASK y las desviaciones 4, 6 y 7 | — (ya en `5c4fe1c`, `a1c537b` y `2d1e525`) | la captura de evidencia | sin cambios de código |
 
 ### 5.7 Erratas del plan encontradas
 
@@ -1004,25 +1023,13 @@ Ninguna.
 
 ### 5.8 Problemas abiertos y no ejercitado
 
-- **Bloquea F2 (instrucciones §7): T8 y T13(b) contra la deriva de MCO1.** El responsable decidió el 2026-10-02, en el chat de esta sesión, parar aquí para una decisión del plan, después de la serie de diagnóstico que él mismo pidió. Los datos:
-  - **El fenómeno ya estaba en F1.** T8 juzga cada captura contra la media de MCO1 medido antes y después de ella, en la misma generación de Digital Out. Entre esas dos medidas, MCO1 salta de vez en cuando de 900 a 1700 ppm. En las capturas de F1 (`e26d289`, `f86706c`, `b65fd03`, `70e0181`, `3174fef`) la diferencia antes/después tiene una mediana de 200–320 ppm y un máximo de 582–1521 ppm. En las de F2, 306 ppm de mediana y hasta 1729 ppm.
-  - **La holgura es poca.** El peor residuo de periodo o de alto, frente a su tolerancia, por ejecución de la serie: 0,89, 0,75, 1,20, 0,88 y 0,99. Tres de esos cinco son puntos de 10 kHz, donde ±(2 ticks + 0,1 %) es casi todo el 0,1 % (unas 22 ticks sobre 20 250); los otros dos son de 100 kHz y de 1 kHz.
-  - **F2 duplica la exposición.** T8 se ejecuta dos veces (BM y LL), con 48 puntos más las capturas directas. En 7 sesiones de F2, 3 tuvieron fallos del host, todos de este tipo: dos de T8 BM, uno de T8 LL y uno de T13(b) BM. No hay ningún fallo de la lógica de `tim_ll`, ni de BM.
-  - **T13(b).** Juzga sus 64 diferencias con ±1 tick y sin el término de 0,1 %. A 1 MHz, 1000 ppm de deriva son 0,2 ticks, y una diferencia de 204 frente a 202,69 queda fuera.
-  - **Opciones que veo, para el plan, no para mí:**
-    - (a) una referencia medida durante las capturas, por ejemplo TIM17 con `TI1SEL = MCO1` en el firmware a la vez que TIM1 captura, o el LA disparado dentro de la ventana de captura;
-    - (b) una tolerancia que incluya la incertidumbre de MCO1 medida en la placa;
-    - (c) aceptar el riesgo de una ejecución con la tasa medida.
-
-  No cambié ningún criterio.
+- **T8 y T13(b) contra la deriva de MCO1 (resuelto con R7-1).** Entre las ventanas de 41 µs antes y después de capturas que duran milisegundos, MCO1 se mueve una mediana de unos 250–300 ppm y hasta unos 1700 ppm (N1). Con 0,1 %, 3 de 7 sesiones de F2 fallaron por eso (`6d71ece`). Con 0,5 %, el peor residuo de la captura de evidencia queda en el 52 % de su cota (1 MHz, donde manda el término en ticks) y por debajo del 31 % en las demás frecuencias.
 - **`LL_TIM_TIM17_TI1_RMP_SPDIF_FS`.** La cabecera LL define `TIM17_TI1SEL = 0001` como SPDIF FS, y RM0399 rev 4 lo da como reservado. El plan y el driver siguen el RM: `tim_ll` lo rechaza con `ERR_UNSUPPORTED` (T1 LL caso 20).
 - **No ejercitado con LL:**
   - `TIM_LL_EnableDmaRequest`/`DisableDmaRequest`, salvo el rechazo de T1: T13 es solo BM según el plan;
-  - `TIM_LL_GenerateEvent`, salvo el rechazo de T1;
-  - `TIM_LL_SetPeriod` y `TIM_LL_SetCompare`, salvo el rechazo de T1;
+  - `TIM_LL_GenerateEvent`, `TIM_LL_SetPeriod` y `TIM_LL_SetCompare`, salvo sus rechazos de T1;
   - T7, T9, T11, T13, T15 y T16, que el plan no pide para LL.
 - **Lo no ejercitado de F1** sigue igual (F1 §5.8).
-- **API de `tim_ll`.** Queda propuesta tal como está en `tim_ll.h` de `2d1e525`, con las preguntas de §5.5, filas 3 y 5.
 
 ## Decisiones abiertas usadas (F2)
 
@@ -1030,11 +1037,10 @@ Ninguna.
 | --- | --- | --- |
 | 1–6 | Las de F1, sin cambios | No (por defecto) |
 
-Decisiones del responsable de esta fase (2026-10-02, chat de esta sesión):
+Decisiones del responsable de esta fase:
 
-- añadir `TIM_BM_Check*` (§5.5, fila 1);
-- que LL delegue el reloj, Deinit, los flags y las búsquedas en `tim_bm` (§5.5, fila 2);
-- una serie de diagnóstico de 5 ejecuciones;
-- parar para una decisión del plan sobre T8/T13(b) (§5.8).
+- añadir `TIM_BM_Check*`, y que LL delegue en `tim_bm` (2026-10-02, chat; R7-2);
+- la serie de diagnóstico y la parada (2026-10-02, chat);
+- D9, aprobada como revisión 7 (`AUDIT.md`, F2 adenda a la parte 1).
 
-Estado de F2: **parada a la espera de una decisión sobre T8/T13(b) (§7); no entregada.** El código y las pruebas están en `2d1e525`, y la evidencia de build en `10c808e`.
+Estado de F2: **entregada para auditoría** (`b63204a`; evidencia en `fe8a07c`).
