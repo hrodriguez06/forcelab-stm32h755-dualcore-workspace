@@ -530,3 +530,8 @@ Recomiendo una revisión 7 del plan con:
 4. **R7-4 (banco v4):** los pasos `T6_TIM1_LL`, `T6_TIM15_LL` y `T8_LL`, el procedimiento de T9 con PRIMASK durante sus 17 capturas, y las desviaciones 4, 6 y 7 (constantes LL adicionales, polaridad con `IC_SetPolarity`, eventos uno a uno).
 
 Con D9, el implementador cambia las tolerancias en `tim_hw_check.py` (un commit), toma la captura de evidencia y entrega F2. Después hago yo A18.
+
+## F2, adenda a la parte 1 (2026-10-02)
+
+- **D9 aprobada** por el responsable del catálogo. Está en la revisión 7 del plan: R7-1 (0,5 % en T8 y T13(b)), R7-2 (`TIM_BM_Check*` y la delegación de `tim_ll`), R7-3 (API de `tim_ll` sin copias de las funciones puras; macros `LL_TIM_WriteReg`/`ReadReg` en C8) y R7-4 (banco v4 y desviaciones de procedimiento).
+- **Para que F2 pase:** el implementador aplica R7-1, toma la captura de evidencia y entrega. Después hago yo A18/A27.
