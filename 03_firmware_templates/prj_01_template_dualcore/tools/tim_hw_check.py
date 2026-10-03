@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host side of the 03_tim selftest on prj_01 (preset selftest-tim), phases F0, F1 and F2.
+"""Host side of the 03_tim selftest on prj_01 (preset selftest-tim), phases F0, F1, F2 and F3.
 
 Runs one complete bench session against CM7/App/Src/tim_selftest.c with the
 Analog Discovery 2 and writes ONE capture file: every console line and every
@@ -28,6 +28,11 @@ F1 tests run in the firmware between the steps and print their verdicts.
 F2 tests (tim_ll): T6 and T8 again, through tim_ll, in the steps T6_TIM1_LL,
 T6_TIM15_LL and T8_LL (without T11 and T13, which are tim_bm only), with the
 same criteria; the internal F2 tests run in the firmware.
+
+F3 tests (tim_hal, CPU1 only): T6 on TIM1, T8 and T9 again, through tim_hal, in
+the steps T6_TIM1_HAL, T8_HAL and T9_HAL (without T11 and T13), with the same
+criteria; the internal F3 tests and the checks of HAL_GetTick (TIM6) against
+CYCCNT run in the firmware.
 
 Image identity (00_gpio README 9.4, R3-a/R3-b/R4-a), checked before any output
 is enabled: Rev(CM7) == Rev(CM4), id(CM7) == id(CM4) (never "unknown"), each
@@ -90,7 +95,7 @@ from monitor import SerialPort, autodetect             # noqa: E402
 from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E402
                            t0b_guard_selftest, tree_record)
 
-BENCH_VERSION = 4          # plan R3-3: TREF_A + TREF_B; v3: the F1 steps (R3-2); v4: the F2 steps
+BENCH_VERSION = 5          # plan R3-3: TREF_A + TREF_B; v3: the F1 steps (R3-2); v4: the F2 steps; v5: the F3 steps
 
 # ---- Wiring (00_gpio README section 8) ----------------------------------------
 DIO_BUS = 0x00FF        # DIO0..7  <- PE8..PE15
@@ -116,6 +121,7 @@ STEPS = [
     ("T0B_DOUT", "AD2"), ("T0B_S12", "AD2"),
     ("T6_TIM1", "MCU"), ("T6_TIM15", "NONE"), ("T8", "AD2"), ("T9", "NONE"),
     ("T6_TIM1_LL", "MCU"), ("T6_TIM15_LL", "NONE"), ("T8_LL", "AD2"),
+    ("T6_TIM1_HAL", "MCU"), ("T8_HAL", "AD2"), ("T9_HAL", "NONE"),
     ("TREF_B", "NONE"), ("DONE", "NONE"),
 ]
 
@@ -914,8 +920,9 @@ class Session:
                    f"{detail}; MCO1 {f_mco / 1e6:.4f} MHz over {mco['periods']} periods; edges on the other lines "
                    f"{other_edges}")
 
-    def t6_tim1(self, ll: bool = False) -> None:
-        name, tim = ("T6_TIM1_LL", "LL TIM1") if ll else ("T6_TIM1", "TIM1")
+    def t6_tim1(self, tier: str = "") -> None:
+        """Step T6_TIM1 (tim_bm), T6_TIM1_LL or T6_TIM1_HAL; tier is "", "LL" or "HAL"."""
+        name, tim = (f"T6_TIM1_{tier}", f"{tier} TIM1") if tier else ("T6_TIM1", "TIM1")
         self.step(name)
         self.buschk(f"{name} before")
         tim1_bits = [TIM1_CH_DIO[c] for c in (1, 2, 3, 4)]
@@ -936,7 +943,7 @@ class Session:
         self.sync(pre=ctrl)
         self.check(f"T6 {tim} control MOE=0", sum(box["edges"].values()) == 0 and not any(box["levels"]),
                    f"CH1-4 enabled with MOE = 0: edges {box['edges']}, levels {box['levels']} (all 0)")
-        if not ll:                     # T11 and T13: tim_bm only (plan, their rows)
+        if not tier:                   # T11 and T13: tim_bm only (plan, their rows)
             self.t11()
             self.t13a()
         self.buschk(f"{name} after (T14)")
@@ -1019,8 +1026,8 @@ class Session:
         same = bool(highs) and all(abs(h - 100 * tick) <= T6_HIGH_TOL_S for h in highs)
         self.check("T13(a) control UDE=0", same, f"{len(highs)} periods, all 100 ticks +-15 ns: {same}")
 
-    def t6_tim15(self, ll: bool = False) -> None:
-        name, tim = ("T6_TIM15_LL", "LL TIM15") if ll else ("T6_TIM15", "TIM15")
+    def t6_tim15(self, tier: str = "") -> None:
+        name, tim = (f"T6_TIM15_{tier}", f"{tier} TIM15") if tier else ("T6_TIM15", "TIM15")
         self.step(name)
         quiet = [0, 1, 2, 3, 4, 5, 6, 7]
         for ch in (1, 2):
@@ -1085,8 +1092,9 @@ class Session:
     def _pwm_values(m: re.Match) -> tuple[list[int], list[int]]:
         return [int(x) for x in m.group(2).split()], [int(x) for x in m.group(3).split()]
 
-    def t8(self, ll: bool = False) -> None:
-        name, px = ("T8_LL", "T8 LL") if ll else ("T8", "T8")
+    def t8(self, tier: str = "") -> None:
+        """Step T8 (tim_bm, with T13(b)), T8_LL or T8_HAL; tier is "", "LL" or "HAL"."""
+        name, px = (f"T8_{tier}", f"T8 {tier}") if tier else ("T8", "T8")
         self.step(name)
         self.buschk(f"{px} before")
         self.buschk(f"{px} with PE9/PE11 in AF1 (S12)")
@@ -1192,7 +1200,7 @@ class Session:
         self.sync(pre=lambda: self._t8_on(1, 100000, 50, box))
         self.sync(pre=lambda: (self.con.expect(rf"\[tim\] {px} overcapture", 30.0), self._dout_stop()))
         # T13(b): 64 captures by DMA, then the control CC1DE = 0 (tim_bm only)
-        for ctl in (() if ll else (False, True)):
+        for ctl in (() if tier else (False, True)):
             self.con.expect(r"\[tim\] T13B" + (r" control" if ctl else r" TIM1 CC1"), 30.0)
             box = {}
             self.sync(pre=lambda b=box: self._t8_on(1, 1000000, 50, b))
@@ -1209,9 +1217,11 @@ class Session:
                 self.sync(pre=lambda: (self.con.expect(r"\[tim\] T13\(b\) control", 30.0), self._dout_stop()))
         self.buschk(f"{px} after (T14)")
 
-    def t9(self) -> None:
-        self.step("T9")
-        self.con.expect(r"\[tim\] T9 TIM17 TI1SEL", 30.0)
+    def t9(self, tier: str = "") -> None:
+        """Step T9 (tim_bm) or T9_HAL; tier is "" or "HAL"."""
+        name, px = (f"T9_{tier}", f"T9 {tier}") if tier else ("T9", "T9")
+        self.step(name)
+        self.con.expect(rf"\[tim\] {px} TIM17 TI1SEL", 30.0)
         box: dict = {}
 
         def measure() -> None:
@@ -1220,7 +1230,7 @@ class Session:
         self.sync(pre=measure)
         mco = box["mco"]
         e = (mco["freq_hz"] - TREF_EXPECTED_HZ) / TREF_EXPECTED_HZ * 1e6 if mco["freq_hz"] else float("nan")
-        self.check("T9 MCO1 on PA8 during the capture", mco["periods"] >= 40 and abs(e) <= TREF_MAX_PPM,
+        self.check(f"{px} MCO1 on PA8 during the capture", mco["periods"] >= 40 and abs(e) <= TREF_MAX_PPM,
                    f"the AD2 measures DIO14 while TIM17 captures TI1SEL = MCO1: {mco['freq_hz'] / 1e6:.4f} MHz "
                    f"({e:+.0f} ppm, |e| <= {TREF_MAX_PPM:.0f}, the TREF bound), {mco['periods']} periods; the ratio "
                    f"with MCO1 in the same acquisition is 1 by construction (plan T9; report 5.5)")
@@ -1235,9 +1245,12 @@ class Session:
         self.t6_tim15()
         self.t8()
         self.t9()
-        self.t6_tim1(ll=True)              # F2: tim_ll
-        self.t6_tim15(ll=True)
-        self.t8(ll=True)
+        self.t6_tim1("LL")                 # F2: tim_ll
+        self.t6_tim15("LL")
+        self.t8("LL")
+        self.t6_tim1("HAL")                # F3: tim_hal (CPU1 only: no TIM15 step)
+        self.t8("HAL")
+        self.t9("HAL")
         caps_b = self.tref("TREF_B", control=False)
         self.step("DONE")
         return tref_stats(caps_a, caps_b, self.log)
@@ -1247,7 +1260,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", help="ST-LINK VCP (default: autodetect)")
     ap.add_argument("--out", type=pathlib.Path,
-                    help="capture file (default: docs/tim_f2_bench_<rev>.txt, tim_dev_f2_bench_<rev>.txt with --allow-dirty)")
+                    help="capture file (default: docs/tim_f3_bench_<rev>.txt, tim_dev_f3_bench_<rev>.txt with --allow-dirty)")
     ap.add_argument("--allow-dirty", action="store_true", help="accept a -dirty Rev (development runs)")
     ap.add_argument("--no-reset", action="store_true", help="do not reset the board; wait for the banner")
     ap.add_argument("--preset", default="selftest-tim", help="configure preset of the image (build id)")
@@ -1268,7 +1281,7 @@ def main() -> int:
     stamp(f"[host] argv: {shlex.join(sys.argv[1:])}")
     stamp(f"[host] options: allow_dirty={args.allow_dirty} preset={args.preset} no_reset={args.no_reset} "
           f"checklist_confirmed={args.checklist_confirmed}")
-    stamp(f"[host] tim_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}, phases F0, F1 and F2")
+    stamp(f"[host] tim_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}, phases F0, F1, F2 and F3")
     procs_ok = checklist(stamp, args.checklist_confirmed)
     tree_record(stamp)
     build_id = host_build_id(args.preset)
@@ -1410,7 +1423,7 @@ def main() -> int:
     out = args.out
     if out is None:
         rev = revs.get("cm7", git_rev())
-        prefix = "tim_dev_f2_bench" if args.allow_dirty else "tim_f2_bench"
+        prefix = "tim_dev_f3_bench" if args.allow_dirty else "tim_f3_bench"
         out = PROJECT / "docs" / f"{prefix}_{rev}.txt"
         n = 2
         while out.exists():
