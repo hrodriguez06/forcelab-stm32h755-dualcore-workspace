@@ -561,3 +561,43 @@ Rango auditado: `9611ada..ffa40e0`. Código: `b63204a`, que solo toca `tools/tim
 ### Para que F2 pase
 
 Solo queda A18/A27: mi ejecución del banco sobre `selftest-tim` compilado en la cabeza de la rama, con la lista de comprobación física confirmada. Si pasa, la API de `tim_ll` queda congelada (C2).
+
+## F2, parte 3: ejecución del banco por el auditor (2026-10-02, en `071bddb`) — **F2 PASA**
+
+Lista de comprobación física confirmada en el chat por el responsable del catálogo (Hector): los cuatro puntos. `Get-Process` no mostraba WaveForms ni ningún servidor de depuración.
+
+### Lo que ejecuté
+
+| Qué | Resultado |
+| --- | --- |
+| `selftest-tim` desde un directorio vacío, en `071bddb` | 0 avisos |
+| `py tools/flash.py --preset selftest-tim`, con el script parado | "Download verified successfully" |
+| `py tools/tim_hw_check.py --checklist-confirmed Hector --out <scratchpad>`, **una sola ejecución** | **192/192, 0 líneas FAIL, `FW VERDICT=PASS` y `HOST VERDICT=PASS`.** Captura sin editar: `03_firmware_templates/prj_01_template_dualcore/docs/tim_f2_audit_bench_071bddb.txt` (1626 líneas) |
+
+### Contenido de la captura
+
+- **Trazabilidad (A21):** checkout `071bddb`, `tree clean`, `Rev` `071bddb` e id `daf97e484e15a273` iguales en CM7, CM4 y el host, protocolo v4.
+- **AD2 (A27):** se abre en S2 (`DIO=0x0000`) y se cierra en S2.
+- **T2 LL:** 6008 imágenes, paridad bit a bit con `tim_bm` y 0 instancias con fallo.
+- **T8:** d = 2,12 (BM) y 2,00 (LL). El peor residuo frente a su cota (R7-1) es 0,17 a 1 kHz, 0,23 a 10 kHz, 0,24 a 100 kHz y 0,44 a 1 MHz.
+- **T13(b):** 202..203 frente a 202,47 ± 2,01.
+- **T15:** 0 pérdidas.
+- **CM4:** `timeout 0, aborts 0`.
+- **TREF (R4-1):** dentro de la cota.
+
+### Tabla A de F2, cerrada
+
+| # | Resultado |
+| --- | --- |
+| A1–A17, A19–A26, A28 | Pasan (partes 1 y 2: `tim_ll` contra el contrato, refactor de `tim_bm` sin cambio de comportamiento, `tim_bm.h` solo con añadidos, C7/C8 en la compilación aislada, builds, alcance, paridad y controles) |
+| A18 | **Pasa** en esta ejecución |
+| A27 | **Pasa** |
+
+No hay hallazgos abiertos de F2. Las desviaciones del informe de F2 están recogidas en la revisión 7 (R7-1 a R7-4).
+
+**Veredicto: F2 pasa.** **La API de `tim_ll` queda congelada en `tim_ll.h` de `071bddb`, y los añadidos de `tim_bm.h` (R7-2) pasan a formar parte de la API congelada de `tim_bm`** (C2). Desde aquí, `git diff 071bddb -- 01_shared_drivers/03_tim/tim_bm.h 01_shared_drivers/03_tim/tim_ll.h` solo puede añadir. El implementador puede empezar F3 (`tim_hal`).
+
+### Notas que siguen abiertas, fuera del gate
+
+- **N1 (del responsable):** el reloj de la placa va un +1,3 % alto y deriva hasta unos 1700 ppm entre ventanas de milisegundos.
+- **Al cierre:** borrar las capturas de desarrollo `tim_dev_f1_*` y `tim_dev_f2_*`; en el README, la nota de `InitTimeBase` (`SR = 0` limpia todos los flags).
