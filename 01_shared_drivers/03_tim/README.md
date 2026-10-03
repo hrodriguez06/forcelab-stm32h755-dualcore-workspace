@@ -250,7 +250,8 @@ the `TIMPRE = 0` row of table 59; with `TIMPRE = 1` and `D2PPRE1 = /4` it would 
 
 ## 7. Examples
 
-Each compiles with `-Wall -Wextra -Wpedantic -Wconversion -Werror` (A, B, D on CM4; C on CM7).
+Each compiles with `-Wall -Wextra -Wpedantic -Wconversion -Werror` (CMSIS/HAL headers as `-isystem`)
+(A, B, D on CM4; C on CM7).
 
 ### A. 1 kHz, 25 % PWM on TIM15 CH1, from CPU2 (`tim_bm`)
 
@@ -587,12 +588,12 @@ on every single-source vector. An ISR on a shared vector must accept an empty ca
 | Development captures (`tim_dev_f1_*`, `tim_dev_f2_*`, `tim_dev_f3_*`) removed from `docs/` | `e778ba7` |
 | This README | the commit that adds it |
 
-The process documents, last version (the catalog owner removes them):
+Process documents at the parent of the commit that removes each (the catalog owner removes them):
 
 ```bash
-git show 3b5dc5e:01_shared_drivers/03_tim/IMPLEMENTATION_PLAN.md          # revision 8
-git show 3b5dc5e:01_shared_drivers/03_tim/IMPLEMENTER_INSTRUCTIONS.md
-git show d6b74b0:01_shared_drivers/03_tim/IMPLEMENTATION_REPORT.md
-git show 27ef8cf:01_shared_drivers/03_tim/AUDIT.md
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/03_tim/IMPLEMENTATION_PLAN.md)^:01_shared_drivers/03_tim/IMPLEMENTATION_PLAN.md   # revision 8
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/03_tim/IMPLEMENTER_INSTRUCTIONS.md)^:01_shared_drivers/03_tim/IMPLEMENTER_INSTRUCTIONS.md
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/03_tim/IMPLEMENTATION_REPORT.md)^:01_shared_drivers/03_tim/IMPLEMENTATION_REPORT.md
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/03_tim/AUDIT.md)^:01_shared_drivers/03_tim/AUDIT.md
 git show e778ba7^:03_firmware_templates/prj_01_template_dualcore/docs/tim_dev_f2_series_2d1e525_1.txt   # and the other 14
 ```
