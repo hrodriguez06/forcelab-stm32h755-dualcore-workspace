@@ -2,7 +2,7 @@
 
 Oct 3, 2026 · @Hector
 
-Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 1) de esta carpeta. El trabajo es el driver SPI en tres tiers, `spi_bm` (F1), `spi_ll` (F2) y `spi_hal` (F3), con una fase F0 que prepara el banco en `prj_01_template_dualcore`: el AD2 de siempre más un puente nuevo, J1. Otra persona audita cada fase de forma independiente y repite tus pruebas en la placa.
+Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta. El trabajo es el driver SPI en tres tiers, `spi_bm` (F1), `spi_ll` (F2) y `spi_hal` (F3), con una fase F0 que prepara el banco en `prj_01_template_dualcore`: el AD2 de siempre más un puente nuevo, J1. Otra persona audita cada fase de forma independiente y repite tus pruebas en la placa.
 
 Este documento dice qué te toca, qué no te toca y qué tienes que entregar. Si algo de aquí choca con el plan, manda el plan, con una excepción: lo que este documento te **prohíbe** sigue prohibido aunque el plan lo mencione.
 
@@ -175,7 +175,7 @@ Reglas de redacción:
 ```markdown
 # Informe de implementación 06_spi
 
-Implementador: <nombre> · Rama: driver/spi · Plan: IMPLEMENTATION_PLAN.md revisión 1
+Implementador: <nombre> · Rama: driver/spi · Plan: IMPLEMENTATION_PLAN.md revisión 2
 
 ## Resumen
 <5-10 líneas: qué hay implementado, en qué fase estás, qué falta y qué está bloqueado.>
