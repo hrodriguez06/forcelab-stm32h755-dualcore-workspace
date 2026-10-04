@@ -480,16 +480,21 @@ static uint32_t reset_diff(const SPI_TypeDef *s)
     return d;
 }
 
-#define T1_SNAP      (NREG + 6U)
+/* T1's photo: every register of SPI1 but the data registers (reading RXDR pops the
+   RxFIFO), plus both RCC banks. */
+#define T1_SNAP      (NREG + 3U + 6U)
 static void t1_snap(uint32_t *r)
 {
     spi_regs(SPI1, r);
-    r[NREG + 0U] = RCC_C1->APB1LENR;
-    r[NREG + 1U] = RCC_C1->APB2ENR;
-    r[NREG + 2U] = RCC_C1->APB4ENR;
-    r[NREG + 3U] = RCC_C2->APB1LENR;
-    r[NREG + 4U] = RCC_C2->APB2ENR;
-    r[NREG + 5U] = RCC_C2->APB4ENR;
+    r[NREG + 0U] = SPI1->SR;
+    r[NREG + 1U] = SPI1->TXCRC;
+    r[NREG + 2U] = SPI1->RXCRC;
+    r[NREG + 3U] = RCC_C1->APB1LENR;
+    r[NREG + 4U] = RCC_C1->APB2ENR;
+    r[NREG + 5U] = RCC_C1->APB4ENR;
+    r[NREG + 6U] = RCC_C2->APB1LENR;
+    r[NREG + 7U] = RCC_C2->APB2ENR;
+    r[NREG + 8U] = RCC_C2->APB4ENR;
 }
 
 static bool snap_eq(const uint32_t *a, const uint32_t *b)

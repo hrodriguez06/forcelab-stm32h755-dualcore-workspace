@@ -1520,7 +1520,7 @@ static uint32_t s_rx[F1_MAXF] __attribute__((section(".axi_ram"), aligned(32)));
 static uint8_t  s_big_tx[F1_BIGF + 1U] __attribute__((section(".axi_ram"), aligned(32)));
 static uint8_t  s_big_rx[F1_BIGF + 1U] __attribute__((section(".axi_ram"), aligned(32)));
 static uint8_t  s_dma1_buf[256] __attribute__((section(".dma_buf"), aligned(32)));
-#define BD_MAXF       4096U
+#define BD_MAXF       8192U
 static uint16_t s_bd_tx[BD_MAXF] __attribute__((section(".d3_ram"), aligned(32)));
 static uint16_t s_bd_rx[BD_MAXF] __attribute__((section(".d3_ram"), aligned(32)));
 
@@ -1694,20 +1694,28 @@ static void t1(SpiBm_Status_t got, SpiBm_Status_t exp)
     s_t1_n++;
 }
 
-#define T1_SNAP       ((4U * NREG) + 6U)
+/* T1's photo of an instance: every register but the data registers (reading RXDR
+   pops the RxFIFO): the eight of spi_regs() plus SR, TXCRC and RXCRC. */
+#define T1_NREG       (NREG + 3U)
+#define T1_SNAP       ((4U * T1_NREG) + 6U)
 static void t1_snap(uint32_t *r)
 {
     SPI_TypeDef *const inst[4] = { SPI2, SPI4, SPI5, SPI6 };
     for (uint32_t i = 0U; i < 4U; i++)
     {
-        spi_regs(inst[i], &r[i * NREG]);
+        uint32_t *q = &r[i * T1_NREG];
+        spi_regs(inst[i], q);
+        q[NREG]      = inst[i]->SR;
+        q[NREG + 1U] = inst[i]->TXCRC;
+        q[NREG + 2U] = inst[i]->RXCRC;
     }
-    r[32] = RCC_C1->APB1LENR;
-    r[33] = RCC_C1->APB2ENR;
-    r[34] = RCC_C1->APB4ENR;
-    r[35] = RCC_C2->APB1LENR;
-    r[36] = RCC_C2->APB2ENR;
-    r[37] = RCC_C2->APB4ENR;
+    uint32_t *b = &r[4U * T1_NREG];
+    b[0] = RCC_C1->APB1LENR;
+    b[1] = RCC_C1->APB2ENR;
+    b[2] = RCC_C1->APB4ENR;
+    b[3] = RCC_C2->APB1LENR;
+    b[4] = RCC_C2->APB2ENR;
+    b[5] = RCC_C2->APB4ENR;
 }
 
 static void f1_t1(void)
@@ -2733,7 +2741,7 @@ static void t7b_spi6(void)
     uint32_t left = 0U;
     bool steps = false;
     const SpiBm_Status_t st = t7b_one(8U, 255U, next_seed(), false, &mism, &crc, &left, &steps);
-    verdict(bad == 0U, "T7(b) SPI6 by BDMA (channels 0/1, DMAMUX2 11/12, buffers in .d3_ram), 8/16 bits, 1..4096 "
+    verdict(bad == 0U, "T7(b) SPI6 by BDMA (channels 0/1, DMAMUX2 11/12, buffers in .d3_ram), 8/16 bits, 1..8192 "
             "frames: %lu failed", (unsigned long)bad);
     verdict((st == SPI_BM_ERR_OVERRUN) && (left == 255U) && steps,
             "T7(b) control RXDMAEN = 0, 255 frames: WaitEnd %u (ERR_OVERRUN %u), RX words with the sentinel %lu (255)",
