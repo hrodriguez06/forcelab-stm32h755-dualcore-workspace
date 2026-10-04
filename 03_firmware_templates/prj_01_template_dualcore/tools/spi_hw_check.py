@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host side of the 06_spi selftest on prj_01 (preset selftest-spi), phase F0.
+"""Host side of the 06_spi selftest on prj_01 (preset selftest-spi), phases F0 and F1.
 
 Runs one complete bench session against CM7/App/Src/spi_selftest.c with the
 Analog Discovery 2 and writes ONE capture file: every console line and every
@@ -14,6 +14,12 @@ wiring and rules S1-S10: 01_shared_drivers/00_gpio/README.md section 8.
 F0 tests: T0a (loose lines, walking 1, control), T0c (the J1 jumper, run by
 CPU1; the host reads its summary), T0b(a) on mock objects before the AD2 is
 opened, then T0b(b)(c)(d)(e)(f) on the bench.
+
+F1 tests (spi_bm, protocol v3): F1_NOPIN (the host recomputes every T3 vector),
+J1_SPI6 and J1_SPI1 (T4, T6, T7, T8 lines checked against the host's own
+xorshift32 pattern and CRC-32 from each seed), SPI4_AD2 (T5, T7(c), T12(b): the
+AD2 logic analyzer captures SPI4 at 100 MS/s, triggered by HOST_REQ, and the host
+decodes the frames; the AD2 drives nothing but HOST_REQ).
 
 Image identity (00_gpio README 9.4, R3-a/R3-b/R4-a), checked before any output
 is enabled: Rev(CM7) == Rev(CM4), id(CM7) == id(CM4) (never "unknown"), each
@@ -34,7 +40,7 @@ Electrical safety (no series resistors on the bench; plan S1-S14):
   S6  1 ms or more between one side releasing and the other driving.
   S7  a step is acted on only if its announcement (name, bus owner, J1 owner,
       protocol version) matches STEPS below.
-  S8  no output is enabled before the banner `SPI_BENCH v2 idle` of the
+  S8  no output is enabled before the banner `SPI_BENCH v3 idle` of the
       right image has been read.
   No Digital Out (plan D6): this script never configures, enables or starts
       Digital Out; at every step boundary it reads the 16 Digital Out enables
@@ -74,7 +80,7 @@ from monitor import SerialPort, autodetect             # noqa: E402
 from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E402
                            t0b_guard_selftest, tree_record)
 
-BENCH_VERSION = 2          # SPI_BENCH_VERSION of Common/Inc/spi_selftest.h (v2: audit B1)
+BENCH_VERSION = 3          # SPI_BENCH_VERSION of Common/Inc/spi_selftest.h (v2: audit B1; v3: F1 steps)
 
 # ---- Wiring (00_gpio README section 8; 06_spi plan "Banco de pruebas") -------------
 DIO_BUS = 0x00FF        # DIO0..7  <- PE8..PE15
@@ -95,6 +101,8 @@ BUS = {"NONE": GPIO_BENCH_BUS_NONE, "MCU": GPIO_BENCH_BUS_MCU}
 STEPS = [
     ("T0A", "NONE", "NONE"), ("T0C", "NONE", "CM7"), ("T0B", "NONE", "CM4"), ("T0B_S5NEG", "MCU", "NONE"),
     ("T0B_TIMEOUT", "NONE", "NONE"), ("T0B_S13", "MCU", "NONE"), ("T0B_S14", "NONE", "CM7"),
+    ("F1_NOPIN", "NONE", "NONE"), ("J1_SPI6", "NONE", "CM7"), ("J1_SPI1", "NONE", "CM4"),
+    ("SPI4_AD2", "MCU", "NONE"),
     ("DONE", "NONE", "NONE"),
 ]
 
@@ -110,10 +118,78 @@ T0B_ACK_LOW_LIMIT_S = 15.0
 T0B_TIMEOUT_MIN_S = 9.0
 T0B_TIMEOUT_MAX_S = 11.0
 T0B_LOW_READS = 20
+# F1: a step's closing handshake comes after all its console output (115200 Bd), so
+# the host waits much longer for MCU_ACK there than in a bare handshake.
+F1_STEP_TIMEOUT_S = 300.0
 
 
 class BenchAbort(Exception):
     pass
+
+
+# ---- F1 oracles: the host's own arithmetic, from the plan's rules ---------------------
+# SpiBm_Status_t values (01_shared_drivers/06_spi/spi_bm.h, in order).
+ST_OK, ST_PARAM, ST_UNSUPPORTED, ST_RANGE = 0, 1, 2, 3
+
+
+def mask(bits: int) -> int:
+    return (1 << bits) - 1
+
+
+def xs32_frames(seed: int, n: int, bits: int) -> list[int]:
+    """Frame i = the (i + 1)-th output of xorshift32 (13, 17, 5) from `seed`, masked."""
+    x, out, m = seed & 0xFFFFFFFF, [], mask(bits)
+    for _ in range(n):
+        x ^= (x << 13) & 0xFFFFFFFF
+        x ^= x >> 17
+        x ^= (x << 5) & 0xFFFFFFFF
+        out.append(x & m)
+    return out
+
+
+def crc_frames(vals: list[int]) -> int:
+    """zlib CRC-32 over each frame as 4 little-endian bytes."""
+    import zlib
+    return zlib.crc32(b"".join(v.to_bytes(4, "little") for v in vals)) & 0xFFFFFFFF
+
+
+def coverage(vals: list[int], bits: int) -> int:
+    ones = zeros = 0
+    for v in vals:
+        ones |= v
+        zeros |= ~v & mask(bits)
+    return ones & zeros
+
+
+def calc_prescaler(k: int, x: int) -> tuple[int, int, int]:
+    """Plan rule: the smallest MBR with k / 2^(MBR+1) <= x; SCK = floor(k / 2^(MBR+1))."""
+    if k == 0 or x == 0:
+        return ST_PARAM, 0, 0
+    for m in range(8):
+        if k <= x * (1 << (m + 1)):
+            return ST_OK, m, k >> (m + 1)
+    return ST_RANGE, 0, 0
+
+
+def calc_guard(c: int, k: int, m: int) -> tuple[int, int]:
+    """One SCK period in CPU cycles, rounded up: ceil(c * 2^(m+1) / k)."""
+    if c == 0 or k == 0 or m > 7:
+        return ST_PARAM, 0
+    v = -(-(c << (m + 1)) // k)
+    return (ST_RANGE, 0) if v > 0xFFFFFFFF else (ST_OK, v)
+
+
+def joined(lines: list[str]) -> list[str]:
+    """Console lines with log_long()'s continuation pieces ("[spi] | ...") put back
+    on the line they continue."""
+    out: list[str] = []
+    for line in lines:
+        i = line.find("[spi] | ")
+        if i >= 0 and out:
+            out[-1] += " " + line[i + len("[spi] | "):]
+        else:
+            out.append(line)
+    return out
 
 
 # ---- S3 for this bench: HOST_REQ only -------------------------------------------------
@@ -221,6 +297,8 @@ class Console:
         self._q: "queue.Queue[tuple[float, str]]" = queue.Queue()
         self._stop = threading.Event()
         self.fw_abort: Optional[str] = None
+        self._lines: list[str] = []           # every line, for the F1 checks made after a step
+        self._lines_lock = threading.Lock()
         self._th = threading.Thread(target=self._run, daemon=True)
         self._th.start()
 
@@ -242,7 +320,18 @@ class Console:
                 self._sink(line)
                 if "[spi] ABORT" in line:
                     self.fw_abort = line
+                with self._lines_lock:
+                    self._lines.append(line)
                 self._q.put((t, line))
+
+    def mark(self) -> int:
+        with self._lines_lock:
+            return len(self._lines)
+
+    def since(self, mark: int) -> list[str]:
+        """The lines received from `mark` on, continuations joined (joined())."""
+        with self._lines_lock:
+            return joined(self._lines[mark:])
 
     def expect(self, pattern: str, timeout_s: float, stop_on_abort: bool = False) -> re.Match:
         rx = re.compile(pattern)
@@ -298,8 +387,8 @@ class Session:
             if time.monotonic() > end:
                 raise BenchAbort(f"MCU_ACK did not go {'high' if high else 'low'} in {timeout_s} s")
 
-    def sync(self, pre: Optional[Callable[[], None]] = None) -> None:
-        self.wait_ack(True)
+    def sync(self, pre: Optional[Callable[[], None]] = None, timeout_s: float = HS_TIMEOUT_S) -> None:
+        self.wait_ack(True, timeout_s)
         if pre:
             pre()
         self.req(True)
@@ -465,12 +554,275 @@ class Session:
         self.step("T0B_S14")
         self.sync()                    # CPU1 claims of J1 in AF8, CPU2 refused
 
+    # ================================================================ F1 (spi_bm)
+    def f1_nopin(self) -> None:
+        """F1_NOPIN: no pin moves. The host recomputes every T3 vector the
+        firmware printed, with its own arithmetic (calc_prescaler, calc_guard)."""
+        mk = self.con.mark()
+        self.step("F1_NOPIN")
+        self.sync(timeout_s=F1_STEP_TIMEOUT_S)
+        lines = self.con.since(mk)
+        rp = re.compile(r"\[spi\] T3P (\d+) k=(\d+) x=(\d+) st=(\d+) mbr=(\d+) sck=(\d+)")
+        rg = re.compile(r"\[spi\] T3G (\d+) c=(\d+) k=(\d+) m=(\d+) st=(\d+) cyc=(\d+)")
+        np_ = ng = 0
+        bad: list[str] = []
+        caught = 0
+        for line in lines:
+            m = rp.search(line)
+            if m:
+                i, k, x, st, mbr, sck = (int(v) for v in m.groups())
+                np_ += 1
+                exp = calc_prescaler(k, x)
+                if (st, mbr, sck) != exp:
+                    bad.append(f"P{i} k={k} x={x}: got {(st, mbr, sck)} exp {exp}")
+                if exp[0] == ST_OK and (st, mbr + 1, sck) != exp:   # control: MBR off by one is seen
+                    caught += 1
+                continue
+            m = rg.search(line)
+            if m:
+                i, c, k, mm, st, cyc = (int(v) for v in m.groups())
+                ng += 1
+                exp2 = calc_guard(c, k, mm)
+                if (st, cyc) != exp2:
+                    bad.append(f"G{i} c={c} k={k} m={mm}: got {(st, cyc)} exp {exp2}")
+        n_ok = sum(1 for line in lines if (m := rp.search(line)) and int(m.group(4)) == ST_OK)
+        self.check("T3 pure functions (host recompute)", np_ > 0 and ng > 0 and not bad,
+                   f"{np_} CalcPrescaler and {ng} CalcGuardCycles vectors recomputed from the plan's rules: "
+                   f"{len(bad)} differ {bad[:4]}")
+        self.check("T3 control", n_ok > 0 and caught == n_ok,
+                   f"the same comparison with MBR + 1 flags {caught} of the {n_ok} OK vectors (all)")
+
+    def j1_lines(self, inst: str, lines: list[str]) -> None:
+        """T4, T4C, T6, T7, T8 lines of one J1 instance against the host's own
+        pattern (xs32_frames), digest (crc_frames) and coverage."""
+        r4 = re.compile(rf"\[spi\] T4 {inst} m(\d) b(\d+) ([ML]) t(\d+) n(\d+) s=([0-9A-F]{{8}}) st=(\d+) "
+                        r"mis=(\d+) crc=([0-9A-F]{8}) cov=([0-9A-F]{8}) cyc=(\d+)")
+        rc = re.compile(rf"\[spi\] T4C {inst} b(\d+) (up|down) n(\d+) s=([0-9A-F]{{8}}) st=(\d+) mis=(\d+) "
+                        r"crc=([0-9A-F]{8})")
+        rx = re.compile(rf"\[spi\] (T6|T7A|T7B|T8) {inst} .*?b(\d+) (?:n(\d+) )?s=([0-9A-F]{{8}}) st=(\d+) mis=(\d+) "
+                        r"crc=([0-9A-F]{8})(?: irq=(\d+) after=(\d+))?(?: (required|recorded))?")
+        n4 = 0
+        bad4: list[str] = []
+        cov: dict[int, int] = {}
+        for line in lines:
+            m = r4.search(line)
+            if not m:
+                continue
+            mode, bits, order, thr, n, seed, st, mis, crc, cv, _ = m.groups()
+            bits, n, seed = int(bits), int(n), int(seed, 16)
+            tx = xs32_frames(seed, n, bits)
+            n4 += 1
+            cov[bits] = cov.get(bits, 0) | int(cv, 16)
+            if int(st) != ST_OK or int(mis) != 0 or int(crc, 16) != crc_frames(tx) or int(cv, 16) != coverage(tx, bits):
+                bad4.append(f"m{mode} b{bits} {order} t{thr} n{n} st={st} mis={mis}")
+        full = sorted(b for b, c in cov.items() if c == mask(b))
+        self.check(f"T4 {inst} loop (host digest)", n4 > 0 and not bad4 and len(full) == len(cov),
+                   f"{n4} transfers: RX CRC-32 = CRC of the xorshift32 pattern from each seed, coverage as computed "
+                   f"here, status 0, no mismatch; {len(bad4)} differ {bad4[:3]}; sizes with every data bit seen at "
+                   f"0 and 1: {full}")
+        nc = 0
+        badc: list[str] = []
+        for line in lines:
+            m = rc.search(line)
+            if not m:
+                continue
+            bits, how, n, seed, st, mis, crc = m.groups()
+            bits, n = int(bits), int(n)
+            tx = xs32_frames(int(seed, 16), n, bits)
+            level = mask(bits) if how == "up" else 0
+            exp_mis = sum(1 for v in tx if v != level)
+            nc += 1
+            if int(crc, 16) != crc_frames([level] * n) or int(mis) != exp_mis or exp_mis == 0:
+                badc.append(f"b{bits} {how} mis={mis} (exp {exp_mis})")
+        self.check(f"T4 {inst} control (MISO on PB4)", nc > 0 and not badc,
+                   f"{nc} transfers with MISO moved to PB4 pulled up/down: RX = all ones/zeros by CRC, mismatches "
+                   f"= the host's count (> 0); {len(badc)} differ {badc[:3]}")
+        groups: dict[str, list[str]] = {}
+        nreq = 0
+        for line in lines:
+            m = rx.search(line)
+            if not m:
+                continue
+            kind, bits, n, seed, st, mis, crc, _irq, after, req = m.groups()
+            bits = int(bits)
+            n = int(n) if n else 1024                   # T8: 1024 frames
+            tx = xs32_frames(int(seed, 16), n, bits)
+            if kind == "T8" and req == "recorded":
+                continue
+            nreq += 1
+            ok = int(st) == ST_OK and int(mis) == 0 and int(crc, 16) == crc_frames(tx) and (after in (None, "0"))
+            if not ok:
+                groups.setdefault(kind, []).append(line.split("] ", 1)[-1][:80])
+        self.check(f"T6/T7/T8 {inst} (host digest)", nreq > 0 and not groups,
+                   f"{nreq} interrupt, DMA and speed-sweep (<= 25 MHz) transfers checked against the seed's CRC: "
+                   f"failed {groups if groups else 'none'}")
+
+    def f1_j1(self, step: str, inst: str) -> None:
+        mk = self.con.mark()
+        self.step(step)
+        self.sync(timeout_s=F1_STEP_TIMEOUT_S)
+        self.j1_lines(inst, self.con.since(mk))
+
+    # -- SPI4 against the AD2 (T5, T7(c), T12(b)): the AD2 only listens
+    LA_RATE = 100e6
+    LA_N = 4096
+    LA_PREFILL = 50
+
+    def spi4_ad2(self, k45: int) -> None:
+        self.step("SPI4_AD2")
+        self.buschk("SPI4_AD2 before")
+        self.buschk("SPI4_AD2 with PE11..PE14 in AF5 (SPI4 at its reset values, S13)")
+        rcap = re.compile(r"\[spi\] CAP (?:([a-zA-Z]) k(\d+) m(\d) b(\d+) l(\d) n(\d+) nss(\d) op(\d) mssi(\d+) "
+                          r"midi(\d+) mbr(\d) s=([0-9A-F]{8})|e k(\d+) keep(\d)|done k(\d+))")
+        caps: list[dict] = []
+        levels: dict[int, int] = {}
+        while True:
+            m = self.con.expect(rcap.pattern, 60.0, stop_on_abort=True)
+            if m.group(15) is not None:
+                break
+            if m.group(13) is not None:                   # (e): SCK level between two transfers
+                keep = int(m.group(14))
+                self.sync(pre=lambda kk=keep: levels.__setitem__(kk, int(bool(self.ad2.digital_io_read() & DIO_SCK))))
+                continue
+            kind = m.group(1)
+            cap = dict(kind=kind, k=int(m.group(2)), mode=int(m.group(3)), bits=int(m.group(4)),
+                       lsb=int(m.group(5)), n=int(m.group(6)), nss=int(m.group(7)), op=int(m.group(8)),
+                       mssi=int(m.group(9)), midi=int(m.group(10)), mbr=int(m.group(11)), seed=int(m.group(12), 16))
+            self.sync(pre=lambda: self.ad2.la_arm(self.LA_RATE, self.LA_N, DIO_REQ, self.LA_PREFILL))
+            cap["smp"] = self.ad2.la_read(self.LA_N, 2.0)
+            cap["st"] = int(self.con.expect(rf"\[spi\] CAPR k{cap['k']} st=(\d+)", 10.0).group(1))
+            caps.append(cap)
+        self.buschk("SPI4_AD2 T14: after the Deinit, PE11..PE14 still in AF5")
+        self.buschk("SPI4_AD2 after, pins in input")
+        self.spi4_judge(caps, levels, k45)
+
+    @staticmethod
+    def sck_period(edges: list[int], bits: int) -> float:
+        """The SCK period in samples, measured inside the frames of this capture
+        (consecutive sampling edges of one frame; the gaps MSSI/MIDI add are not
+        in it). The board's HSE comes from the ST-LINK MCO, about 1.3 % fast, so
+        the nominal 2^(MBR+1) samples would be off by that much."""
+        d = [edges[i + 1] - edges[i] for i in range(len(edges) - 1) if (i + 1) % bits != 0]
+        return sum(d) / len(d) if d else 0.0
+
+    @staticmethod
+    def nss_active(s: int, op: int) -> bool:
+        return bool((s >> 3) & 1) == bool(op)
+
+    def spi4_judge(self, caps: list[dict], levels: dict[int, int], k45: int) -> None:
+        sck_b, mosi_b, mco_b = 4, 6, 14
+        res: dict[str, list[str]] = {}
+        delays: dict[tuple[str, int], float] = {}
+        periods: dict[tuple[str, int], float] = {}
+        widths: dict[str, tuple[int, float]] = {}
+        ratios: list[str] = []
+        ratio_bad: list[str] = []
+        for c in caps:
+            smp = c["smp"]
+            tag = f"{c['kind']}{c['k']}"
+            fails = res.setdefault(c["kind"], [])
+            if smp is None:
+                fails.append(f"{tag}: no capture")
+                continue
+            cpol, cpha = c["mode"] >> 1, c["mode"] & 1
+            exp = xs32_frames(c["seed"], c["n"], c["bits"])
+            edges = ad2mod.spi_sample_edges(smp, sck_b, cpol, cpha)
+            if c["kind"] == "g":
+                fs = ad2mod.la_period_high(smp, sck_b, self.LA_RATE)["freq_hz"]
+                fm = ad2mod.la_period_high(smp, mco_b, self.LA_RATE)["freq_hz"]
+                want = (k45 / (1 << (c["mbr"] + 1))) / (8e6 / 8)
+                got = fs / fm if fm else 0.0
+                err = (got - want) / want if want else 1.0
+                ratios.append(f"/{2 << c['mbr']} {got:.5f} ({want:.5f}, {err * 1e6:+.0f} ppm)")
+                if abs(err) > 0.005 or c["st"] != 0:
+                    ratio_bad.append(tag)
+                continue
+            frames, nedge = ad2mod.spi_decode(smp, sck_b, mosi_b, cpol, cpha, c["bits"], bool(c["lsb"]))
+            if c["st"] != 0:
+                fails.append(f"{tag}: status {c['st']}")
+            if c["kind"] != "N" and (nedge != c["n"] * c["bits"] or frames != exp):
+                fails.append(f"{tag}: {nedge} sampling edges ({c['n'] * c['bits']}), frames differ "
+                             f"{sum(1 for a, b in zip(frames, exp) if a != b) + abs(len(frames) - len(exp))}")
+            if ((smp[0] >> sck_b) & 1) != cpol or ((smp[-1] >> sck_b) & 1) != cpol:
+                fails.append(f"{tag}: SCK idle {(smp[0] >> sck_b) & 1}/{(smp[-1] >> sck_b) & 1} (CPOL {cpol})")
+            if c["nss"] != 0 and edges:
+                act = ad2mod.la_segments(smp, 3, c["op"])
+                with_edges = [s for s in act if any(s[0] <= e < s[1] for e in edges)]
+                if not all(self.nss_active(smp[e], c["op"]) for e in edges) or self.nss_active(smp[0], c["op"]):
+                    fails.append(f"{tag}: NSS not active at every sampling edge, or active before the transfer")
+                want_seg = c["n"] if c["nss"] == 2 else 1
+                if len(with_edges) != want_seg:
+                    fails.append(f"{tag}: {len(with_edges)} NSS active intervals with data ({want_seg})")
+                if c["kind"] == "d" and with_edges:
+                    allr, allf = ad2mod.la_edges(smp, sck_b)
+                    first = min(allr + allf)
+                    tp = self.sck_period(edges, c["bits"])
+                    if c["mssi"] or not c["midi"]:
+                        delays[("mssi", c["mssi"])] = first - with_edges[0][0]
+                        periods[("mssi", c["mssi"])] = tp
+                    if c["midi"] or not c["mssi"]:
+                        per = c["bits"]
+                        gaps = [edges[(f + 1) * per] - edges[f * per + per - 1] for f in range(c["n"] - 1)]
+                        delays[("midi", c["midi"])] = sum(gaps) / len(gaps) if gaps else 0.0
+                        periods[("midi", c["midi"])] = tp
+            if c["kind"] in ("G", "N"):
+                rises, falls = ad2mod.la_edges(smp, sck_b)
+                w = (falls[-1] - rises[-1]) if rises and falls and falls[-1] > rises[-1] else -1
+                widths[c["kind"]] = (w, self.sck_period(edges, c["bits"]))
+        dbad = []
+        dall = []
+        for what in ("mssi", "midi"):
+            base = delays.get((what, 0))
+            for k in (1, 4, 15):
+                d = delays.get((what, k))
+                tp = periods.get((what, k), 0.0)
+                if base is None or d is None or abs((d - base) - k * tp) > 3:
+                    dbad.append(f"{what}={k}")
+                dall.append(f"{what}={k}: {None if d is None or base is None else round(d - base, 1)} "
+                            f"({k} x {tp:.2f} = {k * tp:.1f})")
+        named = {"a": "T5(a) modes x sizes x bit order, hardware SS", "b": "T5(b) SSIOP = 1",
+                 "c": "T5(c) SS pulsed between frames (MIDI 2)", "d": "T5(d) MSSI/MIDI frames",
+                 "m": "T7(c) SPI4 transmit by DMA1 stream 0", "G": "T12(b) one frame with the guard"}
+        for kind, label in named.items():
+            n = sum(1 for c in caps if c["kind"] == kind)
+            fails = res.get(kind, [])
+            self.check(label, n > 0 and not fails,
+                       f"{n} LA captures at 100 MS/s decoded on the host against the seed's xorshift32 frames, SCK idle "
+                       f"at CPOL, NSS per its mode: {len(fails)} failed {fails[:3]}")
+        self.check("T5(d) MSSI and MIDI timing", not dbad,
+                   f"delay NSS->first SCK edge and gap between frames, minus the value at 0, = k SCK periods "
+                   f"measured in the same capture (+-3 samples): {dall}; out {dbad}")
+        self.check("T5(g) SCK against MCO1 (HSE/8)", len(ratios) == 7 and not ratio_bad,
+                   f"f(SCK)/f(MCO1) for MBR /4../256 against {k45} Hz / 2^(MBR+1) / 1 MHz (+-0.5 %): {ratios}; "
+                   f"out {ratio_bad}")
+        g, tg = widths.get("G", (-1, 0.0))
+        half = tg / 2.0
+        self.check("T12(b) last SCK pulse with the guard", tg > 0 and abs(g - half) <= 3,
+                   f"CPHA = 0, /256, one frame: last SCK high pulse {g} samples (half the period measured in the "
+                   f"frame, {half:.1f}, +-3); without the guard (control, decision 6: recorded only) "
+                   f"{widths.get('N', (-1, 0.0))[0]} samples")
+        self.check("T5(e) keep_pins", levels.get(1) == 0 and levels.get(0) == 1,
+                   f"SCK (DIO4) between two transfers, pulled up against CPOL = 0: keep_pins=1 -> {levels.get(1)} "
+                   f"(0: the SPI holds it), control keep_pins=0 -> {levels.get(0)} (1: the pull)")
+
+    def f1_clocks(self) -> int:
+        m = None
+        for line in self.con.since(0):
+            m = re.search(r"F1 clocks .*SPI4/5 (\d+) Hz", line) or m
+        if not m:
+            raise BenchAbort("no 'F1 clocks' line before the F1 steps")
+        return int(m.group(1))
+
     def run(self) -> None:
         self.t0a()
         self.t0c()
         self.t0b()
         self.t0b_s13()
         self.t0b_s14()
+        self.f1_nopin()
+        self.f1_j1("J1_SPI6", "SPI6")
+        self.f1_j1("J1_SPI1", "SPI1")
+        self.spi4_ad2(self.f1_clocks())
         self.step("DONE")
         bad = [(s, f"0x{en:04X}") for s, en in self.dout_seen if en != 0]
         self.check("No Digital Out", not bad and len(self.dout_seen) == len(STEPS),
@@ -482,7 +834,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", help="ST-LINK VCP (default: autodetect)")
     ap.add_argument("--out", type=pathlib.Path,
-                    help="capture file (default: docs/spi_f0_bench_<rev>.txt, spi_dev_f0_bench_<rev>.txt with --allow-dirty)")
+                    help="capture file (default: docs/spi_f1_bench_<rev>.txt, spi_dev_f1_bench_<rev>.txt with --allow-dirty)")
     ap.add_argument("--allow-dirty", action="store_true", help="accept a -dirty Rev (development runs)")
     ap.add_argument("--no-reset", action="store_true", help="do not reset the board; wait for the banner")
     ap.add_argument("--preset", default="selftest-spi", help="configure preset of the image (build id)")
@@ -503,7 +855,7 @@ def main() -> int:
     stamp(f"[host] argv: {shlex.join(sys.argv[1:])}")
     stamp(f"[host] options: allow_dirty={args.allow_dirty} preset={args.preset} no_reset={args.no_reset} "
           f"checklist_confirmed={args.checklist_confirmed}")
-    stamp(f"[host] spi_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}, phase F0")
+    stamp(f"[host] spi_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}, phases F0 and F1")
     procs_ok = checklist(stamp, args.checklist_confirmed)
     tree_record(stamp)
     build_id = host_build_id(args.preset)
@@ -607,7 +959,7 @@ def main() -> int:
     out = args.out
     if out is None:
         rev = revs.get("cm7", git_rev())
-        prefix = "spi_dev_f0_bench" if args.allow_dirty else "spi_f0_bench"
+        prefix = "spi_dev_f1_bench" if args.allow_dirty else "spi_f1_bench"
         out = PROJECT / "docs" / f"{prefix}_{rev}.txt"
         n = 2
         while out.exists():
