@@ -652,18 +652,34 @@ static bool service_tx(SPI_TypeDef *spi, SpiBm_Xfer_t *x, const Geom_t *g)
     return false;
 }
 
-/* Waits `cycles` CPU cycles counted from `t0` (CYCCNT running, checked by the caller). */
-static void wait_from(uint32_t t0, uint32_t cycles)
+/* Successive equal CYCCNT reads that mean the counter stopped (C13: no loop without
+   an exit, even if CYCCNT stops after the check at the start of a call). */
+#define STALL_READS     1000U
+
+/* Waits `cycles` CPU cycles counted from `t0`. False when CYCCNT stopped meanwhile
+   (audit F1, m1): the wait could not be measured. */
+static bool wait_from(uint32_t t0, uint32_t cycles)
 {
-    while ((DWT->CYCCNT - t0) < cycles)
+    uint32_t last = DWT->CYCCNT;
+    uint32_t stalled = 0U;
+    while ((last - t0) < cycles)
     {
+        const uint32_t now = DWT->CYCCNT;
+        stalled = (now == last) ? (stalled + 1U) : 0U;
+        if (stalled > STALL_READS)
+        {
+            return false;
+        }
+        last = now;
     }
+    return true;
 }
 
 /* The end of a transaction (plan rule 4): after EOT, the frames left in the RxFIFO
    (fewer than a packet: RXP is not set with EOT, 53:1197-1202), the guard of ES0445
    2.22.5 counted from EOT, IER = 0 before SPE = 0 (2.22.3), SPE = 0 after every EOT
-   (2.22.1), every flag cleared. OVR, sticky since the start, decides the status. */
+   (2.22.1), every flag cleared. OVR, sticky since the start, decides the status; a
+   guard CYCCNT could not count is ERR_TIMEOUT, after the same disable. */
 static SpiBm_Status_t finish(SPI_TypeDef *spi, SpiBm_Xfer_t *x, const Geom_t *g, uint32_t t_eot, uint32_t guard)
 {
     if (g->fd)
@@ -674,12 +690,16 @@ static SpiBm_Status_t finish(SPI_TypeDef *spi, SpiBm_Xfer_t *x, const Geom_t *g,
             x->rx_done++;
         }
     }
-    wait_from(t_eot, guard);
+    const bool timed = wait_from(t_eot, guard);
     const bool ovr = (spi->SR & SPI_SR_OVR) != 0U;
     ier_write(spi, 0U);
     cr1_clear(spi, SPI_CR1_SPE);
     spi->IFCR = IFCR_ALL;
     __DSB();
+    if (!timed)
+    {
+        return SPI_BM_ERR_TIMEOUT;
+    }
     return ovr ? SPI_BM_ERR_OVERRUN : SPI_BM_OK;
 }
 
@@ -757,7 +777,7 @@ SpiBm_Status_t SPI_BM_Transfer(SPI_TypeDef *spi, const void *tx, void *rx, uint3
         const uint32_t now = DWT->CYCCNT;
         stalled = (now == last) ? (stalled + 1U) : 0U;
         last = now;
-        if (((now - t0) >= max_cycles) || (stalled > 1000U))
+        if (((now - t0) >= max_cycles) || (stalled > STALL_READS))
         {
             abort_xfer(spi);
             return SPI_BM_ERR_TIMEOUT;
@@ -931,7 +951,7 @@ SpiBm_Status_t SPI_BM_WaitEnd(SPI_TypeDef *spi, uint32_t max_cycles)
         const uint32_t now = DWT->CYCCNT;
         stalled = (now == last) ? (stalled + 1U) : 0U;
         last = now;
-        if (((now - t0) >= max_cycles) || (stalled > 1000U))
+        if (((now - t0) >= max_cycles) || (stalled > STALL_READS))
         {
             return SPI_BM_ERR_TIMEOUT;           /* no disable: the caller stops its streams first */
         }
@@ -951,11 +971,7 @@ SpiBm_Status_t SPI_BM_DmaEnd(SPI_TypeDef *spi, uint32_t guard_cycles)
     /* The closing order of 53:1268-1274: the caller stopped its streams; then the SPI
        (guard, IER = 0, SPE = 0), then TXDMAEN and RXDMAEN, then the flags. With no
        CYCCNT the SPI is still disabled, and the call reports the missing guard. */
-    const bool timed = cyccnt_running();
-    if (timed)
-    {
-        wait_from(DWT->CYCCNT, guard_cycles);
-    }
+    const bool timed = cyccnt_running() && wait_from(DWT->CYCCNT, guard_cycles);
     ier_write(spi, 0U);
     cr1_clear(spi, SPI_CR1_SPE);
     cfg1_update(spi, SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN, 0U);
