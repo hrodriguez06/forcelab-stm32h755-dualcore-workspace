@@ -99,3 +99,55 @@ Checklist físico confirmado por el responsable para esta ejecución. Imagen de 
 ### Estado
 
 **F0 pasa.** B1 y M1 cerrados; P1 resuelto en la revisión 2 del plan (R2-1, R2-2), que se aplica en F1. El implementador puede empezar F1 (`spi_bm`) con la revisión 2.
+
+## F1: `spi_bm` (`b4fa22d`)
+
+Entrega: `6a55bb0..b4fa22d` (código en `5c117ce`, evidencia `81ac85c` en `4142921`, informe `b4fa22d`).
+
+### Revisión del driver (`spi_bm.h`, `spi_bm.c`)
+
+| Punto | Resultado |
+| --- | --- |
+| A1–A5, C1–C4 | Sufijo, includes sin prefijo, `stm32h7_driver_spi_bm` sin target sin sufijo, paraguas igual. `grep` de A2: 0 literales de proyecto. `spi_bm` incluye solo `stm32h7xx.h`, `<stdint.h>` y `<stdbool.h>` (define `NULL` él mismo) |
+| A15 tabla de capacidades | `k_spi[]` (l. 51-59) igual a la regla 2 del plan, fila por fila, con sus citas del RM. Contrastada además en T2 `GetCaps` y T7(d) |
+| A6 C6 | `chk_config()`: `NULL` → instancia → capacidad (`data_bits` > máximo de la instancia: `ERR_UNSUPPORTED`) → rango → estado. `chk_transfer()` igual. Ningún camino escribe antes de validar |
+| C7 | `.data = .bss = 0` en `spi_bm.c.obj` (mi `.map`: CM7 `.text` 3324 + `.rodata` 96, CM4 3266 + 96, igual que el informe). El estado de IT vive en `SpiBm_Xfer_t` |
+| A9 C10 | RMW de `CR1`, `CFG1`, `IER` y de los enable de RCC bajo PRIMASK guardado y restaurado (`irq_save`/`irq_restore`); `IFCR` siempre en una escritura; `RCC_D2CCIP1R`/`D3CCIPR` solo leídos; ningún `RSTR` |
+| R2-1 (`Init`, l. 382-440) | `IER = 0` → `IFCR` → `CFG2 = 0` solo si el vigente es maestro con `SSM = 1`, otro `SSIOP` y `AFCNTR = 0` → `CR1 = SSI` inactivo → `CFG1` (`CRCSIZE = 00111`) → `CFG2` en una o dos escrituras según `AFCNTR` vigente (C11) → `SR.MODF` → read-back de `CFG1`, `CFG2`, `CR1`. Correcto |
+| R2-2 (`Deinit`, l. 442-465) | `IER = 0`, `SPE = 0` conservando `SSI` (bajo PRIMASK), `CFG2 = 0`, `CR1 = 0`, `CR2`, `CFG1`, `IFCR`, read-back con `MODF`, `CRCPOLY`, `UDRDR` e `I2SCFGR`. Correcto |
+| Regla 4 y erratas (`finish()`, l. 667-684) | Drenaje de la RxFIFO, guarda contada desde `EOT` (2.22.5), `IER = 0` antes de `SPE = 0` (2.22.3), `SPE = 0` tras cada `EOT` (2.22.1), `IFCR`. En full duplex, `service_tx()` no pone en vuelo más tramas de las que caben en la RxFIFO, así que no hay `OVR` por servicio tardío |
+| Regla 6 | Un acceso por trama del ancho del elemento; sin empaquetado (E1 del informe, aprobado por el responsable). Umbral con 1/2/3/4 B por trama (53:927-929) |
+| Regla 8 (DMA) | `DmaPrepare` (`TSIZE`, `RXDMAEN`), `DmaStart` (`TXDMAEN`, `SPE`, `CSTART`), `WaitEnd`, `DmaEnd` (guarda, `IER = 0`, `SPE = 0`, bits de DMA, `IFCR`): el orden de 53:1262-1274 |
+| C13 | `Transfer` y `WaitEnd`: límite `max_cycles` y detección de `CYCCNT` parado (1000 lecturas iguales). Ver m1 |
+| C14 | Sin handlers, callbacks ni `NVIC_*` |
+
+### Seguridad del banco (A27)
+
+Pasos nuevos `F1_NOPIN`, `J1_SPI6` (CPU1, AF8), `J1_SPI1` (CPU2, AF5) y `SPI4_AD2` (bus = MCU, PE11–PE14 en AF5, PA8 en AF0). Toda AF pasa por `bench_claim()` con S13/R2-3. El control D2 suelta un MISO antes de poner el otro en AF (`spi6_pins()`, l. 2342-2359). Buffers de BDMA solo en CPU1 (`.d3_ram`). `spi_hw_check.py`: ninguna llamada que configure Digital Out; enable releído 0 en las 12 fronteras. `tools/ad2.py`: solo añade (0 líneas quitadas).
+
+### Build y ejecución (mías)
+
+`build_all -Clean` 8/8 en `b4fa22d`, `prj_01` igual a `2481396`; `selftest-spi` desde vacío con 0 avisos. Checklist físico confirmado por el responsable; flasheo con el script parado, arranque en frío, una ejecución sin editar: `docs/spi_f1_audit_bench_b4fa22d.txt`.
+
+| Resultado | Valor |
+| --- | --- |
+| Veredictos | 29/29 en el host, `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`, sin aborto; Rev `b4fa22d` en CM7, CM4 y host, `tree clean` |
+| Frente a la entrega | 125 líneas de resultado; solo cambian valores medidos, todos dentro de su cota: T5(d) `mssi=15` 237 frente a 236,4 (entrega 236 frente a 237,9), T5(g) entre −165 y +218 ppm, T9 y su control con `MBR + 1` en torno a −500 000 ppm, controles de T8 1019/1018 discrepancias, T4 la más larga 2 098 952 ciclos |
+| Erratas | T12(a) control: 20 bloqueos en 40 (2.22.1 reproducida otra vez); T12(b) sin guarda: último pulso de 1 muestra frente a 126,3 (2.22.5 reproducida); con guarda, 126 |
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| M2 | Mayor | **E2 sin evidencia de entrega.** `spi_bm.h` (l. 47-53) publica como contrato que un maestro sin SCK en AF no termina, y la única fuente es una captura de desarrollo con árbol sucio (`spi_dev_f1_bench_25426f8-dirty.txt`), que no vale como evidencia (instrucciones §3.4). Tampoco hay en la entrega ningún `ERR_TIMEOUT` provocado, así que el camino de aborto de C13 no está ejercitado | Una prueba en el selftest: SPI6 por J1, 1 trama con PA5 (SCK) en entrada → `ERR_TIMEOUT` dentro de `max_cycles`, registros tras el aborto (`SPE = 0`, `IER = 0`) e imagen de `Deinit`; control con PA5 en AF8 → `OK`. En la entrega de F2 |
+| m1 | Menor | `wait_from()` (l. 656-661), la guarda de `finish()` y `DmaEnd()`, no tiene salida si `CYCCNT` se para después de la comprobación inicial (C13: "ningún bucle sin salida") | Añadir el mismo contador de lecturas iguales que usa el bucle principal. Antes del cierre; es un cambio interno, no de API |
+| m2 | Menor | El control de T3 solo prueba que el oráculo distingue en `CalcPrescaler` (`MBR + 1`); `CalcGuardCycles` no tiene esperado alterado (R1) | Un esperado alterado también para `CalcGuardCycles`. En la entrega de F2 |
+| N1 | Nota | T2 no compara con la imagen de la HAL cruda en CM7 (plan): necesita `HAL_SPI_MODULE_ENABLED`, que la decisión 7 deja para F3 | Pasa a F3 (revisión 3 del plan) |
+
+Las desviaciones del informe §5.5 y las erratas E1–E4 de §5.7 son correctas. Las tres que el informe dice aprobadas por el responsable el 2026-10-03 (`guard_cycles` en cada llamada que la aplica; T9, T11(b) y B1 en instancias con pines; regla 6 según el RM) cambian el contrato o la tabla de pruebas del plan: van a la revisión 3 (D10).
+
+### Estado
+
+**F1 pasa.** La API de `spi_bm` queda **congelada** con `spi_bm.h` tal como está en `b4fa22d` (C2: desde aquí solo se añade). M2 y m2 se entregan con F2; m1, antes del cierre.
+
+**D10 (para el responsable):** revisión 3 del plan, que recoge lo ya aprobado y lo verificado en F1: (a) `guard_cycles` como parámetro de `Transfer`, `DmaEnd` y `SpiBm_Xfer_t`, fuera de `SpiBm_Config_t`; (b) regla 6 según el RM (sin empaquetado; 1/2/3/4 B por trama en el umbral); (c) E2 en el contrato y en "No ejercitado": T9 en SPI6, SPI4 y SPI1; T11(a) en SPI2 sin transferir y T11(b) en SPI6; B1 en SPI6/SPI1; (d) T2 contra la HAL cruda en F3; (e) T5: flancos de muestreo e intervalos de SS, y periodo medido en la misma captura; (f) citas E3, E4; (g) M2 como prueba nueva (T15).
