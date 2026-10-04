@@ -204,7 +204,7 @@ static bool spi6_clocked(void)
 
 /* Releases a clocked SPI in the order of plan rule 9 (R2-2): IER = 0 (before
    SPE = 0, ES0445 2.22.3) -> SPE = 0 keeping SSI -> CFG2 = 0 (AFCNTR = 0 lets
-   go of the pins, RM0399 53:3456-3464; a slave has no mode fault, 53:1474-1475)
+   go of the pins, RM0399 53:3456-3464; a slave has no mode fault, 53:1475-1476)
    -> CR1 = 0 -> every IFCR flag in one write. */
 static void spi_release(SPI_TypeDef *spi)
 {

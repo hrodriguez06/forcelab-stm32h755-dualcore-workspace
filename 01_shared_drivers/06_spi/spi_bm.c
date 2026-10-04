@@ -41,7 +41,7 @@ typedef struct
     IRQn_Type irq;
 } SpiEntry_t;
 
-/* Frame and FIFO sizes: table 435 (53:53-71: FIFO 53:56, data and CRC size 53:68).
+/* Frame and FIFO sizes: table 435 (53:53-71: FIFO 53:56, data and CRC size 53:68-69).
    RCC: §9.7.44 RCC_APB1LENR (09:7106, SPI3EN 09:7277, SPI2EN 09:7283), §9.7.46
    RCC_APB2ENR (09:7419, SPI5EN 09:7516, SPI4EN 09:7536, SPI1EN 09:7542), §9.7.47
    RCC_APB4ENR (09:7577, SPI6EN 09:7690). Kernel clock: SPI123SEL 09:4653, SPI45SEL
@@ -61,7 +61,7 @@ static const SpiEntry_t k_spi[] = {
 
 /* ---- Register facts (RM0399 53.11) ----------------------------------------------- */
 #define CFG1_RESET      0x00070007UL                        /* 53:3309 */
-#define CFG1_CRCSIZE_8  (7UL << SPI_CFG1_CRCSIZE_Pos)        /* 00111: ES0445 2.22.4, 53:3359 note */
+#define CFG1_CRCSIZE_8  (7UL << SPI_CFG1_CRCSIZE_Pos)        /* 00111: ES0445 2.22.4, 53:3364-3365 */
 #define CRCPOLY_RESET   0x00000107UL                        /* 53:3815 */
 #define IFCR_ALL        (SPI_IFCR_EOTC | SPI_IFCR_TXTFC | SPI_IFCR_UDRC | SPI_IFCR_OVRC | SPI_IFCR_CRCEC | \
                          SPI_IFCR_TIFREC | SPI_IFCR_MODFC | SPI_IFCR_TSERFC | SPI_IFCR_SUSPC)
@@ -135,7 +135,7 @@ static uint32_t elem_bytes(uint32_t bits)
 }
 
 /* Bytes a frame takes in the FIFO: the RxFIFO holds N, N/2, N/3 or N/4 frames of up
-   to 8, 16, 24 and 32 bits (53:950-953). */
+   to 8, 16, 24 and 32 bits (53:927-929). */
 static uint32_t fifo_bytes_per_frame(uint32_t bits)
 {
     return (bits <= 8U) ? 1U : ((bits <= 16U) ? 2U : ((bits <= 24U) ? 3U : 4U));
@@ -447,7 +447,7 @@ SpiBm_Status_t SPI_BM_Deinit(SPI_TypeDef *spi)
     }
     /* Plan rule 9 with R2-2: IER = 0 before SPE = 0 (ES0445 2.22.3); SSI kept while
        CFG2 is still a master's, CFG2 = 0 (AFCNTR = 0 releases the pins; a slave has no
-       mode fault, 53:1474-1475), then CR1 = 0. */
+       mode fault, 53:1475-1476), then CR1 = 0. */
     const uint32_t pm = irq_save();
     spi->IER  = 0U;
     spi->CR1  = spi->CR1 & SPI_CR1_SSI;
@@ -626,7 +626,7 @@ static void service_rx(SPI_TypeDef *spi, SpiBm_Xfer_t *x, const Geom_t *g)
     }
 }
 
-/* Writes packets while TXP says one fits (53:968-976). In full duplex no more than
+/* Writes packets while TXP says one fits (53:947-954). In full duplex no more than
    the RxFIFO holds is in flight, so the RxFIFO cannot overrun even if it is read
    late. Returns true when a packet is due but held back by that limit. */
 static bool service_tx(SPI_TypeDef *spi, SpiBm_Xfer_t *x, const Geom_t *g)
