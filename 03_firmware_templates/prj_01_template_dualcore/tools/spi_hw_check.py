@@ -717,6 +717,7 @@ class Session:
         widths: dict[str, tuple[int, float]] = {}
         ratios: list[str] = []
         ratio_bad: list[str] = []
+        a_ctrl: list[tuple[str, int, int]] = []         # T5(a) control: (tag, mismatches CPHA^1, mismatches order^1)
         for c in caps:
             smp = c["smp"]
             tag = f"{c['kind']}{c['k']}"
@@ -738,6 +739,11 @@ class Session:
                     ratio_bad.append(tag)
                 continue
             frames, nedge = ad2mod.spi_decode(smp, sck_b, mosi_b, cpol, cpha, c["bits"], bool(c["lsb"]))
+            if c["kind"] == "a":
+                fc, _ = ad2mod.spi_decode(smp, sck_b, mosi_b, cpol, cpha ^ 1, c["bits"], bool(c["lsb"]))
+                fo, _ = ad2mod.spi_decode(smp, sck_b, mosi_b, cpol, cpha, c["bits"], not c["lsb"])
+                diff = lambda got: sum(1 for x, y in zip(got, exp) if x != y) + abs(len(got) - len(exp))
+                a_ctrl.append((tag, diff(fc), diff(fo)))
             if c["st"] != 0:
                 fails.append(f"{tag}: status {c['st']}")
             if c["kind"] != "N" and (nedge != c["n"] * c["bits"] or frames != exp):
@@ -776,7 +782,7 @@ class Session:
             for k in (1, 4, 15):
                 d = delays.get((what, k))
                 tp = periods.get((what, k), 0.0)
-                if base is None or d is None or abs((d - base) - k * tp) > 3:
+                if base is None or d is None or abs((d - base) - k * tp) > 2:
                     dbad.append(f"{what}={k}")
                 dall.append(f"{what}={k}: {None if d is None or base is None else round(d - base, 1)} "
                             f"({k} x {tp:.2f} = {k * tp:.1f})")
@@ -789,17 +795,22 @@ class Session:
             self.check(label, n > 0 and not fails,
                        f"{n} LA captures at 100 MS/s decoded on the host against the seed's xorshift32 frames, SCK idle "
                        f"at CPOL, NSS per its mode: {len(fails)} failed {fails[:3]}")
+        caught = [x for x in a_ctrl if x[1] > 0 and x[2] > 0]
+        self.check("T5(a) control (decoder distinguishes)", bool(a_ctrl) and len(caught) == len(a_ctrl),
+                   f"each (a) capture decoded again with the opposite CPHA and with the opposite bit order: both find "
+                   f"mismatches in {len(caught)} of {len(a_ctrl)}; (tag, mismatches CPHA^1, order^1) "
+                   f"{[x for x in a_ctrl if x not in caught] or a_ctrl[:4]}")
         self.check("T5(d) MSSI and MIDI timing", not dbad,
                    f"delay NSS->first SCK edge and gap between frames, minus the value at 0, = k SCK periods "
-                   f"measured in the same capture (+-3 samples): {dall}; out {dbad}")
+                   f"measured in the same capture (+-2 samples): {dall}; out {dbad}")
         self.check("T5(g) SCK against MCO1 (HSE/8)", len(ratios) == 7 and not ratio_bad,
                    f"f(SCK)/f(MCO1) for MBR /4../256 against {k45} Hz / 2^(MBR+1) / 1 MHz (+-0.5 %): {ratios}; "
                    f"out {ratio_bad}")
         g, tg = widths.get("G", (-1, 0.0))
         half = tg / 2.0
-        self.check("T12(b) last SCK pulse with the guard", tg > 0 and abs(g - half) <= 3,
+        self.check("T12(b) last SCK pulse with the guard", tg > 0 and abs(g - half) <= 2,
                    f"CPHA = 0, /256, one frame: last SCK high pulse {g} samples (half the period measured in the "
-                   f"frame, {half:.1f}, +-3); without the guard (control, decision 6: recorded only) "
+                   f"frame, {half:.1f}, +-2); without the guard (control, decision 6: recorded only) "
                    f"{widths.get('N', (-1, 0.0))[0]} samples")
         self.check("T5(e) keep_pins", levels.get(1) == 0 and levels.get(0) == 1,
                    f"SCK (DIO4) between two transfers, pulled up against CPOL = 0: keep_pins=1 -> {levels.get(1)} "
