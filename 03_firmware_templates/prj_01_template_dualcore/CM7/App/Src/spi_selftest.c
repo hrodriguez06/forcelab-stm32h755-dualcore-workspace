@@ -14,8 +14,9 @@
   *          Electrical safety (no series resistors on the bench, and J1 ties
   *          two MCU pins together with a wire):
   *            S2  bench_safe(): every wired pin and the four J1 pins in input,
-  *                MCU_ACK low, SPI4 released (IER = 0, SPE = 0, CFG2 = 0). At
-  *                start, on any abort, on a timeout and at the end.
+  *                MCU_ACK low, SPI4 and SPI6 released in the order of plan rule
+  *                9 (spi_release()). At start, on any abort, on a timeout and
+  *                at the end.
   *            S4  bench_claim(): the only way a wired pin or a J1 pin becomes an
   *                output or AF (pin_cfg() is the only caller of the GPIO driver
   *                for those pins). The permission comes from the CURRENT step of
@@ -25,13 +26,15 @@
   *            S7  every step is announced and waits for the host before it
   *                moves anything; 10 s without the host -> S2 and abort.
   *            S13 PE11..PE14 go to AF5 only in a "bus = MCU" step, and only
-  *                after SPI4 reads back SPE = 0, AFCNTR = 0 and MASTER = 1 (or
-  *                CFG2 = 0) with its clock on in this core's bank
-  *                (spi4_s13_ok()); the S5 check then runs with the pins in AF5.
-  *                step_end() fails a step that leaves SPI4 enabled or with
-  *                AFCNTR = 1.
+  *                after SPI4 reads back at rest (sst_spi_at_rest(): SPE = 0,
+  *                AFCNTR = 0, IOSWP = 0, MASTER = 1 or CFG2 = 0) with its clock
+  *                on in this core's bank (spi4_s13_ok()); the S5 check then
+  *                runs with the pins in AF5. step_end() fails a step that
+  *                leaves SPI4 or SPI6 enabled or with AFCNTR = 1.
   *            S14 PA6 and PB4 are never GPIO outputs; PB5 only in T0C; the J1
-  *                pins belong to the one core the step names (CPU1: AF8).
+  *                pins belong to the one core the step names (CPU1: AF8), and
+  *                go to AF only with SPI6 read back at rest, clocked in this
+  *                core's bank (spi6_j1_ok(), plan R2-3).
   ******************************************************************************
   */
 
@@ -173,9 +176,25 @@ static bool spi4_clocked(void)
     return (RCC_C1->APB2ENR & RCC_APB2ENR_SPI4EN) != 0U;
 }
 
-/* Every flag of SPI_IFCR, written once (IFCR is write-only). */
-#define SPI_IFCR_ALL   (SPI_IFCR_EOTC | SPI_IFCR_TXTFC | SPI_IFCR_UDRC | SPI_IFCR_OVRC | SPI_IFCR_CRCEC | \
-                        SPI_IFCR_TIFREC | SPI_IFCR_MODFC | SPI_IFCR_TSERFC | SPI_IFCR_SUSPC)
+/* SPI6's clock in CPU1's bank: SPI6 is CPU1's J1 instance (AF8, plan R2-3). */
+static bool spi6_clocked(void)
+{
+    return (RCC_C1->APB4ENR & RCC_APB4ENR_SPI6EN) != 0U;
+}
+
+/* Releases a clocked SPI in the order of plan rule 9 (R2-2): IER = 0 (before
+   SPE = 0, ES0445 2.22.3) -> SPE = 0 keeping SSI -> CFG2 = 0 (AFCNTR = 0 lets
+   go of the pins, RM0399 53:3456-3464; a slave has no mode fault, 53:1474-1475)
+   -> CR1 = 0 -> every IFCR flag in one write. */
+static void spi_release(SPI_TypeDef *spi)
+{
+    spi->IER  = 0U;
+    spi->CR1  = spi->CR1 & SPI_CR1_SSI;
+    spi->CFG2 = 0U;
+    spi->CR1  = 0U;
+    spi->IFCR = SST_SPI_IFCR_ALL;
+    __DSB();
+}
 
 /* ---- S2: safe state ------------------------------------------------------------------ */
 
@@ -183,9 +202,8 @@ static bool spi4_clocked(void)
    pull-down, so HOST_REQ reads 0 while the AD2 does not drive it), their AF
    fields at 0, MCU_ACK driven low. PE0 (plan R4) and PE1 (LD2, board_def.h)
    are never touched. Pins first: a pin in input is driven by nobody, whatever
-   its peripheral does. Then SPI4, if clocked in this bank, is released the way
-   rule 9 of the plan orders it (IER = 0 before SPE = 0, ES0445 2.22.3, then
-   CFG2 = 0: AFCNTR = 0 lets go of the pins, RM0399 53:3456-3464). Raw writes:
+   its peripheral does. Then SPI4 (S13) and SPI6 (S14, plan R2-3), each if
+   clocked in this bank, are released by spi_release() (rule 9). Raw writes:
    the safe state must not depend on code under test. The cross-core lock is
    asked for, and the writes happen even if it is refused, with this core's
    interrupts masked: safety first. */
@@ -236,15 +254,11 @@ static void bench_safe(void)
 
     if (spi4_clocked())
     {
-        /* SPE = 0 with SSI = 1 (inactive, SSIOP = 0), and SSI cleared only after
-           CFG2 = 0 (slave): a master with SSM = 1 and SSI active is a mode
-           fault (RM0399 53:1464-1476), and a latched MODF blocks SPE (53:3280). */
-        SPI4->IER  = 0U;
-        SPI4->CR1  = SPI_CR1_SSI;
-        SPI4->CFG2 = 0U;
-        SPI4->CR1  = 0U;
-        SPI4->IFCR = SPI_IFCR_ALL;
-        __DSB();
+        spi_release(SPI4);
+    }
+    if (spi6_clocked())
+    {
+        spi_release(SPI6);
     }
 
     __set_PRIMASK(pm);
@@ -269,23 +283,22 @@ static void bench_abort(const char *reason)
 
 /* S13: SPI4 read back before PE11..PE14 may go to AF5. Its clock is on in this
    core's bank (an unclocked SPI4 cannot be read back at all, so it is refused
-   before any SPI4 read), SPE = 0 and AFCNTR = 0 (with both at 0 the SPI takes
-   no control of its pins, RM0399 53:3456-3464), and it is a master (MASTER =
-   1) or at its reset value (CFG2 = 0). Reads only. */
+   before any SPI4 read), then sst_spi_at_rest(): SPE = 0, AFCNTR = 0, IOSWP = 0,
+   master or CFG2 = 0. Reads only. */
 static bool spi4_s13_ok(void)
 {
-    if (!spi4_clocked())
-    {
-        return false;
-    }
-    const uint32_t cr1  = SPI4->CR1;
-    const uint32_t cfg2 = SPI4->CFG2;
-    if (((cr1 & SPI_CR1_SPE) != 0U) || ((cfg2 & SPI_CFG2_AFCNTR) != 0U))
-    {
-        return false;
-    }
-    return ((cfg2 & SPI_CFG2_MASTER) != 0U) || (cfg2 == 0U);
+    return spi4_clocked() && sst_spi_at_rest(SPI4->CR1, SPI4->CFG2);
 }
+
+/* S14 with plan R2-3: SPI6, CPU1's J1 instance, read back the same way before a
+   J1 pin may go to AF (AF8). Reads only. */
+static bool spi6_j1_ok(void)
+{
+    return spi6_clocked() && sst_spi_at_rest(SPI6->CR1, SPI6->CFG2);
+}
+
+#define J1_MASK_A   ((1UL << PA_J1_SCK) | (1UL << PA_J1_MISO))
+#define J1_MASK_B   ((1UL << PB_J1_MISO) | (1UL << PB_J1_MOSI))
 
 /* All or nothing: every pin of the mask is judged before anything is written. */
 static bool bench_claim(const GPIO_TypeDef *port, uint32_t mask, uint32_t mode, uint32_t af)
@@ -304,6 +317,11 @@ static bool bench_claim(const GPIO_TypeDef *port, uint32_t mask, uint32_t mode, 
     if ((port == GPIOE) && (mode == GPIO_BM_MODE_AF) && ((mask & PE_SPI4_MASK) != 0U))
     {
         return spi4_s13_ok();
+    }
+    if ((mode == GPIO_BM_MODE_AF) &&
+        (((port == GPIOA) && ((mask & J1_MASK_A) != 0U)) || ((port == GPIOB) && ((mask & J1_MASK_B) != 0U))))
+    {
+        return spi6_j1_ok();
     }
     return true;
 }
@@ -418,18 +436,30 @@ static bool step_begin(const char *name)
 
 /* S13: a step hands the bus back with SPI4 disabled and AFCNTR = 0 (a step that
    used keep_pins must have run Deinit). Checked here, then forced anyway. */
+static bool spi_left_driving(const char *name, SPI_TypeDef *spi, bool clocked)
+{
+    if (!clocked || (s_step >= k_sst_step_count))
+    {
+        return false;
+    }
+    const uint32_t cr1  = spi->CR1;
+    const uint32_t cfg2 = spi->CFG2;
+    if (((cr1 & SPI_CR1_SPE) == 0U) && ((cfg2 & SPI_CFG2_AFCNTR) == 0U))
+    {
+        return false;
+    }
+    verdict(false, "step %s ended with %s CR1=0x%08lX CFG2=0x%08lX (SPE or AFCNTR set)",
+            k_sst_steps[s_step].name, name, (unsigned long)cr1, (unsigned long)cfg2);
+    return true;
+}
+
 static void step_end(void)
 {
-    if ((s_step < k_sst_step_count) && spi4_clocked())
+    const bool bad4 = spi_left_driving("SPI4", SPI4, spi4_clocked());
+    const bool bad6 = spi_left_driving("SPI6", SPI6, spi6_clocked());
+    if (bad4 || bad6)
     {
-        const uint32_t cr1  = SPI4->CR1;
-        const uint32_t cfg2 = SPI4->CFG2;
-        if (((cr1 & SPI_CR1_SPE) != 0U) || ((cfg2 & SPI_CFG2_AFCNTR) != 0U))
-        {
-            verdict(false, "step %s ended with SPI4 CR1=0x%08lX CFG2=0x%08lX (SPE or AFCNTR set)",
-                    k_sst_steps[s_step].name, (unsigned long)cr1, (unsigned long)cfg2);
-            bench_abort("SPI4 not released at the end of the step");
-        }
+        bench_abort("SPI4 or SPI6 not released at the end of the step");
     }
     publish_step(SST_STEP_NONE);
 }
@@ -898,7 +928,7 @@ static void step_t0c(void)
     step_end();
 }
 
-/* SPI4 raw state for the S13 cases (the selftest, not a driver: F0 has none).
+/* SPI raw state for the S13 and S14 cases (the selftest, not a driver: F0 has none).
    Written only with the four SPI4 pins in input, except where a test says.
    Order: SPE = 0 with SSI = 1 (inactive: SSIOP is 0 in every configuration
    of this selftest; CFG2 is protected while SPE = 1), then CFG2, then the
@@ -908,19 +938,17 @@ static void step_t0c(void)
    (RM0399 53:1464-1476, 53:3280). In the first run
    (docs/spi_f0_bench_65e19f7.txt) CR1 = 0 was written before CFG2 = 0, and
    the "SPE=1" case of T0b(e) then read SPE back as 0. */
-static void spi4_set(uint32_t cr1, uint32_t cfg2)
+static void spi_set(SPI_TypeDef *spi, uint32_t cr1, uint32_t cfg2)
 {
-    SPI4->IER  = 0U;
-    SPI4->CR1  = SPI_CR1_SSI;
-    SPI4->CFG2 = cfg2;
-    SPI4->CR1  = cr1 & ~SPI_CR1_SPE;
-    SPI4->IFCR = SPI_IFCR_ALL;
-    SPI4->CR1  = cr1;
+    spi->IER  = 0U;
+    spi->CR1  = SPI_CR1_SSI;
+    spi->CFG2 = cfg2;
+    spi->CR1  = cr1 & ~SPI_CR1_SPE;
+    spi->IFCR = SST_SPI_IFCR_ALL;
+    spi->CR1  = cr1;
     __DSB();
 }
 
-#define SPI4_MASTER_SOFT   (SPI_CFG2_MASTER | SPI_CFG2_SSM)   /* master, SS from SSI */
-#define SPI4_SSI_INACTIVE  SPI_CR1_SSI                         /* SSIOP = 0: SSI = 1 is inactive (53:566) */
 
 /* T0b(b)(e)(f) on CPU1 and CPU2 in step T0B (bus = NONE, J1 = CPU2). */
 static void step_t0b(void)
@@ -942,10 +970,10 @@ static void step_t0b(void)
     const bool clk_was_on = spi4_clocked();
     RCC->APB2ENR |= RCC_APB2ENR_SPI4EN;      /* CPU1's bank (RM0399 9.5.10) */
     (void)RCC->APB2ENR;
-    spi4_set(SPI4_SSI_INACTIVE, SPI4_MASTER_SOFT);
+    spi_set(SPI4, SST_SPI_SSI_INACTIVE, SST_SPI_MASTER_SOFT);
     const bool s13_state_ok = spi4_s13_ok();
     const bool e_accepted = bench_claim(GPIOE, PE_SPI4_MASK, GPIO_BM_MODE_AF, SST_AF_SPI4);
-    spi4_set(0U, 0U);
+    spi_set(SPI4, 0U, 0U);
     if (!clk_was_on)
     {
         RCC->APB2ENR &= ~RCC_APB2ENR_SPI4EN;
@@ -973,6 +1001,23 @@ static void step_t0b(void)
                 "PUPDR=0x%02lX AFR=0x%04lX (all 0)", (unsigned long)r->af_moder, (unsigned long)r->af_afr,
                 (unsigned long)r->pull_pupdr, (unsigned long)r->safe_moder, (unsigned long)r->safe_pupdr,
                 (unsigned long)r->safe_afr);
+        verdict((r->spi1_cr1 == SST_SPI_SSI_INACTIVE) && (r->spi1_cfg2 == SST_SPI_MASTER_SOFT) && (r->spi1_cr1_safe == 0U) &&
+                (r->spi1_cfg2_safe == 0U) && ((r->spi1_sr_safe & SPI_SR_MODF) == 0U) && (r->spi1_clk_same == 1U),
+                "T0B(f) R2-3 CM4 bench_safe releases SPI1: CR1 0x%08lX -> 0x%08lX, CFG2 0x%08lX -> 0x%08lX, SR 0x%08lX "
+                "(MODF 0); clock as before %lu", (unsigned long)r->spi1_cr1, (unsigned long)r->spi1_cr1_safe,
+                (unsigned long)r->spi1_cfg2, (unsigned long)r->spi1_cfg2_safe, (unsigned long)r->spi1_sr_safe,
+                (unsigned long)r->spi1_clk_same);
+    }
+    if (cm4_send(SST_CMD_SPI1, 0U))
+    {
+        const SstSpiCaseResult_t *r = &a->m4_spi1;
+        verdict((r->cases == SST_SPI_CASES) && (r->accepted == SST_SPI_CASES_EXPECT) && (r->spe_seen == 1U) &&
+                (r->regs_changed == 0U) && (r->cr1_after == 0U) && (r->cfg2_after == 0U) && (r->clk_same == 1U),
+                "T0B(f) R2-3 CM4, PA6 AF5 against SPI1: SPE=1 (read back %lu), AFCNTR=1, IOSWP=1, slave CFG2!=0, clock "
+                "off refused; master at rest, CFG2=0 accepted: accepted 0x%02lX (0x%02lX), GPIO regs changed 0x%05lX, "
+                "SPI1 back to CR1=0x%08lX CFG2=0x%08lX, clock as before %lu", (unsigned long)r->spe_seen,
+                (unsigned long)r->accepted, (unsigned long)SST_SPI_CASES_EXPECT, (unsigned long)r->regs_changed,
+                (unsigned long)r->cr1_after, (unsigned long)r->cfg2_after, (unsigned long)r->clk_same);
     }
     if (!sync0())
     {
@@ -1068,10 +1113,10 @@ typedef struct { uint32_t cr1, cfg2, clk; const char *what; } S13Case_t;
 /* T0b(e): SPI4 states S13 must refuse (the pins in input meanwhile, so none of
    them reaches a pin; AFCNTR = 1 only with MASTER = 1, RM0399 53:3462). */
 static const S13Case_t k_s13_cases[] = {
-    { SPI4_SSI_INACTIVE | SPI_CR1_SPE, SPI4_MASTER_SOFT,                   1U, "SPE=1" },
-    { SPI4_SSI_INACTIVE,               SPI4_MASTER_SOFT | SPI_CFG2_AFCNTR, 1U, "AFCNTR=1" },
-    { SPI4_SSI_INACTIVE,               SPI_CFG2_SSM | SPI_CFG2_CPOL,       1U, "MASTER=0, CFG2!=0" },
-    { SPI4_SSI_INACTIVE,               SPI4_MASTER_SOFT,                   0U, "SPI4 clock off in CPU1's bank" },
+    { SST_SPI_SSI_INACTIVE | SPI_CR1_SPE, SST_SPI_MASTER_SOFT,                   1U, "SPE=1" },
+    { SST_SPI_SSI_INACTIVE,               SST_SPI_MASTER_SOFT | SPI_CFG2_AFCNTR, 1U, "AFCNTR=1" },
+    { SST_SPI_SSI_INACTIVE,               SPI_CFG2_SSM | SPI_CFG2_CPOL,       1U, "MASTER=0, CFG2!=0" },
+    { SST_SPI_SSI_INACTIVE,               SST_SPI_MASTER_SOFT,                   0U, "SPI4 clock off in CPU1's bank" },
 };
 
 /* The S5 condition read by the MCU, without aborting (the T0b(e) control). */
@@ -1112,7 +1157,7 @@ static void step_t0b_s13(void)
         const S13Case_t *c = &k_s13_cases[i];
         RCC->APB2ENR |= RCC_APB2ENR_SPI4EN;
         (void)RCC->APB2ENR;
-        spi4_set(c->cr1, c->cfg2);
+        spi_set(SPI4, c->cr1, c->cfg2);
         if ((c->cr1 & SPI_CR1_SPE) != 0U)
         {
             spe_seen = SPI4->CR1 & SPI_CR1_SPE;   /* the case is only a case if SPE really is 1 */
@@ -1130,12 +1175,12 @@ static void step_t0b_s13(void)
         }
         RCC->APB2ENR |= RCC_APB2ENR_SPI4EN;
         (void)RCC->APB2ENR;
-        spi4_set(SPI4_SSI_INACTIVE, SPI4_MASTER_SOFT);
+        spi_set(SPI4, SST_SPI_SSI_INACTIVE, SST_SPI_MASTER_SOFT);
     }
     const uint32_t bad_pins = run_claims(k_s13_pin_refuse, NCASES(k_s13_pin_refuse));
     /* The controls: the states S13 accepts. */
     const bool ok_master = bench_claim(GPIOE, PE_SPI4_MASK, GPIO_BM_MODE_AF, SST_AF_SPI4);
-    spi4_set(0U, 0U);
+    spi_set(SPI4, 0U, 0U);
     const bool ok_reset = bench_claim(GPIOE, PE_SPI4_MASK, GPIO_BM_MODE_AF, SST_AF_SPI4);
     port_snap(&g1);
     const bool untouched = port_snap_eq(&g0, &g1);
@@ -1153,7 +1198,7 @@ static void step_t0b_s13(void)
     uint32_t up = 0U;
     uint32_t dn = 0U;
     bool s5_af = false;
-    spi4_set(SPI4_SSI_INACTIVE, SPI4_MASTER_SOFT);
+    spi_set(SPI4, SST_SPI_SSI_INACTIVE, SST_SPI_MASTER_SOFT);
     if (!s_bench_abort)
     {
         s5_af = buschk_af(PE_SPI4_MASK, &up, &dn);     /* host: S5 check with PE11..PE14 in AF5 */
@@ -1172,23 +1217,23 @@ static void step_t0b_s13(void)
     {
         const uint32_t cpol = (k >= 2U) ? SPI_CFG2_CPOL : 0U;
         const bool high = (k & 1U) == 0U;
-        spi4_set(SPI4_SSI_INACTIVE, SPI4_MASTER_SOFT | cpol);           /* AFCNTR = 0, the final polarity */
+        spi_set(SPI4, SST_SPI_SSI_INACTIVE, SST_SPI_MASTER_SOFT | cpol);           /* AFCNTR = 0, the final polarity */
         run_ok = bus_pull(high ? GPIO_BM_PULL_UP : GPIO_BM_PULL_DOWN, PE_SPI4_MASK);
         if (!run_ok)
         {
             break;
         }
-        SPI4->CFG2 = SPI4_MASTER_SOFT | cpol | SPI_CFG2_AFCNTR;         /* SPE = 0: CFG2 writable */
+        SPI4->CFG2 = SST_SPI_MASTER_SOFT | cpol | SPI_CFG2_AFCNTR;         /* SPE = 0: CFG2 writable */
         __DSB();
         delay_ms(1U);
         v[k] = bus_idr();
         held[k] = !s5_holds(v[k], high);
         run_ok = sync0();                                              /* host: s5_released() */
-        SPI4->CFG2 = SPI4_MASTER_SOFT | cpol;                           /* AFCNTR = 0 again */
+        SPI4->CFG2 = SST_SPI_MASTER_SOFT | cpol;                           /* AFCNTR = 0 again */
         __DSB();
     }
     /* Deinit (plan rule 9, by hand): CFG2 = 0 lets the pins go; S5 passes again in AF5. */
-    spi4_set(0U, 0U);
+    spi_set(SPI4, 0U, 0U);
     uint32_t up2 = 0U;
     uint32_t dn2 = 0U;
     const bool s5_after = run_ok && buschk_af(PE_SPI4_MASK, &up2, &dn2);
@@ -1215,7 +1260,7 @@ static void step_t0b_s13(void)
             (unsigned long)up2, (unsigned long)dn2);
 
     (void)pins_input(GPIOE, BUS_MASK, GPIO_BM_PULL_NONE);
-    spi4_set(0U, 0U);
+    spi_set(SPI4, 0U, 0U);
     const uint32_t cr1 = SPI4->CR1;
     const uint32_t cr2 = SPI4->CR2;
     const uint32_t cfg1 = SPI4->CFG1;
@@ -1234,24 +1279,110 @@ static void step_t0b_s13(void)
     verdict(spi4_clocked() == clk_was_on, "T0B(e) SPI4 clock in CPU1's bank as before the step (%u)", (unsigned)clk_was_on);
 }
 
-/* T0b(f): S14 in a step whose J1 owner is CPU1 (T0B_S14). Claims only: AF8 on
-   the four pins is accepted, outputs, CPU2's AF5 and other AFs are refused,
-   nothing is written; CPU2 is refused everything in this step. */
+/* T0b(f), plan R2-3: the SPI states of SST_SPI_CASES, one per condition of
+   sst_spi_at_rest() plus the clock, against a claim of PA6 in AF8; the J1 pins
+   stay in input, so no state reaches a pin (AFCNTR = 1 only with MASTER = 1,
+   RM0399 53:3462). Cases 5 and 6 are the accepted controls. */
+typedef struct { uint32_t cr1, cfg2, clk; } SpiCase_t;
+static const SpiCase_t k_spi6_cases[SST_SPI_CASES] = {
+    { SST_SPI_SSI_INACTIVE | SPI_CR1_SPE, SST_SPI_MASTER_SOFT,                   1U },   /* 0 SPE = 1          */
+    { SST_SPI_SSI_INACTIVE,               SST_SPI_MASTER_SOFT | SPI_CFG2_AFCNTR, 1U },   /* 1 AFCNTR = 1       */
+    { SST_SPI_SSI_INACTIVE,               SST_SPI_MASTER_SOFT | SPI_CFG2_IOSWP,  1U },   /* 2 IOSWP = 1        */
+    { SST_SPI_SSI_INACTIVE,               SPI_CFG2_SSM | SPI_CFG2_CPOL,       1U },   /* 3 slave, CFG2 != 0 */
+    { SST_SPI_SSI_INACTIVE,               SST_SPI_MASTER_SOFT,                   0U },   /* 4 clock off        */
+    { SST_SPI_SSI_INACTIVE,               SST_SPI_MASTER_SOFT,                   1U },   /* 5 control: master  */
+    { 0U,                              0U,                                 1U },   /* 6 control: reset   */
+};
+
+static void spi6_cases(SstSpiCaseResult_t *r)
+{
+    PortSnap_t before;
+    PortSnap_t after;
+    port_snap(&before);
+    uint32_t acc = 0U;
+    r->spe_seen = 0U;
+    for (uint32_t k = 0U; k < SST_SPI_CASES; k++)
+    {
+        RCC->APB4ENR |= RCC_APB4ENR_SPI6EN;
+        (void)RCC->APB4ENR;
+        spi_set(SPI6, k_spi6_cases[k].cr1, k_spi6_cases[k].cfg2);
+        if ((k_spi6_cases[k].cr1 & SPI_CR1_SPE) != 0U)
+        {
+            r->spe_seen = ((SPI6->CR1 & SPI_CR1_SPE) != 0U) ? 1U : 0U;
+        }
+        if (k_spi6_cases[k].clk == 0U)
+        {
+            RCC->APB4ENR &= ~RCC_APB4ENR_SPI6EN;
+            (void)RCC->APB4ENR;
+        }
+        if (bench_claim(GPIOA, 1UL << PA_J1_MISO, GPIO_BM_MODE_AF, SST_AF_SPI6))
+        {
+            acc |= 1UL << k;
+        }
+        RCC->APB4ENR |= RCC_APB4ENR_SPI6EN;
+        (void)RCC->APB4ENR;
+        spi_set(SPI6, 0U, 0U);
+    }
+    port_snap(&after);
+    r->cases        = SST_SPI_CASES;
+    r->accepted     = acc;
+    r->regs_changed = port_snap_eq(&before, &after) ? 0U : 1U;
+    r->cr1_after    = SPI6->CR1;
+    r->cfg2_after   = SPI6->CFG2;
+}
+
+/* T0b(f): S14 in a step whose J1 owner is CPU1 (T0B_S14), SPI6 clocked in
+   CPU1's bank at its reset values. Claims only: AF8 on the four pins is
+   accepted, outputs, CPU2's AF5 and other AFs are refused, nothing is
+   written; then the SPI6 states (R2-3); then bench_safe() must release a
+   configured SPI6 (rule 9 order: CFG2 = 0 and CR1 = 0, no MODF). CPU2 is
+   refused everything in this step. */
 static void step_t0b_s14(void)
 {
     if (!step_begin("T0B_S14"))
     {
         return;
     }
+    const bool clk_was_on = spi6_clocked();
+    RCC->APB4ENR |= RCC_APB4ENR_SPI6EN;      /* CPU1's bank (RM0399 9.5.10) */
+    (void)RCC->APB4ENR;
+    spi_set(SPI6, 0U, 0U);
     PortSnap_t before;
     PortSnap_t after;
     port_snap(&before);
     const uint32_t acc = run_claims(k_s14_claims, NCASES(k_s14_claims));
     port_snap(&after);
     verdict((acc == S14_CLAIMS_EXPECT) && port_snap_eq(&before, &after),
-            "T0B(f) CM7 claim in T0B_S14 (J1 = CM7): %lu cases, accepted 0x%05lX (0x%05lX: AF8 on PA5, PA6, PB4, PB5), "
-            "regs untouched %u", (unsigned long)NCASES(k_s14_claims), (unsigned long)acc,
+            "T0B(f) CM7 claim in T0B_S14 (J1 = CM7, SPI6 at reset): %lu cases, accepted 0x%05lX (0x%05lX: AF8 on PA5, "
+            "PA6, PB4, PB5), regs untouched %u", (unsigned long)NCASES(k_s14_claims), (unsigned long)acc,
             (unsigned long)S14_CLAIMS_EXPECT, (unsigned)port_snap_eq(&before, &after));
+
+    SstSpiCaseResult_t r6;
+    spi6_cases(&r6);
+    verdict((r6.accepted == SST_SPI_CASES_EXPECT) && (r6.spe_seen == 1U) && (r6.regs_changed == 0U) &&
+            (r6.cr1_after == 0U) && (r6.cfg2_after == 0U),
+            "T0B(f) R2-3 CM7, PA6 AF8 against SPI6: SPE=1 (read back %lu), AFCNTR=1, IOSWP=1, slave CFG2!=0, clock off "
+            "refused; master at rest, CFG2=0 accepted: accepted 0x%02lX (0x%02lX), GPIO regs untouched %u",
+            (unsigned long)r6.spe_seen, (unsigned long)r6.accepted, (unsigned long)SST_SPI_CASES_EXPECT,
+            (unsigned)(r6.regs_changed == 0U));
+
+    spi_set(SPI6, SST_SPI_SSI_INACTIVE, SST_SPI_MASTER_SOFT);
+    const uint32_t cr1_before = SPI6->CR1;
+    const uint32_t cfg2_before = SPI6->CFG2;
+    bench_safe();
+    const uint32_t cr1_safe = SPI6->CR1;
+    const uint32_t cfg2_safe = SPI6->CFG2;
+    const uint32_t sr_safe = SPI6->SR;
+    if (!clk_was_on)
+    {
+        RCC->APB4ENR &= ~RCC_APB4ENR_SPI6EN;
+        (void)RCC->APB4ENR;
+    }
+    verdict((cr1_before == SST_SPI_SSI_INACTIVE) && (cfg2_before == SST_SPI_MASTER_SOFT) && (cr1_safe == 0U) &&
+            (cfg2_safe == 0U) && ((sr_safe & SPI_SR_MODF) == 0U) && (spi6_clocked() == clk_was_on),
+            "T0B(f) R2-3 CM7 bench_safe releases SPI6: CR1 0x%08lX -> 0x%08lX, CFG2 0x%08lX -> 0x%08lX, SR 0x%08lX (MODF 0); "
+            "clock as before (%u)", (unsigned long)cr1_before, (unsigned long)cr1_safe, (unsigned long)cfg2_before,
+            (unsigned long)cfg2_safe, (unsigned long)sr_safe, (unsigned)clk_was_on);
     cm4_claims(SST_M4_SLOT_S14, SST_M4_CLAIMS_EXPECT_S14, s_step, "in T0B_S14 (J1 = CM7)");
     if (!sync0())
     {

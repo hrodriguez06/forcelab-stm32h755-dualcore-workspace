@@ -1,12 +1,14 @@
 /**
   ******************************************************************************
   * @file    spi_selftest_common.c
-  * @brief   06_spi selftest, code both cores compile: the bench step table and
-  *          the line rules of bench_claim() (Common/Inc/spi_selftest.h).
+  * @brief   06_spi selftest, code both cores compile: the bench step table, the
+  *          line rules of bench_claim() and the "SPI at rest" rule
+  *          (Common/Inc/spi_selftest.h).
   *
   *          Pure tables and logic: nothing here touches a register. Each core's
   *          App/Src/spi_selftest.c owns its writes, and calls sst_line_rule()
-  *          from its bench_claim() before any pin becomes an output or AF.
+  *          (and, for an SPI pin in AF, sst_spi_at_rest() on the registers it
+  *          read) from its bench_claim() before any pin becomes an output or AF.
   ******************************************************************************
   */
 
@@ -60,6 +62,15 @@ uint32_t sst_step_index(const char *name)
 }
 
 /* PE8..PE15 (the AD2 bus), CPU1 only. */
+bool sst_spi_at_rest(uint32_t cr1, uint32_t cfg2)
+{
+    if (((cr1 & SPI_CR1_SPE) != 0U) || ((cfg2 & (SPI_CFG2_AFCNTR | SPI_CFG2_IOSWP)) != 0U))
+    {
+        return false;
+    }
+    return ((cfg2 & SPI_CFG2_MASTER) != 0U) || (cfg2 == 0U);
+}
+
 static bool rule_bus(uint32_t core, const SstStep_t *s, uint32_t pin, uint32_t mode, uint32_t af)
 {
     const uint16_t bit = (uint16_t)(1U << pin);

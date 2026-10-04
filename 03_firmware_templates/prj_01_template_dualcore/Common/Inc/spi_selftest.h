@@ -82,9 +82,37 @@ uint32_t sst_step_index(const char *name);
  * arguments and k_sst_steps. Default deny: a pin that is not in the line table
  * of the plan is refused. It does NOT cover the SPI4 half of S13: for PE11..PE14
  * in AF5 it only says the step allows them, and CPU1's bench_claim() must still
- * read SPI4 back (SPE = 0, AFCNTR = 0, MASTER = 1 or CFG2 = 0) before it accepts. */
+ * read SPI4 back (sst_spi_at_rest()) before it accepts; likewise for a J1 pin in
+ * AF, each core's bench_claim() reads its own J1 SPI (SPI6 on CPU1, SPI1 on CPU2;
+ * plan R2-3).                                                                    */
 bool sst_line_rule(uint32_t core, uint32_t step, const GPIO_TypeDef *port, uint32_t pin,
                    uint32_t mode, uint32_t af);
+
+/* ---- The SPI behind a claimed pin (S13, S14 with plan R2-3) --------------------- *
+ * True when an SPI whose pins are about to go to AF takes no control of them:
+ * SPE = 0 and AFCNTR = 0 (RM0399 53:3456-3464), IOSWP = 0 (no MISO/MOSI swap),
+ * and a master (MASTER = 1) or at its reset value (CFG2 = 0). A slave with a
+ * CFG2 != 0 is refused: it is what a mode fault leaves (MASTER cleared,
+ * 53:1464-1476), and a slave drives MISO once enabled. Pure: the caller reads
+ * CR1 and CFG2, after checking the SPI's clock in its own RCC bank. Used for
+ * SPI4 on PE11..PE14 (CPU1), SPI6 on J1 (CPU1) and SPI1 on J1 (CPU2).         */
+bool sst_spi_at_rest(uint32_t cr1, uint32_t cfg2);
+
+/* Every flag of SPI_IFCR, written once (IFCR is write-only). */
+#define SST_SPI_IFCR_ALL   (SPI_IFCR_EOTC | SPI_IFCR_TXTFC | SPI_IFCR_UDRC | SPI_IFCR_OVRC | SPI_IFCR_CRCEC | \
+                            SPI_IFCR_TIFREC | SPI_IFCR_MODFC | SPI_IFCR_TSERFC | SPI_IFCR_SUSPC)
+
+/* The raw SPI states the selftest writes (F0 has no driver): a master with SS
+   from SSI, and SSI inactive for SSIOP = 0 (RM0399 53:566-567). */
+#define SST_SPI_MASTER_SOFT  (SPI_CFG2_MASTER | SPI_CFG2_SSM)
+#define SST_SPI_SSI_INACTIVE SPI_CR1_SSI
+
+/* The SPI states T0b(f) puts the J1 owner in (SPI6 on CPU1, SPI1 on CPU2), one
+   case each; bit k of the result = case k accepted. Cases 0..4 must be
+   refused (SPE = 1, AFCNTR = 1, IOSWP = 1, slave with CFG2 != 0, clock off in
+   the core's bank), cases 5..6 accepted (master at rest, CFG2 = 0). */
+#define SST_SPI_CASES           7U
+#define SST_SPI_CASES_EXPECT    0x00000060UL
 
 /* Bench AF per pin (DS12923 table 9, 00_docs_stm32h7/STM32H755_Alternate_Functions.md). */
 #define SST_AF_SPI4          5U    /* PE11 NSS, PE12 SCK, PE13 MISO, PE14 MOSI          */
@@ -106,7 +134,9 @@ typedef enum
 {
     SST_CMD_NONE = 0,
     SST_CMD_CLAIMS,      /* arg0 = slot of m4_claims[] (SST_M4_SLOT_*)                          */
-    SST_CMD_SAFE,        /* claim PA5 AF5 (step T0B), write it, then CPU2's bench_safe()          */
+    SST_CMD_SAFE,        /* claim PA5 AF5 (step T0B), write it, SPI1 a master at rest, then
+                            CPU2's bench_safe()                                                    */
+    SST_CMD_SPI1,        /* T0b(f): the SPI1 states of SST_SPI_CASES against a claim of PA6 AF5 */
     SST_CMD_DONE
 } SstCmd_t;
 
@@ -141,7 +171,24 @@ typedef struct
                                  after CPU2's bench_safe() (0: all input)            */
     uint32_t safe_pupdr;      /* PUPDR fields, same packing (0: no pull)             */
     uint32_t safe_afr;        /* AFR fields of PA5 | PA6 << 4 | PB4 << 8 | PB5 << 12 */
+    uint32_t spi1_cr1;        /* SPI1 CR1, CFG2 before bench_safe() (SSI, MASTER|SSM)  */
+    uint32_t spi1_cfg2;
+    uint32_t spi1_cr1_safe;   /* ... and after it (0, 0), with SR (MODF = 0)           */
+    uint32_t spi1_cfg2_safe;
+    uint32_t spi1_sr_safe;
+    uint32_t spi1_clk_same;   /* SPI1 clock in CPU2's bank as before the command      */
 } SstSafeResult_t;
+
+typedef struct
+{
+    uint32_t cases;           /* SST_SPI_CASES                                       */
+    uint32_t accepted;        /* bit k = case k accepted                             */
+    uint32_t spe_seen;        /* SPE read back 1 in the SPE = 1 case                 */
+    uint32_t regs_changed;    /* GPIO snapshot registers that differ                 */
+    uint32_t cr1_after;       /* the SPI at the end (0, 0)                           */
+    uint32_t cfg2_after;
+    uint32_t clk_same;        /* its clock in the core's bank as before              */
+} SstSpiCaseResult_t;
 
 typedef struct
 {
@@ -166,6 +213,7 @@ typedef struct
     /* CPU2 results */
     SstClaimResult_t  m4_claims[SST_M4_SLOTS];
     SstSafeResult_t   m4_safe;
+    SstSpiCaseResult_t m4_spi1;
 } SstArea_t;
 
 _Static_assert(sizeof(SstArea_t) <= 0x1000U, "SstArea_t no longer fits its 4 KB slot");
