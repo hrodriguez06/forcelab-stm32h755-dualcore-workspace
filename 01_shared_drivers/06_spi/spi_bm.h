@@ -45,7 +45,12 @@
   *          on transmission and read as 0.
   *
   *          Pins (AF, the pull of SCK at CPOL and of SS at its inactive level)
-  *          and DMA streams are the caller's. Ownership: one core per instance;
+  *          and DMA streams are the caller's. The SCK pin must be in its AF for a
+  *          transfer to end: on the bench board (STM32H755, rev V) a master
+  *          whose SCK reaches no pin never sets EOT and receives nothing, so
+  *          Transfer and WaitEnd return ERR_TIMEOUT once max_cycles have gone by
+  *          (F1 development run, docs/spi_dev_f1_bench_25426f8-dirty.txt of
+  *          prj_01; not stated in RM0399 chapter 53 nor in ES0445). Ownership: one core per instance;
   *          the driver takes no cross-core lock.
   ******************************************************************************
   */
