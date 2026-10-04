@@ -151,3 +151,46 @@ Las desviaciones del informe §5.5 y las erratas E1–E4 de §5.7 son correctas.
 **F1 pasa.** La API de `spi_bm` queda **congelada** con `spi_bm.h` tal como está en `b4fa22d` (C2: desde aquí solo se añade). M2 y m2 se entregan con F2; m1, antes del cierre.
 
 **D10 (para el responsable):** revisión 3 del plan, que recoge lo ya aprobado y lo verificado en F1: (a) `guard_cycles` como parámetro de `Transfer`, `DmaEnd` y `SpiBm_Xfer_t`, fuera de `SpiBm_Config_t`; (b) regla 6 según el RM (sin empaquetado; 1/2/3/4 B por trama en el umbral); (c) E2 en el contrato y en "No ejercitado": T9 en SPI6, SPI4 y SPI1; T11(a) en SPI2 sin transferir y T11(b) en SPI6; B1 en SPI6/SPI1; (d) T2 contra la HAL cruda en F3; (e) T5: flancos de muestreo e intervalos de SS, y periodo medido en la misma captura; (f) citas E3, E4; (g) M2 como prueba nueva (T15).
+
+## F2: `spi_ll` (`99fe89b`)
+
+Entrega: `b9de729..99fe89b` (m1 `544fb99`, `SPI_BM_CheckDma*` `14ea027`, `spi_ll` `e731a9f`, selftest `d87a576`/`73c1b76`, evidencia `0f05976`, informe `99fe89b`).
+
+### Revisión
+
+| Punto | Resultado |
+| --- | --- |
+| A3 C2 (`spi_bm.h`) | `git diff b4fa22d..99fe89b -- spi_bm.h`: solo añade `SPI_BM_CheckDmaPrepare` y `SPI_BM_CheckDmaStart`. El responsable confirmó el 2026-10-04 que las aprobó (el implementador las añadió antes de preguntar y lo declara en su informe, §5.5) |
+| m1 | `wait_from()` cuenta lecturas iguales de `CYCCNT` (`STALL_READS`, una sola constante) y, si se rinde, `finish()` y `DmaEnd()` deshabilitan igual y devuelven `ERR_TIMEOUT`. Leído en `spi_bm.c` y en la copia de `spi_ll.c`. No ejercitado en la placa (necesitaría parar `CYCCNT` a mitad de una guarda); lo acepto por lectura. **Cerrado** |
+| Contrato de `spi_ll` | Cada constante LL se traduce a su valor BM (`to_bm()`); una desconocida da un valor que `spi_bm` rechaza en su sitio de C6. Valida solo con `SPI_BM_CheckConfig`, `SPI_BM_CheckTransfer` y `SPI_BM_CheckDma*`: ni la tabla de capacidades ni ninguna validación se duplican (`GetCaps` para el tamaño de FIFO) |
+| Escrituras (C8, C10) | Solo inlines de `stm32h7xx_ll_spi.h` y `LL_SPI_WriteReg`/`ReadReg`; sin `USE_FULL_LL_DRIVER` ni `LL_SPI_Init`. Los RMW de LL (`Enable`/`Disable`, `StartMasterTransfer`, `Enable`/`DisableDMAReq_*`) bajo PRIMASK; `IFCR` en una escritura, sin `LL_SPI_ClearFlag_*` (son `SET_BIT`, el informe lo explica). Mismo orden que BM en `Init` (R2-1), fin de transferencia (las cuatro erratas), aborto y DMA |
+| C7 | `.data = .bss = 0` en `spi_bm.c.obj` y `spi_ll.c.obj` (informe §5.2) |
+| Selftest | La configuración LL de cada prueba sale de `sst_ll_of()` con constantes escritas a mano, no de la traducción de `spi_ll.c`: el oráculo es independiente. Sin cambios en las guardas S13/S14 ni en Digital Out (enable 0 en las 16 fronteras) |
+| Alcance | `git diff b9de729..99fe89b --name-only`: nada fuera de las rutas permitidas |
+
+### Build y ejecución (mías)
+
+`build_all -Clean` 8/8 en `99fe89b`, `prj_01` igual a `2481396`; `selftest-spi` desde vacío con 0 avisos; imágenes 91816/140/253556 (CM7) y 25788/28/45400 (CM4), como el informe. Checklist físico confirmado por el responsable; flasheo con el script parado, arranque en frío, una ejecución sin editar: `docs/spi_f2_audit_bench_99fe89b.txt`.
+
+| Resultado | Valor |
+| --- | --- |
+| Veredictos | 38/38 en el host, `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`; Rev `99fe89b` en CM7, CM4 y host |
+| T2 LL | SPI1..6: la imagen de `spi_ll` difiere de la de `spi_bm` en 0 y de la tabla del RM en 0; control (`MASTER` invertido) detectado |
+| T15 (M2) | BM: `ERR_TIMEOUT` tras 401 009 ciclos; LL: tras 400 986 (`max_cycles` 400 000, cota +10 %). Controles con PA5 en AF8: `OK` y `0xA5` recibido por J1. `Deinit` a la imagen de reset |
+| T3 (m2, R3-6) | El esperado alterado de `CalcGuardCycles` marca 83 de 83 |
+| Frente a la entrega | 167 líneas de resultado; solo cambian medidas del AD2 (T5(a) control, T5(d), T5(g), T12(b)), todas dentro de su cota. T5(d): el punto más justo, `mssi=4` 62 frente a 63,1 (± 2) |
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| M2 | — | T15 lo demuestra en una captura de entrega, con BM y LL, y ejercita el aborto de C13 | **Cerrado** |
+| m2 | — | Control de `CalcGuardCycles` en T3 | **Cerrado** |
+| m3 | Menor (para F3) | La pila de `Status_Task` baja con cada fase: 272, 182 y 128 palabras libres de 512 (F0, F1, F2). F3 añade la HAL encima | D11 |
+| N2 | Nota | `LL_SPI_SetTransferSize` es un RMW de `CR2` sin PRIMASK, mientras `spi_bm` escribe `CR2` entero. Con `SPE = 0`, `TSER = 0` y un solo dueño por instancia no tiene efecto; T2 da la misma imagen | Solo registro |
+
+### Estado
+
+**F2 pasa.** La API de `spi_ll` queda **congelada** con `spi_ll.h` de `99fe89b`, y `spi_bm.h` sigue congelada con las dos funciones añadidas.
+
+**D11 (para el responsable):** autorizar que `CM7/App/Src/app_main.c` dé a `Status_Task` más pila **solo con `SPI_DRIVER_SELFTEST`**, como ya hace con `GPIO_DRIVER_SELFTEST` (2048 palabras, `app_main.c:49-53`). La producción no cambia (A16 lo comprueba). Requisito para F3: la captura de entrega con al menos 128 palabras libres.
