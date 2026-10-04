@@ -68,3 +68,34 @@ Checklist físico confirmado por el responsable para esta ejecución (los cinco 
 ### Estado
 
 **F0 no pasa** por B1. P1 y M1 siguen en la revisión 2 del plan (D9, aprobada por el responsable el 2026-10-03).
+
+## F0, parte 3: verificación de B1 y M1 (`620a678`)
+
+Entrega: `d9a9df7..620a678` (`d8f5e69` B1, `efc1be8` M1, evidencia `0e7a7c4`, informe `620a678`, sección "Respuesta a la auditoría 1").
+
+### Revisión
+
+| Hallazgo | Corrección | Verificación |
+| --- | --- | --- |
+| B1 | `d8f5e69`. Tras su espera de 10 s y `bench_safe()`, el firmware mantiene MCU_ACK bajo y no sigue hasta un pulso de HOST_REQ (`sync_ack_low()`, acotado por `SYNC_TIMEOUT_CYC`). El host espera ACK bajo con límite de 15 s (`wait_ack`, que lanza `BenchAbort` al vencer), mide el tiempo en alto (9..11 s), lee ACK bajo 20 veces en 100 ms, espera la línea y da el pulso, comprobando ACK bajo tras el flanco. Protocolo v2 en firmware y host | Leído. Ya no depende del orden de llegada de las líneas: mientras el host lee, el firmware está retenido en el mismo paso. **Cerrado** |
+| M1 (R2-3) | `efc1be8`. `sst_spi_at_rest()` (común, pura) exige `SPE = 0`, `AFCNTR = 0`, `IOSWP = 0` y `MASTER = 1` o `CFG2 = 0`; S13 (SPI4) la usa también, que es más estricto. `bench_claim()` de CPU1 la aplica con `RCC_C1->APB4ENR.SPI6EN` y la de CPU2 con `RCC_C2->APB2ENR.SPI1EN` antes de cualquier AF en PA5/PA6/PB4/PB5. `bench_safe()` de cada núcleo suelta su SPI con `spi_release()` en el orden de la regla 9 (rev. 2) | Leído en los dos núcleos. T0b(f) con un caso por condición y sus dos controles. **Cerrado** |
+
+### Build (mi ejecución en `620a678`)
+
+`build_all -Clean` 8/8; `prj_01` debug CM7 29304/132/55668, CM4 3456/24/12560, release CM7 28356/132/55672, CM4 3112/24/12560: iguales a `2481396`. `selftest-spi` desde un directorio vacío: 0 avisos.
+
+### Ejecución en la placa
+
+Checklist físico confirmado por el responsable para esta ejecución. Imagen de `620a678` flasheada con el script parado, arranque en frío por USB del ST-LINK, una ejecución: `docs/spi_f0_audit_bench_620a678.txt`, sin editar.
+
+| Resultado | Valor |
+| --- | --- |
+| Identidad | Rev `620a678` e id `c9289b372b468a8f` en CM7, CM4 y host; `tree clean`; banner v2 |
+| Veredictos | 10/10 en el host, `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`, sin aborto |
+| T0B(d) | ACK alto 9,877 s sin HOST_REQ, después bajo en 20/20 lecturas |
+| R2-3 | CPU1 (SPI6, PA6 AF8) y CPU2 (SPI1, PA6 AF5): rechazados `SPE = 1` (releído 1), `AFCNTR = 1`, `IOSWP = 1`, esclavo con `CFG2 ≠ 0` y sin reloj; aceptados `0x60` (maestro en reposo y `CFG2 = 0`). Cada `bench_safe()` deja su SPI en `CR1 = 0`, `CFG2 = 0`, `SR = 0x00001002` |
+| Frente a la entrega | Quitando marcas de tiempo, Rev, id y el tiempo de T0B(d), las 44 líneas de resultado son idénticas a `spi_f0_bench_efc1be8.txt` |
+
+### Estado
+
+**F0 pasa.** B1 y M1 cerrados; P1 resuelto en la revisión 2 del plan (R2-1, R2-2), que se aplica en F1. El implementador puede empezar F1 (`spi_bm`) con la revisión 2.
