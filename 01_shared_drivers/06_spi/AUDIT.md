@@ -194,3 +194,5 @@ Entrega: `b9de729..99fe89b` (m1 `544fb99`, `SPI_BM_CheckDma*` `14ea027`, `spi_ll
 **F2 pasa.** La API de `spi_ll` queda **congelada** con `spi_ll.h` de `99fe89b`, y `spi_bm.h` sigue congelada con las dos funciones añadidas.
 
 **D11 (para el responsable):** autorizar que `CM7/App/Src/app_main.c` dé a `Status_Task` más pila **solo con `SPI_DRIVER_SELFTEST`**, como ya hace con `GPIO_DRIVER_SELFTEST` (2048 palabras, `app_main.c:52-56`). La producción no cambia (A16 lo comprueba). Requisito para F3: la captura de entrega con al menos 128 palabras libres.
+
+**D11 aprobada** por el responsable el 2026-10-04: con `SPI_DRIVER_SELFTEST`, `app_main.c` puede dar a `Status_Task` más pila (el mismo mecanismo de `GPIO_DRIVER_SELFTEST`, `app_main.c:52-56`). Requisito de F3: producción sin cambios (A16) y la captura de entrega con al menos 128 palabras libres.
