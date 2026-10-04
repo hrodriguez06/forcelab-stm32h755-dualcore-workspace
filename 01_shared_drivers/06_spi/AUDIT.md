@@ -47,3 +47,24 @@ Las desviaciones del informe §5.5 son todas más estrictas que el plan o lo amp
 La parte 1 pasa. **F0 queda pendiente de mi ejecución en la placa (parte 2)**, que necesita la confirmación del checklist físico por el responsable.
 
 **D9 (para el responsable):** revisión 2 del plan con: (a) regla 3: `CR1.SSI` inactivo antes de `CFG2`; si el `CFG2` actual es de maestro con `SSM = 1` y otro `SSIOP`, primero `CFG2 = 0`; con `AFCNTR = 1` vigente, mismo `CPOL` y `SSIOP` o `ERR_BUSY`, y `CFG2` en una sola escritura con `AFCNTR = 1`; read-back de `SR.MODF = 0`. (b) Regla 9: `IER = 0` → `SPE = 0` conservando `SSI` → `CFG2 = 0` → `CR1 = 0` → resto → `IFCR`. (c) S14 con la lectura de la instancia dueña (M1). (d) T11 en SPI2.
+
+## F0, parte 2: ejecución del auditor en la placa (`153d5b3`)
+
+Checklist físico confirmado por el responsable para esta ejecución (los cinco puntos y J1). `selftest-spi` recompilado en `153d5b3` (0 avisos), flasheado con `tools/flash.py --preset selftest-spi` con el script parado, arranque en frío desconectando y conectando el USB del ST-LINK, y una ejecución de `spi_hw_check.py --checklist-confirmed Hector`. Captura sin editar: `03_firmware_templates/prj_01_template_dualcore/docs/spi_f0_audit_bench_153d5b3.txt`.
+
+| Resultado | Valor |
+| --- | --- |
+| Identidad | Rev `153d5b3` e id `9b2e44352527ef95` en CM7, CM4 y host; `tree clean` |
+| Firmware | `FW VERDICT=PASS failures=0`; sin aborto; CM4 `timeout 0, aborts 0` |
+| Host | **9/10**, `HOST VERDICT=FAIL`: falla `T0B(d) firmware timeout` |
+| Frente a la entrega | Quitando marcas de tiempo, Rev e id, las 42 líneas de resultado (`-> PASS/FAIL`, veredictos, identidad) son idénticas a `spi_f0_bench_008db8b.txt` salvo T0B(d) y los dos veredictos del host |
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| B1 | Bloqueante (una prueba no se reproduce en mi ejecución) | **Carrera en el host de T0B(d).** `spi_hw_check.py` (l. 390-392) espera la línea `T0B timeout handled` y **después** lee MCU_ACK. Tras esa línea, el firmware empieza el paso siguiente: `step_begin("T0B_S13")` publica el paso y su `sync0()` sube MCU_ACK. En mi captura, `[spi] STEP T0B_S13` (+12,823 s) llega antes de la lectura del host (+12,823 s), que ve ACK alto. En la entrega la lectura cayó 2 ms antes de `STEP` (+12,710 s frente a +12,712 s): pasó por el orden de llegada, no por diseño. El firmware sí puso ACK bajo: su propia comprobación (`GPIOE->ODR` de PE7 = 0 tras `bench_safe()`, l. 1029) da PASS en las dos capturas. No es un defecto de seguridad | Que el host demuestre ACK bajo sin depender del orden: por ejemplo, sondear DIO13 desde el final del handshake hasta verlo bajo (ACK baja en `bench_safe()` y no sube hasta el `sync0()` del paso siguiente), con su límite de tiempo, y solo después esperar la línea. O que el firmware no empiece el paso siguiente hasta que el host lo pida. Corregir, nueva ejecución de entrega y repetiré la mía |
+
+### Estado
+
+**F0 no pasa** por B1. P1 y M1 siguen en la revisión 2 del plan (D9, aprobada por el responsable el 2026-10-03).
