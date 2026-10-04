@@ -864,7 +864,9 @@ bool SPI_BM_TransferIrq(SPI_TypeDef *spi, SpiBm_Xfer_t *x)
 
 /* ---- DMA (plan rule 8, RM0399 53:1262-1274) --------------------------------------- */
 
-SpiBm_Status_t SPI_BM_DmaPrepare(SPI_TypeDef *spi, uint32_t frames, bool rx)
+/* The checks of DmaPrepare and DmaStart (C6 order), reads only; F2 made them public so
+   spi_ll validates with this one copy. */
+SpiBm_Status_t SPI_BM_CheckDmaPrepare(const SPI_TypeDef *spi, uint32_t frames, bool rx)
 {
     if (entry(spi) == NULL)
     {
@@ -881,11 +883,39 @@ SpiBm_Status_t SPI_BM_DmaPrepare(SPI_TypeDef *spi, uint32_t frames, bool rx)
     }
     if ((spi->SR & SPI_SR_MODF) != 0U)
     {
-        return pending_modf(spi, SPI_BM_ERR_MODF);
+        return SPI_BM_ERR_MODF;
     }
     if (((spi->CR1 & SPI_CR1_SPE) != 0U) || ((cfg2 & SPI_CFG2_MASTER) == 0U))
     {
         return SPI_BM_ERR_BUSY;
+    }
+    return SPI_BM_OK;
+}
+
+SpiBm_Status_t SPI_BM_CheckDmaStart(const SPI_TypeDef *spi)
+{
+    if (entry(spi) == NULL)
+    {
+        return SPI_BM_ERR_PARAM;
+    }
+    if ((spi->SR & SPI_SR_MODF) != 0U)
+    {
+        return SPI_BM_ERR_MODF;
+    }
+    if (((spi->CR1 & SPI_CR1_SPE) != 0U) || ((spi->CFG2 & SPI_CFG2_MASTER) == 0U) ||
+        ((spi->CR2 & SPI_CR2_TSIZE_Msk) == 0U))
+    {
+        return SPI_BM_ERR_BUSY;                 /* running, not a master, or not prepared */
+    }
+    return SPI_BM_OK;
+}
+
+SpiBm_Status_t SPI_BM_DmaPrepare(SPI_TypeDef *spi, uint32_t frames, bool rx)
+{
+    const SpiBm_Status_t st = SPI_BM_CheckDmaPrepare(spi, frames, rx);
+    if (st != SPI_BM_OK)
+    {
+        return pending_modf(spi, st);
     }
     if (!set_tsize(spi, frames))
     {
@@ -899,18 +929,10 @@ SpiBm_Status_t SPI_BM_DmaPrepare(SPI_TypeDef *spi, uint32_t frames, bool rx)
 
 SpiBm_Status_t SPI_BM_DmaStart(SPI_TypeDef *spi)
 {
-    if (entry(spi) == NULL)
+    const SpiBm_Status_t st = SPI_BM_CheckDmaStart(spi);
+    if (st != SPI_BM_OK)
     {
-        return SPI_BM_ERR_PARAM;
-    }
-    if ((spi->SR & SPI_SR_MODF) != 0U)
-    {
-        return pending_modf(spi, SPI_BM_ERR_MODF);
-    }
-    if (((spi->CR1 & SPI_CR1_SPE) != 0U) || ((spi->CFG2 & SPI_CFG2_MASTER) == 0U) ||
-        ((spi->CR2 & SPI_CR2_TSIZE_Msk) == 0U))
-    {
-        return SPI_BM_ERR_BUSY;                 /* running, not a master, or not prepared */
+        return pending_modf(spi, st);
     }
     /* Steps 3 and 4 (the caller did step 2): TXDMAEN, then SPE; then CSTART. */
     cfg1_update(spi, 0U, SPI_CFG1_TXDMAEN);

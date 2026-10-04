@@ -193,6 +193,14 @@ SpiBm_Status_t SPI_BM_WaitEnd(SPI_TypeDef *spi, uint32_t max_cycles);   /* EOT o
 SpiBm_Status_t SPI_BM_DmaEnd(SPI_TypeDef *spi, uint32_t guard_cycles);
                                                   /* after the caller stopped its streams: guard,
                                                      SPE = 0, TXDMAEN = RXDMAEN = 0, flags        */
+/** Added in F2 (C2: the frozen API only grows). The checks of SPI_BM_DmaPrepare and
+    SPI_BM_DmaStart, in the C6 order, nothing written, so spi_ll validates its DMA calls
+    with the one copy of the checks. DmaPrepare: ERR_PARAM (instance, frames 0 or
+    > 65 535, rx in TX_ONLY), ERR_MODF (a mode fault in force), ERR_BUSY (SPE = 1 or not
+    a master). DmaStart: ERR_PARAM (instance), ERR_MODF, ERR_BUSY (SPE = 1, not a
+    master, or TSIZE = 0: not prepared). */
+SpiBm_Status_t SPI_BM_CheckDmaPrepare(const SPI_TypeDef *spi, uint32_t frames, bool rx);
+SpiBm_Status_t SPI_BM_CheckDmaStart(const SPI_TypeDef *spi);
 SpiBm_Status_t SPI_BM_GetDmaRequest(const SPI_TypeDef *spi, bool tx, uint32_t *request_id);
 SpiBm_Status_t SPI_BM_GetIRQn(const SPI_TypeDef *spi, IRQn_Type *out);
 
