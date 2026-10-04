@@ -512,3 +512,199 @@ Es la de `k_spi[]` en `spi_bm.c`. Cada valor lleva la línea del `.txt` del RM d
 | 2 | J1 en D11–D12 | Ídem; T0c en cada sesión |
 | 4 | CM7: SPI2–SPI6; CM4: SPI1 | Ídem |
 | 6 | Controles de T12 solo registrados: 2.22.1 reproducido (20 bloqueos en 40); 2.22.5, 2 muestras en la entrega | Ídem |
+
+## Respuesta a la auditoría de F1 (`a58172f`; plan revisión 3, `b9de729`)
+
+F1 pasa. La API de `spi_bm` queda congelada con `spi_bm.h` de `b4fa22d`. `git diff b4fa22d -- 01_shared_drivers/06_spi/spi_bm.h` no quita ninguna línea; las dos funciones que añade están en §5.5 de F2. Los hallazgos que la auditoría dejaba para esta entrega:
+
+| Hallazgo | Commit que lo corrige | Qué ejecuté para comprobarlo | Estado |
+| --- | --- | --- | --- |
+| M2: E2 sin evidencia de entrega; el aborto de C13 sin ejercitar | `d87a576` (prueba T15 de R3-3, con BM y LL) | Ejecución de entrega `docs/spi_f2_bench_73c1b76.txt`, paso J1_SPI6_LL. SPI6 por J1, 1 trama de 8 bits, PA5 en entrada sin pull y PA6/PB5 en AF8. **BM:** `Transfer` = 6 (`ERR_TIMEOUT`) tras 400 942 ciclos (`max_cycles` 400 000; cota +10 %: 440 000). **LL:** igual, tras 401 058 ciclos. En los dos, después: `SPE` 0, `IER` `0x0`, `SR=0x00010002` (`CTSIZE` 1, `TXP`). `Deinit` 0 y los registros iguales a la imagen de reset (`0x00`). **Controles** con PA5 en AF8: `Transfer` 0 tras 3008 (BM) y 3201 (LL) ciclos, y se recibe `0xA5` por J1 | corregido en `d87a576`, pendiente de verificación |
+| m1: `wait_from()` sin salida si `CYCCNT` se para a mitad de la llamada | `544fb99` (y la misma función en `spi_ll.c`, `e731a9f`) | Lectura y compilación: el bucle cuenta lecturas iguales de `CYCCNT` como los bucles de `Transfer` y `WaitEnd` (`STALL_READS`, 1000, ahora una sola constante). Si se rinde, `finish()` deshabilita igual (`IER = 0`, `SPE = 0`, `IFCR`) y devuelve `ERR_TIMEOUT`. **No ejercitado en la placa:** parar `CYCCNT` en medio de una guarda necesitaría un depurador o escribir `DWT->CTRL` desde la prueba, y la prueba no lo hace (§5.8 de F2) | corregido en `544fb99`, pendiente de verificación |
+| m2: el control de T3 no alteraba ningún esperado de `CalcGuardCycles` (R3-6) | `73c1b76` (host) | Misma ejecución: "T3 control CalcGuardCycles (R3-6)": la comparación con un ciclo de más marca los 83 vectores OK de 83. El control de `CalcPrescaler` sigue marcando 153 de 153 | corregido en `73c1b76`, pendiente de verificación |
+| N1: T2 contra la HAL cruda | — | La revisión 3 lo pasa a F3 (R3-4); en F2 no hay nada que hacer | Pasa a F3 |
+
+## F2
+
+Plan: revisión 3 (`b9de729`).
+
+| Fase | Estado | Último commit | Captura |
+| --- | --- | --- | --- |
+| F2 | entregada para auditoría (el commit que añade esta sección) | `73c1b76` (código); evidencia en `0f05976` | `03_firmware_templates/prj_01_template_dualcore/docs/spi_f2_bench_73c1b76.txt` |
+| F3 | sin empezar | — | — |
+
+Qué hay en F2:
+
+- **`spi_ll`:** `01_shared_drivers/06_spi/spi_ll.{h,c}` y el target `stm32h7_driver_spi_ll`, que enlaza `_spi_bm`.
+- **Dos funciones añadidas a `spi_bm.h`:** `SPI_BM_CheckDmaPrepare` y `SPI_BM_CheckDmaStart` (§5.5).
+- **m1** de la auditoría de F1.
+- **Selftest:** cuatro pasos nuevos (protocolo v4), con T1, T2, T4, T5(a), T6, T7(a)(b), T14 y B1 por `spi_ll` en los dos núcleos, y T15 con BM y LL.
+- **Host:** los oráculos de los pasos nuevos, y el control de T3 para `CalcGuardCycles`.
+
+La ejecución de entrega es `docs/spi_f2_bench_73c1b76.txt`: 38/38 comprobaciones del host, `FW VERDICT=PASS failures=0` y `HOST VERDICT=PASS`, sin aborto. En la misma sesión pasan otra vez todas las pruebas de F0 y F1.
+
+### 5.1 Commits
+
+Rango de la entrega: `b9de729..` el commit que añade esta sección, en `driver/spi`.
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `544fb99` | fix(spi): give wait_from() the stalled-CYCCNT exit of the other waits (m1) | m1 |
+| `14ea027` | feat(spi): add SPI_BM_CheckDmaPrepare and SPI_BM_CheckDmaStart | — (§5.5) |
+| `e731a9f` | feat(spi): add spi_ll, the LL tier of 06_spi, and its target | — |
+| `d87a576` | test(prj_01): add the spi_ll selftest steps of 06_spi F2 (bench v4) | M2 (T15) |
+| `73c1b76` | test(prj_01): run the F2 steps from spi_hw_check.py (protocol v4) | m2 |
+| `0f05976` | docs(spi): add the F2 evidence at 73c1b76 | — |
+| (este) | docs(spi): add the F2 section and the reply to the F1 audit | — |
+
+Hubo una ejecución de desarrollo, con el árbol sucio sobre `e731a9f`, antes de `d87a576`. Dio los mismos resultados (38/38, `FW VERDICT=PASS`). No está commiteada: ninguna conclusión se apoya en ella.
+
+### 5.2 Build y tamaños
+
+Fuentes: `docs/spi_f2_build_all_73c1b76.txt`, `docs/spi_f2_selftest_build_73c1b76.txt`, `docs/spi_f2_werror_73c1b76.txt` y `docs/spi_f2_map_sizes_73c1b76.txt`.
+
+- `build_all -Clean` en `73c1b76`: 8/8.
+- `selftest-spi` desde un directorio vacío: 0 líneas `warning:` o `error:`.
+- `-Werror` (`selftest-spi`, `debug`, `release`, en directorios de scratch, `CMAKE_C_FLAGS:STRING=-Werror` en cada `CMakeCache.txt`): exit 0 y 0 avisos en los tres.
+- `spi_bm.c` y `spi_ll.c` sueltos, en CM7 y CM4, con `-O2` y `-Og`, compilan sin avisos con `-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wcast-qual -Wcast-align -Wundef -Werror` (cabeceras de CMSIS y de la HAL como `-isystem`). Esta compilación no está en una captura: la cito porque así se comprobó, no como evidencia.
+
+| Imagen | .text | .data | .bss | Δ frente a 2481396 | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| prj_01 debug CM7 | 29304 | 132 | 55668 | 0 (y 0 en cada sección asignada frente a `8901b77`) | `build/debug/cm7_firmware.map` |
+| prj_01 debug CM4 | 3456 | 24 | 12560 | 0 | `build/debug/cm4_firmware.map` |
+| prj_01 release CM7 | 28356 | 132 | 55672 | 0 | `build/release/cm7_firmware.map` |
+| prj_01 release CM4 | 3112 | 24 | 12560 | 0 | `build/release/cm4_firmware.map` |
+
+| Objeto | Núcleo | .text | .data | .bss | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| `spi_bm.c.obj` | CM7 | 3540 | 0 | 0 | `build/selftest-spi/cm7_firmware.map` |
+| `spi_ll.c.obj` | CM7 | 2400 | 0 | 0 | ídem |
+| `spi_bm.c.obj` | CM4 | 3502 | 0 | 0 | `build/selftest-spi/cm4_firmware.map` |
+| `spi_ll.c.obj` | CM4 | 2376 | 0 | 0 | ídem |
+| `spi_hal.c.obj` | — | no existe en F2 | — | — | — |
+| `spi_selftest.c.obj` (selftest) | CM7 | 44525 | 8 | 197779 | `build/selftest-spi/cm7_firmware.map` |
+| `spi_selftest_common.c.obj` (selftest) | CM7 | 2017 | 0 | 0 | ídem |
+| `spi_selftest.c.obj` (selftest) | CM4 | 10151 | 4 | 32833 | `build/selftest-spi/cm4_firmware.map` |
+| `spi_selftest_common.c.obj` (selftest) | CM4 | 1973 | 0 | 0 | ídem |
+
+.text es la suma de las secciones de entrada `.text*` y `.rodata*`.
+
+- `spi_bm.c.obj` creció de 3420/3362 (F1) a 3540/3502 por m1 y las dos funciones de comprobación.
+- La imagen `selftest-spi` mide 91816/140/253556 en CM7 y 25788/28/45400 en CM4.
+
+### 5.3 Pruebas
+
+Las cifras salen de `docs/spi_f2_bench_73c1b76.txt`:
+
+- Rev `73c1b76` e id `42089a7905c54ab9` en host, CM7 y CM4; `tree clean`.
+- Checklist confirmado por Hector antes de la ejecución; arranque en frío y sin depurador.
+- Protocolo v4; `REV_ID=0x2003`.
+
+Las filas de F0 y F1 dan otra vez PASS en la misma ejecución; aquí solo van las de F2.
+
+| ID | Tier | Núcleo | Resultado | Valor medido | Control negativo: valor | Oráculo | Captura |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| T1 | LL | CM7 | PASS | 48 casos por `spi_ll` en SPI2, SPI4, SPI5 y SPI6, 0 con otro estado. Incluyen: constante LL desconocida en cada campo (polaridad, fase, orden, polaridad de SS, prescaler, ancho, umbral, `MSSI`, `MIDI`); `SIMPLEX_RX`, `HALF_DUPLEX_TX` y `NSS_HARD_INPUT`; `nss_pulse` y `MSSI` con `NSS_SOFT`; 3 bits; 17 bits en SPI4/5/6 (`ERR_UNSUPPORTED`); umbral por encima de media FIFO (`ERR_RANGE`); los parámetros de `Transfer`, `StartIt`, `DmaPrepare`, `DmaStart`, `WaitEnd` y `DmaEnd`; `SPE = 1` y `AFCNTR = 1` vigente (`ERR_BUSY`). Foto de los 11 registros (todos menos `TXDR`/`RXDR`) de las cuatro instancias y de los seis enable de RCC, intacta en los 4 grupos (`0xF`) | Un `SPI_LL_Init(SPI2)` válido cambia la foto (1) | estado esperado escrito a mano por caso | `spi_f2_bench_73c1b76.txt` |
+| T1 | LL | CM4 | PASS | 40 casos en SPI1, 0 con otro estado; foto intacta (`0xF`) | Un `SPI_LL_Init` válido cambia la foto (1) | ídem | ídem |
+| T2 | LL | CM7 | PASS | SPI2 y SPI3: 40 960 configuraciones cada uno; SPI4, SPI5 y SPI6: 30 720 cada uno. La imagen de `spi_ll` (`CR1`, `CR2`, `CFG1`, `CFG2`, `IER`, `CRCPOLY`, `UDRDR`, `I2SCFGR`) difiere de la de `spi_bm` en 0, y `CFG1`/`CFG2`/`CR1` de la tabla del RM en 0. 0 `Init` y 0 `Deinit` fallidos | La misma comparación con `MASTER` invertido en la foto LL lo detecta (1 de 1 por instancia) | imagen de `spi_bm` de la misma configuración (A24) y `sst_t2_expect()` | ídem |
+| T2 | LL | CM4 | PASS | SPI1: 40 960 configuraciones; 0 frente al RM, 0 frente a `spi_bm`, 0 fallos de `Init`/`Deinit` | Detectado (1) | ídem | ídem |
+| T3 control (R3-6) | BM | CM7 + host | PASS | — | Esperado de `CalcGuardCycles` alterado (un ciclo de más): la comparación marca los 83 vectores OK de 83 | Python con enteros | ídem |
+| T4 | LL | CM7 (SPI6) + host | PASS | 896 transferencias por J1 a /8 (12,5 MHz), con la matriz de F1. 0 con estado, discrepancia o `Init`/`Deinit` fallido; la más larga, 2 099 269 ciclos, dentro de su `max_cycles`. 65 535 tramas de 8 bits: estado 0, 0 discrepancias. Host: 897 líneas con CRC-32 y cobertura de la semilla, 0 diferencias; cobertura completa en los 7 tamaños | MISO a PB4 con pull-up y pull-down, 4/8/16 bits: RX todo unos / todo ceros por CRC. Discrepancias = las del host (p. ej. 4 bits arriba 234, 16 bits abajo 255) | cable + CRC-32 en el host | ídem |
+| T4 | LL | CM4 (SPI1) + host | PASS | 1408 transferencias a /16 (12,5 MHz), con además 17/24/31/32 bits; 0 fallidas; la más larga, 2 098 698 ciclos. Host: 0 diferencias; cobertura completa en los 11 tamaños | PB4 arriba/abajo, 4/8/16/32 bits: discrepancias = las del host (p. ej. 8 bits arriba 251) | ídem | ídem |
+| T5(a) | LL | CM7 (SPI4) + host | PASS | 32 capturas LA a 100 MS/s: modos 0–3 × {4, 8, 13, 16} × MSB/LSB, SS por hardware, por `spi_ll`. El host las decodifica contra la semilla: 0 fallidas; SCK en reposo = `CPOL`; SS activo en un solo intervalo con datos | Cada captura decodificada con el `CPHA` contrario y con el orden contrario: las dos encuentran discrepancias en 32 de 32 (p. ej. A0: 30 y 25) | `ad2.spi_decode()` en el host | ídem |
+| T6 | LL | CM7 (SPI6) | PASS | 8 y 16 bits, {1, FIFO + 1, 1024} tramas: 0 fallidas. IRQ hasta el fin: 1/9/1024 y 1/5/1024. (c) 0 IRQ en los 10 ms tras cada fin, con `SPE = 0` | `TXPIE = 1` a mano con `SPE = 0`: 2 IRQ espurias (≥ 1) | ISR de prueba + CRC en el host | ídem |
+| T6 | LL | CM4 (SPI1) | PASS | 8/16/32 bits, {1, FIFO + 1, 1024}: 0 fallidas. IRQ: 1/17/823 (8 bits: con LL en CM4 una IRQ sirve a veces más de un paquete), 1/9/1024 y 1/5/1024. (c) 0 | El control `TXPIE` a mano no se repite con LL: no pasa por el driver; el de F1, en la misma ejecución, da 1 | ídem | ídem |
+| T7(a) | LL | CM4 | PASS | SPI1 con DMA2 streams 0/1, 8/16/32 bits, {1, 2, 17, 255, 4096} tramas, por `spi_ll`: 0 fallidas (CRC también en el host) | `RXDMAEN = 0`, 255 tramas: `WaitEnd` = 8 (`ERR_OVERRUN`), 255 palabras con el centinela | cable | ídem |
+| T7(b) | LL | CM7 | PASS | SPI6 con BDMA canales 0/1, buffers en `.d3_ram`, 8/16 bits, {1, 9, 255, 8192} tramas, por `spi_ll`: 0 fallidas | `RXDMAEN = 0`: `ERR_OVERRUN`, 255 con centinela | cable | ídem |
+| T14 | LL | CM7, CM4 | PASS | Tras un `SPI_LL_Init`, `SPI_BM_Deinit` deja SPI2..6 (F2_NOPIN), SPI6 (J1_SPI6_LL), SPI4 (SPI4_AD2_LL) y SPI1 (CM4) iguales a la imagen de reset (`0x00`). J1 en entrada en los dos núcleos. S5 pasa con PE11..PE14 en AF5 tras el `Deinit`, y en entrada | Tras `SPI_LL_Init` y antes del `Deinit`: SPI6 `0x0D`, SPI4 `0x0D` (≠ 0) | reset de RM0399 escrito a mano | ídem |
+| T15 | BM y LL | CM7 (SPI6) | PASS | PA5 (SCK) en entrada: `ERR_TIMEOUT` tras 400 942 (BM) y 401 058 (LL) ciclos, frente a `max_cycles` 400 000 (+10 %: 440 000); después `SPE` 0, `IER` 0, `SR=0x00010002`; `Deinit` 0 e imagen de reset | PA5 en AF8: `OK` tras 3008 (BM) y 3201 (LL) ciclos, y `0xA5` recibido por J1 | registros leídos directamente; `CYCCNT` | ídem |
+| Sin Digital Out | — | host | PASS | Enable releído en las 16 fronteras de paso: `0x0000` en todas | — | `FDwfDigitalOutEnableGet` | ídem |
+| Veredicto | — | CM7 + host | PASS | `bench completed without abort`; CM4 `timeout 0, aborts 0`; `FW VERDICT=PASS failures=0`; 38/38; `HOST VERDICT=PASS` | — | — | ídem |
+
+**El oráculo de las pruebas LL.** La configuración LL de cada prueba sale de `sst_ll_of()` (`Common/Src/spi_selftest_common.c`), con las constantes LL escritas a mano en la prueba, no de la traducción de `spi_ll.c`. Esa traducción es justo lo que prueban T1 y T2. T2 compara además la imagen LL con la de `spi_bm` para la misma configuración, y con la tabla del RM.
+
+### 5.4 Medidas (B1)
+
+De `docs/spi_f2_bench_73c1b76.txt`. `Init` y `Transfer` se miden con `PRIMASK` puesto. La instancia es SPI6 en CM7 y SPI1 en CM4 (R3-3), con los pines de J1 en AF. `Transfer` es 1 trama a /2, solo TX.
+
+| Función | BM, CM7 (400 MHz) | LL, CM7 | BM, CM4 (200 MHz) | LL, CM4 |
+| --- | --- | --- | --- | --- |
+| `Init` | 530 ciclos | 850 | 473 | 891 |
+| `Transfer` de 1 trama | 1569 | 1901 | 1446 | 1604 |
+| `TransferIrq` por llamada (T6) | mín. 413, máx. 808 | mín. 520, máx. 967 | mín. 354, máx. 543 | mín. 354, máx. 678 |
+
+- **Diferencias con F1:** las cifras de BM no son las de la captura de F1 (`Init` 453 en `4142921`) porque la imagen cambió. Las dos columnas de este B1 salen de la misma imagen y la misma ejecución.
+- **Por qué LL es más lento:** el preset `selftest-spi` es Debug (`-Og`) y no expande del todo las inline de LL. No lo he medido en `-O2`.
+- `CalcPrescaler`, el peor de T3: 145 ciclos.
+- Pila de `Status_Task` con el selftest: high-water mark de 128 palabras libres de 512 (F1: 182; F0: 272), y baja con cada fase (§5.8).
+
+### 5.5 Desviaciones del plan
+
+| Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- |
+| Contrato de `spi_ll`: "valida llamando a `SPI_BM_Check*`"; la API de `spi_bm` está congelada desde `b4fa22d` (solo se añade) | Añadí a `spi_bm.h` `SPI_BM_CheckDmaPrepare` y `SPI_BM_CheckDmaStart` (`14ea027`): las comprobaciones que ya hacían `DmaPrepare` y `DmaStart`, que ahora las llaman. `spi_ll` valida con ellas sus llamadas de DMA | Sin ellas, las comprobaciones de DMA tendrían una segunda copia en `spi_ll` | **No pregunté antes, y §7 lo pide** ("una función pública que no está en el contrato del plan"). Me di cuenta al escribir este informe. El responsable lo aprobó después, el 2026-10-04, en el chat ("Keep them") |
+| Contrato de `spi_ll`: "Mismas operaciones que `spi_bm` (`SPI_LL_*`)" | `SPI_LL_CheckConfig`, `_Init`, `_Transfer`, `_TransferStartIt`, `_TransferIrq`, `_DmaPrepare`, `_DmaStart`, `_WaitEnd` y `_DmaEnd`. Reloj, `Deinit`, `TakeErrors`, `GetIRQn`, `GetDmaRequest`, `GetCaps`, `GetKernelSource`, `CheckTransfer` y las funciones puras se usan de `spi_bm`, sin envoltorio LL | Es lo que dice el plan para esas funciones ("se usan de `spi_bm`") | No consultado |
+| "Una constante LL desconocida se convierte en un valor BM fuera de rango" | Los campos LL de dos valores (polaridad, fase, orden, polaridad de SS) son `bool` o un bit en `spi_bm`, que no tienen valor fuera de rango. Una constante desconocida en cualquiera de ellos se convierte en `mode = 4` (`ERR_PARAM` en el sitio de los errores de campo). `nss_pulse` con `NSS_SOFT`, y `NSS_HARD_INPUT`, se convierten en `nss = 3` | Es la forma de dar `ERR_PARAM` en el orden de C6 sin otra validación en LL | No consultado |
+| "Escribe con funciones `static inline` de la cabecera LL (y `LL_SPI_WriteReg`/`ReadReg` donde ninguna inline escribe el registro entero)" | `CR1`, `CFG1`, `CFG2`, `IER` e `IFCR` con `LL_SPI_WriteReg`, incluido el segundo `CFG2` con `AFCNTR` (C11). Nunca uso `LL_SPI_ClearFlag_*`: son `SET_BIT` sobre `IFCR`, un RMW de un registro de solo escritura. El resto con las inline | Ninguna inline escribe esos registros enteros, y escribir `CFG2` campo a campo dejaría estados intermedios (p. ej. `MASTER` antes que `SSM`: MODF) | No consultado |
+| T6(c), control: "`TXPIE = 1` a mano con `SPE = 0`" | Con LL se repite en CM7 (SPI6, 2 IRQ espurias), pero no en CM4: el control no pasa por el driver, y el de F1 corre en la misma sesión (1 IRQ) | Es independiente del tier | No consultado |
+| B1 en F2 | Las líneas de B1 de CM7 dicen ahora `Init` y `Transfer`, sin `SPI_BM_`, porque la misma función mide los dos tiers | — | No consultado |
+| Encargo de F2: "sube `SPI_BM_BENCH_VERSION`" | La macro se llama `SPI_BENCH_VERSION` (`Common/Inc/spi_selftest.h`), y la del host `BENCH_VERSION`. Las dos pasan a 4 | No hay ninguna `SPI_BM_BENCH_VERSION` | — |
+
+### 5.6 Respuesta a la auditoría
+
+La de F1 está arriba, en su propia sección. De F2 todavía no hay auditoría.
+
+### 5.7 Erratas del plan encontradas
+
+Ninguna nueva en F2.
+
+### 5.8 Problemas abiertos y no ejercitado
+
+- **Fallo propio de proceso:** las dos funciones de `spi_bm.h` se añadieron sin la pregunta de §7 (§5.5).
+- **m1 no está ejercitado en la placa.** La prueba no para `CYCCNT` en medio de una guarda (no se escribe `DWT->CTRL` desde la prueba, y no hay depurador).
+- **La pila de `Status_Task` baja con cada fase:** 272, 182 y 128 palabras libres de 512. Las funciones de F2 con más pila son `f2_t1` (dos fotos de 50 palabras) y `t2ll_one` (dos de 8). Si F3 añade otro tanto, quedará poco margen. El tamaño de la pila es de producción y no lo toco (§2.2).
+- **T6 en CM4 con LL:** con 1024 tramas de 8 bits hubo 823 IRQ, no 1024. Cada IRQ sirve todos los paquetes que hay; con LL en CM4 a `-Og` a veces se juntan. T6(b) solo pide registrarlo.
+- **B1 de LL frente a BM:** medido solo en Debug (`-Og`).
+- **No ejercitado en F2:**
+  - `SPI_LL_TransferIrq` con `MODF` u `OVR`;
+  - `ERR_VERIFY` de LL;
+  - `keep_pins` con LL fuera de T2 y T1 (sin pines);
+  - T5(b)–(g), T8, T9, T11, T12 y T13 con LL (el plan no los pide en F2).
+- **Lo que sigue de F1:** sin transferencias que terminen en SPI2, SPI3 y SPI5 (R3-3); solo silicio rev V.
+
+### Constantes y funciones de `stm32h7xx_ll_spi.h` que usa `spi_ll`
+
+Cabecera del Cube con el que compila `prj_01` (`CUBE_DIR` → `02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7`, `STM32H7xx_HAL_Driver` en `e3c518e`). Es idéntica, byte a byte, a la copia de `00_docs_stm32h7`. Las líneas son las del `#define` o de la cabecera de la función.
+
+| Constante o función | Línea | Uso |
+| --- | --- | --- |
+| `LL_SPI_MODE_MASTER` | 187 | `CFG2` |
+| `LL_SPI_SS_LEVEL_HIGH` / `_LOW` | 196 / 197 | `CR1.SSI` inactivo |
+| `LL_SPI_SS_IDLENESS_00CYCLE` … `_15CYCLE` | 205–220 | `ss_idleness` (`MSSI`) |
+| `LL_SPI_ID_IDLENESS_00CYCLE` … `_15CYCLE` | 229–244 | `interdata_idleness` (`MIDI`) |
+| `LL_SPI_PROTOCOL_MOTOROLA` | 291 | `CFG2` (`SP = 000`) |
+| `LL_SPI_PHASE_1EDGE` / `_2EDGE` | 300 / 301 | `clock_phase` |
+| `LL_SPI_POLARITY_LOW` / `_HIGH` | 309 / 310 | `clock_polarity` |
+| `LL_SPI_NSS_POLARITY_LOW` / `_HIGH` | 318 / 319 | `nss_polarity` |
+| `LL_SPI_BAUDRATEPRESCALER_DIV2` … `_DIV256` | 327–334 | `baudrate` |
+| `LL_SPI_LSB_FIRST` / `LL_SPI_MSB_FIRST` | 342 / 343 | `bit_order` |
+| `LL_SPI_FULL_DUPLEX` / `LL_SPI_SIMPLEX_TX` | 351 / 352 | `transfer_direction` |
+| `LL_SPI_DATAWIDTH_4BIT` … `_32BIT` | 363–396 | `data_width` |
+| `LL_SPI_FIFO_TH_01DATA` … `_16DATA` | 405–420 | `fifo_threshold` |
+| `LL_SPI_CRC_8BIT` | 445 | `CFG1.CRCSIZE = 00111` (ES0445 2.22.4) |
+| `LL_SPI_NSS_SOFT` / `LL_SPI_NSS_HARD_OUTPUT` | 483 / 485 | `nss` |
+| `LL_SPI_WriteReg` / `LL_SPI_ReadReg` | 521 / 529 | `CR1`, `CFG1`, `CFG2`, `IER`, `IFCR`; read-back |
+| `LL_SPI_Enable` / `_Disable` / `_IsEnabled` | 555 / 567 / 578 | `SPE` (bajo PRIMASK) |
+| `LL_SPI_SetTransferSize` / `_GetTransferSize` | 799 / 811 | `TSIZE` y read-back |
+| `LL_SPI_StartMasterTransfer` | 997 | `CSTART` (bajo PRIMASK) |
+| `LL_SPI_GetTransferDirection` | 1324 | full duplex o no |
+| `LL_SPI_GetDataWidth` / `_GetFIFOThreshold` | 1437 / 1493 | tamaño del elemento, paquete |
+| `LL_SPI_IsActiveFlag_RXP` / `_TXP` / `_EOT` / `_MODF` / `_OVR` | 1698 / 1709 / 1731 / 1775 / 1786 | servicio y fin |
+| `LL_SPI_EnableDMAReq_RX` / `_DisableDMAReq_RX` / `_IsEnabledDMAReq_RX` | 2356 / 2367 / 2378 | `RXDMAEN` |
+| `LL_SPI_EnableDMAReq_TX` / `_DisableDMAReq_TX` / `_IsEnabledDMAReq_TX` | 2389 / 2400 / 2411 | `TXDMAEN` |
+| `LL_SPI_ReceiveData8` / `16` / `32` | 2450 / 2461 / 2477 | `RXDR` con el ancho del elemento |
+| `LL_SPI_TransmitData8` / `16` / `32` | 2489 / 2501 / 2518 | `TXDR` con el ancho del elemento |
+
+En el selftest se usan además `LL_SPI_SIMPLEX_RX` (353), `LL_SPI_HALF_DUPLEX_TX` (355) y `LL_SPI_NSS_HARD_INPUT` (484), como casos de rechazo de T1.
+
+Sin usar a propósito: `LL_SPI_ClearFlag_*` (desde la línea 1878), porque son `SET_BIT` sobre `IFCR`, y los setters de campo de `CFG2` (`LL_SPI_SetNSSMode`, `LL_SPI_EnableNSSPulseMgt`, `LL_SPI_EnableGPIOControl`…), porque escribirían `CFG2` por partes.
