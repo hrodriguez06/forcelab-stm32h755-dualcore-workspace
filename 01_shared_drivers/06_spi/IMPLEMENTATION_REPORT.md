@@ -274,3 +274,241 @@ Las filas de §5.3 que no aparecen aquí dan los mismos valores que en `008db8b`
 
 - La captura de la entrega anterior (`spi_f0_bench_008db8b.txt`) y la del auditor (`spi_f0_audit_bench_153d5b3.txt`) son del protocolo v1. No se tocan.
 - No empiezo F1 hasta que `AUDIT.md` diga que F0 pasa.
+
+## F1
+
+Plan: revisión 2 (`d9a9df7`). F1 empezó cuando `AUDIT.md` (parte 3, `6a55bb0`) dio F0 por buena.
+
+| Fase | Estado | Último commit | Captura |
+| --- | --- | --- | --- |
+| F1 | entregada para auditoría (el commit que añade esta sección) | `5c117ce` (código); evidencia en `81ac85c` | `03_firmware_templates/prj_01_template_dualcore/docs/spi_f1_bench_4142921.txt` |
+| F2 | sin empezar | — | — |
+| F3 | sin empezar | — | — |
+
+Qué hay en F1:
+
+- `01_shared_drivers/06_spi/spi_bm.{h,c}` y el target `stm32h7_driver_spi_bm`.
+- Los pasos de F1 del selftest en los dos núcleos (protocolo del banco v3): F1_NOPIN, J1_SPI6, J1_SPI1 y SPI4_AD2.
+- Los oráculos del host en `tools/spi_hw_check.py`, y un decodificador SPI nuevo en `tools/ad2.py` (solo funciones añadidas).
+
+La ejecución de entrega es `docs/spi_f1_bench_4142921.txt`: 29/29 comprobaciones del host, `FW VERDICT=PASS failures=0` y `HOST VERDICT=PASS`, sin aborto.
+
+Hay dos cosas que el plan no preveía:
+
+- **Un maestro sin SCK en su AF no termina ninguna transferencia en esta placa.** Por eso T9, T11 y B1 no corren donde decía el plan. El responsable decidió moverlos el 2026-10-03 (§5.5, §5.7).
+- **La regla 6 (`DSIZE = 4`) contradice el RM.** Seguí el RM, con la aprobación del responsable del 2026-10-03 (§5.7).
+
+### 5.1 Commits
+
+Rango de la entrega: `6a55bb0..` el commit que añade esta sección, en `driver/spi`.
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `30fdad8` | feat(spi): add spi_bm, the bare-metal tier of 06_spi | — |
+| `25426f8` | build(spi): add the stm32h7_driver_spi_bm target | — |
+| `67e471c` | feat(tools): add an SPI decoder for logic-analyzer captures to ad2.py | — |
+| `ef9b464` | test(prj_01): add the spi_bm selftest steps of 06_spi F1 (bench v3) | — |
+| `9f8d66f` | test(prj_01): run the F1 steps from spi_hw_check.py (protocol v3) | — |
+| `6fd75d4` | docs(prj_01): add the two F1 development captures of 06_spi | — |
+| `c41040a` | docs(spi): state in spi_bm.h that a transfer needs its SCK pin in AF | hallazgo propio (§5.7, E2) |
+| `35d36e3` | docs(spi): add the F1 evidence at c41040a | — |
+| `9c8f597` | test(prj_01): photograph every SPI register in T1 and run T7(b) up to 8192 frames | fallo propio: menos que el plan (§5.8) |
+| `4142921` | test(prj_01): add the T5(a) decoder control and the plan's 2-sample tolerances | fallo propio: menos que el plan (§5.8) |
+| `81ac85c` | docs(spi): add the F1 evidence at 4142921 | — |
+| `5c117ce` | docs(spi): correct six RM0399 line citations in comments | fallo propio (§5.8) |
+| (este) | docs(spi): add the F1 section of the implementation report | — |
+
+Notas sobre el orden:
+
+- **La evidencia es de `4142921`.** `5c117ce`, posterior, solo cambia comentarios: `git diff 4142921 5c117ce` son 6 líneas de comentario en `spi_bm.c` y `spi_selftest.c` de CM7.
+- **La evidencia de `c41040a` (`35d36e3`) se queda como está.** Es una ejecución que también dio PASS (28/28, `FW VERDICT=PASS`), pero de antes de `9c8f597` y `4142921`. Esos dos commits acercan el selftest y el host a la tabla de pruebas del plan (§5.8). No es la entrega.
+- **`6fd75d4` añade dos capturas de desarrollo**, hechas con el árbol sucio sobre `25426f8` (`--allow-dirty`). Son la fuente del hallazgo E2 y de la corrección del oráculo de T5(d) (§5.8).
+
+### 5.2 Build y tamaños
+
+Fuentes: `docs/spi_f1_build_all_4142921.txt`, `docs/spi_f1_selftest_build_4142921.txt`, `docs/spi_f1_werror_4142921.txt` y `docs/spi_f1_map_sizes_4142921.txt`.
+
+- `build_all -Clean` en `4142921`: 8/8.
+- `selftest-spi` desde un directorio vacío: 0 líneas `warning:` o `error:`.
+- `-Werror` (`selftest-spi`, `debug`, `release`, en directorios de scratch, `CMAKE_C_FLAGS:STRING=-Werror` en cada `CMakeCache.txt`): exit 0 y 0 avisos en los tres.
+
+| Imagen | .text | .data | .bss | Δ frente a 2481396 | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| prj_01 debug CM7 | 29304 | 132 | 55668 | 0 (y 0 en cada sección asignada frente a `8901b77`) | `build/debug/cm7_firmware.map` |
+| prj_01 debug CM4 | 3456 | 24 | 12560 | 0 | `build/debug/cm4_firmware.map` |
+| prj_01 release CM7 | 28356 | 132 | 55672 | 0 | `build/release/cm7_firmware.map` |
+| prj_01 release CM4 | 3112 | 24 | 12560 | 0 | `build/release/cm4_firmware.map` |
+
+| Objeto | Núcleo | .text | .data | .bss | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| `spi_bm.c.obj` | CM7 | 3420 | 0 | 0 | `build/selftest-spi/cm7_firmware.map` |
+| `spi_bm.c.obj` | CM4 | 3362 | 0 | 0 | `build/selftest-spi/cm4_firmware.map` |
+| `spi_ll.c.obj`, `spi_hal.c.obj` | — | no existen en F1 | — | — | ídem |
+| `spi_selftest.c.obj` (selftest) | CM7 | 35609 | 8 | 197775 | `build/selftest-spi/cm7_firmware.map` |
+| `spi_selftest_common.c.obj` (selftest) | CM7 | 1349 | 0 | 0 | ídem |
+| `dma_bm.c.obj` (02_dma, lo enlaza el selftest) | CM7 | 2064 | 0 | 0 | ídem |
+| `dma_hal.c.obj` (02_dma, lo enlaza el selftest) | CM7 | 852 | 0 | 96 | ídem |
+| `spi_selftest.c.obj` (selftest) | CM4 | 7147 | 4 | 32829 | `build/selftest-spi/cm4_firmware.map` |
+| `spi_selftest_common.c.obj` (selftest) | CM4 | 1305 | 0 | 0 | ídem |
+| `dma_bm.c.obj` (02_dma, lo enlaza el selftest) | CM4 | 1974 | 0 | 0 | ídem |
+
+En esta tabla, .text es la suma de las secciones de entrada `.text*` y `.rodata*`.
+
+- **La imagen `selftest-spi`** mide 79752/140/253556 en CM7 y 19596/28/45400 en CM4.
+- **El `.bss` del selftest de CM7** son sobre todo sus buffers:
+  - `.axi_ram`: `s_tx`/`s_rx` de 4096 palabras, y `s_big_tx`/`s_big_rx` de 65 536 B para las 65 535 tramas de T4;
+  - `.d3_ram`: los dos buffers de BDMA de 8192 medias palabras, que llenan los 32 KB;
+  - `.dma_buf`: 256 B.
+- **El de CM4** son `s_tx`/`s_rx` de 4096 palabras en SRAM2.
+
+### 5.3 Pruebas
+
+Las cifras salen de `docs/spi_f1_bench_4142921.txt`, salvo donde se indica otra captura:
+
+- Rev `4142921` e id `4312466b8fdd8b5e` en host, CM7 y CM4; `tree clean`.
+- Checklist confirmado por Hector antes de la ejecución.
+- Arranque en frío y sin depurador.
+- Protocolo v3; `REV_ID=0x2003`.
+- Relojes, según la HAL a partir de `HSE_VALUE`: CPU1 400 MHz; kernel de SPI1-3 200 MHz; SPI4/5 100 MHz; SPI6 100 MHz.
+
+Las filas de F0 (T0a, T0c, T0b) dan los mismos valores que en `efc1be8`. No se repiten.
+
+| ID | Tier | Núcleo | Resultado | Valor medido | Control negativo: valor | Oráculo | Captura |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| T1 | BM | CM7 | PASS | 52 casos en SPI2, SPI4, SPI5 y SPI6, 0 con otro estado. Los 4 grupos (sin `Init`; transferencia en `TX_ONLY`; `SPE=1` a mano, releído 1; `AFCNTR=1` vigente con otro `CPOL`/`SSIOP`) dejan la foto intacta: `0xF`. La foto tiene 11 registros por instancia (todos menos `TXDR`/`RXDR`) y los seis de enable de `RCC_C1`/`RCC_C2` | Un `SPI_BM_Init(SPI2)` válido cambia la foto (1) | estado esperado escrito a mano por caso; foto de registros | `spi_f1_bench_4142921.txt` |
+| T1 | BM | CM4 | PASS | 35 casos en SPI1, 0 con otro estado; foto intacta en los 4 grupos (`0xF`) | Un `Init` válido cambia la foto (1) | ídem | ídem |
+| T2 | BM | CM7 | PASS | SPI2 y SPI3: 40 960 configuraciones cada uno; SPI4, SPI5 y SPI6: 30 720 cada uno (sin 32 bits). `CFG1`/`CFG2`/`CR1` difieren en 0, `Deinit` falla en 0, y `I2SCFGR`/`CRCPOLY`/`UDRDR` fuera de reset en 0 | La imagen esperada con `MASTER` invertido se detecta: 1 de 1 por instancia | `sst_t2_expect()`: posiciones de bit escritas a mano desde RM0399 53.11.1–53.11.4 | ídem |
+| T2 | BM | CM4 | PASS | SPI1: 40 960 configuraciones, 0 diferencias, 0 `Deinit` fallidos, 0 fuera de reset | Detectado (1) | ídem | ídem |
+| T2 `GetCaps` | BM | CM7 | PASS | SPI1..6 frente a la tabla 435 escrita a mano (32/16 bits, FIFO 16/8 B, campo de kernel, DMAMUX): difieren `0x00` | — | tabla escrita a mano | ídem |
+| T3 | BM | CM7 + host | PASS | 202 vectores de `CalcPrescaler` y 102 de `CalcGuardCycles`, recalculados en el host desde las reglas de cálculo del plan: 0 diferencias | El host compara con `MBR + 1`: marca 153 de los 153 vectores OK | Python con enteros (`calc_prescaler`, `calc_guard`) | ídem |
+| T4 | BM | CM7 (SPI6) + host | PASS | 896 transferencias en J1 a /8 (12,5 MHz): modos 0–3 × {4, 5, 7, 8, 9, 15, 16} × MSB/LSB × {1, 2, 3, FIFO−1, FIFO, FIFO+1, 255, 4096} × umbral {1, máx}. 0 con estado, discrepancia o `Init`/`Deinit` fallido. La más larga dura 2 098 966 ciclos, dentro de su `max_cycles`. Más 65 535 tramas de 8 bits: estado 0, 0 discrepancias. Host: 897 líneas, CRC-32 de RX = CRC del patrón xorshift32 de la semilla, y cobertura completa en los 7 tamaños | MISO a PB4 con pull-up y pull-down, 255 tramas de 4/8/16 bits: RX = todo unos / todo ceros por CRC. Las discrepancias son las que calcula el host desde la semilla (p. ej. 4 bits arriba 242, 8 bits abajo 253) | cable + CRC-32 en el host | ídem |
+| T4 | BM | CM4 (SPI1) + host | PASS | 1408 transferencias a /16 (12,5 MHz), con además {17, 24, 31, 32} bits; 0 fallidas. Host: 1408 líneas, sin diferencias; cobertura completa en los 11 tamaños | PB4 arriba/abajo, 4/8/16/32 bits: las discrepancias coinciden con las del host (p. ej. 32 bits 255/255) | ídem | ídem |
+| T5(a) | BM | CM7 (SPI4) + host | PASS | 32 capturas LA a 100 MS/s: modos 0–3 × {4, 8, 13, 16} × MSB/LSB, SS por hardware. El host decodifica MOSI y lo compara con la semilla: 0 fallidas. SCK en reposo = `CPOL`; SS activo en cada flanco de muestreo y en un solo intervalo | Cada captura decodificada con el `CPHA` contrario y con el orden contrario: las dos encuentran discrepancias en 32 de 32 (p. ej. a0: 27 y 25) | `ad2.spi_decode()` en el host | ídem |
+| T5(b) | BM | CM7 + host | PASS | `SSIOP=1`: SS activo alto en los flancos y bajo antes de la transferencia; tramas correctas | El caso `SSIOP=0` es (a) | ídem | ídem |
+| T5(c) | BM | CM7 + host | PASS | `NSS_HW_PULSE`, `midi` 2: un intervalo de SS activo por trama; tramas correctas | — | ídem | ídem |
+| T5(d) | BM | CM7 + host | PASS | Retardo(k) − retardo(0), en muestras, frente a k × el periodo de SCK medido en la misma captura (± 2). `mssi` 1/4/15: 16 / 63 / 236, esperado 15,8 / 63,1 / 237,9. `midi` 1/4/15: 16,0 / 63,2 / 237,0, esperado 15,8 / 63,1 / 237,5. Las 8 capturas decodifican bien | — (el plan no lo pide) | LA, periodo medido dentro de las tramas | ídem |
+| T5(e) | BM | CM7 + host | PASS | `keep_pins=1`, SCK con pull-up frente a `CPOL=0`: DIO4 = 0 entre dos transferencias | `keep_pins=0`: DIO4 = 1 (sigue al pull) | DIO del AD2 | ídem |
+| T5(f) | BM | CM7 | PASS | Full duplex, PE13 con pull-up: 16 tramas, 0 distintas de `0xFF`. Con pull-down: 0 distintas de `0x00`. Estado 0 | — | RX frente al pull | ídem |
+| T5(g) | BM | CM7 + host | PASS | f(SCK)/f(MCO1) para /4../256 frente a 100 MHz / 2^(MBR+1) / 1 MHz, ± 0,5 %: entre −132 y +274 ppm. MCO1 = HSE/8 (`0x00A00000`) durante el paso; `RCC_CFGR` antes `0x0000001B`, después `0x0000001B` | — | MCO1 en DIO14, misma captura | ídem |
+| T6 | BM | CM7 (SPI6) | PASS | 8 y 16 bits, {1, FIFO+1, 1024} tramas: 0 fallidas. IRQ hasta el fin: 1/9/1024 (8 bits) y 1/5/1024 (16 bits). (c) 0 IRQ en los 10 ms tras cada fin, con `SPE = 0` | `TXPIE = 1` a mano con `SPE = 0`: 2 IRQ espurias (≥ 1) | ISR de prueba + CRC en el host | ídem |
+| T6 | BM | CM4 (SPI1) | PASS | 8/16/32 bits, {1, FIFO+1, 1024}: 0 fallidas; IRQ 1/17/1024, 1/9/1024, 1/5/1024; (c) 0 | 1 IRQ espuria (≥ 1) | ídem | ídem |
+| T7(a) | BM | CM4 | PASS | SPI1 con DMA2 streams 0/1 (`dma_bm`), 8/16/32 bits, {1, 2, 17, 255, 4096} tramas: 0 fallidas (CRC también en el host) | `RXDMAEN = 0`, 255 tramas: `WaitEnd` = 8 (`ERR_OVERRUN`), 255 palabras RX con el centinela | cable | ídem |
+| T7(b) | BM | CM7 | PASS | SPI6 con BDMA canales 0/1 (`dma_hal`, `BDMA_REQUEST_SPI6_RX/TX`), buffers en `.d3_ram`, 8/16 bits, {1, 9, 255, 8192} tramas: 0 fallidas | `RXDMAEN = 0`: `ERR_OVERRUN`, 255 con centinela | cable | ídem |
+| T7(c) | BM | CM7 + host | PASS | SPI4 solo TX con DMA1 stream 0, 8 y 16 bits: 2 capturas decodificadas sin discrepancias | — | LA | ídem |
+| T7(d) | BM | CM7 | PASS | `GetDmaRequest` RX/TX de SPI1..6 = `DMA_REQUEST_SPIx_RX/TX` (y `BDMA_REQUEST_SPI6_RX/TX`) de `stm32h7xx_hal_dma.h`; `GetIRQn` = `SPIx_IRQn`. Difieren `0x00` | — | constantes de la HAL y de CMSIS | ídem |
+| T8 | BM | CM7 (SPI6) | PASS | 1024 tramas de 8 y 16 bits, /256 … /2, pines `VERY_HIGH`. Pasa en todas (máscara `0xFF`): obligatorio hasta /4 = 25 MHz; registrado /2 = 50 MHz | MISO a PB4 con pull-up a /2: 1021 discrepancias | cable + CRC en el host | ídem |
+| T8 | BM | CM4 (SPI1) | PASS | 8 y 32 bits: pasa en todas (máscara `0xFF`); obligatorio hasta /8 = 25 MHz; registrado /4 = 50 MHz y /2 = 100 MHz | PB4 a /2: 1022 discrepancias | ídem | ídem |
+| T9 | BM | CM7 (SPI6, SPI4) | PASS | Solo TX, /16 y /64, 8 y 16 bits, t(2000) − t(1000) frente a 1000 × `DSIZE` × 2^(MBR+1) ticks de kernel. SPI6: −179, −74, +3 y −6 ppm. SPI4: −109, −62, −7 y −3 ppm | La misma cuenta con `MBR + 1`: unos −500 000 ppm, fuera | `CYCCNT` | ídem |
+| T9 | BM | CM4 (SPI1) | PASS | −335, −453, +7 y −9 ppm | ídem | ídem | ídem |
+| T10 | BM | CM7 | PASS | `GetKernelSource` SPI1..6 = 0 0 0 0 0 0; `RCC_D2CCIP1R` y `RCC_D3CCIPR` = 0 leídos directamente | — (el control es T9) | registro leído directamente | ídem |
+| T11(a) | BM | CM7 (SPI2) | PASS | `SSI` activo a mano: `SR=0x00001202` (MODF). `CheckTransfer` = 7 (`ERR_MODF`) y MODF sigue puesto. `Transfer` = 7; después `SPE` 0, `MASTER` 0 y MODF borrado. `Deinit` 0 + `Init` 0: `MASTER` 1 y `CheckTransfer` 0 | `SSI` inactivo: `CheckTransfer` 0 y MODF 0 | registros leídos directamente | ídem |
+| T11(b) | BM | CM7 (SPI6) | PASS | OVR a mano: 32 tramas con la RxFIFO sin leer. `SR=0x0000905F` (`EOT`, `OVR`); `TakeErrors` = `0x040`; después `SR=0x0000901F` (OVR borrado) | — | registros | ídem |
+| T12(a) | BM | CM7 (SPI6) | PASS | 10 000 transferencias de 1 trama a /256 sin pausa: 0 `ERR_TIMEOUT`, 0 erróneas | A mano, `CSTART` con `SPE = 1` justo después de `EOT`: 20 bloqueos en 40 transferencias (reproducido; decisión 6: solo se registra) | `CYCCNT` | ídem |
+| T12(b) | BM | CM7 (SPI4) + host | PASS | `CPHA = 0`, /256, 1 trama: último pulso alto de SCK 126 muestras frente a 126,4 (medio periodo medido en la trama), ± 2 | A mano, `SPE = 0` sin guarda: 2 muestras (se registra). En las capturas de desarrollo fue 153 y 151 muestras (§5.8) | LA | ídem |
+| T13 | BM | CM7 + CM4 | PASS | SPI2 transmite con DMA1 stream 1 (circular, 64 B), 65 535 tramas a /256. CTSIZE 63583. CPU2 `DisableClock(SPI2)` (`RCC_C2` SPI2EN 0): 30 ms después 60653, sigue. CPU2 `EnableClock` + `DisableClock`: `RCC_C2` 0 y `RCC_C1` 1; 30 ms después 57723, sigue | CPU1 `DisableClock(SPI2)`: los dos bancos a 0; 30 ms después (con el reloj de vuelta) 57723, igual que antes: parado | `CTSIZE` leído por CM7; `RCC_C1`/`RCC_C2` `APB1LENR` | ídem |
+| T14 | BM | CM7, CM4 | PASS | `Deinit` 0 y registros iguales a la imagen de reset del RM (`0x00`) en SPI1..6, tras F1_NOPIN y tras cada paso con pines. J1 en entrada (`MODER` `0x00`) en los dos núcleos. S5 pasa con PE11..PE14 aún en AF5 tras el `Deinit` de SPI4, y otra vez con los pines en entrada | Instancia aún inicializada: difiere `0x0D` (SPI2, SPI4, SPI6) | reset de RM0399 53:3188, 3285, 3309, 3442, 3544, 3815, 3902, 3923 escrito a mano | ídem |
+| Sin Digital Out | — | host | PASS | Enable de Digital Out releído en las 12 fronteras de paso: `0x0000` en todas | — | `FDwfDigitalOutEnableGet` | ídem |
+| Veredicto | — | CM7 + host | PASS | `bench completed without abort`; CM4 `timeout 0, aborts 0`; `FW VERDICT=PASS failures=0`; 29/29; `HOST VERDICT=PASS` | — | — | ídem |
+
+Notas:
+
+- **T4, T6, T7 y T8 tienen dos oráculos.** El firmware compara RX con TX. El host recalcula, línea por línea, el CRC-32 y la cobertura desde la semilla impresa, sin usar lo que dice el firmware.
+- **Las comprobaciones de S5 del host** registran PASS porque `buschk()` lanza `BenchAbort` si falla. Pasa lo mismo que en F0.
+
+### 5.4 Medidas (B1)
+
+De `docs/spi_f1_bench_4142921.txt`, con `PRIMASK` puesto durante la medida de `Init` y `Transfer`.
+
+| Función | CM7 (400 MHz) | CM4 (200 MHz) |
+| --- | --- | --- |
+| `SPI_BM_Init` (en frío, tras `Deinit`) | 453 ciclos (SPI6) | 426 ciclos (SPI1) |
+| `SPI_BM_Transfer` de 1 trama a /2, solo TX | 1330 ciclos (SPI6) | 1376 ciclos (SPI1) |
+| `SPI_BM_TransferIrq`, por llamada (T6) | mín. 389, máx. 751 (SPI6) | mín. 335, máx. 504 (SPI1) |
+| `SPI_BM_CalcPrescaler`, el peor de T3 | 98 ciclos | — |
+
+- **Frecuencia más alta que pasó en T8:** SPI6 a /2 = 50 MHz (8 y 16 bits) y SPI1 a /2 = 100 MHz nominales (8 y 32 bits). Las dos con 1024 tramas por el cable de J1 y pines `VERY_HIGH`. Por encima de 25 MHz solo se registra (D5).
+- **Pila de `Status_Task` con el selftest:** high-water mark de 182 palabras libres de 512 (en F0, 272).
+- **Tamaños:** §5.2.
+
+### 5.5 Desviaciones del plan
+
+| Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- |
+| Contrato: `guard_cycles` en `SpiBm_Config_t` | `guard_cycles` se pasa donde se aplica: `SPI_BM_Transfer(spi, tx, rx, frames, guard_cycles, max_cycles)`, `SPI_BM_DmaEnd(spi, guard_cycles)` y `SpiBm_Xfer_t.guard_cycles`. Cada uno rechaza 0 (`ERR_PARAM`) | Las funciones que aplican la guarda no reciben la configuración, y C7 prohíbe guardarla en RAM | Sí: el responsable, en el chat, 2026-10-03 ("Pasarla donde se usa") |
+| T9: CM7 en SPI2, SPI3 y SPI5, y CM4 en SPI1, "motor sin pines" | T9 en SPI6 y SPI4 (CM7) y en SPI1 (CM4), con sus pines en AF: SPI6 y SPI1 por J1, SPI4 por el bus del AD2 en SPI4_AD2, con `NSS_SOFT` para que PE11 no se conduzca | Sin SCK en AF el maestro no termina (§5.7, E2) | Sí: el responsable, 2026-10-03 ("Move to pinned") |
+| T11 en SPI2 (R2-4): `Transfer` → `ERR_MODF`; la recuperación se comprueba con una "transferencia posterior correcta"; (b) en SPI2 | (a) sigue en SPI2. El control y la recuperación se leen con `SPI_BM_CheckTransfer` y `MASTER`, sin transferir. El fallo usa `Transfer`, que vuelve antes de arrancar nada. (b) va en SPI6 por J1, y además exige `EOT` | Igual: en SPI2 ninguna transferencia termina | Sí, en la misma decisión |
+| B1: ciclos de `Transfer` de 1 trama (sin instancia fijada) | En SPI6 (CM7) y SPI1 (CM4), con los pines de J1 en AF | Igual | Sí, en la misma decisión |
+| T5(d) "retardo(k) − retardo(0) = k periodos ± 2 muestras"; T12(b) "medio periodo ± 2 muestras" | El periodo es el de SCK **medido dentro de las tramas de la misma captura**, no el nominal de 2^(MBR+1) muestras | El HSE de la placa viene del MCO del ST-LINK, ~1,3 % rápido. Con el periodo nominal, `mssi = 15` daba 236 frente a 240 ± 3 en la segunda captura de desarrollo (§5.8) | No consultado |
+| T5(a) "flancos de SCK = 2 × DSIZE × tramas"; T5(c) "tramas − 1 pulsos" | (a) Cuento los flancos de muestreo (= `DSIZE` × tramas), que son la mitad de todos. (c) Cuento los intervalos de SS activo con datos (= tramas); entre ellos hay tramas − 1 pulsos inactivos | Son la misma condición contada de otra forma | No consultado |
+| T5: captura LA disparada por un flanco de SCK o de SS (el plan no lo fija) | El LA se dispara con el flanco de subida de HOST_REQ, que da el propio host, con 50 muestras de antes. El firmware arranca la transferencia al ver HOST_REQ alto | Un solo disparo vale para los cuatro modos y las dos polaridades de SS. El AD2 no conduce nada más | No consultado |
+| `SPI_BM_CheckTransfer` y las llamadas que transfieren | Un MODF ya presente cuando empiezan es `ERR_MODF`. Las llamadas que pueden escribir lo borran (`IFCR.MODFC`); `CheckTransfer` solo lee | Regla 7: "`MODF` → `ERR_MODF`". Sin esto, una transferencia con un MODF pendiente se quedaría en `ERR_BUSY` (`MASTER = 0`) sin decir por qué | No consultado |
+| Protocolo v2 | v3: cuatro pasos nuevos en la tabla común. Hasta cuatro argumentos por comando a CPU2 (`cm4_send4`). CPU2 espera hasta 300 s un comando (`SST_CM4_IDLE_TIMEOUT_MS`, antes 60 s). El handshake de cierre de un paso de F1 espera hasta 300 s (`F1_STEP_TIMEOUT_S`) | Los pasos de F1 imprimen durante decenas de segundos a 115200 Bd | No consultado |
+
+### 5.6 Respuesta a la auditoría
+
+Todavía no hay auditoría de F1.
+
+### 5.7 Erratas del plan encontradas
+
+| Sección del plan | Qué dice | Qué es correcto | Fuente (53:<línea>, ES0445 §, página del SDK) |
+| --- | --- | --- | --- |
+| E1. Regla 6 (tramas, accesos y umbral) y T4 | "Con `DSIZE = 4` un acceso de 8 bits empaqueta dos tramas (53:772-776): el driver las combina por pares" | Las tramas de hasta 8 bits solo se empaquetan con accesos de 16 o 32 bits. Un acceso de 8 bits lleva una trama. La figura 666 muestra cuatro tramas de 4 bits en un acceso de 32 bits, una por byte, y la RxFIFO guarda N tramas de ≤ 8 bits en N bytes. 53:775 ("If the access is a multiple of the configured data size, data packing is applied automatically") es la regla general. Para tramas de ≤ 8 bits, 53:1158-1165 la concreta: solo con accesos de 16 o 32 bits. Leí ese párrafo y la figura como mandatos sobre la regla general. El driver hace un acceso de 8 bits por trama y no empaqueta. T4 prueba `DSIZE = 4` con número par e impar de tramas (1, 2, 3, 7, 8, 9, 255, 4096) | 53:1158-1165; 53:1204-1226 (figura 666); 53:927-929. El responsable aprobó seguir el RM el 2026-10-03 |
+| E2. T9 ("motor sin pines"), T11 (R2-4: SPI2 "sin pines", "transferencia posterior correcta"), B1 | Que un maestro sin pines termina sus transferencias | En esta placa (STM32H755, rev V, `REV_ID=0x2003`), un maestro cuyo SCK no está en su AF **nunca pone `EOT` y no recibe nada**. SPI2, SPI3, SPI5 y SPI1 con los pines de J1 en entrada se quedaron en `CTSIZE = 1`, y `Transfer` devolvió `ERR_TIMEOUT` al agotar `max_cycles`. SPI2 envió 31 de 32 tramas a una RxFIFO sin leer y no dio OVR (`SR=0x00010012`). La misma transferencia en SPI4, con sus pines en AF5, terminó. T13 pasó en SPI2 sin pines porque solo mira `CTSIZE`. No está en RM0399 cap. 53 ni en ES0445 | Observación propia: `docs/spi_dev_f1_bench_25426f8-dirty.txt` (19 fallos de firmware, todos de este tipo). Contrato anotado en `spi_bm.h` (`c41040a`) |
+| E3. T6(c) | "en reset `SR.TXP = 1`, 53:3597" | 53:3597 es el título de la sección del registro. El valor de reset `0x0000 1002` está en 53:3599. Es una errata de cita, no de contenido | 53:3599 |
+| E4. R2-2 | "en esclavo no hay fallo de modo" (el plan cita 53:1474-1475 en la regla) | La frase está en 53:1475-1476. Errata de cita | 53:1475-1476 |
+
+### 5.8 Problemas abiertos y no ejercitado
+
+- **Fallos propios: la primera entrega (`c41040a`) hacía menos de lo que pide la tabla de pruebas.** Lo vi al cruzar fila por fila la tabla del plan con lo ejecutado, antes de entregar. No lo vio ningún auditor. Lo corregí y repetí la ejecución de entrega en `4142921`:
+  - T1: la foto no tenía `SR`, `TXCRC` ni `RXCRC` (corregido en `9c8f597`).
+  - T7(b): llegaba a 4096 tramas, no a 8192. Lo había reducido para dejar margen en `.d3_ram` (corregido en `9c8f597`).
+  - T5(a): faltaba el control del decodificador, con el `CPHA` y el orden contrarios (corregido en `4142921`).
+  - T5(d) y T12(b): la tolerancia era ± 3 muestras y no ± 2 (corregido en `4142921`).
+  - La captura `spi_f1_bench_c41040a.txt` queda como registro de aquella ejecución.
+- **Fallo propio: citas del RM.** Seis comentarios citaban líneas equivocadas de RM0399 (corregido en `5c117ce`; detalle en el mensaje del commit). Uno es el número de tramas de la RxFIFO, que citaba 53:950-953 en vez de 53:927-929. El mensaje de `30fdad8` repite esa cita mala y no se puede cambiar.
+- **Margen de T5(d):** `mssi = 15` dio 236 muestras frente a 237,9 ± 2. Pasó por 0,1 muestras. El retardo se cuenta en muestras enteras, y el periodo esperado sale de una media.
+- **Control de T12(b), sin guarda:**
+  - dos capturas de desarrollo: 153 y 151 muestras;
+  - dos ejecuciones de entrega: 2 muestras.
+  - Medio periodo es unas 126 muestras. Con 2 muestras el último pulso sale asimétrico (2.22.5 reproducido); con 151–153 es más largo que medio periodo.
+  - No sé qué cambia entre unas ejecuciones y otras. El control es "solo registro" (decisión 6).
+- **Control de T3:** comprueba que el oráculo distingue en `CalcPrescaler` (`MBR + 1`). En `CalcGuardCycles` no hay un esperado alterado a propósito.
+- **No ejercitado en F1:**
+  - ninguna transferencia que termine en SPI2, SPI3 o SPI5 (E2). SPI2 solo transmite por DMA en T13, sin `EOT`;
+  - la imagen que deja la HAL cruda en T2 (el plan la pone en CM7). Necesita `HAL_SPI_MODULE_ENABLED`, que según la decisión 7 entra en F3;
+  - `ERR_VERIFY` y el camino de `CYCCNT` parado (C13). `ERR_TIMEOUT` solo salió sin querer en la primera captura de desarrollo;
+  - `MODF` y `OVR` servidos dentro de `SPI_BM_TransferIrq`;
+  - `keep_pins` solo en SPI4 con `CPOL = 0`;
+  - 65 535 tramas solo en SPI6 con 8 bits por sondeo;
+  - MISO de SPI4 con datos reales: el AD2 no conduce (D6), así que la RX de SPI4 solo se ve como el nivel del pull (T5(f));
+  - B1 mide `TransferIrq` por llamada, no por tipo de evento;
+  - silicio distinto de la revisión V.
+- **Árbol sucio en desarrollo:** las dos capturas de `6fd75d4` son de un árbol sin commitear sobre `25426f8`. Las cito solo como fuente de E2 y del cambio de oráculo de T5(d), no como evidencia de la entrega.
+
+### Tabla de capacidades (regla 2 del plan)
+
+Es la de `k_spi[]` en `spi_bm.c`. Cada valor lleva la línea del `.txt` del RM de la que sale, comprobada antes de entregar (RM0399 rev 4: `00_docs_stm32h7/docs/peripherals/`). Ninguna celda difiere del plan.
+
+| Instancia | Bus, bit de enable | Dominio | Trama máx. | FIFO | Kernel | DMAMUX: RX / TX | IRQn | Líneas del RM |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SPI1 | APB2, bit 12 | D2 | 32 | 16 B | SPI123SEL | 1: 37 / 38 | 35 | 53:56, 53:68-69; 09:7419 (`RCC_APB2ENR`), 09:7542 (SPI1EN); 09:4653; 18:127-128 |
+| SPI2 | APB1L, bit 14 | D2 | 32 | 16 B | SPI123SEL | 1: 39 / 40 | 36 | 53:56, 53:68-69; 09:7106 (`RCC_APB1LENR`), 09:7283 (SPI2EN); 09:4653; 18:129-130 |
+| SPI3 | APB1L, bit 15 | D2 | 32 | 16 B | SPI123SEL | 1: 61 / 62 | 51 | 53:56, 53:68-69; 09:7106, 09:7277 (SPI3EN); 09:4653; 18:98-99 |
+| SPI4 | APB2, bit 13 | D2 | 16 | 8 B | SPI45SEL | 1: 83 / 84 | 84 | 53:56, 53:68-69; 09:7419, 09:7536 (SPI4EN); 09:4643; 18:130-131 |
+| SPI5 | APB2, bit 20 | D2 | 16 | 8 B | SPI45SEL | 1: 85 / 86 | 85 | 53:56, 53:68-69; 09:7419, 09:7516 (SPI5EN); 09:4643; 18:132-133 |
+| SPI6 | APB4, bit 5 | D3 | 16 | 8 B | SPI6SEL | 2: 11 / 12 (BDMA) | 86 | 53:56, 53:68-69; 09:7577 (`RCC_APB4ENR`), 09:7690 (SPI6EN); 09:4802; 18:233-234 |
+
+- **Tabla 435:** 53:53-71.
+- **Kernel:** SPI123SEL `RCC_D2CCIP1R[14:12]`, SPI45SEL `RCC_D2CCIP1R[18:16]`, SPI6SEL `RCC_D3CCIPR[30:28]`.
+- **DMAMUX1:** tabla 126 (las peticiones de SPI4/SPI5 están en la segunda columna de 18:130-133). **DMAMUX2:** tabla 130.
+- **IRQn:** `stm32h755xx.h`.
+- **Contraste en el banco:** T2 `GetCaps` frente a la tabla escrita a mano, y T7(d) frente a las constantes de la HAL y de CMSIS.
+
+### Decisiones abiertas usadas en F1
+
+| # | Opción usada | Consultada |
+| --- | --- | --- |
+| 1 | `SpiBm_Status_t` en BM | Opción por defecto (cabecera del plan, 2026-10-03) |
+| 2 | J1 en D11–D12 | Ídem; T0c en cada sesión |
+| 4 | CM7: SPI2–SPI6; CM4: SPI1 | Ídem |
+| 6 | Controles de T12 solo registrados: 2.22.1 reproducido (20 bloqueos en 40); 2.22.5, 2 muestras en la entrega | Ídem |
