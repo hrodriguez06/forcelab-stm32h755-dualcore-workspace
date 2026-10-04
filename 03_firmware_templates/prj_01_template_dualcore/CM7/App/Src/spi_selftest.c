@@ -131,6 +131,10 @@ static bool spi4_clocked(void)
     return (RCC_C1->APB2ENR & RCC_APB2ENR_SPI4EN) != 0U;
 }
 
+/* Every flag of SPI_IFCR, written once (IFCR is write-only). */
+#define SPI_IFCR_ALL   (SPI_IFCR_EOTC | SPI_IFCR_TXTFC | SPI_IFCR_UDRC | SPI_IFCR_OVRC | SPI_IFCR_CRCEC | \
+                        SPI_IFCR_TIFREC | SPI_IFCR_MODFC | SPI_IFCR_TSERFC | SPI_IFCR_SUSPC)
+
 /* ---- S2: safe state ------------------------------------------------------------------ */
 
 /* Every wired pin and the four J1 pins in input without pull (PE2 with
@@ -190,9 +194,14 @@ static void bench_safe(void)
 
     if (spi4_clocked())
     {
+        /* SPE = 0 with SSI = 1 (inactive, SSIOP = 0), and SSI cleared only after
+           CFG2 = 0 (slave): a master with SSM = 1 and SSI active is a mode
+           fault (RM0399 53:1464-1476), and a latched MODF blocks SPE (53:3280). */
         SPI4->IER  = 0U;
-        SPI4->CR1  = 0U;
+        SPI4->CR1  = SPI_CR1_SSI;
         SPI4->CFG2 = 0U;
+        SPI4->CR1  = 0U;
+        SPI4->IFCR = SPI_IFCR_ALL;
         __DSB();
     }
 
@@ -848,12 +857,22 @@ static void step_t0c(void)
 }
 
 /* SPI4 raw state for the S13 cases (the selftest, not a driver: F0 has none).
-   Written only with the four SPI4 pins in input, except where a test says. */
+   Written only with the four SPI4 pins in input, except where a test says.
+   Order: SPE = 0 with SSI = 1 (inactive: SSIOP is 0 in every configuration
+   of this selftest; CFG2 is protected while SPE = 1), then CFG2, then the
+   requested SSI, then every flag cleared, then SPE if asked. So no write
+   order makes a master with SSM = 1 see SSI active: that is a mode fault,
+   which clears MASTER and, while MODF stays set, keeps SPE from being set
+   (RM0399 53:1464-1476, 53:3280). In the first run
+   (docs/spi_f0_bench_65e19f7.txt) CR1 = 0 was written before CFG2 = 0, and
+   the "SPE=1" case of T0b(e) then read SPE back as 0. */
 static void spi4_set(uint32_t cr1, uint32_t cfg2)
 {
     SPI4->IER  = 0U;
-    SPI4->CR1  = cr1 & ~SPI_CR1_SPE;       /* SPE = 0 first: CFG2 is protected while SPE = 1 */
+    SPI4->CR1  = SPI_CR1_SSI;
     SPI4->CFG2 = cfg2;
+    SPI4->CR1  = cr1 & ~SPI_CR1_SPE;
+    SPI4->IFCR = SPI_IFCR_ALL;
     SPI4->CR1  = cr1;
     __DSB();
 }
@@ -1007,12 +1026,16 @@ static void step_t0b_s13(void)
     const bool clk_was_on = spi4_clocked();
     RCC->APB2ENR |= RCC_APB2ENR_SPI4EN;      /* CPU1's bank (RM0399 9.5.10) */
     (void)RCC->APB2ENR;
+    LOG("T0B(e) SPI4 at the start of the step: CR1=0x%08lX CFG2=0x%08lX SR=0x%08lX (MODF %lu)",
+        (unsigned long)SPI4->CR1, (unsigned long)SPI4->CFG2, (unsigned long)SPI4->SR,
+        (unsigned long)((SPI4->SR & SPI_SR_MODF) != 0U));
 
     PortSnap_t g0;
     PortSnap_t g1;
     port_snap(&g0);
     uint32_t bad_state = 0U;
     uint32_t spe_seen = 0U;
+    uint32_t spe_sr = 0U;
     for (uint32_t i = 0U; i < NCASES(k_s13_cases); i++)
     {
         const S13Case_t *c = &k_s13_cases[i];
@@ -1022,6 +1045,7 @@ static void step_t0b_s13(void)
         if ((c->cr1 & SPI_CR1_SPE) != 0U)
         {
             spe_seen = SPI4->CR1 & SPI_CR1_SPE;   /* the case is only a case if SPE really is 1 */
+            spe_sr   = SPI4->SR;
         }
         if (c->clk == 0U)
         {
@@ -1045,7 +1069,8 @@ static void step_t0b_s13(void)
     port_snap(&g1);
     const bool untouched = port_snap_eq(&g0, &g1);
     LOG("T0B(e) SPI4 cases: SPE=1 (read back %lu), AFCNTR=1, MASTER=0 with CPOL, clock off; pin cases: AF6, AF1, PE8, "
-        "PE10, PE15, PE9, PE12 output, PE2, PE6, SPI4 with PE10, PA5 AF8", (unsigned long)spe_seen);
+        "PE10, PE15, PE9, PE12 output, PE2, PE6, SPI4 with PE10, PA5 AF8; SR in the SPE case 0x%08lX",
+        (unsigned long)spe_seen, (unsigned long)spe_sr);
     verdict((bad_state == 0U) && (bad_pins == 0U) && (spe_seen != 0U) && untouched,
             "T0B(e) S13 claim: %lu SPI4 states and %lu pin cases refused, accepted by mistake 0x%lX / 0x%04lX, "
             "GPIO regs untouched %u", (unsigned long)NCASES(k_s13_cases), (unsigned long)NCASES(k_s13_pin_refuse),
