@@ -182,3 +182,95 @@ Antes de F1 pregunto al responsable cómo quiere que se haga: `SSI` antes de `CF
 ## Tabla de capacidades
 
 Entra en F1 (regla 2 del plan; instrucciones §6). En F0 no existe.
+
+## Respuesta a la auditoría 1 (F0, partes 1 y 2; plan revisión 2)
+
+Auditoría en `AUDIT.md`: parte 1 en `f7dc54f`, parte 2 en `b688884` (B1). La captura del auditor es `docs/spi_f0_audit_bench_153d5b3.txt`. Desde `d9a9df7` el plan está en la revisión 2 (D9), y estas correcciones la siguen. P1 queda resuelto en la revisión 2 (R2-1, R2-2) y se aplica en F1, así que aquí no se contesta.
+
+| Fase | Estado | Último commit | Captura |
+| --- | --- | --- | --- |
+| F0 | entregada para auditoría (el commit que añade esta sección) | `efc1be8` (código); evidencia en `0e7a7c4` | `03_firmware_templates/prj_01_template_dualcore/docs/spi_f0_bench_efc1be8.txt` |
+| F1 | sin empezar | — | — |
+
+### 5.6 Hallazgos
+
+| Hallazgo | Commit que lo corrige | Qué ejecuté para comprobarlo | Estado |
+| --- | --- | --- | --- |
+| B1: T0B(d) en el host leía MCU_ACK después de `T0B timeout handled`, y el resultado dependía del orden de llegada | `d8f5e69` | Ejecución de entrega en la placa, `docs/spi_f0_bench_efc1be8.txt`: ACK alto 9,870 s sin HOST_REQ (cota 9..11 s), luego bajo en 20/20 lecturas mientras el firmware espera. `STEP T0B_S13` (+13,993 s) llega después de la comprobación del host (+13,990 s), que se imprime tras el pulso de HOST_REQ | corregido en `d8f5e69`, pendiente de verificación |
+| M1 (R2-3 del plan): S14 no leía el SPI dueño de J1 | `efc1be8` | Misma ejecución: los 7 casos por núcleo dan `0x60` (esperado `0x60`) en SPI6/CPU1 y en SPI1/CPU2, con `SPE=1` releído 1 en los dos. Cada `bench_safe()` deja su SPI en `CR1=0`, `CFG2=0` y MODF 0. Los reclamos de J1 que deben aceptarse siguen dando `0x0000F` (CPU2 en T0B) y `0x0001F` (CPU1 en T0B_S14) | corregido en `efc1be8`, pendiente de verificación |
+
+**B1, la corrección elegida.** El firmware ya no empieza el paso siguiente por su cuenta. Tras su espera de 10 s y `bench_safe()`, mantiene MCU_ACK bajo y espera un pulso de HOST_REQ (`sync_ack_low()`), acotado por los mismos 10 s. Si no llega, aborta.
+
+El host hace lo siguiente:
+1. Espera ACK bajo con un límite de 15 s.
+2. Mide cuánto estuvo alto.
+3. Lo lee bajo 20 veces en 100 ms.
+4. Lee la línea `T0B timeout handled`.
+5. Da el pulso, y comprueba que ACK sigue bajo después del flanco de subida.
+
+Elegí esta opción en vez de solo sondear DIO13 en el host. Sondeando, el host tendría que caer en la ventana entre `bench_safe()` y el `sync0()` del paso siguiente, que dura lo que tarda la consola en sacar dos o tres líneas. Seguiría siendo una carrera, solo que más difícil de perder.
+
+Cambia el protocolo (un handshake más en T0B_TIMEOUT), así que `SPI_BENCH_VERSION` y el `BENCH_VERSION` del host pasan a 2. La tabla de pasos, sus nombres y sus dueños no cambian.
+
+**M1/R2-3, lo implementado.**
+- `sst_spi_at_rest(cr1, cfg2)`: una función pura en `Common/Src/spi_selftest_common.c`. Comprueba `SPE = 0`, `AFCNTR = 0`, `IOSWP = 0`, y `MASTER = 1` o `CFG2 = 0`. Es una sola copia para SPI4 (S13), SPI6 y SPI1.
+- `bench_claim()` de cada núcleo exige, antes de un AF en PA5, PA6, PB4 o PB5, que su SPI tenga reloj en su banco (`RCC_C1->APB4ENR` SPI6EN en CPU1, `RCC_C2->APB2ENR` SPI1EN en CPU2) y esté en reposo.
+- `bench_safe()` de cada núcleo suelta su SPI en el orden de la regla 9 de la revisión 2 (`spi_release()`): `IER = 0`, `SPE = 0` conservando `SSI`, `CFG2 = 0`, `CR1 = 0`, `IFCR`. CPU1 suelta SPI4 y SPI6, y CPU2 suelta SPI1.
+- `step_end()` también falla si un paso deja SPI6 con `SPE` o `AFCNTR`.
+- T0b(f) tiene un caso de rechazo por condición, con los pines de J1 en entrada: `SPE=1`, `AFCNTR=1`, `IOSWP=1`, esclavo con `CFG2≠0` y reloj apagado. Los controles aceptados son "maestro en reposo" y `CFG2=0`. En CPU1 los ejecuta `spi6_cases()` en T0B_S14; en CPU2, `spi1_cases()` en T0B, con el comando nuevo `SST_CMD_SPI1`.
+
+### Build y tamaños en `efc1be8`
+
+Fuentes: `docs/spi_f0_build_all_efc1be8.txt`, `docs/spi_f0_selftest_build_efc1be8.txt`, `docs/spi_f0_werror_efc1be8.txt` y `docs/spi_f0_map_sizes_efc1be8.txt`.
+
+- `build_all -Clean`: 8/8.
+- `selftest-spi` desde un directorio vacío: 0 líneas `warning:` o `error:`.
+- `-Werror` (`selftest-spi`, `debug`, `release`): configure 0, build 0 y 0 avisos en cada uno.
+
+| Imagen | .text | .data | .bss | Δ frente a 2481396 | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| prj_01 debug CM7 | 29304 | 132 | 55668 | 0 (y 0 en cada sección asignada frente a `8901b77`) | `build/debug/cm7_firmware.map` |
+| prj_01 debug CM4 | 3456 | 24 | 12560 | 0 | `build/debug/cm4_firmware.map` |
+| prj_01 release CM7 | 28356 | 132 | 55672 | 0 | `build/release/cm7_firmware.map` |
+| prj_01 release CM4 | 3112 | 24 | 12560 | 0 | `build/release/cm4_firmware.map` |
+
+| Objeto | Núcleo | .text | .data | .bss | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| `spi_bm.c.obj`, `spi_ll.c.obj`, `spi_hal.c.obj` | — | no existen en F0 (0 objetos de `06_spi` en los dos `.map`) | — | — | `build/selftest-spi/cm{7,4}_firmware.map` |
+| `spi_selftest.c.obj` (selftest) | CM7 | 12662 | 4 | 405 | `build/selftest-spi/cm7_firmware.map` |
+| `spi_selftest_common.c.obj` (selftest) | CM7 | 661 | 0 | 0 | ídem |
+| `spi_selftest.c.obj` (selftest) | CM4 | 1933 | 0 | 0 | `build/selftest-spi/cm4_firmware.map` |
+| `spi_selftest_common.c.obj` (selftest) | CM4 | 617 | 0 | 0 | ídem |
+
+Pila de `Status_Task` con el selftest: 272 palabras libres de 512 (`spi_f0_bench_efc1be8.txt`).
+
+### Pruebas en `efc1be8`
+
+Ejecución de entrega, `docs/spi_f0_bench_efc1be8.txt`: arranque en frío, checklist confirmado por Hector y `tree clean`. Rev `efc1be8` e id `b2d94e5e65f27406` en host, CM7 y CM4. Protocolo v2 y `REV_ID=0x2003`. Resultado: 10/10 comprobaciones del host, `FW VERDICT=PASS failures=0` y `HOST VERDICT=PASS`, sin aborto.
+
+Las filas de §5.3 que no aparecen aquí dan los mismos valores que en `008db8b`:
+- T0a: `0x4FFF`/`0x0000`, walking 1 sin diferencias, el control marca `0x0200`.
+- T0c: control `0x9`/`0x6`, `0x5A3C` leído en PA6.
+- T0b(b): 23 rechazos y PA8 AF0 aceptado; CPU2 da `0x0000F` en T0B y `0x00000` entre pasos.
+- T0b(c): `0x5A`.
+- T0b(e): los mismos valores, incluidos `SR=0x00001002` al empezar y `SPE` releído 1.
+- No Digital Out: 0 en las 8 fronteras.
+
+| ID | Tier | Núcleo | Resultado | Valor medido | Control negativo: valor | Oráculo | Captura |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| T0b(d) | — | CM7 + host | PASS | Firmware: tras 10 s sin HOST_REQ, `GPIOE MODER[31:4] = 0x00004000`, `AFRH = 0` y J1 `MODER` = 0. Host: ACK alto 9,870 s y luego bajo en 20/20 lecturas mientras el firmware espera | — (es el propio caso negativo) | DIO13 del AD2, `MODER` leído directamente | `spi_f0_bench_efc1be8.txt` |
+| T0b(f) R2-3 CPU1 | — | CM7 | PASS | PA6 AF8 frente a SPI6: rechazado con `SPE=1` (releído 1), `AFCNTR=1`, `IOSWP=1`, esclavo con `CFG2≠0` y sin reloj; aceptado `0x60` (esperado `0x60`), GPIO intacto. `bench_safe()` lleva SPI6 de `CR1 0x00001000`, `CFG2 0x04400000` a 0 y 0, `SR 0x00001002` (MODF 0); reloj como antes (0) | Maestro en reposo y `CFG2=0` aceptados (bits 5 y 6) | registros de SPI6 y de RCC leídos directamente; máscara escrita a mano (`SST_SPI_CASES_EXPECT`) | ídem |
+| T0b(f) R2-3 CPU2 | — | CM4 | PASS | PA6 AF5 frente a SPI1: los mismos 7 casos, aceptado `0x60` (`0x60`), registros GPIO cambiados `0x00000`, SPI1 devuelto a `CR1=0`, `CFG2=0` y reloj como antes. `bench_safe()` lleva SPI1 de `CR1 0x00001000`, `CFG2 0x04400000` a 0 y 0, `SR 0x00001002` (MODF 0) | Maestro en reposo y `CFG2=0` aceptados | ídem | ídem |
+| T0b(f) J1 | — | CM7, CM4 | PASS | CPU1 en T0B_S14, con SPI6 en reset: 16 casos, aceptado `0x0001F` (`0x0001F`), registros intactos. CPU2 en T0B_S14: `0x00000`. CPU1 en T0B: 5 rechazos. T0C: `0x01` | Los aceptados de T0B_S14 y T0C | máscaras escritas a mano | ídem |
+
+### Desviaciones
+
+| Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- |
+| S13: `bench_claim()` lee SPI4 con `SPE = 0`, `AFCNTR = 0` y `MASTER = 1` o `CFG2 = 0` | SPI4 pasa por la misma `sst_spi_at_rest()` que R2-3, así que S13 también exige `IOSWP = 0` | Una sola copia de la condición. Es más estricto | No consultado |
+| Protocolo v1 de T0B(d) (como `03_tim`) | Un handshake más, con ACK bajo, al final de T0B_TIMEOUT (protocolo v2) | B1 | Elección que dejaba el auditor; explicada arriba |
+
+### Pendiente
+
+- La captura de la entrega anterior (`spi_f0_bench_008db8b.txt`) y la del auditor (`spi_f0_audit_bench_153d5b3.txt`) son del protocolo v1. No se tocan.
+- No empiezo F1 hasta que `AUDIT.md` diga que F0 pasa.
