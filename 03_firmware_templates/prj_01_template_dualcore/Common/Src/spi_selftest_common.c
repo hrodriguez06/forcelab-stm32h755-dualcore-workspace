@@ -44,6 +44,14 @@ const SstStep_t k_sst_steps[] = {
     { "T0B_TIMEOUT",  SST_BUS_NONE, SST_J1_NONE, 0U,   0U,     0U,          0U,      0U         },  /* (d) */
     { "T0B_S13",      SST_BUS_MCU,  SST_J1_NONE, 0U,   0U,     0U,          PE_SPI4, 0U         },  /* (e) */
     { "T0B_S14",      SST_BUS_NONE, SST_J1_CM7,  1U,   0U,     0U,          0U,      0U         },  /* (f) CPU1 J1 */
+    /* Phase F1, spi_bm. F1_NOPIN takes no pin: SPI2, SPI3, SPI5 have none on the bench,
+       and SPI1, SPI4, SPI6 run there with their pins in input. J1_SPI6 is CPU1's J1 step
+       (SPI6, AF8), J1_SPI1 CPU2's (SPI1, AF5). SPI4_AD2 puts PE11..PE14 in AF5 (S13) and
+       PA8 in AF0 (MCO1, T5(g)), the AD2 only listening. */
+    { "F1_NOPIN",     SST_BUS_NONE, SST_J1_NONE, 0U,   0U,     0U,          0U,      0U         },
+    { "J1_SPI6",      SST_BUS_NONE, SST_J1_CM7,  1U,   0U,     0U,          0U,      0U         },
+    { "J1_SPI1",      SST_BUS_NONE, SST_J1_CM4,  1U,   0U,     0U,          0U,      0U         },
+    { "SPI4_AD2",     SST_BUS_MCU,  SST_J1_NONE, 0U,   0U,     0U,          PE_SPI4, E(PA_MCO)  },
     { "DONE",         SST_BUS_NONE, SST_J1_NONE, 0U,   0U,     0U,          0U,      0U         },
 };
 
@@ -142,4 +150,150 @@ bool sst_line_rule(uint32_t core, uint32_t step, const GPIO_TypeDef *port, uint3
         return rule_j1(core, s, pin == PB_J1_MOSI, mode, af);
     }
     return false;       /* PC13 (R4), PG13 (RMII_TXD0), PF14/PF15 (scope loads), any other pin */
+}
+
+/* ==========================================================================
+ * Data pattern and oracles (phase F1). Pure: buffers and arithmetic only.
+ * ========================================================================== */
+
+uint32_t sst_mask(uint32_t bits)
+{
+    return (bits >= 32U) ? 0xFFFFFFFFUL : ((1UL << bits) - 1U);
+}
+
+uint32_t sst_elem_bytes(uint32_t bits)
+{
+    return (bits <= 8U) ? 1U : ((bits <= 16U) ? 2U : 4U);
+}
+
+static void put_elem(void *buf, uint32_t es, uint32_t i, uint32_t v)
+{
+    if (es == 1U)
+    {
+        ((uint8_t *)buf)[i] = (uint8_t)v;
+    }
+    else if (es == 2U)
+    {
+        ((uint16_t *)buf)[i] = (uint16_t)v;
+    }
+    else
+    {
+        ((uint32_t *)buf)[i] = v;
+    }
+}
+
+uint32_t sst_get(const void *buf, uint32_t es, uint32_t i)
+{
+    if (es == 1U)
+    {
+        return ((const uint8_t *)buf)[i];
+    }
+    if (es == 2U)
+    {
+        return ((const uint16_t *)buf)[i];
+    }
+    return ((const uint32_t *)buf)[i];
+}
+
+void sst_fill(void *buf, uint32_t es, uint32_t frames, uint32_t bits, uint32_t seed)
+{
+    const uint32_t m = sst_mask(bits);
+    uint32_t x = seed;
+    for (uint32_t i = 0U; i < frames; i++)
+    {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        put_elem(buf, es, i, x & m);
+    }
+}
+
+void sst_fill_const(void *buf, uint32_t es, uint32_t frames, uint32_t value)
+{
+    for (uint32_t i = 0U; i < frames; i++)
+    {
+        put_elem(buf, es, i, value);
+    }
+}
+
+uint32_t sst_crc32_frames(const void *buf, uint32_t es, uint32_t frames, uint32_t bits)
+{
+    const uint32_t m = sst_mask(bits);
+    uint32_t crc = 0xFFFFFFFFUL;
+    for (uint32_t i = 0U; i < frames; i++)
+    {
+        const uint32_t v = sst_get(buf, es, i) & m;
+        for (uint32_t b = 0U; b < 4U; b++)
+        {
+            crc ^= (v >> (8U * b)) & 0xFFUL;
+            for (uint32_t k = 0U; k < 8U; k++)
+            {
+                crc = ((crc & 1U) != 0U) ? ((crc >> 1) ^ 0xEDB88320UL) : (crc >> 1);
+            }
+        }
+    }
+    return crc ^ 0xFFFFFFFFUL;
+}
+
+uint32_t sst_mismatch(const void *a, const void *b, uint32_t es, uint32_t frames, uint32_t bits)
+{
+    const uint32_t m = sst_mask(bits);
+    uint32_t n = 0U;
+    for (uint32_t i = 0U; i < frames; i++)
+    {
+        if (((sst_get(a, es, i) ^ sst_get(b, es, i)) & m) != 0U)
+        {
+            n++;
+        }
+    }
+    return n;
+}
+
+uint32_t sst_coverage(const void *buf, uint32_t es, uint32_t frames, uint32_t bits)
+{
+    const uint32_t m = sst_mask(bits);
+    uint32_t ones = 0U;
+    uint32_t zeros = 0U;
+    for (uint32_t i = 0U; i < frames; i++)
+    {
+        const uint32_t v = sst_get(buf, es, i) & m;
+        ones |= v;
+        zeros |= ~v & m;
+    }
+    return ones & zeros;
+}
+
+/* RM0399 rev 4, 53.11.1 SPI_CR1 (SSI bit 12), 53.11.3 SPI_CFG1 (MBR 30:28, CRCEN 22,
+   CRCSIZE 20:16, TXDMAEN 15, RXDMAEN 14, UDRDET 12:11, UDRCFG 10:9, FTHLV 8:5, DSIZE
+   4:0) and 53.11.4 SPI_CFG2 (AFCNTR 31, SSOM 30, SSOE 29, SSIOP 28, SSM 26, CPOL 25,
+   CPHA 24, LSBFRST 23, MASTER 22, SP 21:19, COMM 18:17, IOSWP 15, MIDI 7:4, MSSI
+   3:0). The positions are typed here from the register drawings; the encodings are
+   the RM's: DSIZE = bits - 1, FTHLV = frames - 1, CRCSIZE kept at 00111 (8 bits,
+   ES0445 2.22.4), COMM 00 full duplex / 01 transmitter, SP 000 Motorola. */
+void sst_t2_expect(const SpiBm_Config_t *cfg, uint32_t *cfg1, uint32_t *cfg2, uint32_t *cr1)
+{
+    *cfg1 = (cfg->mbr << 28) | (7UL << 16) | ((cfg->fifo_threshold - 1U) << 5) | (cfg->data_bits - 1U);
+    uint32_t v = (1UL << 22) | (cfg->direction << 17) | (cfg->midi << 4) | cfg->mssi;   /* MASTER */
+    v |= ((cfg->mode >> 1) & 1U) << 25;                                               /* CPOL   */
+    v |= (cfg->mode & 1U) << 24;                                                      /* CPHA   */
+    v |= (cfg->lsb_first ? 1UL : 0UL) << 23;
+    v |= (cfg->nss_active_high ? 1UL : 0UL) << 28;
+    if (cfg->nss == SPI_BM_NSS_SOFT)
+    {
+        v |= 1UL << 26;                                                               /* SSM    */
+    }
+    else
+    {
+        v |= 1UL << 29;                                                               /* SSOE   */
+        if (cfg->nss == SPI_BM_NSS_HW_PULSE)
+        {
+            v |= 1UL << 30;                                                           /* SSOM   */
+        }
+    }
+    if (cfg->keep_pins)
+    {
+        v |= 1UL << 31;                                                               /* AFCNTR */
+    }
+    *cfg2 = v;
+    *cr1 = cfg->nss_active_high ? 0U : (1UL << 12);    /* SSI inactive: SSI != SSIOP (53:566-567) */
 }

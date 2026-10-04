@@ -20,6 +20,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "stm32h7xx.h"
+#include "spi_bm.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,9 +38,10 @@ void SPI_Selftest_CM4_Run(void);          /* CPU2, after Shared_GpioLockInstall(
  * protocol: printed in the banner and in every STEP line, and checked by
  * tools/spi_hw_check.py, which keeps its own copy of the step names, their bus
  * owners and their J1 owners. Bump it when any of those change.              */
-#define SPI_BENCH_VERSION    2U    /* v1: T0A, T0C, T0B(b)-(f) (plan phase F0); v2: after the
+#define SPI_BENCH_VERSION    3U    /* v1: T0A, T0C, T0B(b)-(f) (plan phase F0); v2: after the
                                        T0B(d) timeout MCU_ACK stays low until a HOST_REQ
-                                       pulse (audit B1) */
+                                       pulse (audit B1); v3: the spi_bm steps F1_NOPIN,
+                                       J1_SPI6, J1_SPI1 and SPI4_AD2 (phase F1) */
 
 typedef enum
 {
@@ -114,6 +116,25 @@ bool sst_spi_at_rest(uint32_t cr1, uint32_t cfg2);
 #define SST_SPI_CASES           7U
 #define SST_SPI_CASES_EXPECT    0x00000060UL
 
+/* ---- Data pattern and oracles (pure; plan "Plan de pruebas") ------------------- *
+ * Frame i of a transfer is the (i + 1)-th output of xorshift32 (x ^= x << 13,
+ * x ^= x >> 17, x ^= x << 5) from `seed`, masked to `bits`. Buffers hold one
+ * element per frame of `es` bytes (1, 2 or 4). The digest is the CRC-32 of zlib
+ * (reflected 0xEDB88320, init and final XOR 0xFFFFFFFF) over each masked frame
+ * as 4 little-endian bytes; the host recomputes all of it from the seed.         */
+uint32_t sst_mask(uint32_t bits);
+uint32_t sst_elem_bytes(uint32_t bits);
+void     sst_fill(void *buf, uint32_t es, uint32_t frames, uint32_t bits, uint32_t seed);
+void     sst_fill_const(void *buf, uint32_t es, uint32_t frames, uint32_t value);
+uint32_t sst_get(const void *buf, uint32_t es, uint32_t i);
+uint32_t sst_crc32_frames(const void *buf, uint32_t es, uint32_t frames, uint32_t bits);
+uint32_t sst_mismatch(const void *a, const void *b, uint32_t es, uint32_t frames, uint32_t bits);
+uint32_t sst_coverage(const void *buf, uint32_t es, uint32_t frames, uint32_t bits);
+
+/* T2's oracle: CFG1, CFG2 and CR1 of RM0399 53.11.1-53.11.4 for `cfg`, every field
+   placed with its bit position typed from the RM text, not from CMSIS or the driver. */
+void     sst_t2_expect(const SpiBm_Config_t *cfg, uint32_t *cfg1, uint32_t *cfg2, uint32_t *cr1);
+
 /* Bench AF per pin (DS12923 table 9, 00_docs_stm32h7/STM32H755_Alternate_Functions.md). */
 #define SST_AF_SPI4          5U    /* PE11 NSS, PE12 SCK, PE13 MISO, PE14 MOSI          */
 #define SST_AF_SPI1          5U    /* PA5 SCK, PA6/PB4 MISO, PB5 MOSI: CPU2 (SPI1)      */
@@ -137,8 +158,56 @@ typedef enum
     SST_CMD_SAFE,        /* claim PA5 AF5 (step T0B), write it, SPI1 a master at rest, then
                             CPU2's bench_safe()                                                    */
     SST_CMD_SPI1,        /* T0b(f): the SPI1 states of SST_SPI_CASES against a claim of PA6 AF5 */
-    SST_CMD_DONE
+    SST_CMD_DONE,
+    /* Phase F1 (spi_bm on SPI1, CPU2's instance; plus SPI2 for T13) */
+    SST_CMD_T1,          /* T1 refusals on SPI1                         -> m4_res (SstT1Res)      */
+    SST_CMD_T2,          /* T2 register images of SPI1                  -> m4_res (SstT2Res)      */
+    SST_CMD_J1PINS,      /* arg0 = SST_J1P_*, arg1 = CPOL (pull of SCK), arg2 = GPIO speed       */
+    SST_CMD_XFER,        /* arg0 = SST_XCFG(...), arg1 = seed, arg2 = frames, arg3 = SST_XM_*
+                            -> m4_res (SstXferRes)                                               */
+    SST_CMD_T6C,         /* T6(c): arg0 = 0: SPI1 IRQs in 10 ms after the end; 1: the control
+                            (TXPIE = 1 with SPE = 0)                    -> m4_res[0] = IRQs      */
+    SST_CMD_T9,          /* arg0 = mbr, arg1 = data bits: SPI1 TX only  -> m4_res[0..1] = t1000, t2000 */
+    SST_CMD_T13,         /* arg0 = 1: DisableClock(SPI2); 2: EnableClock then DisableClock(SPI2)
+                            -> m4_res[0..2] = statuses, RCC_C2 APB1LENR after                    */
+    SST_CMD_T14,         /* SPI_BM_Deinit(SPI1) and its registers       -> m4_res[0..9]          */
+    SST_CMD_B1           /* cycles of Init, Transfer of 1 frame, TransferIrq -> m4_res[0..5]     */
 } SstCmd_t;
+
+/* SST_CMD_J1PINS: the four J1 pins of SPI1 (AF5), CPU2's J1 steps only (S14). */
+#define SST_J1P_RELEASE      0U   /* the four in input without pull                             */
+#define SST_J1P_LOOP         1U   /* PA5 SCK, PB5 MOSI, PA6 MISO in AF5; PB4 input               */
+#define SST_J1P_PB4_UP       2U   /* MISO moved to PB4 (AF5, pull-up), PA6 input (plan D2)       */
+#define SST_J1P_PB4_DOWN     3U   /* the same with pull-down                                     */
+
+/* SST_CMD_XFER: one transfer on SPI1 (Init, transfer, Deinit). */
+#define SST_XM_POLL          0U   /* SPI_BM_Transfer                                             */
+#define SST_XM_IT            1U   /* SPI_BM_TransferStartIt + the test's SPI1_IRQHandler         */
+#define SST_XM_DMA           2U   /* DMA2 streams 0 (RX) and 1 (TX), the DMA driver's BM tier    */
+#define SST_XM_DMA_NORX      3U   /* the T7 control: RXDMAEN = 0                                 */
+#define SST_XCFG(mode, bits, lsb, thr, mbr, dir) \
+    ((uint32_t)(mode) | ((uint32_t)(bits) << 2) | ((uint32_t)(lsb) << 8) | ((uint32_t)(thr) << 9) | \
+     ((uint32_t)(mbr) << 14) | ((uint32_t)(dir) << 17))
+#define SST_XCFG_MODE(c)     ((c) & 3U)
+#define SST_XCFG_BITS(c)     (((c) >> 2) & 0x3FU)
+#define SST_XCFG_LSB(c)      (((c) >> 8) & 1U)
+#define SST_XCFG_THR(c)      (((c) >> 9) & 0x1FU)
+#define SST_XCFG_MBR(c)      (((c) >> 14) & 7U)
+#define SST_XCFG_DIR(c)      (((c) >> 17) & 1U)
+
+/* The result of one transfer, in m4_res[] for SST_CMD_XFER. */
+typedef struct
+{
+    uint32_t status;          /* SpiBm_Status_t of the transfer                      */
+    uint32_t mism;            /* frames of RX that differ from TX, masked to the size */
+    uint32_t crc;             /* sst_crc32_frames() of what was received             */
+    uint32_t cov;             /* bits that took both values in TX (sst_coverage)     */
+    uint32_t cycles;          /* CYCCNT of the transfer call(s)                      */
+    uint32_t irqs;            /* SPI1 interrupts (IT), from the start to the end     */
+    uint32_t init_st;         /* SPI_BM_Init                                          */
+    uint32_t deinit_st;       /* SPI_BM_Deinit                                        */
+    uint32_t sentinel_left;   /* DMA control: RX words still holding the sentinel     */
+} SstXferRes_t;
 
 /* CPU2's claim cases (T0b(b) and (f)). The expected bit patterns are written by
    hand in SST_M4_CLAIMS_EXPECT_*: bit k = case k accepted. CPU1 judges them. */
@@ -209,11 +278,14 @@ typedef struct
     volatile uint32_t ack_seq;         /* CPU2 copies cmd_seq when done               */
     volatile uint32_t m4_timeout;      /* CPU2 gave up waiting for a command          */
     volatile uint32_t m4_aborts;       /* CPU2 bench_abort() calls                    */
+    volatile uint32_t arg2;
+    volatile uint32_t arg3;
 
     /* CPU2 results */
     SstClaimResult_t  m4_claims[SST_M4_SLOTS];
     SstSafeResult_t   m4_safe;
     SstSpiCaseResult_t m4_spi1;
+    volatile uint32_t m4_res[160];     /* phase F1: the result of the last command     */
 } SstArea_t;
 
 _Static_assert(sizeof(SstArea_t) <= 0x1000U, "SstArea_t no longer fits its 4 KB slot");

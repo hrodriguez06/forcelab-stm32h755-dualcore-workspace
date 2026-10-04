@@ -131,13 +131,20 @@ if(TIM_DRIVER_SELFTEST)
     )
 endif()
 
-# 06_spi selftest. F0 (the bench) needs only gpio_bm, already linked above for
-# the lock hook; the _spi_* targets join with the phase that adds their source.
+# 06_spi selftest: gpio_bm (linked above for the lock hook) for the bench, and,
+# only with the option, the driver under test (spi_bm since F1; the _spi_ll and
+# _spi_hal targets join with their phases), dma_bm (DMA1 streams: T7(c), T13) and
+# dma_hal (BDMA for SPI6, T7(b): the only 02_dma tier with BDMA, plan D7).
 if(SPI_DRIVER_SELFTEST)
     target_compile_definitions(${TARGET} PRIVATE SPI_DRIVER_SELFTEST=1)
     target_sources(${TARGET} PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/App/Src/spi_selftest.c
         ${CMAKE_SOURCE_DIR}/Common/Src/spi_selftest_common.c
+    )
+    target_link_libraries(${TARGET} PRIVATE
+        stm32h7_driver_spi_bm
+        stm32h7_driver_dma_bm
+        stm32h7_driver_dma_hal
     )
 endif()
 
