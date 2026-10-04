@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host side of the 06_spi selftest on prj_01 (preset selftest-spi), phases F0 and F1.
+"""Host side of the 06_spi selftest on prj_01 (preset selftest-spi), phases F0, F1 and F2.
 
 Runs one complete bench session against CM7/App/Src/spi_selftest.c with the
 Analog Discovery 2 and writes ONE capture file: every console line and every
@@ -14,6 +14,10 @@ wiring and rules S1-S10: 01_shared_drivers/00_gpio/README.md section 8.
 F0 tests: T0a (loose lines, walking 1, control), T0c (the J1 jumper, run by
 CPU1; the host reads its summary), T0b(a) on mock objects before the AD2 is
 opened, then T0b(b)(c)(d)(e)(f) on the bench.
+
+F2 tests (spi_ll, protocol v4): F2_NOPIN (firmware verdicts), J1_SPI6_LL and
+J1_SPI1_LL (the T4, T6, T7 lines with "/LL" after the instance, checked as in F1),
+SPI4_AD2_LL (T5(a) captures of kind 'A', decoded with the same control).
 
 F1 tests (spi_bm, protocol v3): F1_NOPIN (the host recomputes every T3 vector),
 J1_SPI6 and J1_SPI1 (T4, T6, T7, T8 lines checked against the host's own
@@ -40,7 +44,7 @@ Electrical safety (no series resistors on the bench; plan S1-S14):
   S6  1 ms or more between one side releasing and the other driving.
   S7  a step is acted on only if its announcement (name, bus owner, J1 owner,
       protocol version) matches STEPS below.
-  S8  no output is enabled before the banner `SPI_BENCH v3 idle` of the
+  S8  no output is enabled before the banner `SPI_BENCH v4 idle` of the
       right image has been read.
   No Digital Out (plan D6): this script never configures, enables or starts
       Digital Out; at every step boundary it reads the 16 Digital Out enables
@@ -80,7 +84,7 @@ from monitor import SerialPort, autodetect             # noqa: E402
 from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E402
                            t0b_guard_selftest, tree_record)
 
-BENCH_VERSION = 3          # SPI_BENCH_VERSION of Common/Inc/spi_selftest.h (v2: audit B1; v3: F1 steps)
+BENCH_VERSION = 4          # SPI_BENCH_VERSION of Common/Inc/spi_selftest.h (v2: audit B1; v3: F1; v4: F2 steps)
 
 # ---- Wiring (00_gpio README section 8; 06_spi plan "Banco de pruebas") -------------
 DIO_BUS = 0x00FF        # DIO0..7  <- PE8..PE15
@@ -103,6 +107,8 @@ STEPS = [
     ("T0B_TIMEOUT", "NONE", "NONE"), ("T0B_S13", "MCU", "NONE"), ("T0B_S14", "NONE", "CM7"),
     ("F1_NOPIN", "NONE", "NONE"), ("J1_SPI6", "NONE", "CM7"), ("J1_SPI1", "NONE", "CM4"),
     ("SPI4_AD2", "MCU", "NONE"),
+    ("F2_NOPIN", "NONE", "NONE"), ("J1_SPI6_LL", "NONE", "CM7"), ("J1_SPI1_LL", "NONE", "CM4"),
+    ("SPI4_AD2_LL", "MCU", "NONE"),
     ("DONE", "NONE", "NONE"),
 ]
 
@@ -567,6 +573,7 @@ class Session:
         np_ = ng = 0
         bad: list[str] = []
         caught = 0
+        g_ok = g_caught = 0
         for line in lines:
             m = rp.search(line)
             if m:
@@ -585,12 +592,24 @@ class Session:
                 exp2 = calc_guard(c, k, mm)
                 if (st, cyc) != exp2:
                     bad.append(f"G{i} c={c} k={k} m={mm}: got {(st, cyc)} exp {exp2}")
+                if exp2[0] == ST_OK:                    # control (R3-6): one cycle more is seen
+                    g_ok += 1
+                    if (st, cyc + 1) != exp2:
+                        g_caught += 1
         n_ok = sum(1 for line in lines if (m := rp.search(line)) and int(m.group(4)) == ST_OK)
         self.check("T3 pure functions (host recompute)", np_ > 0 and ng > 0 and not bad,
                    f"{np_} CalcPrescaler and {ng} CalcGuardCycles vectors recomputed from the plan's rules: "
                    f"{len(bad)} differ {bad[:4]}")
         self.check("T3 control", n_ok > 0 and caught == n_ok,
                    f"the same comparison with MBR + 1 flags {caught} of the {n_ok} OK vectors (all)")
+        self.check("T3 control CalcGuardCycles (R3-6)", g_ok > 0 and g_caught == g_ok,
+                   f"the same comparison with one cycle more flags {g_caught} of the {g_ok} OK vectors (all)")
+
+    def f2_nopin(self) -> None:
+        """F2_NOPIN: no pin moves; T1, T2 (parity) and T14 with spi_ll are judged by the
+        firmware (its verdict lines); the host waits for the closing handshake."""
+        self.step("F2_NOPIN")
+        self.sync(timeout_s=F1_STEP_TIMEOUT_S)
 
     def j1_lines(self, inst: str, lines: list[str]) -> None:
         """T4, T4C, T6, T7, T8 lines of one J1 instance against the host's own
@@ -672,6 +691,23 @@ class Session:
         self.step("SPI4_AD2")
         self.buschk("SPI4_AD2 before")
         self.buschk("SPI4_AD2 with PE11..PE14 in AF5 (SPI4 at its reset values, S13)")
+        caps, levels = self.spi4_captures()
+        self.buschk("SPI4_AD2 T14: after the Deinit, PE11..PE14 still in AF5")
+        self.buschk("SPI4_AD2 after, pins in input")
+        self.spi4_judge(caps, levels, k45)
+
+    def spi4_ad2_ll(self) -> None:
+        """T5(a) through spi_ll (kind 'A'): the same captures, decoder and control."""
+        self.step("SPI4_AD2_LL")
+        self.buschk("SPI4_AD2_LL before")
+        self.buschk("SPI4_AD2_LL with PE11..PE14 in AF5 (SPI4 at its reset values, S13)")
+        caps, levels = self.spi4_captures()
+        self.buschk("SPI4_AD2_LL T14: after the Deinit, PE11..PE14 still in AF5")
+        self.buschk("SPI4_AD2_LL after, pins in input")
+        self.spi4_judge(caps, levels, 0, ll=True)
+
+    def spi4_captures(self) -> tuple[list[dict], dict[int, int]]:
+        """One LA capture per announced transfer (CAP lines) until "CAP done"."""
         rcap = re.compile(r"\[spi\] CAP (?:([a-zA-Z]) k(\d+) m(\d) b(\d+) l(\d) n(\d+) nss(\d) op(\d) mssi(\d+) "
                           r"midi(\d+) mbr(\d) s=([0-9A-F]{8})|e k(\d+) keep(\d)|done k(\d+))")
         caps: list[dict] = []
@@ -692,9 +728,7 @@ class Session:
             cap["smp"] = self.ad2.la_read(self.LA_N, 2.0)
             cap["st"] = int(self.con.expect(rf"\[spi\] CAPR k{cap['k']} st=(\d+)", 10.0).group(1))
             caps.append(cap)
-        self.buschk("SPI4_AD2 T14: after the Deinit, PE11..PE14 still in AF5")
-        self.buschk("SPI4_AD2 after, pins in input")
-        self.spi4_judge(caps, levels, k45)
+        return caps, levels
 
     @staticmethod
     def sck_period(edges: list[int], bits: int) -> float:
@@ -709,7 +743,7 @@ class Session:
     def nss_active(s: int, op: int) -> bool:
         return bool((s >> 3) & 1) == bool(op)
 
-    def spi4_judge(self, caps: list[dict], levels: dict[int, int], k45: int) -> None:
+    def spi4_judge(self, caps: list[dict], levels: dict[int, int], k45: int, ll: bool = False) -> None:
         sck_b, mosi_b, mco_b = 4, 6, 14
         res: dict[str, list[str]] = {}
         delays: dict[tuple[str, int], float] = {}
@@ -739,7 +773,7 @@ class Session:
                     ratio_bad.append(tag)
                 continue
             frames, nedge = ad2mod.spi_decode(smp, sck_b, mosi_b, cpol, cpha, c["bits"], bool(c["lsb"]))
-            if c["kind"] == "a":
+            if c["kind"] in ("a", "A"):
                 fc, _ = ad2mod.spi_decode(smp, sck_b, mosi_b, cpol, cpha ^ 1, c["bits"], bool(c["lsb"]))
                 fo, _ = ad2mod.spi_decode(smp, sck_b, mosi_b, cpol, cpha, c["bits"], not c["lsb"])
                 diff = lambda got: sum(1 for x, y in zip(got, exp) if x != y) + abs(len(got) - len(exp))
@@ -786,6 +820,18 @@ class Session:
                     dbad.append(f"{what}={k}")
                 dall.append(f"{what}={k}: {None if d is None or base is None else round(d - base, 1)} "
                             f"({k} x {tp:.2f} = {k * tp:.1f})")
+        if ll:
+            n = sum(1 for c in caps if c["kind"] == "A")
+            fails = res.get("A", [])
+            self.check("T5(a) LL modes x sizes x bit order, hardware SS", n == 32 and not fails,
+                       f"{n} LA captures of SPI4 through spi_ll at 100 MS/s decoded on the host against the seed's "
+                       f"xorshift32 frames, SCK idle at CPOL, NSS per its mode: {len(fails)} failed {fails[:3]}")
+            caught = [x for x in a_ctrl if x[1] > 0 and x[2] > 0]
+            self.check("T5(a) LL control (decoder distinguishes)", bool(a_ctrl) and len(caught) == len(a_ctrl),
+                       f"each capture decoded again with the opposite CPHA and with the opposite bit order: both find "
+                       f"mismatches in {len(caught)} of {len(a_ctrl)}; (tag, mismatches CPHA^1, order^1) "
+                       f"{[x for x in a_ctrl if x not in caught] or a_ctrl[:4]}")
+            return
         named = {"a": "T5(a) modes x sizes x bit order, hardware SS", "b": "T5(b) SSIOP = 1",
                  "c": "T5(c) SS pulsed between frames (MIDI 2)", "d": "T5(d) MSSI/MIDI frames",
                  "m": "T7(c) SPI4 transmit by DMA1 stream 0", "G": "T12(b) one frame with the guard"}
@@ -834,6 +880,10 @@ class Session:
         self.f1_j1("J1_SPI6", "SPI6")
         self.f1_j1("J1_SPI1", "SPI1")
         self.spi4_ad2(self.f1_clocks())
+        self.f2_nopin()
+        self.f1_j1("J1_SPI6_LL", "SPI6/LL")
+        self.f1_j1("J1_SPI1_LL", "SPI1/LL")
+        self.spi4_ad2_ll()
         self.step("DONE")
         bad = [(s, f"0x{en:04X}") for s, en in self.dout_seen if en != 0]
         self.check("No Digital Out", not bad and len(self.dout_seen) == len(STEPS),
@@ -845,7 +895,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", help="ST-LINK VCP (default: autodetect)")
     ap.add_argument("--out", type=pathlib.Path,
-                    help="capture file (default: docs/spi_f1_bench_<rev>.txt, spi_dev_f1_bench_<rev>.txt with --allow-dirty)")
+                    help="capture file (default: docs/spi_f2_bench_<rev>.txt, spi_dev_f2_bench_<rev>.txt with --allow-dirty)")
     ap.add_argument("--allow-dirty", action="store_true", help="accept a -dirty Rev (development runs)")
     ap.add_argument("--no-reset", action="store_true", help="do not reset the board; wait for the banner")
     ap.add_argument("--preset", default="selftest-spi", help="configure preset of the image (build id)")
@@ -866,7 +916,7 @@ def main() -> int:
     stamp(f"[host] argv: {shlex.join(sys.argv[1:])}")
     stamp(f"[host] options: allow_dirty={args.allow_dirty} preset={args.preset} no_reset={args.no_reset} "
           f"checklist_confirmed={args.checklist_confirmed}")
-    stamp(f"[host] spi_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}, phases F0 and F1")
+    stamp(f"[host] spi_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}, phases F0, F1 and F2")
     procs_ok = checklist(stamp, args.checklist_confirmed)
     tree_record(stamp)
     build_id = host_build_id(args.preset)
@@ -970,7 +1020,7 @@ def main() -> int:
     out = args.out
     if out is None:
         rev = revs.get("cm7", git_rev())
-        prefix = "spi_dev_f1_bench" if args.allow_dirty else "spi_f1_bench"
+        prefix = "spi_dev_f2_bench" if args.allow_dirty else "spi_f2_bench"
         out = PROJECT / "docs" / f"{prefix}_{rev}.txt"
         n = 2
         while out.exists():
