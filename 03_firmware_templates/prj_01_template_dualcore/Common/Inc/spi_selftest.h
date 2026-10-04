@@ -37,7 +37,9 @@ void SPI_Selftest_CM4_Run(void);          /* CPU2, after Shared_GpioLockInstall(
  * protocol: printed in the banner and in every STEP line, and checked by
  * tools/spi_hw_check.py, which keeps its own copy of the step names, their bus
  * owners and their J1 owners. Bump it when any of those change.              */
-#define SPI_BENCH_VERSION    1U    /* v1: T0A, T0C, T0B(b)-(f) (plan phase F0) */
+#define SPI_BENCH_VERSION    2U    /* v1: T0A, T0C, T0B(b)-(f) (plan phase F0); v2: after the
+                                       T0B(d) timeout MCU_ACK stays low until a HOST_REQ
+                                       pulse (audit B1) */
 
 typedef enum
 {

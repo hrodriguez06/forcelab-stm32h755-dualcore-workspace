@@ -34,7 +34,7 @@ Electrical safety (no series resistors on the bench; plan S1-S14):
   S6  1 ms or more between one side releasing and the other driving.
   S7  a step is acted on only if its announcement (name, bus owner, J1 owner,
       protocol version) matches STEPS below.
-  S8  no output is enabled before the banner `SPI_BENCH v1 idle` of the
+  S8  no output is enabled before the banner `SPI_BENCH v2 idle` of the
       right image has been read.
   No Digital Out (plan D6): this script never configures, enables or starts
       Digital Out; at every step boundary it reads the 16 Digital Out enables
@@ -74,7 +74,7 @@ from monitor import SerialPort, autodetect             # noqa: E402
 from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E402
                            t0b_guard_selftest, tree_record)
 
-BENCH_VERSION = 1          # SPI_BENCH_VERSION of Common/Inc/spi_selftest.h
+BENCH_VERSION = 2          # SPI_BENCH_VERSION of Common/Inc/spi_selftest.h (v2: audit B1)
 
 # ---- Wiring (00_gpio README section 8; 06_spi plan "Banco de pruebas") -------------
 DIO_BUS = 0x00FF        # DIO0..7  <- PE8..PE15
@@ -104,6 +104,12 @@ STEPS = [
 SPI_OE_ALLOWED = DIO_REQ
 
 HS_TIMEOUT_S = 10.0
+# T0b(d), protocol v2 (audit B1): the MCU's wait is SYNC_TIMEOUT_CYC = 4e9 cycles of
+# CYCCNT (10 s at 400 MHz; about 9.87 s with the board's HSE at +1.3 %).
+T0B_ACK_LOW_LIMIT_S = 15.0
+T0B_TIMEOUT_MIN_S = 9.0
+T0B_TIMEOUT_MAX_S = 11.0
+T0B_LOW_READS = 20
 
 
 class BenchAbort(Exception):
@@ -384,12 +390,44 @@ class Session:
                    f"MCU drives the bus: s5_released() returned "
                    f"{[(ok, f'0x{d:02X}') for ok, d, _ in seen]} (must be False twice, DIO=0x5A)")
         self.buschk("T0B_S5NEG after")
+        self.t0b_timeout()
+
+    def t0b_timeout(self) -> None:
+        """T0b(d), protocol v2 (audit B1). The MCU raises MCU_ACK and waits up to
+        10 s for HOST_REQ, which the host never raises; it then goes to S2 (ACK
+        low) and stays in the step, ACK low, until the host pulses HOST_REQ. The
+        host waits for ACK low with a limit, measures the time ACK stayed high,
+        reads ACK low again over T0B_LOW_READS reads while the MCU is held, and
+        only then pulses HOST_REQ: nothing depends on when the console lines
+        arrive. In v1 the host read ACK after the line `T0B timeout handled`,
+        when the next step could already have raised it again."""
         self.step("T0B_TIMEOUT")
         self.wait_ack(True)
+        t_high = time.monotonic()
         self.log("[ad2] T0B(d) MCU_ACK high: the host deliberately does not raise HOST_REQ")
-        self.con.expect(r"\[spi\] T0B timeout handled", 20.0)
-        low = (self.ad2.digital_io_read() & DIO_ACK) == 0
-        self.check("T0B(d) firmware timeout", low, "firmware reported the timeout and MCU_ACK is low")
+        self.wait_ack(False, T0B_ACK_LOW_LIMIT_S)          # the MCU's timeout, then bench_safe()
+        held_s = time.monotonic() - t_high
+        reads = []
+        for _ in range(T0B_LOW_READS):
+            reads.append((self.ad2.digital_io_read() & DIO_ACK) == 0)
+            time.sleep(0.005)
+        self.con.expect(r"\[spi\] T0B timeout handled", 5.0)
+        self.sync_low_pulse()                               # lets the MCU go on to the next step
+        ok = all(reads) and T0B_TIMEOUT_MIN_S <= held_s <= T0B_TIMEOUT_MAX_S
+        self.check("T0B(d) firmware timeout", ok,
+                   f"MCU_ACK stayed high {held_s:.3f} s without HOST_REQ ({T0B_TIMEOUT_MIN_S}..{T0B_TIMEOUT_MAX_S} s; "
+                   f"the MCU waits 4e9 cycles), then low in {sum(reads)}/{T0B_LOW_READS} reads over "
+                   f"{T0B_LOW_READS * 5} ms while the MCU waited for the host; `T0B timeout handled` reported")
+
+    def sync_low_pulse(self) -> None:
+        """The host side of sync_ack_low(): HOST_REQ up, then down, with MCU_ACK
+        low throughout (checked after each edge)."""
+        self.req(True)
+        time.sleep(0.005)
+        hi_ok = (self.ad2.digital_io_read() & DIO_ACK) == 0
+        self.req(False)
+        if not hi_ok:
+            raise BenchAbort("T0B(d): MCU_ACK went high during the HOST_REQ pulse")
 
     def t0b_s13(self) -> None:
         """T0b(e): S5 with PE11..PE14 in AF5 must pass; with AFCNTR = 1 (SPE = 0)

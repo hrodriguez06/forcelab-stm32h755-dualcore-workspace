@@ -1010,7 +1010,32 @@ static void step_t0b_s5neg(void)
     step_end();
 }
 
-/* T0b(d): the host does not answer; the MCU must time out into S2. */
+/* After the T0b(d) timeout: MCU_ACK stays low (bench_safe() drove it low) and
+   the MCU goes on only once the host has raised and dropped HOST_REQ. The host
+   reads ACK low while the MCU waits here, so its check does not depend on the
+   order in which console lines and DIO reads arrive (audit B1: in
+   docs/spi_f0_audit_bench_153d5b3.txt the next step had raised ACK again
+   before the host read it). */
+static bool sync_ack_low(void)
+{
+    if (s_bench_abort)
+    {
+        return false;
+    }
+    bool ok = wait_req(true, SYNC_TIMEOUT_CYC);
+    if (ok)
+    {
+        ok = wait_req(false, SYNC_TIMEOUT_CYC);
+    }
+    if (!ok)
+    {
+        bench_abort("host timeout");
+    }
+    return ok;
+}
+
+/* T0b(d): the host does not answer; the MCU must time out into S2, and wait
+   with MCU_ACK low until the host has seen it (sync_ack_low()). */
 static void step_t0b_timeout(void)
 {
     if (!step_begin("T0B_TIMEOUT"))
@@ -1031,6 +1056,10 @@ static void step_t0b_timeout(void)
             "J1 MODER PA5|PA6|PB4|PB5=0x%02lX (0)", (unsigned long)e_moder, (unsigned long)expect,
             (unsigned long)GPIOE->AFR[1], (unsigned long)j1);
     LOG("T0B timeout handled");
+    if (!sync_ack_low())   /* host: MCU_ACK low, then a HOST_REQ pulse */
+    {
+        return;
+    }
     step_end();
 }
 
