@@ -83,7 +83,7 @@ static const char *const k_j1_name[]  = { "NONE", "CM7", "CM4" };
 static uint32_t  s_step = SST_STEP_NONE;  /* NONE between steps: nothing wired may be driven */
 static bool      s_bench_abort;
 static uint32_t  s_fail;                  /* firmware-side verdicts that failed */
-static char      s_line[160];             /* verdict() text; one task, no reentrancy */
+static char      s_line[400];             /* verdict()/log_long() text; one task, no reentrancy */
 
 /* ---- Small helpers ------------------------------------------------------------------ */
 
@@ -103,6 +103,48 @@ static void delay_ms(uint32_t ms)
     }
 }
 
+/* App_Log() cuts a line at APP_LOG_LINE_MAX (160, CM7/App/Src/app_log.c): in
+   the first run (docs/spi_f0_bench_65e19f7.txt) two lines lost their end,
+   one of them its "-> PASS". So s_line is printed in pieces of at most
+   LOG_CHUNK characters, cut at a space, the next ones starting with "| ",
+   and `suffix` goes on the last piece. */
+#define LOG_CHUNK           120U
+
+static void log_text(const char *suffix)
+{
+    const char *t = s_line;
+    size_t n = strlen(t);
+    bool first = true;
+    while (n > LOG_CHUNK)
+    {
+        size_t cut = LOG_CHUNK;
+        while ((cut > (LOG_CHUNK / 2U)) && (t[cut] != ' '))
+        {
+            cut--;
+        }
+        LOG("%s%.*s", first ? "" : "| ", (int)cut, t);
+        t += cut;
+        n -= cut;
+        while ((n > 0U) && (*t == ' '))
+        {
+            t++;
+            n--;
+        }
+        first = false;
+    }
+    LOG("%s%s%s", first ? "" : "| ", t, suffix);
+}
+
+static void log_long(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void log_long(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    (void)vsnprintf(s_line, sizeof(s_line), fmt, ap);
+    va_end(ap);
+    log_text("");
+}
+
 static void verdict(bool ok, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 static void verdict(bool ok, const char *fmt, ...)
 {
@@ -114,7 +156,7 @@ static void verdict(bool ok, const char *fmt, ...)
     {
         s_fail++;
     }
-    LOG("%s -> %s", s_line, ok ? "PASS" : "FAIL");
+    log_text(ok ? " -> PASS" : " -> FAIL");
 }
 
 static void publish_step(uint32_t idx)
@@ -1026,7 +1068,7 @@ static void step_t0b_s13(void)
     const bool clk_was_on = spi4_clocked();
     RCC->APB2ENR |= RCC_APB2ENR_SPI4EN;      /* CPU1's bank (RM0399 9.5.10) */
     (void)RCC->APB2ENR;
-    LOG("T0B(e) SPI4 at the start of the step: CR1=0x%08lX CFG2=0x%08lX SR=0x%08lX (MODF %lu)",
+    log_long("T0B(e) SPI4 at the start of the step: CR1=0x%08lX CFG2=0x%08lX SR=0x%08lX (MODF %lu)",
         (unsigned long)SPI4->CR1, (unsigned long)SPI4->CFG2, (unsigned long)SPI4->SR,
         (unsigned long)((SPI4->SR & SPI_SR_MODF) != 0U));
 
@@ -1068,7 +1110,7 @@ static void step_t0b_s13(void)
     const bool ok_reset = bench_claim(GPIOE, PE_SPI4_MASK, GPIO_BM_MODE_AF, SST_AF_SPI4);
     port_snap(&g1);
     const bool untouched = port_snap_eq(&g0, &g1);
-    LOG("T0B(e) SPI4 cases: SPE=1 (read back %lu), AFCNTR=1, MASTER=0 with CPOL, clock off; pin cases: AF6, AF1, PE8, "
+    log_long("T0B(e) SPI4 cases: SPE=1 (read back %lu), AFCNTR=1, MASTER=0 with CPOL, clock off; pin cases: AF6, AF1, PE8, "
         "PE10, PE15, PE9, PE12 output, PE2, PE6, SPI4 with PE10, PA5 AF8; SR in the SPE case 0x%08lX",
         (unsigned long)spe_seen, (unsigned long)spe_sr);
     verdict((bad_state == 0U) && (bad_pins == 0U) && (spe_seen != 0U) && untouched,
@@ -1132,7 +1174,7 @@ static void step_t0b_s13(void)
         ctrl_ok = ctrl_ok && ((v[k] & sck) == cpol_level) && ((v[k] & others) == pulled);
     }
     ctrl_ok = ctrl_ok && held[0] && held[3];
-    LOG("T0B(e) control AFCNTR=1 MCU IDR bus: CPOL=0 up 0x%02lX down 0x%02lX, CPOL=1 up 0x%02lX down 0x%02lX; "
+    log_long("T0B(e) control AFCNTR=1 MCU IDR bus: CPOL=0 up 0x%02lX down 0x%02lX, CPOL=1 up 0x%02lX down 0x%02lX; "
         "MOSI (DIO6) %lu %lu %lu %lu", (unsigned long)v[0], (unsigned long)v[1], (unsigned long)v[2],
         (unsigned long)v[3], (unsigned long)((v[0] >> 6) & 1U), (unsigned long)((v[1] >> 6) & 1U),
         (unsigned long)((v[2] >> 6) & 1U), (unsigned long)((v[3] >> 6) & 1U));
