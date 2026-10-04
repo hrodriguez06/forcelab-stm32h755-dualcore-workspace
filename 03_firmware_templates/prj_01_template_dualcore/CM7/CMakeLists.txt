@@ -143,6 +143,7 @@ if(SPI_DRIVER_SELFTEST)
     )
     target_link_libraries(${TARGET} PRIVATE
         stm32h7_driver_spi_bm
+        stm32h7_driver_spi_ll
         stm32h7_driver_dma_bm
         stm32h7_driver_dma_hal
     )

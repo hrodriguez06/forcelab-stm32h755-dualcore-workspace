@@ -10,8 +10,10 @@
   *          F1 steps: F1_NOPIN (T1-T3, T7(d), T10, T11(a), T13, T14 with no pin),
   *          J1_SPI6 and J1_SPI1 (T4, T6-T9, T11(b), T12(a), T14, B1 through the
   *          jumper, SPI1 on CPU2) and SPI4_AD2 (T5, T7(c), T9, T12(b), T14
-  *          against the AD2, which only listens), and prints the global verdict, CPU2's results
-  *          included. Plan and meaning of every test:
+  *          against the AD2, which only listens), then the F2 steps (spi_ll): F2_NOPIN
+  *          (T1, T2 parity with spi_bm, T14), J1_SPI6_LL and J1_SPI1_LL (T4, T6, T7, T14,
+  *          B1; T15 with spi_bm and spi_ll) and SPI4_AD2_LL (T5(a)), and prints the global
+  *          verdict, CPU2's results included. Plan and meaning of every test:
   *          01_shared_drivers/06_spi/IMPLEMENTATION_PLAN.md.
   *
   *          Electrical safety (no series resistors on the bench, and J1 ties
@@ -1446,6 +1448,58 @@ static void f1_clocks(void)
              (unsigned long)s_k6, (unsigned long)s_seed);
 }
 
+/* ---- F2: the tier under test. T4, T5(a), T6, T7, T15 and B1 run the same code through
+   spi_bm or spi_ll; the LL configuration is the test's own (sst_ll_of()). ---------------- */
+#define TIER_BM       0U
+#define TIER_LL       1U
+static uint32_t s_tier = TIER_BM;
+
+static SpiBm_Status_t x_init(const SpiBm_Config_t *c)
+{
+    if (s_tier == TIER_LL)
+    {
+        SpiLl_Config_t l;
+        sst_ll_of(c, &l);
+        return SPI_LL_Init(&l);
+    }
+    return SPI_BM_Init(c);
+}
+
+static SpiBm_Status_t x_transfer(SPI_TypeDef *spi, const void *tx, void *rx, uint32_t n, uint32_t g, uint32_t m)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_Transfer(spi, tx, rx, n, g, m) : SPI_BM_Transfer(spi, tx, rx, n, g, m);
+}
+
+static SpiBm_Status_t x_start_it(SPI_TypeDef *spi, SpiBm_Xfer_t *x)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_TransferStartIt(spi, x) : SPI_BM_TransferStartIt(spi, x);
+}
+
+static bool x_irq(SPI_TypeDef *spi, SpiBm_Xfer_t *x)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_TransferIrq(spi, x) : SPI_BM_TransferIrq(spi, x);
+}
+
+static SpiBm_Status_t x_dma_prepare(SPI_TypeDef *spi, uint32_t n, bool rx)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_DmaPrepare(spi, n, rx) : SPI_BM_DmaPrepare(spi, n, rx);
+}
+
+static SpiBm_Status_t x_dma_start(SPI_TypeDef *spi)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_DmaStart(spi) : SPI_BM_DmaStart(spi);
+}
+
+static SpiBm_Status_t x_wait_end(SPI_TypeDef *spi, uint32_t m)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_WaitEnd(spi, m) : SPI_BM_WaitEnd(spi, m);
+}
+
+static SpiBm_Status_t x_dma_end(SPI_TypeDef *spi, uint32_t g)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_DmaEnd(spi, g) : SPI_BM_DmaEnd(spi, g);
+}
+
 static uint32_t next_seed(void)
 {
     uint32_t x = s_seed;
@@ -2284,14 +2338,14 @@ static void f1_b1(SPI_TypeDef *spi, const char *name)
     const uint32_t pm = __get_PRIMASK();
     __disable_irq();
     uint32_t t0 = DWT->CYCCNT;
-    const SpiBm_Status_t si = SPI_BM_Init(&c);
+    const SpiBm_Status_t si = x_init(&c);
     const uint32_t c_init = DWT->CYCCNT - t0;
     t0 = DWT->CYCCNT;
-    const SpiBm_Status_t st = SPI_BM_Transfer(spi, s_tx, NULL, 1U, guard_of(spi, 0U), budget_of(spi, 0U, 8U, 1U));
+    const SpiBm_Status_t st = x_transfer(spi, s_tx, NULL, 1U, guard_of(spi, 0U), budget_of(spi, 0U, 8U, 1U));
     const uint32_t c_xfer = DWT->CYCCNT - t0;
     __set_PRIMASK(pm);
     (void)SPI_BM_Deinit(spi);
-    LOG("B1 CM7 %s SPI_BM_Init %lu cycles (st %u), SPI_BM_Transfer of 1 frame at /2 %lu cycles (st %u), "
+    LOG("B1 CM7 %s Init %lu cycles (st %u), Transfer of 1 frame at /2 %lu cycles (st %u), "
         "CalcPrescaler worst %lu", name, (unsigned long)c_init, (unsigned)si, (unsigned long)c_xfer, (unsigned)st,
         (unsigned long)s_b1_calc_max);
 }
@@ -2372,9 +2426,9 @@ static void xfer_local(const SpiBm_Config_t *c, uint32_t n, uint32_t seed, void 
     const uint32_t es = sst_elem_bytes(bits);
     sst_fill(tx, es, n, bits, seed);
     sst_fill_const(rx, es, n, 0xA5A5A5A5UL);
-    r->init_st = SPI_BM_Init(c);
+    r->init_st = x_init(c);
     const uint32_t t0 = DWT->CYCCNT;
-    r->status = SPI_BM_Transfer(spi, tx, rx, n, guard_of(spi, c->mbr), budget_of(spi, c->mbr, bits, n));
+    r->status = x_transfer(spi, tx, rx, n, guard_of(spi, c->mbr), budget_of(spi, c->mbr, bits, n));
     r->cycles = DWT->CYCCNT - t0;
     r->mism = sst_mismatch(tx, rx, es, n, bits);
     r->crc = sst_crc32_frames(rx, es, n, bits);
@@ -2387,7 +2441,7 @@ static void xfer_local(const SpiBm_Config_t *c, uint32_t n, uint32_t seed, void 
 /* One transfer on SPI1, run by CPU2 (SST_CMD_XFER). */
 static bool xfer_m4(uint32_t xcfg, uint32_t n, uint32_t seed, uint32_t xm, SstXferRes_t *r)
 {
-    if (!cm4_send4(SST_CMD_XFER, xcfg, seed, n, xm))
+    if (!cm4_send4(SST_CMD_XFER, xcfg | ((s_tier == TIER_LL) ? SST_XCFG_LL : 0U), seed, n, xm))
     {
         return false;
     }
@@ -2547,7 +2601,7 @@ void SPI6_IRQHandler(void)
     if (s_it_active)
     {
         const uint32_t t0 = DWT->CYCCNT;
-        const bool done = SPI_BM_TransferIrq(SPI6, &s_it);
+        const bool done = x_irq(SPI6, &s_it);
         const uint32_t dt = DWT->CYCCNT - t0;
         if (dt < s_b1_irq_min)
         {
@@ -2569,7 +2623,7 @@ void SPI6_IRQHandler(void)
     }
 }
 
-static void t6_spi6(void)
+static void t6_spi6(const char *name)
 {
     IRQn_Type irq = SPI6_IRQn;
     (void)SPI_BM_GetIRQn(SPI6, &irq);
@@ -2591,7 +2645,7 @@ static void t6_spi6(void)
             const SpiBm_Config_t c = mkcfg(SPI6, mbr, 0U, bits, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
             sst_fill(s_tx, es, n, bits, seed);
             sst_fill_const(s_rx, es, n, 0xA5A5A5A5UL);
-            const SpiBm_Status_t si = SPI_BM_Init(&c);
+            const SpiBm_Status_t si = x_init(&c);
             s_it.tx = s_tx;
             s_it.rx = s_rx;
             s_it.frames = n;
@@ -2599,7 +2653,7 @@ static void t6_spi6(void)
             s_it_irqs = 0U;
             s_it_spurious = 0U;
             s_it_active = true;
-            const SpiBm_Status_t ss = SPI_BM_TransferStartIt(SPI6, &s_it);
+            const SpiBm_Status_t ss = x_start_it(SPI6, &s_it);
             if (ss != SPI_BM_OK)
             {
                 s_it_active = false;
@@ -2620,7 +2674,7 @@ static void t6_spi6(void)
             const uint32_t mism = sst_mismatch(s_tx, s_rx, es, n, bits);
             const uint32_t crc = sst_crc32_frames(s_rx, es, n, bits);
             const SpiBm_Status_t sd = SPI_BM_Deinit(SPI6);
-            LOG("T6 SPI6 b%lu n%lu s=%08lX st=%lu mis=%lu crc=%08lX irq=%lu after=%lu", (unsigned long)bits,
+            LOG("T6 %s b%lu n%lu s=%08lX st=%lu mis=%lu crc=%08lX irq=%lu after=%lu", name, (unsigned long)bits,
                 (unsigned long)n, (unsigned long)seed, (unsigned long)s_it.status, (unsigned long)mism,
                 (unsigned long)crc, (unsigned long)irqs, (unsigned long)after);
             if ((si != SPI_BM_OK) || (ss != SPI_BM_OK) || !done || (s_it.status != SPI_BM_OK) || (mism != 0U) ||
@@ -2641,9 +2695,9 @@ static void t6_spi6(void)
     (void)SPI_BM_Deinit(SPI6);
     HAL_NVIC_DisableIRQ(irq);
     NVIC_ClearPendingIRQ(irq);
-    verdict(bad == 0U, "T6 SPI6 by interrupt (8/16 bits, 1, FIFO + 1, 1024 frames): %lu failed; (c) IRQs in the 10 ms "
-            "after each end, SPE = 0: %lu in total (0)", (unsigned long)bad, (unsigned long)after_total);
-    verdict(spurious >= 1U, "T6(c) control: TXPIE = 1 by hand with SPE = 0: %lu spurious IRQ (>= 1)",
+    verdict(bad == 0U, "T6 %s by interrupt (8/16 bits, 1, FIFO + 1, 1024 frames): %lu failed; (c) IRQs in the 10 ms "
+            "after each end, SPE = 0: %lu in total (0)", name, (unsigned long)bad, (unsigned long)after_total);
+    verdict(spurious >= 1U, "T6(c) %s control: TXPIE = 1 by hand with SPE = 0: %lu spurious IRQ (>= 1)", name,
             (unsigned long)spurious);
 }
 
@@ -2672,8 +2726,8 @@ static SpiBm_Status_t t7b_one(uint32_t bits, uint32_t n, uint32_t seed, bool rxd
     const SpiBm_Config_t c = mkcfg(SPI6, mbr, 0U, bits, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
     sst_fill(s_bd_tx, es, n, bits, seed);
     sst_fill_const(s_bd_rx, es, n, 0xA5A5A5A5UL);
-    const SpiBm_Status_t si = SPI_BM_Init(&c);
-    const SpiBm_Status_t sp = SPI_BM_DmaPrepare(SPI6, n, rxdma);
+    const SpiBm_Status_t si = x_init(&c);
+    const SpiBm_Status_t sp = x_dma_prepare(SPI6, n, rxdma);
     const bool d_ok = bd_init(&s_hbd_rx, BDMA_Channel0, BDMA_REQUEST_SPI6_RX, DMA_PERIPH_TO_MEMORY, es) &&
                       bd_init(&s_hbd_tx, BDMA_Channel1, BDMA_REQUEST_SPI6_TX, DMA_MEMORY_TO_PERIPH, es);
     bool s_ok = d_ok;
@@ -2685,15 +2739,15 @@ static SpiBm_Status_t t7b_one(uint32_t bits, uint32_t n, uint32_t seed, bool rxd
     {
         s_ok = HAL_DMA_Start(&s_hbd_tx, (uint32_t)s_bd_tx, (uint32_t)&SPI6->TXDR, n) == HAL_OK;
     }
-    const SpiBm_Status_t ss = SPI_BM_DmaStart(SPI6);
-    const SpiBm_Status_t sw = SPI_BM_WaitEnd(SPI6, budget_of(SPI6, mbr, bits, n));
+    const SpiBm_Status_t ss = x_dma_start(SPI6);
+    const SpiBm_Status_t sw = x_wait_end(SPI6, budget_of(SPI6, mbr, bits, n));
     if (rxdma)
     {
         (void)HAL_DMA_PollForTransfer(&s_hbd_rx, HAL_DMA_FULL_TRANSFER, 10U);
     }
     (void)HAL_DMA_Abort(&s_hbd_tx);                   /* 1. the caller's streams */
     (void)HAL_DMA_Abort(&s_hbd_rx);
-    const SpiBm_Status_t se = SPI_BM_DmaEnd(SPI6, guard_of(SPI6, mbr));   /* 2. SPI, 3. DMA bits */
+    const SpiBm_Status_t se = x_dma_end(SPI6, guard_of(SPI6, mbr));   /* 2. SPI, 3. DMA bits */
     (void)DMA_HAL_DeInit(&s_hbd_tx);
     (void)DMA_HAL_DeInit(&s_hbd_rx);
     const SpiBm_Status_t sd = SPI_BM_Deinit(SPI6);
@@ -2713,7 +2767,7 @@ static SpiBm_Status_t t7b_one(uint32_t bits, uint32_t n, uint32_t seed, bool rxd
     return sw;
 }
 
-static void t7b_spi6(void)
+static void t7b_spi6(const char *name)
 {
     uint32_t bad = 0U;
     for (uint32_t b = 0U; b < 2U; b++)
@@ -2728,7 +2782,7 @@ static void t7b_spi6(void)
             uint32_t left = 0U;
             bool steps = false;
             const SpiBm_Status_t st = t7b_one(bits, frames[k], seed, true, &mism, &crc, &left, &steps);
-            LOG("T7B SPI6 b%lu n%lu s=%08lX st=%u mis=%lu crc=%08lX", (unsigned long)bits, (unsigned long)frames[k],
+            LOG("T7B %s b%lu n%lu s=%08lX st=%u mis=%lu crc=%08lX", name, (unsigned long)bits, (unsigned long)frames[k],
                 (unsigned long)seed, (unsigned)st, (unsigned long)mism, (unsigned long)crc);
             if ((st != SPI_BM_OK) || (mism != 0U) || !steps)
             {
@@ -2741,11 +2795,11 @@ static void t7b_spi6(void)
     uint32_t left = 0U;
     bool steps = false;
     const SpiBm_Status_t st = t7b_one(8U, 255U, next_seed(), false, &mism, &crc, &left, &steps);
-    verdict(bad == 0U, "T7(b) SPI6 by BDMA (channels 0/1, DMAMUX2 11/12, buffers in .d3_ram), 8/16 bits, 1..8192 "
-            "frames: %lu failed", (unsigned long)bad);
+    verdict(bad == 0U, "T7(b) %s by BDMA (channels 0/1, DMAMUX2 11/12, buffers in .d3_ram), 8/16 bits, 1..8192 "
+            "frames: %lu failed", name, (unsigned long)bad);
     verdict((st == SPI_BM_ERR_OVERRUN) && (left == 255U) && steps,
-            "T7(b) control RXDMAEN = 0, 255 frames: WaitEnd %u (ERR_OVERRUN %u), RX words with the sentinel %lu (255)",
-            (unsigned)st, (unsigned)SPI_BM_ERR_OVERRUN, (unsigned long)left);
+            "T7(b) %s control RXDMAEN = 0, 255 frames: WaitEnd %u (ERR_OVERRUN %u), RX words with the sentinel %lu (255)",
+            name, (unsigned)st, (unsigned)SPI_BM_ERR_OVERRUN, (unsigned long)left);
 }
 
 /* ---- T8: speed sweep on J1 (pins at VERY_HIGH) ---------------------------------------- */
@@ -2931,8 +2985,8 @@ static void step_j1_spi6(void)
     }
     if (!s_bench_abort)
     {
-        t6_spi6();
-        t7b_spi6();
+        t6_spi6("SPI6");
+        t7b_spi6("SPI6");
         t8_sweep(SPI6, "SPI6", false, 16U);
         t12a_spi6();
     }
@@ -3112,14 +3166,14 @@ static uint32_t       s_cap_bad;
 
 static SpiBm_Status_t cap_poll(void)
 {
-    return SPI_BM_Transfer(SPI4, s_tx, NULL, s_cap_n, guard_of(SPI4, s_cap_cfg.mbr),
+    return x_transfer(SPI4, s_tx, NULL, s_cap_n, guard_of(SPI4, s_cap_cfg.mbr),
                            budget_of(SPI4, s_cap_cfg.mbr, s_cap_cfg.data_bits, s_cap_n));
 }
 
 static SpiBm_Status_t cap_dma(void)
 {
-    const SpiBm_Status_t s = SPI_BM_DmaStart(SPI4);
-    const SpiBm_Status_t w = SPI_BM_WaitEnd(SPI4, budget_of(SPI4, s_cap_cfg.mbr, s_cap_cfg.data_bits, s_cap_n));
+    const SpiBm_Status_t s = x_dma_start(SPI4);
+    const SpiBm_Status_t w = x_wait_end(SPI4, budget_of(SPI4, s_cap_cfg.mbr, s_cap_cfg.data_bits, s_cap_n));
     return (s != SPI_BM_OK) ? s : w;
 }
 
@@ -3152,7 +3206,7 @@ static void cap_one(char kind, const SpiBm_Config_t *c, uint32_t n, CapFn_t fn)
     s_cap_n = n;
     const uint32_t seed = next_seed();
     sst_fill(s_tx, sst_elem_bytes(c->data_bits), n, c->data_bits, seed);
-    const SpiBm_Status_t si = SPI_BM_Init(c);
+    const SpiBm_Status_t si = x_init(c);
     if (!spi4_pins(c->mode >> 1, c->nss_active_high, GPIO_BM_PULL_DOWN, 0xFFU))
     {
         return;
@@ -3173,7 +3227,7 @@ static void cap_one(char kind, const SpiBm_Config_t *c, uint32_t n, CapFn_t fn)
             .mem1_addr = 0U, .mem_burst = DMA_BM_BURST_SINGLE, .periph_burst = DMA_BM_BURST_SINGLE,
             .periph_flow_ctrl = false, .fail_if_busy = true, .stop_spin_limit = 0U };
         sst_fill(s_dma1_buf, sst_elem_bytes(c->data_bits), n, c->data_bits, seed);
-        if ((SPI_BM_DmaPrepare(SPI4, n, false) != SPI_BM_OK) || !DMA_BM_InitStreamEx(&d) || !DMA_BM_StartEx(DMA1_Stream0))
+        if ((x_dma_prepare(SPI4, n, false) != SPI_BM_OK) || !DMA_BM_InitStreamEx(&d) || !DMA_BM_StartEx(DMA1_Stream0))
         {
             s_cap_bad++;
         }
@@ -3190,7 +3244,7 @@ static void cap_one(char kind, const SpiBm_Config_t *c, uint32_t n, CapFn_t fn)
     if (fn == cap_dma)
     {
         (void)DMA_BM_StopEx(DMA1_Stream0, 0U);
-        if (SPI_BM_DmaEnd(SPI4, guard_of(SPI4, c->mbr)) != SPI_BM_OK)
+        if (x_dma_end(SPI4, guard_of(SPI4, c->mbr)) != SPI_BM_OK)
         {
             s_cap_bad++;
         }
@@ -3396,6 +3450,591 @@ static void step_spi4_ad2(void)
 }
 
 /* ==========================================================================================
+ * Phase F2: spi_ll (plan revision 3: T1, T2, T4, T5(a), T6, T7(a)(b), T14 with LL on both
+ * cores; T15 with BM and LL; B1). The tests of F1 run again with s_tier = TIER_LL; the LL
+ * configuration of each is the test's own (sst_ll_of(), written by hand from the LL
+ * constants).
+ * ========================================================================================== */
+
+/* ---- T1 with spi_ll (CPU1: SPI2, SPI4, SPI5, SPI6) ------------------------------------- */
+static void f2_t1(void)
+{
+    SPI_TypeDef *const inst[4] = { SPI2, SPI4, SPI5, SPI6 };
+    for (uint32_t i = 0U; i < 4U; i++)
+    {
+        (void)SPI_BM_EnableClock(inst[i]);
+        (void)SPI_BM_Deinit(inst[i]);
+    }
+    uint32_t a[T1_SNAP];
+    uint32_t b[T1_SNAP];
+    uint32_t same = 0U;
+    const SpiBm_Config_t cb = mkcfg(SPI2, 7U, 0U, 8U, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+    SpiLl_Config_t c;
+    sst_ll_of(&cb, &c);
+    SpiLl_Config_t k;
+    s_t1_n = 0U;
+
+    /* 1. Nothing initialised: every LL field with a constant LL does not know, the
+          capability, the FIFO range, and the parameters of the other calls. */
+    t1_snap(a);
+    t1(SPI_LL_CheckConfig(NULL), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_Init(NULL), SPI_BM_ERR_PARAM);
+    k = c; k.spi = (SPI_TypeDef *)USART3;                          t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.spi = (SPI_TypeDef *)((uint32_t)SPI1 + 4U);           t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.data_width = SPI_CFG1_DSIZE_1;                         t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);  /* 3 bits */
+    k = c; k.data_width = LL_SPI_DATAWIDTH_8BIT | (1UL << 5);       t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);  /* stray */
+    k = c; k.spi = SPI4; k.data_width = LL_SPI_DATAWIDTH_17BIT;     t1(SPI_LL_Init(&k), SPI_BM_ERR_UNSUPPORTED);
+    k = c; k.spi = SPI5; k.data_width = LL_SPI_DATAWIDTH_17BIT;     t1(SPI_LL_Init(&k), SPI_BM_ERR_UNSUPPORTED);
+    k = c; k.spi = SPI6; k.data_width = LL_SPI_DATAWIDTH_17BIT;     t1(SPI_LL_Init(&k), SPI_BM_ERR_UNSUPPORTED);
+    k = c; k.clock_polarity = SPI_CFG2_CPHA;                        t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.clock_phase = SPI_CFG2_CPOL;                           t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.bit_order = 1U;                                        t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.nss_polarity = SPI_CFG2_SSOE;                          t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.baudrate = 1U;                                         t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.transfer_direction = LL_SPI_SIMPLEX_RX;                t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.transfer_direction = LL_SPI_HALF_DUPLEX_TX;            t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.nss = LL_SPI_NSS_HARD_INPUT;                           t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.nss_pulse = true;                                      t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);  /* with SOFT */
+    k = c; k.ss_idleness = LL_SPI_SS_IDLENESS_05CYCLE;              t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);  /* with SOFT */
+    k = c; k.nss = LL_SPI_NSS_HARD_OUTPUT; k.ss_idleness = SPI_CFG2_MIDI_0;
+                                                                    t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.interdata_idleness = 1U;                               t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.fifo_threshold = 1U;                                   t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.spi = SPI4; k.data_width = LL_SPI_DATAWIDTH_16BIT; k.fifo_threshold = LL_SPI_FIFO_TH_03DATA;
+                                                                    t1(SPI_LL_Init(&k), SPI_BM_ERR_RANGE);
+    k = c; k.data_width = LL_SPI_DATAWIDTH_32BIT; k.fifo_threshold = LL_SPI_FIFO_TH_03DATA;
+                                                                    t1(SPI_LL_Init(&k), SPI_BM_ERR_RANGE);
+    t1(SPI_LL_TransferStartIt(SPI2, NULL), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_DmaStart(NULL), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_WaitEnd(NULL, 1000U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_DmaEnd((SPI_TypeDef *)USART3, 1U), SPI_BM_ERR_PARAM);
+    t1_snap(b);
+    same |= (memcmp(a, b, sizeof(a)) == 0) ? 1U : 0U;
+
+    /* 2. SPI2 transmit only, SPI5 16-bit, both through spi_ll: the transfer's parameters. */
+    k = c; k.transfer_direction = LL_SPI_SIMPLEX_TX;
+    const SpiBm_Status_t i2 = SPI_LL_Init(&k);
+    k = c; k.spi = SPI5; k.data_width = LL_SPI_DATAWIDTH_16BIT;
+    const SpiBm_Status_t i5 = SPI_LL_Init(&k);
+    SpiBm_Xfer_t x = { s_tx, NULL, 1U, 0U, 0U, 0U, SPI_BM_OK };
+    t1_snap(a);
+    t1(SPI_LL_Transfer(SPI2, s_tx, NULL, 0U, 1U, 1000U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_Transfer(SPI2, s_tx, NULL, 65536U, 1U, 1000U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_Transfer(SPI2, NULL, NULL, 1U, 1U, 1000U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_Transfer(SPI2, s_tx, NULL, 1U, 0U, 1000U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_Transfer(SPI2, s_tx, NULL, 1U, 1U, 0U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_Transfer(SPI2, s_tx, s_rx, 1U, 1U, 1000U), SPI_BM_ERR_PARAM);          /* rx in TX_ONLY */
+    t1(SPI_LL_Transfer(SPI5, (const uint8_t *)s_tx + 1U, NULL, 1U, 1U, 1000U), SPI_BM_ERR_PARAM);   /* odd */
+    t1(SPI_LL_TransferStartIt(SPI2, &x), SPI_BM_ERR_PARAM);                             /* guard 0 */
+    t1(SPI_LL_DmaPrepare(SPI2, 1U, true), SPI_BM_ERR_PARAM);                            /* rx in TX_ONLY */
+    t1(SPI_LL_DmaPrepare(SPI2, 0U, false), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_DmaPrepare(SPI2, 65536U, false), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_DmaEnd(SPI2, 0U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_WaitEnd(SPI2, 0U), SPI_BM_ERR_PARAM);
+    t1_snap(b);
+    same |= (memcmp(a, b, sizeof(a)) == 0) ? 2U : 0U;
+    (void)SPI_BM_Deinit(SPI5);
+
+    /* 3. SPE = 1 (by hand; SPI2 has no pin). */
+    k = c;
+    const SpiBm_Status_t i3 = SPI_LL_Init(&k);
+    SPI2->CR1 |= SPI_CR1_SPE;
+    const uint32_t spe = SPI2->CR1 & SPI_CR1_SPE;
+    t1_snap(a);
+    t1(SPI_LL_Init(&k), SPI_BM_ERR_BUSY);
+    t1(SPI_LL_CheckConfig(&k), SPI_BM_ERR_BUSY);
+    t1(SPI_LL_DmaPrepare(SPI2, 1U, false), SPI_BM_ERR_BUSY);
+    t1(SPI_LL_DmaStart(SPI2), SPI_BM_ERR_BUSY);
+    t1(SPI_LL_Transfer(SPI2, s_tx, NULL, 1U, 1U, 1000U), SPI_BM_ERR_BUSY);
+    t1_snap(b);
+    same |= (memcmp(a, b, sizeof(a)) == 0) ? 4U : 0U;
+    SPI2->CR1 &= ~SPI_CR1_SPE;
+
+    /* 4. AFCNTR = 1 in force (keep_pins; SPI2 has no pin): another CPOL or SSIOP. */
+    k = c; k.keep_pins = true;
+    const SpiBm_Status_t i4 = SPI_LL_Init(&k);
+    t1_snap(a);
+    k.clock_polarity = LL_SPI_POLARITY_HIGH;                    t1(SPI_LL_Init(&k), SPI_BM_ERR_BUSY);
+    k.clock_polarity = LL_SPI_POLARITY_LOW;
+    k.nss_polarity = LL_SPI_NSS_POLARITY_HIGH;                  t1(SPI_LL_Init(&k), SPI_BM_ERR_BUSY);
+    t1_snap(b);
+    same |= (memcmp(a, b, sizeof(a)) == 0) ? 8U : 0U;
+    (void)SPI_BM_Deinit(SPI2);
+
+    /* The control: a valid SPI_LL_Init changes the snapshot. */
+    t1_snap(a);
+    k = c;
+    const SpiBm_Status_t w = SPI_LL_Init(&k);
+    t1_snap(b);
+    const bool ctrl = memcmp(a, b, sizeof(a)) != 0;
+    (void)SPI_BM_Deinit(SPI2);
+
+    uint32_t bad = 0U;
+    for (uint32_t i = 0U; (i < s_t1_n) && (i < T1_MAX); i++)
+    {
+        if (s_t1_got[i] != s_t1_exp[i])
+        {
+            bad++;
+            LOG("T1 LL CM7 case %lu: status %u, expected %u", (unsigned long)i, (unsigned)s_t1_got[i],
+                (unsigned)s_t1_exp[i]);
+        }
+    }
+    verdict((bad == 0U) && (s_t1_n <= T1_MAX) && (same == 0xFU) && (spe != 0U) &&
+            (i2 == SPI_BM_OK) && (i5 == SPI_BM_OK) && (i3 == SPI_BM_OK) && (i4 == SPI_BM_OK),
+            "T1 LL CM7 refusals through spi_ll on SPI2, SPI4, SPI5, SPI6: %lu cases, %lu with another status; "
+            "registers of the four and RCC_C1/C2 APB1LENR/APB2ENR/APB4ENR unchanged in the 4 groups: 0x%lX (0xF); "
+            "SPE set by hand %u", (unsigned long)s_t1_n, (unsigned long)bad, (unsigned long)same,
+            (unsigned)(spe != 0U));
+    verdict(ctrl && (w == SPI_BM_OK), "T1 LL CM7 control: a valid SPI_LL_Init(SPI2) changes the snapshot (%u)",
+            (unsigned)ctrl);
+}
+
+/* ---- T2 with spi_ll: the image of each configuration against the RM table and against
+   the one spi_bm leaves, bit for bit (A24). The photo is spi_regs() (8 registers). ---- */
+typedef struct { uint32_t n, bad_rm, bad_bm, bad_init, bad_deinit, first_i, first_reg, got, exp; } T2LlCount_t;
+
+static void t2ll_one(const SpiBm_Config_t *c, T2LlCount_t *t)
+{
+    SPI_TypeDef *spi = c->spi;
+    uint32_t pb[NREG];
+    uint32_t pl[NREG];
+    const SpiBm_Status_t sb = SPI_BM_Init(c);
+    spi_regs(spi, pb);
+    const SpiBm_Status_t db = SPI_BM_Deinit(spi);
+    SpiLl_Config_t l;
+    sst_ll_of(c, &l);
+    const SpiBm_Status_t sl = SPI_LL_Init(&l);
+    spi_regs(spi, pl);
+    const SpiBm_Status_t dl = SPI_BM_Deinit(spi);
+    uint32_t e1 = 0U;
+    uint32_t e2 = 0U;
+    uint32_t ecr = 0U;
+    sst_t2_expect(c, &e1, &e2, &ecr);
+    if ((sb != SPI_BM_OK) || (sl != SPI_BM_OK))
+    {
+        t->bad_init++;
+    }
+    if ((db != SPI_BM_OK) || (dl != SPI_BM_OK))
+    {
+        t->bad_deinit++;
+    }
+    if ((pl[2] != e1) || (pl[3] != e2) || (pl[0] != ecr))
+    {
+        t->bad_rm++;
+    }
+    for (uint32_t r = 0U; r < NREG; r++)
+    {
+        if (pl[r] != pb[r])
+        {
+            if (t->bad_bm == 0U)
+            {
+                t->first_i = t->n;
+                t->first_reg = r;
+                t->got = pl[r];
+                t->exp = pb[r];
+            }
+            t->bad_bm++;
+            break;
+        }
+    }
+    t->n++;
+}
+
+static void t2ll_inst(SPI_TypeDef *spi, const char *name)
+{
+    SpiBm_Caps_t caps = { 0U, 0U, 0U, 0U };
+    (void)SPI_BM_GetCaps(spi, &caps);
+    static const uint32_t bits_list[4] = { 4U, 8U, 16U, 32U };
+    const uint32_t nb = (caps.max_data_bits == 32U) ? 4U : 3U;
+    T2LlCount_t t = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+    (void)SPI_BM_EnableClock(spi);
+    (void)SPI_BM_Deinit(spi);
+    for (uint32_t mbr = 0U; mbr <= 7U; mbr++)
+    {
+        for (uint32_t mode = 0U; mode <= 3U; mode++)
+        {
+            for (uint32_t ib = 0U; ib < nb; ib++)
+            {
+                const uint32_t bits = bits_list[ib];
+                const uint32_t thr[2] = { 1U, thr_max(spi, bits) };
+                for (uint32_t it = 0U; it < 2U; it++)
+                {
+                    for (uint32_t lsb = 0U; lsb < 2U; lsb++)
+                    {
+                        for (uint32_t dir = 0U; dir < 2U; dir++)
+                        {
+                            for (uint32_t nss = 0U; nss < 3U; nss++)
+                            {
+                                for (uint32_t op = 0U; op < 2U; op++)
+                                {
+                                    for (uint32_t mi = 0U; mi < 4U; mi++)
+                                    {
+                                        const uint32_t mssi = ((mi & 1U) != 0U) ? 15U : 0U;
+                                        const uint32_t midi = ((mi & 2U) != 0U) ? 15U : 0U;
+                                        if ((nss == SPI_BM_NSS_SOFT) && (mssi != 0U))
+                                        {
+                                            continue;
+                                        }
+                                        for (uint32_t keep = 0U; keep < 2U; keep++)
+                                        {
+                                            const SpiBm_Config_t c = { spi, mbr, mode, bits, lsb != 0U, dir, thr[it],
+                                                                       nss, op != 0U, mssi, midi, keep != 0U };
+                                            t2ll_one(&c, &t);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    /* The control: the same comparison, with one bit of the LL photo flipped (MASTER in
+       CFG2), must report a difference. */
+    const SpiBm_Config_t c0 = mkcfg(spi, 0U, 0U, 8U, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+    uint32_t pb[NREG];
+    uint32_t pl[NREG];
+    (void)SPI_BM_Init(&c0);
+    spi_regs(spi, pb);
+    (void)SPI_BM_Deinit(spi);
+    SpiLl_Config_t l0;
+    sst_ll_of(&c0, &l0);
+    (void)SPI_LL_Init(&l0);
+    spi_regs(spi, pl);
+    (void)SPI_BM_Deinit(spi);
+    pl[3] ^= SPI_CFG2_MASTER;
+    const bool caught = memcmp(pb, pl, sizeof(pb)) != 0;
+    if (t.bad_bm != 0U)
+    {
+        LOG("T2 LL %s first difference from spi_bm: config %lu register %lu LL 0x%08lX BM 0x%08lX", name,
+            (unsigned long)t.first_i, (unsigned long)t.first_reg, (unsigned long)t.got, (unsigned long)t.exp);
+    }
+    verdict((t.bad_bm == 0U) && (t.bad_rm == 0U) && (t.bad_init == 0U) && (t.bad_deinit == 0U) && caught,
+            "T2 LL %s %lu configurations: spi_ll image (CR1, CR2, CFG1, CFG2, IER, CRCPOLY, UDRDR, I2SCFGR) differs "
+            "from spi_bm's in %lu, CFG1/CFG2/CR1 from the RM0399 table in %lu; Init failed %lu, Deinit failed %lu; "
+            "control (MASTER flipped in the LL photo) caught %u", name, (unsigned long)t.n, (unsigned long)t.bad_bm,
+            (unsigned long)t.bad_rm, (unsigned long)t.bad_init, (unsigned long)t.bad_deinit, (unsigned)caught);
+}
+
+/* ---- T15 (R3-3, audit M2): SPI6 through J1 with PA5 (SCK) in input --------------------- */
+
+/* PA5 in input without pull, PB5 and PA6 in AF8 (S14: SPI6 at rest, read back). */
+static bool spi6_pins_nosck(void)
+{
+    return pin_cfg(GPIOA, PA_J1_SCK, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_NONE, 0U) &&
+           pin_cfg(GPIOB, PB_J1_MISO, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_NONE, 0U) &&
+           pin_cfg(GPIOB, PB_J1_MOSI, GPIO_BM_MODE_AF, SST_AF_SPI6, GPIO_BM_PULL_NONE, 0U) &&
+           pin_cfg(GPIOA, PA_J1_MISO, GPIO_BM_MODE_AF, SST_AF_SPI6, GPIO_BM_PULL_NONE, 0U);
+}
+
+static void t15_one(uint32_t tier, bool sck_routed)
+{
+    s_tier = tier;
+    const char *tn = (tier == TIER_LL) ? "LL" : "BM";
+    const uint32_t mbr = 4U;                                     /* /32: 3.125 MHz */
+    const uint32_t max = 400000U;                                /* 1 ms at 400 MHz */
+    const SpiBm_Config_t c = mkcfg(SPI6, mbr, 0U, 8U, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+    (void)SPI_BM_Deinit(SPI6);
+    const bool pins = sck_routed ? spi6_pins(0U, 0U, GPIO_BM_SPEED_HIGH) : spi6_pins_nosck();
+    if (!pins)
+    {
+        return;
+    }
+    uint8_t *tx = (uint8_t *)s_tx;
+    uint8_t *rx = (uint8_t *)s_rx;
+    tx[0] = 0xA5U;
+    rx[0] = 0x00U;
+    const SpiBm_Status_t si = x_init(&c);
+    const uint32_t t0 = DWT->CYCCNT;
+    const SpiBm_Status_t st = x_transfer(SPI6, tx, rx, 1U, guard_of(SPI6, mbr), max);
+    const uint32_t dt = DWT->CYCCNT - t0;
+    const uint32_t spe = SPI6->CR1 & SPI_CR1_SPE;
+    const uint32_t ier = SPI6->IER;
+    const uint32_t sr = SPI6->SR;
+    const SpiBm_Status_t sd = SPI_BM_Deinit(SPI6);
+    const uint32_t d = reset_diff(SPI6);
+    s_tier = TIER_BM;
+    if (!sck_routed)
+    {
+        verdict((si == SPI_BM_OK) && (st == SPI_BM_ERR_TIMEOUT) && (dt >= max) && (dt <= (max + (max / 10U))) &&
+                (spe == 0U) && (ier == 0U) && (sd == SPI_BM_OK) && (d == 0U),
+                "T15 %s SPI6, PA5 (SCK) in input, 1 frame: Transfer %u (ERR_TIMEOUT %u) after %lu cycles (max_cycles "
+                "%lu .. +10 %%); then SPE %lu IER 0x%lX SR 0x%08lX; Deinit %u, registers off the reset image 0x%02lX (0)",
+                tn, (unsigned)st, (unsigned)SPI_BM_ERR_TIMEOUT, (unsigned long)dt, (unsigned long)max,
+                (unsigned long)(spe != 0U), (unsigned long)ier, (unsigned long)sr, (unsigned)sd, (unsigned long)d);
+    }
+    else
+    {
+        verdict((si == SPI_BM_OK) && (st == SPI_BM_OK) && (rx[0] == tx[0]) && (sd == SPI_BM_OK) && (d == 0U),
+                "T15 %s control, PA5 in AF8: Transfer %u after %lu cycles, received 0x%02X through J1 (0x%02X); "
+                "Deinit %u, off reset 0x%02lX", tn, (unsigned)st, (unsigned long)dt, (unsigned)rx[0], (unsigned)tx[0],
+                (unsigned)sd, (unsigned long)d);
+    }
+}
+
+/* ---- The F2 steps ------------------------------------------------------------------------ */
+
+static void step_f2_nopin(void)
+{
+    SstArea_t *a = SST_AREA;
+    if (!step_begin("F2_NOPIN"))
+    {
+        return;
+    }
+    f2_t1();
+    t2ll_inst(SPI2, "SPI2");
+    t2ll_inst(SPI3, "SPI3");
+    t2ll_inst(SPI4, "SPI4");
+    t2ll_inst(SPI5, "SPI5");
+    t2ll_inst(SPI6, "SPI6");
+    if (cm4_send(SST_CMD_T1, TIER_LL))
+    {
+        const volatile uint32_t *r = a->m4_res;
+        verdict((r[1] == 0U) && (r[2] == 0xFU) && (r[3] == 1U),
+                "T1 LL CM4 refusals through spi_ll on SPI1: %lu cases, %lu with another status (first %lu: %lu, "
+                "expected %lu); registers and RCC banks unchanged in the groups 0x%lX (0xF); control changes them %lu",
+                (unsigned long)r[0], (unsigned long)r[1], (unsigned long)r[4], (unsigned long)r[5],
+                (unsigned long)r[6], (unsigned long)r[2], (unsigned long)r[3]);
+    }
+    if (cm4_send(SST_CMD_T2, TIER_LL))
+    {
+        const volatile uint32_t *r = a->m4_res;
+        verdict((r[1] == 0U) && (r[2] == 0U) && (r[3] == 0U) && (r[4] == 1U) && (r[8] == 0U),
+                "T2 LL CM4 SPI1 %lu configurations: spi_ll image differs from the RM0399 table in %lu, from spi_bm's "
+                "in %lu, Init/Deinit failed %lu; control caught %lu (first difference: config %lu register %lu "
+                "0x%08lX/0x%08lX)", (unsigned long)r[0], (unsigned long)r[1], (unsigned long)r[8],
+                (unsigned long)(r[2] + r[3]), (unsigned long)r[4], (unsigned long)r[5], (unsigned long)r[9],
+                (unsigned long)r[6], (unsigned long)r[7]);
+    }
+    SPI_TypeDef *const inst[5] = { SPI2, SPI3, SPI4, SPI5, SPI6 };
+    const char *const names[5] = { "SPI2", "SPI3", "SPI4", "SPI5", "SPI6" };
+    for (uint32_t i = 0U; i < 5U; i++)
+    {
+        SpiBm_Config_t cb = mkcfg(inst[i], 3U, 1U, 8U, true, SPI_BM_DIR_FULL_DUPLEX, 1U);
+        SpiLl_Config_t l;
+        sst_ll_of(&cb, &l);
+        (void)SPI_LL_Init(&l);
+        t14_check(names[i], inst[i], NULL);        /* after an LL Init: Deinit gives the reset image */
+    }
+    if (!sync0())
+    {
+        return;
+    }
+    step_end();
+}
+
+static void step_j1_spi6_ll(void)
+{
+    if (!step_begin("J1_SPI6_LL"))
+    {
+        return;
+    }
+    static const uint32_t bits6[7] = { 4U, 5U, 7U, 8U, 9U, 15U, 16U };
+    static const uint32_t ctl6[3] = { 4U, 8U, 16U };
+    (void)SPI_BM_EnableClock(SPI6);
+    (void)SPI_BM_Deinit(SPI6);
+    s_tier = TIER_LL;
+    t4_matrix(SPI6, "SPI6/LL", false, bits6, 7U);
+    if (!s_bench_abort && spi6_pins(0U, 0U, GPIO_BM_SPEED_HIGH))
+    {
+        uint32_t mbr = 0U;
+        uint32_t sck = 0U;
+        (void)SPI_BM_CalcPrescaler(s_k6, 12500000U, &mbr, &sck);
+        const SpiBm_Config_t c = mkcfg(SPI6, mbr, 0U, 8U, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+        const uint32_t seed = next_seed();
+        SstXferRes_t r;
+        xfer_local(&c, F1_BIGF, seed, s_big_tx, s_big_rx, &r);
+        t4_line("SPI6/LL", 0U, 8U, 0U, 1U, F1_BIGF, seed, &r);
+        verdict(xfer_ok(&r), "T4 SPI6/LL 65535 frames of 8 bits: status %lu, %lu mismatches",
+                (unsigned long)r.status, (unsigned long)r.mism);
+    }
+    if (!s_bench_abort)
+    {
+        t4_control(SPI6, "SPI6/LL", false, ctl6, 3U);
+        (void)spi6_pins(0U, 0U, GPIO_BM_SPEED_HIGH);
+    }
+    if (!s_bench_abort)
+    {
+        s_b1_irq_min = 0xFFFFFFFFUL;
+        s_b1_irq_max = 0U;
+        t6_spi6("SPI6/LL");
+        t7b_spi6("SPI6/LL");
+    }
+    if (!s_bench_abort && spi6_pins(0U, 0U, GPIO_BM_SPEED_HIGH))
+    {
+        f1_b1(SPI6, "SPI6/LL");
+        LOG("B1 CM7 SPI6/LL TransferIrq per call (T6) min %lu max %lu cycles", (unsigned long)s_b1_irq_min,
+            (unsigned long)s_b1_irq_max);
+    }
+    s_tier = TIER_BM;
+    /* T15 with both tiers, the control after each (plan R3-3, audit M2) */
+    if (!s_bench_abort)
+    {
+        t15_one(TIER_BM, false);
+        t15_one(TIER_BM, true);
+        t15_one(TIER_LL, false);
+        t15_one(TIER_LL, true);
+    }
+    const SpiBm_Config_t cb = mkcfg(SPI6, 2U, 0U, 8U, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+    SpiLl_Config_t l;
+    sst_ll_of(&cb, &l);
+    (void)SPI_LL_Init(&l);
+    const uint32_t dctrl = reset_diff(SPI6);
+    t14_check("SPI6/LL", SPI6, NULL);
+    verdict(dctrl != 0U, "T14 SPI6/LL control: after SPI_LL_Init, before Deinit, registers off reset 0x%02lX (!= 0)",
+            (unsigned long)dctrl);
+    const bool rel = j1_release();
+    const uint32_t j1 = ((GPIOA->MODER >> (PA_J1_SCK * 2U)) & 0xFUL) | (((GPIOB->MODER >> (PB_J1_MISO * 2U)) & 0xFUL) << 4);
+    verdict(rel && (j1 == 0U), "T14 J1 pins back in input: MODER PA5|PA6|PB4|PB5 0x%02lX (0)", (unsigned long)j1);
+    if (!sync0())
+    {
+        return;
+    }
+    step_end();
+}
+
+static void step_j1_spi1_ll(void)
+{
+    SstArea_t *a = SST_AREA;
+    if (!step_begin("J1_SPI1_LL"))
+    {
+        return;
+    }
+    static const uint32_t bits1[11] = { 4U, 5U, 7U, 8U, 9U, 15U, 16U, 17U, 24U, 31U, 32U };
+    static const uint32_t ctl1[4] = { 4U, 8U, 16U, 32U };
+    s_tier = TIER_LL;
+    t4_matrix(SPI1, "SPI1/LL", true, bits1, 11U);
+    if (!s_bench_abort)
+    {
+        t4_control(SPI1, "SPI1/LL", true, ctl1, 4U);
+        (void)cm4_send4(SST_CMD_J1PINS, SST_J1P_LOOP, 0U, GPIO_BM_SPEED_HIGH, 0U);
+    }
+    uint32_t bad = 0U;
+    for (uint32_t b = 0U; (b < 3U) && !s_bench_abort; b++)
+    {
+        const uint32_t bits = (b == 0U) ? 8U : ((b == 1U) ? 16U : 32U);
+        const uint32_t frames[3] = { 1U, fifo_frames(SPI1, bits) + 1U, 1024U };
+        for (uint32_t k = 0U; k < 3U; k++)
+        {
+            const uint32_t seed = next_seed();
+            SstXferRes_t r;
+            (void)xfer_m4(SST_XCFG(0U, bits, 0U, 1U, 5U, 0U), frames[k], seed, SST_XM_IT, &r);
+            const uint32_t after = a->m4_res[9];
+            LOG("T6 SPI1/LL b%lu n%lu s=%08lX st=%lu mis=%lu crc=%08lX irq=%lu after=%lu", (unsigned long)bits,
+                (unsigned long)frames[k], (unsigned long)seed, (unsigned long)r.status, (unsigned long)r.mism,
+                (unsigned long)r.crc, (unsigned long)r.irqs, (unsigned long)after);
+            if (!xfer_ok(&r) || (after != 0U))
+            {
+                bad++;
+            }
+        }
+    }
+    verdict(bad == 0U, "T6 SPI1/LL by interrupt on CPU2 (8/16/32 bits, 1, FIFO + 1, 1024 frames): %lu failed, (c) "
+            "IRQs in the 10 ms after each end 0", (unsigned long)bad);
+    bad = 0U;
+    for (uint32_t b = 0U; (b < 3U) && !s_bench_abort; b++)
+    {
+        const uint32_t bits = (b == 0U) ? 8U : ((b == 1U) ? 16U : 32U);
+        const uint32_t frames[5] = { 1U, 2U, 17U, 255U, 4096U };
+        for (uint32_t k = 0U; k < 5U; k++)
+        {
+            const uint32_t seed = next_seed();
+            SstXferRes_t r;
+            (void)xfer_m4(SST_XCFG(0U, bits, 0U, 1U, 3U, 0U), frames[k], seed, SST_XM_DMA, &r);
+            LOG("T7A SPI1/LL b%lu n%lu s=%08lX st=%lu mis=%lu crc=%08lX", (unsigned long)bits,
+                (unsigned long)frames[k], (unsigned long)seed, (unsigned long)r.status, (unsigned long)r.mism,
+                (unsigned long)r.crc);
+            if (!xfer_ok(&r))
+            {
+                bad++;
+            }
+        }
+    }
+    SstXferRes_t rc = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+    (void)xfer_m4(SST_XCFG(0U, 8U, 0U, 1U, 3U, 0U), 255U, next_seed(), SST_XM_DMA_NORX, &rc);
+    verdict(bad == 0U, "T7(a) SPI1/LL by DMA2 (CPU2, 8/16/32 bits, 1..4096 frames): %lu failed", (unsigned long)bad);
+    verdict((rc.status == (uint32_t)SPI_BM_ERR_OVERRUN) && (rc.sentinel_left == 255U),
+            "T7(a) SPI1/LL control RXDMAEN = 0, 255 frames: WaitEnd %lu (ERR_OVERRUN %u), RX words with the sentinel "
+            "%lu (255)", (unsigned long)rc.status, (unsigned)SPI_BM_ERR_OVERRUN, (unsigned long)rc.sentinel_left);
+    if (!s_bench_abort && cm4_send(SST_CMD_B1, TIER_LL))
+    {
+        LOG("B1 CM4 SPI1/LL SPI_LL_Init %lu cycles, SPI_LL_Transfer of 1 frame at /2 %lu cycles, TransferIrq per "
+            "call min %lu max %lu", (unsigned long)a->m4_res[0], (unsigned long)a->m4_res[1],
+            (unsigned long)a->m4_res[2], (unsigned long)a->m4_res[3]);
+    }
+    s_tier = TIER_BM;
+    if (cm4_send(SST_CMD_T14, 0U))
+    {
+        verdict((a->m4_res[0] == (uint32_t)SPI_BM_OK) && (a->m4_res[1] == 0U),
+                "T14 SPI1/LL (CPU2) Deinit %lu, registers off the RM0399 reset image 0x%02lX (0)",
+                (unsigned long)a->m4_res[0], (unsigned long)a->m4_res[1]);
+    }
+    if (cm4_send4(SST_CMD_J1PINS, SST_J1P_RELEASE, 0U, GPIO_BM_SPEED_LOW, 0U))
+    {
+        verdict(a->m4_res[0] == 1U, "T14 CPU2's J1 pins back in input: MODER PA5|PA6|PB4|PB5 0x%02lX (0)",
+                (unsigned long)a->m4_res[1]);
+    }
+    if (!sync0())
+    {
+        return;
+    }
+    step_end();
+}
+
+/* T5(a) through spi_ll: the same 32 captures, kind 'A' for the host. */
+static void step_spi4_ad2_ll(void)
+{
+    if (!step_begin("SPI4_AD2_LL") || !buschk())
+    {
+        return;
+    }
+    const bool clk_was_on = spi4_clocked();
+    (void)SPI_BM_EnableClock(SPI4);
+    (void)SPI_BM_Deinit(SPI4);
+    if (!spi4_pins(0U, false, GPIO_BM_PULL_DOWN, 0xFFU) || !buschk_af(PE_SPI4_MASK, NULL, NULL))
+    {
+        return;
+    }
+    s_cap_k = 0U;
+    s_cap_bad = 0U;
+    s_tier = TIER_LL;
+    static const uint32_t ab[4] = { 4U, 8U, 13U, 16U };
+    for (uint32_t mode = 0U; mode <= 3U; mode++)
+    {
+        for (uint32_t ib = 0U; ib < 4U; ib++)
+        {
+            for (uint32_t lsb = 0U; lsb < 2U; lsb++)
+            {
+                const SpiBm_Config_t c = { SPI4, 3U, mode, ab[ib], lsb != 0U, SPI_BM_DIR_TX_ONLY, 1U, SPI_BM_NSS_HW,
+                                           false, 0U, 0U, false };
+                cap_one('A', &c, cap_frames(ab[ib], 3U, 0U, 0U, 32U), cap_poll);
+            }
+        }
+    }
+    s_tier = TIER_BM;
+    LOG("CAP done k%lu", (unsigned long)s_cap_k);
+    verdict(s_cap_bad == 0U, "T5(a) SPI4/LL: %lu captures run, %lu with a failed Init, transfer or Deinit",
+            (unsigned long)s_cap_k, (unsigned long)s_cap_bad);
+    const SpiBm_Config_t ctrl = { SPI4, 3U, 0U, 8U, false, SPI_BM_DIR_TX_ONLY, 1U, SPI_BM_NSS_HW, false, 0U, 0U, false };
+    t14_check("SPI4/LL", SPI4, &ctrl);
+    if (!spi4_pins(0U, false, GPIO_BM_PULL_DOWN, 0xFFU) || !buschk_af(PE_SPI4_MASK, NULL, NULL))
+    {
+        return;
+    }
+    (void)pins_input(GPIOE, BUS_MASK, GPIO_BM_PULL_NONE);
+    if (!buschk())
+    {
+        return;
+    }
+    if (!clk_was_on)
+    {
+        (void)SPI_BM_DisableClock(SPI4);
+    }
+    step_end();
+}
+
+/* ==========================================================================================
  * Entry points
  * ========================================================================================== */
 
@@ -3463,6 +4102,10 @@ void SPI_Selftest_CM7_Run(void)
     step_j1_spi6();
     step_j1_spi1();
     step_spi4_ad2();
+    step_f2_nopin();
+    step_j1_spi6_ll();
+    step_j1_spi1_ll();
+    step_spi4_ad2_ll();
     if (step_begin("DONE"))
     {
         step_end();

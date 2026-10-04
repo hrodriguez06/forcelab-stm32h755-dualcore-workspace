@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include "stm32h7xx.h"
 #include "spi_bm.h"
+#include "spi_ll.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,10 +39,12 @@ void SPI_Selftest_CM4_Run(void);          /* CPU2, after Shared_GpioLockInstall(
  * protocol: printed in the banner and in every STEP line, and checked by
  * tools/spi_hw_check.py, which keeps its own copy of the step names, their bus
  * owners and their J1 owners. Bump it when any of those change.              */
-#define SPI_BENCH_VERSION    3U    /* v1: T0A, T0C, T0B(b)-(f) (plan phase F0); v2: after the
+#define SPI_BENCH_VERSION    4U    /* v1: T0A, T0C, T0B(b)-(f) (plan phase F0); v2: after the
                                        T0B(d) timeout MCU_ACK stays low until a HOST_REQ
                                        pulse (audit B1); v3: the spi_bm steps F1_NOPIN,
-                                       J1_SPI6, J1_SPI1 and SPI4_AD2 (phase F1) */
+                                       J1_SPI6, J1_SPI1 and SPI4_AD2 (phase F1); v4: the
+                                       spi_ll steps F2_NOPIN, J1_SPI6_LL, J1_SPI1_LL and
+                                       SPI4_AD2_LL (phase F2) */
 
 typedef enum
 {
@@ -135,6 +138,10 @@ uint32_t sst_coverage(const void *buf, uint32_t es, uint32_t frames, uint32_t bi
    placed with its bit position typed from the RM text, not from CMSIS or the driver. */
 void     sst_t2_expect(const SpiBm_Config_t *cfg, uint32_t *cfg1, uint32_t *cfg2, uint32_t *cr1);
 
+/* F2: the spi_ll configuration of a spi_bm one, from the LL constants written by hand
+   in the test (not from spi_ll.c, whose translation T1 and T2 test). */
+void     sst_ll_of(const SpiBm_Config_t *b, SpiLl_Config_t *l);
+
 /* Bench AF per pin (DS12923 table 9, 00_docs_stm32h7/STM32H755_Alternate_Functions.md). */
 #define SST_AF_SPI4          5U    /* PE11 NSS, PE12 SCK, PE13 MISO, PE14 MOSI          */
 #define SST_AF_SPI1          5U    /* PA5 SCK, PA6/PB4 MISO, PB5 MOSI: CPU2 (SPI1)      */
@@ -160,8 +167,9 @@ typedef enum
     SST_CMD_SPI1,        /* T0b(f): the SPI1 states of SST_SPI_CASES against a claim of PA6 AF5 */
     SST_CMD_DONE,
     /* Phase F1 (spi_bm on SPI1, CPU2's instance; plus SPI2 for T13) */
-    SST_CMD_T1,          /* T1 refusals on SPI1                         -> m4_res (SstT1Res)      */
-    SST_CMD_T2,          /* T2 register images of SPI1                  -> m4_res (SstT2Res)      */
+    SST_CMD_T1,          /* T1 refusals on SPI1; arg0 = 0 spi_bm, 1 spi_ll -> m4_res             */
+    SST_CMD_T2,          /* T2 register images of SPI1; arg0 = 0 spi_bm, 1 spi_ll: images against
+                            the RM table, and spi_ll against spi_bm bit for bit -> m4_res         */
     SST_CMD_J1PINS,      /* arg0 = SST_J1P_*, arg1 = CPOL (pull of SCK), arg2 = GPIO speed       */
     SST_CMD_XFER,        /* arg0 = SST_XCFG(...), arg1 = seed, arg2 = frames, arg3 = SST_XM_*
                             -> m4_res (SstXferRes)                                               */
@@ -171,7 +179,8 @@ typedef enum
     SST_CMD_T13,         /* arg0 = 1: DisableClock(SPI2); 2: EnableClock then DisableClock(SPI2)
                             -> m4_res[0..2] = statuses, RCC_C2 APB1LENR after                    */
     SST_CMD_T14,         /* SPI_BM_Deinit(SPI1) and its registers       -> m4_res[0..9]          */
-    SST_CMD_B1           /* cycles of Init, Transfer of 1 frame, TransferIrq -> m4_res[0..5]     */
+    SST_CMD_B1           /* cycles of Init, Transfer of 1 frame, TransferIrq; arg0 = tier
+                            -> m4_res[0..5]                                                      */
 } SstCmd_t;
 
 /* SST_CMD_J1PINS: the four J1 pins of SPI1 (AF5), CPU2's J1 steps only (S14). */
@@ -194,6 +203,8 @@ typedef enum
 #define SST_XCFG_THR(c)      (((c) >> 9) & 0x1FU)
 #define SST_XCFG_MBR(c)      (((c) >> 14) & 7U)
 #define SST_XCFG_DIR(c)      (((c) >> 17) & 1U)
+#define SST_XCFG_LL          (1UL << 18)       /* F2: the transfer through spi_ll       */
+#define SST_XCFG_IS_LL(c)    (((c) >> 18) & 1U)
 
 /* The result of one transfer, in m4_res[] for SST_CMD_XFER. */
 typedef struct

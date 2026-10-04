@@ -3,7 +3,8 @@
   * @file    spi_selftest.c
   * @brief   06_spi selftest, CPU2 side (preset selftest-spi), phases F0 and
   *          F1 (spi_bm on SPI1, CPU2's instance: T1, T2, T4, T6-T9, T14, B1,
-  *          and the CPU2 half of T13 on SPI2).
+  *          and the CPU2 half of T13 on SPI2), and F2 (the same T1, T2, T4, T6,
+  *          T7(a), T14 and B1 through spi_ll; T2 also against spi_bm bit for bit).
   *
   *          CPU2 has no console. It publishes its Rev, build id and step-table
   *          version in the SRAM4 block (Common/Inc/spi_selftest.h), serves the
@@ -509,6 +510,58 @@ static bool snap_eq(const uint32_t *a, const uint32_t *b)
     return true;
 }
 
+/* ---- F2: the tier of a transfer (SST_XCFG_LL, arg0 of T1/T2/B1); the LL configuration
+   is the test's own (sst_ll_of()). ---------------------------------------------------- */
+#define TIER_BM       0U
+#define TIER_LL       1U
+static uint32_t s_tier = TIER_BM;
+
+static SpiBm_Status_t x_init(const SpiBm_Config_t *c)
+{
+    if (s_tier == TIER_LL)
+    {
+        SpiLl_Config_t l;
+        sst_ll_of(c, &l);
+        return SPI_LL_Init(&l);
+    }
+    return SPI_BM_Init(c);
+}
+
+static SpiBm_Status_t x_transfer(SPI_TypeDef *spi, const void *tx, void *rx, uint32_t n, uint32_t g, uint32_t m)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_Transfer(spi, tx, rx, n, g, m) : SPI_BM_Transfer(spi, tx, rx, n, g, m);
+}
+
+static SpiBm_Status_t x_start_it(SPI_TypeDef *spi, SpiBm_Xfer_t *x)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_TransferStartIt(spi, x) : SPI_BM_TransferStartIt(spi, x);
+}
+
+static bool x_irq(SPI_TypeDef *spi, SpiBm_Xfer_t *x)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_TransferIrq(spi, x) : SPI_BM_TransferIrq(spi, x);
+}
+
+static SpiBm_Status_t x_dma_prepare(SPI_TypeDef *spi, uint32_t n, bool rx)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_DmaPrepare(spi, n, rx) : SPI_BM_DmaPrepare(spi, n, rx);
+}
+
+static SpiBm_Status_t x_dma_start(SPI_TypeDef *spi)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_DmaStart(spi) : SPI_BM_DmaStart(spi);
+}
+
+static SpiBm_Status_t x_wait_end(SPI_TypeDef *spi, uint32_t m)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_WaitEnd(spi, m) : SPI_BM_WaitEnd(spi, m);
+}
+
+static SpiBm_Status_t x_dma_end(SPI_TypeDef *spi, uint32_t g)
+{
+    return (s_tier == TIER_LL) ? SPI_LL_DmaEnd(spi, g) : SPI_BM_DmaEnd(spi, g);
+}
+
 /* ---- T1 on SPI1: the refusals, with the expected status of each case by hand ---------- */
 static uint32_t s_t1_n;
 static uint32_t s_t1_bad;
@@ -719,6 +772,231 @@ static void cmd_t2(void)
     r[3] = bad_r;
 }
 
+/* ---- F2: T1 with spi_ll on SPI1 ------------------------------------------------------- */
+static void cmd_t1_ll(void)
+{
+    volatile uint32_t *r = SST_AREA->m4_res;
+    uint32_t a[T1_SNAP];
+    uint32_t b[T1_SNAP];
+    uint32_t same = 0U;
+    const SpiBm_Config_t cb = mkcfg(7U, 0U, 8U, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+    SpiLl_Config_t c;
+    sst_ll_of(&cb, &c);
+    SpiLl_Config_t k;
+    res_clear();
+    s_t1_n = 0U;
+    s_t1_bad = 0U;
+    (void)SPI_BM_EnableClock(SPI1);
+    (void)SPI_BM_Deinit(SPI1);
+
+    /* 1. LL constants this API does not know, ranges, parameters, nothing initialised */
+    t1_snap(a);
+    t1(SPI_LL_CheckConfig(NULL), SPI_BM_ERR_PARAM);
+    k = c; k.spi = (SPI_TypeDef *)((uint32_t)SPI1 + 4U);      t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.data_width = SPI_CFG1_DSIZE_1;                     t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);   /* 3 bits */
+    k = c; k.data_width = LL_SPI_DATAWIDTH_8BIT | (1UL << 5);   t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.clock_polarity = SPI_CFG2_CPHA;                    t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.clock_phase = SPI_CFG2_CPOL;                       t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.bit_order = 1U;                                    t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.nss_polarity = SPI_CFG2_SSOE;                      t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.baudrate = 1U;                                     t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.transfer_direction = LL_SPI_SIMPLEX_RX;            t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.transfer_direction = LL_SPI_HALF_DUPLEX_TX;        t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.nss = LL_SPI_NSS_HARD_INPUT;                       t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.nss_pulse = true;                                  t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.ss_idleness = LL_SPI_SS_IDLENESS_05CYCLE;          t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.interdata_idleness = 1U;                           t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.fifo_threshold = 1U;                               t1(SPI_LL_Init(&k), SPI_BM_ERR_PARAM);
+    k = c; k.data_width = LL_SPI_DATAWIDTH_32BIT; k.fifo_threshold = LL_SPI_FIFO_TH_03DATA;
+                                                                t1(SPI_LL_Init(&k), SPI_BM_ERR_RANGE);
+    k = c; k.data_width = LL_SPI_DATAWIDTH_24BIT; k.fifo_threshold = LL_SPI_FIFO_TH_03DATA;
+                                                                t1(SPI_LL_Init(&k), SPI_BM_ERR_RANGE);
+    t1(SPI_LL_TransferStartIt(SPI1, NULL), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_DmaStart(NULL), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_WaitEnd(NULL, 1000U), SPI_BM_ERR_PARAM);
+    t1_snap(b);
+    same |= snap_eq(a, b) ? 1U : 0U;
+
+    /* 2. SPI1 transmit only, 32-bit, through spi_ll */
+    k = c; k.transfer_direction = LL_SPI_SIMPLEX_TX; k.data_width = LL_SPI_DATAWIDTH_32BIT;
+    const SpiBm_Status_t i2 = SPI_LL_Init(&k);
+    SpiBm_Xfer_t x = { s_tx, NULL, 1U, 0U, 0U, 0U, SPI_BM_OK };
+    t1_snap(a);
+    t1(SPI_LL_Transfer(SPI1, s_tx, NULL, 0U, 1U, 1000U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_Transfer(SPI1, s_tx, NULL, 65536U, 1U, 1000U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_Transfer(SPI1, NULL, NULL, 1U, 1U, 1000U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_Transfer(SPI1, s_tx, NULL, 1U, 0U, 1000U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_Transfer(SPI1, s_tx, NULL, 1U, 1U, 0U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_Transfer(SPI1, s_tx, s_rx, 1U, 1U, 1000U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_Transfer(SPI1, (const uint8_t *)s_tx + 2U, NULL, 1U, 1U, 1000U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_TransferStartIt(SPI1, &x), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_DmaPrepare(SPI1, 1U, true), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_DmaPrepare(SPI1, 0U, false), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_DmaEnd(SPI1, 0U), SPI_BM_ERR_PARAM);
+    t1(SPI_LL_WaitEnd(SPI1, 0U), SPI_BM_ERR_PARAM);
+    t1_snap(b);
+    same |= snap_eq(a, b) ? 2U : 0U;
+    (void)SPI_BM_Deinit(SPI1);
+
+    /* 3. SPE = 1 by hand (the J1 pins are in input in this step) */
+    k = c;
+    const SpiBm_Status_t i3 = SPI_LL_Init(&k);
+    SPI1->CR1 |= SPI_CR1_SPE;
+    const uint32_t spe = SPI1->CR1 & SPI_CR1_SPE;
+    t1_snap(a);
+    t1(SPI_LL_Init(&k), SPI_BM_ERR_BUSY);
+    t1(SPI_LL_CheckConfig(&k), SPI_BM_ERR_BUSY);
+    t1(SPI_LL_DmaPrepare(SPI1, 1U, false), SPI_BM_ERR_BUSY);
+    t1(SPI_LL_DmaStart(SPI1), SPI_BM_ERR_BUSY);
+    t1(SPI_LL_Transfer(SPI1, s_tx, s_rx, 1U, 1U, 1000U), SPI_BM_ERR_BUSY);
+    t1_snap(b);
+    same |= snap_eq(a, b) ? 4U : 0U;
+    SPI1->CR1 &= ~SPI_CR1_SPE;
+
+    /* 4. AFCNTR = 1 in force: another CPOL or SSIOP */
+    k = c; k.keep_pins = true;
+    const SpiBm_Status_t i4 = SPI_LL_Init(&k);
+    t1_snap(a);
+    k.clock_polarity = LL_SPI_POLARITY_HIGH;                    t1(SPI_LL_Init(&k), SPI_BM_ERR_BUSY);
+    k.clock_polarity = LL_SPI_POLARITY_LOW;
+    k.nss_polarity = LL_SPI_NSS_POLARITY_HIGH;                  t1(SPI_LL_Init(&k), SPI_BM_ERR_BUSY);
+    t1_snap(b);
+    same |= snap_eq(a, b) ? 8U : 0U;
+    (void)SPI_BM_Deinit(SPI1);
+
+    /* the control: a valid SPI_LL_Init changes the snapshot */
+    t1_snap(a);
+    k = c;
+    const SpiBm_Status_t w = SPI_LL_Init(&k);
+    t1_snap(b);
+    const bool ctrl = !snap_eq(a, b);
+    (void)SPI_BM_Deinit(SPI1);
+
+    r[0] = s_t1_n;
+    r[1] = s_t1_bad + (((i2 != SPI_BM_OK) || (i3 != SPI_BM_OK) || (i4 != SPI_BM_OK) || (spe == 0U)) ? 1U : 0U);
+    r[2] = same;
+    r[3] = (ctrl && (w == SPI_BM_OK)) ? 1U : 0U;
+}
+
+/* ---- F2: T2 with spi_ll on SPI1: the image against the RM table and against spi_bm's,
+   bit for bit (A24). m4_res: [0] configurations, [1] off the RM table, [2] Init failed,
+   [3] Deinit failed, [4] control caught, [5] first config off spi_bm, [6]/[7] LL/BM value,
+   [8] off spi_bm, [9] first register index (spi_regs order). ---------------------------- */
+static void t2ll_one(const SpiBm_Config_t *c, volatile uint32_t *r)
+{
+    uint32_t pb[NREG];
+    uint32_t pl[NREG];
+    const SpiBm_Status_t sb = SPI_BM_Init(c);
+    spi_regs(SPI1, pb);
+    const SpiBm_Status_t db = SPI_BM_Deinit(SPI1);
+    SpiLl_Config_t l;
+    sst_ll_of(c, &l);
+    const SpiBm_Status_t sl = SPI_LL_Init(&l);
+    spi_regs(SPI1, pl);
+    const SpiBm_Status_t dl = SPI_BM_Deinit(SPI1);
+    uint32_t e1 = 0U;
+    uint32_t e2 = 0U;
+    uint32_t ecr = 0U;
+    sst_t2_expect(c, &e1, &e2, &ecr);
+    if ((sb != SPI_BM_OK) || (sl != SPI_BM_OK))
+    {
+        r[2]++;
+    }
+    if ((db != SPI_BM_OK) || (dl != SPI_BM_OK))
+    {
+        r[3]++;
+    }
+    if ((pl[2] != e1) || (pl[3] != e2) || (pl[0] != ecr))
+    {
+        r[1]++;
+    }
+    for (uint32_t k = 0U; k < NREG; k++)
+    {
+        if (pl[k] != pb[k])
+        {
+            if (r[8] == 0U)
+            {
+                r[5] = r[0];
+                r[9] = k;
+                r[6] = pl[k];
+                r[7] = pb[k];
+            }
+            r[8]++;
+            break;
+        }
+    }
+    r[0]++;
+}
+
+static void cmd_t2_ll(void)
+{
+    volatile uint32_t *r = SST_AREA->m4_res;
+    static const uint32_t bits_list[4] = { 4U, 8U, 16U, 32U };
+    res_clear();
+    (void)SPI_BM_EnableClock(SPI1);
+    (void)SPI_BM_Deinit(SPI1);
+    for (uint32_t mbr = 0U; mbr <= 7U; mbr++)
+    {
+        for (uint32_t mode = 0U; mode <= 3U; mode++)
+        {
+            for (uint32_t ib = 0U; ib < 4U; ib++)
+            {
+                const uint32_t bits = bits_list[ib];
+                const uint32_t thr[2] = { 1U, thr_max(bits) };
+                for (uint32_t it = 0U; it < 2U; it++)
+                {
+                    for (uint32_t lsb = 0U; lsb < 2U; lsb++)
+                    {
+                        for (uint32_t dir = 0U; dir < 2U; dir++)
+                        {
+                            for (uint32_t nss = 0U; nss < 3U; nss++)
+                            {
+                                for (uint32_t op = 0U; op < 2U; op++)
+                                {
+                                    for (uint32_t mi = 0U; mi < 4U; mi++)
+                                    {
+                                        const uint32_t mssi = ((mi & 1U) != 0U) ? 15U : 0U;
+                                        const uint32_t midi = ((mi & 2U) != 0U) ? 15U : 0U;
+                                        if ((nss == SPI_BM_NSS_SOFT) && (mssi != 0U))
+                                        {
+                                            continue;
+                                        }
+                                        for (uint32_t keep = 0U; keep < 2U; keep++)
+                                        {
+                                            const SpiBm_Config_t c = { SPI1, mbr, mode, bits, lsb != 0U, dir, thr[it],
+                                                                       nss, op != 0U, mssi, midi, keep != 0U };
+                                            t2ll_one(&c, r);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    /* the control: the same comparison with MASTER flipped in the LL photo */
+    const SpiBm_Config_t c0 = mkcfg(0U, 0U, 8U, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+    uint32_t pb[NREG];
+    uint32_t pl[NREG];
+    (void)SPI_BM_Init(&c0);
+    spi_regs(SPI1, pb);
+    (void)SPI_BM_Deinit(SPI1);
+    SpiLl_Config_t l0;
+    sst_ll_of(&c0, &l0);
+    (void)SPI_LL_Init(&l0);
+    spi_regs(SPI1, pl);
+    (void)SPI_BM_Deinit(SPI1);
+    pl[3] ^= SPI_CFG2_MASTER;
+    bool differ = false;
+    for (uint32_t k = 0U; k < NREG; k++)
+    {
+        differ = differ || (pl[k] != pb[k]);
+    }
+    r[4] = differ ? 1U : 0U;
+}
+
 /* ---- J1 pins of SPI1 (AF5): the claim reads SPI1 back at rest first (S14, R2-3) ------- */
 static bool j1_af(uint32_t port_pin_a, GPIO_TypeDef *port, uint32_t pull)
 {
@@ -776,7 +1054,7 @@ void SPI1_IRQHandler(void)
     if (s_it_active)
     {
         const uint32_t t0 = DWT->CYCCNT;
-        const bool done = SPI_BM_TransferIrq(SPI1, &s_it);
+        const bool done = x_irq(SPI1, &s_it);
         const uint32_t dt = DWT->CYCCNT - t0;
         if (dt < s_b1_irq_min)
         {
@@ -840,6 +1118,7 @@ static void cmd_xfer(uint32_t xc, uint32_t seed, uint32_t n, uint32_t xm)
 {
     volatile uint32_t *r = SST_AREA->m4_res;
     res_clear();
+    s_tier = (SST_XCFG_IS_LL(xc) != 0U) ? TIER_LL : TIER_BM;
     const uint32_t bits = SST_XCFG_BITS(xc);
     const uint32_t mbr = SST_XCFG_MBR(xc);
     const uint32_t es = sst_elem_bytes(bits);
@@ -853,7 +1132,7 @@ static void cmd_xfer(uint32_t xc, uint32_t seed, uint32_t n, uint32_t xm)
     sst_fill(s_tx, es, n, bits, seed);
     sst_fill_const(s_rx, es, n, 0xA5A5A5A5UL);
     (void)SPI_BM_EnableClock(SPI1);
-    const SpiBm_Status_t si = SPI_BM_Init(&c);
+    const SpiBm_Status_t si = x_init(&c);
     const uint32_t g = guard_of(mbr);
     const uint32_t bud = budget_of(mbr, bits, n);
     SpiBm_Status_t st = SPI_BM_ERR_PARAM;
@@ -862,7 +1141,7 @@ static void cmd_xfer(uint32_t xc, uint32_t seed, uint32_t n, uint32_t xm)
     uint32_t t0 = DWT->CYCCNT;
     if (xm == SST_XM_POLL)
     {
-        st = SPI_BM_Transfer(SPI1, s_tx, s_rx, n, g, bud);
+        st = x_transfer(SPI1, s_tx, s_rx, n, g, bud);
     }
     else if (xm == SST_XM_IT)
     {
@@ -874,7 +1153,7 @@ static void cmd_xfer(uint32_t xc, uint32_t seed, uint32_t n, uint32_t xm)
         s_it_irqs = 0U;
         s_it_active = true;
         t0 = DWT->CYCCNT;
-        st = SPI_BM_TransferStartIt(SPI1, &s_it);
+        st = x_start_it(SPI1, &s_it);
         if (st != SPI_BM_OK)
         {
             s_it_active = false;
@@ -899,7 +1178,7 @@ static void cmd_xfer(uint32_t xc, uint32_t seed, uint32_t n, uint32_t xm)
     else
     {
         const bool rxdma = (xm == SST_XM_DMA);
-        const SpiBm_Status_t sp = SPI_BM_DmaPrepare(SPI1, n, rxdma);
+        const SpiBm_Status_t sp = x_dma_prepare(SPI1, n, rxdma);
         bool dok = true;
         if (rxdma)
         {
@@ -907,8 +1186,8 @@ static void cmd_xfer(uint32_t xc, uint32_t seed, uint32_t n, uint32_t xm)
         }
         dok = dok && m4_stream(M4_TX_STREAM, true, es, s_tx, n);
         t0 = DWT->CYCCNT;
-        const SpiBm_Status_t ss = SPI_BM_DmaStart(SPI1);
-        st = SPI_BM_WaitEnd(SPI1, bud);
+        const SpiBm_Status_t ss = x_dma_start(SPI1);
+        st = x_wait_end(SPI1, bud);
         if (rxdma)
         {
             const uint32_t w0 = DWT->CYCCNT;          /* the last frames leave the RxFIFO */
@@ -921,7 +1200,7 @@ static void cmd_xfer(uint32_t xc, uint32_t seed, uint32_t n, uint32_t xm)
         {
             (void)DMA_BM_StopEx(M4_RX_STREAM, 0U);
         }
-        const SpiBm_Status_t se = SPI_BM_DmaEnd(SPI1, g);   /* 2. SPI, 3. DMA enables */
+        const SpiBm_Status_t se = x_dma_end(SPI1, g);   /* 2. SPI, 3. DMA enables */
         (void)DMA_BM_DeinitStream(M4_TX_STREAM);
         if (rxdma)
         {
@@ -950,6 +1229,7 @@ static void cmd_xfer(uint32_t xc, uint32_t seed, uint32_t n, uint32_t xm)
     r[5] = irqs;
     r[6] = (uint32_t)si;
     r[9] = after;
+    s_tier = TIER_BM;
 }
 
 /* T6(c)'s control: TXPIE = 1 by hand with SPE = 0 (TXP = 1 at reset, 53:3597). */
@@ -1026,10 +1306,11 @@ static void cmd_t14(void)
 
 /* B1 on CPU2: a cold Init, a 1-frame Transfer at /2 (TX only, J1 pins in AF5), and the
    TransferIrq cycles seen by the T6 transfers. */
-static void cmd_b1(void)
+static void cmd_b1(uint32_t tier)
 {
     volatile uint32_t *r = SST_AREA->m4_res;
     res_clear();
+    s_tier = (tier == TIER_LL) ? TIER_LL : TIER_BM;
     const SpiBm_Config_t c = mkcfg(0U, 0U, 8U, false, SPI_BM_DIR_TX_ONLY, 1U);
     (void)SPI_BM_EnableClock(SPI1);
     (void)SPI_BM_Deinit(SPI1);
@@ -1037,13 +1318,14 @@ static void cmd_b1(void)
     const uint32_t pm = __get_PRIMASK();
     __disable_irq();
     uint32_t t0 = DWT->CYCCNT;
-    (void)SPI_BM_Init(&c);
+    (void)x_init(&c);
     r[0] = DWT->CYCCNT - t0;
     t0 = DWT->CYCCNT;
-    (void)SPI_BM_Transfer(SPI1, s_tx, NULL, 1U, guard_of(0U), budget_of(0U, 8U, 1U));
+    (void)x_transfer(SPI1, s_tx, NULL, 1U, guard_of(0U), budget_of(0U, 8U, 1U));
     r[1] = DWT->CYCCNT - t0;
     __set_PRIMASK(pm);
     (void)SPI_BM_Deinit(SPI1);
+    s_tier = TIER_BM;
     r[2] = s_b1_irq_min;
     r[3] = s_b1_irq_max;
 }
@@ -1115,10 +1397,24 @@ void SPI_Selftest_CM4_Run(void)
             spi1_cases(&a->m4_spi1);
             break;
         case SST_CMD_T1:
-            cmd_t1();
+            if (a0 == TIER_LL)
+            {
+                cmd_t1_ll();
+            }
+            else
+            {
+                cmd_t1();
+            }
             break;
         case SST_CMD_T2:
-            cmd_t2();
+            if (a0 == TIER_LL)
+            {
+                cmd_t2_ll();
+            }
+            else
+            {
+                cmd_t2();
+            }
             break;
         case SST_CMD_J1PINS:
             cmd_j1pins(a0, a1, a2);
@@ -1139,7 +1435,7 @@ void SPI_Selftest_CM4_Run(void)
             cmd_t14();
             break;
         case SST_CMD_B1:
-            cmd_b1();
+            cmd_b1(a0);
             break;
         case SST_CMD_DONE:
             bench_safe();
