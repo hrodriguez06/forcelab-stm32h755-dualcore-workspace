@@ -30,6 +30,9 @@ extern "C" {
 #define HAL_RCC_MODULE_ENABLED
 #define HAL_TIM_MODULE_ENABLED
 #define HAL_UART_MODULE_ENABLED
+#if defined(SPI_DRIVER_SELFTEST)
+#define HAL_SPI_MODULE_ENABLED   /* 06_spi selftest only (plan decision 7): spi_hal and its tests */
+#endif
 
 /* ---- Oscillators ------------------------------------------------------- *
  * The NUCLEO-H755ZI-Q has no MCU crystal: HSE is the 8 MHz ST-LINK MCO fed in
@@ -137,6 +140,9 @@ void assert_failed(uint8_t *file, uint32_t line);
 #endif
 #ifdef HAL_UART_MODULE_ENABLED
 #include "stm32h7xx_hal_uart.h"
+#endif
+#if defined(SPI_DRIVER_SELFTEST) && defined(HAL_SPI_MODULE_ENABLED)
+#include "stm32h7xx_hal_spi.h"
 #endif
 
 #ifdef __cplusplus

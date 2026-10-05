@@ -51,6 +51,8 @@
 
 #if defined(GPIO_DRIVER_SELFTEST)
 #define STATUS_TASK_STACK_WORDS      2048U   /* the 00_gpio selftest runs in this task first */
+#elif defined(SPI_DRIVER_SELFTEST)
+#define STATUS_TASK_STACK_WORDS      1024U   /* the 06_spi selftest runs in this task (D11) */
 #else
 #define STATUS_TASK_STACK_WORDS      512U
 #endif
