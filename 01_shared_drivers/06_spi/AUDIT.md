@@ -239,3 +239,45 @@ Entrega: `5d6f21a..b267f4c` (`spi_hal` `4e147b5`, build y D11 `dbab128`, correcc
 **F3 pasa.** La API de `spi_hal` queda **congelada** con `spi_hal.h` de `b267f4c`. Las tres APIs están congeladas.
 
 **Cierre:** pido al implementador el README (plan, "README de cierre") y la línea de `06_spi` en `01_shared_drivers/README.md`, con m4 corregido en un commit propio. El README tiene que llevar: E2/R3-3 (SCK en AF) con T15 como evidencia; las limitaciones de `spi_hal`; SP3 (`.d3_ram` en los dos linker scripts); SP4 y N1 (reloj de la placa); N3 como nota de consumo de `02_dma`; y lo no ejercitado del plan y de los informes.
+
+## Cierre, parte 1: m4 y README (`575ace9`)
+
+Entrega: `6675064..575ace9` (m4 `1c8ab15`, su prueba `8b5d165`, evidencia `cc951c4`, README y línea del catálogo `575ace9`).
+
+### m4
+
+`SPI_HAL_Wait` (`spi_hal.c:302-328`) sale con `ERR_TIMEOUT` tras 2 × `HAL_GetTickFreq()` × (`SystemCoreClock` / 1000) lecturas con el mismo tick (al menos dos periodos de tick), además de `timeout_ms`. `spi_hal.h` solo cambia el comentario de `SPI_HAL_Wait` con la precondición (C2). El selftest lo prueba con PRIMASK puesto (tick parado) y con el control con el tick en marcha (`spi_f3_bench_8b5d165.txt`: `ERR_TIMEOUT` tras 14 400 178 ciclos con el tick sin cambiar; control, `ERR_TIMEOUT` tras ≥ 10 ms). Alcance: nada fuera de `06_spi`, `prj_01` y la línea de `01_shared_drivers/README.md`. **Cerrado.**
+
+### README
+
+600 líneas (el máximo), en inglés, con las secciones del plan en orden. Comprobado por mí y por una verificación sistemática de cada cifra y cita:
+
+- **Cifras:** unas 115, contra la captura que cita cada una: 0 discrepancias. Las del `.map` (`spi_f3_map_sizes_8b5d165.txt`) y los recuentos de las 18 capturas de §9.1, también.
+- **API:** 24 declaraciones BM, 9 funciones LL, 6 HAL, 11 estados, los campos de `SpiBm_Config_t`, `SpiBm_Xfer_t` y `SpiLl_Config_t` en orden: iguales a las cabeceras.
+- **Tabla de capacidades** igual a `k_spi[]`; las seis citas `53:<línea>`, las del HAL (l. 375-381, 398, 474, 3121, 3124), los linker scripts y `dma_hal.c:183-186`, correctas. Los 25 hashes de la historia existen y su asunto coincide.
+- **Ejemplos:** los tres compilan, en mi ejecución, con `-Wall -Wextra -Wpedantic -Wconversion -Werror` (A para CM4; B y C para CM7 con `SPI_DRIVER_SELFTEST`), cabeceras de CMSIS y HAL como `-isystem`.
+- **Sin sobreafirmaciones** sobre velocidades por encima de 25 MHz, SPI2/3/5 o la HAL en CM4.
+
+### Hallazgos del README
+
+| ID | Clase | Línea | Hallazgo | Corrección |
+| --- | --- | --- | --- | --- |
+| M3 | Mayor | 552-553 (§10.2) | "`Transfer` and `WaitEnd` then return `ERR_TIMEOUT` … and leave the SPI disabled": `WaitEnd` no deshabilita (`spi_bm.c:976-978`, `spi_ll.c:614`, `spi_bm.h:192`); T15 solo ejercita `Transfer` | `Transfer` deja `IER = 0`, `SPE = 0`; `WaitEnd` devuelve `ERR_TIMEOUT` con el SPI habilitado: parar los streams y después `DmaEnd` |
+| M4 | Mayor | 164 (§3) | `SPI_BM_NSS_HW_PULSE` "for `midi` ≥ 1": RM0399 53:3470 ("when MIDI[3:0]>1") y 53:615-616 piden `MIDI > 1`; T5(c) usó 2 y el driver no lo comprueba | "`midi` ≥ 2 (RM0399 53:3470); the driver does not check it" |
+| M5 | Mayor | 251 (§6.3), 416 y 431 (§8) | MCO1 se usa solo en T5(g) (`spi_hw_check.py:804`), y solo en el paso `SPI4_AD2` (F1); T5(d) y T12(b) miden el periodo de SCK dentro de la misma captura (R3-5). El README dice "every T5 period", "T5 measures SCK against MCO1" y "`RCC_CFGR` only in the SPI4 steps" | "T5(g) only (step `SPI4_AD2`)"; "T5(g) is a ratio to MCO1; T5(d) and T12(b) count in SCK periods measured in the same capture" |
+| M6 | Mayor | 515-527 (§9.5) | Omisiones frente al informe (§5.8 de F1–F3): `TransferIrq` de **BM** con `MODF`/`OVR` (solo dice LL); `keep_pins` solo en SPI4 con `CPOL = 0`; 65 535 tramas solo en SPI6, 8 bits, por sondeo (la fila T4 de l. 473 sugiere también SPI1); el camino de C13 con `CYCCNT` sin contar o parado en `Transfer`/`WaitEnd`/`TransferStartIt` (solo dice "inside a guard"); el `ERR_TIMEOUT` de `SPI_HAL_Transfer` (el de la HAL) | Añadirlos a "Not exercised" |
+| m5 | Menor | 244, 481 | Control de T12(b): "156 samples" es correcto en `8b5d165`, pero 156 > 126,4 no es truncado, y varía entre ejecuciones: 1–2 muestras (reproducido) en `c41040a`, `4142921`, `b4fa22d`, `73c1b76`, `b267f4c`; 146–157 en `99fe89b`, `efb4a3f`, `8b5d165`. La decisión 6 pide decir si se reproduce | "Not reproduced in this run; reproduced (1–2 samples) in 5 of the 8 clean runs" |
+| m6 | Menor | 35 | "builds empty in `prj_01`": en CM4 `spi_hal.c` ni se compila (`CM4/CMakeLists.txt` no enlaza `_spi_hal`) | "not built on CM4" |
+| m7 | Menor | 51 | LL "use `SPI_BM_*`" para `Check*`, pero existe `SPI_LL_CheckConfig` (l. 120 lo cita) | Matizar |
+| m8 | Menor | 136 | `SPI_HAL_Init` no comprueba el estado del handle: lo fuerza a RESET tras `SPI_BM_Deinit` (`spi_hal.c:113-118`); solo las transferencias exigen `READY` | Precisar |
+| m9 | Menor | 174 | `WaitEnd` termina en `EOT` (con `ERR_OVERRUN` si hay `OVR`), en `MODF` o por tiempo; `OVR` solo no la termina | Precisar |
+| m10 | Menor | 441 | "Every test prints its negative control", pero T10 y la fila de tick/pila no tienen | "every test that has one" o el control de T10 (T9) |
+| m11 | Menor | 406, 417 | J1 también lo usan T9, T11(b), T12(a) y B1 | Completar |
+| m12 | Menor | 258, 279-292 | "Pins are those of the bench", pero el CS del ejemplo A es PD14, que no es una línea del banco | Decir que PD14 es un GPIO libre del proyecto, o usar otro y decirlo |
+| m13 | Menor | 587-600 (§13) | Los documentos de proceso se citan por hashes intermedios (`AUDIT.md` en `6675064`, el informe en `b267f4c`), que no serán sus versiones finales | La forma de recuperación de `03_tim`: `git show $(git log -1 --format=%h --diff-filter=D -- <ruta>)^:<ruta>` |
+
+Notas (opcionales): `spi_f1_bench_c41040a.txt` figura como entrega sin decir que la sustituyó `4142921` (l. 453); `spi_dev_f3_bench_dbab128-dirty_3` (45/45) está bajo "Failed runs kept" (l. 461); "B1" nombra a la vez el hallazgo de F0 y la medida del plan (l. 459, 502); `git diff main -- …` solo sirve después del merge (l. 578); el bucle se rinde con más de 1000 lecturas iguales, no con 1000 (l. 211).
+
+### Estado
+
+**El cierre no pasa todavía:** M3–M6 son afirmaciones falsas u omisiones del README. Con M3–M6 y m5–m13 corregidos (sin pasar de 600 líneas), y la respuesta en el informe, haré la parte 2. No hace falta otra ejecución en la placa: m4 ya está en `spi_f3_bench_8b5d165.txt`.
