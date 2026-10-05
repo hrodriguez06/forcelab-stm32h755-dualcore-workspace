@@ -2749,7 +2749,7 @@ static void t6_spi6(const char *name)
             const uint32_t spe = SPI6->CR1 & SPI_CR1_SPE;
             after_total += after;
             /* Every IRQ after the close lands in the handler's spurious branch. The HAL's
-               IT start fills the FIFO before it sets DXPIE (stm32h7xx_hal_spi.c l. 1922-1963):
+               IT start fills the FIFO before it sets DXPIE (stm32h7xx_hal_spi.c l. 1926-1963):
                when every frame fits, TXTF came first and DXPIE stays set (RM0399 53.11.5),
                and SPI_CloseTransfer clears SPE before IER (l. 3945-3948, ES0445 2.22.3): one
                IRQ after the close, a HAL limitation (owner's decision, 2026-10-04). */

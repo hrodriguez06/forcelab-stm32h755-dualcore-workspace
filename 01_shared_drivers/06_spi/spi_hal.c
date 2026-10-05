@@ -184,7 +184,7 @@ static uint32_t comm_of(const void *rx)
 
 /* After the HAL closed a transfer (SPI_CloseTransfer, l. 3937): SPE = 0, the DMA
    requests off, and IER clear except TSERFIE: the IT starts enable it (l. 1743, 1837,
-   1964) and the close's mask (l. 3946) leaves it out. TSERF is set only by a TSER
+   1964) and the close's mask (l. 3948) leaves it out. TSERF is set only by a TSER
    reload, which this tier never programs; SPI_HAL_Deinit clears it. */
 static bool closed(const SPI_TypeDef *spi)
 {
@@ -249,7 +249,7 @@ SpiBm_Status_t SPI_HAL_StartTransferIt(SPI_HandleTypeDef *h, const void *tx, voi
            SPI_BM_OK : SPI_BM_ERR_VERIFY;
 }
 
-/* The HAL refuses a DMA memory size narrower than the frame (l. 2157, 2304, 2446) after
+/* The HAL refuses a DMA memory size narrower than the frame (l. 2157, 2304, 2447) after
    it has set h->State busy, and leaves it so: refused here first (C6). */
 static bool dma_fits(const SPI_HandleTypeDef *h, const DMA_HandleTypeDef *d)
 {
