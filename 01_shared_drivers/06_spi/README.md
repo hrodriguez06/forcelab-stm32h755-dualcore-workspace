@@ -32,7 +32,7 @@ target_link_libraries(cm7_firmware PRIVATE stm32h7_driver_spi_bm)   # CMake; or 
 | Tier | CM7 | CM4 |
 | :--- | :---: | :---: |
 | BM, LL | yes | yes |
-| HAL | yes (needs `HAL_SPI_MODULE_ENABLED`; `prj_01` enables it only with `SPI_DRIVER_SELFTEST`) | builds empty in `prj_01`: CM4 does not enable the HAL SPI module |
+| HAL | yes (needs `HAL_SPI_MODULE_ENABLED`; `prj_01` enables it only with `SPI_DRIVER_SELFTEST`) | not built on CM4 in `prj_01` (CM4 does not link `_spi_hal`) |
 
 - **No unsuffixed target;** the umbrella `stm32h7_shared_drivers` puts `06_spi` on the include path only.
 - **`spi_bm` holds the only copy** of the capability table and of every check (`SPI_BM_Check*`, no write);
@@ -47,7 +47,7 @@ target_link_libraries(cm7_firmware PRIVATE stm32h7_driver_spi_bm)   # CMake; or 
 
 | Operation | BM | LL | HAL |
 | :--- | :---: | :---: | :---: |
-| `IsValidInstance`, `GetCaps`, `EnableClock`, `DisableClock`, `GetKernelSource`, `CalcPrescaler`, `CalcGuardCycles`, `Check*`, `GetIRQn`, `GetDmaRequest`, `TakeErrors` | yes | use `SPI_BM_*` | use `SPI_BM_*` |
+| `IsValidInstance`, `GetCaps`, `EnableClock`, `DisableClock`, `GetKernelSource`, `CalcPrescaler`, `CalcGuardCycles`, `Check*`, `GetIRQn`, `GetDmaRequest`, `TakeErrors` | yes | use `SPI_BM_*`, plus `SPI_LL_CheckConfig` | use `SPI_BM_*` |
 | `Init` | yes | yes | yes (`SPI_BM_Deinit`, then `HAL_SPI_Init`) |
 | `Deinit` | yes | use `SPI_BM_Deinit` | yes (→ BM, plus the handle to RESET) |
 | `Transfer` (polling) | yes | yes | yes (`HAL_SPI_TransmitReceive` / `Transmit`) |
@@ -83,7 +83,6 @@ SpiBm_Status_t SPI_BM_EnableClock(SPI_TypeDef *spi);    /* and DisableClock: thi
 SpiBm_Status_t SPI_BM_GetKernelSource(const SPI_TypeDef *spi, uint32_t *field);  /* raw SPIxSEL */
 SpiBm_Status_t SPI_BM_CalcPrescaler(uint32_t kernel_hz, uint32_t max_sck_hz, uint32_t *mbr, uint32_t *sck_hz);
 SpiBm_Status_t SPI_BM_CalcGuardCycles(uint32_t cpu_hz, uint32_t kernel_hz, uint32_t mbr, uint32_t *cycles);
-SpiBm_Status_t SPI_BM_CheckConfig(const SpiBm_Config_t *cfg);      /* and the other Check*: no write */
 SpiBm_Status_t SPI_BM_Init(const SpiBm_Config_t *cfg);             /* SPE = 0 required */
 SpiBm_Status_t SPI_BM_Deinit(SPI_TypeDef *spi);                    /* reset image, pins released, no RCC */
 SpiBm_Status_t SPI_BM_Transfer(SPI_TypeDef *spi, const void *tx, void *rx, uint32_t frames,
@@ -92,9 +91,9 @@ SpiBm_Status_t SPI_BM_TransferStartIt(SPI_TypeDef *spi, SpiBm_Xfer_t *x);
 bool           SPI_BM_TransferIrq(SPI_TypeDef *spi, SpiBm_Xfer_t *x);   /* true when x->status is final */
 SpiBm_Status_t SPI_BM_DmaPrepare(SPI_TypeDef *spi, uint32_t frames, bool rx);   /* TSIZE, RXDMAEN */
 SpiBm_Status_t SPI_BM_DmaStart(SPI_TypeDef *spi);                    /* TXDMAEN, SPE, CSTART */
-SpiBm_Status_t SPI_BM_WaitEnd(SPI_TypeDef *spi, uint32_t max_cycles);   /* EOT or error, no disable */
+SpiBm_Status_t SPI_BM_WaitEnd(SPI_TypeDef *spi, uint32_t max_cycles);   /* EOT, MODF or time; no disable */
 SpiBm_Status_t SPI_BM_DmaEnd(SPI_TypeDef *spi, uint32_t guard_cycles);  /* after the streams stopped */
-SpiBm_Status_t SPI_BM_CheckTransfer(...), SPI_BM_CheckDmaPrepare(...), SPI_BM_CheckDmaStart(...); /* no write */
+SpiBm_Status_t SPI_BM_CheckConfig(cfg), _CheckTransfer(...), _CheckDmaPrepare(...), _CheckDmaStart(spi);  /* no write */
 SpiBm_Status_t SPI_BM_GetDmaRequest(const SPI_TypeDef *spi, bool tx, uint32_t *request_id);
 SpiBm_Status_t SPI_BM_GetIRQn(const SPI_TypeDef *spi, IRQn_Type *out);
 uint32_t       SPI_BM_TakeErrors(SPI_TypeDef *spi);   /* SPI_BM_ERRF_OVR/MODF/TIFRE; one IFCR write, DSB */
@@ -130,7 +129,8 @@ SpiBm_Status_t SPI_HAL_Deinit(SPI_HandleTypeDef *h);
 ```
 
 Values are `spi_bm`'s. A NULL handle, or an `h->Instance` that is not an SPI or not `cfg->spi`, gives
-`ERR_PARAM`; then `SPI_BM_Check*`, the handle's state, the HAL call and a read-back of what it wrote.
+`ERR_PARAM`; then `SPI_BM_Check*`, the handle's state (transfers need `READY`; `SPI_HAL_Init` does not check
+it: it puts the handle to RESET after `SPI_BM_Deinit`), the HAL call and a read-back of what it wrote.
 `StartTransferDma` needs `h->hdmatx` (and `h->hdmarx` with `rx`) linked, with a memory size of at least the
 frame's (else `ERR_PARAM`: the HAL's refusal would leave the handle busy). `SPI_HAL_Deinit` =
 `SPI_BM_Deinit` + the handle to RESET, no `HAL_SPI_DeInit` (no MSP). No guard in this tier (§10.1).
@@ -161,14 +161,13 @@ frame's (else `ERR_PARAM`: the HAL's refusal would leave the handle busy). `SPI_
   only with `midi` ≥ 2 (RM0399 53:3470, 53:615-616); the driver does not check it (T5(c) uses 2).
 - **`keep_pins`** (`AFCNTR = 1`): the SPI holds SCK at `CPOL` while disabled (T5(e)). A later `Init` with
   another `CPOL` or `SSIOP` is refused with `ERR_BUSY`: `Deinit` first.
-- **Interrupt:** fill a `SpiBm_Xfer_t` (`tx`, `rx`, `frames`, `guard_cycles`), give the vector of
-  `SPI_BM_GetIRQn` a priority and enable it, call `TransferStartIt`; the project's `SPIx_IRQHandler` calls
-  `SPI_BM_TransferIrq` (or `SPI_LL_`) until it returns true; then `x->status` is final. `IER` is written
-  after `SPE = 1` and cleared before `SPE = 0` (ES0445 2.22.3).
+- **Interrupt:** fill a `SpiBm_Xfer_t` (`tx`, `rx`, `frames`, `guard_cycles`), enable the vector of `GetIRQn`, call
+  `TransferStartIt`; the project's `SPIx_IRQHandler` calls `TransferIrq` until it returns true (ES0445 2.22.3: §6.2).
 - **DMA (rule 8, RM0399 53:1262-1274):** `GetDmaRequest(spi, tx, &req)` gives the DMAMUX request
   (DMAMUX1 for SPI1–5, DMAMUX2 for SPI6, T7(d)). Order: `DmaPrepare` (`TSIZE`, `RXDMAEN`) → the caller
   programs and starts its RX and TX streams (`02_dma`) → `DmaStart` (`TXDMAEN`, `SPE`, `CSTART`) →
-  `WaitEnd` (`EOT`, `OVR` or `MODF`) → the caller stops its streams → `DmaEnd` (guard, `SPE = 0`,
+  `WaitEnd` (ends on `EOT`, with `ERR_OVERRUN` if `OVR` was set; on `MODF`; or on time: `OVR` alone does
+  not end it) → the caller stops its streams → `DmaEnd` (guard, `SPE = 0`,
   `TXDMAEN = RXDMAEN = 0`, flags). For DMA1/DMA2 with `dma_hal`, read N3 (§10.3).
 - **BDMA (SPI6 only):** it reaches SRAM4 and the backup SRAM, not the D1/D2 RAMs (`02_dma`): buffers in
   `.d3_ram` (SRAM4), from **one core only** (SP3, §10.3); requests 11/12 (T7(b), example C).
@@ -180,11 +179,9 @@ frame's (else `ERR_PARAM`: the HAL's refusal would leave the handle busy). `SPI_
 - **One owner core per instance,** no cross-core lock. `prj_01` selftest: CPU1 owns SPI2–6, CPU2 SPI1.
 - **RCC banks (RM0399 9.5.10):** per core; an SPI runs while either core enables it, so `DisableClock`
   on one core does not stop it (T13). `RCC_APBxRSTR` is never written.
-- **Kernel multiplexer:** `RCC_D2CCIP1R` and `RCC_D3CCIPR` belong to the project; the driver only reads
-  them (`GetKernelSource`) and takes the kernel frequency from the caller.
+- **Kernel multiplexer:** `RCC_D2CCIP1R`/`RCC_D3CCIPR` are the project's; the driver only reads them.
 - **No callback, no MSP, no vector in the driver.** `HAL_SPI_Init` calls the project's `HAL_SPI_MspInit`
-  while `h->State` is RESET (in `prj_01`, the HAL's empty weak one). For IT and DMA in `spi_hal`, the
-  project's `SPIx_IRQHandler` calls `HAL_SPI_IRQHandler(h)` and its DMA handlers `HAL_DMA_IRQHandler`.
+  (in `prj_01`, the HAL's empty weak one); the project's handlers call `HAL_SPI_IRQHandler`/`HAL_DMA_IRQHandler`.
 - **CPU1's HAL tick is TIM6** in `prj_01` (`TICK_INT_PRIORITY 0`): `SPI_HAL_Wait` needs it running (§10.1).
 
 ---
@@ -205,7 +202,7 @@ frame's (else `ERR_PARAM`: the HAL's refusal would leave the handle busy). `SPI_
   `Init`. A write the hardware would ignore is refused with `ERR_BUSY`: configuration or `TSIZE` with
   `SPE = 1` (RM0399 53:3273-3275, 53:3302). `CalcPrescaler` returns the real SCK, not the requested one.
 - **C13, bounded waits.** BM/LL waits are bounded by `max_cycles` DWT cycles the caller passes; a
-  `CYCCNT` that is not counting, or stops for 1000 equal reads, is `ERR_TIMEOUT`. An abort runs
+  `CYCCNT` that is not counting, or reads the same value more than 1000 times, is `ERR_TIMEOUT`. An abort runs
   `IER = 0`, `SPE = 0` (RM0399 53:1071), flags. `SPI_HAL_Wait` is bounded by `timeout_ms` of
   `HAL_GetTick()` and by a count of polls with the tick stopped (m4, §10.1).
 
@@ -238,7 +235,7 @@ The FIFO threshold is t frames per event with t × bytes per frame (1, 2, 3 or 4
 | 2.22.2 | CRC error with `UDRDET ≠ 0` (slave) | Out of scope (no slave, no CRC) | Same |
 | 2.22.3 | `TXP`/`TXC` raise the IRQ with `SPE = 0` | `IER` only while `SPE = 1`: written after it, cleared before it. T6(c): 0 IRQs in the 10 ms after each end; control `TXPIE = 1` by hand: 2 (CPU1), 1 (CPU2) | **Not met in one HAL path:** when every frame fits the FIFO pre-fill, `DXPIE` is still set when the close clears `SPE` before `IER`: one IRQ follows the close (T6: 1 with 1 frame, 0 with FIFO + 1 and 1024). Kept as the HAL does it (owner's decision, 2026-10-04); the handler must accept it (§10.1) |
 | 2.22.4 | `CRCSIZE < 00111` with `CRCEN = 0` and `TSIZE > 0` | `CRCSIZE = 00111`, `CRCEN = 0` in every image (T2, 174 080 + 40 960 configurations) | Needs `USE_SPI_CRC = 0` (`#error`); `SPI_HAL_Init` starts from the reset image, and the HAL keeps its `00111` (T2: equal to the raw `HAL_SPI_Init`) |
-| 2.22.5 | Truncated outputs if `SPE = 0` comes too soon after `EOT` | `guard_cycles` (one SCK period, `CalcGuardCycles`) between `EOT` and `SPE = 0`, also in the ISR and `DmaEnd`. T12(b), `CPHA = 0`, /256: last SCK high pulse 126 samples, half the measured period 126.4 (± 2); without the guard (control, recorded only): 156 | **No guard:** `SPI_CloseTransfer` clears `SPE` right after `EOT` (decision 5, §10.1). Use BM or LL with `CPHA = 0` and a slow SCK |
+| 2.22.5 | Truncated outputs if `SPE = 0` comes too soon after `EOT` | `guard_cycles` (one SCK period, `CalcGuardCycles`) between `EOT` and `SPE = 0`, also in the ISR and `DmaEnd`. T12(b), `CPHA = 0`, /256: last SCK high pulse 126 samples, half the measured period 126.4 (± 2). Control without the guard (decision 6): 156, not reproduced in this run; reproduced (1–2 samples) in 5 of the 8 clean runs of §9.1 | **No guard:** `SPI_CloseTransfer` clears `SPE` right after `EOT` (decision 5, §10.1). Use BM or LL with `CPHA = 0` and a slow SCK |
 
 ### 6.3 The board clock (SP4, N1)
 
@@ -252,7 +249,8 @@ the same capture; T5(d) and T12(b) count in SCK periods measured in the same cap
 ## 7. Examples
 
 Each compiles with `-Wall -Wextra -Wpedantic -Wconversion -Werror` (CMSIS/HAL headers as `-isystem`;
-A for CM4, B and C for CM7 with `HAL_SPI_MODULE_ENABLED`). Pins are those of the bench (§8).
+A for CM4, B and C for CM7 with `HAL_SPI_MODULE_ENABLED`). Pins are those of the bench (§8), except the CS
+of example A, PD14: a pin `prj_01` does not use, not wired on the bench.
 
 ### A. Polling with CS on a GPIO, SPI1 from CPU2 (`spi_bm`)
 
@@ -400,7 +398,7 @@ AD2 never uses Digital Out in this bench. The lines the SPI tests use:
 
  J1 (male-male wire on CN7, no resistor):
    CN7-14  PB5  SPI1_MOSI (AF5) / SPI6_MOSI (AF8)  ──┐
-   CN7-12  PA6  SPI1_MISO (AF5) / SPI6_MISO (AF8)  ──┘  loop MOSI -> MISO (T4, T6-T8, T15)
+   CN7-12  PA6  SPI1_MISO (AF5) / SPI6_MISO (AF8)  ──┘  loop (T4, T6-T9, T11(b), T12(a), T15, B1)
    CN7-10  PA5  SCK of SPI1/SPI6 (not observed)    CN7-19  PB4  alternative MISO with a pull (controls)
 ```
 
@@ -411,7 +409,7 @@ AD2 never uses Digital Out in this bench. The lines the SPI tests use:
 | DIO0–2, DIO7; DIO8–11 | PE8–PE10, PE15; PE3–PE6 | none (never AF) | T0a, S5 | bus; nobody |
 | DIO12 / DIO13 | PE2 / PE7 | `HOST_REQ` / `MCU_ACK` | every handshake | AD2 / MCU |
 | DIO14 | PA8 | MCO1 (AF0) | T5(g) only (step `SPI4_AD2`) | MCU only |
-| J1-A | PB5 | MOSI of SPI1/SPI6 | T4, T6–T8, T15; GPIO output only in T0c | MCU |
+| J1-A | PB5 | MOSI of SPI1/SPI6 | T4, T6–T9, T11(b), T12(a), T15, B1; GPIO output only in T0c | MCU |
 | J1-B | PA6 | MISO of SPI1/SPI6 | same; **never an output** (S14) | PB5 through J1 |
 | - | PA5 | SCK of SPI1/SPI6 | same; input in T15 | MCU |
 | - | PB4 | alternative MISO | T4/T8 controls, input with a pull; **never an output** | nobody |
@@ -435,7 +433,7 @@ cold start; run the host (§9.3); stop it before reflashing or unwiring.
 
 `prj_01_template_dualcore`, preset `selftest-spi`: `C*/App/Src/spi_selftest.c`, `Common/Src/spi_selftest_common.c`
 (block at `0x3800C000`, SRAM4), host `tools/spi_hw_check.py` (protocol v5). CPU1 prints the global verdict.
-Every test prints its negative control; no oracle is the driver (register snapshots, RM0399 fields typed by
+Every test that has a negative control prints it; no oracle is the driver (register snapshots, RM0399 fields typed by
 hand, the raw `HAL_SPI_Init`, the wire, `CYCCNT`, the AD2 with the host's decoder, the host's arithmetic).
 With the option off, production keeps the sections of `2481396` (`docs/spi_f3_map_sizes_8b5d165.txt`).
 
@@ -447,15 +445,16 @@ the same `Rev` and build id on both cores and the host.
 | Phase | Auditor's run | Delivered run |
 | :--- | :--- | :--- |
 | F0 bench | `spi_f0_audit_bench_620a678.txt`: 10/10, PASS | `spi_f0_bench_008db8b.txt`, `spi_f0_bench_efc1be8.txt`: 10/10, PASS |
-| F1 `spi_bm` | `spi_f1_audit_bench_b4fa22d.txt`: 29/29, PASS | `spi_f1_bench_c41040a.txt`: 28/28; `spi_f1_bench_4142921.txt`: 29/29, PASS |
+| F1 `spi_bm` | `spi_f1_audit_bench_b4fa22d.txt`: 29/29, PASS | `spi_f1_bench_4142921.txt`: 29/29, PASS (replaced `spi_f1_bench_c41040a.txt`, 28/28) |
 | F2 `spi_ll` | `spi_f2_audit_bench_99fe89b.txt`: 38/38, PASS | `spi_f2_bench_73c1b76.txt`: 38/38, PASS |
 | F3 `spi_hal` | `spi_f3_audit_bench_b267f4c.txt`: 45/45, PASS | `spi_f3_bench_efb4a3f.txt`: 45/45, PASS |
 | Close (m4) | - | **`spi_f3_bench_8b5d165.txt`: 45/45, PASS** (the final code) |
 
 Failed runs kept: `spi_f0_bench_65e19f7.txt` (the `SPE = 1` case of T0b(e) read `SPE = 0`),
-`spi_f0_audit_bench_153d5b3.txt` (9/10, T0B(d): B1), the development runs `spi_dev_f1_bench_25426f8-dirty*`
-(transfers without SCK pins never end, E2; T5(d) against the nominal period) and
-`spi_dev_f3_bench_dbab128-dirty*` (T6 HAL read-back of `TSERFIE`; T7(c) HAL and N3; `_3`: 45/45).
+`spi_f0_audit_bench_153d5b3.txt` (9/10, T0B(d): F0 audit finding B1), the development runs
+`spi_dev_f1_bench_25426f8-dirty*` (transfers without SCK pins never end, E2; T5(d) against the nominal
+period) and `spi_dev_f3_bench_dbab128-dirty.txt`, `_2` (T6 HAL read-back of `TSERFIE`; T7(c) HAL and N3).
+`_3` passed (45/45) before T6 counted the IRQs after the close.
 
 ### 9.2 Tests
 
@@ -475,7 +474,7 @@ Values from `spi_f3_bench_8b5d165.txt`; "BM/LL/HAL" are the tiers the test runs 
 | T9 | BM SPI6, SPI4, SPI1 | t(2000) − t(1000) frames against `DSIZE` × 2^(MBR+1) kernel ticks, `CYCCNT` | within −101…+70 ppm (± 1 %) | `MBR + 1`: −50 % |
 | T10 | BM | `GetKernelSource` against `RCC_D2CCIP1R`/`RCC_D3CCIPR` read directly | 0 on all six, 0 differ | - |
 | T11 | BM | (a) `MODF` on SPI2 by hand; (b) `OVR` on SPI6, `TakeErrors` | `ERR_MODF`, `SPE = MASTER = 0`, `Deinit` + `Init` recover; `TakeErrors` 0x040, all cleared | `SSI` inactive: no `MODF` |
-| T12 | BM | (a) 2.22.1; (b) 2.22.5 | (a) 0 timeouts in 10 000; (b) 126 samples against 126.4 | (a) 20 stalls in 40; (b) 156 samples (recorded) |
+| T12 | BM | (a) 2.22.1; (b) 2.22.5 | (a) 0 timeouts in 10 000; (b) 126 samples against 126.4 | (a) 20 stalls in 40; (b) 156 samples: not reproduced here (1–2 samples in 5 of 8 clean runs, §6.2) |
 | T13 | BM CPU1/CPU2 | RCC banks: `DisableClock(SPI2)` from CPU2 while CPU1 sends by DMA | SPI2 keeps running (`CTSIZE` 63 583 → 60 653) | CPU1 disables last: stopped (57 723 → 57 723) |
 | T14 | all | `Deinit` against the RM0399 reset image after every test; S5 after each pin step | 0x00 everywhere | before the `Deinit`: 0x0D / 0x0C |
 | T15 | BM, LL SPI6 | PA5 (SCK) as an input: `Transfer` | `ERR_TIMEOUT` after 401 018 (BM) / 401 071 (LL) cycles, `max_cycles` 400 000 (+10 %); then `SPE = 0`, `IER = 0`, reset image | PA5 in AF8: `OK` after 3056 / 3191 cycles, 0xA5 received |
@@ -496,7 +495,7 @@ cd ..\..; .\tools\build_all.ps1 -Clean                      # 8/8
 
 The host refuses a `Rev`/build id that is not this checkout's, WaveForms or a debugger running.
 
-### 9.4 Measurements (B1)
+### 9.4 Measurements (B1 of the plan)
 
 Cycles of one call, DWT, `Init` and `Transfer` with PRIMASK, SPI6 on CM7 (400 MHz) and SPI1 on CM4
 (200 MHz), `Transfer` of 1 frame at /2, transmit only, Debug (`-Og`), in `spi_f3_bench_8b5d165.txt`:
@@ -512,18 +511,18 @@ Cycles of one call, DWT, `Init` and `Transfer` with PRIMASK, SPI6 on CM7 (400 MH
 ### 9.5 Not exercised
 
 - **SCK of SPI1/SPI6 and hardware SS of SPI1/2/3/5/6:** no AD2 line (decision 3).
-- **SPI2, SPI3, SPI5 have no pins** on the bench, and without SCK in AF a master never ends (§10.2): none
-  of their transfers ends. They have their register image (T2), `MODF` without a transfer (T11(a),
-  SPI2) and the RCC banks (T13, SPI2).
+- **SPI2, SPI3, SPI5 have no pins** on the bench and so no transfer that ends (§10.2): only their register
+  image (T2), `MODF` without a transfer (T11(a), SPI2) and the RCC banks (T13, SPI2).
 - **RX from another device:** only the loop and the pulls. Speeds above 25 MHz only recorded (T8).
 - **BM and LL:** `TransferIrq` with `MODF` or `OVR`; the C13 path with `CYCCNT` not counting or stopped in
   `Transfer`, `WaitEnd` and `TransferStartIt` (and inside a guard, m1, accepted by reading). `keep_pins`
-  only on SPI4 with `CPOL = 0` (T5(e)), with LL and HAL only in T1/T2. 65 535 frames only on SPI6, 8 bits,
-  by polling. **LL:** T5(b)–(g), T8, T9, T11–T13 not through LL. **HAL:** `StartTransferIt` without `rx` and IT on SPI4; `ERR_MODF`/`ERR_OVERRUN` through
-  the HAL; the `ERR_TIMEOUT` of `SPI_HAL_Transfer` (the HAL's own); the HAL's error path (§10.1); T5(b)–(g), T8, T9, T11–T13 not through HAL; `spi_hal` on CM4.
+  only on SPI4 with `CPOL = 0` (T5(e)); with LL and HAL only in T1/T2. 65 535 frames only on SPI6, 8 bits,
+  by polling. T5(b)–(g), T8, T9, T11–T13 not through LL nor HAL.
+- **HAL:** `StartTransferIt` without `rx`, and IT on SPI4; `ERR_MODF`/`ERR_OVERRUN` through the HAL; the
+  `ERR_TIMEOUT` of `SPI_HAL_Transfer` (the HAL's own); the HAL's error path (§10.1); `spi_hal` on CM4.
 - **Never produced:** `ERR_VERIFY` in any tier (the one in the F3 development runs was a read-back defect,
-  fixed in `3c23568`); ES0445 2.22.2. Silicon
-  other than Rev V; any clock tree other than `prj_01`'s, except the pure functions (T3).
+  fixed in `3c23568`); ES0445 2.22.2. Silicon other than Rev V; any clock tree other than `prj_01`'s,
+  except the pure functions (T3).
 
 ---
 
@@ -540,10 +539,8 @@ Cycles of one call, DWT, `Init` and `Transfer` with PRIMASK, SPI6 on CM7 (400 MH
   an `Init` releases the pins for a few cycles. **By design:** with hardware SS the HAL leaves
   `CR1.SSI = 0` (l. 375-381), where `spi_bm` writes it inactive (no effect with `SSM = 0`; the only T2 bit).
 - **`rx == NULL`** goes through `HAL_SPI_Transmit*`: `CFG2.COMM` = transmit only until a transfer with `rx`.
-- **`IER.TSERFIE`** stays at 1 after an IT transfer (the HAL's close does not clear it); `TSERF` needs a
-  `TSER` reload, which this tier never programs, and `SPI_HAL_Deinit` clears it.
-- **The HAL's error path** in `HAL_SPI_IRQHandler` clears `SPE` (l. 3121) before the interrupts
-  (l. 3124). Not exercised.
+- **`IER.TSERFIE`** stays at 1 after an IT transfer: harmless without a `TSER` reload; `SPI_HAL_Deinit` clears it.
+- **The HAL's error path** clears `SPE` (l. 3121) before the interrupts (l. 3124). Not exercised.
 
 ### 10.2 The SCK pin must be in its AF (E2, R3-3)
 
@@ -557,11 +554,10 @@ against 400 000; control 0xA5 received); first seen in `spi_dev_f1_bench_25426f8
 
 - **SP3, `.d3_ram`:** both linker scripts of `prj_01` place it at `0x38000000` (`stm32h755zi_cm7.ld`
   l. 182-190, `stm32h755zi_cm4.ld` l. 107-115): only one core may use it (CPU1 in the selftest).
-- **N3, for DMA1/DMA2 through `02_dma`:** `DMA_HAL_Init` (`02_dma/dma_hal.c:183-186`) compares
-  `periph_align` (`DMA_PDATAALIGN_*`, `PSIZE`, bits 12:11) with `mem_align` (`DMA_MDATAALIGN_*`, `MSIZE`,
-  bits 14:13) in direct mode, so it refuses direct mode with half-words or words although `PSIZE = MSIZE`.
-  Until `02_dma` changes, use FIFO mode for 9..32-bit frames on DMA1/DMA2 (T7(c) HAL does). The BDMA
-  path does not run this check.
+- **N3, for DMA1/DMA2 through `02_dma`:** `DMA_HAL_Init` (`02_dma/dma_hal.c:183-186`) compares `periph_align`
+  (`DMA_PDATAALIGN_*`, `PSIZE`, bits 12:11) with `mem_align` (`DMA_MDATAALIGN_*`, `MSIZE`, bits 14:13) in direct
+  mode, so it refuses half-words and words although `PSIZE = MSIZE`. Until `02_dma` changes, use FIFO mode for
+  9..32-bit frames on DMA1/DMA2 (T7(c) HAL does); the BDMA path does not run this check.
 
 ---
 
@@ -575,10 +571,10 @@ against 400 000; control 0xA5 received); first seen in `spi_dev_f1_bench_25426f8
 
 1. **Frozen API, additions only** (catalog rule 2): `spi_bm.h` as at `b4fa22d` plus `SPI_BM_CheckDma*`
    (`14ea027`), `spi_ll.h` as at `99fe89b`, `spi_hal.h` as at `b267f4c` (`1c8ab15` added only the
-   precondition text of `SPI_HAL_Wait`); check with `git diff main -- '01_shared_drivers/06_spi/*.h'`.
+   precondition text of `SPI_HAL_Wait`); after the merge: `git diff main -- '01_shared_drivers/06_spi/*.h'`.
 2. **One copy of every check** (`SPI_BM_Check*`, called by LL/HAL before writing); a silicon fact goes
    into `k_spi[]` with its RM0399 line and, typed separately, into the test's table.
-3. **Dependencies (§1), no state in RAM;** every test prints its negative control; no oracle is the driver.
+3. **Dependencies (§1), no state in RAM;** every negative control is printed; no oracle is the driver.
 4. **Before merging:** `build_all -Clean` 8/8, `selftest-spi` with 0 warnings and with `-Werror`,
    production `.map` unchanged, one clean unedited bench run.
 
@@ -595,6 +591,10 @@ against 400 000; control 0xA5 received); first seen in `spi_dev_f1_bench_25426f8
 | F3: `spi_hal`, target, HAL SPI module and `Status_Task` stack under the option, tests (v5) | `4e147b5` … `b267f4c`; F3 passes at `6675064` (auditor's run `b267f4c`) |
 | Close: m4, its check, evidence; this README | `1c8ab15`, `8b5d165`, `cc951c4`; the commit that adds this README |
 
-Process documents, kept here at the close: `IMPLEMENTATION_PLAN.md` and `IMPLEMENTER_INSTRUCTIONS.md`
-(revision 3, `b9de729`; revisions 2 and 1 at `d9a9df7` and `700b8ed`), `AUDIT.md` (F3 at `6675064`),
-`IMPLEMENTATION_REPORT.md` (F3 at `b267f4c`; the reply to the F3 audit in the commit of this README).
+Process documents (plan revision 3; revisions 2 and 1 at `d9a9df7`, `700b8ed`): in this directory until
+the catalog owner removes them; then each is at the parent of the commit that removes it:
+
+```bash
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/06_spi/IMPLEMENTATION_PLAN.md)^:01_shared_drivers/06_spi/IMPLEMENTATION_PLAN.md
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/06_spi/AUDIT.md)^:01_shared_drivers/06_spi/AUDIT.md   # and the other two
+```
