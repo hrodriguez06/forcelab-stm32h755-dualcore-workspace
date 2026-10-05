@@ -302,12 +302,28 @@ SpiBm_Status_t SPI_HAL_Wait(SPI_HandleTypeDef *h, uint32_t timeout_ms)
     {
         return SPI_BM_ERR_PARAM;
     }
+    /* C13 (m4): an exit when HAL_GetTick() stops (PRIMASK set, or a caller at or above
+       the tick's priority). A poll takes at least one CPU cycle, so this many polls with
+       the same tick are at least two tick periods (uwTickFreq ms each). */
+    const uint32_t stall_max = 2U * (uint32_t)HAL_GetTickFreq() * (SystemCoreClock / 1000U);
     const uint32_t t0 = HAL_GetTick();
+    uint32_t last = t0;
+    uint32_t same = 0U;
     while (h->State != HAL_SPI_STATE_READY)
     {
-        if ((HAL_GetTick() - t0) >= timeout_ms)
+        const uint32_t now = HAL_GetTick();
+        if ((now - t0) >= timeout_ms)
         {
             return SPI_BM_ERR_TIMEOUT;
+        }
+        if (now != last)
+        {
+            last = now;
+            same = 0U;
+        }
+        else if (++same > stall_max)
+        {
+            return SPI_BM_ERR_TIMEOUT;          /* the tick stopped */
         }
     }
     if (h->ErrorCode != HAL_SPI_ERROR_NONE)

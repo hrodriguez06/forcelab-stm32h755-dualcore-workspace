@@ -92,7 +92,13 @@ SpiBm_Status_t SPI_HAL_StartTransferDma(SPI_HandleTypeDef *h, const void *tx, vo
 /** Polls h->State until READY, at most timeout_ms (>= 1) of HAL_GetTick; then
     h->ErrorCode, and the read-back of the close (SPE = 0, IER = 0 but TSERFIE, DMA
     requests off).
-    ERR_TIMEOUT leaves the transfer as it is. */
+    ERR_TIMEOUT leaves the transfer as it is.
+    Precondition: the HAL tick and the SPI (and DMA) interrupts must be able to run,
+    so call it from thread mode with PRIMASK clear, or from an ISR of lower priority
+    than all of them. Otherwise h->State never changes and the tick stops: after
+    2 x (SystemCoreClock / 1000) x the tick period in ms polls with the same
+    HAL_GetTick() value (two tick periods at least) it returns ERR_TIMEOUT.
+    SPI_HAL_Transfer has no such exit: its bound is the HAL's own, on HAL_GetTick. */
 SpiBm_Status_t SPI_HAL_Wait(SPI_HandleTypeDef *h, uint32_t timeout_ms);
 /** SPI_BM_Deinit(h->Instance); the handle back to RESET (State, ErrorCode, Lock). */
 SpiBm_Status_t SPI_HAL_Deinit(SPI_HandleTypeDef *h);
