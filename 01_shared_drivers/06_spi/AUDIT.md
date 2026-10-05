@@ -281,3 +281,29 @@ Notas (opcionales): `spi_f1_bench_c41040a.txt` figura como entrega sin decir que
 ### Estado
 
 **El cierre no pasa todavía:** M3–M6 son afirmaciones falsas u omisiones del README. Con M3–M6 y m5–m13 corregidos (sin pasar de 600 líneas), y la respuesta en el informe, haré la parte 2. No hace falta otra ejecución en la placa: m4 ya está en `spi_f3_bench_8b5d165.txt`.
+
+## Cierre, parte 2: verificación del README (`3dfb2cf`)
+
+Entrega: `6c66ac8..3dfb2cf` (M3–M6 `0f10fd6`, m5–m13 y notas `fc5ec16`, respuesta en el informe `3dfb2cf`). README: 600 líneas.
+
+| Hallazgo | Corrección en el README | Verificación |
+| --- | --- | --- |
+| M3 | §10.2 y §3: `Transfer` deja `IER = 0`, `SPE = 0`; `WaitEnd` devuelve `ERR_TIMEOUT` con el SPI habilitado (parar streams, después `DmaEnd`); la evidencia de T15 es solo de `Transfer` | Igual a `spi_bm.c`/`spi_ll.c`. **Cerrado** |
+| M4 | §3: `NSS_HW_PULSE` solo con `midi` ≥ 2 (53:3470, 53:615-616), sin comprobación del driver | **Cerrado** |
+| M5 | §6.3, diagrama y tabla de §8, línea de `RCC_CFGR`: MCO1 solo para T5(g) en `SPI4_AD2`; T5(d) y T12(b) en periodos medidos en la captura (R3-5) | **Cerrado** |
+| M6 | §9.5: `TransferIrq` de BM y LL con `MODF`/`OVR`; C13 con `CYCCNT` sin contar o parado; `keep_pins` solo con `CPOL = 0`; 65 535 tramas solo en SPI6 (también en la fila T4); `ERR_TIMEOUT` de `SPI_HAL_Transfer` | Coincide con el informe (§5.8 de F1–F3). **Cerrado** |
+| m5–m13 | Control de T12(b) (156, no reproducido aquí; 1–2 muestras en 5 de 8 ejecuciones limpias); "not built on CM4"; `SPI_LL_CheckConfig`; `SPI_HAL_Init` sin comprobación de estado; fin de `WaitEnd`; controles negativos "that has one"; J1 también en T9, T11(b), T12(a), B1; PD14 declarado fuera del banco; forma de recuperación de los documentos de proceso | **Cerrados** |
+| Notas | `c41040a` sustituida por `4142921`; `dbab128-dirty_3` aparte; "B1 of the plan" frente al hallazgo B1 de F0; `git diff main` "after the merge"; "more than 1000" | Atendidas |
+
+El código de los tres ejemplos no cambia en esta entrega: sigue valiendo mi compilación con `-Werror` de la parte 1.
+
+### Estado
+
+**El cierre pasa.** `06_spi` queda auditado: F0–F3 y README. Todos los hallazgos de la rama están cerrados, salvo N3, que es de `02_dma` y está propuesto como tarea aparte.
+
+Pasos del responsable del catálogo, no del implementador:
+
+1. `DRIVER_ROADMAP.md`: la fila de `06_spi` y su sección.
+2. `02_dma/README.md` §9: la línea "BDMA with a real D3 peripheral" queda ejercitada con SPI6 (T7(b), BM, LL y HAL). Más la nota N3.
+3. `00_gpio/README.md` §8: la mención de J1.
+4. Borrado de los documentos de proceso, merge a `main` y borrado de la rama.
