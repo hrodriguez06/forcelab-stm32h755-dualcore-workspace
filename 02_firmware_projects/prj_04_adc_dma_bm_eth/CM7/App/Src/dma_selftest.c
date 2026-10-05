@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   * @file    dma_selftest.c
-  * @brief   DMA driver self-test implementation for CM7 (T8-T11).
+  * @brief   DMA driver self-test implementation for CM7 (T8-T11, T13).
   ******************************************************************************
   */
 
@@ -24,6 +24,15 @@ __attribute__((section(".dma_buf"), aligned(32))) static uint32_t s_sram1_buf[32
 
 /* Buffer for T10 (USART3 DMA TX) */
 __attribute__((section(".axi_ram"), aligned(32))) static char s_t10_msg[80];
+
+/* Buffers for T13 (USART3 DMA TX in direct mode): one character per item */
+__attribute__((section(".axi_ram"), aligned(32))) static uint16_t s_t13_hw[64];
+__attribute__((section(".axi_ram"), aligned(32))) static uint32_t s_t13_w[64];
+
+/* T13 matrix counters, printed by the runner */
+static uint32_t s_t13_combos_ok = 0U;
+static uint32_t s_t13_combos_rej = 0U;
+static uint32_t s_t13_combos_mismatch = 0U;
 
 /* Callback counter for T9 */
 static volatile uint32_t s_t9_tc_callback_count = 0U;
@@ -644,6 +653,161 @@ static bool Test_T11(void)
     return true;
 }
 
+/* ---- T13: HAL direct mode with PSIZE = MSIZE = HALFWORD and WORD -------- */
+/* Independent oracle, written by hand from RM0399 16:535-538 and 16:1278: in
+ * direct mode both data widths are PSIZE, so DMA_HAL_Init must accept exactly
+ * the diagonal. Index 0/1/2 = BYTE/HALFWORD/WORD = field code 00/01/10. */
+static const bool s_rm0399_direct_valid[3][3] = {
+    /* MSIZE:  BYTE   HALFWORD WORD */
+    /* BYTE */ { true,  false,  false },
+    /* HALF */ { false, true,   false },
+    /* WORD */ { false, false,  true  }
+};
+
+static HAL_StatusTypeDef T13_Init(DMA_HandleTypeDef *hdma, uint32_t palign, uint32_t malign)
+{
+    DmaHal_Config_t cfg = {
+        .instance       = DMA2_Stream2,
+        .request        = DMA_REQUEST_USART3_TX,
+        .direction      = DMA_MEMORY_TO_PERIPH,
+        .periph_inc     = DMA_PINC_DISABLE,
+        .mem_inc        = DMA_MINC_ENABLE,
+        .periph_align   = palign,
+        .mem_align      = malign,
+        .mode           = DMA_NORMAL,
+        .priority       = DMA_PRIORITY_LOW,
+        .fifo_mode      = DMA_FIFOMODE_DISABLE,
+        .fifo_threshold = DMA_FIFO_THRESHOLD_HALFFULL,
+        .mem_burst      = DMA_MBURST_SINGLE,
+        .periph_burst   = DMA_PBURST_SINGLE,
+        .enable_clock   = true,
+        .irq_priority   = -1
+    };
+
+    memset(hdma, 0, sizeof(*hdma));
+    return DMA_HAL_Init(hdma, &cfg);
+}
+
+/* Sends text on USART3 through DMA2_Stream2 in direct mode, one character per
+ * item of 'item_bytes' (2 or 4). The line on the console is the end-to-end
+ * check: a wrong width would interleave NUL characters or drop characters. */
+static bool T13_Send(const char *text, uint32_t palign, uint32_t malign, uint32_t item_bytes)
+{
+    void    *buf = (item_bytes == 2U) ? (void *)s_t13_hw : (void *)s_t13_w;
+    uint32_t cap = (item_bytes == 2U) ? (uint32_t)(sizeof(s_t13_hw) / 2U)
+                                      : (uint32_t)(sizeof(s_t13_w) / 4U);
+    uint32_t len = 0U;
+
+    while ((text[len] != '\0') && (len < cap))
+    {
+        if (item_bytes == 2U)
+        {
+            s_t13_hw[len] = (uint16_t)(uint8_t)text[len];
+        }
+        else
+        {
+            s_t13_w[len] = (uint32_t)(uint8_t)text[len];
+        }
+        len++;
+    }
+    DMA_MEM_BM_CleanForTx(buf, (item_bytes == 2U) ? sizeof(s_t13_hw) : sizeof(s_t13_w));
+
+    DMA_HandleTypeDef hdma;
+    if (T13_Init(&hdma, palign, malign) != HAL_OK)
+    {
+        return false;
+    }
+
+    USART3->CR3 |= USART_CR3_DMAT;
+
+    if (HAL_DMA_Start(&hdma, (uint32_t)buf, (uint32_t)&(USART3->TDR), len) != HAL_OK)
+    {
+        DMA_HAL_DeInit(&hdma);
+        return false;
+    }
+
+    if (HAL_DMA_PollForTransfer(&hdma, HAL_DMA_FULL_TRANSFER, 500U) != HAL_OK)
+    {
+        (void)HAL_DMA_Abort(&hdma);
+        DMA_HAL_DeInit(&hdma);
+        return false;
+    }
+
+    uint32_t ndtr = ((DMA_Stream_TypeDef *)hdma.Instance)->NDTR;
+    DMA_HAL_DeInit(&hdma);
+    return (ndtr == 0U);
+}
+
+static bool Test_T13(void)
+{
+    static const uint32_t paligns[3] = {
+        DMA_PDATAALIGN_BYTE, DMA_PDATAALIGN_HALFWORD, DMA_PDATAALIGN_WORD
+    };
+    static const uint32_t maligns[3] = {
+        DMA_MDATAALIGN_BYTE, DMA_MDATAALIGN_HALFWORD, DMA_MDATAALIGN_WORD
+    };
+    DMA_Stream_TypeDef *s = DMA2_Stream2;
+
+    s_t13_combos_ok = 0U;
+    s_t13_combos_rej = 0U;
+    s_t13_combos_mismatch = 0U;
+
+    /* 1. Direct-mode matrix: the stream is never enabled. An accepted pair must
+     * reach CR as written (PSIZE = CR[12:11], MSIZE = CR[14:13]) with DMDIS =
+     * FCR[2] = 0; a rejected pair must leave the stream untouched (CR == 0). */
+    for (uint32_t p = 0U; p < 3U; p++)
+    {
+        for (uint32_t m = 0U; m < 3U; m++)
+        {
+            DMA_HandleTypeDef hdma;
+            DMA_BM_DeinitStream(s);
+            HAL_StatusTypeDef res = T13_Init(&hdma, paligns[p], maligns[m]);
+            uint32_t cr  = s->CR;
+            uint32_t fcr = s->FCR;
+            bool ok;
+
+            if (s_rm0399_direct_valid[p][m])
+            {
+                ok = (res == HAL_OK) &&
+                     (((cr >> 11) & 3U) == p) &&
+                     (((cr >> 13) & 3U) == m) &&
+                     ((fcr & (1UL << 2)) == 0U);
+                if (ok)
+                {
+                    s_t13_combos_ok++;
+                }
+            }
+            else
+            {
+                ok = (res == HAL_ERROR) && (cr == 0U);
+                if (ok)
+                {
+                    s_t13_combos_rej++;
+                }
+            }
+
+            if (!ok)
+            {
+                s_t13_combos_mismatch++;
+            }
+
+            if (res == HAL_OK)
+            {
+                DMA_HAL_DeInit(&hdma);
+            }
+        }
+    }
+
+    /* 2. Real direct-mode transfers at the two widths the defect refused */
+    bool hw_ok = T13_Send("[m7_dma_test] T13 direct mode HALFWORD -> USART3 TDR\r\n",
+                          DMA_PDATAALIGN_HALFWORD, DMA_MDATAALIGN_HALFWORD, 2U);
+    bool w_ok  = T13_Send("[m7_dma_test] T13 direct mode WORD -> USART3 TDR\r\n",
+                          DMA_PDATAALIGN_WORD, DMA_MDATAALIGN_WORD, 4U);
+
+    return (s_t13_combos_ok == 3U) && (s_t13_combos_rej == 6U) &&
+           (s_t13_combos_mismatch == 0U) && hw_ok && w_ok;
+}
+
 /* ---- Public Runner ------------------------------------------------------ */
 void DMA_SelfTest_CM7_Run(void)
 {
@@ -662,6 +826,12 @@ void DMA_SelfTest_CM7_Run(void)
     bool t11 = Test_T11();
     APP_LOG("[m7_dma_test] T11_BDMA_SRAM4: %s", t11 ? "PASS" : "FAIL");
 
-    bool all_pass = t8 && t9 && t10 && t11;
-    APP_LOG("[m7_dma_test] OVERALL: %s (T8-T11)", all_pass ? "PASS" : "FAIL");
+    bool t13 = Test_T13();
+    APP_LOG("[m7_dma_test] T13 combos valid=3 ok=%lu invalid=6 rej=%lu mismatch=%lu",
+            (unsigned long)s_t13_combos_ok, (unsigned long)s_t13_combos_rej,
+            (unsigned long)s_t13_combos_mismatch);
+    APP_LOG("[m7_dma_test] T13_HAL_DIRECT_SIZES: %s", t13 ? "PASS" : "FAIL");
+
+    bool all_pass = t8 && t9 && t10 && t11 && t13;
+    APP_LOG("[m7_dma_test] OVERALL: %s (T8-T11, T13)", all_pass ? "PASS" : "FAIL");
 }
