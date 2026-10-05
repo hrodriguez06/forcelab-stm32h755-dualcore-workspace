@@ -33,12 +33,21 @@
       "binaryDir": "${sourceDir}/build/selftest-tim",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "TIM_DRIVER_SELFTEST": "ON", "FW_PRESET": "selftest-tim" }
+    },
+    {
+      "name": "selftest-spi",
+      "displayName": "Dual-Core Debug with the 06_spi selftest (AD2 bench, J1)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/selftest-spi",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "SPI_DRIVER_SELFTEST": "ON", "FW_PRESET": "selftest-spi" }
     }
   ],
   "buildPresets": [
     { "name": "debug",         "configurePreset": "debug"         },
     { "name": "release",       "configurePreset": "release"       },
     { "name": "selftest-gpio", "configurePreset": "selftest-gpio" },
-    { "name": "selftest-tim",  "configurePreset": "selftest-tim"  }
+    { "name": "selftest-tim",  "configurePreset": "selftest-tim"  },
+    { "name": "selftest-spi",  "configurePreset": "selftest-spi"  }
   ]
 }

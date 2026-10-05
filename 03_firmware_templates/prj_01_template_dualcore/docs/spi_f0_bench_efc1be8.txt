@@ -1,0 +1,150 @@
+[+   0.000s] [host] argv: --checklist-confirmed Hector
+[+   0.000s] [host] options: allow_dirty=False preset=selftest-spi no_reset=False checklist_confirmed=Hector
+[+   0.064s] [host] spi_hw_check.py, host checkout efc1be8, protocol v2, phase F0
+[+   0.064s] [host] checklist [x] GND first, then the DIO lines per 00_gpio README 8; no series resistors: confirmed by Hector (--checklist-confirmed)
+[+   0.064s] [host] checklist [x] J1 colocado (CN7-14 <-> CN7-12): confirmed by Hector (--checklist-confirmed)
+[+   0.064s] [host] checklist [x] nothing on W1, W2, V+, V-: confirmed by Hector (--checklist-confirmed)
+[+   0.064s] [host] checklist [x] both USB connected (AD2 and ST-LINK), AD2 on USB while the Nucleo is powered: confirmed by Hector (--checklist-confirmed)
+[+   0.064s] [host] checklist [x] selftest-spi flashed with this script stopped, then a cold start: confirmed by Hector (--checklist-confirmed)
+[+   0.890s] [host] checklist [x] WaveForms GUI closed, no debugger attached (tasklist: none of WaveForms.exe, ST-LINK_gdbserver.exe, openocd.exe, STM32CubeProgrammer.exe)
+[+   1.289s] [host] tree clean
+[+   1.769s] [host] build id of this checkout and build/selftest-spi: b2d94e5e65f27406
+[+   1.769s] [ad2] T0B(a) ad2_set_oe(0x0200, bus=NONE): refused before the DLL
+[+   1.770s] [ad2] T0B(a) ad2_set_oe(0x0800, bus=NONE): refused before the DLL
+[+   1.770s] [ad2] T0B(a) ad2_set_oe(0x2000, bus=NONE): refused before the DLL
+[+   1.770s] [ad2] T0B(a) ad2_set_oe(0x4000, bus=NONE): refused before the DLL
+[+   1.770s] [ad2] T0B(a) ad2_set_oe(0x8000, bus=NONE): refused before the DLL
+[+   1.770s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=NONE): refused before the DLL
+[+   1.770s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=MCU): refused before the DLL
+[+   1.770s] [ad2] T0B(a) ad2_set_oe(0x10FF, bus=MCU): refused before the DLL
+[+   1.770s] [ad2] T0B(a) control ad2_set_oe(0x1000, bus=NONE): passed to the DLL
+[+   1.770s] [ad2] T0B(a) control ad2_set_oe(0x10FF, bus=AD2): passed to the DLL
+[+   1.770s] [ad2] T0B(a) spi_set_oe(0x0100, bus=NONE) [DIO8 (S3 would allow it)]: refused, S2, nothing passed to ad2_set_oe
+[+   1.770s] [ad2] T0B(a) spi_set_oe(0x0400, bus=NONE) [DIO10 (S3 would allow it)]: refused, S2, nothing passed to ad2_set_oe
+[+   1.770s] [ad2] T0B(a) spi_set_oe(0x00FF, bus=MCU) [the bus]: refused, S2, nothing passed to ad2_set_oe
+[+   1.770s] [ad2] T0B(a) spi_set_oe(0x0010, bus=MCU) [DIO4 (SPI4 SCK)]: refused, S2, nothing passed to ad2_set_oe
+[+   1.770s] [ad2] T0B(a) spi_set_oe(0x0200, bus=NONE) [DIO9]: refused, S2, nothing passed to ad2_set_oe
+[+   1.770s] [ad2] T0B(a) spi_set_oe(0x4000, bus=NONE) [DIO14 (PA8)]: refused, S2, nothing passed to ad2_set_oe
+[+   1.770s] [ad2] T0B(a) spi_set_oe(0x8000, bus=NONE) [DIO15]: refused, S2, nothing passed to ad2_set_oe
+[+   1.770s] [ad2] T0B(a) spi_set_oe(0x1100, bus=NONE) [HOST_REQ with DIO8]: refused, S2, nothing passed to ad2_set_oe
+[+   1.770s] [ad2] T0B(a) control spi_set_oe(0x0000, bus=NONE): passed to ad2_set_oe
+[+   1.770s] [ad2] T0B(a) control spi_set_oe(0x1000, bus=NONE): passed to ad2_set_oe
+[+   1.770s] [host] T0B(a) S3 guard on the mock: PASS; HOST_REQ-only guard on the mock: PASS
+[+   2.367s] [ad2] opened in S2: OE=0x0000 DIO=0x0000 Digital Out enable=0x0000 Zet=0xFFFF
+[+   2.368s] [host] reset through SWD (STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst), AD2 in S2
+[+   3.285s] [ipc] m7=101 m4=308  (CPU2 alive)
+[+   3.537s]  
+[+   3.542s] === STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[+   3.546s] [sys] build rev=efc1be8 id=b2d94e5e65f27406
+[+   3.550s] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[+   3.553s] [sys] silicon revision id=0x2003
+[+   3.557s] [ipc] shared block at 0x38008000, magic=0x48375353
+[+   3.561s] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[+   3.563s] [spi] CM7 Rev efc1be8
+[+   3.566s] [spi] CM7 Build id b2d94e5e65f27406
+[+   3.568s] [spi] CM4 Rev efc1be8
+[+   3.571s] [spi] CM4 Build id b2d94e5e65f27406
+[+   3.574s] [spi] SPI_BENCH v2 idle
+[+   3.580s] [spi] silicon REV_ID=0x2003, test block at 0x3800C000, CM4 table v2, steps 8
+[+   3.583s] [spi] STEP T0A bus=NONE j1=NONE v=2
+[+   3.656s] [host] R4-a: cm7 Rev=efc1be8 id=b2d94e5e65f27406; cm4 Rev=efc1be8 id=b2d94e5e65f27406; host HEAD=efc1be8 id=b2d94e5e65f27406
+[+   3.656s] [host] build id host=b2d94e5e65f27406 cm7=b2d94e5e65f27406 cm4=b2d94e5e65f27406
+[+   3.656s] [host] S8: banner v2, Rev cm7=efc1be8 cm4=efc1be8
+[+   3.665s] [ad2] step T0A: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+   3.719s] [ad2] T0A loose lines: 13 lines with MCU pull-up 0x4FFF (0x4FFF), pull-down 0x0000 (0x0000); HOST_REQ/MCU_ACK exercised by every handshake -> PASS
+[+   3.719s] [ad2] T0A walking 1: one line pulled up at a time, the others down: 13 patterns, mismatches [] -> PASS
+[+   3.719s] [ad2] T0A control: firmware pulls DIO9 (PE5) down where the host expects all up: the check flags 0x0200 (0x0200 expected) -> PASS
+[+   3.727s] [spi] T0A MCU IDR of the 13 lines, pull-up 0x1FFF (0x1FFF), pull-down 0x0000 (0x0000) -> PASS
+[+   3.734s] [spi] T0A walking 1 on 13 lines, MCU IDR: lines that differ 0x0000 -> PASS
+[+   3.743s] [spi] T0A control: DIO9 (PE5) pulled down on purpose, MCU check flags 0x0200 (0x0200 expected) -> PASS
+[+   3.746s] [spi] STEP T0C bus=NONE j1=CM7 v=2
+[+   3.753s] [ad2] step T0C: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+   3.764s] [spi] T0C(f) claims in T0C: 6 cases, accepted 0x01 (0x01: PB5 output only), regs untouched 1 -> PASS
+[+   3.777s] [spi] T0C control: PB5 input no pull, PA6 pull-up -> PA6|PB4|PA5|PB5 = 0x9 (0x9), pull-down -> 0x6 (0x6): PA6 follows its pull
+[+   3.781s] [spi] | and PB5 follows PA6 through J1 -> PASS
+[+   3.805s] [spi] T0C PB5 wrote 0x5A3C over 16 steps, PA6 read 0x5A3C: steps that differ 0x0000 -> PASS
+[+   3.813s] [spi] T0C PB4 and PA5 (pull opposite to PB5) followed their pull: steps that differ 0x0000 -> PASS
+[+   3.822s] [spi] T0C PB5 MODER 1 (output) during the test, 0 (input) after; J1 pins input without pull -> PASS
+[+   3.824s] [spi] T0C summary PASS
+[+   3.825s] [ad2] T0C J1 (firmware): CPU1's summary PASS: control (PB5 input, PA6 pull up/down), 16 levels of PB5 on PA6, PB4/PA5 on their pull (lines '[spi] T0C ...' above) -> PASS
+[+   3.828s] [spi] STEP T0B bus=NONE j1=CM4 v=2
+[+   3.836s] [ad2] step T0B: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+   3.848s] [spi] T0B(b) CM7 claim: 23 refusals, accepted by mistake 0x00000000; PA8 AF0 accepted (control) 1; regs untouched 1 -> PASS
+[+   3.857s] [spi] T0B(f) CM7 claim of J1 in CPU2's step: 5 refusals (AF8, AF5, PB5 output), accepted by mistake 0x00 -> PASS
+[+   3.869s] [spi] T0B(e) PE11..PE14 AF5 in bus = NONE with SPI4 at an S13 state (master, SPE = 0, AFCNTR = 0: S13 read-back 1): refused 1 -> PASS
+[+   3.879s] [spi] T0B(b)(f) CM4 claim in T0B (J1 = CM4): 19 cases, accepted 0x0000F (0x0000F), regs changed 0x00000 -> PASS
+[+   3.890s] [spi] T0B(f) CM4 bench_safe: PA5 AF5 MODER=2 AFR=5, PA6|PB4 PUPDR=0x6; after safe J1 MODER=0x00 PUPDR=0x00 AFR=0x0000 (all 0) -> PASS
+[+   3.901s] [spi] T0B(f) R2-3 CM4 bench_safe releases SPI1: CR1 0x00001000 -> 0x00000000, CFG2 0x04400000 -> 0x00000000, SR 0x00001002
+[+   3.905s] [spi] | (MODF 0); clock as before 1 -> PASS
+[+   3.916s] [spi] T0B(f) R2-3 CM4, PA6 AF5 against SPI1: SPE=1 (read back 1), AFCNTR=1, IOSWP=1, slave CFG2!=0, clock off refused; master
+[+   3.927s] [spi] | at rest, CFG2=0 accepted: accepted 0x60 (0x60), GPIO regs changed 0x00000, SPI1 back to CR1=0x00000000 CFG2=0x00000000,
+[+   3.930s] [spi] | clock as before 1 -> PASS
+[+   3.941s] [spi] T0B(b)(f) CM4 claim between steps: 19 cases, accepted 0x00000 (0x00000), regs changed 0x00000 -> PASS
+[+   3.944s] [spi] STEP T0B_S5NEG bus=MCU j1=NONE v=2
+[+   3.952s] [ad2] step T0B_S5NEG: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+   3.958s] [ad2] S5 T0B_S5NEG before: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+   3.962s] [ad2] T0B(c) S5 negative control: MCU drives the bus: s5_released() returned [(False, '0x5A'), (False, '0x5A')] (must be False twice, DIO=0x5A) -> PASS
+[+   3.968s] [ad2] S5 T0B_S5NEG after: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+   3.976s] [spi] T0B(c) bus driven to 0x5A during the host check, then released (MODER bus 0x0000) -> PASS
+[+   3.980s] [spi] STEP T0B_TIMEOUT bus=NONE j1=NONE v=2
+[+   3.992s] [ad2] step T0B_TIMEOUT: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+   3.994s] [ad2] T0B(d) MCU_ACK high: the host deliberately does not raise HOST_REQ
+[+  13.874s] [spi] T0B(d) no HOST_REQ in 10 s -> bench_safe: GPIOE MODER[31:4]=0x00004000 (0x00004000), AFRH=0x00000000, J1 MODER
+[+  13.878s] [spi] | PA5|PA6|PB4|PB5=0x00 (0) -> PASS
+[+  13.880s] [spi] T0B timeout handled
+[+  13.990s] [ad2] T0B(d) firmware timeout: MCU_ACK stayed high 9.870 s without HOST_REQ (9.0..11.0 s; the MCU waits 4e9 cycles), then low in 20/20 reads over 100 ms while the MCU waited for the host; `T0B timeout handled` reported -> PASS
+[+  13.993s] [spi] STEP T0B_S13 bus=MCU j1=NONE v=2
+[+  14.003s] [ad2] step T0B_S13: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+  14.010s] [ad2] S5 T0B_S13 before: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  14.018s] [spi] T0B(e) SPI4 at the start of the step: CR1=0x00000000 CFG2=0x00000000 SR=0x00001002 (MODF 0)
+[+  14.029s] [spi] T0B(e) SPI4 cases: SPE=1 (read back 1), AFCNTR=1, MASTER=0 with CPOL, clock off; pin cases: AF6, AF1, PE8, PE10, PE15,
+[+  14.037s] [spi] | PE9, PE12 output, PE2, PE6, SPI4 with PE10, PA5 AF8; SR in the SPE case 0x00001002
+[+  14.048s] [spi] T0B(e) S13 claim: 4 SPI4 states and 11 pin cases refused, accepted by mistake 0x0 / 0x0000, GPIO regs untouched 1 -> PASS
+[+  14.055s] [spi] T0B(e) controls: CFG2=MASTER|SSM accepted 1, CFG2=0 (reset) accepted 1 -> PASS
+[+  14.061s] [ad2] S5 T0B_S13 with PE11..PE14 in AF5, AFCNTR=0: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  14.061s] [ad2] T0B(e) S5 with PE11..PE14 in AF5: the bus followed both MCU pulls with SPI4 a master at rest, pins in AF5 (else BenchAbort) -> PASS
+[+  14.072s] [spi] T0B(e) S5 with PE11..PE14 in AF5 (MODER 0xAA, AFR 0x5555), SPI4 CFG2=0x04400000: MCU IDR bus up 0xFF down 0x00 -> PASS
+[+  14.087s] [ad2] T0B(e) control AFCNTR=1: CPOL=0 pull-up: s5_released False DIO=0xAF SCK=0 MOSI=0; CPOL=0 pull-down: s5_released True DIO=0x00 SCK=0 MOSI=0; CPOL=1 pull-up: s5_released False DIO=0xBF SCK=1 MOSI=0; CPOL=1 pull-down: s5_released False DIO=0x10 SCK=1 MOSI=0 -- SCK at CPOL in all 4, the other lines but MOSI follow the pull, and s5_released() fails at CPOL=0 pull-up and CPOL=1 pull-down: the check that guards every capture would abort here -> PASS
+[+  14.092s] [ad2] S5 T0B_S13 after the Deinit, PE11..PE14 still in AF5: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  14.092s] [ad2] T0B(e) S5 after the Deinit: AFCNTR = 0, CFG2 = 0: released again (else BenchAbort) -> PASS
+[+  14.102s] [spi] T0B(e) control AFCNTR=1 MCU IDR bus: CPOL=0 up 0xAF down 0x00, CPOL=1 up 0xBF down 0x10; MOSI (DIO6) 0 0 0 0
+[+  14.113s] [spi] T0B(e) control AFCNTR=1, SPE=0: SCK (PE12) at CPOL in all 4 readings, the S5 condition fails (CPOL=0 pull-up 1, CPOL=1
+[+  14.120s] [spi] | pull-down 1); NSS, MISO and the 4 other bus lines follow the pull -> PASS
+[+  14.130s] [spi] T0B(e) after the Deinit (CFG2=0), PE11..PE14 still in AF5: S5 passes again, MCU IDR bus up 0xFF down 0x00 -> PASS
+[+  14.140s] [spi] T0B(e) SPI4 at its reset values: CR1=0x00000000 CR2=0x00000000 CFG1=0x00070007 (0x00070007) CFG2=0x00000000
+[+  14.143s] [spi] | IER=0x00000000 -> PASS
+[+  14.149s] [ad2] S5 T0B_S13 after, pins in input: bus followed both MCU pulls (0xFF, 0x00), OE bus = 0
+[+  14.155s] [spi] T0B(e) SPI4 clock in CPU1's bank as before the step (0) -> PASS
+[+  14.158s] [spi] STEP T0B_S14 bus=NONE j1=CM7 v=2
+[+  14.170s] [ad2] step T0B_S14: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+  14.182s] [spi] T0B(f) CM7 claim in T0B_S14 (J1 = CM7, SPI6 at reset): 16 cases, accepted 0x0001F (0x0001F: AF8 on PA5, PA6, PB4, PB5),
+[+  14.185s] [spi] | regs untouched 1 -> PASS
+[+  14.196s] [spi] T0B(f) R2-3 CM7, PA6 AF8 against SPI6: SPE=1 (read back 1), AFCNTR=1, IOSWP=1, slave CFG2!=0, clock off refused; master
+[+  14.203s] [spi] | at rest, CFG2=0 accepted: accepted 0x60 (0x60), GPIO regs untouched 1 -> PASS
+[+  14.214s] [spi] T0B(f) R2-3 CM7 bench_safe releases SPI6: CR1 0x00001000 -> 0x00000000, CFG2 0x04400000 -> 0x00000000, SR 0x00001002
+[+  14.218s] [spi] | (MODF 0); clock as before (0) -> PASS
+[+  14.228s] [spi] T0B(f) CM4 claim in T0B_S14 (J1 = CM7): 19 cases, accepted 0x00000 (0x00000), regs changed 0x00000 -> PASS
+[+  14.233s] [spi] STEP DONE bus=NONE j1=NONE v=2
+[+  14.241s] [ad2] step DONE: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+  14.242s] [ad2] No Digital Out: Digital Out enable read back at 8 step boundaries of 8: all 0x0000 True [] -> PASS
+[+  14.246s] [spi] bench completed without abort -> PASS
+[+  14.250s] [spi] CM4 finished: timeout 0, aborts 0 -> PASS
+[+  14.255s] [spi] Status_Task stack high-water mark 272 words
+[+  14.257s] [spi] FW VERDICT=PASS failures=0
+[+  14.263s] [sys] cpu2 build rev=efc1be8 id=b2d94e5e65f27406
+[+  14.266s] [ipc] m7=6 m4=1  (CPU2 alive)
+[+  14.586s] [ad2] closing in S2: OE=0x0000 Digital Out enable=0x0000 Zet=0xFFFF
+[+  14.618s] [host] T0B(a) host S3 guard: PASS
+[+  14.618s] [host] T0B(a) host HOST_REQ-only guard: PASS
+[+  14.618s] [host] CHECK T0A loose lines: PASS
+[+  14.618s] [host] CHECK T0A walking 1: PASS
+[+  14.618s] [host] CHECK T0A control: PASS
+[+  14.619s] [host] CHECK T0C J1 (firmware): PASS
+[+  14.619s] [host] CHECK T0B(c) S5 negative control: PASS
+[+  14.619s] [host] CHECK T0B(d) firmware timeout: PASS
+[+  14.619s] [host] CHECK T0B(e) S5 with PE11..PE14 in AF5: PASS
+[+  14.619s] [host] CHECK T0B(e) control AFCNTR=1: PASS
+[+  14.619s] [host] CHECK T0B(e) S5 after the Deinit: PASS
+[+  14.619s] [host] CHECK No Digital Out: PASS
+[+  14.619s] [host] 10/10 host checks passed, FW VERDICT=PASS, abort=None
+[+  14.619s] HOST VERDICT=PASS

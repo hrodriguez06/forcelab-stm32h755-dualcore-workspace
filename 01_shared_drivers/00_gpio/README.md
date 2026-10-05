@@ -444,6 +444,10 @@ The pins used unwired are PF3..PF11 (T1, T2, TB, B1, T15, T16), GPIOJ and GPIOK
 (T16). PF0..PF5, PF12 and PF13 reach no connector on this board. PE0 and PE1
 (LD2) are never touched.
 
+Since `06_spi` the bench also has the jumper J1, a wire between CN7-14 (PB5)
+and CN7-12 (PA6), with PA5 and PB4 used unwired. It touches no AD2 line and no
+pin of this driver's tests (`06_spi/README.md` §8).
+
 **Electrical safety.** There are no series resistors, so nothing limits the
 current in a contention (DS12923 table 11: 20 mA per pin, +0 mA injection on FT
 pins). A contention or an injection can damage a pin with no immediate symptom.

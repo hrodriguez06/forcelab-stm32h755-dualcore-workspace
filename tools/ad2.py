@@ -265,6 +265,52 @@ def la_period_high(samples: list[int], bit: int, rate_hz: float) -> dict:
     return out
 
 
+def la_segments(samples: list[int], bit: int, level: int) -> list[tuple[int, int]]:
+    """The runs of `bit` at `level` (0 or 1) in LA samples, as (first, last + 1)
+    sample indices; a run cut by either end of the capture is included."""
+    runs: list[tuple[int, int]] = []
+    start = None
+    for i, s in enumerate(samples):
+        on = ((s >> bit) & 1) == level
+        if on and start is None:
+            start = i
+        elif not on and start is not None:
+            runs.append((start, i))
+            start = None
+    if start is not None:
+        runs.append((start, len(samples)))
+    return runs
+
+
+def spi_sample_edges(samples: list[int], sck_bit: int, cpol: int, cpha: int) -> list[int]:
+    """Sample indices of the SCK edges on which an SPI receiver samples data
+    (Motorola format): the leading edge for CPHA = 0, the trailing edge for
+    CPHA = 1; leading is rising for CPOL = 0 and falling for CPOL = 1. So the
+    sampling edge rises when CPOL == CPHA and falls otherwise."""
+    rises, falls = la_edges(samples, sck_bit)
+    return rises if (cpol ^ cpha) == 0 else falls
+
+
+def spi_decode(samples: list[int], sck_bit: int, data_bit: int, cpol: int, cpha: int, bits: int,
+               lsb_first: bool) -> tuple[list[int], int]:
+    """Frames of `bits` bits read from `data_bit` at every sampling edge of SCK
+    (spi_sample_edges), MSB or LSB first. Returns (frames, number of sampling
+    edges); a trailing partial frame is not returned. Only listens: works on a
+    capture already made."""
+    edges = spi_sample_edges(samples, sck_bit, cpol, cpha)
+    vals = [(samples[i] >> data_bit) & 1 for i in edges]
+    frames = []
+    for f in range(len(vals) // bits):
+        chunk = vals[f * bits:(f + 1) * bits]
+        if lsb_first:
+            chunk = chunk[::-1]
+        v = 0
+        for b in chunk:
+            v = (v << 1) | b
+        frames.append(v)
+    return frames, len(edges)
+
+
 class AD2:
     """Analog Discovery 2 instrument controller with safety guards."""
 

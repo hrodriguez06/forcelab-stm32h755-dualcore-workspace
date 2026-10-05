@@ -33,6 +33,9 @@
 #if defined(TIM_DRIVER_SELFTEST)
 #include "tim_selftest.h"
 #endif
+#if defined(SPI_DRIVER_SELFTEST)
+#include "spi_selftest.h"
+#endif
 
 #define HEARTBEAT_DELAY_LOOPS   2000000UL
 
@@ -82,6 +85,10 @@ int main(void)
 #if defined(TIM_DRIVER_SELFTEST)
     /* Serves CPU1's 03_tim bench commands until it says it is done. */
     TIM_Selftest_CM4_Run();
+#endif
+#if defined(SPI_DRIVER_SELFTEST)
+    /* Serves CPU1's 06_spi bench commands until it says it is done. */
+    SPI_Selftest_CM4_Run();
 #endif
 
     for (;;)

@@ -1,0 +1,10 @@
+-Werror builds of prj_01 at efb4a3f docs(prj_01): add the three F3 development captures of 06_spi, in fresh scratch build dirs (not the presets' build/<preset>), CMAKE_C_FLAGS=-Werror
+selftest-spi (Debug, SPI_DRIVER_SELFTEST=ON; CMakeCache CMAKE_C_FLAGS=-Werror): exit 0; lines with 'warning:' or 'error:' = 0; text data bss dec hex filename:
+    110684	    140	 254484	 365308	  592fc  <scratch>/weselftest-spi/CM7/cm7_firmware.elf
+    25876	     28	  45400	  71304	  11688  <scratch>/weselftest-spi/CM4/cm4_firmware.elf
+debug (Debug, SPI_DRIVER_SELFTEST=OFF; CMakeCache CMAKE_C_FLAGS=-Werror): exit 0; lines with 'warning:' or 'error:' = 0; text data bss dec hex filename:
+    29304	    132	  55668	  85104	  14c70  <scratch>/wedebug/CM7/cm7_firmware.elf
+    3456	     24	  12560	  16040	   3ea8  <scratch>/wedebug/CM4/cm4_firmware.elf
+release (Release, SPI_DRIVER_SELFTEST=OFF; CMakeCache CMAKE_C_FLAGS=-Werror): exit 0; lines with 'warning:' or 'error:' = 0; text data bss dec hex filename:
+    28356	    132	  55672	  84160	  148c0  <scratch>/werelease/CM7/cm7_firmware.elf
+    3112	     24	  12560	  15696	   3d50  <scratch>/werelease/CM4/cm4_firmware.elf

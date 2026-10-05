@@ -98,6 +98,24 @@ target_sources(stm32h7_driver_uart_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uar
 target_link_libraries(stm32h7_driver_uart_ll INTERFACE stm32h7_driver_gpio)
 
 
+# 06_spi: SPI1-SPI6. No unsuffixed target (rule C4) and the umbrella below does not
+# link the tiers: a project picks one. stm32h7_driver_spi_bm holds the single
+# capability table and validation; the LL and HAL tiers will link it (06_spi plan,
+# phases F2 and F3).
+add_library(stm32h7_driver_spi_bm INTERFACE)
+target_include_directories(stm32h7_driver_spi_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/06_spi)
+target_sources(stm32h7_driver_spi_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/06_spi/spi_bm.c)
+
+add_library(stm32h7_driver_spi_ll INTERFACE)
+target_include_directories(stm32h7_driver_spi_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/06_spi)
+target_sources(stm32h7_driver_spi_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/06_spi/spi_ll.c)
+target_link_libraries(stm32h7_driver_spi_ll INTERFACE stm32h7_driver_spi_bm)
+
+add_library(stm32h7_driver_spi_hal INTERFACE)
+target_include_directories(stm32h7_driver_spi_hal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/06_spi)
+target_sources(stm32h7_driver_spi_hal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/06_spi/spi_hal.c)
+target_link_libraries(stm32h7_driver_spi_hal INTERFACE stm32h7_driver_spi_bm)
+
 add_library(stm32h7_driver_adc INTERFACE)
 target_include_directories(stm32h7_driver_adc INTERFACE ${CMAKE_CURRENT_LIST_DIR}/07_adc)
 target_sources(stm32h7_driver_adc INTERFACE ${CMAKE_CURRENT_LIST_DIR}/07_adc/adc_hal.c)

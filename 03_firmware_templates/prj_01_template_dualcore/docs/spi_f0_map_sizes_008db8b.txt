@@ -1,0 +1,34 @@
+06_spi F0: linked .map sizes of prj_01 ("Discarded input sections" excluded: parsing starts at
+"Linker script and memory map"). 8901b77: a detached worktree of 8901b77 (git worktree add --detach), configured
+with its debug/release presets (-B a short scratch dir, -DCUBE_DIR=the main checkout's Cube); 008db8b: build/<preset>
+of tools/build_all.ps1 -Clean, tree clean. Allocated output sections only (address != 0): .debug_* change with
+the build path and are not part of the image.
+text = .isr_vector+.text+.rodata+.ARM, data = .data+.init_array+.fini_array,
+bss = .bss+._user_heap_stack+.shared_ram (the grouping arm-none-eabi-size and build_all.ps1 report).
+Reference 2481396 (docs/tim_f0_map_sizes_2481396.txt): debug CM7 29304/132/55668, CM4 3456/24/12560;
+release CM7 28356/132/55672, CM4 3112/24/12560.
+
+image        commit   .isr_vector       .text     .rodata        .ARM .init_array .fini_array       .data        .bss ._user_heap .shared_ram    text  data    bss
+debug CM7    8901b77          664       27900         732           8           4           4         124       30868       24576         224   29304   132  55668
+debug CM7    008db8b          664       27900         732           8           4           4         124       30868       24576         224   29304   132  55668
+             delta    0 in every allocated section
+debug CM4    8901b77          664        2736          56           0           4           4          16          44       12292         224    3456    24  12560
+debug CM4    008db8b          664        2736          56           0           4           4          16          44       12292         224    3456    24  12560
+             delta    0 in every allocated section
+release CM7  8901b77          664       26952         732           8           4           4         124       30872       24576         224   28356   132  55672
+release CM7  008db8b          664       26952         732           8           4           4         124       30872       24576         224   28356   132  55672
+             delta    0 in every allocated section
+release CM4  8901b77          664        2392          56           0           4           4          16          44       12292         224    3112    24  12560
+release CM4  008db8b          664        2392          56           0           4           4          16          44       12292         224    3112    24  12560
+             delta    0 in every allocated section
+
+selftest-spi (008db8b, build/selftest-spi from an empty dir): objects of the selftest; F0 has no driver object
+(spi_bm.c.obj, spi_ll.c.obj, spi_hal.c.obj of 06_spi do not exist yet). text = .text+.rodata input sections:
+  CM7 image: text 41652 data 136 bss 56080
+  CM7 spi_selftest.c.obj             text= 10795 data=   4 bss= 405
+  CM7 spi_selftest_common.c.obj      text=   621 data=   0 bss=   0
+  CM7 06_spi driver objects in the map: 0
+  CM4 image: text 6156 data 24 bss 12560
+  CM4 spi_selftest.c.obj             text=  1197 data=   0 bss=   0
+  CM4 spi_selftest_common.c.obj      text=   577 data=   0 bss=   0
+  CM4 06_spi driver objects in the map: 0

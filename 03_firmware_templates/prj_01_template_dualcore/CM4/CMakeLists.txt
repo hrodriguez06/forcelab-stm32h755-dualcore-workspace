@@ -120,6 +120,21 @@ if(TIM_DRIVER_SELFTEST)
     )
 endif()
 
+# 06_spi selftest, CPU2 side (see CM7/CMakeLists.txt): SPI1 through spi_bm, and
+# dma_bm for its DMA2 streams (T7(a)).
+if(SPI_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE SPI_DRIVER_SELFTEST=1)
+    target_sources(${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/App/Src/spi_selftest.c
+        ${CMAKE_SOURCE_DIR}/Common/Src/spi_selftest_common.c
+    )
+    target_link_libraries(${TARGET} PRIVATE
+        stm32h7_driver_spi_bm
+        stm32h7_driver_spi_ll
+        stm32h7_driver_dma_bm
+    )
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"

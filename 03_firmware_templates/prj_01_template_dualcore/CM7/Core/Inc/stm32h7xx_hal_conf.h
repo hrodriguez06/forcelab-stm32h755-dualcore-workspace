@@ -30,6 +30,9 @@ extern "C" {
 #define HAL_RCC_MODULE_ENABLED
 #define HAL_TIM_MODULE_ENABLED
 #define HAL_UART_MODULE_ENABLED
+#if defined(SPI_DRIVER_SELFTEST)
+#define HAL_SPI_MODULE_ENABLED   /* 06_spi selftest only (plan decision 7): spi_hal and its tests */
+#endif
 
 /* ---- Oscillators ------------------------------------------------------- *
  * The NUCLEO-H755ZI-Q has no MCU crystal: HSE is the 8 MHz ST-LINK MCO fed in
@@ -70,6 +73,9 @@ extern "C" {
 #define USE_HAL_ETH_REGISTER_CALLBACKS  0U
 #define USE_HAL_UART_REGISTER_CALLBACKS 0U
 #define USE_HAL_TIM_REGISTER_CALLBACKS  0U
+#if defined(SPI_DRIVER_SELFTEST)
+#define USE_HAL_SPI_REGISTER_CALLBACKS  0U   /* 06_spi selftest only: no callbacks (C14) */
+#endif
 
 /* HAL_GetTick() runs on TIM6, not SysTick: FreeRTOS owns SysTick. The HAL
  * timebase interrupt has to stay above the FreeRTOS syscall ceiling so that
@@ -137,6 +143,9 @@ void assert_failed(uint8_t *file, uint32_t line);
 #endif
 #ifdef HAL_UART_MODULE_ENABLED
 #include "stm32h7xx_hal_uart.h"
+#endif
+#if defined(SPI_DRIVER_SELFTEST) && defined(HAL_SPI_MODULE_ENABLED)
+#include "stm32h7xx_hal_spi.h"
 #endif
 
 #ifdef __cplusplus
