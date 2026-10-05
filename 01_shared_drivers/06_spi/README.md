@@ -35,9 +35,8 @@ target_link_libraries(cm7_firmware PRIVATE stm32h7_driver_spi_bm)   # CMake; or 
 | HAL | yes (needs `HAL_SPI_MODULE_ENABLED`; `prj_01` enables it only with `SPI_DRIVER_SELFTEST`) | builds empty in `prj_01`: CM4 does not enable the HAL SPI module |
 
 - **No unsuffixed target;** the umbrella `stm32h7_shared_drivers` puts `06_spi` on the include path only.
-- **`spi_bm` holds the only copy** of the capability table and of every check. `SPI_BM_Check*` runs the
-  checks of an operation without writing; LL and HAL call it before they write, so every tier refuses the
-  same request with the same status.
+- **`spi_bm` holds the only copy** of the capability table and of every check (`SPI_BM_Check*`, no write);
+  LL and HAL call it before they write, so every tier refuses a request with the same status.
 - **No state in RAM:** `.data = .bss = 0` in the three objects. `.text + .rodata`: `spi_bm` 3540 B (CM7)
   / 3502 B (CM4), `spi_ll` 2400 / 2376 B, `spi_hal` 1224 B (`docs/spi_f3_map_sizes_8b5d165.txt`).
 - **No `USE_FULL_LL_DRIVER`, no `LL_SPI_Init`; `spi_hal` compiles to nothing** without
@@ -110,13 +109,11 @@ data register is accessed with that width, so frames are never packed.
 
 ### 2.3 `spi_ll.h`
 
-`SpiLl_Config_t` = `{ spi, baudrate, clock_polarity, clock_phase, data_width, bit_order,
-transfer_direction, fifo_threshold, nss, nss_pulse, nss_polarity, ss_idleness, interdata_idleness,
-keep_pins }` with the constants of `stm32h7xx_ll_spi.h`: `LL_SPI_BAUDRATEPRESCALER_DIV2.._DIV256`,
-`LL_SPI_POLARITY_*`, `LL_SPI_PHASE_*`, `LL_SPI_DATAWIDTH_4BIT.._32BIT`, `LL_SPI_MSB_FIRST`/`LSB_FIRST`,
-`LL_SPI_FULL_DUPLEX`/`SIMPLEX_TX`, `LL_SPI_FIFO_TH_01DATA.._16DATA`, `LL_SPI_NSS_SOFT`/`HARD_OUTPUT`,
-`LL_SPI_NSS_POLARITY_*`, `LL_SPI_SS_IDLENESS_*`, `LL_SPI_ID_IDLENESS_*`. A constant outside the API
-(`LL_SPI_SIMPLEX_RX`, `LL_SPI_HALF_DUPLEX_TX`, `LL_SPI_NSS_HARD_INPUT`, …) gives `ERR_PARAM`. Functions:
+`SpiLl_Config_t` = `{ spi, baudrate, clock_polarity, clock_phase, data_width, bit_order, transfer_direction,
+fifo_threshold, nss, nss_pulse, nss_polarity, ss_idleness, interdata_idleness, keep_pins }` with the
+`stm32h7xx_ll_spi.h` constants (`LL_SPI_BAUDRATEPRESCALER_*`, `_POLARITY_*`, `_PHASE_*`, `_DATAWIDTH_*`,
+`_MSB_FIRST`/`_LSB_FIRST`, `_FULL_DUPLEX`/`_SIMPLEX_TX`, `_FIFO_TH_*`, `_NSS_SOFT`/`_HARD_OUTPUT`,
+`_NSS_POLARITY_*`, `_SS_IDLENESS_*`, `_ID_IDLENESS_*`); any other (`LL_SPI_SIMPLEX_RX`, …) gives `ERR_PARAM`. Functions:
 `SPI_LL_CheckConfig`, `SPI_LL_Init`, and `SPI_LL_Transfer`, `_TransferStartIt`, `_TransferIrq`, `_DmaPrepare`,
 `_DmaStart`, `_WaitEnd`, `_DmaEnd` with the arguments of their `SPI_BM_` twins.
 
@@ -160,8 +157,8 @@ frame's (else `ERR_PARAM`: the HAL's refusal would leave the handle busy). `SPI_
 - **SS by software** (`SPI_BM_NSS_SOFT`): `SSM = 1` with `SSI` inactive; the caller drives a GPIO around
   the call (example A). `mssi` must be 0.
 - **SS by hardware** (`SPI_BM_NSS_HW`): `SSOE = 1`, SS active from `CSTART` to `EOT`, polarity `SSIOP`,
-  `mssi` SCK periods before the first edge. `SPI_BM_NSS_HW_PULSE` (`SSOM = 1`) releases SS between frames,
-  for `midi` ≥ 1 (T5(c)).
+  `mssi` SCK periods before the first edge. `SPI_BM_NSS_HW_PULSE` (`SSOM = 1`) releases SS between frames
+  only with `midi` ≥ 2 (RM0399 53:3470, 53:615-616); the driver does not check it (T5(c) uses 2).
 - **`keep_pins`** (`AFCNTR = 1`): the SPI holds SCK at `CPOL` while disabled (T5(e)). A later `Init` with
   another `CPOL` or `SSIOP` is refused with `ERR_BUSY`: `Deinit` first.
 - **Interrupt:** fill a `SpiBm_Xfer_t` (`tx`, `rx`, `frames`, `guard_cycles`), give the vector of
@@ -245,10 +242,10 @@ The FIFO threshold is t frames per event with t × bytes per frame (1, 2, 3 or 4
 
 ### 6.3 The board clock (SP4, N1)
 
-The HSE comes from the ST-LINK MCO and runs about +1.3 % fast (`03_tim` N1: TREF ē = +13 273 ppm in
-`docs/tim_f3_audit_bench_70b2062.txt`), so `pll1_q_ck` runs near 202.6 MHz, above the 200 MHz that RM0399
-table 62 allows the SPI1–3 kernel in VOS1 (SP4), and SPI6 at /2 near 50.6 MHz. Open, outside the driver.
-The tests do not depend on it: T5 measures SCK against MCO1 = HSE/8 in the same capture; T9 counts CPU cycles.
+The HSE (ST-LINK MCO) runs about +1.3 % fast (`03_tim` N1: TREF ē = +13 273 ppm, `tim_f3_audit_bench_70b2062`):
+`pll1_q_ck` near 202.6 MHz, above the 200 MHz of RM0399 table 62 for the SPI1–3 kernel in VOS1 (SP4); SPI6 at /2
+near 50.6 MHz. Open, outside the driver. The tests do not depend on it: T5(g) is a ratio to MCO1 = HSE/8 in
+the same capture; T5(d) and T12(b) count in SCK periods measured in the same capture (R3-5); T9 in CPU cycles.
 
 ---
 
@@ -398,7 +395,7 @@ AD2 never uses Digital Out in this bench. The lines the SPI tests use:
  DIO6  ◄───────────────  PE14  SPI4_MOSI (AF5): MOSI (T5, T7(c))            CN10-8
  DIO0-2, DIO7, DIO8-11  PE8-PE10, PE15 (never AF, S5 pulls); PE3-PE6 (inputs, never AF nor output)
  DIO12 ───────────────►  PE2   HOST_REQ            DIO13 ◄──────  PE7   MCU_ACK
- DIO14 ◄───────────────  PA8   MCO1 = HSE/8 (AF0): reference of T5
+ DIO14 ◄───────────────  PA8   MCO1 = HSE/8 (AF0): reference of T5(g), step SPI4_AD2
  GND   ─────────────────  GND  (first on, last off)    W1, W2, V+, V−: never connected
 
  J1 (male-male wire on CN7, no resistor):
@@ -413,7 +410,7 @@ AD2 never uses Digital Out in this bench. The lines the SPI tests use:
 | DIO5 | PE13 | SPI4 MISO (AF5), input with a pull | T5(f) | nobody |
 | DIO0–2, DIO7; DIO8–11 | PE8–PE10, PE15; PE3–PE6 | none (never AF) | T0a, S5 | bus; nobody |
 | DIO12 / DIO13 | PE2 / PE7 | `HOST_REQ` / `MCU_ACK` | every handshake | AD2 / MCU |
-| DIO14 | PA8 | MCO1 (AF0) | T5(g) and every T5 period | MCU only |
+| DIO14 | PA8 | MCO1 (AF0) | T5(g) only (step `SPI4_AD2`) | MCU only |
 | J1-A | PB5 | MOSI of SPI1/SPI6 | T4, T6–T8, T15; GPIO output only in T0c | MCU |
 | J1-B | PA6 | MISO of SPI1/SPI6 | same; **never an output** (S14) | PB5 through J1 |
 | - | PA5 | SCK of SPI1/SPI6 | same; input in T15 | MCU |
@@ -428,7 +425,7 @@ AD2 never uses Digital Out in this bench. The lines the SPI tests use:
 | S14 | **J1.** PA6 and PB4 are never GPIO outputs; PB5 is an output only in T0c. One core per step owns PA5, PA6, PB4, PB5 (CPU2 for SPI1, CPU1 for SPI6). Before an AF on J1, `bench_claim()` reads that core's SPI: clock, `SPE = 0`, `AFCNTR = 0`, `IOSWP = 0`, `MASTER = 1` or `CFG2 = 0` (R2-3). `bench_safe()` leaves the four pins as inputs and releases the SPI with rule 9 | `bench_claim()` on both cores; T0b(f) |
 
 Never touched: PE0, PE1, PC13, PA4, PA7, PA13/PA14, TIM6, SysTick, `RCC_D2CFGR`, `RCC_D2CCIP1R`,
-`RCC_D3CCIPR`, `RCC_APBxRSTR`, `DBGMCU` (write); `RCC_CFGR` (`MCO1`) only in the SPI4 steps, saved and
+`RCC_D3CCIPR`, `RCC_APBxRSTR`, `DBGMCU` (write); `RCC_CFGR` (`MCO1`) only in the step `SPI4_AD2`, saved and
 restored with read-back. **Procedure:** GND first, then the DIO lines and J1; flash with the script stopped;
 cold start; run the host (§9.3); stop it before reflashing or unwiring.
 
@@ -470,7 +467,7 @@ Values from `spi_f3_bench_8b5d165.txt`; "BM/LL/HAL" are the tiers the test runs 
 | T1 | BM CM7/CM4, LL CM7/CM4, HAL CM7 | refusals, with the instance's registers and both RCC banks read before and after | 52 + 35 (BM), 48 + 40 (LL), 33 (HAL): right status, nothing touched | a valid `Init` changes the snapshot |
 | T2 | BM, LL CM7/CM4; HAL CM7 | register image of 40 960 configurations on SPI1–3 and 30 720 on SPI4–6, against RM0399 fields typed by hand; LL and HAL also against BM, HAL also against the raw `HAL_SPI_Init` | 0 mismatches; HAL = raw HAL in 0; HAL against BM only `CR1.SSI` with hardware SS active low (§10.1); `GetCaps` = table 435 | `MASTER` flipped in the expected image: caught |
 | T3 | BM + host | `CalcPrescaler` (202 vectors), `CalcGuardCycles` (102), recomputed by the host | 0 differ | `MBR + 1`: 153/153 flagged; one cycle more: 83/83 flagged |
-| T4 | BM, LL, HAL SPI6 (CPU1); BM, LL SPI1 (CPU2) | loop through J1 at 12.5 MHz: modes × sizes × order × 1..4096 frames × threshold; 65 535 frames of 8 bits | 896 transfers (SPI6) and 1408 (SPI1) per tier, 0 failed; host CRC and bit coverage 0 differ; 65 535 frames: 0 mismatches | MISO moved to PB4 pulled up/down: mismatches = the host's count |
+| T4 | BM, LL, HAL SPI6 (CPU1); BM, LL SPI1 (CPU2) | loop through J1 at 12.5 MHz: modes × sizes × order × 1..4096 frames × threshold; 65 535 frames of 8 bits on SPI6 | 896 transfers (SPI6) and 1408 (SPI1) per tier, 0 failed; host CRC and bit coverage 0 differ; 65 535 frames (SPI6 only): 0 mismatches | MISO moved to PB4 pulled up/down: mismatches = the host's count |
 | T5 | BM (a)–(g); LL, HAL (a) | SPI4 decoded by the AD2: (a) modes × {4, 8, 13, 16} × order, hardware SS; (b) `SSIOP`; (c) SS pulse; (d) `MSSI`/`MIDI`; (e) `keep_pins`; (f) RX = pull; (g) SCK/MCO1 | (a) 32 captures per tier, 0 failed; (d) k periods ± 2 samples; (e) SCK held at `CPOL`; (f) exact; (g) /4…/256 within −312…+220 ppm (± 0.5 %) | (a) decoded with the opposite `CPHA` and order: mismatches in 32 of 32; (e) `keep_pins = 0`: SCK follows the pull |
 | T6 | BM, LL, HAL SPI6; BM, LL SPI1 | interrupt transfers of 1, FIFO + 1, 1024 frames; (c) IRQs after the end | 0 failed; (c) 0 in 10 ms; after the HAL's close: 1 with 1 frame, as expected (§6.2) | `TXPIE = 1` by hand with `SPE = 0`: 2 (CPU1), 1 (CPU2) spurious IRQs |
 | T7 | (a) BM, LL SPI1 DMA2; (b) BM, LL, HAL SPI6 BDMA; (c) BM, HAL SPI4 DMA1; (d) BM | DMA up to 4096 / 8192 frames; (c) decoded by the AD2; (d) `GetDmaRequest`, `GetIRQn` | 0 failed; (d) 0 differ | `RXDMAEN = 0`: `ERR_OVERRUN`, 255 sentinels; HAL: no RX stream, 255 sentinels |
@@ -519,11 +516,13 @@ Cycles of one call, DWT, `Init` and `Transfer` with PRIMASK, SPI6 on CM7 (400 MH
   of their transfers ends. They have their register image (T2), `MODF` without a transfer (T11(a),
   SPI2) and the RCC banks (T13, SPI2).
 - **RX from another device:** only the loop and the pulls. Speeds above 25 MHz only recorded (T8).
-- **LL:** `TransferIrq` with `MODF` or `OVR`; `keep_pins` outside T1/T2; T5(b)–(g), T8, T9, T11–T13
-  not through LL. **HAL:** `StartTransferIt` without `rx` and IT on SPI4; `ERR_MODF`/`ERR_OVERRUN` through
-  the HAL; the HAL's error path (§10.1); T5(b)–(g), T8, T9, T11–T13 not through HAL; `spi_hal` on CM4.
+- **BM and LL:** `TransferIrq` with `MODF` or `OVR`; the C13 path with `CYCCNT` not counting or stopped in
+  `Transfer`, `WaitEnd` and `TransferStartIt` (and inside a guard, m1, accepted by reading). `keep_pins`
+  only on SPI4 with `CPOL = 0` (T5(e)), with LL and HAL only in T1/T2. 65 535 frames only on SPI6, 8 bits,
+  by polling. **LL:** T5(b)–(g), T8, T9, T11–T13 not through LL. **HAL:** `StartTransferIt` without `rx` and IT on SPI4; `ERR_MODF`/`ERR_OVERRUN` through
+  the HAL; the `ERR_TIMEOUT` of `SPI_HAL_Transfer` (the HAL's own); the HAL's error path (§10.1); T5(b)–(g), T8, T9, T11–T13 not through HAL; `spi_hal` on CM4.
 - **Never produced:** `ERR_VERIFY` in any tier (the one in the F3 development runs was a read-back defect,
-  fixed in `3c23568`); a `CYCCNT` stopped inside a guard (m1, accepted by reading); ES0445 2.22.2. Silicon
+  fixed in `3c23568`); ES0445 2.22.2. Silicon
   other than Rev V; any clock tree other than `prj_01`'s, except the pure functions (T3).
 
 ---
@@ -549,8 +548,9 @@ Cycles of one call, DWT, `Init` and `Transfer` with PRIMASK, SPI6 on CM7 (400 MH
 ### 10.2 The SCK pin must be in its AF (E2, R3-3)
 
 On this silicon (Rev V), a master whose SCK reaches no pin never sets `EOT` and receives nothing; RM0399
-chapter 53 and ES0445 do not say so. `Transfer` and `WaitEnd` then return `ERR_TIMEOUT` after `max_cycles`
-and leave the SPI disabled. Evidence: T15 in `spi_f3_bench_8b5d165.txt` (BM/LL: 401 018 / 401 071 cycles
+chapter 53 and ES0445 do not say so. `Transfer` then returns `ERR_TIMEOUT` after `max_cycles` with `IER = 0`
+and `SPE = 0`; `WaitEnd` returns `ERR_TIMEOUT` with the SPI still enabled: the caller stops its streams,
+then calls `DmaEnd`. Evidence (`Transfer` only): T15 in `spi_f3_bench_8b5d165.txt` (BM/LL: 401 018 / 401 071 cycles
 against 400 000; control 0xA5 received); first seen in `spi_dev_f1_bench_25426f8-dirty.txt`.
 
 ### 10.3 Project notes (and SP4, N1: §6.3)
