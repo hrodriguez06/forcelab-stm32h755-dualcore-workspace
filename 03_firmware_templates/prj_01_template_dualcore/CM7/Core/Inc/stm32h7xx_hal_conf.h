@@ -73,6 +73,9 @@ extern "C" {
 #define USE_HAL_ETH_REGISTER_CALLBACKS  0U
 #define USE_HAL_UART_REGISTER_CALLBACKS 0U
 #define USE_HAL_TIM_REGISTER_CALLBACKS  0U
+#if defined(SPI_DRIVER_SELFTEST)
+#define USE_HAL_SPI_REGISTER_CALLBACKS  0U   /* 06_spi selftest only: no callbacks (C14) */
+#endif
 
 /* HAL_GetTick() runs on TIM6, not SysTick: FreeRTOS owns SysTick. The HAL
  * timebase interrupt has to stay above the FreeRTOS syscall ceiling so that

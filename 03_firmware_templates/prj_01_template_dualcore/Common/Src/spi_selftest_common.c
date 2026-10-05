@@ -58,6 +58,10 @@ const SstStep_t k_sst_steps[] = {
     { "J1_SPI6_LL",   SST_BUS_NONE, SST_J1_CM7,  1U,   0U,     0U,          0U,      0U         },
     { "J1_SPI1_LL",   SST_BUS_NONE, SST_J1_CM4,  1U,   0U,     0U,          0U,      0U         },
     { "SPI4_AD2_LL",  SST_BUS_MCU,  SST_J1_NONE, 0U,   0U,     0U,          PE_SPI4, 0U         },
+    /* Phase F3, spi_hal (CPU1 only): the owners of F1_NOPIN, J1_SPI6 and SPI4_AD2. */
+    { "F3_NOPIN",     SST_BUS_NONE, SST_J1_NONE, 0U,   0U,     0U,          0U,      0U         },
+    { "J1_SPI6_HAL",  SST_BUS_NONE, SST_J1_CM7,  1U,   0U,     0U,          0U,      0U         },
+    { "SPI4_AD2_HAL", SST_BUS_MCU,  SST_J1_NONE, 0U,   0U,     0U,          PE_SPI4, 0U         },
     { "DONE",         SST_BUS_NONE, SST_J1_NONE, 0U,   0U,     0U,          0U,      0U         },
 };
 

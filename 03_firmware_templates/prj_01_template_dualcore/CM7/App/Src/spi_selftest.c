@@ -12,8 +12,10 @@
   *          jumper, SPI1 on CPU2) and SPI4_AD2 (T5, T7(c), T9, T12(b), T14
   *          against the AD2, which only listens), then the F2 steps (spi_ll): F2_NOPIN
   *          (T1, T2 parity with spi_bm, T14), J1_SPI6_LL and J1_SPI1_LL (T4, T6, T7, T14,
-  *          B1; T15 with spi_bm and spi_ll) and SPI4_AD2_LL (T5(a)), and prints the global
-  *          verdict, CPU2's results included. Plan and meaning of every test:
+  *          B1; T15 with spi_bm and spi_ll) and SPI4_AD2_LL (T5(a)), then the F3 steps
+  *          (spi_hal, CPU1): F3_NOPIN (T1, T2 against spi_bm and the raw HAL, T14),
+  *          J1_SPI6_HAL (T4, T6, T7(b), T14, B1) and SPI4_AD2_HAL (T5(a), T7(c)), and
+  *          prints the global verdict, CPU2's results included. Plan and meaning of every test:
   *          01_shared_drivers/06_spi/IMPLEMENTATION_PLAN.md.
   *
   *          Electrical safety (no series resistors on the bench, and J1 ties
@@ -45,6 +47,7 @@
 
 #include "spi_selftest.h"
 #include "spi_bm.h"
+#include "spi_hal.h"
 #include "dma_bm.h"
 #include "dma_hal.h"
 #include "fw_build_id.h"
@@ -1452,10 +1455,49 @@ static void f1_clocks(void)
    spi_bm or spi_ll; the LL configuration is the test's own (sst_ll_of()). ---------------- */
 #define TIER_BM       0U
 #define TIER_LL       1U
+#define TIER_HAL      2U          /* F3: spi_hal, CPU1 only */
 static uint32_t s_tier = TIER_BM;
+
+/* F3: one HAL handle per CPU1 instance; s_hal_busy while a HAL IT or DMA transfer is
+   in flight, so the test's SPI handlers call the HAL's routine only then. */
+static SPI_HandleTypeDef s_h2;
+static SPI_HandleTypeDef s_h3;
+static SPI_HandleTypeDef s_h4;
+static SPI_HandleTypeDef s_h5;
+static SPI_HandleTypeDef s_h6;
+static volatile bool     s_hal_busy;
+
+static SPI_HandleTypeDef *hal_h(const SPI_TypeDef *spi)
+{
+    if (spi == SPI2)
+    {
+        return &s_h2;
+    }
+    if (spi == SPI3)
+    {
+        return &s_h3;
+    }
+    if (spi == SPI4)
+    {
+        return &s_h4;
+    }
+    return (spi == SPI5) ? &s_h5 : &s_h6;
+}
+
+/* A bound in CPU cycles as HAL milliseconds (at least 1). */
+static uint32_t ms_of(uint32_t cycles)
+{
+    return (cycles / (SystemCoreClock / 1000U)) + 1U;
+}
 
 static SpiBm_Status_t x_init(const SpiBm_Config_t *c)
 {
+    if (s_tier == TIER_HAL)
+    {
+        SPI_HandleTypeDef *h = hal_h(c->spi);
+        h->Instance = c->spi;
+        return SPI_HAL_Init(h, c);
+    }
     if (s_tier == TIER_LL)
     {
         SpiLl_Config_t l;
@@ -1467,16 +1509,43 @@ static SpiBm_Status_t x_init(const SpiBm_Config_t *c)
 
 static SpiBm_Status_t x_transfer(SPI_TypeDef *spi, const void *tx, void *rx, uint32_t n, uint32_t g, uint32_t m)
 {
+    if (s_tier == TIER_HAL)
+    {
+        return SPI_HAL_Transfer(hal_h(spi), tx, rx, n, ms_of(m));    /* no guard in the HAL (decision 5) */
+    }
     return (s_tier == TIER_LL) ? SPI_LL_Transfer(spi, tx, rx, n, g, m) : SPI_BM_Transfer(spi, tx, rx, n, g, m);
 }
 
 static SpiBm_Status_t x_start_it(SPI_TypeDef *spi, SpiBm_Xfer_t *x)
 {
+    if (s_tier == TIER_HAL)
+    {
+        x->status = SPI_BM_PENDING;
+        s_hal_busy = true;
+        const SpiBm_Status_t st = SPI_HAL_StartTransferIt(hal_h(spi), x->tx, x->rx, x->frames);
+        if (st != SPI_BM_OK)
+        {
+            s_hal_busy = false;
+        }
+        return st;
+    }
     return (s_tier == TIER_LL) ? SPI_LL_TransferStartIt(spi, x) : SPI_BM_TransferStartIt(spi, x);
 }
 
 static bool x_irq(SPI_TypeDef *spi, SpiBm_Xfer_t *x)
 {
+    if (s_tier == TIER_HAL)
+    {
+        SPI_HandleTypeDef *h = hal_h(spi);
+        HAL_SPI_IRQHandler(h);
+        if (h->State != HAL_SPI_STATE_READY)
+        {
+            return false;
+        }
+        s_hal_busy = false;
+        x->status = (h->ErrorCode == HAL_SPI_ERROR_NONE) ? SPI_BM_OK : SPI_BM_ERR_HAL;
+        return true;
+    }
     return (s_tier == TIER_LL) ? SPI_LL_TransferIrq(spi, x) : SPI_BM_TransferIrq(spi, x);
 }
 
@@ -2598,7 +2667,7 @@ static volatile uint32_t s_it_spurious;
 void SPI6_IRQHandler(void)
 {
     s_it_irqs++;
-    if (s_it_active)
+    if (s_it_active || s_hal_busy)
     {
         const uint32_t t0 = DWT->CYCCNT;
         const bool done = x_irq(SPI6, &s_it);
@@ -2633,6 +2702,7 @@ static void t6_spi6(const char *name)
     const uint32_t mbr = 4U;                      /* /32: 3.125 MHz */
     uint32_t bad = 0U;
     uint32_t after_total = 0U;
+    uint32_t post_bad = 0U;
     for (uint32_t b = 0U; b < 2U; b++)
     {
         const uint32_t bits = (b == 0U) ? 8U : 16U;
@@ -2664,6 +2734,13 @@ static void t6_spi6(const char *name)
             {
             }
             const bool done = !s_it_active;
+            if ((s_tier == TIER_HAL) && (ss == SPI_BM_OK))
+            {
+                s_it.status = SPI_HAL_Wait(&s_h6, 100U);     /* already READY: the handle's verdict */
+                LOG("T6H %s b%lu n%lu ier=%08lX cr1=%08lX spurious=%lu herr=%08lX", name, (unsigned long)bits,
+                    (unsigned long)n, (unsigned long)SPI6->IER, (unsigned long)SPI6->CR1,
+                    (unsigned long)s_it_spurious, (unsigned long)s_h6.ErrorCode);
+            }
             s_it_active = false;
             const uint32_t irqs = s_it_irqs;
             /* (c) ES0445 2.22.3: 10 ms after the end, SPE = 0, no IRQ of SPI6 */
@@ -2671,12 +2748,24 @@ static void t6_spi6(const char *name)
             const uint32_t after = s_it_irqs - irqs;
             const uint32_t spe = SPI6->CR1 & SPI_CR1_SPE;
             after_total += after;
+            /* Every IRQ after the close lands in the handler's spurious branch. The HAL's
+               IT start fills the FIFO before it sets DXPIE (stm32h7xx_hal_spi.c l. 1922-1963):
+               when every frame fits, TXTF came first and DXPIE stays set (RM0399 53.11.5),
+               and SPI_CloseTransfer clears SPE before IER (l. 3945-3948, ES0445 2.22.3): one
+               IRQ after the close, a HAL limitation (owner's decision, 2026-10-04). */
+            const uint32_t post = s_it_spurious;
+            const uint32_t post_exp = ((s_tier == TIER_HAL) && (n <= fifo_frames(SPI6, bits))) ? 1U : 0U;
+            if (post != post_exp)
+            {
+                post_bad++;
+            }
             const uint32_t mism = sst_mismatch(s_tx, s_rx, es, n, bits);
             const uint32_t crc = sst_crc32_frames(s_rx, es, n, bits);
             const SpiBm_Status_t sd = SPI_BM_Deinit(SPI6);
-            LOG("T6 %s b%lu n%lu s=%08lX st=%lu mis=%lu crc=%08lX irq=%lu after=%lu", name, (unsigned long)bits,
-                (unsigned long)n, (unsigned long)seed, (unsigned long)s_it.status, (unsigned long)mism,
-                (unsigned long)crc, (unsigned long)irqs, (unsigned long)after);
+            LOG("T6 %s b%lu n%lu s=%08lX st=%lu mis=%lu crc=%08lX irq=%lu after=%lu post=%lu exp=%lu", name,
+                (unsigned long)bits, (unsigned long)n, (unsigned long)seed, (unsigned long)s_it.status,
+                (unsigned long)mism, (unsigned long)crc, (unsigned long)irqs, (unsigned long)after,
+                (unsigned long)post, (unsigned long)post_exp);
             if ((si != SPI_BM_OK) || (ss != SPI_BM_OK) || !done || (s_it.status != SPI_BM_OK) || (mism != 0U) ||
                 (after != 0U) || (spe != 0U) || (sd != SPI_BM_OK))
             {
@@ -2695,8 +2784,10 @@ static void t6_spi6(const char *name)
     (void)SPI_BM_Deinit(SPI6);
     HAL_NVIC_DisableIRQ(irq);
     NVIC_ClearPendingIRQ(irq);
-    verdict(bad == 0U, "T6 %s by interrupt (8/16 bits, 1, FIFO + 1, 1024 frames): %lu failed; (c) IRQs in the 10 ms "
-            "after each end, SPE = 0: %lu in total (0)", name, (unsigned long)bad, (unsigned long)after_total);
+    verdict((bad == 0U) && (post_bad == 0U), "T6 %s by interrupt (8/16 bits, 1, FIFO + 1, 1024 frames): %lu failed; "
+            "(c) IRQs in the 10 ms after each end, SPE = 0: %lu in total (0); IRQs after the close other than "
+            "expected (1 with the HAL when every frame fits the FIFO, ES0445 2.22.3 in the HAL; else 0): %lu",
+            name, (unsigned long)bad, (unsigned long)after_total, (unsigned long)post_bad);
     verdict(spurious >= 1U, "T6(c) %s control: TXPIE = 1 by hand with SPE = 0: %lu spurious IRQ (>= 1)", name,
             (unsigned long)spurious);
 }
@@ -3170,8 +3261,21 @@ static SpiBm_Status_t cap_poll(void)
                            budget_of(SPI4, s_cap_cfg.mbr, s_cap_cfg.data_bits, s_cap_n));
 }
 
+static DMA_HandleTypeDef s_hd1;      /* F3: DMA1 stream 0 for SPI4 TX through dma_hal */
+
 static SpiBm_Status_t cap_dma(void)
 {
+    if (s_tier == TIER_HAL)
+    {
+        s_hal_busy = true;
+        SpiBm_Status_t st = SPI_HAL_StartTransferDma(&s_h4, s_dma1_buf, NULL, s_cap_n);
+        if (st == SPI_BM_OK)
+        {
+            st = SPI_HAL_Wait(&s_h4, ms_of(budget_of(SPI4, s_cap_cfg.mbr, s_cap_cfg.data_bits, s_cap_n)));
+        }
+        s_hal_busy = false;
+        return st;
+    }
     const SpiBm_Status_t s = x_dma_start(SPI4);
     const SpiBm_Status_t w = x_wait_end(SPI4, budget_of(SPI4, s_cap_cfg.mbr, s_cap_cfg.data_bits, s_cap_n));
     return (s != SPI_BM_OK) ? s : w;
@@ -3211,7 +3315,37 @@ static void cap_one(char kind, const SpiBm_Config_t *c, uint32_t n, CapFn_t fn)
     {
         return;
     }
-    if (fn == cap_dma)
+    HAL_StatusTypeDef dinit = HAL_OK;
+    if ((fn == cap_dma) && (s_tier == TIER_HAL))
+    {
+        sst_fill(s_dma1_buf, sst_elem_bytes(c->data_bits), n, c->data_bits, seed);
+        const uint32_t al = (c->data_bits <= 8U) ? 0U : 1U;
+        const DmaHal_Config_t dc = {
+            .instance = DMA1_Stream0, .request = DMA_REQUEST_SPI4_TX, .direction = DMA_MEMORY_TO_PERIPH,
+            .periph_inc = DMA_PINC_DISABLE, .mem_inc = DMA_MINC_ENABLE,
+            .periph_align = (al == 0U) ? DMA_PDATAALIGN_BYTE : DMA_PDATAALIGN_HALFWORD,
+            .mem_align = (al == 0U) ? DMA_MDATAALIGN_BYTE : DMA_MDATAALIGN_HALFWORD, .mode = DMA_NORMAL,
+            .priority = DMA_PRIORITY_HIGH, .fifo_mode = DMA_FIFOMODE_ENABLE, .fifo_threshold = DMA_FIFO_THRESHOLD_FULL,
+            .mem_burst = DMA_MBURST_SINGLE, .periph_burst = DMA_PBURST_SINGLE, .enable_clock = true,
+            .irq_priority = 6 };
+        /* FIFO mode: DMA_HAL_Init (02_dma, dma_hal.c:183-186) compares the PSIZE and MSIZE
+           encodings of a direct-mode stream and refuses every size above a byte. */
+        dinit = DMA_HAL_Init(&s_hd1, &dc);
+        s_h4.hdmatx = NULL;
+        if (dinit != HAL_OK)
+        {
+            s_cap_bad++;
+        }
+        else
+        {
+            __HAL_LINKDMA(&s_h4, hdmatx, s_hd1);
+        }
+        s_h4.hdmarx = NULL;
+        HAL_NVIC_SetPriority(SPI4_IRQn, 6U, 0U);
+        NVIC_ClearPendingIRQ(SPI4_IRQn);
+        HAL_NVIC_EnableIRQ(SPI4_IRQn);
+    }
+    else if (fn == cap_dma)
     {
         uint32_t req = 0U;
         (void)SPI_BM_GetDmaRequest(SPI4, true, &req);
@@ -3241,7 +3375,18 @@ static void cap_one(char kind, const SpiBm_Config_t *c, uint32_t n, CapFn_t fn)
     {
         return;
     }
-    if (fn == cap_dma)
+    if ((fn == cap_dma) && (s_tier == TIER_HAL))
+    {
+        LOG("CAPH k%lu si=%u dinit=%u herr=%08lX hstate=%u derr=%08lX dstate=%u dcr=%08lX ndtr=%lu buf=%08lX",
+            (unsigned long)s_cap_k, (unsigned)si, (unsigned)dinit, (unsigned long)s_h4.ErrorCode,
+            (unsigned)s_h4.State, (unsigned long)s_hd1.ErrorCode, (unsigned)s_hd1.State,
+            (unsigned long)DMA1_Stream0->CR, (unsigned long)DMA1_Stream0->NDTR, (unsigned long)(uintptr_t)s_dma1_buf);
+        HAL_NVIC_DisableIRQ(SPI4_IRQn);
+        NVIC_ClearPendingIRQ(SPI4_IRQn);
+        (void)DMA_HAL_DeInit(&s_hd1);
+        s_h4.hdmatx = NULL;
+    }
+    else if (fn == cap_dma)
     {
         (void)DMA_BM_StopEx(DMA1_Stream0, 0U);
         if (x_dma_end(SPI4, guard_of(SPI4, c->mbr)) != SPI_BM_OK)
@@ -4034,6 +4179,678 @@ static void step_spi4_ad2_ll(void)
     step_end();
 }
 
+/* ---- F3 handlers: the HAL's routines, only while a HAL transfer is in flight -------- */
+void SPI4_IRQHandler(void)
+{
+    if (s_hal_busy)
+    {
+        HAL_SPI_IRQHandler(&s_h4);
+        if (s_h4.State == HAL_SPI_STATE_READY)
+        {
+            s_hal_busy = false;
+        }
+    }
+    else
+    {
+        SPI4->IER = 0U;
+    }
+}
+
+void DMA1_Stream0_IRQHandler(void)
+{
+    HAL_DMA_IRQHandler(&s_hd1);
+}
+
+void BDMA_Channel0_IRQHandler(void)
+{
+    HAL_DMA_IRQHandler(&s_hbd_rx);
+}
+
+void BDMA_Channel1_IRQHandler(void)
+{
+    HAL_DMA_IRQHandler(&s_hbd_tx);
+}
+
+/* A BDMA channel for the HAL's DMA path: as bd_init(), with its NVIC line enabled
+   (dma_hal: irq_priority >= 0). */
+static bool bd_init_irq(DMA_HandleTypeDef *h, BDMA_Channel_TypeDef *ch, uint32_t req, uint32_t dir, uint32_t es)
+{
+    const DmaHal_Config_t c = {
+        .instance = ch, .request = req, .direction = dir, .periph_inc = DMA_PINC_DISABLE, .mem_inc = DMA_MINC_ENABLE,
+        .periph_align = (es == 1U) ? DMA_PDATAALIGN_BYTE : DMA_PDATAALIGN_HALFWORD,
+        .mem_align = (es == 1U) ? DMA_MDATAALIGN_BYTE : DMA_MDATAALIGN_HALFWORD, .mode = DMA_NORMAL,
+        .priority = DMA_PRIORITY_HIGH, .fifo_mode = DMA_FIFOMODE_DISABLE, .fifo_threshold = DMA_FIFO_THRESHOLD_FULL,
+        .mem_burst = DMA_MBURST_SINGLE, .periph_burst = DMA_PBURST_SINGLE, .enable_clock = true, .irq_priority = 6 };
+    return DMA_HAL_Init(h, &c) == HAL_OK;
+}
+
+static void nvic_spi6(bool on)
+{
+    if (on)
+    {
+        HAL_NVIC_SetPriority(SPI6_IRQn, 6U, 0U);
+        NVIC_ClearPendingIRQ(SPI6_IRQn);
+        HAL_NVIC_EnableIRQ(SPI6_IRQn);
+    }
+    else
+    {
+        HAL_NVIC_DisableIRQ(SPI6_IRQn);
+        NVIC_ClearPendingIRQ(SPI6_IRQn);
+    }
+}
+
+/* ==========================================================================================
+ * Phase F3: spi_hal on CPU1 (plan revision 3: T1, T2 (with the raw HAL image, R3-4), T4
+ * (SPI6), T5(a) (SPI4), T6, T7(b) BDMA and (c) DMA1, T14, B1). The tests of F1 run again
+ * with s_tier = TIER_HAL; the HAL configuration of the raw-HAL image of T2 is the test's
+ * own (sst_hal_of(), HAL constants written by hand). HAL_GetTick() is printed before,
+ * during and after each HAL step (TICK lines).
+ * ========================================================================================== */
+
+static void tick_line(const char *where)
+{
+    LOG("TICK %s %lu", where, (unsigned long)HAL_GetTick());
+}
+
+/* ---- The test's own SpiBm_Config_t -> SPI_InitTypeDef, for the raw-HAL image ----------- */
+static const uint32_t k_hal_size[29] = {
+    SPI_DATASIZE_4BIT,  SPI_DATASIZE_5BIT,  SPI_DATASIZE_6BIT,  SPI_DATASIZE_7BIT,  SPI_DATASIZE_8BIT,
+    SPI_DATASIZE_9BIT,  SPI_DATASIZE_10BIT, SPI_DATASIZE_11BIT, SPI_DATASIZE_12BIT, SPI_DATASIZE_13BIT,
+    SPI_DATASIZE_14BIT, SPI_DATASIZE_15BIT, SPI_DATASIZE_16BIT, SPI_DATASIZE_17BIT, SPI_DATASIZE_18BIT,
+    SPI_DATASIZE_19BIT, SPI_DATASIZE_20BIT, SPI_DATASIZE_21BIT, SPI_DATASIZE_22BIT, SPI_DATASIZE_23BIT,
+    SPI_DATASIZE_24BIT, SPI_DATASIZE_25BIT, SPI_DATASIZE_26BIT, SPI_DATASIZE_27BIT, SPI_DATASIZE_28BIT,
+    SPI_DATASIZE_29BIT, SPI_DATASIZE_30BIT, SPI_DATASIZE_31BIT, SPI_DATASIZE_32BIT };
+static const uint32_t k_hal_fifo[16] = {
+    SPI_FIFO_THRESHOLD_01DATA, SPI_FIFO_THRESHOLD_02DATA, SPI_FIFO_THRESHOLD_03DATA, SPI_FIFO_THRESHOLD_04DATA,
+    SPI_FIFO_THRESHOLD_05DATA, SPI_FIFO_THRESHOLD_06DATA, SPI_FIFO_THRESHOLD_07DATA, SPI_FIFO_THRESHOLD_08DATA,
+    SPI_FIFO_THRESHOLD_09DATA, SPI_FIFO_THRESHOLD_10DATA, SPI_FIFO_THRESHOLD_11DATA, SPI_FIFO_THRESHOLD_12DATA,
+    SPI_FIFO_THRESHOLD_13DATA, SPI_FIFO_THRESHOLD_14DATA, SPI_FIFO_THRESHOLD_15DATA, SPI_FIFO_THRESHOLD_16DATA };
+static const uint32_t k_hal_brp[8] = {
+    SPI_BAUDRATEPRESCALER_2, SPI_BAUDRATEPRESCALER_4, SPI_BAUDRATEPRESCALER_8, SPI_BAUDRATEPRESCALER_16,
+    SPI_BAUDRATEPRESCALER_32, SPI_BAUDRATEPRESCALER_64, SPI_BAUDRATEPRESCALER_128, SPI_BAUDRATEPRESCALER_256 };
+static const uint32_t k_hal_mssi[16] = {
+    SPI_MASTER_SS_IDLENESS_00CYCLE, SPI_MASTER_SS_IDLENESS_01CYCLE, SPI_MASTER_SS_IDLENESS_02CYCLE,
+    SPI_MASTER_SS_IDLENESS_03CYCLE, SPI_MASTER_SS_IDLENESS_04CYCLE, SPI_MASTER_SS_IDLENESS_05CYCLE,
+    SPI_MASTER_SS_IDLENESS_06CYCLE, SPI_MASTER_SS_IDLENESS_07CYCLE, SPI_MASTER_SS_IDLENESS_08CYCLE,
+    SPI_MASTER_SS_IDLENESS_09CYCLE, SPI_MASTER_SS_IDLENESS_10CYCLE, SPI_MASTER_SS_IDLENESS_11CYCLE,
+    SPI_MASTER_SS_IDLENESS_12CYCLE, SPI_MASTER_SS_IDLENESS_13CYCLE, SPI_MASTER_SS_IDLENESS_14CYCLE,
+    SPI_MASTER_SS_IDLENESS_15CYCLE };
+static const uint32_t k_hal_midi[16] = {
+    SPI_MASTER_INTERDATA_IDLENESS_00CYCLE, SPI_MASTER_INTERDATA_IDLENESS_01CYCLE, SPI_MASTER_INTERDATA_IDLENESS_02CYCLE,
+    SPI_MASTER_INTERDATA_IDLENESS_03CYCLE, SPI_MASTER_INTERDATA_IDLENESS_04CYCLE, SPI_MASTER_INTERDATA_IDLENESS_05CYCLE,
+    SPI_MASTER_INTERDATA_IDLENESS_06CYCLE, SPI_MASTER_INTERDATA_IDLENESS_07CYCLE, SPI_MASTER_INTERDATA_IDLENESS_08CYCLE,
+    SPI_MASTER_INTERDATA_IDLENESS_09CYCLE, SPI_MASTER_INTERDATA_IDLENESS_10CYCLE, SPI_MASTER_INTERDATA_IDLENESS_11CYCLE,
+    SPI_MASTER_INTERDATA_IDLENESS_12CYCLE, SPI_MASTER_INTERDATA_IDLENESS_13CYCLE, SPI_MASTER_INTERDATA_IDLENESS_14CYCLE,
+    SPI_MASTER_INTERDATA_IDLENESS_15CYCLE };
+
+static void sst_hal_of(const SpiBm_Config_t *b, SPI_InitTypeDef *in)
+{
+    in->Mode                       = SPI_MODE_MASTER;
+    in->Direction                  = (b->direction == SPI_BM_DIR_TX_ONLY) ? SPI_DIRECTION_2LINES_TXONLY : SPI_DIRECTION_2LINES;
+    in->DataSize                   = k_hal_size[(b->data_bits - 4U) % 29U];
+    in->CLKPolarity                = ((b->mode & 2U) != 0U) ? SPI_POLARITY_HIGH : SPI_POLARITY_LOW;
+    in->CLKPhase                   = ((b->mode & 1U) != 0U) ? SPI_PHASE_2EDGE : SPI_PHASE_1EDGE;
+    in->NSS                        = (b->nss == SPI_BM_NSS_SOFT) ? SPI_NSS_SOFT : SPI_NSS_HARD_OUTPUT;
+    in->BaudRatePrescaler          = k_hal_brp[b->mbr & 7U];
+    in->FirstBit                   = b->lsb_first ? SPI_FIRSTBIT_LSB : SPI_FIRSTBIT_MSB;
+    in->TIMode                     = SPI_TIMODE_DISABLE;
+    in->CRCCalculation             = SPI_CRCCALCULATION_DISABLE;
+    in->CRCPolynomial              = 0x7U;
+    in->CRCLength                  = SPI_CRC_LENGTH_DATASIZE;
+    in->NSSPMode                   = (b->nss == SPI_BM_NSS_HW_PULSE) ? SPI_NSS_PULSE_ENABLE : SPI_NSS_PULSE_DISABLE;
+    in->NSSPolarity                = b->nss_active_high ? SPI_NSS_POLARITY_HIGH : SPI_NSS_POLARITY_LOW;
+    in->FifoThreshold              = k_hal_fifo[(b->fifo_threshold - 1U) & 15U];
+    in->TxCRCInitializationPattern = SPI_CRC_INITIALIZATION_ALL_ZERO_PATTERN;
+    in->RxCRCInitializationPattern = SPI_CRC_INITIALIZATION_ALL_ZERO_PATTERN;
+    in->MasterSSIdleness           = k_hal_mssi[b->mssi & 15U];
+    in->MasterInterDataIdleness    = k_hal_midi[b->midi & 15U];
+    in->MasterReceiverAutoSusp     = SPI_MASTER_RX_AUTOSUSP_DISABLE;
+    in->MasterKeepIOState          = b->keep_pins ? SPI_MASTER_KEEP_IO_STATE_ENABLE : SPI_MASTER_KEEP_IO_STATE_DISABLE;
+    in->IOSwap                     = SPI_IO_SWAP_DISABLE;
+}
+
+/* ---- T1 with spi_hal (CPU1: SPI2, SPI4, SPI6) ------------------------------------------ */
+static DMA_HandleTypeDef s_hd_dummy;     /* a linked, never started DMA handle (T1 only) */
+
+static void f3_t1(void)
+{
+    SPI_TypeDef *const inst[4] = { SPI2, SPI4, SPI5, SPI6 };
+    for (uint32_t i = 0U; i < 4U; i++)
+    {
+        (void)SPI_BM_EnableClock(inst[i]);
+        (void)SPI_BM_Deinit(inst[i]);
+    }
+    uint32_t a[T1_SNAP];
+    uint32_t b[T1_SNAP];
+    uint32_t same = 0U;
+    const SpiBm_Config_t c = mkcfg(SPI2, 7U, 0U, 8U, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+    SpiBm_Config_t k;
+    SPI_HandleTypeDef *h = &s_h2;
+    s_t1_n = 0U;
+
+    /* 1. Nothing initialised: the handle, the instance, the configuration, the calls. */
+    t1_snap(a);
+    h->Instance = SPI2;
+    t1(SPI_HAL_Init(NULL, &c), SPI_BM_ERR_PARAM);
+    t1(SPI_HAL_Init(h, NULL), SPI_BM_ERR_PARAM);
+    h->Instance = (SPI_TypeDef *)USART3;                      t1(SPI_HAL_Init(h, &c), SPI_BM_ERR_PARAM);
+    h->Instance = SPI4;                                       t1(SPI_HAL_Init(h, &c), SPI_BM_ERR_PARAM);  /* != cfg->spi */
+    h->Instance = SPI2;
+    k = c; k.data_bits = 3U;                                  t1(SPI_HAL_Init(h, &k), SPI_BM_ERR_PARAM);
+    k = c; k.mode = 4U;                                       t1(SPI_HAL_Init(h, &k), SPI_BM_ERR_PARAM);
+    k = c; k.mssi = 1U;                                       t1(SPI_HAL_Init(h, &k), SPI_BM_ERR_PARAM);
+    k = c; k.data_bits = 32U; k.fifo_threshold = 3U;          t1(SPI_HAL_Init(h, &k), SPI_BM_ERR_RANGE);
+    s_h6.Instance = SPI6;
+    k = c; k.spi = SPI6; k.data_bits = 17U;                   t1(SPI_HAL_Init(&s_h6, &k), SPI_BM_ERR_UNSUPPORTED);
+    s_h4.Instance = SPI4;
+    k = c; k.spi = SPI4; k.data_bits = 16U; k.fifo_threshold = 3U;
+                                                              t1(SPI_HAL_Init(&s_h4, &k), SPI_BM_ERR_RANGE);
+    t1(SPI_HAL_Deinit(NULL), SPI_BM_ERR_PARAM);
+    h->Instance = (SPI_TypeDef *)USART3;                      t1(SPI_HAL_Deinit(h), SPI_BM_ERR_PARAM);
+    h->Instance = SPI2;
+    t1(SPI_HAL_Wait(NULL, 10U), SPI_BM_ERR_PARAM);
+    t1(SPI_HAL_Wait(h, 0U), SPI_BM_ERR_PARAM);
+    t1(SPI_HAL_Transfer(NULL, s_tx, s_rx, 1U, 10U), SPI_BM_ERR_PARAM);
+    t1(SPI_HAL_StartTransferIt(NULL, s_tx, s_rx, 1U), SPI_BM_ERR_PARAM);
+    h->hdmatx = NULL;
+    h->hdmarx = NULL;
+    t1(SPI_HAL_StartTransferDma(h, s_tx, NULL, 1U), SPI_BM_ERR_PARAM);                     /* no hdmatx */
+    t1_snap(b);
+    same |= (memcmp(a, b, sizeof(a)) == 0) ? 1U : 0U;
+
+    /* 2. SPI2 transmit only through spi_hal, SPI5 16-bit: the transfer's parameters. */
+    k = c; k.direction = SPI_BM_DIR_TX_ONLY;
+    const SpiBm_Status_t i2 = SPI_HAL_Init(h, &k);
+    s_h5.Instance = SPI5;
+    k = c; k.spi = SPI5; k.data_bits = 16U;
+    const SpiBm_Status_t i5 = SPI_HAL_Init(&s_h5, &k);
+    t1_snap(a);
+    t1(SPI_HAL_Transfer(h, s_tx, NULL, 1U, 0U), SPI_BM_ERR_PARAM);                         /* timeout 0 */
+    t1(SPI_HAL_Transfer(h, s_tx, NULL, 0U, 10U), SPI_BM_ERR_PARAM);
+    t1(SPI_HAL_Transfer(h, s_tx, NULL, 65536U, 10U), SPI_BM_ERR_PARAM);
+    t1(SPI_HAL_Transfer(h, NULL, NULL, 1U, 10U), SPI_BM_ERR_PARAM);
+    t1(SPI_HAL_Transfer(h, s_tx, s_rx, 1U, 10U), SPI_BM_ERR_PARAM);                        /* rx in TX_ONLY */
+    t1(SPI_HAL_Transfer(&s_h5, (const uint8_t *)s_tx + 1U, NULL, 1U, 10U), SPI_BM_ERR_PARAM);   /* odd */
+    t1(SPI_HAL_StartTransferIt(h, s_tx, NULL, 0U), SPI_BM_ERR_PARAM);
+    h->hdmatx = &s_hd_dummy;
+    t1(SPI_HAL_StartTransferDma(h, s_tx, s_rx, 1U), SPI_BM_ERR_PARAM);                     /* rx, no hdmarx */
+    s_hd_dummy.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
+    s_h5.hdmatx = &s_hd_dummy;
+    s_h5.hdmarx = NULL;
+    t1(SPI_HAL_StartTransferDma(&s_h5, s_tx, NULL, 1U), SPI_BM_ERR_PARAM);  /* byte memory size, 16-bit frames */
+    const bool h5_ready = s_h5.State == HAL_SPI_STATE_READY;                /* the HAL's refusal would leave it busy */
+    s_h5.hdmatx = NULL;
+    t1_snap(b);
+    same |= (memcmp(a, b, sizeof(a)) == 0) ? 2U : 0U;
+    (void)SPI_HAL_Deinit(&s_h5);
+
+    /* 3. SPE = 1 by hand, and the handle busy: refused before any HAL call. */
+    k = c;
+    const SpiBm_Status_t i3 = SPI_HAL_Init(h, &k);
+    SPI2->CR1 |= SPI_CR1_SPE;
+    const uint32_t spe = SPI2->CR1 & SPI_CR1_SPE;
+    t1_snap(a);
+    t1(SPI_HAL_Init(h, &k), SPI_BM_ERR_BUSY);
+    t1(SPI_HAL_Transfer(h, s_tx, s_rx, 1U, 10U), SPI_BM_ERR_BUSY);
+    t1(SPI_HAL_StartTransferIt(h, s_tx, s_rx, 1U), SPI_BM_ERR_BUSY);
+    h->hdmarx = &s_hd_dummy;
+    t1(SPI_HAL_StartTransferDma(h, s_tx, s_rx, 1U), SPI_BM_ERR_BUSY);
+    t1_snap(b);
+    same |= (memcmp(a, b, sizeof(a)) == 0) ? 4U : 0U;
+    SPI2->CR1 &= ~SPI_CR1_SPE;
+    h->State = HAL_SPI_STATE_BUSY_TX_RX;                      /* the handle says busy, the SPI is at rest */
+    t1(SPI_HAL_Transfer(h, s_tx, s_rx, 1U, 10U), SPI_BM_ERR_BUSY);
+    h->State = HAL_SPI_STATE_READY;
+    h->hdmatx = NULL;
+    h->hdmarx = NULL;
+
+    /* 4. AFCNTR = 1 in force: another CPOL or SSIOP. */
+    k = c; k.keep_pins = true;
+    const SpiBm_Status_t i4 = SPI_HAL_Init(h, &k);
+    t1_snap(a);
+    k.mode = 2U;                                     t1(SPI_HAL_Init(h, &k), SPI_BM_ERR_BUSY);
+    k.mode = 0U; k.nss_active_high = true;           t1(SPI_HAL_Init(h, &k), SPI_BM_ERR_BUSY);
+    t1_snap(b);
+    same |= (memcmp(a, b, sizeof(a)) == 0) ? 8U : 0U;
+    const SpiBm_Status_t d4 = SPI_HAL_Deinit(h);
+    const bool reset_state = (h->State == HAL_SPI_STATE_RESET) && (reset_diff(SPI2) == 0U);
+
+    /* The control: a valid SPI_HAL_Init changes the snapshot. */
+    t1_snap(a);
+    k = c;
+    const SpiBm_Status_t w = SPI_HAL_Init(h, &k);
+    t1_snap(b);
+    const bool ctrl = memcmp(a, b, sizeof(a)) != 0;
+    (void)SPI_HAL_Deinit(h);
+
+    uint32_t bad = 0U;
+    for (uint32_t i = 0U; (i < s_t1_n) && (i < T1_MAX); i++)
+    {
+        if (s_t1_got[i] != s_t1_exp[i])
+        {
+            bad++;
+            LOG("T1 HAL CM7 case %lu: status %u, expected %u", (unsigned long)i, (unsigned)s_t1_got[i],
+                (unsigned)s_t1_exp[i]);
+        }
+    }
+    verdict((bad == 0U) && (s_t1_n <= T1_MAX) && (same == 0xFU) && (spe != 0U) && (i2 == SPI_BM_OK) &&
+            (i5 == SPI_BM_OK) && (i3 == SPI_BM_OK) && (i4 == SPI_BM_OK) && h5_ready,
+            "T1 HAL CM7 refusals through spi_hal on SPI2, SPI4, SPI5, SPI6: %lu cases, %lu with another status; "
+            "registers of the four and RCC_C1/C2 APB1LENR/APB2ENR/APB4ENR unchanged in the 4 groups: 0x%lX (0xF); "
+            "SPE set by hand %u; SPI5 handle READY after the DMA size refusal %u", (unsigned long)s_t1_n,
+            (unsigned long)bad, (unsigned long)same, (unsigned)(spe != 0U), (unsigned)h5_ready);
+    verdict(ctrl && (w == SPI_BM_OK), "T1 HAL CM7 control: a valid SPI_HAL_Init(SPI2) changes the snapshot (%u)",
+            (unsigned)ctrl);
+    verdict((d4 == SPI_BM_OK) && reset_state, "T14 HAL SPI_HAL_Deinit(SPI2) after a keep_pins Init: status %u, "
+            "handle in RESET and registers at the reset image %u", (unsigned)d4, (unsigned)reset_state);
+}
+
+/* ---- T2 with spi_hal: the image of SPI_HAL_Init against the raw HAL_SPI_Init (bit for
+   bit), against spi_bm (bit for bit but for the differences by design) and against the
+   RM table. The one difference by design found in the HAL source: CR1.SSI with hardware
+   SS (stm32h7xx_hal_spi.c l. 375-381 set SSI only for a soft SS active low). ---------- */
+typedef struct { uint32_t n, bad_raw, bad_bm, design, bad_rm, bad_st, first_i, first_reg, got, exp; } T2HalCount_t;
+
+static void t2hal_one(const SpiBm_Config_t *c, T2HalCount_t *t)
+{
+    SPI_TypeDef *spi = c->spi;
+    SPI_HandleTypeDef *h = hal_h(spi);
+    uint32_t pb[NREG];
+    uint32_t ph[NREG];
+    uint32_t pr[NREG];
+    const SpiBm_Status_t sb = SPI_BM_Init(c);
+    spi_regs(spi, pb);
+    (void)SPI_BM_Deinit(spi);
+    h->Instance = spi;
+    const SpiBm_Status_t sh = SPI_HAL_Init(h, c);
+    spi_regs(spi, ph);
+    const SpiBm_Status_t dh = SPI_HAL_Deinit(h);
+    /* the raw HAL: the reset image, then HAL_SPI_Init with no wrapper */
+    (void)SPI_BM_Deinit(spi);
+    h->State = HAL_SPI_STATE_RESET;
+    sst_hal_of(c, &h->Init);
+    const HAL_StatusTypeDef hr = HAL_SPI_Init(h);
+    spi_regs(spi, pr);
+    (void)SPI_HAL_Deinit(h);
+    if ((sb != SPI_BM_OK) || (sh != SPI_BM_OK) || (dh != SPI_BM_OK) || (hr != HAL_OK))
+    {
+        t->bad_st++;
+    }
+    if (memcmp(ph, pr, sizeof(ph)) != 0)
+    {
+        t->bad_raw++;
+    }
+    /* spi_bm writes CR1.SSI inactive with any SS; the HAL only with a soft SS */
+    const uint32_t design = ((c->nss != SPI_BM_NSS_SOFT) && !c->nss_active_high) ? SPI_CR1_SSI : 0U;
+    if (((ph[0] ^ pb[0]) == design) && (design != 0U))
+    {
+        t->design++;
+    }
+    for (uint32_t r = 0U; r < NREG; r++)
+    {
+        const uint32_t allowed = (r == 0U) ? design : 0U;
+        if ((ph[r] ^ pb[r]) != allowed)
+        {
+            if (t->bad_bm == 0U)
+            {
+                t->first_i = t->n;
+                t->first_reg = r;
+                t->got = ph[r];
+                t->exp = pb[r];
+            }
+            t->bad_bm++;
+            break;
+        }
+    }
+    uint32_t e1 = 0U;
+    uint32_t e2 = 0U;
+    uint32_t ecr = 0U;
+    sst_t2_expect(c, &e1, &e2, &ecr);
+    if ((ph[2] != e1) || (ph[3] != e2) || (ph[0] != (ecr ^ design)))
+    {
+        t->bad_rm++;
+    }
+    t->n++;
+}
+
+static void t2hal_inst(SPI_TypeDef *spi, const char *name)
+{
+    SpiBm_Caps_t caps = { 0U, 0U, 0U, 0U };
+    (void)SPI_BM_GetCaps(spi, &caps);
+    static const uint32_t bits_list[4] = { 4U, 8U, 16U, 32U };
+    const uint32_t nb = (caps.max_data_bits == 32U) ? 4U : 3U;
+    T2HalCount_t t = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+    (void)SPI_BM_EnableClock(spi);
+    (void)SPI_BM_Deinit(spi);
+    for (uint32_t mbr = 0U; mbr <= 7U; mbr++)
+    {
+        for (uint32_t mode = 0U; mode <= 3U; mode++)
+        {
+            for (uint32_t ib = 0U; ib < nb; ib++)
+            {
+                const uint32_t bits = bits_list[ib];
+                const uint32_t thr[2] = { 1U, thr_max(spi, bits) };
+                for (uint32_t it = 0U; it < 2U; it++)
+                {
+                    for (uint32_t lsb = 0U; lsb < 2U; lsb++)
+                    {
+                        for (uint32_t dir = 0U; dir < 2U; dir++)
+                        {
+                            for (uint32_t nss = 0U; nss < 3U; nss++)
+                            {
+                                for (uint32_t op = 0U; op < 2U; op++)
+                                {
+                                    for (uint32_t mi = 0U; mi < 4U; mi++)
+                                    {
+                                        const uint32_t mssi = ((mi & 1U) != 0U) ? 15U : 0U;
+                                        const uint32_t midi = ((mi & 2U) != 0U) ? 15U : 0U;
+                                        if ((nss == SPI_BM_NSS_SOFT) && (mssi != 0U))
+                                        {
+                                            continue;
+                                        }
+                                        for (uint32_t keep = 0U; keep < 2U; keep++)
+                                        {
+                                            const SpiBm_Config_t c = { spi, mbr, mode, bits, lsb != 0U, dir, thr[it],
+                                                                       nss, op != 0U, mssi, midi, keep != 0U };
+                                            t2hal_one(&c, &t);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    /* The control: one bit flipped in the spi_hal photo (MASTER in CFG2) is caught by the
+       same comparison with the raw HAL image. */
+    const SpiBm_Config_t c0 = mkcfg(spi, 0U, 0U, 8U, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+    SPI_HandleTypeDef *h = hal_h(spi);
+    uint32_t ph[NREG];
+    uint32_t pr[NREG];
+    h->Instance = spi;
+    (void)SPI_HAL_Init(h, &c0);
+    spi_regs(spi, ph);
+    (void)SPI_HAL_Deinit(h);
+    h->State = HAL_SPI_STATE_RESET;
+    sst_hal_of(&c0, &h->Init);
+    (void)HAL_SPI_Init(h);
+    spi_regs(spi, pr);
+    (void)SPI_HAL_Deinit(h);
+    ph[3] ^= SPI_CFG2_MASTER;
+    const bool caught = memcmp(ph, pr, sizeof(ph)) != 0;
+    if (t.bad_bm != 0U)
+    {
+        LOG("T2 HAL %s first difference from spi_bm outside the design: config %lu register %lu HAL 0x%08lX BM 0x%08lX",
+            name, (unsigned long)t.first_i, (unsigned long)t.first_reg, (unsigned long)t.got, (unsigned long)t.exp);
+    }
+    verdict((t.bad_raw == 0U) && (t.bad_bm == 0U) && (t.bad_rm == 0U) && (t.bad_st == 0U) && caught,
+            "T2 HAL %s %lu configurations: SPI_HAL_Init image differs from the raw HAL_SPI_Init image in %lu, from "
+            "spi_bm's outside the differences by design in %lu (CR1.SSI with hardware SS, active low: %lu "
+            "configurations), CFG1/CFG2/CR1 from the RM0399 table in %lu; a status other than OK %lu; control (MASTER "
+            "flipped in the spi_hal photo) caught %u", name, (unsigned long)t.n, (unsigned long)t.bad_raw,
+            (unsigned long)t.bad_bm, (unsigned long)t.design, (unsigned long)t.bad_rm, (unsigned long)t.bad_st,
+            (unsigned)caught);
+}
+
+/* ---- T7(b) with spi_hal: SPI6 by BDMA (dma_hal), the HAL's DMA path ------------------- */
+static SpiBm_Status_t t7b_one_hal(uint32_t bits, uint32_t n, uint32_t seed, bool rx, uint32_t *mism,
+                                  uint32_t *left)
+{
+    const uint32_t es = sst_elem_bytes(bits);
+    const uint32_t mbr = 2U;
+    const SpiBm_Config_t c = mkcfg(SPI6, mbr, 0U, bits, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+    sst_fill(s_bd_tx, es, n, bits, seed);
+    sst_fill_const(s_bd_rx, es, n, 0xA5A5A5A5UL);
+    s_h6.Instance = SPI6;
+    const SpiBm_Status_t si = SPI_HAL_Init(&s_h6, &c);
+    const bool d_ok = bd_init_irq(&s_hbd_rx, BDMA_Channel0, BDMA_REQUEST_SPI6_RX, DMA_PERIPH_TO_MEMORY, es) &&
+                      bd_init_irq(&s_hbd_tx, BDMA_Channel1, BDMA_REQUEST_SPI6_TX, DMA_MEMORY_TO_PERIPH, es);
+    __HAL_LINKDMA(&s_h6, hdmatx, s_hbd_tx);
+    __HAL_LINKDMA(&s_h6, hdmarx, s_hbd_rx);
+    nvic_spi6(true);
+    s_hal_busy = true;
+    SpiBm_Status_t st = SPI_HAL_StartTransferDma(&s_h6, s_bd_tx, rx ? s_bd_rx : NULL, n);
+    if (st != SPI_BM_OK)
+    {
+        s_hal_busy = false;
+    }
+    else
+    {
+        st = SPI_HAL_Wait(&s_h6, ms_of(budget_of(SPI6, mbr, bits, n)));
+    }
+    s_hal_busy = false;
+    nvic_spi6(false);
+    (void)DMA_HAL_DeInit(&s_hbd_tx);
+    (void)DMA_HAL_DeInit(&s_hbd_rx);
+    s_h6.hdmatx = NULL;
+    s_h6.hdmarx = NULL;
+    const SpiBm_Status_t sd = SPI_HAL_Deinit(&s_h6);
+    *mism = sst_mismatch(s_bd_tx, s_bd_rx, es, n, bits);
+    uint32_t l = 0U;
+    for (uint32_t i = 0U; i < n; i++)
+    {
+        if (sst_get(s_bd_rx, es, i) == (0xA5A5A5A5UL & sst_mask(es * 8U)))
+        {
+            l++;
+        }
+    }
+    *left = l;
+    if ((si != SPI_BM_OK) || !d_ok || (sd != SPI_BM_OK))
+    {
+        return SPI_BM_ERR_HAL;
+    }
+    return st;
+}
+
+static void t7b_hal(void)
+{
+    uint32_t bad = 0U;
+    for (uint32_t b = 0U; b < 2U; b++)
+    {
+        const uint32_t bits = (b == 0U) ? 8U : 16U;
+        const uint32_t frames[4] = { 1U, 9U, 255U, BD_MAXF };
+        for (uint32_t k = 0U; k < 4U; k++)
+        {
+            const uint32_t seed = next_seed();
+            uint32_t mism = 0U;
+            uint32_t left = 0U;
+            const SpiBm_Status_t st = t7b_one_hal(bits, frames[k], seed, true, &mism, &left);
+            const uint32_t crc = sst_crc32_frames(s_bd_rx, sst_elem_bytes(bits), frames[k], bits);
+            LOG("T7B SPI6/HAL b%lu n%lu s=%08lX st=%u mis=%lu crc=%08lX", (unsigned long)bits,
+                (unsigned long)frames[k], (unsigned long)seed, (unsigned)st, (unsigned long)mism, (unsigned long)crc);
+            if ((st != SPI_BM_OK) || (mism != 0U))
+            {
+                bad++;
+            }
+        }
+    }
+    uint32_t mism = 0U;
+    uint32_t left = 0U;
+    const SpiBm_Status_t st = t7b_one_hal(8U, 255U, next_seed(), false, &mism, &left);
+    verdict(bad == 0U, "T7(b) SPI6/HAL by BDMA (HAL_SPI_TransmitReceive_DMA, channels 0/1, buffers in .d3_ram), "
+            "8/16 bits, 1..8192 frames: %lu failed", (unsigned long)bad);
+    verdict((st == SPI_BM_OK) && (left == 255U), "T7(b) SPI6/HAL control, no RX stream (HAL_SPI_Transmit_DMA, "
+            "COMM = transmit only), 255 frames: status %u, RX words with the sentinel %lu (255)", (unsigned)st,
+            (unsigned long)left);
+}
+
+/* ---- The F3 steps ------------------------------------------------------------------------ */
+
+static void step_f3_nopin(void)
+{
+    if (!step_begin("F3_NOPIN"))
+    {
+        return;
+    }
+    tick_line("F3_NOPIN start");
+    f3_t1();
+    t2hal_inst(SPI2, "SPI2");
+    tick_line("F3_NOPIN T2 SPI2");
+    t2hal_inst(SPI3, "SPI3");
+    t2hal_inst(SPI4, "SPI4");
+    t2hal_inst(SPI5, "SPI5");
+    t2hal_inst(SPI6, "SPI6");
+    SPI_TypeDef *const inst[5] = { SPI2, SPI3, SPI4, SPI5, SPI6 };
+    const char *const names[5] = { "SPI2", "SPI3", "SPI4", "SPI5", "SPI6" };
+    for (uint32_t i = 0U; i < 5U; i++)
+    {
+        const SpiBm_Config_t cb = mkcfg(inst[i], 3U, 1U, 8U, true, SPI_BM_DIR_FULL_DUPLEX, 1U);
+        SPI_HandleTypeDef *h = hal_h(inst[i]);
+        h->Instance = inst[i];
+        (void)SPI_HAL_Init(h, &cb);
+        const SpiBm_Status_t sd = SPI_HAL_Deinit(h);
+        const uint32_t d = reset_diff(inst[i]);
+        verdict((sd == SPI_BM_OK) && (d == 0U) && (h->State == HAL_SPI_STATE_RESET),
+                "T14 HAL %s SPI_HAL_Deinit after SPI_HAL_Init: %u, registers off the reset image 0x%02lX (0), handle "
+                "RESET %u", names[i], (unsigned)sd, (unsigned long)d, (unsigned)(h->State == HAL_SPI_STATE_RESET));
+    }
+    tick_line("F3_NOPIN end");
+    if (!sync0())
+    {
+        return;
+    }
+    step_end();
+}
+
+static void step_j1_spi6_hal(void)
+{
+    if (!step_begin("J1_SPI6_HAL"))
+    {
+        return;
+    }
+    tick_line("J1_SPI6_HAL start");
+    static const uint32_t bits6[7] = { 4U, 5U, 7U, 8U, 9U, 15U, 16U };
+    static const uint32_t ctl6[3] = { 4U, 8U, 16U };
+    (void)SPI_BM_EnableClock(SPI6);
+    (void)SPI_BM_Deinit(SPI6);
+    s_tier = TIER_HAL;
+    t4_matrix(SPI6, "SPI6/HAL", false, bits6, 7U);
+    tick_line("J1_SPI6_HAL T4");
+    if (!s_bench_abort && spi6_pins(0U, 0U, GPIO_BM_SPEED_HIGH))
+    {
+        uint32_t mbr = 0U;
+        uint32_t sck = 0U;
+        (void)SPI_BM_CalcPrescaler(s_k6, 12500000U, &mbr, &sck);
+        const SpiBm_Config_t c = mkcfg(SPI6, mbr, 0U, 8U, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+        const uint32_t seed = next_seed();
+        SstXferRes_t r;
+        xfer_local(&c, F1_BIGF, seed, s_big_tx, s_big_rx, &r);
+        t4_line("SPI6/HAL", 0U, 8U, 0U, 1U, F1_BIGF, seed, &r);
+        verdict(xfer_ok(&r), "T4 SPI6/HAL 65535 frames of 8 bits: status %lu, %lu mismatches",
+                (unsigned long)r.status, (unsigned long)r.mism);
+    }
+    if (!s_bench_abort)
+    {
+        t4_control(SPI6, "SPI6/HAL", false, ctl6, 3U);
+        (void)spi6_pins(0U, 0U, GPIO_BM_SPEED_HIGH);
+    }
+    if (!s_bench_abort)
+    {
+        s_b1_irq_min = 0xFFFFFFFFUL;
+        s_b1_irq_max = 0U;
+        t6_spi6("SPI6/HAL");
+        tick_line("J1_SPI6_HAL T6");
+        t7b_hal();
+        tick_line("J1_SPI6_HAL T7(b)");
+    }
+    if (!s_bench_abort && spi6_pins(0U, 0U, GPIO_BM_SPEED_HIGH))
+    {
+        f1_b1(SPI6, "SPI6/HAL");
+        LOG("B1 CM7 SPI6/HAL HAL_SPI_IRQHandler per call (T6) min %lu max %lu cycles", (unsigned long)s_b1_irq_min,
+            (unsigned long)s_b1_irq_max);
+    }
+    s_tier = TIER_BM;
+    s_h6.Instance = SPI6;
+    const SpiBm_Config_t cb = mkcfg(SPI6, 2U, 0U, 8U, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+    (void)SPI_HAL_Init(&s_h6, &cb);
+    const uint32_t dctrl = reset_diff(SPI6);
+    const SpiBm_Status_t sd = SPI_HAL_Deinit(&s_h6);
+    const uint32_t d = reset_diff(SPI6);
+    verdict((sd == SPI_BM_OK) && (d == 0U) && (dctrl != 0U),
+            "T14 SPI6/HAL SPI_HAL_Deinit %u, registers off the reset image 0x%02lX (0); control, after SPI_HAL_Init "
+            "and before the Deinit: 0x%02lX (!= 0)", (unsigned)sd, (unsigned long)d, (unsigned long)dctrl);
+    const bool rel = j1_release();
+    const uint32_t j1 = ((GPIOA->MODER >> (PA_J1_SCK * 2U)) & 0xFUL) | (((GPIOB->MODER >> (PB_J1_MISO * 2U)) & 0xFUL) << 4);
+    verdict(rel && (j1 == 0U), "T14 J1 pins back in input: MODER PA5|PA6|PB4|PB5 0x%02lX (0)", (unsigned long)j1);
+    tick_line("J1_SPI6_HAL end");
+    if (!sync0())
+    {
+        return;
+    }
+    step_end();
+}
+
+/* T5(a) through spi_hal (kind 'H') and T7(c) through spi_hal (kind 'Q'). */
+static void step_spi4_ad2_hal(void)
+{
+    if (!step_begin("SPI4_AD2_HAL") || !buschk())
+    {
+        return;
+    }
+    tick_line("SPI4_AD2_HAL start");
+    const bool clk_was_on = spi4_clocked();
+    (void)SPI_BM_EnableClock(SPI4);
+    (void)SPI_BM_Deinit(SPI4);
+    if (!spi4_pins(0U, false, GPIO_BM_PULL_DOWN, 0xFFU) || !buschk_af(PE_SPI4_MASK, NULL, NULL))
+    {
+        return;
+    }
+    s_cap_k = 0U;
+    s_cap_bad = 0U;
+    s_tier = TIER_HAL;
+    static const uint32_t ab[4] = { 4U, 8U, 13U, 16U };
+    for (uint32_t mode = 0U; mode <= 3U; mode++)
+    {
+        for (uint32_t ib = 0U; ib < 4U; ib++)
+        {
+            for (uint32_t lsb = 0U; lsb < 2U; lsb++)
+            {
+                const SpiBm_Config_t c = { SPI4, 3U, mode, ab[ib], lsb != 0U, SPI_BM_DIR_TX_ONLY, 1U, SPI_BM_NSS_HW,
+                                           false, 0U, 0U, false };
+                cap_one('H', &c, cap_frames(ab[ib], 3U, 0U, 0U, 32U), cap_poll);
+            }
+        }
+    }
+    tick_line("SPI4_AD2_HAL T5(a)");
+    for (uint32_t b = 0U; b < 2U; b++)
+    {
+        const uint32_t bits = (b == 0U) ? 8U : 16U;
+        const SpiBm_Config_t c = { SPI4, 3U, 0U, bits, false, SPI_BM_DIR_TX_ONLY, 1U, SPI_BM_NSS_HW, false, 0U, 0U,
+                                   false };
+        cap_one('Q', &c, cap_frames(bits, 3U, 0U, 0U, 16U), cap_dma);
+    }
+    s_tier = TIER_BM;
+    LOG("CAP done k%lu", (unsigned long)s_cap_k);
+    verdict(s_cap_bad == 0U, "T5(a)/T7(c) SPI4/HAL: %lu captures run, %lu with a failed Init, transfer, DMA step or "
+            "Deinit", (unsigned long)s_cap_k, (unsigned long)s_cap_bad);
+    s_h4.Instance = SPI4;
+    const SpiBm_Config_t ctrl = { SPI4, 3U, 0U, 8U, false, SPI_BM_DIR_TX_ONLY, 1U, SPI_BM_NSS_HW, false, 0U, 0U, false };
+    (void)SPI_HAL_Init(&s_h4, &ctrl);
+    const uint32_t dctrl = reset_diff(SPI4);
+    const SpiBm_Status_t sd = SPI_HAL_Deinit(&s_h4);
+    const uint32_t d = reset_diff(SPI4);
+    verdict((sd == SPI_BM_OK) && (d == 0U) && (dctrl != 0U),
+            "T14 SPI4/HAL SPI_HAL_Deinit %u, registers off the reset image 0x%02lX (0); control before the Deinit "
+            "0x%02lX (!= 0)", (unsigned)sd, (unsigned long)d, (unsigned long)dctrl);
+    if (!spi4_pins(0U, false, GPIO_BM_PULL_DOWN, 0xFFU) || !buschk_af(PE_SPI4_MASK, NULL, NULL))
+    {
+        return;
+    }
+    (void)pins_input(GPIOE, BUS_MASK, GPIO_BM_PULL_NONE);
+    tick_line("SPI4_AD2_HAL end");
+    if (!buschk())
+    {
+        return;
+    }
+    if (!clk_was_on)
+    {
+        (void)SPI_BM_DisableClock(SPI4);
+    }
+    step_end();
+}
+
 /* ==========================================================================================
  * Entry points
  * ========================================================================================== */
@@ -4106,6 +4923,9 @@ void SPI_Selftest_CM7_Run(void)
     step_j1_spi6_ll();
     step_j1_spi1_ll();
     step_spi4_ad2_ll();
+    step_f3_nopin();
+    step_j1_spi6_hal();
+    step_spi4_ad2_hal();
     if (step_begin("DONE"))
     {
         step_end();
@@ -4116,6 +4936,7 @@ void SPI_Selftest_CM7_Run(void)
     (void)cm4_send(SST_CMD_DONE, 0U);
     verdict((a->m4_timeout == 0U) && (a->m4_aborts == 0U), "CM4 finished: timeout %lu, aborts %lu",
             (unsigned long)a->m4_timeout, (unsigned long)a->m4_aborts);
+    tick_line("after DONE");
     LOG("Status_Task stack high-water mark %lu words", (unsigned long)uxTaskGetStackHighWaterMark(NULL));
     LOG("FW VERDICT=%s failures=%lu", (s_fail == 0U) ? "PASS" : "FAIL", (unsigned long)s_fail);
 
