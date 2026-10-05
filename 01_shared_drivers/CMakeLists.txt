@@ -111,6 +111,11 @@ target_include_directories(stm32h7_driver_spi_ll INTERFACE ${CMAKE_CURRENT_LIST_
 target_sources(stm32h7_driver_spi_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/06_spi/spi_ll.c)
 target_link_libraries(stm32h7_driver_spi_ll INTERFACE stm32h7_driver_spi_bm)
 
+add_library(stm32h7_driver_spi_hal INTERFACE)
+target_include_directories(stm32h7_driver_spi_hal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/06_spi)
+target_sources(stm32h7_driver_spi_hal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/06_spi/spi_hal.c)
+target_link_libraries(stm32h7_driver_spi_hal INTERFACE stm32h7_driver_spi_bm)
+
 add_library(stm32h7_driver_adc INTERFACE)
 target_include_directories(stm32h7_driver_adc INTERFACE ${CMAKE_CURRENT_LIST_DIR}/07_adc)
 target_sources(stm32h7_driver_adc INTERFACE ${CMAKE_CURRENT_LIST_DIR}/07_adc/adc_hal.c)
