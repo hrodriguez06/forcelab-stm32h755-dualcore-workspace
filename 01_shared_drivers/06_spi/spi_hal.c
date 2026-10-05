@@ -182,11 +182,14 @@ static uint32_t comm_of(const void *rx)
     return (rx != NULL) ? 0U : SPI_CFG2_COMM_0;
 }
 
-/* After the HAL closed a transfer (SPI_CloseTransfer, l. 3937): SPE = 0, IER = 0, the
-   DMA requests off. */
+/* After the HAL closed a transfer (SPI_CloseTransfer, l. 3937): SPE = 0, the DMA
+   requests off, and IER clear except TSERFIE: the IT starts enable it (l. 1743, 1837,
+   1964) and the close's mask (l. 3946) leaves it out. TSERF is set only by a TSER
+   reload, which this tier never programs; SPI_HAL_Deinit clears it. */
 static bool closed(const SPI_TypeDef *spi)
 {
-    return ((spi->CR1 & SPI_CR1_SPE) == 0U) && (spi->IER == 0U) && ((spi->CFG1 & DMA_REQS) == 0U);
+    return ((spi->CR1 & SPI_CR1_SPE) == 0U) && ((spi->IER & ~SPI_IER_TSERFIE_Msk) == 0U) &&
+           ((spi->CFG1 & DMA_REQS) == 0U);
 }
 
 SpiBm_Status_t SPI_HAL_Transfer(SPI_HandleTypeDef *h, const void *tx, void *rx, uint32_t frames,
@@ -246,11 +249,28 @@ SpiBm_Status_t SPI_HAL_StartTransferIt(SPI_HandleTypeDef *h, const void *tx, voi
            SPI_BM_OK : SPI_BM_ERR_VERIFY;
 }
 
+/* The HAL refuses a DMA memory size narrower than the frame (l. 2157, 2304, 2446) after
+   it has set h->State busy, and leaves it so: refused here first (C6). */
+static bool dma_fits(const SPI_HandleTypeDef *h, const DMA_HandleTypeDef *d)
+{
+    const uint32_t m = d->Init.MemDataAlignment;
+    if (h->Init.DataSize > SPI_DATASIZE_16BIT)
+    {
+        return m == DMA_MDATAALIGN_WORD;
+    }
+    if (h->Init.DataSize > SPI_DATASIZE_8BIT)
+    {
+        return (m == DMA_MDATAALIGN_HALFWORD) || (m == DMA_MDATAALIGN_WORD);
+    }
+    return true;
+}
+
 SpiBm_Status_t SPI_HAL_StartTransferDma(SPI_HandleTypeDef *h, const void *tx, void *rx, uint32_t frames)
 {
-    if ((h != NULL) && ((h->hdmatx == NULL) || ((rx != NULL) && (h->hdmarx == NULL))))
+    if ((h != NULL) && ((h->hdmatx == NULL) || ((rx != NULL) && (h->hdmarx == NULL)) || !dma_fits(h, h->hdmatx) ||
+                        ((rx != NULL) && !dma_fits(h, h->hdmarx))))
     {
-        return SPI_BM_ERR_PARAM;            /* the caller links its DMA handles */
+        return SPI_BM_ERR_PARAM;            /* the caller links its DMA handles, sized for the frame */
     }
     SpiBm_Status_t st = chk_xfer(h, tx, rx, frames);
     if (st != SPI_BM_OK)

@@ -42,6 +42,15 @@
   *            - with hardware SS the HAL leaves CR1.SSI at 0, where spi_bm writes
   *              it inactive: SSI does not act with SSM = 0 (T2, a difference by
   *              design);
+  *            - ES0445 2.22.3 in the HAL's interrupt path: HAL_SPI_TransmitReceive_IT
+  *              fills the FIFO before it sets DXPIE; when every frame fits, TXTF
+  *              came first and DXPIE stays set (RM0399 53.11.5), and the HAL's
+  *              close clears SPE before IER. One SPI interrupt then follows the
+  *              close, with h->State READY: the project's handler must tolerate
+  *              it (owner's decision, 2026-10-04: the HAL is kept as it is);
+  *            - after an interrupt transfer the HAL leaves IER.TSERFIE at 1 (its
+  *              close does not clear it); TSERF needs a TSER reload, which this
+  *              tier never programs, and SPI_HAL_Deinit clears it;
   *            - with rx == NULL a full-duplex configuration goes through
   *              HAL_SPI_Transmit, which sets CFG2.COMM to transmit only
   *              (SPI_2LINES_TX); the next transfer with rx sets it back.
@@ -69,17 +78,20 @@ extern "C" {
     h->Init filled from cfg, HAL_SPI_Init, read-back of CR1, CFG1, CFG2 and SR.MODF. */
 SpiBm_Status_t SPI_HAL_Init(SPI_HandleTypeDef *h, const SpiBm_Config_t *cfg);
 /** HAL_SPI_TransmitReceive (rx != NULL) or HAL_SPI_Transmit; frames 1..65 535, the
-    element per frame of spi_bm; timeout_ms >= 1. Read-back: SPE = 0, IER = 0, DMA
-    requests off, TSIZE, COMM. */
+    element per frame of spi_bm; timeout_ms >= 1. Read-back: SPE = 0, IER = 0 but
+    TSERFIE, DMA requests off, TSIZE, COMM. */
 SpiBm_Status_t SPI_HAL_Transfer(SPI_HandleTypeDef *h, const void *tx, void *rx, uint32_t frames,
                                 uint32_t timeout_ms);
 /** HAL_SPI_TransmitReceive_IT or HAL_SPI_Transmit_IT; read-back of TSIZE and COMM. */
 SpiBm_Status_t SPI_HAL_StartTransferIt(SPI_HandleTypeDef *h, const void *tx, void *rx, uint32_t frames);
 /** HAL_SPI_TransmitReceive_DMA or HAL_SPI_Transmit_DMA; h->hdmatx (and h->hdmarx with
-    rx) linked by the caller, else ERR_PARAM; read-back of TSIZE and COMM. */
+    rx) linked by the caller, with a memory size of at least a half-word for frames of
+    9..16 bits and a word above, else ERR_PARAM (the HAL's own refusal would leave
+    h->State busy); read-back of TSIZE and COMM. */
 SpiBm_Status_t SPI_HAL_StartTransferDma(SPI_HandleTypeDef *h, const void *tx, void *rx, uint32_t frames);
 /** Polls h->State until READY, at most timeout_ms (>= 1) of HAL_GetTick; then
-    h->ErrorCode, and the read-back of the close (SPE = 0, IER = 0, DMA requests off).
+    h->ErrorCode, and the read-back of the close (SPE = 0, IER = 0 but TSERFIE, DMA
+    requests off).
     ERR_TIMEOUT leaves the transfer as it is. */
 SpiBm_Status_t SPI_HAL_Wait(SPI_HandleTypeDef *h, uint32_t timeout_ms);
 /** SPI_BM_Deinit(h->Instance); the handle back to RESET (State, ErrorCode, Lock). */
