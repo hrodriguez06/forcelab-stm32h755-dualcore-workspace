@@ -1,0 +1,319 @@
+selftest-spi at efb4a3f docs(prj_01): add the three F3 development captures of 06_spi, from an empty build/selftest-spi; 'warning:' or 'error:' lines: 0
+> cmake --preset selftest-spi (build/selftest-spi removed first)
+-- The C compiler identification is GNU 14.3.1
+-- The ASM compiler identification is GNU
+-- Found assembler: C:/ST/STM32CubeIDE_2.2.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740/tools/bin/arm-none-eabi-gcc.exe
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: C:/ST/STM32CubeIDE_2.2.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740/tools/bin/arm-none-eabi-gcc.exe - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Configuring done (1.3s)
+-- Generating done (0.3s)
+-- Build files have been written to: C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/build/selftest-spi
+> cmake --build --preset selftest-spi
+[1/287] fw_build_id.h (FW_GIT_REV, FW_BUILD_ID)
+[2/287] Building ASM object CM7/CMakeFiles/cm7_firmware.dir/8b284118a476e40e388be6d953341488/Templates/gcc/startup_stm32h755xx.s.obj
+[3/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/a640336fa2b4f3102377104d927965c3/Source/Templates/system_stm32h7xx.c.obj
+[4/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/Core/Src/stm32h7xx_it.c.obj
+[5/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/Core/Src/stm32h7xx_hal_timebase_tim.c.obj
+[6/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/Core/Src/main.c.obj
+[7/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_adc.c.obj
+[8/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/__/Common/Src/shared_memory.c.obj
+[9/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_adc_ex.c.obj
+[10/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_comp.c.obj
+[11/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_cec.c.obj
+[12/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/App/Src/app_main.c.obj
+[13/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/App/Src/mpu_config.c.obj
+[14/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/Core/Src/syscalls.c.obj
+[15/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/App/Src/app_log.c.obj
+[16/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal.c.obj
+[17/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_cordic.c.obj
+[18/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_crc.c.obj
+[19/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_cortex.c.obj
+[20/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dac_ex.c.obj
+[21/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_cryp_ex.c.obj
+[22/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_cryp.c.obj
+[23/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dcmi.c.obj
+[24/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_crc_ex.c.obj
+[25/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dfsdm.c.obj
+[26/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dma2d.c.obj
+[27/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dac.c.obj
+[28/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dfsdm_ex.c.obj
+[29/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dma_ex.c.obj
+[30/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dma.c.obj
+[31/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dts.c.obj
+[32/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dsi.c.obj
+[33/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_eth.c.obj
+[34/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_eth_ex.c.obj
+[35/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_fdcan.c.obj
+[36/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_flash.c.obj
+[37/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_hash.c.obj
+[38/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_fmac.c.obj
+[39/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_hash_ex.c.obj
+[40/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_exti.c.obj
+[41/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_gfxmmu.c.obj
+[42/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_gpio.c.obj
+[43/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_flash_ex.c.obj
+[44/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_hcd.c.obj
+[45/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_i2s_ex.c.obj
+[46/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_hrtim.c.obj
+[47/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_hsem.c.obj
+[48/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_i2c.c.obj
+[49/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_i2c_ex.c.obj
+[50/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_i2s.c.obj
+[51/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_irda.c.obj
+[52/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_iwdg.c.obj
+[53/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_ltdc.c.obj
+[54/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_lptim.c.obj
+[55/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_ltdc_ex.c.obj
+[56/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_mmc.c.obj
+[57/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_jpeg.c.obj
+[58/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_mdios.c.obj
+[59/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_mdma.c.obj
+[60/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_mmc_ex.c.obj
+[61/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_nor.c.obj
+[62/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_opamp.c.obj
+[63/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_nand.c.obj
+[64/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_opamp_ex.c.obj
+[65/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_otfdec.c.obj
+[66/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_pcd.c.obj
+[67/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_ospi.c.obj
+[68/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_qspi.c.obj
+[69/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_pwr.c.obj
+[70/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_pcd_ex.c.obj
+[71/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_pssi.c.obj
+[72/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_ramecc.c.obj
+[73/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_pwr_ex.c.obj
+[74/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_rng.c.obj
+[75/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_rcc.c.obj
+[76/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_rng_ex.c.obj
+[77/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_rcc_ex.c.obj
+[78/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sai_ex.c.obj
+[79/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_rtc_ex.c.obj
+[80/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_rtc.c.obj
+[81/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sd.c.obj
+[82/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sdio.c.obj
+[83/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sd_ex.c.obj
+[84/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sdram.c.obj
+[85/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sai.c.obj
+[86/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_smartcard_ex.c.obj
+[87/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_smartcard.c.obj
+[88/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_smbus.c.obj
+[89/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_smbus_ex.c.obj
+[90/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_spdifrx.c.obj
+[91/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_adc.c.obj
+[92/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_bdma.c.obj
+[93/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_swpmi.c.obj
+[94/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_comp.c.obj
+[95/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_cordic.c.obj
+[96/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_spi.c.obj
+[97/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_spi_ex.c.obj
+[98/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sram.c.obj
+[99/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_crc.c.obj
+[100/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_dac.c.obj
+[101/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_crs.c.obj
+[102/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_uart_ex.c.obj
+[103/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_usart.c.obj
+[104/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_dma.c.obj
+[105/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_usart_ex.c.obj
+[106/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_dma2d.c.obj
+[107/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_wwdg.c.obj
+[108/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_exti.c.obj
+[109/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_fmac.c.obj
+[110/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_tim_ex.c.obj
+[111/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_hrtim.c.obj
+[112/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_i2c.c.obj
+[113/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_gpio.c.obj
+[114/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_lpuart.c.obj
+[115/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_lptim.c.obj
+[116/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_mdma.c.obj
+[117/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_uart.c.obj
+[118/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_opamp.c.obj
+[119/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_rcc.c.obj
+[120/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_pwr.c.obj
+[121/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_tim.c.obj
+[122/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_rng.c.obj
+[123/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_spi.c.obj
+[124/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_rtc.c.obj
+[125/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_swpmi.c.obj
+[126/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_usart.c.obj
+[127/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_delayblock.c.obj
+[128/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_tim.c.obj
+[129/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/ecf6a28f12b4de315d80af7a26959ea8/Third_Party/FreeRTOS/Source/croutine.c.obj
+[130/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_fmc.c.obj
+[131/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/b50e7472e155aba178d5a85e0f4fa58b/Source/portable/GCC/ARM_CM7/r0p1/port.c.obj
+[132/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/ecf6a28f12b4de315d80af7a26959ea8/Third_Party/FreeRTOS/Source/list.c.obj
+[133/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/d99d8270841eb00ffa88ae8fb20abe44/FreeRTOS/Source/event_groups.c.obj
+[134/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_sdmmc.c.obj
+[135/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/b50e7472e155aba178d5a85e0f4fa58b/Source/portable/MemMang/heap_4.c.obj
+[136/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/d99d8270841eb00ffa88ae8fb20abe44/FreeRTOS/Source/stream_buffer.c.obj
+[137/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/ecf6a28f12b4de315d80af7a26959ea8/Third_Party/FreeRTOS/Source/timers.c.obj
+[138/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/ecf6a28f12b4de315d80af7a26959ea8/Third_Party/FreeRTOS/Source/queue.c.obj
+[139/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_usb.c.obj
+[140/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/ecf6a28f12b4de315d80af7a26959ea8/Third_Party/FreeRTOS/Source/tasks.c.obj
+[141/287] Building ASM object CM4/CMakeFiles/cm4_firmware.dir/8b284118a476e40e388be6d953341488/Templates/gcc/startup_stm32h755xx.s.obj
+[142/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_utils.c.obj
+[143/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/01_led/led_bm.c.obj
+[144/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/__/Common/Src/spi_selftest_common.c.obj
+[145/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/00_gpio/gpio_bm.c.obj
+[146/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/04_uart/uart_hal.c.obj
+[147/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/10_hsem/hsem_bm.c.obj
+[148/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/06_spi/spi_bm.c.obj
+[149/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/06_spi/spi_hal.c.obj
+[150/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/06_spi/spi_ll.c.obj
+[151/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/02_dma/dma_bm.c.obj
+[152/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/a640336fa2b4f3102377104d927965c3/Source/Templates/system_stm32h7xx.c.obj
+[153/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/02_dma/dma_hal.c.obj
+[154/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/Core/Src/main.c.obj
+[155/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/Core/Src/stm32h7xx_it.c.obj
+[156/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_adc_ex.c.obj
+[157/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/__/Common/Src/shared_memory.c.obj
+[158/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_adc.c.obj
+[159/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_cec.c.obj
+[160/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal.c.obj
+[161/287] Building C object CM7/CMakeFiles/cm7_firmware.dir/App/Src/spi_selftest.c.obj
+[162/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_comp.c.obj
+[163/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_crc_ex.c.obj
+[164/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_crc.c.obj
+[165/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_cordic.c.obj
+[166/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_cryp_ex.c.obj
+[167/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_cortex.c.obj
+[168/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_cryp.c.obj
+[169/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dac.c.obj
+[170/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dcmi.c.obj
+[171/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dac_ex.c.obj
+[172/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dfsdm.c.obj
+[173/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dfsdm_ex.c.obj
+[174/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dma.c.obj
+[175/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dsi.c.obj
+[176/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dts.c.obj
+[177/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dma2d.c.obj
+[178/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_dma_ex.c.obj
+[179/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_eth.c.obj
+[180/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_fdcan.c.obj
+[181/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_eth_ex.c.obj
+[182/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_exti.c.obj
+[183/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_flash.c.obj
+[184/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_fmac.c.obj
+[185/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_i2s_ex.c.obj
+[186/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_flash_ex.c.obj
+[187/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_gfxmmu.c.obj
+[188/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_hash.c.obj
+[189/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_gpio.c.obj
+[190/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_hrtim.c.obj
+[191/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_hcd.c.obj
+[192/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_hash_ex.c.obj
+[193/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_i2c.c.obj
+[194/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_hsem.c.obj
+[195/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_i2c_ex.c.obj
+[196/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_i2s.c.obj
+[197/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_irda.c.obj
+[198/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_iwdg.c.obj
+[199/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_lptim.c.obj
+[200/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_jpeg.c.obj
+[201/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_ltdc.c.obj
+[202/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_ltdc_ex.c.obj
+[203/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_mdios.c.obj
+[204/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_mmc.c.obj
+[205/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_mmc_ex.c.obj
+[206/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_nand.c.obj
+[207/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_opamp.c.obj
+[208/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_mdma.c.obj
+[209/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_opamp_ex.c.obj
+[210/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_nor.c.obj
+[211/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_ospi.c.obj
+[212/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_otfdec.c.obj
+[213/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_pcd_ex.c.obj
+[214/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_pcd.c.obj
+[215/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_pssi.c.obj
+[216/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_pwr.c.obj
+[217/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_qspi.c.obj
+[218/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_rng.c.obj
+[219/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_ramecc.c.obj
+[220/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_pwr_ex.c.obj
+[221/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_rcc.c.obj
+[222/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_rtc.c.obj
+[223/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_rng_ex.c.obj
+[224/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sai.c.obj
+[225/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_rtc_ex.c.obj
+[226/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_rcc_ex.c.obj
+[227/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sd.c.obj
+[228/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sd_ex.c.obj
+[229/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sai_ex.c.obj
+[230/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sdio.c.obj
+[231/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sdram.c.obj
+[232/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_smartcard_ex.c.obj
+[233/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_smartcard.c.obj
+[234/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_smbus.c.obj
+[235/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_smbus_ex.c.obj
+[236/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_spi.c.obj
+[237/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_spdifrx.c.obj
+[238/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_spi_ex.c.obj
+[239/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_sram.c.obj
+[240/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_adc.c.obj
+[241/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_tim.c.obj
+[242/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_cordic.c.obj
+[243/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_tim_ex.c.obj
+[244/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_uart.c.obj
+[245/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_comp.c.obj
+[246/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_swpmi.c.obj
+[247/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_crc.c.obj
+[248/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_bdma.c.obj
+[249/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_crs.c.obj
+[250/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_dac.c.obj
+[251/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_dma2d.c.obj
+[252/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_dma.c.obj
+[253/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_uart_ex.c.obj
+[254/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_exti.c.obj
+[255/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_fmac.c.obj
+[256/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_gpio.c.obj
+[257/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_hrtim.c.obj
+[258/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_i2c.c.obj
+[259/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_usart.c.obj
+[260/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_usart_ex.c.obj
+[261/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_lpuart.c.obj
+[262/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_lptim.c.obj
+[263/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_pwr.c.obj
+[264/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_mdma.c.obj
+[265/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_opamp.c.obj
+[266/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_hal_wwdg.c.obj
+[267/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_rng.c.obj
+[268/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_rcc.c.obj
+[269/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_rtc.c.obj
+[270/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_swpmi.c.obj
+[271/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_tim.c.obj
+[272/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_spi.c.obj
+[273/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_usart.c.obj
+[274/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_delayblock.c.obj
+[275/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_fmc.c.obj
+[276/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_sdmmc.c.obj
+[277/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_usb.c.obj
+[278/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/e010f704e27b969d11ba996c5df08870/Src/stm32h7xx_ll_utils.c.obj
+[279/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/00_gpio/gpio_bm.c.obj
+[280/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/10_hsem/hsem_bm.c.obj
+[281/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/__/Common/Src/spi_selftest_common.c.obj
+[282/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/06_spi/spi_bm.c.obj
+[283/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/02_dma/dma_bm.c.obj
+[284/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/f30c6ed61005fd1a1a51ad2ef4009e1c/01_shared_drivers/06_spi/spi_ll.c.obj
+[285/287] Building C object CM4/CMakeFiles/cm4_firmware.dir/App/Src/spi_selftest.c.obj
+[286/287] Linking C executable CM7\cm7_firmware.elf; Generating cm7_firmware.bin / cm7_firmware.hex and reporting size
+Memory region         Used Size  Region Size  %age Used
+         ITCMRAM:           0 B        64 KB      0.00%
+           FLASH:      110832 B         1 MB     10.57%
+         DTCMRAM:       57528 B       128 KB     43.89%
+          RAM_D1:        160 KB       512 KB     31.25%
+       RAM_D2_M7:         256 B       128 KB      0.20%
+      RAM_D2_ETH:           0 B        32 KB      0.00%
+          RAM_D3:         32 KB        32 KB    100.00%
+      RAM_SHARED:         224 B        32 KB      0.68%
+   text	   data	    bss	    dec	    hex	filename
+ 110684	    140	 254484	 365308	  592fc	C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/build/selftest-spi/CM7/cm7_firmware.elf
+[287/287] Linking C executable CM4\cm4_firmware.elf; Generating cm4_firmware.bin / cm4_firmware.hex and reporting size
+Memory region         Used Size  Region Size  %age Used
+           FLASH:       25904 B         1 MB      2.47%
+       RAM_D2_M4:       45208 B       128 KB     34.49%
+          RAM_D3:           0 B        32 KB      0.00%
+      RAM_SHARED:         224 B        32 KB      0.68%
+   text	   data	    bss	    dec	    hex	filename
+  25876	     28	  45400	  71304	  11688	C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/build/selftest-spi/CM4/cm4_firmware.elf
