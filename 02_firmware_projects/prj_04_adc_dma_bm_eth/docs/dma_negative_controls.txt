@@ -124,3 +124,49 @@ UART Capture:
 [   2.963] [m7_dma_test] T11_BDMA_SRAM4: FAIL
 [   2.966] [m7_dma_test] OVERALL: FAIL (T8-T11)
 ================================================================================
+================================================================================
+DMA_HAL_Init DIRECT-MODE SIZE CHECK (T13): NEGATIVE CONTROLS
+================================================================================
+Test commit dd65b06 (fix 57b1bf7). Run on 2026-10-04, NUCLEO-H755ZI-Q Rev V
+(0x2003), PD5-PD6 jumper fitted, captures by tools/monitor.py --timestamps.
+Clean run at rev=dd65b06: T13 combos valid=3 ok=3 invalid=6 rej=6 mismatch=0,
+T13_HAL_DIRECT_SIZES: PASS, OVERALL: PASS (dma_t13_selftest_dd65b06.txt).
+Each mutation was applied to dma_hal.c only, built with the selftest preset,
+flashed with --core both, captured, and reverted with git checkout; the tree
+was clean again before the release build used for T12.
+
+Item  Description                          Mutation Applied                           Failing Output Line               Observed Rev
+----  -----------------------------------  -----------------------------------------  --------------------------------  ----------------
+NC1   The bench defect itself              Raw periph_align != mem_align compare      T13_HAL_DIRECT_SIZES: FAIL        dd65b06-dirty
+NC2   Direct-mode size check missing       Size check removed (always accepts)        T13_HAL_DIRECT_SIZES: FAIL        dd65b06-dirty
+
+
+8. CONTROL NC1 (reintroduce the defect found by 06_spi F3)
+----------------------------------------------------------
+Mutation: in DMA_HAL_Init, '(psize != msize)' replaced by the original
+'(cfg->periph_align != cfg->mem_align)'. HALFWORD/HALFWORD and WORD/WORD are
+refused, so the matrix counts 2 mismatches and neither direct-mode transfer
+runs (no "T13 direct mode" lines). Full log: dma_t13_nc1_dd65b06-dirty.txt.
+UART Capture:
+[   5.117] [m7_dma_test] rev=dd65b06-dirty
+[   5.135] [m7_dma_test] T11_BDMA_SRAM4: PASS
+[   5.140] [m7_dma_test] T13 combos valid=3 ok=1 invalid=6 rej=6 mismatch=2
+[   5.144] [m7_dma_test] T13_HAL_DIRECT_SIZES: FAIL
+[   5.148] [m7_dma_test] OVERALL: FAIL (T8-T11, T13)
+
+
+9. CONTROL NC2 (rejection half of the T13 matrix)
+-------------------------------------------------
+Mutation: in DMA_HAL_Init, the direct-mode condition replaced by 'false', so
+every PSIZE/MSIZE pair is accepted. The 6 off-diagonal pairs reach
+HAL_DMA_Init and leave CR != 0. The two real transfers still pass, which
+shows they cannot catch this regression alone. Full log:
+dma_t13_nc2_dd65b06-dirty.txt.
+UART Capture:
+[   7.783] [m7_dma_test] rev=dd65b06-dirty
+[   7.805] [m7_dma_test] T13 direct mode HALFWORD -> USART3 TDR
+[   7.810] [m7_dma_test] T13 direct mode WORD -> USART3 TDR
+[   7.815] [m7_dma_test] T13 combos valid=3 ok=3 invalid=6 rej=0 mismatch=6
+[   7.819] [m7_dma_test] T13_HAL_DIRECT_SIZES: FAIL
+[   7.823] [m7_dma_test] OVERALL: FAIL (T8-T11, T13)
+================================================================================

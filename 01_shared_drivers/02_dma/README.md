@@ -8,8 +8,10 @@ reachability helpers shared by every tier.
 Status: every tier was validated on a NUCLEO-H755ZI-Q (silicon Rev V,
 `REV_ID = 0x2003`) on 2026-09-25, with a PD5-PD6 loopback fitted. The run is
 self-identifying (`rev=df46b94`) and each hardware test has a recorded negative
-control. What that covers, and what it does not, is in
-[section 9](#9-validation).
+control. On 2026-10-04 the same board ran the fix to the direct-mode size
+check in `DMA_HAL_Init` and its test, T13 (`rev=dd65b06`, with two negative
+controls). That change has not had an independent run yet. What all this
+covers, and what it does not, is in [section 9](#9-validation).
 
 ---
 
@@ -406,11 +408,19 @@ results.
 | T10 / T10b | CM7 HAL | USART3 TX by DMA2, with `CR` read right after `HAL_DMA_Init` showing TRBUFF = 1. `DMA_HAL_CheckErrata` returns `HAL_BUSY` on an enabled stream and leaves `CR` unchanged. |
 | T11 / T11b | CM7 HAL, BDMA | M2M SRAM4→SRAM4 and SRAM4↔backup SRAM on BDMA channel 0. A buffer in SRAM1 is rejected for BDMA. |
 | T12 | Production | The normal `release` build of `prj_04`: ADC1 at about 500 kSPS (measured 503-511 kSPS), `err`/`ovr`/`adc_ovr` = 0 over hundreds of millions of samples. |
+| T13 | CM7 HAL | Direct mode on DMA2_Stream2 (USART3_TX request). The 3 × 3 PSIZE × MSIZE matrix through `DMA_HAL_Init` is checked against a hand-written RM0399 table (accept the diagonal only): an accepted pair reads back in `CR[12:11]`/`CR[14:13]` with `DMDIS = 0`, and a rejected one leaves `CR == 0`. Then real HALFWORD and WORD direct-mode transfers to `USART3->TDR`, one character per item, each printing a console line. |
 
 - **Evidence:** in `prj_04_adc_dma_bm_eth/docs/`.
   - `dma_selftest_capture.txt`: clean run at `rev=df46b94`.
+  - `dma_t13_selftest_dd65b06.txt`: clean run of T1-T11 and T13 at
+    `rev=dd65b06` (T13 `ok=3 rej=6 mismatch=0`). Its first two lines come from
+    the image that was on the board before the flash.
+  - `dma_t12_release_dd65b06_{console,query}.txt`: T12 at `rev=dd65b06`, 120
+    queries over about 60 s (about 30 M samples, about 509 kSPS), `err`/`ovr`/`adc_ovr` = 0.
   - `dma_negative_controls.txt`: for each test, the defect it was built to
-    catch, reintroduced, with the resulting FAIL on a `-dirty` image.
+    catch, reintroduced, with the resulting FAIL on a `-dirty` image. For T13:
+    NC1 (`dma_t13_nc1_dd65b06-dirty.txt`) and NC2
+    (`dma_t13_nc2_dd65b06-dirty.txt`).
 - **Independent run by the auditor:** repeated at `f3ab055` from a clean build,
   including a negative control that reintroduced the NDTR-unit bug and made T9
   fail.
@@ -522,6 +532,7 @@ changing it:
 | Hardening, `dma_mem_bm.h`, `dma_ll`, `dma_hal`, selftest | `b508e82` … `40105eb` |
 | Audit fixes: NDTR in PSIZE units, NDT ≤ 65535 in HAL, Table 115, TRBUFF check, errata text | `52897a1` … `4c8d6fa`, closed at `f3ab055` |
 | Iteration 2: `…Ex` IRQn and DBM APIs, peripheral burst rule, independent T1 oracle, backup SRAM for BDMA | `4922386` … `fd7b7b0` |
+| `DMA_HAL_Init` refused HALFWORD and WORD direct mode: it compared the raw `DMA_PDATAALIGN_x` and `DMA_MDATAALIGN_x` constants, which coincide only for BYTE. Found by the 06_spi F3 selftest. Fix and T13 | `57b1bf7`, `dd65b06` |
 
 The implementation plans, the audit record and the iteration reports were
 removed from this folder once their content was folded into this README. They

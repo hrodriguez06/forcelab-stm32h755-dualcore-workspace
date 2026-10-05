@@ -1,0 +1,61 @@
+[   0.903] [ipc] m7=172 m4=810  (CPU2 alive)
+[   2.877] [ipc] m7=176 m4=830  (CPU2 alive)
+[   7.730]  
+[   7.738] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev dd65b06-dirty ===
+[   7.742] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[   7.745] [sys] silicon revision id=0x2003
+[   7.749] [ipc] shared block at 0x38008000, magic=0x48375353
+[   7.753] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[   7.755] [net] starting TCP/IP stack
+[   7.762] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[   7.766] [net] mac=02:00:00:00:00:01 phy_addr=0
+[   7.771] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[   7.774] [phy] partner advertised:
+[   7.777] [net] udp echo listening on port 7
+[   7.780] [adc_srv] listening on UDP port 5001
+[   7.783] [m7_dma_test] rev=dd65b06-dirty
+[   7.786] [m7_dma_test] T8_DCACHE_COHERENCY: PASS
+[   7.790] [m7_dma_test] T9_HAL_MEMCOPY_IT: PASS
+[   7.794] [m7_dma_test] T10_USART3_DMA: PASS (TRBUFF verified)
+[   7.798] [m7_dma_test] T10_USART3_DMA: PASS
+[   7.801] [m7_dma_test] T11_BDMA_SRAM4: PASS
+[   7.805] [m7_dma_test] T13 direct mode HALFWORD -> USART3 TDR
+[   7.810] [m7_dma_test] T13 direct mode WORD -> USART3 TDR
+[   7.815] [m7_dma_test] T13 combos valid=3 ok=3 invalid=6 rej=0 mismatch=6
+[   7.819] [m7_dma_test] T13_HAL_DIRECT_SIZES: FAIL
+[   7.823] [m7_dma_test] OVERALL: FAIL (T8-T11, T13)
+[   7.825] [ipc] m7=1 m4=0  (CPU2 starting)
+[   9.358] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[   9.364] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[   9.368] [net] link up: 100 Mbps full duplex
+[   9.757] [ipc] m7=4 m4=0  (CPU2 NOT RESPONDING)
+[  11.731] [ipc] m7=8 m4=0  (CPU2 NOT RESPONDING)
+[  12.731] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  13.705] [m4_dma_test] rev=dd65b06-dirty
+[  13.707] [ipc] m7=13 m4=10  (CPU2 alive)
+[  15.681] [m4_dma_test] T1_M2M=PASS T2_REJ=PASS T3_UART=PASS
+[  15.683] [ipc] m7=17 m4=30  (CPU2 alive)
+[  17.657] [m4_dma_test] T1 combos valid=23 ok=23 invalid=25 rej=25 mismatch=0
+[  17.660] [ipc] m7=21 m4=50  (CPU2 alive)
+[  17.677] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  19.631] [m4_dma_test] T4_TIM7=PASS (tc=9,ht=10) T5_DBM=PASS
+[  19.633] [ipc] m7=25 m4=70  (CPU2 alive)
+[  21.605] [m4_dma_test] T6_REARM=PASS T7_ITCM=PASS (te=1)
+[  21.608] [ipc] m7=29 m4=90  (CPU2 alive)
+[  22.622] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  23.580] [m4_dma_test] OVERALL=PASS (mask=0xFE/0xFE)
+[  23.583] [ipc] m7=33 m4=110  (CPU2 alive)
+[  25.554] [ipc] m7=36 m4=130  (CPU2 alive)
+[  27.528] [ipc] m7=40 m4=150  (CPU2 alive)
+[  27.567] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  29.502] [ipc] m7=44 m4=170  (CPU2 alive)
+[  31.477] [ipc] m7=48 m4=190  (CPU2 alive)
+[  32.510] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  33.451] [ipc] m7=52 m4=210  (CPU2 alive)
+[  35.426] [ipc] m7=56 m4=230  (CPU2 alive)
+[  37.401] [ipc] m7=60 m4=250  (CPU2 alive)
+[  37.455] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=2 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  39.376] [ipc] m7=64 m4=270  (CPU2 alive)
+[  41.350] [ipc] m7=68 m4=290  (CPU2 alive)
+[  42.399] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=2 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  43.324] [ipc] m7=72 m4=310  (CPU2 alive)
