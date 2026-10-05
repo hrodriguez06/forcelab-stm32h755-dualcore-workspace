@@ -27,7 +27,7 @@ because it needs both cores already running.
 ├── 03_tim/                     # TIM1-8, TIM12-17: time base, PWM, input capture, master/slave, IRQ and DMA requests (tim_bm, tim_ll, tim_hal). LPTIM and HRTIM not covered
 ├── 04_uart/                    # USART1 - USART8, LPUART1 - console / log, first thing you want talking
 ├── 05_i2c/                     # I2C1 - I2C4 sensor interfaces
-├── 06_spi/                     # SPI1 - SPI6 high-speed serial
+├── 06_spi/                     # SPI1-SPI6 master: polling, interrupt and DMA/BDMA transfers, SS by software or hardware, ES0445 2.22 workarounds in BM/LL (spi_bm, spi_ll, spi_hal). Slave, CRC, TI and I2S not covered
 ├── 07_adc/                     # ADC1, ADC2, ADC3 (ADC sampling, analog watchdogs)
 ├── 08_eth/                     # Ethernet MAC + LAN8742 PHY - its own ETH DMA, descriptors in SRAM3; does not link 02_dma
 ├── 09_fdcan/                   # FDCAN1, FDCAN2 industrial communications

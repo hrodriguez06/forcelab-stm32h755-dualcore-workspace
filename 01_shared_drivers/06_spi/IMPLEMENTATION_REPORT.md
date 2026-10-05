@@ -893,3 +893,19 @@ Fuente del Cube con el que compila `prj_01` (`CUBE_DIR` → `02_firmware_project
 | 3006-3034 | el `EOT` vacía lo que queda en RX | — |
 | 3121 / 3124 | camino de error: `SPE` antes que las IRQ | limitación, no ejercitada |
 | 3937, 3945, 3948 | `SPI_CloseTransfer`: `SPE`, después `IER` (sin `TSERFIE`) | read-back del cierre; 2.22.3 y 2.22.5 |
+
+## Respuesta a la auditoría de F3 (`6675064`)
+
+| ID | Qué pedía | Qué hice | Estado |
+| --- | --- | --- | --- |
+| m4 | `SPI_HAL_Wait` sin salida si `HAL_GetTick()` no avanza (PRIMASK puesto, o una ISR de prioridad igual o mayor que la del tick); la precondición en `spi_hal.h`, sin cambiar firmas | `1c8ab15`: cuenta las vueltas con el mismo valor de `HAL_GetTick()` y devuelve `ERR_TIMEOUT` tras `2 × HAL_GetTickFreq() × (SystemCoreClock / 1000)` (cada vuelta cuesta al menos un ciclo: al menos dos periodos del tick). No usa `CYCCNT`. `spi_hal.h` dice la precondición y que `SPI_HAL_Transfer` no tiene esa salida (su cota es el timeout de la HAL, sobre el mismo tick). `8b5d165`: comprobación en `F3_NOPIN`, sin paso nuevo (protocolo v5) | corregido en `1c8ab15`, pendiente de verificación |
+
+Comprobado en `docs/spi_f3_bench_8b5d165.txt` (árbol limpio, checklist confirmado por Hector, arranque en frío, sin depurador; evidencia en `cc951c4`):
+
+- m4: `SPI_HAL_Wait(10 ms)` con PRIMASK puesto y el handle ocupado devuelve 6 (`ERR_TIMEOUT`) tras 14 400 178 ciclos, con `HAL_GetTick()` sin cambiar; el control, con el tick en marcha, devuelve 6 tras 10 ms.
+- 45/45 comprobaciones del host, `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`.
+- `build_all -Clean` 8/8 con producción igual a `2481396`; `selftest-spi` desde vacío con 0 avisos; `-Werror` ×3 con exit 0 y 0 avisos; `spi_hal.c.obj` 1224 B de `.text`, `.data = .bss = 0` (`docs/spi_f3_*_8b5d165.txt`).
+
+N3 (el defecto de `DMA_HAL_Init` en `02_dma`) no se toca aquí; el README lo recoge como nota para quien use DMA1/DMA2.
+
+El README de cierre (`06_spi/README.md`) y la línea de `06_spi` en `01_shared_drivers/README.md` van en el commit que añade esta sección. Sus ejemplos se compilaron sueltos, tal como están en el README, con `-std=gnu11 -O2 -Wall -Wextra -Wpedantic -Wconversion -Werror` (A para CM4; B y C para CM7 con `SPI_DRIVER_SELFTEST`, que habilita `HAL_SPI_MODULE_ENABLED`): exit 0 los tres. Esa compilación no está en una captura.
