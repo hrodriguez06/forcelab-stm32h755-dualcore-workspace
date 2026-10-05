@@ -196,3 +196,46 @@ Entrega: `b9de729..99fe89b` (m1 `544fb99`, `SPI_BM_CheckDma*` `14ea027`, `spi_ll
 **D11 (para el responsable):** autorizar que `CM7/App/Src/app_main.c` dé a `Status_Task` más pila **solo con `SPI_DRIVER_SELFTEST`**, como ya hace con `GPIO_DRIVER_SELFTEST` (2048 palabras, `app_main.c:52-56`). La producción no cambia (A16 lo comprueba). Requisito para F3: la captura de entrega con al menos 128 palabras libres.
 
 **D11 aprobada** por el responsable el 2026-10-04: con `SPI_DRIVER_SELFTEST`, `app_main.c` puede dar a `Status_Task` más pila (el mismo mecanismo de `GPIO_DRIVER_SELFTEST`, `app_main.c:52-56`). Requisito de F3: producción sin cambios (A16) y la captura de entrega con al menos 128 palabras libres.
+
+## F3: `spi_hal` (`b267f4c`)
+
+Entrega: `5d6f21a..b267f4c` (`spi_hal` `4e147b5`, build y D11 `dbab128`, corrección `3c23568`, selftest `b9b6237`, capturas de desarrollo `efb4a3f`, evidencia `5f9f1f3`, citas `4e96c69`, informe `b267f4c`).
+
+### Revisión
+
+| Punto | Resultado |
+| --- | --- |
+| Alcance y C2 | Nada fuera de las rutas permitidas. `spi_bm.{h,c}` y `spi_ll.{h,c}` sin cambios desde `99fe89b` |
+| Producción de `prj_01` | `stm32h7xx_hal_conf.h` de CM7 gana `HAL_SPI_MODULE_ENABLED`, su `#include` y `USE_HAL_SPI_REGISTER_CALLBACKS 0U`, los tres bajo `SPI_DRIVER_SELFTEST`. `app_main.c`: 1024 palabras para `Status_Task` solo con la opción (D11). Mi `build_all -Clean`: producción igual a `2481396` |
+| C8 | `spi_hal.h`/`.c` no declaran ni compilan nada sin `HAL_SPI_MODULE_ENABLED`; `#error` con `USE_SPI_CRC != 0` (regla 10). `_Static_assert` de que las constantes de la HAL son los campos del registro |
+| C6 | `h`, instancia y `h->Instance == cfg->spi`, después `SPI_BM_CheckConfig`/`CheckTransfer`, después el estado del handle; en DMA, además, los handles enlazados y su tamaño de memoria antes de llamar a la HAL (la HAL lo rechazaría dejando el handle ocupado) |
+| R2-1 en `SPI_HAL_Init` | `SPI_BM_Deinit` primero y el handle a RESET: desde la imagen de reset, la HAL pone `SSI` (l. 375-381) antes de `CFG2` (l. 398) y conserva `CRCSIZE = 00111` (l. 367). Decisión del responsable ("SPI_BM_Deinit first", confirmada el 2026-10-04) |
+| C12 | Read-back tras cada llamada: `CFG1`, `CFG2`, `CR1`, `SR.MODF` y estado del handle en `Init`; `SPE`, `IER` (salvo `TSERFIE`, que la HAL deja: l. 1743/1837/1964 frente a la máscara de l. 3948), DMA, `TSIZE` y `COMM` en las transferencias |
+| C14 | Sin callbacks ni MSP; `SPI_HAL_Deinit` no llama a `HAL_SPI_DeInit`. El selftest no define `HAL_SPI_MspInit` (se usa la débil, vacía) |
+| Limitaciones de la HAL | Documentadas en `spi_hal.h`: 2.22.5 sin guarda (decisión 5); 2.22.3 en el camino IT con todas las tramas en la FIFO, una IRQ tras el cierre (decisión del responsable "Keep HAL, document", confirmada el 2026-10-04; T6 la cuenta y la espera); `keep_pins` suelta los pines unos ciclos en el `Init`; `TSERFIE` queda a 1; `COMM` pasa a solo TX con `rx == NULL` |
+
+### Build y ejecución (mías)
+
+`build_all -Clean` 8/8 en `b267f4c`; `selftest-spi` desde vacío con 0 avisos. Checklist físico confirmado por el responsable; flasheo con el script parado, arranque en frío, una ejecución sin editar: `docs/spi_f3_audit_bench_b267f4c.txt`.
+
+| Resultado | Valor |
+| --- | --- |
+| Veredictos | 45/45 en el host, `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`; Rev `b267f4c` en CM7, CM4 y host |
+| T2 HAL | SPI2..6: imagen de `SPI_HAL_Init` igual a la de `HAL_SPI_Init` crudo en 0 diferencias; frente a `spi_bm`, 0 fuera de la diferencia por diseño (`CR1.SSI` con SS por hardware activo bajo) |
+| T6 HAL | IRQ tras el cierre de la HAL = esperado (1 con 1 trama, 0 con FIFO + 1 y 1024), en 8 y 16 bits; BM y LL, 0 |
+| Tick y pila | 12 líneas `TICK` estrictamente crecientes, la última después de `DONE`; `Status_Task` con 640 palabras libres de 1024 (D11 pide ≥ 128) |
+| Frente a la entrega | 196 líneas de resultado; solo cambian medidas del AD2, todas dentro de su cota |
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| m3 | — | Pila de `Status_Task` (D11): 640 palabras libres | **Cerrado** |
+| m4 | Menor | `SPI_HAL_Wait` (`spi_hal.c:305-312`) no tiene salida si `HAL_GetTick()` no avanza: con PRIMASK puesto o desde una ISR de prioridad 0 (la del tick por TIM6 en `prj_01`, `TICK_INT_PRIORITY 0`). C13 pide que ningún bucle se quede sin salida | Salida por tick parado (por ejemplo, contar con `CYCCNT` o un número de vueltas sin cambio de tick → `ERR_TIMEOUT`), y la precondición en `spi_hal.h`. Antes del cierre; cambio interno |
+| N3 | Nota (fuera de `06_spi`) | **Defecto en `02_dma`:** `DMA_HAL_Init` (`dma_hal.c:183-184`) compara en modo directo `periph_align` (`DMA_PDATAALIGN_*`, bits `PSIZE` 12:11) con `mem_align` (`DMA_MDATAALIGN_*`, bits `MSIZE` 14:13), así que rechaza el modo directo con media palabra o palabra aunque `PSIZE = MSIZE`. T7(c) lo evita con modo FIFO | Tarea aparte para `02_dma` (driver cerrado); no bloquea `06_spi` |
+
+### Estado
+
+**F3 pasa.** La API de `spi_hal` queda **congelada** con `spi_hal.h` de `b267f4c`. Las tres APIs están congeladas.
+
+**Cierre:** pido al implementador el README (plan, "README de cierre") y la línea de `06_spi` en `01_shared_drivers/README.md`, con m4 corregido en un commit propio. El README tiene que llevar: E2/R3-3 (SCK en AF) con T15 como evidencia; las limitaciones de `spi_hal`; SP3 (`.d3_ram` en los dos linker scripts); SP4 y N1 (reloj de la placa); N3 como nota de consumo de `02_dma`; y lo no ejercitado del plan y de los informes.
