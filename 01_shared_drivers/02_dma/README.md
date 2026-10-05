@@ -435,7 +435,15 @@ Then restore the production image with `--preset release`, and check T12 with
   the stream first, so `HAL_BUSY` cannot occur on that path.
 - TRBUFF on HASH_IN (request 78). No HASH test exists.
 - Silicon below `REV_ID 0x2000` (Rev Y), where TRBUFF is not applied.
-- BDMA with a real D3 peripheral (LPUART1, SPI6, I2C4, ADC3). Only M2M was run.
+- BDMA with LPUART1, I2C4 or ADC3. Since `06_spi`, the BDMA has run with a real
+  D3 peripheral: SPI6 through `dma_hal` (channels 0/1, requests 11/12, buffers
+  in `.d3_ram`, up to 8192 frames; `06_spi/README.md` §9, T7(b)).
+
+**Known defect (N3, found by `06_spi`).** In direct mode, `DMA_HAL_Init`
+(`dma_hal.c:183-186`) compares `periph_align` (`DMA_PDATAALIGN_*`, bits 12:11)
+with `mem_align` (`DMA_MDATAALIGN_*`, bits 14:13), so it refuses direct mode
+with half-words or words even when `PSIZE = MSIZE`. Use FIFO mode for those
+sizes on DMA1/DMA2 until it is fixed; the BDMA path does not run this check.
 
 **Flash budget.** `dma_bm` linked into the `prj_04` CM4 release image takes
 1 596 B (1 588 B `.text` + 8 B `.rodata`, measured from the `.map`). The first
