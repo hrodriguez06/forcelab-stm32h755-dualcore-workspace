@@ -708,3 +708,188 @@ Cabecera del Cube con el que compila `prj_01` (`CUBE_DIR` → `02_firmware_proje
 En el selftest se usan además `LL_SPI_SIMPLEX_RX` (353), `LL_SPI_HALF_DUPLEX_TX` (355) y `LL_SPI_NSS_HARD_INPUT` (484), como casos de rechazo de T1.
 
 Sin usar a propósito: `LL_SPI_ClearFlag_*` (desde la línea 1878), porque son `SET_BIT` sobre `IFCR`, y los setters de campo de `CFG2` (`LL_SPI_SetNSSMode`, `LL_SPI_EnableNSSPulseMgt`, `LL_SPI_EnableGPIOControl`…), porque escribirían `CFG2` por partes.
+
+## Respuesta a la auditoría de F2 (`ea8430b`)
+
+| ID | Qué pedía | Qué hice | Estado |
+| --- | --- | --- | --- |
+| m3 | La pila de `Status_Task` baja con cada fase (128 palabras libres de 512 en F2); D11, aprobada el 2026-10-04 | `dbab128`: con `SPI_DRIVER_SELFTEST`, `STATUS_TASK_STACK_WORDS` es `1024U` (`app_main.c:54-55`), con el mismo mecanismo que `GPIO_DRIVER_SELFTEST` (`app_main.c:53`); la rama de producción sigue en `512U` (`app_main.c:57`). Comprobado con la captura de entrega de F3: `Status_Task stack high-water mark 640 words`, y con las imágenes de producción iguales a `8901b77` en cada sección asignada (`docs/spi_f3_map_sizes_efb4a3f.txt`) | corregido en `dbab128`, pendiente de verificación |
+
+## F3
+
+Plan: revisión 3 (`b9de729`).
+
+| Fase | Estado | Último commit | Captura |
+| --- | --- | --- | --- |
+| F3 | entregada para auditoría (el commit que añade esta sección) | `efb4a3f` (código probado en la placa); `4e96c69` solo corrige tres números de línea en comentarios; evidencia en `5f9f1f3` | `03_firmware_templates/prj_01_template_dualcore/docs/spi_f3_bench_efb4a3f.txt` |
+
+Qué hay en F3:
+
+- **`spi_hal`:** `01_shared_drivers/06_spi/spi_hal.{h,c}` y el target `stm32h7_driver_spi_hal`, que enlaza `_spi_bm`. Seis funciones: `SPI_HAL_Init`, `_Transfer`, `_StartTransferIt`, `_StartTransferDma`, `_Wait` y `_Deinit`, sobre `SPI_HandleTypeDef`. Sin el módulo `HAL_SPI_MODULE_ENABLED` la cabecera no declara nada y `spi_hal.c` compila a nada; con `USE_SPI_CRC != 0` da `#error`.
+- **Build de `prj_01`:** `HAL_SPI_MODULE_ENABLED`, su `#include` y `USE_HAL_SPI_REGISTER_CALLBACKS 0U` en `CM7/Core/Inc/stm32h7xx_hal_conf.h`, los tres solo bajo `SPI_DRIVER_SELFTEST`. CM4 no habilita la HAL de SPI. La pila de `Status_Task` de D11.
+- **Selftest:** tres pasos nuevos de CPU1 (protocolo v5): `F3_NOPIN` (T1, T2, T14), `J1_SPI6_HAL` (T4, T6, T7(b), B1, T14) y `SPI4_AD2_HAL` (T5(a), T7(c), T14). Líneas `TICK` con `HAL_GetTick()`.
+- **Host:** los oráculos de los pasos nuevos, el decodificador para las capturas `H` y `Q`, y la comprobación de las líneas `TICK`.
+
+La ejecución de entrega es `docs/spi_f3_bench_efb4a3f.txt`: 45/45 comprobaciones del host, `FW VERDICT=PASS failures=0` y `HOST VERDICT=PASS`, sin aborto. En la misma sesión pasan otra vez todas las pruebas de F0, F1 y F2.
+
+### 5.1 Commits
+
+Rango de la entrega: `5d6f21a..` el commit que añade esta sección, en `driver/spi`.
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `4e147b5` | feat(spi): add spi_hal, the HAL tier of 06_spi, and its target | — |
+| `dbab128` | build(prj_01): enable the HAL SPI module and a larger Status_Task stack under the SPI selftest | m3 (D11) |
+| `3c23568` | fix(spi): match spi_hal's close read-back and DMA checks to the HAL | — (§5.8, ejecuciones de desarrollo) |
+| `b9b6237` | test(prj_01): add the F3 tests of 06_spi (spi_hal on CPU1), bench protocol v5 | — |
+| `efb4a3f` | docs(prj_01): add the three F3 development captures of 06_spi | — |
+| `5f9f1f3` | docs(spi): add the F3 evidence at efb4a3f | — |
+| `4e96c69` | docs(spi): correct three stm32h7xx_hal_spi.c line citations in comments | — |
+| (este) | docs(spi): add the F3 section and the reply to the F2 audit | — |
+
+- **Las ejecuciones de desarrollo sí están commiteadas** (`efb4a3f`), porque dos conclusiones de esta sección se apoyan en ellas (§5.8): `docs/spi_dev_f3_bench_dbab128-dirty.txt`, `_2.txt` y `_3.txt`, con el árbol sucio sobre `dbab128`.
+- **`4e96c69` va después de la ejecución de entrega.** Solo cambia tres comentarios (`git diff efb4a3f 4e96c69 -- '*.c'`: tres líneas, todas de comentario). El mensaje de `3c23568` repite dos de esos números mal: dice l. 3946 donde es l. 3948, y l. 2446 donde es l. 2447. Los mensajes de commit no se reescriben; la corrección queda aquí.
+
+### 5.2 Build y tamaños
+
+Fuentes: `docs/spi_f3_build_all_efb4a3f.txt`, `docs/spi_f3_selftest_build_efb4a3f.txt`, `docs/spi_f3_werror_efb4a3f.txt` y `docs/spi_f3_map_sizes_efb4a3f.txt`.
+
+- `build_all -Clean` en `efb4a3f`: 8/8.
+- `selftest-spi` desde un directorio vacío: 0 líneas `warning:` o `error:`.
+- `-Werror` (`selftest-spi`, `debug`, `release`, en directorios de scratch, `CMAKE_C_FLAGS:STRING=-Werror` en cada `CMakeCache.txt`): exit 0 y 0 avisos en los tres.
+
+| Imagen | .text | .data | .bss | Δ frente a 2481396 | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| prj_01 debug CM7 | 29304 | 132 | 55668 | 0 (y 0 en cada sección asignada frente a `8901b77`) | `build/debug/cm7_firmware.map` |
+| prj_01 debug CM4 | 3456 | 24 | 12560 | 0 | `build/debug/cm4_firmware.map` |
+| prj_01 release CM7 | 28356 | 132 | 55672 | 0 | `build/release/cm7_firmware.map` |
+| prj_01 release CM4 | 3112 | 24 | 12560 | 0 | `build/release/cm4_firmware.map` |
+
+| Objeto | Núcleo | .text | .data | .bss | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| `spi_bm.c.obj` | CM7 | 3540 | 0 | 0 | `build/selftest-spi/cm7_firmware.map` |
+| `spi_ll.c.obj` | CM7 | 2400 | 0 | 0 | ídem |
+| `spi_hal.c.obj` | CM7 | 1158 | 0 | 0 | ídem |
+| `spi_bm.c.obj` | CM4 | 3502 | 0 | 0 | `build/selftest-spi/cm4_firmware.map` |
+| `spi_ll.c.obj` | CM4 | 2376 | 0 | 0 | ídem |
+| `spi_hal.c.obj` | CM4 | no enlazado (CM4 no habilita la HAL de SPI) | — | — | ídem |
+| `spi_selftest.c.obj` (selftest) | CM7 | 53838 | 8 | 198700 | `build/selftest-spi/cm7_firmware.map` |
+| `spi_selftest_common.c.obj` (selftest) | CM7 | 2105 | 0 | 0 | ídem |
+| `dma_hal.c.obj` (02_dma, lo usa el selftest) | CM7 | 852 | 0 | 96 | ídem |
+| `spi_selftest.c.obj` (selftest) | CM4 | 10151 | 4 | 32833 | `build/selftest-spi/cm4_firmware.map` |
+| `spi_selftest_common.c.obj` (selftest) | CM4 | 2061 | 0 | 0 | ídem |
+
+.text es la suma de las secciones de entrada `.text*` y `.rodata*`.
+
+- `spi_bm.c.obj` y `spi_ll.c.obj` no cambian frente a F2.
+- La imagen `selftest-spi` mide 110684/140/254484 en CM7 y 25876/28/45400 en CM4.
+- Con los avisos de `-Wundef`: la cabecera de la HAL de SPI evalúa `USE_HAL_SPI_REGISTER_CALLBACKS`, que el `stm32h7xx_hal_conf.h` de `prj_01` no definía. Lo defino a `0U` bajo `SPI_DRIVER_SELFTEST` (§5.5).
+
+### 5.3 Pruebas
+
+Las cifras salen de `docs/spi_f3_bench_efb4a3f.txt`:
+
+- Rev `efb4a3f` e id `47f3d7b8ec959318` en host, CM7 y CM4; `tree clean`.
+- Checklist confirmado por Hector antes de la ejecución; flasheo con el script parado, arranque en frío y sin depurador.
+- Protocolo v5; `REV_ID=0x2003`.
+
+Las filas de F0, F1 y F2 dan otra vez PASS en la misma ejecución; aquí solo van las de F3. Todas son de CM7: la HAL de SPI solo está en CPU1.
+
+| ID | Tier | Núcleo | Resultado | Valor medido | Control negativo: valor | Oráculo | Captura |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| T1 | HAL | CM7 | PASS | 33 casos por `spi_hal` en SPI2, SPI4, SPI5 y SPI6, 0 con otro estado. Incluyen: `h == NULL`, `cfg == NULL`, una instancia que no es SPI (USART3) y `h->Instance ≠ cfg->spi` (`ERR_PARAM`); los rechazos de `SPI_BM_CheckConfig` (3 bits, modo 4, `MSSI` con SS por software, umbral fuera de rango, 17 bits en SPI6); `Deinit`, `Wait`, `Transfer`, `StartTransferIt` y `StartTransferDma` con `NULL`, timeout 0, 0 y 65 536 tramas, `tx == NULL`, `rx` en `TX_ONLY`, dirección impar con 16 bits, `StartTransferDma` sin `hdmatx`, sin `hdmarx` con `rx`, y con un DMA de memoria byte para tramas de 16 bits; `SPE = 1` a mano y el handle en `BUSY_TX_RX` (`ERR_BUSY`); `AFCNTR = 1` vigente con otro `CPOL` u otro `SSIOP` (`ERR_BUSY`). Foto de los registros de las cuatro instancias y de los enable de RCC de C1/C2, intacta en los 4 grupos (`0xF`). Tras el rechazo por tamaño de DMA, el handle de SPI5 sigue en `READY` (1) | Un `SPI_HAL_Init(SPI2)` válido cambia la foto (1) | estado esperado escrito a mano por caso | `spi_f3_bench_efb4a3f.txt` |
+| T2 | HAL | CM7 | PASS | SPI2 y SPI3: 40 960 configuraciones cada uno; SPI4, SPI5 y SPI6: 30 720 cada uno. La imagen de `SPI_HAL_Init` difiere de la de `HAL_SPI_Init` crudo en 0 (R3-4: desde la imagen de reset, con un `SPI_InitTypeDef` de `sst_hal_of()`, constantes HAL escritas a mano en la prueba). Frente a `spi_bm`, 0 fuera de la diferencia por diseño (`CR1.SSI` con SS por hardware activo bajo: 16 384 configuraciones en SPI2/3, 12 288 en SPI4/5/6). `CFG1`/`CFG2`/`CR1` de la tabla del RM en 0. 0 estados distintos de OK | La misma comparación con `MASTER` invertido en la foto de `spi_hal` lo detecta (1 de 1 por instancia) | `HAL_SPI_Init` crudo, imagen de `spi_bm` y `sst_t2_expect()` | ídem |
+| T4 | HAL | CM7 (SPI6) + host | PASS | 896 transferencias por J1 a /8 (12,5 MHz), con la matriz de F1. 0 con estado, discrepancia o `Init`/`Deinit` fallido; la más larga, 2 099 373 ciclos, dentro de su `max_cycles`. 65 535 tramas de 8 bits: estado 0, 0 discrepancias. Host: 897 líneas con CRC-32 y cobertura de la semilla, 0 diferencias; cobertura completa en los 7 tamaños | MISO a PB4 con pull-up y pull-down, 4/8/16 bits: RX todo unos / todo ceros por CRC. Discrepancias = las del host (p. ej. 4 bits arriba 233, 8 bits abajo 251) | cable + CRC-32 en el host | ídem |
+| T5(a) | HAL | CM7 (SPI4) + host | PASS | 32 capturas LA a 100 MS/s (tipo `H`): modos 0–3 × {4, 8, 13, 16} × MSB/LSB, SS por hardware, por `SPI_HAL_Transfer` (`HAL_SPI_Transmit`). El host las decodifica contra la semilla: 0 fallidas; SCK en reposo = `CPOL`; SS según su modo | Cada captura decodificada con el `CPHA` contrario y con el orden contrario: las dos encuentran discrepancias en 32 de 32 (p. ej. H0: 26 y 19) | `ad2.spi_decode()` en el host | ídem |
+| T6 | HAL | CM7 (SPI6) | PASS | 8 y 16 bits, {1, FIFO + 1, 1024} tramas, por `SPI_HAL_StartTransferIt` y `SPI_HAL_Wait`, con el handler de la prueba llamando a `HAL_SPI_IRQHandler`: 0 fallidas. IRQ contadas: 3/2/1017 (8 bits) y 3/2/1021 (16 bits). (c) 0 IRQ en los 10 ms tras cada fin, con `SPE = 0`. IRQ después del cierre de la HAL: 1 con 1 trama y 0 con FIFO + 1 y 1024, en los dos anchos, igual al esperado (§5.5, decisión del responsable) | `TXPIE = 1` a mano con `SPE = 0`: 2 IRQ espurias (≥ 1) | ISR de prueba + CRC en el host | ídem |
+| T7(b) | HAL | CM7 | PASS | SPI6 con BDMA canales 0/1 (`dma_hal`, buffers en `.d3_ram`), 8/16 bits, {1, 9, 255, 8192} tramas, por `SPI_HAL_StartTransferDma` (`HAL_SPI_TransmitReceive_DMA`) y `SPI_HAL_Wait`: 0 fallidas | Sin stream de RX (`HAL_SPI_Transmit_DMA`, `COMM` solo TX), 255 tramas: estado 0 y 255 palabras con el centinela (§5.5) | cable | ídem |
+| T7(c) | HAL | CM7 (SPI4) + host | PASS | 2 capturas LA (tipo `Q`, 8 bits × 16 tramas y 16 bits × 11) por `HAL_SPI_Transmit_DMA` con DMA1 stream 0 (`dma_hal`, modo FIFO, §5.5): 0 fallidas en el host | el control de decodificación de T5(a), en la misma captura | `ad2.spi_decode()` | ídem |
+| T14 | HAL | CM7 | PASS | `SPI_HAL_Deinit` deja SPI2..6 (F3_NOPIN), SPI6 (J1_SPI6_HAL) y SPI4 (SPI4_AD2_HAL) iguales a la imagen de reset (`0x00`) y el handle en `RESET`; también tras un `Init` con `keep_pins`. J1 en entrada. S5 pasa con PE11..PE14 en AF5 tras el `Deinit`, y en entrada | Tras `SPI_HAL_Init` y antes del `Deinit`: SPI6 `0x0D`, SPI4 `0x0C` (≠ 0) | reset de RM0399 escrito a mano | ídem |
+| Tick | HAL | CM7 + host | PASS | 12 líneas `TICK` (`HAL_GetTick()`, base de tiempo TIM6, que la prueba no toca) estrictamente crecientes, de 66 038 a 77 645 ms; la última, después de `DONE` | — | host | ídem |
+| Pila (D11) | — | CM7 | — | `Status_Task stack high-water mark 640 words` libres de 1024 (requisito: ≥ 128) | — | `uxTaskGetStackHighWaterMark` | ídem |
+| Sin Digital Out | — | host | PASS | Enable releído en las 19 fronteras de paso: `0x0000` en todas | — | `FDwfDigitalOutEnableGet` | ídem |
+| Veredicto | — | CM7 + host | PASS | `bench completed without abort`; CM4 `timeout 0, aborts 0`; `FW VERDICT=PASS failures=0`; 45/45; `HOST VERDICT=PASS` | — | — | ídem |
+
+**El oráculo de las pruebas HAL.** La configuración HAL de la imagen cruda de T2 sale de `sst_hal_of()` (`CM7/App/Src/spi_selftest.c`), con las constantes HAL escritas a mano en la prueba, no de `fill_init()` de `spi_hal.c`. El selftest no define `HAL_SPI_MspInit`: la HAL llama a su versión débil, vacía, y ningún pin cambia en `HAL_SPI_Init`.
+
+### 5.4 Medidas (B1)
+
+De `docs/spi_f3_bench_efb4a3f.txt`, SPI6 en CM7 con los pines de J1 en AF. `Init` y `Transfer` se miden con `PRIMASK` puesto. `Transfer` es 1 trama a /2, solo TX. Las tres columnas salen de la misma imagen y la misma ejecución.
+
+| Función | BM, CM7 (400 MHz) | LL, CM7 | HAL, CM7 |
+| --- | --- | --- | --- |
+| `Init` | 489 ciclos | 892 | 1533 |
+| `Transfer` de 1 trama | 1464 | 2005 | 2181 |
+| Por IRQ (T6): `TransferIrq` o `HAL_SPI_IRQHandler` | mín. 362, máx. 852 | mín. 522, máx. 977 | mín. 202, máx. 989 |
+
+- `SPI_HAL_Init` incluye el `SPI_BM_Deinit` previo (§5.5) y la llamada a `HAL_SPI_Init`, que llama a la MSP débil.
+- El mínimo por IRQ de la HAL (202) es menor que los de BM y LL. No he medido qué llamada lo da. La HAL tampoco sirve cada trama con una IRQ: con FIFO + 1 tramas hay 2 IRQ en total, y lo que queda en RX lo vacía el `EOT` (l. 3006-3034 de `stm32h7xx_hal_spi.c`).
+- Las cifras de BM y LL no son las de F2: la imagen cambió.
+- `CalcPrescaler`, el peor de T3: 97 ciclos.
+
+### 5.5 Desviaciones del plan
+
+| Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- |
+| Regla 3 / R2-1: `SSI` antes de `CFG2` en el `Init` | `SPI_HAL_Init` llama primero a `SPI_BM_Deinit`, pone el handle en `RESET` y luego llama a `HAL_SPI_Init`. Desde la imagen de reset, el orden propio de la HAL (`SSI`, l. 375-381, antes de `CFG2`, l. 398) cumple R2-1, y la HAL encuentra `CRCSIZE = 00111` (ES0445 2.22.4), que conserva con `USE_SPI_CRC = 0` (l. 367) | Sin el `Deinit`, un `Init` sobre una imagen previa haría que la HAL escribiera `CFG2` sobre un `SSI` anterior | Sí: el responsable eligió "SPI_BM_Deinit first" el 2026-10-04, antes de escribir `spi_hal.c` |
+| ES0445 2.22.3 (`SPE` a 0 sin una IRQ después) en el camino IT | La HAL queda como es. `HAL_SPI_TransmitReceive_IT` llena la FIFO (l. 1926) antes de poner `DXPIE` (l. 1963); si caben todas las tramas, `TXTF` llegó antes y `DXPIE` sigue a 1 (RM0399 53.11.5), y `SPI_CloseTransfer` borra `SPE` (l. 3945) antes que `IER` (l. 3948): una IRQ después del cierre, con `h->State = READY`. Documentado en `spi_hal.h`; T6 cuenta esas IRQ y espera 1 en ese caso | Corregirlo exigiría apartarse de la secuencia de la HAL | Sí: el responsable eligió "Keep HAL, document" el 2026-10-04 |
+| T6(c) | En CM7, T6 cuenta además, en los tres tiers, toda IRQ que llega después del cierre (la rama espuria del handler de la prueba), contra un esperado: 0, salvo la HAL con todas las tramas dentro de la FIFO (1). El host lo comprueba en las líneas `post=`/`exp=`. BM y LL dan 0 | El contador de "10 ms tras el fin" empezaba después de `SPI_HAL_Wait`, y la IRQ de arriba llegaba antes: la prueba no la veía (ejecuciones de desarrollo) | Como consecuencia de la decisión anterior; el cambio de la prueba no lo consulté |
+| T7(b), control: `RXDMAEN = 0` → `ERR_OVERRUN` | Con la HAL el control es `rx == NULL` (`HAL_SPI_Transmit_DMA`, sin stream de RX, `COMM` solo TX): estado 0 y las 255 palabras con el centinela | La API de la HAL no deja `RXDMAEN = 0` con un stream de RX enlazado; el control comprueba igual que sin la petición de RX no llega nada | No consultado |
+| T7(c) con DMA1 stream 0 | Por `dma_hal` en modo FIFO (umbral `FULL`, ráfagas simples), no en modo directo | `DMA_HAL_Init` de 02_dma (`dma_hal.c:183-186`) compara `DMA_PDATAALIGN_*` (bits 12:11) con `DMA_MDATAALIGN_*` (bits 14:13) en modo directo, y rechaza todo tamaño por encima de byte aunque `PSIZE = MSIZE` (ejecución de desarrollo 2, `CAPH k33 ... dinit=1`). No toco 02_dma (§2.2) | No consultado; está propuesto como tarea aparte para 02_dma |
+| Contrato: read-back tras cada llamada a la HAL | El read-back del cierre acepta `IER.TSERFIE = 1`, y solo ese bit | Lo enciende la HAL en sus arranques IT (l. 1743, 1837, 1964) y su cierre no lo borra (máscara de l. 3948). Es lo que escribe la HAL, no una desviación de ella. `TSERF` solo lo pone una recarga de `TSER`, que `spi_hal` no programa; `SPI_HAL_Deinit` lo borra | No consultado |
+| Contrato: validar antes de la HAL (C6) | `SPI_HAL_StartTransferDma` rechaza con `ERR_PARAM` un handle de DMA cuyo tamaño de memoria no cabe en la trama (la regla de la HAL, l. 2157, 2304, 2447) | La HAL lo rechaza después de poner `h->State` en ocupado, y lo deja así (l. 2157-2163): el handle no aceptaría otra llamada sin otro `Init` | No consultado; es una comprobación dentro de una función del contrato, no una función nueva |
+| `SPI_HAL_Transfer`/`StartTransferIt`/`StartTransferDma` | Con `rx == NULL` usan `HAL_SPI_Transmit*`, que pone `CFG2.COMM` en solo TX (`SPI_2LINES_TX`, l. 872, 1730, 2153) aunque la configuración sea full duplex; la siguiente transferencia con `rx` lo vuelve a poner (`SPI_2LINES`, l. 1398, 1918, 2441). El read-back comprueba ese `COMM` | Es lo que hace la HAL con un solo buffer | No consultado; documentado en `spi_hal.h` |
+| Encargo de F3: `HAL_SPI_MODULE_ENABLED` y su `#include` bajo `SPI_DRIVER_SELFTEST` | Además, `USE_HAL_SPI_REGISTER_CALLBACKS 0U` bajo la misma guarda (`b9b6237`) | La cabecera de la HAL de SPI lo evalúa en `#if`, y con `-Wundef` daba avisos | No consultado |
+| — | Líneas de diagnóstico `T6H` (IER, CR1, IRQ espurias y `ErrorCode` tras `SPI_HAL_Wait`) y `CAPH` (estado del handle de SPI y del de DMA tras una captura de DMA con la HAL). El host no las usa | Localizaron los dos fallos de desarrollo; las dejo como registro | — |
+
+**Diferencias por diseño de la imagen HAL frente a `spi_bm` (T2, R3-4).** Solo una: `CR1.SSI` con SS por hardware activo bajo. `spi_bm` escribe `SSI` inactivo con cualquier modo de SS; la HAL solo pone `SSI` con SS por software, maestro y polaridad baja (`stm32h7xx_hal_spi.c` l. 375-381, `SET_BIT` en l. 380). Con `SSM = 0`, `SSI` no actúa. Ningún otro bit de `CR1`, `CR2`, `CFG1`, `CFG2`, `IER`, `CRCPOLY`, `UDRDR` o `I2SCFGR` difiere en las 174 080 configuraciones.
+
+### 5.6 Respuesta a la auditoría
+
+La de F2 está arriba, en su propia sección. De F3 todavía no hay auditoría.
+
+### 5.7 Erratas del plan encontradas
+
+- **T7(b), control con la HAL:** el plan pide `RXDMAEN = 0` con `ERR_OVERRUN`, que la API de la HAL no permite producir (§5.5).
+
+### 5.8 Problemas abiertos y no ejercitado
+
+- **Dos fallos encontrados en las ejecuciones de desarrollo**, los dos corregidos en `3c23568`:
+  - **T6 HAL con `ERR_VERIFY`** (`spi_dev_f3_bench_dbab128-dirty.txt`): 4 de 6 casos, con los datos bien (0 discrepancias). Mi read-back del cierre esperaba `IER = 0`, y la HAL deja `TSERFIE` (`T6H ... ier=00000400` en `_2.txt`). Con 1 trama pasaba solo porque la IRQ posterior al cierre caía en la rama espuria del handler de la prueba, que pone `IER = 0` (`spurious=1`, `ier=00000000`).
+  - **T7(c) HAL con `ERR_HAL`** (`_dirty.txt`, `_2.txt`): la segunda captura (16 bits). `DMA_HAL_Init` falló por el defecto de 02_dma (§5.5); el handle de DMA conservaba el tamaño byte de la captura anterior, y `HAL_SPI_Transmit_DMA` lo rechazó dejando el handle de SPI en `BUSY_TX` (`CAPH k33 ... hstate=3`).
+- **Defecto en otro driver:** `DMA_HAL_Init` de 02_dma rechaza el modo directo con tamaños de media palabra o palabra en DMA1/DMA2 (§5.5). No lo toco; queda propuesto como tarea aparte.
+- **Limitaciones de la HAL, documentadas en `spi_hal.h` (para el README):**
+  - ES0445 2.22.5: `SPI_CloseTransfer` borra `SPE` justo tras `EOT`, sin guarda (decisión 5 del plan: no hay `guard_cycles` en este tier);
+  - ES0445 2.22.3 en el camino IT con todas las tramas en la FIFO (§5.5);
+  - `HAL_SPI_Init` escribe `CFG2` (l. 398) y después `AFCNTR` (l. 474): un `Init` con `keep_pins` suelta los pines unos ciclos;
+  - el camino de error del `IRQHandler` borra `SPE` (l. 3121) antes que las IRQ (l. 3124); no ejercitado;
+  - `IER.TSERFIE` queda a 1 tras una transferencia IT.
+- **No ejercitado en F3:**
+  - `SPI_HAL_StartTransferIt` sin `rx` (`HAL_SPI_Transmit_IT`) y por IT en SPI4;
+  - los estados `ERR_MODF`, `ERR_OVERRUN`, `ERR_TIMEOUT` y `ERR_VERIFY` de `spi_hal` en la placa (el `ERR_VERIFY` de desarrollo era un defecto, ya corregido);
+  - T5(b)–(g), T8, T9, T11, T12 y T13 con la HAL (el plan no los pide en F3);
+  - la HAL en CM4 (no habilitada, por el encargo).
+- **B1 de la HAL:** medido solo en Debug (`-Og`).
+- **Lo que sigue de F1:** sin transferencias que terminen en SPI2, SPI3 y SPI5 (R3-3); solo silicio rev V.
+
+### Líneas de `stm32h7xx_hal_spi.c` en las que se apoya `spi_hal`
+
+Fuente del Cube con el que compila `prj_01` (`CUBE_DIR` → `02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7`, `STM32H7xx_HAL_Driver` en `e3c518e`).
+
+| Línea | Qué hace la HAL | Uso en `spi_hal` |
+| --- | --- | --- |
+| 356 | `HAL_SPI_MspInit` con `State = RESET` | sin MSP propia: la débil, vacía |
+| 363 | `SPE` a 0 | — |
+| 367 | conserva `CRCSIZE` con `USE_SPI_CRC = 0` | read-back de `CFG1` con `CRCSIZE = 00111` |
+| 375-381 (`SET_BIT` en 380) | `SSI` solo con SS por software, maestro, polaridad baja | read-back de `CR1`; la diferencia por diseño de T2 |
+| 386 | `MASRX` | — |
+| 394 / 398 | `CFG1` y `CFG2` con `WRITE_REG` | read-back |
+| 467 | borra `I2SMOD` | — |
+| 474 | `AFCNTR` con `MODIFY_REG`, después de `CFG2` | read-back; limitación de `keep_pins` |
+| 872, 1730, 2153 / 1398, 1918, 2441 | `SPI_2LINES_TX` / `SPI_2LINES` | read-back de `COMM` |
+| 1743, 1837, 1964 | los arranques IT encienden `TSERFIE` | read-back del cierre |
+| 1926, 1963 | el llenado de la FIFO, y después `DXPIE` | IRQ tras el cierre (2.22.3) |
+| 2157, 2304, 2447 | tamaño de memoria del DMA frente al de trama | comprobado antes, `ERR_PARAM` |
+| 3006-3034 | el `EOT` vacía lo que queda en RX | — |
+| 3121 / 3124 | camino de error: `SPE` antes que las IRQ | limitación, no ejercitada |
+| 3937, 3945, 3948 | `SPI_CloseTransfer`: `SPE`, después `IER` (sin `TSERFIE`) | read-back del cierre; 2.22.3 y 2.22.5 |
