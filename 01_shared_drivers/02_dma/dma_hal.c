@@ -179,9 +179,12 @@ HAL_StatusTypeDef DMA_HAL_Init(DMA_HandleTypeDef *hdma, const DmaHal_Config_t *c
         }
         else
         {
-            /* Direct mode requires MSIZE == PSIZE (A6) */
-            if ((fifo_mode == DMA_FIFOMODE_DISABLE) &&
-                (cfg->periph_align != cfg->mem_align))
+            /* Direct mode requires MSIZE == PSIZE (A6). PSIZE is CR[12:11] and
+             * MSIZE is CR[14:13], so DMA_PDATAALIGN_x and DMA_MDATAALIGN_x
+             * differ for every size but BYTE: compare the field values. */
+            uint32_t psize = cfg->periph_align >> DMA_SxCR_PSIZE_Pos;
+            uint32_t msize = cfg->mem_align >> DMA_SxCR_MSIZE_Pos;
+            if ((fifo_mode == DMA_FIFOMODE_DISABLE) && (psize != msize))
             {
                 return HAL_ERROR;
             }
