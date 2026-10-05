@@ -449,11 +449,13 @@ Then restore the production image with `--preset release`, and check T12 with
   D3 peripheral: SPI6 through `dma_hal` (channels 0/1, requests 11/12, buffers
   in `.d3_ram`, up to 8192 frames; `06_spi/README.md` §9, T7(b)).
 
-**Known defect (N3, found by `06_spi`).** In direct mode, `DMA_HAL_Init`
-(`dma_hal.c:183-186`) compares `periph_align` (`DMA_PDATAALIGN_*`, bits 12:11)
-with `mem_align` (`DMA_MDATAALIGN_*`, bits 14:13), so it refuses direct mode
-with half-words or words even when `PSIZE = MSIZE`. Use FIFO mode for those
-sizes on DMA1/DMA2 until it is fixed; the BDMA path does not run this check.
+**Defect N3 (found by `06_spi`), fixed in `57b1bf7`.** Before that commit, in
+direct mode `DMA_HAL_Init` compared `periph_align` (`DMA_PDATAALIGN_*`, bits
+12:11) with `mem_align` (`DMA_MDATAALIGN_*`, bits 14:13), so it refused direct
+mode with half-words or words even when `PSIZE = MSIZE`. It now compares the
+field values, as `dma_ll.c` does, and T13 covers it, with negative controls NC1
+and NC2. A build older than `57b1bf7` still needs FIFO mode for those sizes on
+DMA1/DMA2. The BDMA path never ran this check.
 
 **Flash budget.** `dma_bm` linked into the `prj_04` CM4 release image takes
 1 596 B (1 588 B `.text` + 8 B `.rodata`, measured from the `.map`). The first
@@ -540,7 +542,7 @@ changing it:
 | Hardening, `dma_mem_bm.h`, `dma_ll`, `dma_hal`, selftest | `b508e82` … `40105eb` |
 | Audit fixes: NDTR in PSIZE units, NDT ≤ 65535 in HAL, Table 115, TRBUFF check, errata text | `52897a1` … `4c8d6fa`, closed at `f3ab055` |
 | Iteration 2: `…Ex` IRQn and DBM APIs, peripheral burst rule, independent T1 oracle, backup SRAM for BDMA | `4922386` … `fd7b7b0` |
-| `DMA_HAL_Init` refused HALFWORD and WORD direct mode: it compared the raw `DMA_PDATAALIGN_x` and `DMA_MDATAALIGN_x` constants, which coincide only for BYTE. Found by the 06_spi F3 selftest. Fix and T13 | `57b1bf7`, `dd65b06` |
+| `DMA_HAL_Init` refused HALFWORD and WORD direct mode: it compared the raw `DMA_PDATAALIGN_x` and `DMA_MDATAALIGN_x` constants, which coincide only for BYTE. Found by the 06_spi F3 selftest (N3). Fix and T13 | `57b1bf7`, `dd65b06` |
 
 The implementation plans, the audit record and the iteration reports were
 removed from this folder once their content was folded into this README. They
