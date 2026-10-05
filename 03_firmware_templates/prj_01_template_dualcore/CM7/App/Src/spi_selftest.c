@@ -4676,6 +4676,35 @@ static void t7b_hal(void)
             (unsigned long)left);
 }
 
+/* m4 (F3 audit): SPI_HAL_Wait has an exit when HAL_GetTick() stops. The handle says busy
+   while SPI2 is at rest, so the wait can only end by its bounds: with PRIMASK set the
+   tick (TIM6) is frozen and the stall bound ends it; the control, with the tick running,
+   ends by timeout_ms. */
+static void f3_m4(void)
+{
+    const SpiBm_Config_t c = mkcfg(SPI2, 7U, 0U, 8U, false, SPI_BM_DIR_FULL_DUPLEX, 1U);
+    s_h2.Instance = SPI2;
+    const SpiBm_Status_t si = SPI_HAL_Init(&s_h2, &c);
+    s_h2.State = HAL_SPI_STATE_BUSY_TX_RX;
+    __disable_irq();
+    const uint32_t tk0 = HAL_GetTick();
+    const uint32_t c0 = DWT->CYCCNT;
+    const SpiBm_Status_t w = SPI_HAL_Wait(&s_h2, 10U);
+    const uint32_t cyc = DWT->CYCCNT - c0;
+    const uint32_t tk1 = HAL_GetTick();
+    __enable_irq();
+    const uint32_t t1 = HAL_GetTick();
+    const SpiBm_Status_t wc = SPI_HAL_Wait(&s_h2, 10U);
+    const uint32_t dt = HAL_GetTick() - t1;
+    s_h2.State = HAL_SPI_STATE_READY;
+    const SpiBm_Status_t sd = SPI_HAL_Deinit(&s_h2);
+    verdict((si == SPI_BM_OK) && (w == SPI_BM_ERR_TIMEOUT) && (tk1 == tk0) && (wc == SPI_BM_ERR_TIMEOUT) &&
+            (dt >= 10U) && (sd == SPI_BM_OK),
+            "m4 SPI_HAL_Wait(10 ms) with PRIMASK set: status %u (6), HAL_GetTick() unchanged %u, %lu cycles; "
+            "control, tick running: status %u (6) after %lu ms (>= 10)", (unsigned)w, (unsigned)(tk1 == tk0),
+            (unsigned long)cyc, (unsigned)wc, (unsigned long)dt);
+}
+
 /* ---- The F3 steps ------------------------------------------------------------------------ */
 
 static void step_f3_nopin(void)
@@ -4686,6 +4715,7 @@ static void step_f3_nopin(void)
     }
     tick_line("F3_NOPIN start");
     f3_t1();
+    f3_m4();
     t2hal_inst(SPI2, "SPI2");
     tick_line("F3_NOPIN T2 SPI2");
     t2hal_inst(SPI3, "SPI3");
