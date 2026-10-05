@@ -909,3 +909,25 @@ Comprobado en `docs/spi_f3_bench_8b5d165.txt` (árbol limpio, checklist confirma
 N3 (el defecto de `DMA_HAL_Init` en `02_dma`) no se toca aquí; el README lo recoge como nota para quien use DMA1/DMA2.
 
 El README de cierre (`06_spi/README.md`) y la línea de `06_spi` en `01_shared_drivers/README.md` van en el commit que añade esta sección. Sus ejemplos se compilaron sueltos, tal como están en el README, con `-std=gnu11 -O2 -Wall -Wextra -Wpedantic -Wconversion -Werror` (A para CM4; B y C para CM7 con `SPI_DRIVER_SELFTEST`, que habilita `HAL_SPI_MODULE_ENABLED`): exit 0 los tres. Esa compilación no está en una captura.
+
+## Respuesta a la auditoría de cierre, parte 1 (`7f168f0`, `6c66ac8`)
+
+Solo cambia `06_spi/README.md`, que sigue en 600 líneas. Los tres ejemplos no cambian (comprobado: el texto de cada bloque es el mismo que compilé para `575ace9`). Sin ejecución nueva en la placa: las cifras siguen saliendo de `docs/spi_f3_bench_8b5d165.txt`, salvo m5, que cita las otras siete ejecuciones limpias.
+
+| ID | Qué pedía | Qué hice | Estado |
+| --- | --- | --- | --- |
+| M3 | §10.2: `WaitEnd` no deshabilita el SPI | `Transfer` deja `IER = 0` y `SPE = 0` tras `ERR_TIMEOUT`; `WaitEnd` devuelve `ERR_TIMEOUT` con el SPI habilitado: el llamador para sus streams y después llama a `DmaEnd` (`spi_bm.c:976-978`). La evidencia de T15 es solo de `Transfer` | corregido en `0f10fd6`, pendiente de verificación |
+| M4 | §3: `SPI_BM_NSS_HW_PULSE` con `midi` ≥ 1 | `midi` ≥ 2 (RM0399 53:3470, "MIDI[3:0]>1"; 53:615-616); el driver no lo comprueba; T5(c) usa 2 | corregido en `0f10fd6`, pendiente de verificación |
+| M5 | §6.3 y §8: MCO1 como referencia de todo T5 | MCO1 es la referencia de T5(g) solo, en el paso `SPI4_AD2`, el único que escribe `RCC_CFGR`; T5(d) y T12(b) cuentan en periodos de SCK medidos en la misma captura (R3-5). Cambiados §6.3, el diagrama, la tabla de líneas y "Never touched" | corregido en `0f10fd6`, pendiente de verificación |
+| M6 | §9.5: omisiones frente al informe | Añadidos: `TransferIrq` de BM y LL con `MODF`/`OVR`; el camino de C13 con `CYCCNT` sin contar o parado en `Transfer`, `WaitEnd` y `TransferStartIt`; `keep_pins` solo en SPI4 con `CPOL = 0`; 65 535 tramas solo en SPI6, 8 bits, por sondeo (también en la fila T4); el `ERR_TIMEOUT` de `SPI_HAL_Transfer` | corregido en `0f10fd6`, pendiente de verificación |
+| m5 | Control de T12(b) | §6.2 y la fila T12: 156 muestras en `8b5d165`, no reproducido; reproducido (1–2 muestras) en 5 de las 8 ejecuciones limpias. Comprobado en las capturas: 1 en `b4fa22d`, `73c1b76` y `b267f4c`; 2 en `4142921` y `c41040a`; 156 en `99fe89b` y `8b5d165`; 146 en `efb4a3f` | corregido en `fc5ec16`, pendiente de verificación |
+| m6 | "builds empty" en CM4 | "not built on CM4 in `prj_01`" (`CM4/CMakeLists.txt` no enlaza `_spi_hal`) | corregido en `fc5ec16`, pendiente de verificación |
+| m7 | `SPI_LL_CheckConfig` | En la matriz de funciones | corregido en `fc5ec16`, pendiente de verificación |
+| m8 | Estado del handle en `SPI_HAL_Init` | `SPI_HAL_Init` no lo comprueba: lo pone a RESET tras `SPI_BM_Deinit`; solo las transferencias exigen `READY` | corregido en `fc5ec16`, pendiente de verificación |
+| m9 | Fin de `WaitEnd` | `EOT` (con `ERR_OVERRUN` si `OVR`), `MODF` o tiempo; `OVR` solo no la termina (§2.2 y §3) | corregido en `fc5ec16`, pendiente de verificación |
+| m10 | "Every test prints its negative control" | "Every test that has a negative control prints it" (§9 y §12) | corregido en `fc5ec16`, pendiente de verificación |
+| m11 | J1 en más pruebas | T9, T11(b), T12(a) y B1 en el diagrama y la fila J1-A | corregido en `fc5ec16`, pendiente de verificación |
+| m12 | CS del ejemplo A | Dicho en §7: PD14 no es una línea del banco ni lo usa `prj_01` (`git grep` en `prj_01`: solo PD8/PD9, la consola) | corregido en `fc5ec16`, pendiente de verificación |
+| m13 | Documentos de proceso | La forma de `03_tim/README.md`: `git show $(git log -1 --format=%h --diff-filter=D -- <ruta>)^:<ruta>` | corregido en `fc5ec16`, pendiente de verificación |
+
+Notas, también en `fc5ec16`: `spi_f1_bench_4142921.txt` sustituye a `c41040a`; `dbab128-dirty_3` (45/45) ya no figura como ejecución fallida; "F0 audit finding B1" frente a "B1 of the plan" (§9.4); `git diff main` "after the merge"; "more than 1000" lecturas iguales de `CYCCNT`.
