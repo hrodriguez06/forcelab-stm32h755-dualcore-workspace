@@ -249,6 +249,7 @@ static const Claim_t k_claims[IST_M4_CLAIM_CASES] = {
     { GPIOB, B8 | (1U << 7), A, 4U, OD, NP },   /* 18 PB8 with PB7 (I2C1_SDA elsewhere)        */
     { GPIOB, B8, I, 0U, OD, NP },               /* 19 control: plain input                     */
 };
+_Static_assert(IST_M4_CLAIM_CASES <= 32U, "k_claims: more cases than result bits (audit F0, m10)");
 #undef I
 #undef O
 #undef A

@@ -320,7 +320,13 @@ static void bench_abort(const char *reason)
         s_fail++;
     }
     bench_safe();
+    /* The step is withdrawn too (audit F0, m9): CPU2 judges its claims against
+       the published step, so after an abort it may claim nothing until DONE. */
+    const uint32_t was = s_step;
+    publish_step(IST_STEP_NONE);
+    s_step = was;                       /* kept for the ABORT line below only */
     LOG("ABORT step=%s reason=%s", (s_step < k_ist_step_count) ? k_ist_steps[s_step].name : "-", reason);
+    s_step = IST_STEP_NONE;
 }
 
 /* ---- S4 + S15 + S16: the claim --------------------------------------------------------- */
@@ -618,7 +624,7 @@ static uint32_t run_claims(const Claim_t *c, uint32_t n)
 static const Claim_t k_t0b_refuse[] = {
     { GPIOB, B8, A, 6U, OD, NP },      { GPIOB, B9, A, 6U, OD, NP },      /* AF6, but the bus is CPU2's (S16) */
     { GPIOB, B8 | B9, A, 6U, OD, NP }, { GPIOB, B8, A, 4U, OD, NP },      /* both; CPU2's AF4 on CPU1         */
-    { GPIOB, B8, O, 0U, OD, NP },      { GPIOB, B9, O, 0U, PP, NP },      /* GPIO OD (od_out 0); push-pull    */
+    { GPIOB, B8, O, 0U, OD, NP },      { GPIOB, B9, O, 0U, PP, NP },      /* GPIO OD: CPU2's step; push-pull */
     { GPIOB, B8, I, 0U, OD, PU },      { GPIOB, B9, I, 0U, OD, PD },      /* inputs with a pull (S15)         */
     { GPIOF, F14, A, 4U, OD, NP },     { GPIOF, F15, A, 4U, OD, NP },     /* I2C4 on the taps (S15)           */
     { GPIOF, F14, O, 0U, PP, NP },     { GPIOF, F15, I, 0U, OD, PU },     /* tap output; tap pull (S15)       */
@@ -653,6 +659,10 @@ static const Claim_t k_cm7_claims[] = {
     { GPIOF, F15, O, 0U, OD, NP },     { GPIOB, B8, I, 0U, OD, NP },      /* 13 tap output; 14 plain input    */
 };
 #define CM7_CLAIMS_EXPECT   0x00004007UL
+/* Each table's result is a uint32_t, bit k = case k (audit F0, m10). */
+_Static_assert(NCASES(k_t0b_refuse) <= 32U, "k_t0b_refuse: more cases than result bits");
+_Static_assert(NCASES(k_t0b_accept) <= 32U, "k_t0b_accept: more cases than result bits");
+_Static_assert(NCASES(k_cm7_claims) <= 32U, "k_cm7_claims: more cases than result bits");
 #undef I
 #undef O
 #undef A
@@ -1035,10 +1045,24 @@ static void step_t0b(void)
             "(0x3: released)", (unsigned long)p->claim_ok, (unsigned long)p->moder, (unsigned long)p->otyper,
             (unsigned long)p->pupdr, (unsigned long)p->afr, (unsigned long)p->i2c_cr1,
             (unsigned long)((p->i2c_isr & I2C_ISR_BUSY) != 0U), (unsigned long)p->idr, (unsigned long)(lv & 3U));
-    /* While CPU2 has the pins in AF4, CPU1's own AF6 claim must still be refused. */
+    /* While CPU2 has the pins in AF4: CPU1's AF6 claim is refused by the step's
+       owner rule (ist_line_rule(), the bus is CPU2's in T0B), which a claim
+       meets before it reads the pins (audit F0, m8). The pin half of S16 is
+       then tried on the LIVE registers, PB8/PB9 really in AF4: ist_s16_pins_ok()
+       must refuse AF6 on its own, and accept AF4 (the control). */
     const bool cm7_refused = !bench_claim(GPIOB, IST_BUS_MASK, GPIO_BM_MODE_AF, IST_AF_I2C4, GPIO_BM_OTYPE_OD,
                                           GPIO_BM_PULL_NONE);
-    verdict(cm7_refused, "T0B CM7 claim of PB8/PB9 AF6 while CM4 holds them in AF4: refused %u", (unsigned)cm7_refused);
+    const bool rule_refused = !ist_line_rule(0U, s_step, GPIOB, IST_PIN_SCL, GPIO_BM_MODE_AF, IST_AF_I2C4,
+                                             GPIO_BM_OTYPE_OD, GPIO_BM_PULL_NONE);
+    verdict(cm7_refused && rule_refused, "T0B CM7 claim of PB8/PB9 AF6 in step T0B (bus = CM4): refused %u, by the "
+            "step-owner rule (ist_line_rule refuses %u)", (unsigned)cm7_refused, (unsigned)rule_refused);
+    const uint32_t live_moder = GPIOB->MODER;
+    const uint32_t live_afrh  = GPIOB->AFR[1];
+    const bool pins_af6 = ist_s16_pins_ok(live_moder, live_afrh, IST_AF_I2C4);
+    const bool pins_af4 = ist_s16_pins_ok(live_moder, live_afrh, IST_AF_I2C1);
+    verdict(!pins_af6 && pins_af4, "T0B S16 pin check on the live GPIOB registers (PB8/PB9 in AF4 by CM4, MODER "
+            "0x%08lX AFRH 0x%08lX): AF6 refused %u, AF4 accepted %u (the control)", (unsigned long)live_moder,
+            (unsigned long)live_afrh, (unsigned)!pins_af6, (unsigned)pins_af4);
     LOG("T0B levels with CM4 AF4 pb8=%lu pb9=%lu", (unsigned long)(lv & 1U), (unsigned long)((lv >> 1) & 1U));
     const bool host_ok = sync0();        /* host: bus levels (S17) with the pins in AF4 at PE = 0 */
 
