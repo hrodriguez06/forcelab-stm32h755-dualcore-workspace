@@ -618,8 +618,20 @@ static void xfer_close(I2C_TypeDef *i2c, uint32_t icr)
     __DSB();
 }
 
-/* After NACKF or TIMEOUT the hardware sends the STOP itself (50:1192-1194,
-   2276-2278): waited for within the budget. False if it did not come. */
+/* TIMEOUT in master mode (SCL low longer than TIMEOUTA, 50:1793-1800): RM0399 says
+   the hardware then sends a STOP (50:2276-2278), but on the bench (05_i2c F1,
+   docs/i2c_dev_f1_bench_notaps_*) the master went on holding SCL and SDA low after
+   the other device had let SCL go, until the caller's budget ran out. So the
+   instance is software-reset at once (PE = 0 lets go of both lines, rule 6) and the
+   flags cleared; the caller gets ERR_BUS. */
+static void timeout_end(I2C_TypeDef *i2c)
+{
+    soft_reset(i2c);
+    xfer_close(i2c, ICR_ALL);
+}
+
+/* After NACKF the hardware sends the STOP itself (50:1192-1194): waited for within
+   the budget. False if it did not come. */
 static bool wait_stop(I2C_TypeDef *i2c, Clock_t *c)
 {
     while ((i2c->ISR & I2C_ISR_STOPF) == 0U)
@@ -677,12 +689,7 @@ static I2cBm_Status_t xfer_poll(I2C_TypeDef *i2c, uint32_t addr7, const uint8_t 
         }
         if ((isr & I2C_ISR_TIMEOUT) != 0U)
         {
-            /* SCL held low beyond TIMEOUTA: the hardware sends a STOP. */
-            if (!wait_stop(i2c, &c))
-            {
-                soft_reset(i2c);
-            }
-            xfer_close(i2c, ICR_ALL);
+            timeout_end(i2c);
             return I2C_BM_ERR_BUS;
         }
         if ((isr & I2C_ISR_NACKF) != 0U)
@@ -901,7 +908,10 @@ bool I2C_BM_XferIrq(I2C_TypeDef *i2c, I2cBm_Xfer_t *x)
     }
     if ((isr & I2C_ISR_TIMEOUT) != 0U)
     {
-        return it_finish(i2c, x, I2C_BM_ERR_BUS);   /* the hardware sends the STOP */
+        cr1_update(i2c, CR1_IE_ALL, 0U);
+        timeout_end(i2c);                           /* software reset: both lines let go */
+        x->status = I2C_BM_ERR_BUS;
+        return true;
     }
     /* NACKF. done_tx counted the bytes written to TXDR; the one in the shift
        register was not acknowledged, and one more may wait unsent in TXDR (TXE = 0:
@@ -1056,10 +1066,7 @@ I2cBm_Status_t I2C_BM_WaitEnd(I2C_TypeDef *i2c, uint32_t n, uint32_t max_cycles)
         }
         if ((isr & I2C_ISR_TIMEOUT) != 0U)
         {
-            if (!wait_stop(i2c, &c))
-            {
-                soft_reset(i2c);
-            }
+            soft_reset(i2c);                        /* as timeout_end(); DmaEnd clears the flags */
             return I2C_BM_ERR_BUS;
         }
         if ((isr & I2C_ISR_NACKF) != 0U)
