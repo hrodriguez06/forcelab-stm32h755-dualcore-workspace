@@ -82,6 +82,7 @@ import threading
 import time
 import zlib
 from ctypes import wintypes
+from collections import Counter
 from typing import Callable, Optional
 
 PROJECT = pathlib.Path(__file__).resolve().parents[1]
@@ -230,7 +231,7 @@ def s15_report_ok(line: str) -> tuple[bool, str]:
             continue
         elif not (moder == 2 and otyper == 1 and afr == 4):
             bad.append(f"{name} MODER={moder} OTYPER={otyper} AFR={afr}")
-    if "s15=ok" not in line:
+    if not re.search(r"(?<!\S)s15=ok(?!\S)", line):
         bad.append("no s15=ok")
     return not bad, ", ".join(bad) if bad else "ok"
 
@@ -248,6 +249,8 @@ def t0b_s15_selftest(log: Callable[[str], None]) -> bool:
         ("PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok", False, "PB9 missing"),
         ("PB8 MODER=2 OTYPER=0 PUPDR=0 AFR=4 " + ok_af, False, "PB8 twice, a bad copy first (m14)"),
         (ok_af.replace("PB9 MODER", "XPB9 MODER"), False, "PB9 only inside another word (m14)"),
+        (ok_af.replace(" s15=ok", " s15=okx"), False, "s15=okx is not s15=ok (O13)"),
+        (ok_af.replace(" s15=ok", " xs15=ok"), False, "xs15=ok is not s15=ok (O13)"),
     ]
     ok = True
     for text, want, why in cases:
@@ -809,6 +812,39 @@ def timingr_rm_problems(k: int, f: int, tr: int, tf: int, af: bool, dnf: int, t:
     return bad
 
 
+T3_RX = re.compile(r"\[i2c\] T3 (\d+) (\d+) (\d+) (\d+) (\d+) (\d) (\d+) (\d+) ([0-9A-F]+) (\d+) (\d+)")
+
+
+def t3_judge(lines: list[str], alter: bool = False) -> dict:
+    """T3: every vector the firmware printed against calc_timing() and every OK
+    TIMINGR against RM0399. With alter, the host's expected TIMINGR of every OK
+    vector is changed (SCLL + 1) before the same comparison: the control of the
+    plan, which must then find every OK vector different (audit F1, m23)."""
+    r = {"n": 0, "bad": 0, "rm_bad": 0, "ok_n": 0, "first": "", "first_rm": ""}
+    for t in lines:
+        m = T3_RX.search(t)
+        if not m:
+            continue
+        i, k, f, tr, tf, af, dnf, st = (int(m.group(j)) for j in range(1, 9))
+        tim, mode, model = int(m.group(9), 16), int(m.group(10)), int(m.group(11))
+        r["n"] += 1
+        want = list(calc_timing(k, f, tr, tf, bool(af), dnf))
+        if want[0] != ST_OK:
+            want[1:] = [0, 0, 0]
+        elif alter:
+            want[1] = (want[1] & ~0xFF) | (((want[1] & 0xFF) + 1) & 0xFF)
+        if (st, tim, mode, model) != tuple(want):
+            r["bad"] += 1
+            r["first"] = r["first"] or f"vector {i}: firmware {st} 0x{tim:08X} {model}, host {want[0]} 0x{want[1]:08X} {want[3]}"
+        if st == ST_OK:
+            r["ok_n"] += 1
+            probs = timingr_rm_problems(k, f, tr, tf, bool(af), dnf, tim, model)
+            if probs:
+                r["rm_bad"] += 1
+                r["first_rm"] = r["first_rm"] or f"vector {i}: {'; '.join(probs)}"
+    return r
+
+
 def t0b_calc_selftest(log: Callable[[str], None]) -> bool:
     """T3's two oracles on vectors typed here: the bench's own case (with the
     plan's floor of N the model came out at 100 100 Hz; rounded up 99 700), the
@@ -822,11 +858,21 @@ def t0b_calc_selftest(log: Callable[[str], None]) -> bool:
     ok = ok and good
     log(f"[host] T0B(a) T3 calc: 100 MHz, 100 kHz, t_r 250, t_f 20, filter: status {st} TIMINGR 0x{t:08X} model "
         f"{model} (99700, RM check clean) -> {'as expected' if good else 'WRONG'}")
-    altered = t + 1
-    good = altered != t
+    # The control through t3_judge itself (m23): T3 lines made from calc_timing are
+    # clean; the same lines with the expected TIMINGR altered (SCLL + 1) are told
+    # apart in every OK vector.
+    vecs = [(100000000, 100000, 250, 20, 1, 0), (100000000, 400000, 300, 10, 1, 0), (64000000, 1000000, 40, 10, 1, 0),
+            (3999999, 100000, 100, 10, 1, 0)]
+    lines = []
+    for i, (k_, f_, tr_, tf_, af_, dnf_) in enumerate(vecs):
+        st_, t_, m_, mo_ = calc_timing(k_, f_, tr_, tf_, bool(af_), dnf_)
+        lines.append(f"[i2c] T3 {i} {k_} {f_} {tr_} {tf_} {af_} {dnf_} {st_} {t_:08X} {m_} {mo_}")
+    plain, ctl = t3_judge(lines), t3_judge(lines, alter=True)
+    good = plain["bad"] == 0 and plain["ok_n"] == 3 and ctl["bad"] == ctl["ok_n"] == 3
     ok = ok and good
-    log(f"[host] T0B(a) T3 control: expected TIMINGR with SCLL + 1 (0x{altered:08X}) differs from 0x{t:08X}: "
-        f"{'told apart' if good else 'NOT told apart'}")
+    log(f"[host] T0B(a) T3 control through t3_judge: {len(lines)} vectors, {plain['bad']} differ as printed; with the "
+        f"expected TIMINGR altered (SCLL + 1) {ctl['bad']} of {ctl['ok_n']} OK vectors differ -> "
+        f"{'as expected' if good else 'WRONG'}")
     # With t_f = 300 ns the SDADEL window starts above 0 (50:319): the vector's own
     # TIMINGR passes, the same with SDADEL = 0 must not.
     st2, t2, _, model2 = calc_timing(100000000, 100000, 1000, 300, True, 0)
@@ -1109,13 +1155,16 @@ def t0b_decoder_selftest(log: Callable[[str], None]) -> bool:
     return ok
 
 
-def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: float, rate: float) -> tuple[list[str], str]:
+def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: float, rate: float,
+                       af: bool = True, dnf: int = 0) -> tuple[list[str], str]:
     """T5's times of one capture: every measured time at least the mode's minimum
-    (tables 405/407), tLOW and tHIGH between their counters (SCLL, SCLH) and the
-    counters plus the synchronisation of CalcTiming's model (recomputed with the
-    t_r and t_f measured here), f_SCL not above the one asked and within 5 % of the
-    model, both normalised by the CPU clock ratio (CLKREF, plan N1). Tolerance per
-    interval: 2 x (2 samples + 2 kernel cycles)."""
+    (tables 405/407); EVERY tLOW and tHIGH between its counter (SCLL, SCLH) and the
+    counter plus the synchronisation of the model of 50:977-989, with the filters
+    the bench really uses (af, dnf, from the SCOPE line) at their largest delay and
+    the t_r and t_f measured here (audit F1, m25); f_SCL not above the one asked
+    and within 5 % of the model, both normalised by the CPU clock ratio (CLKREF,
+    plan N1). Tolerance per interval: 2 x (2 samples + 2 kernel cycles), one per
+    edge; the kernel cycles in AD2 time (N1)."""
     m = 0 if f <= 100000 else (1 if f <= 400000 else 2)
     _, tl_min, th_min, tsu_min, _, _, tr_max, tf_max, _, thdsta_min, tsusta_min, tsusto_min, tbuf_min = MODES[m]
     ns = 1e-9
@@ -1146,15 +1195,19 @@ def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: flo
     p = (t >> 28) & 0xF
     scll, sclh = ((t & 0xFF) + 1) * (p + 1), (((t >> 8) & 0xFF) + 1) * (p + 1)
     tk = ratio / k                                     # one kernel cycle, in seconds of the AD2
-    sync = _cdiv(int(round((tr_m + tf_m) / ns)) * k + 2 * T_AF[0] * k, G) + 6 if trs and tfs else 0
+    afmax = T_AF[1] if af else 0
+    sync = (_cdiv(int(round((tr_m + tf_m) / ns)) * k + 2 * afmax * k, G) + 2 * (dnf + 3)) if trs and tfs else 0
     tol = 2 * (2 / rate + 2 * tk)
     lo_l, hi_l = scll * tk - tol, (scll + sync) * tk + tol
     lo_h, hi_h = sclh * tk - tol, (sclh + sync) * tk + tol
-    if tlow and (min(tlow) < lo_l or med(tlow) > hi_l):
-        bad.append(f"tLOW min {min(tlow) / ns:.0f} median {med(tlow) / ns:.0f} ns outside {lo_l / ns:.0f}..{hi_l / ns:.0f}")
-    if thigh and (min(thigh) < lo_h or med(thigh) > hi_h):
-        bad.append(f"tHIGH min {min(thigh) / ns:.0f} median {med(thigh) / ns:.0f} ns outside "
-                   f"{lo_h / ns:.0f}..{hi_h / ns:.0f}")
+    out_l = [v for v in tlow if not lo_l <= v <= hi_l]
+    out_h = [v for v in thigh if not lo_h <= v <= hi_h]
+    if out_l:
+        bad.append(f"{len(out_l)} of {len(tlow)} tLOW outside {lo_l / ns:.0f}..{hi_l / ns:.0f} ns (first "
+                   f"{out_l[0] / ns:.0f})")
+    if out_h:
+        bad.append(f"{len(out_h)} of {len(thigh)} tHIGH outside {lo_h / ns:.0f}..{hi_h / ns:.0f} ns (first "
+                   f"{out_h[0] / ns:.0f})")
     f_norm = dec["f_scl"] * ratio
     if dec["f_scl"] <= 0:
         bad.append("no f_SCL")
@@ -1163,15 +1216,126 @@ def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: flo
             bad.append(f"f_SCL {f_norm:.0f} Hz (normalised) above {f}")
         if abs(f_norm - model) > 0.05 * model:
             bad.append(f"f_SCL {f_norm:.0f} Hz (normalised) not within 5 % of the model {model}")
-    txt = (f"tLOW {min(tlow, default=0) / ns:.0f}/{med(tlow) / ns:.0f} ns (min/median; counter {scll * tk / ns:.0f}, "
-           f"window {lo_l / ns:.0f}..{hi_l / ns:.0f}), tHIGH {min(thigh, default=0) / ns:.0f}/{med(thigh) / ns:.0f} "
-           f"(counter {sclh * tk / ns:.0f}), tSU;DAT min {min(tsud, default=0) / ns:.0f} (H755 bits; target bits "
+    txt = (f"tLOW {min(tlow, default=0) / ns:.0f}/{med(tlow) / ns:.0f}/{max(tlow, default=0) / ns:.0f} ns "
+           f"(min/median/max of {len(tlow)}; counter {scll * tk / ns:.0f}, window {lo_l / ns:.0f}..{hi_l / ns:.0f}), "
+           f"tHIGH {min(thigh, default=0) / ns:.0f}/{med(thigh) / ns:.0f}/{max(thigh, default=0) / ns:.0f} "
+           f"(counter {sclh * tk / ns:.0f}, window {lo_h / ns:.0f}..{hi_h / ns:.0f}; filter {'analog' if af else 'off'}, "
+           f"DNF {dnf}), tSU;DAT min {min(tsud, default=0) / ns:.0f} (H755 bits; target bits "
            f"{min(tsud_s, default=0) / ns:.0f}), tHD;STA "
            f"{min(dec['t_hd_sta'], default=0) / ns:.0f}, tSU;STA {min(dec['t_su_sta'], default=0) / ns:.0f}, tSU;STO "
            f"{min(dec['t_su_sto'], default=0) / ns:.0f}, tBUF {min(dec['t_buf'], default=0) / ns:.0f} ns; t_r "
            f"{tr_m / ns:.0f} t_f {tf_m / ns:.0f} ns (median, 30-70 %); f_SCL {dec['f_scl']:.0f} Hz, normalised "
            f"{f_norm:.0f} (asked {f}, model {model})")
     return bad, txt
+
+
+# ---- What the selftest must do in a session (audit F1, m26) ------------------------------
+
+T4_SIZES = (1, 2, 255, 256, 1000, 65535)
+T6_SIZES = (1, 2, 256, 1000)
+T7_SIZES = (2, 255, 256, 4096)
+
+
+def expected_transfers(state: str) -> Counter:
+    """Every X line the selftest must print in a session, from the plan's test list
+    (sizes of T4, T6 and T7; T5 only with taps; 1 MHz only without): keys (test,
+    core, f, op, mode, address, n)."""
+    c: Counter = Counter()
+    taps = state == "taps"
+    t4_speeds = (100000, 400000) if taps else (400000, 1000000)
+    fm = 400000 if taps else 1000000
+    for core in ("cm4", "cm7"):
+        for f in t4_speeds:
+            c[("T4", core, f, "P", "poll", TARGET, 0)] += 1
+            c[("T4", core, f, "P", "poll", NO_TARGET, 0)] += 1
+            for op in ("R", "W", "WR"):
+                for n in T4_SIZES:
+                    c[("T4", core, f, op, "poll", TARGET, n)] += 1
+            c[("T4C", core, f, "R", "poll", TARGET, 16)] += 1
+            if taps:
+                for op, a, n in (("P", TARGET, 0), ("P", NO_TARGET, 0), ("R", TARGET, 2), ("W", TARGET, 1),
+                                 ("W", TARGET, 2), ("WR", TARGET, 1)):
+                    c[("T5", core, f, op, "poll", a, n)] += 1
+        for op in ("R", "W", "WR"):
+            for n in T6_SIZES:
+                c[("T6", core, fm, op, "it", TARGET, n)] += 1
+        c[("T6C", core, fm, "W", "itc", TARGET, 2)] += 1
+        for op in ("R", "W"):
+            for n in T7_SIZES:
+                c[("T7", core, fm, op, "dma", TARGET, n)] += 1
+        c[("T7C", core, fm, "R", "dmac", TARGET, 64)] += 1
+        c[("T8A", core, fm, "P", "it", NO_TARGET, 0)] += 1
+        c[("T8A", core, fm, "R", "poll", TARGET, 4)] += 1
+        c[("T8A", core, fm, "W", "poll", NO_TARGET, 1)] += 1
+        c[("T8B", core, fm, "W", "it", TARGET, 8)] += 1
+        c[("T8B", core, fm, "W", "poll", TARGET, 8)] += 2
+        for t in ("T10A0", "T10A"):
+            for op in ("R", "W"):
+                c[(t, core, fm, op, "poll", TARGET, 4)] += 1
+        c[("T10B", core, fm, "W", "poll", TARGET, 2)] += 1
+        c[("T10BC", core, fm, "W", "poll", TARGET, 2)] += 1
+    c[("T9", "cm7", fm, "W", "poll", TARGET, 2)] += 1
+    c[("T9B", "cm7", fm, "W", "poll", TARGET, 2)] += 1
+    return c
+
+
+def expected_scopes(state: str) -> Counter:
+    """Every scope capture the selftest must announce: (test, k, f). None without taps."""
+    c: Counter = Counter()
+    if state != "taps":
+        return c
+    for _core in ("cm4", "cm7"):
+        for f in (100000, 400000):
+            for k in range(5):
+                c[("T5", k, f)] += 1
+        c[("T8", 0, 400000)] += 1
+        c[("T10", 0, 400000)] += 1
+        c[("T10", 1, 400000)] += 1
+        c[("T10B", 0, 400000)] += 1
+    c[("T9", 0, 0)] += 1
+    c[("T9B", 0, 400000)] += 1
+    return c
+
+
+def manifest_problems(want: Counter, got: Counter) -> list[str]:
+    missing, extra = want - got, got - want
+    out = []
+    if missing:
+        out.append(f"{sum(missing.values())} missing, first {sorted(missing)[0]}")
+    if extra:
+        out.append(f"{sum(extra.values())} not on the list, first {sorted(extra)[0]}")
+    return out
+
+
+def t0b_manifest_selftest(log: Callable[[str], None]) -> bool:
+    """The list check on lists typed here: the full list passes; one T4 size left
+    out, one extra transfer, and a T5 capture left out are found."""
+    ok = True
+    for state in ("taps", "notaps"):
+        want = expected_transfers(state)
+        less = want.copy()
+        less[("T4", "cm4", 400000, "W", "poll", TARGET, 65535)] -= 1
+        more = want.copy()
+        more[("T4", "cm7", 400000, "W", "poll", TARGET, 7)] += 1
+        cases = [(want, True, "the full list"), (+less, False, "T4 CM4 400 kHz without the write of 65535"),
+                 (more, False, "an extra write of 7")]
+        if state == "taps":
+            sw = expected_scopes(state)
+            sl = sw.copy()
+            sl[("T5", 3, 100000)] -= 1
+            cases += [(None, True, "the full capture list"), (+sl, False, "a T5 capture left out")]
+        for got, good_want, why in cases:
+            if got is None:
+                probs = manifest_problems(expected_scopes(state), expected_scopes(state))
+            elif why.startswith("a T5"):
+                probs = manifest_problems(expected_scopes(state), got)
+            else:
+                probs = manifest_problems(want, got)
+            good = (not probs) == good_want
+            ok = ok and good
+            log(f"[host] T0B(a) m26 list ({state}) [{why}]: {'; '.join(probs) or 'complete'} -> "
+                f"{'as expected' if good else 'WRONG'}")
+    return ok
 
 
 # ---- The session ---------------------------------------------------------------------------
@@ -1389,14 +1553,14 @@ class Session:
 
     def t0b(self) -> None:
         self.step("T0B")
-        m = self.con.expect(r"\[i2c\] T0B levels with CM4 AF4 pb8=(\d) pb9=(\d)", 60.0)
+        m = self.con.expect(r"\[i2c\] T0B levels with CM4 AF4 pb8=(\d) pb9=(\d)", 60.0, stop_on_abort=True)
         self.sync(pre=lambda: self.bus_rest(f"T0B with PB8/PB9 in AF4 on CM4, I2C1 PE=0 (CM7 reads "
                                             f"pb8={m.group(1)} pb9={m.group(2)})"))
         self.sync(pre=lambda: self.bus_rest("T0B after CM4's bench_safe"))
 
     def t0b_cm7(self) -> None:
         self.step("T0B_CM7")
-        m = self.con.expect(r"\[i2c\] T0B levels with CM7 AF6 pb8=(\d) pb9=(\d)", 60.0)
+        m = self.con.expect(r"\[i2c\] T0B levels with CM7 AF6 pb8=(\d) pb9=(\d)", 60.0, stop_on_abort=True)
         self.sync(pre=lambda: self.bus_rest(f"T0B_CM7 with PB8/PB9 in AF6 on CM7, I2C4 PE=0 (CM7 reads "
                                             f"pb8={m.group(1)} pb9={m.group(2)})"))
         self.sync(pre=lambda: self.bus_rest("T0B_CM7 after CM7's bench_safe"))
@@ -1448,6 +1612,9 @@ class Session:
         self.clk_measured = False
         self.t3_lines: list[str] = []
         self.timing: dict = {}
+        self.x_seen: Counter = Counter()
+        self.scopes_seen: Counter = Counter()
+        self.bus_tr = self.bus_tf = 0
 
     def group(self, key: str, ok: bool, detail: str) -> None:
         g = self.groups.setdefault(key, {"n": 0, "bad": []})
@@ -1493,6 +1660,9 @@ class Session:
         self.rpt_mark = len(self.f334.lines)
         it = iter(rpts)
         for x in xs:
+            if self.state == "taps" and x["f"] > 400000:
+                raise BenchAbort(f"S19: a transfer at {x['f']} Hz with taps: {x['text'].strip()}")   # m27
+            self.x_seen[(x["test"], x["core"], x["f"], x["op"], x["mode"], x["a"], x["n"])] += 1
             if x["t"] == 1 and self.armed:
                 x["armed"] = self.armed
                 self.armed = {}
@@ -1532,8 +1702,8 @@ class Session:
             return
         scl, sda = cap
         rate = spec["rate_actual"]
-        if test == "T9":
-            self.scope_t9(name, scl, sda, rate)
+        if test in ("T9", "T9B"):
+            self.scope_t9(name, scl, sda, rate, exact=(test == "T9"))
             return
         if test == "T10B":
             self.scope_t10b(name, scl, sda, rate, spec)
@@ -1552,9 +1722,22 @@ class Session:
         if test == "T5":
             key = ("CM4" if xs and xs[0]["core"] == "cm4" else "CM7", spec["f"])
             k, t, model = self.timing.get(key, (spec["kernel"], spec["timingr"], spec["model"]))
-            probs, txt = t5_timing_problems(dec, spec["f"], k, t, model, self.clk_ratio, rate)
+            af, dnf = bool(spec.get("af", 1)), int(spec.get("dnf", 0))
+            probs, txt = t5_timing_problems(dec, spec["f"], k, t, model, self.clk_ratio, rate, af, dnf)
+            if not self.clk_measured:
+                probs.append("no CLKREF: the times are not normalised (O13)")
+            # The TIMINGR of the capture recomputed by the host (O13).
+            hst = calc_timing(k, spec["f"], self.bus_tr, self.bus_tf, af, dnf)
+            if hst[0] != ST_OK or hst[1] != t or hst[3] != model:
+                probs.append(f"TIMINGR 0x{t:08X} model {model}, host calc_timing 0x{hst[1]:08X} model {hst[3]} "
+                             f"(t_r {self.bus_tr}, t_f {self.bus_tf})")
             self.log(f"[host] {name} times: {txt}")
             self.group(f"F1 T5 {key[0]} {spec['f']} Hz scope: times", not probs, f"{name}: {'; '.join(probs)}")
+            raw = dec["f_scl"]
+            # R3-7 (audit F1, M3): the frequency on the bus as the AD2 measures it, a record.
+            self.record(f"T5 {key[0]} k={spec['k']} f_SCL raw {raw:.0f} Hz with {spec['f']} Hz asked "
+                        f"({(raw / spec['f'] - 1) * 100:+.2f} %), normalised {raw * self.clk_ratio:.0f} Hz "
+                        f"(CLKREF ratio {self.clk_ratio:.5f})")
         if test == "T10":
             runs = self.low_runs(scl, rate, 150e-6)
             lens = [round(r * 1e6) for r in runs]
@@ -1590,7 +1773,10 @@ class Session:
         seq = ", ".join(f"{n} {1e3 * (t - t0):.3f} ms" for t, n in ev[:12])
         ok = 45.0 <= lo_scl <= 55.0 and scl[-1] >= V_HIGH and sda[-1] >= V_HIGH
         rel_txt = "no SDA release seen"
-        if spec.get("tmo"):
+        if spec.get("tmo") and not self.clk_measured:
+            ok = False
+            rel_txt = "no CLKREF: TIMEOUTA cannot be timed (O13)"
+        elif spec.get("tmo"):
             # With timeout_scl_low the master lets SDA go (its software reset at TIMEOUT)
             # (TIMEOUTA + 1) x 2048 kernel cycles after SCL fell, in AD2 time (CLKREF).
             want = spec["tmo"] * 2048 / spec["kernel"] * self.clk_ratio
@@ -1609,7 +1795,10 @@ class Session:
                    f"{name}: SCL low {lo_scl:.2f} ms ({runs_scl} runs), {rel_txt}, end levels "
                    f"{scl[-1]:.2f}/{sda[-1]:.2f} V")
 
-    def scope_t9(self, name: str, scl: list[float], sda: list[float], rate: float) -> None:
+    def scope_t9(self, name: str, scl: list[float], sda: list[float], rate: float, exact: bool = True) -> None:
+        """T9: SDA held until the 5th SCL rising edge, then the STOP. exact: the 5
+        edges are all RecoverBus's pulses; T9(b) (exact False): some may be the
+        refused transfer's, the target still counts 5 before it lets go."""
         s0, se = ad2mod.i2c_edges_analog(scl, rate, V_LOW, V_HIGH)
         d0, de = ad2mod.i2c_edges_analog(sda, rate, V_LOW, V_HIGH)
         falls = [e["t"] for e in se if not e["rise"]]
@@ -1621,11 +1810,11 @@ class Session:
         rel = sda_rise[0] if sda_rise else None
         before = sum(1 for t in rises if rel is not None and t < rel)
         stop_ok = len(sda_fall) >= 1 and len(sda_rise) >= 2 and rel is not None and sda_fall[-1] > rel
-        ok = d0 == 0 and before == 5 and len(falls) == 5 and stop_ok
+        ok = d0 == 0 and before == 5 and (len(falls) == 5 or not exact) and stop_ok
         self.log(f"[host] {name}: SDA low at the start {d0 == 0}, SCL pulses {len(falls)} falls / {len(rises)} rises, "
                  f"SDA released after {before} rises, then SDA falls {len(sda_fall)} rises {len(sda_rise)} (the STOP)")
-        self.group("F1 T9 scope: recovery", ok, f"{name}: {len(falls)} SCL pulses, SDA released after {before}, "
-                   f"STOP seen {stop_ok}")
+        self.group(f"F1 {'T9' if exact else 'T9(b)'} scope: recovery", ok,
+                   f"{name}: {len(falls)} SCL pulses, SDA released after {before}, STOP seen {stop_ok}")
 
     # -- the AT points ----------------------------------------------------------------
     def at_action(self, tag: str) -> tuple[Optional[Callable[[], None]], Optional[Callable[[], None]]]:
@@ -1641,13 +1830,17 @@ class Session:
         if tag == "HOLD_END":
             return self.hold_end, None
         m = re.match(r"SCOPE (\S+) k=(\d+) f=(\d+) kernel=(\d+) timingr=([0-9A-F]+) model=(\d+) rate=(\d+) "
-                     r"trig=(sda|scl)(?: tmo=(\d+))?$", tag)
+                     r"trig=(sda|scl)(?: tmo=(\d+))?(?: af=(\d) dnf=(\d+))?$", tag)
         if m:
             spec = {"test": m.group(1), "k": int(m.group(2)), "f": int(m.group(3)), "kernel": int(m.group(4)),
                     "timingr": int(m.group(5), 16), "model": int(m.group(6)), "rate": int(m.group(7)),
-                    "trig": m.group(8), "tmo": int(m.group(9) or 0)}
+                    "trig": m.group(8), "tmo": int(m.group(9) or 0), "af": int(m.group(10) or 1),
+                    "dnf": int(m.group(11) or 0)}
             if self.state != "taps":
                 raise BenchAbort(f"S19: a scope capture announced without taps: {tag}")
+            if spec["f"] > 400000:
+                raise BenchAbort(f"S19: a capture at {spec['f']} Hz: {tag}")
+            self.scopes_seen[(spec["test"], spec["k"], spec["f"])] += 1
             return (lambda: self.scope_arm(spec)), None
         if tag == "SCOPE end":
             return None, None
@@ -1674,6 +1867,8 @@ class Session:
             self.f334.command(f"STRETCH {cmd[1]} {int(cmd[2])}", r"^OK STRETCH ")
             self.armed["stretch"] = True
         elif c == "FMP" and len(cmd) == 2 and cmd[1] in ("0", "1"):
+            if cmd[1] == "1" and self.state == "taps":
+                raise BenchAbort("S19: FMP 1 (Fm+, 1 MHz) asked with taps")              # m27
             self.f334.command(f"FMP {cmd[1]}", rf"^OK FMP {cmd[1]}")
         elif c == "STATUS" and len(cmd) == 2 and cmd[1].startswith("t12="):
             m = self.f334.command("STATUS", r"^STATUS xfers=(\d+) rx=(\d+) tx=(\d+) nk=(\d+) ev=(\d+) idle_cuts=(\d+) "
@@ -1765,32 +1960,17 @@ class Session:
 
     # -- what is judged once the firmware has finished ------------------------------------
     def f1_t3(self) -> None:
-        rx = re.compile(r"\[i2c\] T3 (\d+) (\d+) (\d+) (\d+) (\d+) (\d) (\d+) (\d+) ([0-9A-F]+) (\d+) (\d+)")
-        n = bad = rm_bad = ok_n = 0
-        first = first_rm = ""
-        for t in self.t3_lines:
-            m = rx.search(t)
-            if not m:
-                continue
-            i, k, f, tr, tf, af, dnf, st = (int(m.group(j)) for j in range(1, 9))
-            tim, mode, model = int(m.group(9), 16), int(m.group(10)), int(m.group(11))
-            n += 1
-            want = calc_timing(k, f, tr, tf, bool(af), dnf)
-            if (st, tim, mode, model) != (want[0], want[1] if want[0] == 0 else 0, want[2] if want[0] == 0 else 0,
-                                          want[3] if want[0] == 0 else 0):
-                bad += 1
-                first = first or f"vector {i}: firmware {st} 0x{tim:08X} {model}, host {want[0]} 0x{want[1]:08X} {want[3]}"
-            if st == 0:
-                ok_n += 1
-                probs = timingr_rm_problems(k, f, tr, tf, bool(af), dnf, tim, model)
-                if probs:
-                    rm_bad += 1
-                    first_rm = first_rm or f"vector {i}: {'; '.join(probs)}"
-        self.check("F1 T3 CalcTiming against the host's own rules", n >= 300 and bad == 0,
-                   f"{n} vectors (>= 300), {bad} differ from the host's computation{(': ' + first) if first else ''}")
-        self.check("F1 T3 every TIMINGR meets RM0399", ok_n > 0 and rm_bad == 0,
-                   f"{ok_n} OK vectors checked on their fields (50:342, 50:319-331, table 407, 50:162-163, 2.19.1, "
-                   f"model <= f): {rm_bad} do not{(': ' + first_rm) if first_rm else ''}")
+        r = t3_judge(self.t3_lines)
+        self.check("F1 T3 CalcTiming against the host's own rules", r["n"] >= 300 and r["bad"] == 0,
+                   f"{r['n']} vectors (>= 300), {r['bad']} differ from the host's computation"
+                   f"{(': ' + r['first']) if r['first'] else ''}")
+        self.check("F1 T3 every TIMINGR meets RM0399", r["ok_n"] > 0 and r["rm_bad"] == 0,
+                   f"{r['ok_n']} OK vectors checked on their fields (50:342, 50:319-331, table 407, 50:162-163, 2.19.1, "
+                   f"model <= f): {r['rm_bad']} do not{(': ' + r['first_rm']) if r['first_rm'] else ''}")
+        c = t3_judge(self.t3_lines, alter=True)
+        self.check("F1 T3 control: the expected TIMINGR altered (SCLL + 1), the same comparison",
+                   c["ok_n"] > 0 and c["bad"] == c["ok_n"],
+                   f"{c['bad']} of the {c['ok_n']} OK vectors told apart (all must be; audit F1, m23)")
 
     def f1_t12(self) -> None:
         s = self.t12_status
@@ -1823,12 +2003,26 @@ class Session:
                    f"CPU1 reads PF14 as '{state}', the host was told '{self.state}' (1 MHz only without taps)")
         if state != self.state:
             raise BenchAbort(f"S19: firmware state {state}, declared {self.state}")
+        for text in self.con.since(0):
+            m = re.search(r"CalcTiming bus t_r (\d+) ns t_f (\d+) ns", text)
+            if m:
+                self.bus_tr, self.bus_tf = int(m.group(1)), int(m.group(2))
         self.f1_step("F1_CM4")
         self.f1_step("F1_CM7")
         self.f1_step("F1_RECOVER")
         self.step("DONE")
         self.f1_t3()
         self.f1_t12()
+        # m26: everything the selftest had to do, and nothing left half done.
+        probs = manifest_problems(expected_transfers(self.state), self.x_seen)
+        self.check("F1 transfers against the host's list (m26)", not probs,
+                   f"{sum(self.x_seen.values())} X lines, {sum(expected_transfers(self.state).values())} expected"
+                   + (f": {'; '.join(probs)}" if probs else ", all there and nothing else"))
+        sprobs = manifest_problems(expected_scopes(self.state), self.scopes_seen)
+        pend = [w for w, v in (("a scope capture", self.scope_pending), ("a hold", self.hold_pending)) if v is not None]
+        self.check("F1 scope captures against the host's list, nothing pending (m26)", not sprobs and not pend,
+                   f"{sum(self.scopes_seen.values())} captures, {sum(expected_scopes(self.state).values())} expected"
+                   + (f": {'; '.join(sprobs)}" if sprobs else "") + (f"; still pending: {', '.join(pend)}" if pend else ""))
         # Not a counted check (audit F0, m12): step() aborts on any enable bit.
         self.record(f"No Digital Out: enable read back 0x0000 at all {len(self.dout_seen)} step boundaries of "
                     f"{len(STEPS)} (any other value aborts the session in step())")
@@ -1979,7 +2173,7 @@ def session_body(args, stamp, head: str, res: dict) -> None:
                    "S21 hold": t0b_s21_selftest(stamp), "S18 probes": t0b_s18_selftest(stamp),
                    "T0d identity": t0b_t0d_selftest(stamp), "checklist arguments": t0b_checklist_selftest(stamp),
                    "T3 calculation rules": t0b_calc_selftest(stamp), "X/RPT pairing": t0b_pairing_selftest(stamp),
-                   "I2C decoder": t0b_decoder_selftest(stamp)})
+                   "I2C decoder": t0b_decoder_selftest(stamp), "m26 lists": t0b_manifest_selftest(stamp)})
     for name, ok in guards.items():
         stamp(f"[host] T0B(a) {name} guard on its mock: {'PASS' if ok else 'FAIL'}")
 
