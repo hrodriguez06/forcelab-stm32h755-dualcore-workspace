@@ -395,9 +395,14 @@ def i2c_decode_analog(scl: list[float], sda: list[float], rate_hz: float, vdd: f
       "t_low", "t_high": SCL low and high periods inside the frames (s), the high
                  periods that contain a START/STOP excluded;
       "t_r_scl", "t_f_scl", "t_r_sda", "t_f_sda": 30-70 % edge times (s);
-      "t_su_dat": [(s, bit index in its frame 0..8, value)]: SDA settled (its 70 %
-                 for a rise, its 30 % for a fall) to the 30 % of the next SCL rise,
-                 for SDA edges while SCL is low;
+      "t_su_dat": [(s, bit index in its frame 0..8, value, driver)]: SDA settled
+                 (its 70 % for a rise, its 30 % for a fall) to the 30 % of the next
+                 SCL rise, for SDA edges while SCL is low; driver "m" (the master:
+                 the address byte, written data, the acknowledge of read data) or
+                 "s" (the target: the acknowledge of the address and of written
+                 data, read data), from the bit's place in its segment; only
+                 for data and acknowledge bits (an SCL high that ends in a
+                 repeated START or a STOP is not one);
       "t_hd_sta": SDA's 30 % of a START/Sr to SCL's next 70 % fall;
       "t_su_sta": SCL's 70 % rise to SDA's 70 % of a repeated START;
       "t_su_sto": SCL's 70 % rise to SDA's 30 % of the STOP;
@@ -437,6 +442,7 @@ def i2c_decode_analog(scl: list[float], sda: list[float], rate_hz: float, vdd: f
     last_sda_change: Optional[dict] = None     # SDA edge while SCL low, for tSU;DAT
     last_stop_t70: Optional[float] = None
     pending_hd_sta: Optional[float] = None
+    pending_su: Optional[tuple] = None         # tSU;DAT of this SCL high, kept if it is a bit
     high_has_cond = False
     rise_times: list[float] = []
     for t, line, e in tl:
@@ -480,7 +486,12 @@ def i2c_decode_analog(scl: list[float], sda: list[float], rate_hz: float, vdd: f
                     out["t_low"].append(e["t_lo"] - last_scl_fall["t_lo"])
                 if last_sda_change is not None:
                     settled = last_sda_change["t_hi"] if last_sda_change["rise"] else last_sda_change["t_lo"]
-                    out["t_su_dat"].append((e["t_lo"] - settled, len(bits) % 9, 1 if last_sda_change["rise"] else 0))
+                    b = len(bits) % 9
+                    j = len(frame["bytes"]) if frame is not None else 0
+                    rd = bool(frame["bytes"][0][0] & 1) if (frame is not None and frame["bytes"]) else False
+                    master = (b < 8 and (j == 0 or not rd)) or (b == 8 and j >= 1 and rd)
+                    pending_su = (e["t_lo"] - settled, b, 1 if last_sda_change["rise"] else 0,
+                                  "m" if master else "s")
                 rise_times.append(e["t_hi"])
             last_sda_change = None
             last_scl_rise = e
@@ -493,6 +504,8 @@ def i2c_decode_analog(scl: list[float], sda: list[float], rate_hz: float, vdd: f
                     pending_hd_sta = None
                 elif last_scl_rise is not None and not high_has_cond:
                     out["t_high"].append(e["t_hi"] - last_scl_rise["t_hi"])
+                if pending_su is not None and not high_has_cond:
+                    out["t_su_dat"].append(pending_su)
                 # The bit of this SCL high: SDA as it was during the high.
                 if last_scl_rise is not None and not high_has_cond:
                     bits.append(_level_at(d0, de, (last_scl_rise["t"] + e["t"]) / 2.0))
@@ -502,6 +515,7 @@ def i2c_decode_analog(scl: list[float], sda: list[float], rate_hz: float, vdd: f
                             val = (val << 1) | b
                         frame["bytes"].append((val, bits[8]))
                         bits = []
+            pending_su = None
             last_scl_fall = e
             scl_lv = 0
     if frame is not None:
