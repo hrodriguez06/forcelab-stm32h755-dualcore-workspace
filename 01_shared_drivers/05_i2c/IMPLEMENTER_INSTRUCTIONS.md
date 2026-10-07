@@ -2,7 +2,7 @@
 
 Oct 6, 2026 · @Hector
 
-Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 1) de esta carpeta: el driver I2C maestro en tres tiers, `i2c_bm` (F1), `i2c_ll` (F2) e `i2c_hal` (F3), con una fase F0 que prepara el banco en `prj_01_template_dualcore`: el AD2 de siempre, el bus I2C en PB8/PB9 y una **NUCLEO-F334R8** como target, con un firmware de banco que también escribes tú. Otra persona audita cada fase y repite tus pruebas en la placa.
+Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta: el driver I2C maestro en tres tiers, `i2c_bm` (F1), `i2c_ll` (F2) e `i2c_hal` (F3), con una fase F0 que prepara el banco en `prj_01_template_dualcore`: el AD2 de siempre, el bus I2C en PB8/PB9 y una **NUCLEO-F334R8** como target, con un firmware de banco que también escribes tú. Otra persona audita cada fase y repite tus pruebas en la placa.
 
 Si algo de aquí choca con el plan, manda el plan, salvo lo que este documento **prohíbe**, que sigue prohibido.
 
@@ -107,7 +107,7 @@ Entre la H755, la F334 y el AD2 no hay resistencias en serie. Valen S1–S14 tal
 
 - **S15, solo open-drain:** ningún pin del bus en push-pull ni con pull interno, en ninguna de las dos placas. PF14/PF15 de la H755, solo entrada sin pull. Escríbelo primero en `bench_claim()` de los dos núcleos y en el firmware de la F334, antes que ninguna prueba.
 - **S16:** una sola instancia de la H755 en AF sobre PB8/PB9 a la vez, de un solo núcleo, con la instancia dueña leída antes (reloj, `PE = 0`).
-- **S17:** niveles del bus comprobados antes de conducir y tras cada paso.
+- **S17:** niveles del bus comprobados antes de conducir y tras cada paso, como razón SCL/SDA desde la revisión 2 (R2-1).
 - **S18:** cada llamada al programador con `sn=`; puertos por SN; los otros bancos con el USB de la F334 desconectado.
 - **S19:** el estado del banco declarado y comprobado; 1 MHz solo sin tomas.
 - **S20:** las dos placas por USB del mismo PC, ningún riel entre placas, GND primero; flashear o resetear solo con el host parado.

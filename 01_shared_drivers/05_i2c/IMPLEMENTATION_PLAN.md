@@ -1,6 +1,6 @@
 # Plan del driver I2C 05\_i2c
 
-Oct 6, 2026 · @Hector · revisión 1
+Oct 7, 2026 · @Hector · revisión 2 (sustituye a la revisión 1, `3d9c830`)
 
 Este plan cubre el paso 5 de `DRIVER_ROADMAP.md`: el driver I2C `05_i2c` en sus tres tiers, `i2c_bm`, `i2c_ll` e `i2c_hal`, en modo maestro. Tiene una fase F0 de preparación del banco (con el target externo), tres fases de implementación (F1 BM, F2 LL, F3 HAL) y una de cierre.
 
@@ -9,6 +9,16 @@ Cada fase pasa una auditoría independiente antes de empezar la siguiente, con l
 Base: `cc8aa2c` de `main` (cierre de `06_spi` y corrección N3 de `02_dma`), árbol limpio, rama `driver/i2c`.
 
 **Decisiones del responsable ya tomadas (2026-10-05/06):** banco de opción A (bus en la Nucleo, sin dispositivo comercial) con una **NUCLEO-F334R8 como target I2C independiente**, con su propio firmware de banco; se acepta ese firmware como desviación del encargo (D2) y la descarga del CMSIS de STM32F3 (`STMicroelectronics/cmsis_device_f3`, v2.3.9).
+
+## Cambios respecto a la revisión 1
+
+Salen de la auditoría de F0 (`AUDIT.md`, `85f9d29` y `ee96c37`): la observación O5, que el responsable del catálogo aprobó como D9 el 2026-10-07, y el hallazgo M1. Afectan a F1 en adelante; F0 no cambia.
+
+| # | Cambio | Por qué |
+| --- | --- | --- |
+| R2-1 | **S17 relativa (D9).** Con tomas: SDA (2+) ≥ 3,0 V y la razón SCL/SDA = 0,956 ± 0,015, el divisor del pull-up de 1 kΩ con los 22 kΩ a GND de PF14 (22/23). Sin tomas: 1+ < 0,10 V (S19, sin cambios) y 2+ ≥ 3,0 V. La H755 y la F334 siguen leyendo 1 en PB8/PB9 en los dos estados | Los umbrales absolutos de la revisión 1 (SCL 3,16 ± 0,10 V, SDA ≥ 3,20 V) daban unos 40 mV de margen: en la sesión taps del auditor los dos niveles salieron un 1,7 % más bajos con la misma razón (O5), y en notaps 2+ mide PF15 contra el 1 MΩ del AD2, unos 35 mV sobre 3,20 V (m13). La razón detecta lo mismo (el 22 kΩ a GND en el nodo de SCL; un pull-up de 2,2 kΩ da 0,909 y uno de 10 kΩ, 0,688) sin depender del riel ni de la ganancia del AD2 |
+| R2-2 | **T8(b) y T10(a) no se fían solo de la F334 armada (M1).** Antes de usarlos, la F334 decide el ACK/NACK de cada byte con `RXNE` y `TCR` juntos (si `TCR` llega con `RXNE` pendiente, consume primero el byte), y el stretching por byte en lecturas (SBC con `RELOAD` en transmisión de esclavo) se comprueba. En la prueba, el oráculo es triple: `nk` y `rx` del informe de la F334, el recuento del driver y, con tomas, el NACK y la duración del stretching vistos en el osciloscopio | En la revisión 1, el NACK del byte k dependía del orden en que el ISR de la F334 ve `RXNE` y `TCR` (`target.c:439-482`); un NACK perdido o tardío haría pasar o fallar T8(b) por la razón equivocada |
+| R2-3 | **Nombre de las capturas:** `docs/i2c_<fase>_<prueba>_<estado>_<hash>.txt`, como en las instrucciones §3.4 | Errata del plan que señaló el informe de F0 (§5.7) |
 
 ## Encargo
 
@@ -334,7 +344,7 @@ Es el banco de `00_gpio` §8 y J1 de `06_spi`, **más el bus I2C** que coloca el
 | --- | --- | --- |
 | S15 | **Solo open-drain.** PB8/PB9 (H755 y F334) nunca push-pull ni con pull interno: entrada, AF de I2C con `OTYPER = 1`, o GPIO open-drain solo en los pasos de recuperación y de bus colgado. PF14/PF15 de la H755: solo entrada sin pull | `bench_claim()` de los dos núcleos lee `OTYPER`/`PUPDR` además de `MODER`/`AFR`; la F334 imprime `MODER`/`OTYPER`/`PUPDR` de PB8/PB9 en su banner y el host rechaza otra cosa |
 | S16 | **Un maestro y un juego de pines.** En cada paso, a lo sumo una instancia I2C de la H755 en AF sobre PB8/PB9, de un solo núcleo (CM4 con I2C1 en los suyos, CM7 con I2C4 en los suyos). `bench_claim()` lee antes la instancia dueña: reloj en su banco y `PE = 0` (lección R2-3). Cambio de instancia: `PE = 0`, pines a entrada, ≥ 1 ms, y después la otra | Firmware |
-| S17 | **Niveles antes de conducir.** Con todo suelto, en el estado "con tomas" el osciloscopio debe leer SCL 3,16 ± 0,10 V y SDA ≥ 3,20 V; la H755 y la F334 leen 1 en PB8/PB9 (en los dos estados). Se repite tras cada paso | Host |
+| S17 | **Niveles antes de conducir** (R2-1). Con todo suelto: con tomas, el osciloscopio lee SDA ≥ 3,0 V y SCL/SDA = 0,956 ± 0,015; sin tomas, 1+ < 0,10 V y 2+ ≥ 3,0 V; la H755 y la F334 leen 1 en PB8/PB9 (en los dos estados). Se repite tras cada paso | Host |
 | S18 | **Identidad de probes y puertos.** Cada llamada a `STM32_Programmer_CLI` lleva `sn=`; cada puerto COM se elige por el SN de su ST-LINK. `i2c_hw_check.py` se niega a correr si hay más ST-LINK que los dos esperados. Los otros bancos (`gpio`, `tim`, `spi`) se ejecutan **con el USB de la F334 desconectado** | Host, `tools/` (D7), procedimiento |
 | S19 | **Estado del banco declarado.** El host recibe `--bench-state taps\|notaps` y lo comprueba (con tomas, el osciloscopio ve el bus; sin tomas, PF14 lee < 0,1 V por su 22 kΩ a GND). 1 MHz solo en "notaps" | Host |
 | S20 | **Alimentación.** Las dos placas por USB del mismo PC; ningún riel entre placas (los pull-ups van al 3V3 de la H755); la F334 encendida antes que cualquier paso que toque el bus; flashear o resetear cualquiera de las dos solo con el host parado | Procedimiento, checklist |
