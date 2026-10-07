@@ -1,16 +1,19 @@
 /**
   ******************************************************************************
   * @file    i2c_selftest.c
-  * @brief   05_i2c selftest, CPU1 side (preset selftest-i2c), phase F0: the
-  *          bench (AD2, the I2C bus on PB8/PB9, the NUCLEO-F334R8 target). No
-  *          driver code yet (F1-F3).
+  * @brief   05_i2c selftest, CPU1 side (preset selftest-i2c), phases F0 and
+  *          F1: the bench (AD2, the I2C bus on PB8/PB9, the NUCLEO-F334R8
+  *          target) and i2c_bm on both cores.
   *
   *          Prints Rev and build id of both cores, then runs the bench steps
   *          T0a, T0c and T0b with the host (tools/i2c_hw_check.py, which also
   *          talks to the F334, reads the scope, checks the identity of every
-  *          image and probe, T0d, and runs its guards on mocks, T0b(a)), and
-  *          prints the global verdict, CPU2's results included. Plan and
-  *          meaning of every test: 01_shared_drivers/05_i2c/IMPLEMENTATION_PLAN.md.
+  *          image and probe, T0d, and runs its guards on mocks, T0b(a)); then
+  *          the F1 steps: F1_NOPIN (T1-T3, T13-T15 without the bus), F1_CM4
+  *          (CPU2's I2C1: T1 with BUSY, T4, T5, T6, T7(a), T8, T10, T12, B1),
+  *          F1_CM7 (CPU1's I2C4: the same with T7(b) by BDMA) and F1_RECOVER
+  *          (T9); and prints the global verdict, CPU2's results included. Plan
+  *          and meaning of every test: 01_shared_drivers/05_i2c/IMPLEMENTATION_PLAN.md.
   *
   *          Electrical safety (no series resistors anywhere on the bench):
   *            S2  bench_safe(): every AD2 line, PA8, PB8/PB9 and PF14/PF15 in
@@ -40,6 +43,8 @@
 #include "i2c_selftest.h"
 #include "fw_build_id.h"
 #include "gpio_bm.h"
+#include "i2c_bm.h"
+#include "dma_hal.h"
 #include "app_log.h"
 #include "stm32h7xx_hal.h"
 
@@ -55,7 +60,7 @@
 #define CYC_PER_MS          400000U       /* CPU1 at 400 MHz nominal (+1.3 % with this board's HSE, N1) */
 #define CYC_PER_US          400U
 #define SYNC_TIMEOUT_MS     10000U
-#define CM4_TIMEOUT_MS      30000U
+#define CM4_TIMEOUT_MS      30000U        /* a CPU2 command: 65535 bytes at 100 kHz take about 6 s */
 #define CM4_READY_MS        5000U
 #define STALL_READS         1000U         /* CYCCNT read equal this often in a row: stopped */
 
@@ -1226,6 +1231,1849 @@ static void step_t0b_timeout(void)
 }
 
 /* ==========================================================================================
+ * Phase F1: i2c_bm (plan T1-T15, B1)
+ *
+ * The bench state comes from PF14 (S19): with J2 in place it follows the SCL node
+ * (1 at rest), without it its 22 kOhm pulls it to 0. With taps the transfers run at
+ * 100 and 400 kHz and the scope watches them (T5); without taps at 1 MHz only (D3).
+ * The host is told at every point where it acts or measures: an "AT" line, then a
+ * handshake (host_at()). Each transfer prints one "X" line, which the host pairs, in
+ * order, with the target's RPT line when the line says t=1.
+ * ========================================================================================== */
+
+#define T_ADDR          IST_TARGET_ADDR
+#define T_NOADDR        IST_NO_TARGET_ADDR
+#define F1_BIG          65536U
+#define BD_N            4096U
+#define SENTINEL        0x5AU
+#define PACE_MS         20U          /* the target prints one RPT line in about 13 ms at 115200 */
+#define IRQ_PRIO        6U
+#define TAPS_SPEEDS     2U
+
+static uint32_t s_cpu_hz;            /* CPU1, SystemCoreClock                                   */
+static uint32_t s_k123;              /* rcc_pclk1: I2C1-3 (I2C123SEL = 00, 09:4744-4749)         */
+static uint32_t s_k4;                /* rcc_pclk4: I2C4 (I2C4SEL = 00, 09:4868-4873)             */
+static uint32_t s_seed;              /* xorshift32 state of the run's seeds                     */
+static bool     s_taps;              /* bench state, from PF14                                   */
+static uint32_t s_f_main;            /* the functional tests' speed: 400 kHz taps, 1 MHz notaps  */
+static uint32_t s_rise_ns, s_fall_ns;/* the bus t_r/t_f given to CalcTiming                      */
+
+static uint8_t s_big[F1_BIG] __attribute__((section(".axi_ram"), aligned(32)));
+static uint8_t s_ptrb __attribute__((section(".axi_ram"), aligned(32)));
+static uint8_t s_bd_tx[BD_N] __attribute__((section(".d3_ram"), aligned(32)));   /* BDMA: SRAM4 */
+static uint8_t s_bd_rx[BD_N] __attribute__((section(".d3_ram"), aligned(32)));
+
+static const uint32_t k_t4_sizes[] = { 1U, 2U, 255U, 256U, 1000U, 65535U };
+#define T4_SIZES   ((uint32_t)(sizeof(k_t4_sizes) / sizeof(k_t4_sizes[0])))
+
+static uint32_t next_seed(void)
+{
+    return ist_xorshift32(&s_seed);
+}
+
+static uint32_t ms_cyc(uint32_t ms)
+{
+    return ms * (s_cpu_hz / 1000U);
+}
+
+/* The CYCCNT budget of a transfer of `bytes` bytes at f Hz: 1.6 times its nine bits per
+   byte plus 20 ms (the target's own clock stretching, the reloads), within 32 bits. */
+static uint32_t budget(uint32_t cpu_hz, uint32_t f, uint32_t bytes)
+{
+    const uint64_t bus = ((uint64_t)(bytes + 2U) * 9U * (uint64_t)cpu_hz * 16U) / ((uint64_t)f * 10U);
+    const uint64_t c = bus + ((uint64_t)cpu_hz / 50U);
+    return (c > 0xF0000000ULL) ? 0xF0000000UL : (uint32_t)c;
+}
+
+static const char *op_name(uint32_t op)
+{
+    static const char *const k[4] = { "W", "R", "WR", "P" };
+    return (op < 4U) ? k[op] : "?";
+}
+
+static const char *mode_name(uint32_t mode)
+{
+    static const char *const k[5] = { "poll", "it", "dma", "itc", "dmac" };
+    return (mode < 5U) ? k[mode] : "?";
+}
+
+/* One point where the host acts (the target, the scope): the AT line, then the handshake.
+   The host does its part before raising HOST_REQ; this core goes on once it has dropped it. */
+static bool host_at(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static bool host_at(const char *fmt, ...)
+{
+    if (s_bench_abort)
+    {
+        return false;
+    }
+    char t[160];
+    va_list ap;
+    va_start(ap, fmt);
+    (void)vsnprintf(t, sizeof(t), fmt, ap);
+    va_end(ap);
+    LOG("AT %s", t);
+    return sync0();
+}
+
+static void f1_clocks(void)
+{
+    s_cpu_hz = SystemCoreClock;
+    s_k123   = HAL_RCC_GetPCLK1Freq();
+    s_k4     = HAL_RCCEx_GetD3PCLK1Freq();
+    s_seed   = DWT->CYCCNT | 1U;
+    s_taps   = ((GPIOF->IDR >> IST_PIN_TAP_SCL) & 1UL) != 0U;
+    s_f_main = s_taps ? 400000U : 1000000U;
+    s_rise_ns = s_taps ? 200U : 40U;
+    s_fall_ns = 10U;
+    log_long("F1 clocks (HAL, from HSE_VALUE): CPU1 %lu Hz, I2C1-3 kernel %lu Hz, I2C4 kernel %lu Hz; bench state "
+             "from PF14: %s; CalcTiming bus t_r %lu ns t_f %lu ns; run seed 0x%08lX", (unsigned long)s_cpu_hz,
+             (unsigned long)s_k123, (unsigned long)s_k4, s_taps ? "taps" : "notaps", (unsigned long)s_rise_ns,
+             (unsigned long)s_fall_ns, (unsigned long)s_seed);
+}
+
+/* TIMINGR of the bench for kernel k and speed f (CalcTiming with the bus figures above). */
+static I2cBm_Status_t bench_timing(uint32_t k, uint32_t f, I2cBm_TimingOut_t *o)
+{
+    const I2cBm_TimingIn_t in = { k, f, s_rise_ns, s_fall_ns, true, 0U };
+    return I2C_BM_CalcTiming(&in, o);
+}
+
+/* ---- CPU2 commands with four arguments ------------------------------------------------- */
+static bool cm4_send4(IstCmd_t cmd, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
+{
+    IstArea_t *a = IST_AREA;
+    a->arg1 = a1;
+    a->arg2 = a2;
+    a->arg3 = a3;
+    return cm4_send(cmd, a0);
+}
+
+/* ---- I2C4 on CPU1: pins, IRQ, BDMA ------------------------------------------------------- */
+static I2cBm_Xfer_t      s_it;
+static volatile bool     s_it_active;
+static volatile uint32_t s_it_irqs;
+static uint32_t          s_irq_min = 0xFFFFFFFFUL;
+static uint32_t          s_irq_max;
+
+static void it_serve(void)
+{
+    s_it_irqs++;
+    if (s_it_active)
+    {
+        const uint32_t t0 = DWT->CYCCNT;
+        const bool done = I2C_BM_XferIrq(I2C4, &s_it);
+        const uint32_t dt = DWT->CYCCNT - t0;
+        s_irq_min = (dt < s_irq_min) ? dt : s_irq_min;
+        s_irq_max = (dt > s_irq_max) ? dt : s_irq_max;
+        if (done)
+        {
+            s_it_active = false;
+        }
+    }
+    else
+    {
+        I2C4->CR1 &= ~(I2C_CR1_TXIE | I2C_CR1_RXIE | I2C_CR1_TCIE | I2C_CR1_STOPIE | I2C_CR1_NACKIE |
+                       I2C_CR1_ERRIE | I2C_CR1_ADDRIE);   /* a stray one: silenced */
+    }
+}
+
+/* The project's vectors for the test (plan C14), CPU1's NVIC, priority 6. */
+void I2C4_EV_IRQHandler(void)
+{
+    it_serve();
+}
+
+void I2C4_ER_IRQHandler(void)
+{
+    it_serve();
+}
+
+static void nvic_i2c4(bool on)
+{
+    IRQn_Type ev = I2C4_EV_IRQn;
+    IRQn_Type er = I2C4_ER_IRQn;
+    (void)I2C_BM_GetIRQn(I2C4, &ev, &er);
+    const IRQn_Type q[2] = { ev, er };
+    for (uint32_t k = 0U; k < 2U; k++)
+    {
+        if (on)
+        {
+            HAL_NVIC_SetPriority(q[k], IRQ_PRIO, 0U);
+            NVIC_ClearPendingIRQ(q[k]);
+            HAL_NVIC_EnableIRQ(q[k]);
+        }
+        else
+        {
+            HAL_NVIC_DisableIRQ(q[k]);
+            NVIC_ClearPendingIRQ(q[k]);
+        }
+    }
+}
+
+static DMA_HandleTypeDef s_hbd_rx;
+static DMA_HandleTypeDef s_hbd_tx;
+
+static bool bd_init(DMA_HandleTypeDef *h, BDMA_Channel_TypeDef *ch, bool tx)
+{
+    uint32_t req = 0U;
+    (void)I2C_BM_GetDmaRequest(I2C4, tx, &req);
+    const DmaHal_Config_t c = {
+        .instance = ch, .request = req, .direction = tx ? DMA_MEMORY_TO_PERIPH : DMA_PERIPH_TO_MEMORY,
+        .periph_inc = DMA_PINC_DISABLE, .mem_inc = DMA_MINC_ENABLE, .periph_align = DMA_PDATAALIGN_BYTE,
+        .mem_align = DMA_MDATAALIGN_BYTE, .mode = DMA_NORMAL, .priority = DMA_PRIORITY_HIGH,
+        .fifo_mode = DMA_FIFOMODE_DISABLE, .fifo_threshold = DMA_FIFO_THRESHOLD_FULL,
+        .mem_burst = DMA_MBURST_SINGLE, .periph_burst = DMA_PBURST_SINGLE, .enable_clock = true, .irq_priority = -1 };
+    return DMA_HAL_Init(h, &c) == HAL_OK;
+}
+
+static uint32_t sentinel_left(const uint8_t *b, uint32_t n)
+{
+    uint32_t left = 0U;
+    for (uint32_t i = 0U; i < n; i++)
+    {
+        if (b[i] == SENTINEL)
+        {
+            left++;
+        }
+    }
+    return left;
+}
+
+/* One transfer on I2C4 (initialised), the twin of CPU2's cmd_xfer(): polling and IT on
+   s_big (AXI SRAM, CPU only), DMA on s_bd_tx/s_bd_rx (SRAM4, BDMA, non-cacheable). */
+static void cm7_xfer(uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cycles, uint32_t r[IST_XR_N])
+{
+    for (uint32_t k = 0U; k < IST_XR_N; k++)
+    {
+        r[k] = 0U;
+    }
+    const uint32_t op = IST_XF_OP(xf);
+    const uint32_t mode = IST_XF_MODE(xf);
+    const uint32_t addr = IST_XF_ADDR(xf);
+    const bool dma = (mode == IST_MODE_DMA) || (mode == IST_MODE_DMA_CTRL);
+    uint8_t *buf = dma ? ((op == IST_OP_WRITE) ? s_bd_tx : s_bd_rx) : s_big;
+    if ((n > (dma ? BD_N : F1_BIG)) || (max_cycles == 0U))
+    {
+        r[IST_XR_STATUS] = (uint32_t)I2C_BM_ERR_PARAM;
+        return;
+    }
+    const bool rd = (op == IST_OP_READ) || (op == IST_OP_WRITEREAD);
+    if (op == IST_OP_WRITE)
+    {
+        ist_fill(buf, n, arg);
+    }
+    else
+    {
+        for (uint32_t i = 0U; i < n; i++)
+        {
+            buf[i] = SENTINEL;
+        }
+    }
+    s_ptrb = (uint8_t)arg;
+    I2cBm_Status_t st = I2C_BM_ERR_PARAM;
+    uint32_t done_tx = 0U;
+    uint32_t done_rx = 0U;
+    uint32_t aux = 0U;
+    uint32_t t0 = DWT->CYCCNT;
+    if (mode == IST_MODE_POLL)
+    {
+        if (op == IST_OP_WRITE)
+        {
+            st = I2C_BM_Write(I2C4, addr, buf, n, max_cycles);
+        }
+        else if (op == IST_OP_READ)
+        {
+            st = I2C_BM_Read(I2C4, addr, buf, n, max_cycles);
+        }
+        else if (op == IST_OP_WRITEREAD)
+        {
+            st = I2C_BM_WriteRead(I2C4, addr, &s_ptrb, 1U, buf, n, max_cycles);
+        }
+        else
+        {
+            st = I2C_BM_Write(I2C4, addr, NULL, 0U, max_cycles);
+        }
+        r[IST_XR_CYCLES] = DWT->CYCCNT - t0;
+        done_tx = (op == IST_OP_WRITE) ? n : ((op == IST_OP_WRITEREAD) ? 1U : 0U);
+        done_rx = rd ? n : 0U;
+    }
+    else if ((mode == IST_MODE_IT) || (mode == IST_MODE_IT_CTRL))
+    {
+        s_it.addr7 = addr;
+        s_it.tx = (op == IST_OP_WRITE) ? buf : &s_ptrb;
+        s_it.ntx = (op == IST_OP_WRITE) ? n : ((op == IST_OP_WRITEREAD) ? 1U : 0U);
+        s_it.rx = buf;
+        s_it.nrx = rd ? n : 0U;
+        nvic_i2c4(true);
+        s_it_irqs = 0U;
+        s_it_active = true;
+        t0 = DWT->CYCCNT;
+        st = I2C_BM_StartIt(I2C4, &s_it);
+        if (mode == IST_MODE_IT_CTRL)
+        {
+            /* T6's control: every enable cleared by hand before the first event. */
+            const uint32_t pm = __get_PRIMASK();
+            __disable_irq();
+            I2C4->CR1 &= ~(I2C_CR1_TXIE | I2C_CR1_RXIE | I2C_CR1_TCIE | I2C_CR1_STOPIE | I2C_CR1_NACKIE | I2C_CR1_ERRIE);
+            __set_PRIMASK(pm);
+        }
+        if (st != I2C_BM_OK)
+        {
+            s_it_active = false;
+        }
+        uint32_t last = DWT->CYCCNT;
+        uint32_t same = 0U;
+        while (s_it_active && ((DWT->CYCCNT - t0) < max_cycles))
+        {
+            const uint32_t now = DWT->CYCCNT;
+            same = (now == last) ? (same + 1U) : 0U;
+            last = now;
+            if (same > STALL_READS)
+            {
+                s_stalls++;
+                break;
+            }
+        }
+        const bool timed_out = s_it_active;
+        s_it_active = false;
+        if (st == I2C_BM_OK)
+        {
+            st = timed_out ? I2C_BM_ERR_TIMEOUT : s_it.status;
+        }
+        r[IST_XR_CYCLES] = DWT->CYCCNT - t0;
+        r[IST_XR_IRQS] = s_it_irqs;
+        done_tx = s_it.done_tx;
+        done_rx = s_it.done_rx;
+        const uint32_t before = s_it_irqs;
+        (void)delay_ms(10U);                                 /* T6: 10 ms with no I2C4 IRQ */
+        r[IST_XR_IRQS_AFTER] = s_it_irqs - before;
+        nvic_i2c4(false);
+        if (timed_out)
+        {
+            aux = (uint32_t)s_it.status;                     /* still PENDING: no progress */
+        }
+    }
+    else
+    {
+        /* BDMA through dma_hal (plan rule 8): the channel first, then DmaStart, WaitEnd,
+           the channel aborted, DmaEnd. */
+        bool sok;
+        if (op == IST_OP_WRITE)
+        {
+            sok = bd_init(&s_hbd_tx, BDMA_Channel1, true) &&
+                  (HAL_DMA_Start(&s_hbd_tx, (uint32_t)&buf[1], (uint32_t)&I2C4->TXDR, n - 1U) == HAL_OK);
+            t0 = DWT->CYCCNT;
+            const I2cBm_Status_t s1 = I2C_BM_DmaStartWrite(I2C4, addr, buf, n);
+            st = (s1 == I2C_BM_OK) ? I2C_BM_WaitEnd(I2C4, n, max_cycles) : s1;
+            r[IST_XR_CYCLES] = DWT->CYCCNT - t0;
+            (void)HAL_DMA_Abort(&s_hbd_tx);
+            (void)DMA_HAL_DeInit(&s_hbd_tx);
+            done_tx = n;
+        }
+        else
+        {
+            sok = bd_init(&s_hbd_rx, BDMA_Channel0, false) &&
+                  (HAL_DMA_Start(&s_hbd_rx, (uint32_t)&I2C4->RXDR, (uint32_t)buf, n) == HAL_OK);
+            t0 = DWT->CYCCNT;
+            const I2cBm_Status_t s1 = I2C_BM_DmaStartRead(I2C4, addr, n);
+            if ((s1 == I2C_BM_OK) && (mode == IST_MODE_DMA_CTRL))
+            {
+                const uint32_t pm = __get_PRIMASK();         /* T7's control: RXDMAEN cleared by hand */
+                __disable_irq();
+                I2C4->CR1 &= ~I2C_CR1_RXDMAEN;
+                __set_PRIMASK(pm);
+            }
+            st = (s1 == I2C_BM_OK) ? I2C_BM_WaitEnd(I2C4, n, max_cycles) : s1;
+            r[IST_XR_CYCLES] = DWT->CYCCNT - t0;
+            if (st == I2C_BM_OK)
+            {
+                (void)HAL_DMA_PollForTransfer(&s_hbd_rx, HAL_DMA_FULL_TRANSFER, 10U);
+            }
+            done_rx = n - __HAL_DMA_GET_COUNTER(&s_hbd_rx);
+            (void)HAL_DMA_Abort(&s_hbd_rx);
+            (void)DMA_HAL_DeInit(&s_hbd_rx);
+        }
+        const I2cBm_Status_t se = I2C_BM_DmaEnd(I2C4);
+        aux = (sok ? 0U : 1U) | ((se == I2C_BM_OK) ? 0U : 2U);
+    }
+    uint32_t first = 0xFFFFFFFFUL;
+    r[IST_XR_STATUS] = (uint32_t)st;
+    r[IST_XR_CRC] = (rd || (op == IST_OP_WRITE)) ? ist_crc32(buf, n) : 0U;
+    r[IST_XR_MISM] = rd ? ist_check_target(buf, n, arg & 0xFFU, &first) : 0U;
+    r[IST_XR_FIRST_BAD] = first;
+    r[IST_XR_DONE_TX] = done_tx;
+    r[IST_XR_DONE_RX] = done_rx;
+    r[IST_XR_CR1_AFTER] = I2C4->CR1;
+    r[IST_XR_SENTINEL] = rd ? sentinel_left(buf, n) : 0U;
+    r[IST_XR_ISR_AFTER] = I2C4->ISR;
+    r[IST_XR_AUX] = aux;
+}
+
+/* A transfer on CPU2's I2C1 (m4) or this core's I2C4; r receives IST_XR_*. The bytes of
+   a write are regenerated here from the seed for the X line (both cores fill the same). */
+static bool xfer(bool m4, uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cycles, uint32_t r[IST_XR_N])
+{
+    if (!m4)
+    {
+        cm7_xfer(xf, n, arg, max_cycles, r);
+        return true;
+    }
+    if (!cm4_send4(IST_CMD_M4_XFER, xf, n, arg, max_cycles))
+    {
+        return false;
+    }
+    for (uint32_t k = 0U; k < IST_XR_N; k++)
+    {
+        r[k] = IST_AREA->m4_res[k];
+    }
+    return true;
+}
+
+/* The X line of one transfer: what the host pairs with the target's RPT (t=1). For a
+   write of up to 8 bytes, the bytes too (the host compares them with the scope). */
+static void xline(const char *test, bool m4, uint32_t f, uint32_t xf, uint32_t n, uint32_t arg, const uint32_t *r,
+                  bool target)
+{
+    char d[24] = "";
+    const uint32_t op = IST_XF_OP(xf);
+    if ((op == IST_OP_WRITE) && (n <= 8U))
+    {
+        uint8_t b[8];
+        ist_fill(b, n, arg);
+        for (uint32_t i = 0U; i < n; i++)
+        {
+            (void)snprintf(&d[2U * i], 3U, "%02X", b[i]);
+        }
+    }
+    log_long("X %s %s f=%lu op=%s mode=%s a=%02lX n=%lu p=%lu st=%lu crc=%08lX mis=%lu bad=%ld cyc=%lu dtx=%lu drx=%lu "
+             "irq=%lu irqa=%lu cr1=%08lX sen=%lu isr=%08lX aux=%lu t=%u%s%s", test, m4 ? "cm4" : "cm7", (unsigned long)f,
+             op_name(op), mode_name(IST_XF_MODE(xf)), (unsigned long)IST_XF_ADDR(xf), (unsigned long)n,
+             (unsigned long)arg, (unsigned long)r[IST_XR_STATUS], (unsigned long)r[IST_XR_CRC],
+             (unsigned long)r[IST_XR_MISM], (long)(int32_t)r[IST_XR_FIRST_BAD], (unsigned long)r[IST_XR_CYCLES],
+             (unsigned long)r[IST_XR_DONE_TX], (unsigned long)r[IST_XR_DONE_RX], (unsigned long)r[IST_XR_IRQS],
+             (unsigned long)r[IST_XR_IRQS_AFTER], (unsigned long)r[IST_XR_CR1_AFTER], (unsigned long)r[IST_XR_SENTINEL],
+             (unsigned long)r[IST_XR_ISR_AFTER], (unsigned long)r[IST_XR_AUX], target ? 1U : 0U,
+             (d[0] != '\0') ? " d=" : "", d);
+}
+
+/* Init of the instance under test on either core; the image read back. */
+static I2cBm_Status_t inst_init(bool m4, uint32_t timingr, uint32_t tmo, uint32_t img[IST_NREG])
+{
+    if (m4)
+    {
+        if (!cm4_send4(IST_CMD_M4_INIT, timingr, 1U, tmo, 0U))
+        {
+            return I2C_BM_ERR_HAL;
+        }
+        for (uint32_t k = 0U; k < IST_NREG; k++)
+        {
+            img[k] = IST_AREA->m4_res[1U + k];
+        }
+        return (I2cBm_Status_t)IST_AREA->m4_res[0];
+    }
+    const I2cBm_Config_t c = { I2C4, timingr, true, 0U, tmo };
+    (void)I2C_BM_EnableClock(I2C4);
+    const I2cBm_Status_t st = I2C_BM_Init(&c);
+    ist_regs(I2C4, img);
+    return st;
+}
+
+/* Deinit, then T14: the reset image of RM0399 50.7 typed in Common (ist_reset_diff()). */
+static bool inst_deinit(bool m4, uint32_t *diff)
+{
+    I2cBm_Status_t st;
+    uint32_t img[IST_NREG];
+    if (m4)
+    {
+        if (!cm4_send4(IST_CMD_M4_DEINIT, 0U, 0U, 0U, 0U))
+        {
+            *diff = 0xFFU;
+            return false;
+        }
+        st = (I2cBm_Status_t)IST_AREA->m4_res[0];
+        for (uint32_t k = 0U; k < IST_NREG; k++)
+        {
+            img[k] = IST_AREA->m4_res[1U + k];
+        }
+    }
+    else
+    {
+        st = I2C_BM_Deinit(I2C4);
+        ist_regs(I2C4, img);
+    }
+    static const uint32_t rst[IST_NREG] = { 0U, 0U, 0U, 0U, 0U, 0U, 0x00000001UL };
+    uint32_t d = 0U;
+    for (uint32_t k = 0U; k < IST_NREG; k++)
+    {
+        if (img[k] != rst[k])
+        {
+            d |= 1UL << k;
+        }
+    }
+    *diff = d;
+    return (st == I2C_BM_OK) && (d == 0U);
+}
+
+/* ---- T3: CalcTiming, printed for the host to recompute (C15) -------------------------- */
+static uint32_t s_b1_calc_max;
+
+static void t3_one(uint32_t *i, uint32_t k, uint32_t f, uint32_t tr, uint32_t tf, bool af, uint32_t dnf)
+{
+    const I2cBm_TimingIn_t in = { k, f, tr, tf, af, dnf };
+    I2cBm_TimingOut_t o = { 0U, 0U, 0U };
+    const uint32_t t0 = DWT->CYCCNT;
+    const I2cBm_Status_t st = I2C_BM_CalcTiming(&in, &o);
+    const uint32_t dt = DWT->CYCCNT - t0;
+    s_b1_calc_max = (dt > s_b1_calc_max) ? dt : s_b1_calc_max;
+    LOG("T3 %lu %lu %lu %lu %lu %u %lu %u %08lX %lu %lu", (unsigned long)*i, (unsigned long)k, (unsigned long)f,
+        (unsigned long)tr, (unsigned long)tf, (unsigned)af, (unsigned long)dnf, (unsigned)st,
+        (unsigned long)((st == I2C_BM_OK) ? o.timingr : 0U), (unsigned long)((st == I2C_BM_OK) ? o.mode : 0U),
+        (unsigned long)((st == I2C_BM_OK) ? o.scl_hz_model : 0U));
+    (*i)++;
+}
+
+static void f1_t3(void)
+{
+    static const uint32_t ks[] = { 4000000U, 8000000U, 10000000U, 16000000U, 20000000U, 48000000U, 64000000U,
+                                   100000000U, 125000000U };
+    static const uint32_t fs[] = { 10000U, 100000U, 250000U, 400000U, 1000000U };
+    static const uint32_t rf[][2] = { { 100U, 10U }, { 250U, 20U }, { 300U, 300U }, { 120U, 120U } };
+    uint32_t n = 0U;
+    for (uint32_t a = 0U; a < (sizeof(ks) / sizeof(ks[0])); a++)
+    {
+        for (uint32_t b = 0U; b < (sizeof(fs) / sizeof(fs[0])); b++)
+        {
+            for (uint32_t c = 0U; c < (sizeof(rf) / sizeof(rf[0])); c++)
+            {
+                for (uint32_t d = 0U; d < 2U; d++)
+                {
+                    t3_one(&n, ks[a], fs[b], rf[c][0], rf[c][1], d != 0U, 0U);
+                }
+            }
+        }
+    }
+    /* The digital filter, the limits of each rule, and the parameters. */
+    static const uint32_t dnfs[] = { 1U, 2U, 4U, 8U, 15U };
+    for (uint32_t d = 0U; d < (sizeof(dnfs) / sizeof(dnfs[0])); d++)
+    {
+        t3_one(&n, 100000000U, 100000U, 250U, 20U, true, dnfs[d]);
+        t3_one(&n, 100000000U, 400000U, 250U, 20U, false, dnfs[d]);
+        t3_one(&n, 100000000U, 1000000U, 40U, 10U, true, dnfs[d]);
+        t3_one(&n, 20000000U, 1000000U, 120U, 120U, true, dnfs[d]);
+    }
+    static const uint32_t edge[][5] = {
+        { 4000000U, 100000U, 1000U, 300U, 1U }, { 3999999U, 100000U, 100U, 10U, 0U },
+        { 10000000U, 400000U, 300U, 300U, 1U }, { 9999999U, 400000U, 100U, 10U, 0U },
+        { 20000000U, 1000000U, 120U, 120U, 1U }, { 19999999U, 1000000U, 100U, 10U, 0U },
+        { 100000000U, 100001U, 250U, 20U, 1U }, { 100000000U, 400001U, 120U, 20U, 1U },
+        { 100000000U, 99900U, 250U, 20U, 1U }, { 101250000U, 400000U, 200U, 10U, 1U },
+        { 64000000U, 400000U, 200U, 10U, 1U }, { 64000000U, 1000000U, 40U, 10U, 1U },
+        { 100000000U, 1U, 0U, 0U, 0U }, { 4294967295U, 1000000U, 0U, 0U, 0U }, { 4294967295U, 10000U, 1000U, 300U, 1U },
+        { 100000000U, 100000U, 1001U, 20U, 1U }, { 100000000U, 400000U, 301U, 20U, 1U },
+        { 100000000U, 1000000U, 121U, 20U, 1U }, { 100000000U, 1000000U, 40U, 121U, 1U },
+        { 0U, 100000U, 100U, 10U, 1U }, { 100000000U, 0U, 100U, 10U, 1U }, { 100000000U, 1000001U, 100U, 10U, 1U },
+    };
+    for (uint32_t e = 0U; e < (sizeof(edge) / sizeof(edge[0])); e++)
+    {
+        t3_one(&n, edge[e][0], edge[e][1], edge[e][2], edge[e][3], edge[e][4] != 0U, 0U);
+    }
+    t3_one(&n, 100000000U, 100000U, 250U, 20U, true, 16U);
+    LOG("T3 done: %lu CalcTiming vectors (the host recomputes them); the slowest took %lu cycles",
+        (unsigned long)n, (unsigned long)s_b1_calc_max);
+}
+
+/* ---- T1 and T2: the Common code on CPU1's instances and, through CPU2, on I2C1 ----------- */
+static void t1_print(const char *who, const IstT1Result_t *t)
+{
+    for (uint32_t i = 0U; (i < t->cases) && (i < IST_T1_MAX); i++)
+    {
+        if (t->got[i] != t->exp[i])
+        {
+            LOG("T1 %s case %lu: status %u, expected %u", who, (unsigned long)i, (unsigned)t->got[i],
+                (unsigned)t->exp[i]);
+        }
+    }
+}
+
+static void f1_t1(void)
+{
+    static IstT1Result_t t;
+    I2cBm_TimingOut_t o = { 0U, 0U, 0U };
+    (void)bench_timing(s_k123, 100000U, &o);
+    (void)I2C_BM_EnableClock(I2C2);
+    ist_t1(I2C2, o.timingr, &t);
+    t1_print("CM7 I2C2", &t);
+    verdict((t.bad == 0U) && (t.cases <= IST_T1_MAX) && (t.groups_same == 3U) && (t.control_changed == 1U),
+            "T1 CM7 refusals on I2C2: %lu cases, %lu with another status; instance, RCC_C1/C2 APB1LENR/APB4ENR, "
+            "D2CCIP2R, D3CCIPR, SYSCFG_PMCR unchanged in the 2 groups: 0x%lX (0x3); control (a valid Init) changes "
+            "them %lu (Init %lu)", (unsigned long)t.cases, (unsigned long)t.bad, (unsigned long)t.groups_same,
+            (unsigned long)t.control_changed, (unsigned long)t.init_status);
+    (void)I2C_BM_DisableClock(I2C2);
+
+    if (cm4_send4(IST_CMD_M4_T1, o.timingr, 0U, 0U, 0U))
+    {
+        const volatile uint32_t *r = IST_AREA->m4_res;
+        static const uint8_t k_exp_dummy = 0U;
+        (void)k_exp_dummy;
+        verdict((r[1] == 0U) && (r[0] <= IST_T1_MAX) && (r[2] == 3U) && (r[3] == 1U),
+                "T1 CM4 refusals on I2C1 (the same Common cases): %lu cases, %lu with another status; photo unchanged "
+                "in the 2 groups 0x%lX (0x3); control changes it %lu", (unsigned long)r[0], (unsigned long)r[1],
+                (unsigned long)r[2], (unsigned long)r[3]);
+    }
+}
+
+static void t2_print(const char *who, const IstT2Result_t *t)
+{
+    verdict((t->bad == 0U) && (t->bad_deinit == 0U) && (t->bad_status == 0U) && (t->control == 1U) && (t->cases == 120U),
+            "T2 %s images over TIMINGR x filter x DNF x timeout: %lu cases, %lu differ from the RM fields typed by hand "
+            "(first case<<4|reg 0x%lX got 0x%08lX expected 0x%08lX), %lu Deinit not at the reset image, %lu Init "
+            "neither OK nor ERR_BUS; control (DNF + 1 expected) told apart %lu", who, (unsigned long)t->cases,
+            (unsigned long)t->bad, (unsigned long)t->first_bad, (unsigned long)t->got, (unsigned long)t->exp,
+            (unsigned long)t->bad_deinit, (unsigned long)t->bad_status, (unsigned long)t->control);
+}
+
+static void f1_t2(void)
+{
+    static const struct { I2C_TypeDef *i2c; const char *name; } inst[3] = {
+        { I2C2, "CM7 I2C2" }, { I2C3, "CM7 I2C3" }, { I2C4, "CM7 I2C4" } };
+    for (uint32_t i = 0U; i < 3U; i++)
+    {
+        IstT2Result_t t;
+        (void)I2C_BM_EnableClock(inst[i].i2c);
+        ist_t2(inst[i].i2c, &t);
+        t2_print(inst[i].name, &t);
+        if (inst[i].i2c != I2C4)
+        {
+            (void)I2C_BM_DisableClock(inst[i].i2c);
+        }
+    }
+    if (cm4_send4(IST_CMD_M4_T2, 0U, 0U, 0U, 0U))
+    {
+        const volatile uint32_t *r = IST_AREA->m4_res;
+        IstT2Result_t t = { r[0], r[1], r[2], r[7], r[3], r[4], r[5], r[6] };
+        t2_print("CM4 I2C1", &t);
+    }
+}
+
+/* Silicon facts of the table against the CMSIS/HAL constants, and the kernel field
+   against RCC read directly (C1, plan rule 2). */
+static void f1_caps(void)
+{
+    I2C_TypeDef *const inst[4] = { I2C1, I2C2, I2C3, I2C4 };
+    static const IRQn_Type ev[4] = { I2C1_EV_IRQn, I2C2_EV_IRQn, I2C3_EV_IRQn, I2C4_EV_IRQn };
+    static const IRQn_Type er[4] = { I2C1_ER_IRQn, I2C2_ER_IRQn, I2C3_ER_IRQn, I2C4_ER_IRQn };
+    static const uint32_t rx[4] = { DMA_REQUEST_I2C1_RX, DMA_REQUEST_I2C2_RX, DMA_REQUEST_I2C3_RX, BDMA_REQUEST_I2C4_RX };
+    static const uint32_t tx[4] = { DMA_REQUEST_I2C1_TX, DMA_REQUEST_I2C2_TX, DMA_REQUEST_I2C3_TX, BDMA_REQUEST_I2C4_TX };
+    const uint32_t d2 = RCC->D2CCIP2R;
+    const uint32_t d3 = RCC->D3CCIPR;
+    /* Field positions typed from RM0399 9.7.20 (I2C123SEL 13:12) and 9.7.21 (I2C4SEL 9:8). */
+    const uint32_t raw[4] = { (d2 >> 12) & 3U, (d2 >> 12) & 3U, (d2 >> 12) & 3U, (d3 >> 8) & 3U };
+    uint32_t bad = 0U;
+    for (uint32_t i = 0U; i < 4U; i++)
+    {
+        I2cBm_Caps_t c = { 0xFFU, 0xFFU };
+        IRQn_Type e = (IRQn_Type)0;
+        IRQn_Type f = (IRQn_Type)0;
+        uint32_t qr = 0U;
+        uint32_t qt = 0U;
+        uint32_t ks = 9U;
+        const bool ok = I2C_BM_IsValidInstance(inst[i]) && (I2C_BM_GetCaps(inst[i], &c) == I2C_BM_OK) &&
+                        (I2C_BM_GetIRQn(inst[i], &e, &f) == I2C_BM_OK) &&
+                        (I2C_BM_GetDmaRequest(inst[i], false, &qr) == I2C_BM_OK) &&
+                        (I2C_BM_GetDmaRequest(inst[i], true, &qt) == I2C_BM_OK) &&
+                        (I2C_BM_GetKernelSource(inst[i], &ks) == I2C_BM_OK);
+        const bool facts = (e == ev[i]) && (f == er[i]) && (qr == rx[i]) && (qt == tx[i]) &&
+                           (c.dmamux == ((i == 3U) ? 2U : 1U)) &&
+                           (c.kernel_select == ((i == 3U) ? I2C_BM_KSEL_I2C4 : I2C_BM_KSEL_I2C123)) &&
+                           (ks == raw[i]) && (ks == 0U);
+        if (!ok || !facts)
+        {
+            bad |= 1UL << i;
+        }
+    }
+    const bool not_inst = !I2C_BM_IsValidInstance((const I2C_TypeDef *)((uint32_t)I2C1 + 4U)) &&
+                          !I2C_BM_IsValidInstance((const I2C_TypeDef *)USART3) && !I2C_BM_IsValidInstance(NULL);
+    verdict((bad == 0U) && not_inst,
+            "T1/T2 capability table of I2C1..4 against stm32h755xx.h (IRQn EV/ER), stm32h7xx_hal_dma.h (DMAMUX1 "
+            "33/34 35/36 73/74, DMAMUX2 13/14) and RCC read directly (I2C123SEL %lu, I2C4SEL %lu, 0 in prj_01): "
+            "rows that differ 0x%lX; I2C1+4, USART3 and NULL not instances %u", (unsigned long)raw[0],
+            (unsigned long)raw[3], (unsigned long)bad, (unsigned)not_inst);
+}
+
+/* SetFastModePlus: one bit of SYSCFG_PMCR, the rest unchanged, restored (C10, rule 10). */
+static void f1_fmp(void)
+{
+    const uint32_t before = SYSCFG->PMCR;
+    const I2cBm_Status_t s1 = I2C_BM_SetFastModePlus(I2C2, true);
+    const uint32_t on = SYSCFG->PMCR;
+    const I2cBm_Status_t s2 = I2C_BM_SetFastModePlus(I2C2, false);
+    const uint32_t off = SYSCFG->PMCR;
+    verdict((s1 == I2C_BM_OK) && (s2 == I2C_BM_OK) && (on == (before | SYSCFG_PMCR_I2C2_FMP)) &&
+            (off == (before & ~SYSCFG_PMCR_I2C2_FMP)) && (off == before),
+            "SetFastModePlus(I2C2): SYSCFG_PMCR 0x%08lX -> on 0x%08lX (bit 1 only) -> off 0x%08lX (as before), "
+            "statuses %u %u", (unsigned long)before, (unsigned long)on, (unsigned long)off, (unsigned)s1, (unsigned)s2);
+}
+
+/* T13: CPU2's DisableClock(I2C2) while CPU1's bank enables it (RM0399 9.5.10). The
+   oracle is whether a register write lands: an unclocked I2C ignores it. */
+static void f1_t13(void)
+{
+    I2cBm_TimingOut_t o = { 0U, 0U, 0U };
+    (void)bench_timing(s_k123, 100000U, &o);
+    const I2cBm_Config_t c = { I2C2, o.timingr, true, 0U, 0U };
+    (void)I2C_BM_EnableClock(I2C2);
+    (void)I2C_BM_Deinit(I2C2);
+    I2C2->TIMINGR = o.timingr;                             /* PE = 0: written directly */
+    const uint32_t c1on = RCC_C1->APB1LENR & RCC_APB1LENR_I2C2EN;
+    bool m1 = false;
+    bool m2 = false;
+    uint32_t r1 = 0U;
+    uint32_t r2 = 0U;
+    if (cm4_send4(IST_CMD_M4_T13, 1U, 0U, 0U, 0U))
+    {
+        m1 = IST_AREA->m4_res[1] == (uint32_t)I2C_BM_OK;
+        r1 = IST_AREA->m4_res[2];
+    }
+    I2C2->TIMEOUTR = 0x00000123UL;
+    const bool land1 = (I2C2->TIMEOUTR == 0x00000123UL) && (I2C2->TIMINGR == o.timingr);
+    if (cm4_send4(IST_CMD_M4_T13, 2U, 0U, 0U, 0U))
+    {
+        m2 = (IST_AREA->m4_res[0] == (uint32_t)I2C_BM_OK) && (IST_AREA->m4_res[1] == (uint32_t)I2C_BM_OK);
+        r2 = IST_AREA->m4_res[2];
+    }
+    I2C2->TIMEOUTR = 0x00000456UL;
+    const bool land2 = (I2C2->TIMEOUTR == 0x00000456UL);
+    /* The control: CPU1 disables its bank too; nobody enables I2C2; a write is lost. */
+    const I2cBm_Status_t dc = I2C_BM_DisableClock(I2C2);
+    const uint32_t both = (RCC_C1->APB1LENR | RCC_C2->APB1LENR) & RCC_APB1LENR_I2C2EN;
+    I2C2->TIMINGR = 0x10101010UL;
+    (void)I2C_BM_EnableClock(I2C2);
+    const uint32_t after = I2C2->TIMINGR;
+    (void)I2C_BM_Init(&c);
+    (void)I2C_BM_Deinit(I2C2);
+    (void)I2C_BM_DisableClock(I2C2);
+    verdict(m1 && land1 && ((r1 & RCC_APB1LENR_I2C2EN) == 0U) && (c1on != 0U),
+            "T13 CPU2 DisableClock(I2C2) (RCC_C2 APB1LENR I2C2EN %lu) while RCC_C1 enables it (%lu): a TIMEOUTR write "
+            "still lands %u", (unsigned long)((r1 & RCC_APB1LENR_I2C2EN) != 0U), (unsigned long)(c1on != 0U),
+            (unsigned)land1);
+    verdict(m2 && land2 && ((r2 & RCC_APB1LENR_I2C2EN) == 0U),
+            "T13 CPU2 EnableClock + DisableClock(I2C2): RCC_C2 I2C2EN %lu after; a write still lands %u",
+            (unsigned long)((r2 & RCC_APB1LENR_I2C2EN) != 0U), (unsigned)land2);
+    verdict((dc == I2C_BM_OK) && (both == 0U) && (after == o.timingr),
+            "T13 control: CPU1 DisableClock(I2C2) %u, both banks off; TIMINGR 0x10101010 written then, read with the "
+            "clock back: 0x%08lX (the earlier 0x%08lX: the write was lost)", (unsigned)dc, (unsigned long)after,
+            (unsigned long)o.timingr);
+}
+
+/* T15 (lesson E2): I2C2 has no pin in AF on this bench. A Write must end, bounded,
+   and Deinit give the reset image. Control: I2C4 with its pins (step F1_CM7). */
+static void f1_t15(void)
+{
+    I2cBm_TimingOut_t o = { 0U, 0U, 0U };
+    (void)bench_timing(s_k123, 100000U, &o);
+    const I2cBm_Config_t c = { I2C2, o.timingr, true, 0U, 0U };
+    (void)I2C_BM_EnableClock(I2C2);
+    const I2cBm_Status_t si = I2C_BM_Init(&c);
+    const uint32_t isr0 = I2C2->ISR;
+    uint8_t b[2] = { 0x11U, 0x22U };
+    const uint32_t max = ms_cyc(5U);
+    uint32_t t0 = DWT->CYCCNT;
+    const I2cBm_Status_t sw = (si == I2C_BM_OK) ? I2C_BM_Write(I2C2, T_ADDR, b, 2U, max) : si;
+    const uint32_t cw = DWT->CYCCNT - t0;
+    uint32_t img[IST_NREG];
+    ist_regs(I2C2, img);
+    t0 = DWT->CYCCNT;
+    const I2cBm_Status_t sr = (si == I2C_BM_OK) ? I2C_BM_Read(I2C2, T_ADDR, b, 2U, max) : si;
+    const uint32_t cr = DWT->CYCCNT - t0;
+    const I2cBm_Status_t sd = I2C_BM_Deinit(I2C2);
+    const uint32_t diff = ist_reset_diff(I2C2);
+    (void)I2C_BM_DisableClock(I2C2);
+    log_long("T15 I2C2 without pins: Init %u, ISR after Init 0x%08lX; Write of 2 bytes %u in %lu cycles; registers "
+             "after: CR1 0x%08lX CR2 0x%08lX ISR 0x%08lX; Read of 2 bytes %u in %lu cycles", (unsigned)si,
+             (unsigned long)isr0, (unsigned)sw, (unsigned long)cw, (unsigned long)img[0], (unsigned long)img[1],
+             (unsigned long)img[6], (unsigned)sr, (unsigned long)cr);
+    const bool bounded = (cw <= (max + ms_cyc(1U))) && (cr <= (max + ms_cyc(1U)));
+    verdict(((sw == I2C_BM_ERR_TIMEOUT) || (sw == I2C_BM_ERR_BUS)) && ((sr == I2C_BM_ERR_TIMEOUT) || (sr == I2C_BM_ERR_BUS)) &&
+            bounded && (sd == I2C_BM_OK) && (diff == 0U),
+            "T15 I2C2 without pins: Write %u, Read %u (ERR_TIMEOUT %u or ERR_BUS %u), each within max_cycles + 1 ms "
+            "(%lu, %lu <= %lu); Deinit %u, registers that differ from reset 0x%02lX", (unsigned)sw, (unsigned)sr,
+            (unsigned)I2C_BM_ERR_TIMEOUT, (unsigned)I2C_BM_ERR_BUS, (unsigned long)cw, (unsigned long)cr,
+            (unsigned long)(max + ms_cyc(1U)), (unsigned)sd, (unsigned long)diff);
+}
+
+/* T14's control: an instance left initialised is told apart from the reset image. */
+static void f1_t14_control(void)
+{
+    I2cBm_TimingOut_t o = { 0U, 0U, 0U };
+    (void)bench_timing(s_k123, 100000U, &o);
+    const I2cBm_Config_t c = { I2C3, o.timingr, true, 0U, 0U };
+    (void)I2C_BM_EnableClock(I2C3);
+    (void)I2C_BM_Init(&c);
+    const uint32_t d1 = ist_reset_diff(I2C3);
+    const I2cBm_Status_t sd = I2C_BM_Deinit(I2C3);
+    const uint32_t d2 = ist_reset_diff(I2C3);
+    (void)I2C_BM_DisableClock(I2C3);
+    verdict((d1 != 0U) && (sd == I2C_BM_OK) && (d2 == 0U),
+            "T14 control: I2C3 initialised and not deinitialised differs from the reset image in 0x%02lX (CR1, "
+            "TIMINGR); after Deinit %u: 0x%02lX", (unsigned long)d1, (unsigned)sd, (unsigned long)d2);
+}
+
+/* The CPU clock against the AD2's (plan N1): MCU_ACK high for exactly CLKREF_CYC CYCCNT
+   cycles, interrupts masked; the host times it with the logic analyzer. */
+#define CLKREF_CYC   40000000UL       /* 100 ms at 400 MHz nominal */
+
+static void f1_clkref(void)
+{
+    if (!host_at("CLKREF cyc=%lu cpu=%lu", (unsigned long)CLKREF_CYC, (unsigned long)s_cpu_hz))
+    {
+        return;
+    }
+    (void)delay_ms(50U);
+    const uint32_t pm = __get_PRIMASK();
+    __disable_irq();
+    const uint32_t t0 = DWT->CYCCNT;
+    ack(true);
+    while ((DWT->CYCCNT - t0) < CLKREF_CYC)
+    {
+    }
+    ack(false);
+    __set_PRIMASK(pm);
+    LOG("CLKREF done");
+}
+
+static void step_f1_nopin(void)
+{
+    if (!step_begin("F1_NOPIN"))
+    {
+        return;
+    }
+    f1_clocks();
+    f1_clkref();
+    f1_t3();
+    f1_caps();
+    f1_t1();
+    f1_t2();
+    f1_fmp();
+    f1_t13();
+    f1_t15();
+    f1_t14_control();
+    if (!host_at("F1_NOPIN end"))
+    {
+        return;
+    }
+    step_end();
+}
+
+/* ---- Transfers on the bus (steps F1_CM4 and F1_CM7) ------------------------------------- */
+
+static uint32_t core_hz(bool m4)
+{
+    return m4 ? (s_cpu_hz / 2U) : s_cpu_hz;              /* CPU2 at 200 MHz (CM7 main.c) */
+}
+
+static bool pace(void)
+{
+    return delay_ms(PACE_MS);
+}
+
+/* One transfer: done, printed, paced. ok_st is the status it must end with. */
+static bool run1(const char *test, bool m4, uint32_t f, uint32_t xf, uint32_t n, uint32_t arg, bool target,
+                 I2cBm_Status_t ok_st, uint32_t *bad, uint32_t r[IST_XR_N])
+{
+    const uint32_t op = IST_XF_OP(xf);
+    const uint32_t bytes = n + ((op == IST_OP_WRITEREAD) ? 2U : 1U);
+    if (!xfer(m4, xf, n, arg, budget(core_hz(m4), f, bytes), r))
+    {
+        bench_abort("CM4 transfer command");
+        return false;
+    }
+    xline(test, m4, f, xf, n, arg, r, target);
+    const bool rd = (op == IST_OP_READ) || (op == IST_OP_WRITEREAD);
+    if ((r[IST_XR_STATUS] != (uint32_t)ok_st) || (rd && (ok_st == I2C_BM_OK) && (r[IST_XR_MISM] != 0U)))
+    {
+        (*bad)++;
+    }
+    return pace();
+}
+
+/* T4 at one speed on one core (CPU2's I2C1 or CPU1's I2C4): reads from the target's
+   known content, write-reads, the address probes, writes; the control (a returned byte
+   inverted by the target) last. The host pairs every X line with t=1 with an RPT. */
+static void t4_speed(bool m4, uint32_t f, uint32_t timingr)
+{
+    const char *core = m4 ? "CM4" : "CM7";
+    uint32_t r[IST_XR_N];
+    uint32_t bad = 0U;
+    uint32_t p = 0U;
+    if (!host_at("F334 INIT"))
+    {
+        return;
+    }
+    for (uint32_t i = 0U; i < T4_SIZES; i++)
+    {
+        const uint32_t n = k_t4_sizes[i];
+        if (!run1("T4", m4, f, IST_XF(IST_OP_READ, IST_MODE_POLL, T_ADDR), n, p, true, I2C_BM_OK, &bad, r))
+        {
+            return;
+        }
+        p = (p + n) & 0xFFU;                              /* the target's pointer moves by n */
+    }
+    for (uint32_t i = 0U; i < T4_SIZES; i++)
+    {
+        const uint32_t ptr = (0x10U * (i + 1U)) & 0xFFU;
+        if (!run1("T4", m4, f, IST_XF(IST_OP_WRITEREAD, IST_MODE_POLL, T_ADDR), k_t4_sizes[i], ptr, true, I2C_BM_OK,
+                  &bad, r))
+        {
+            return;
+        }
+    }
+    if (!run1("T4", m4, f, IST_XF(IST_OP_PROBE, IST_MODE_POLL, T_ADDR), 0U, 0U, true, I2C_BM_OK, &bad, r) ||
+        !run1("T4", m4, f, IST_XF(IST_OP_PROBE, IST_MODE_POLL, T_NOADDR), 0U, 0U, false, I2C_BM_ERR_NACK, &bad, r))
+    {
+        return;
+    }
+    for (uint32_t i = 0U; i < T4_SIZES; i++)
+    {
+        if (!run1("T4", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), k_t4_sizes[i], next_seed(), true,
+                  I2C_BM_OK, &bad, r))
+        {
+            return;
+        }
+    }
+    verdict(bad == 0U, "T4 %s at %lu Hz (TIMINGR 0x%08lX): %lu reads, %lu write-reads, 2 probes, %lu writes of 1..65535 "
+            "bytes: %lu with another status or a byte that differs from the target's content", core, (unsigned long)f,
+            (unsigned long)timingr, (unsigned long)T4_SIZES, (unsigned long)T4_SIZES, (unsigned long)T4_SIZES,
+            (unsigned long)bad);
+    /* The control: the target inverts the 6th byte it returns; the check sees it. */
+    if (!host_at("F334 INIT") || !host_at("F334 CORRUPT 5"))
+    {
+        return;
+    }
+    uint32_t cbad = 0U;
+    if (!run1("T4C", m4, f, IST_XF(IST_OP_READ, IST_MODE_POLL, T_ADDR), 16U, 0U, true, I2C_BM_OK, &cbad, r))
+    {
+        return;
+    }
+    verdict((r[IST_XR_STATUS] == (uint32_t)I2C_BM_OK) && (r[IST_XR_MISM] == 1U) && (r[IST_XR_FIRST_BAD] == 5U),
+            "T4 %s control at %lu Hz: target armed CORRUPT 5, read of 16: %lu byte differs, at index %ld (5)", core,
+            (unsigned long)f, (unsigned long)r[IST_XR_MISM], (long)(int32_t)r[IST_XR_FIRST_BAD]);
+}
+
+/* T5 (taps): short transfers, each one captured by the scope; the host decodes it
+   and judges the bytes, the conditions and the times against TIMINGR. */
+static void t5_speed(bool m4, uint32_t f, uint32_t timingr, uint32_t k, uint32_t model)
+{
+    uint32_t r[IST_XR_N];
+    uint32_t bad = 0U;
+    if (!host_at("F334 INIT"))
+    {
+        return;
+    }
+    /* The reads first, while the target holds its known content and pointer 0; the
+       writes (random bytes from a seed, the first one the pointer) after. */
+    struct { uint32_t op; uint32_t addr; uint32_t n; uint32_t arg; bool target; I2cBm_Status_t st; bool probe_first; } c[5] = {
+        { IST_OP_READ, T_ADDR, 2U, 0U, true, I2C_BM_OK, false },
+        { IST_OP_WRITEREAD, T_ADDR, 1U, 0x07U, true, I2C_BM_OK, false },
+        { IST_OP_WRITE, T_ADDR, 1U, 0x00000020UL, true, I2C_BM_OK, true },     /* probe + 1 byte: tBUF  */
+        { IST_OP_WRITE, T_ADDR, 2U, 0x0000C310UL, true, I2C_BM_OK, false },
+        { IST_OP_PROBE, T_NOADDR, 0U, 0U, false, I2C_BM_ERR_NACK, false },    /* NACK and STOP (T8(a)) */
+    };
+    for (uint32_t i = 0U; i < 5U; i++)
+    {
+        if (!host_at("SCOPE T5 k=%lu f=%lu kernel=%lu timingr=%08lX model=%lu rate=%lu trig=sda", (unsigned long)i,
+                     (unsigned long)f, (unsigned long)k, (unsigned long)timingr, (unsigned long)model,
+                     (unsigned long)((f <= 100000U) ? 20000000U : 50000000U)))
+        {
+            return;
+        }
+        if (c[i].probe_first)
+        {
+            if (!xfer(m4, IST_XF(IST_OP_PROBE, IST_MODE_POLL, T_ADDR), 0U, 0U, budget(core_hz(m4), f, 1U), r))
+            {
+                return;
+            }
+            xline("T5", m4, f, IST_XF(IST_OP_PROBE, IST_MODE_POLL, T_ADDR), 0U, 0U, r, true);
+            bad += (r[IST_XR_STATUS] != (uint32_t)I2C_BM_OK) ? 1U : 0U;
+        }
+        if (!xfer(m4, IST_XF(c[i].op, IST_MODE_POLL, c[i].addr), c[i].n, c[i].arg, budget(core_hz(m4), f, 4U), r))
+        {
+            return;
+        }
+        xline("T5", m4, f, IST_XF(c[i].op, IST_MODE_POLL, c[i].addr), c[i].n, c[i].arg, r, c[i].target);
+        bad += ((r[IST_XR_STATUS] != (uint32_t)c[i].st) ||
+                (((c[i].op == IST_OP_READ) || (c[i].op == IST_OP_WRITEREAD)) && (r[IST_XR_MISM] != 0U))) ? 1U : 0U;
+        if (!pace())
+        {
+            return;
+        }
+    }
+    if (!host_at("SCOPE end"))
+    {
+        return;
+    }
+    verdict(bad == 0U, "T5 %s at %lu Hz: 5 captured transfers (probe + write 1, write 2, read 2, write-read 1+1, probe "
+            "0x43) ended as expected on the H755 side: %lu did not (the host judges the bus)", m4 ? "CM4" : "CM7",
+            (unsigned long)f, (unsigned long)bad);
+}
+
+/* The bench speeds of this session, one entry each: TIMINGR and its model. */
+static uint32_t speeds(uint32_t f_out[TAPS_SPEEDS])
+{
+    if (s_taps)
+    {
+        f_out[0] = 100000U;
+        f_out[1] = 400000U;
+        return 2U;
+    }
+    f_out[0] = 400000U;                                   /* also without taps: O1 (taps/notaps) */
+    f_out[1] = 1000000U;                                  /* S19, D3: only without taps */
+    return 2U;
+}
+
+/* Fm+ (SYSCFG_PMCR.I2CxFMP) of the instance under test, and the target's FMP. */
+static bool fmp(bool m4, bool on)
+{
+    I2cBm_Status_t st;
+    if (m4)
+    {
+        if (!cm4_send4(IST_CMD_M4_FMP, on ? 1U : 0U, 0U, 0U, 0U))
+        {
+            return false;
+        }
+        st = (I2cBm_Status_t)IST_AREA->m4_res[0];
+    }
+    else
+    {
+        st = I2C_BM_SetFastModePlus(I2C4, on);
+    }
+    LOG("Fm+ %s %s: SetFastModePlus %u, SYSCFG_PMCR 0x%08lX", m4 ? "I2C1" : "I2C4", on ? "on" : "off", (unsigned)st,
+        (unsigned long)SYSCFG->PMCR);
+    return (st == I2C_BM_OK) && host_at("F334 FMP %u", on ? 1U : 0U);
+}
+
+/* T4 and T5 at every speed of the session. */
+static void t4_t5(bool m4)
+{
+    uint32_t fl[TAPS_SPEEDS];
+    const uint32_t nf = speeds(fl);
+    const uint32_t k = m4 ? s_k123 : s_k4;
+    for (uint32_t i = 0U; (i < nf) && !s_bench_abort; i++)
+    {
+        I2cBm_TimingOut_t o = { 0U, 0U, 0U };
+        const I2cBm_Status_t sc = bench_timing(k, fl[i], &o);
+        uint32_t img[IST_NREG];
+        const bool fm = fl[i] > 400000U;
+        if (fm && !fmp(m4, true))
+        {
+            bench_abort("Fm+");
+            return;
+        }
+        const I2cBm_Status_t si = (sc == I2C_BM_OK) ? inst_init(m4, o.timingr, 0U, img) : sc;
+        LOG("TIMING %s f=%lu kernel=%lu timingr=%08lX model=%lu calc=%u init=%u", m4 ? "CM4" : "CM7",
+            (unsigned long)fl[i], (unsigned long)k, (unsigned long)o.timingr, (unsigned long)o.scl_hz_model,
+            (unsigned)sc, (unsigned)si);
+        if (si != I2C_BM_OK)
+        {
+            verdict(false, "Init of %s at %lu Hz: %u", m4 ? "I2C1" : "I2C4", (unsigned long)fl[i], (unsigned)si);
+            bench_abort("Init");
+            return;
+        }
+        t4_speed(m4, fl[i], o.timingr);
+        if (s_taps)
+        {
+            t5_speed(m4, fl[i], o.timingr, k, o.scl_hz_model);
+        }
+        uint32_t diff = 0U;
+        const bool d_ok = inst_deinit(m4, &diff);
+        verdict(d_ok, "T14 %s after T4/T5 at %lu Hz: Deinit, registers that differ from the reset image 0x%02lX",
+                m4 ? "I2C1" : "I2C4", (unsigned long)fl[i], (unsigned long)diff);
+        if (fm && !fmp(m4, false))
+        {
+            bench_abort("Fm+ off");
+            return;
+        }
+    }
+}
+
+/* The main speed's TIMINGR for this core's instance, and Init. */
+static bool main_init(bool m4, uint32_t tmo, uint32_t *timingr)
+{
+    I2cBm_TimingOut_t o = { 0U, 0U, 0U };
+    const I2cBm_Status_t sc = bench_timing(m4 ? s_k123 : s_k4, s_f_main, &o);
+    uint32_t img[IST_NREG];
+    const I2cBm_Status_t si = (sc == I2C_BM_OK) ? inst_init(m4, o.timingr, tmo, img) : sc;
+    *timingr = o.timingr;
+    if (si != I2C_BM_OK)
+    {
+        verdict(false, "Init of %s at %lu Hz, timeout %lu: %u", m4 ? "I2C1" : "I2C4", (unsigned long)s_f_main,
+                (unsigned long)tmo, (unsigned)si);
+        bench_abort("Init");
+        return false;
+    }
+    return true;
+}
+
+/* T6: by interrupt; the control clears the enables by hand. */
+static void t6(bool m4)
+{
+    static const uint32_t ns[4] = { 1U, 2U, 256U, 1000U };
+    static const uint32_t ops[3] = { IST_OP_WRITE, IST_OP_READ, IST_OP_WRITEREAD };
+    uint32_t r[IST_XR_N];
+    uint32_t bad = 0U;
+    uint32_t irq_left = 0U;
+    uint32_t ie_left = 0U;
+    const uint32_t f = s_f_main;
+    if (!host_at("F334 INIT"))
+    {
+        return;
+    }
+    uint32_t p = 0U;
+    for (uint32_t o = 0U; o < 3U; o++)
+    {
+        for (uint32_t i = 0U; i < 4U; i++)
+        {
+            const uint32_t arg = (ops[o] == IST_OP_WRITE) ? next_seed() : ((ops[o] == IST_OP_READ) ? p : 0x40U);
+            if (!run1("T6", m4, f, IST_XF(ops[o], IST_MODE_IT, T_ADDR), ns[i], arg, true, I2C_BM_OK, &bad, r))
+            {
+                return;
+            }
+            irq_left += r[IST_XR_IRQS_AFTER];
+            ie_left |= r[IST_XR_CR1_AFTER] & 0xFEU;     /* every interrupt enable of CR1 */
+            if (ops[o] == IST_OP_READ)
+            {
+                p = (p + ns[i]) & 0xFFU;
+            }
+            if (ops[o] == IST_OP_WRITE)
+            {
+                /* writes change the target's registers: back to the known content */
+                if (!host_at("F334 INIT"))
+                {
+                    return;
+                }
+                p = 0U;
+            }
+        }
+    }
+    verdict((bad == 0U) && (irq_left == 0U) && (ie_left == 0U),
+            "T6 %s by interrupt at %lu Hz: write, read, write-read of 1, 2, 256, 1000 bytes: %lu with another status or "
+            "data; interrupt enables left in CR1 0x%02lX (0); IRQs in the 10 ms after the end %lu (0)",
+            m4 ? "CM4" : "CM7", (unsigned long)f, (unsigned long)bad, (unsigned long)ie_left, (unsigned long)irq_left);
+    /* The control: the enables cleared before the first event: no progress, the wait
+       ends by its budget; the instance is reset (the master held SCL low), and the
+       target cuts its transfer after 500 ms without progress. */
+    const uint32_t max = ms_cyc(5U) / (m4 ? 2U : 1U);
+    if (!xfer(m4, IST_XF(IST_OP_WRITE, IST_MODE_IT_CTRL, T_ADDR), 2U, next_seed(), max, r))
+    {
+        return;
+    }
+    xline("T6C", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_IT_CTRL, T_ADDR), 2U, 0U, r, true);
+    uint32_t img[IST_NREG];
+    uint32_t tr = 0U;
+    uint32_t diff = 0U;
+    (void)inst_deinit(m4, &diff);
+    (void)delay_ms(600U);
+    const bool re = main_init(m4, 0U, &tr);
+    (void)img;
+    verdict((r[IST_XR_STATUS] == (uint32_t)I2C_BM_ERR_TIMEOUT) && (r[IST_XR_AUX] == (uint32_t)I2C_BM_PENDING) &&
+            (r[IST_XR_IRQS] == 0U) && re,
+            "T6 %s control: enables cleared by hand after StartIt: status still PENDING (%lu), the wait ended by its "
+            "budget (%lu = ERR_TIMEOUT), %lu IRQs; Deinit, 600 ms (the target's cut), Init again %u", m4 ? "CM4" : "CM7",
+            (unsigned long)r[IST_XR_AUX], (unsigned long)r[IST_XR_STATUS], (unsigned long)r[IST_XR_IRQS], (unsigned)re);
+}
+
+/* T7: by DMA (CPU2: DMA2 streams through dma_bm; CPU1: BDMA through dma_hal, SRAM4). */
+static void t7(bool m4)
+{
+    static const uint32_t ns[4] = { 2U, 255U, 256U, 4096U };
+    uint32_t r[IST_XR_N];
+    uint32_t bad = 0U;
+    uint32_t aux = 0U;
+    const uint32_t f = s_f_main;
+    if (!host_at("F334 INIT"))
+    {
+        return;
+    }
+    uint32_t p = 0U;
+    for (uint32_t i = 0U; i < 4U; i++)
+    {
+        if (!run1("T7", m4, f, IST_XF(IST_OP_READ, IST_MODE_DMA, T_ADDR), ns[i], p, true, I2C_BM_OK, &bad, r))
+        {
+            return;
+        }
+        aux |= r[IST_XR_AUX];
+        p = (p + ns[i]) & 0xFFU;
+    }
+    for (uint32_t i = 0U; i < 4U; i++)
+    {
+        if (!run1("T7", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_DMA, T_ADDR), ns[i], next_seed(), true, I2C_BM_OK, &bad, r))
+        {
+            return;
+        }
+        aux |= r[IST_XR_AUX];
+    }
+    verdict((bad == 0U) && (aux == 0U), "T7%s %s by %s at %lu Hz: read and write of 2, 255, 256, 4096 bytes: %lu with "
+            "another status or data; DMA steps not OK 0x%lX", m4 ? "(a)" : "(b)", m4 ? "CM4 I2C1" : "CM7 I2C4",
+            m4 ? "DMA2 (dma_bm)" : "BDMA (dma_hal, .d3_ram)", (unsigned long)f, (unsigned long)bad, (unsigned long)aux);
+    /* The control: RXDMAEN cleared by hand: nobody reads RXDR, the buffer keeps its
+       sentinel and WaitEnd ends by its budget (software reset). */
+    if (!host_at("F334 INIT"))
+    {
+        return;
+    }
+    const uint32_t max = ms_cyc(5U) / (m4 ? 2U : 1U);
+    if (!xfer(m4, IST_XF(IST_OP_READ, IST_MODE_DMA_CTRL, T_ADDR), 64U, 0U, max, r))
+    {
+        return;
+    }
+    xline("T7C", m4, f, IST_XF(IST_OP_READ, IST_MODE_DMA_CTRL, T_ADDR), 64U, 0U, r, true);
+    (void)delay_ms(600U);                                 /* the target's 500 ms cut */
+    verdict((r[IST_XR_STATUS] == (uint32_t)I2C_BM_ERR_TIMEOUT) && (r[IST_XR_SENTINEL] == 64U),
+            "T7%s control: RXDMAEN cleared by hand, read of 64: WaitEnd %lu (ERR_TIMEOUT %u), bytes still holding the "
+            "sentinel %lu (64)", m4 ? "(a)" : "(b)", (unsigned long)r[IST_XR_STATUS], (unsigned)I2C_BM_ERR_TIMEOUT,
+            (unsigned long)r[IST_XR_SENTINEL]);
+}
+
+static bool wait_pin(uint32_t pin, uint32_t level, uint32_t ms)
+{
+    const uint32_t t0 = DWT->CYCCNT;
+    uint32_t last = t0;
+    uint32_t same = 0U;
+    while (((GPIOB->IDR >> pin) & 1UL) != level)
+    {
+        const uint32_t now = DWT->CYCCNT;
+        same = (now == last) ? (same + 1U) : 0U;
+        last = now;
+        if ((same > STALL_READS) || ((now - t0) >= ms_cyc(ms)))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* T8: (a) no target at 0x43; (b) the target NACKs data byte 3 of a write of 8. */
+static void t8(bool m4)
+{
+    uint32_t r[IST_XR_N];
+    uint32_t bad = 0U;
+    const uint32_t f = s_f_main;
+    if (!run1("T8A", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_NOADDR), 1U, 0x0000005AUL, false, I2C_BM_ERR_NACK,
+              &bad, r))
+    {
+        return;
+    }
+    const uint32_t busy_a = r[IST_XR_ISR_AFTER] & I2C_ISR_BUSY;
+    if (!run1("T8A", m4, f, IST_XF(IST_OP_PROBE, IST_MODE_IT, T_NOADDR), 0U, 0U, false, I2C_BM_ERR_NACK, &bad, r))
+    {
+        return;
+    }
+    const uint32_t busy_b = r[IST_XR_ISR_AFTER] & I2C_ISR_BUSY;
+    if (!host_at("F334 INIT"))
+    {
+        return;
+    }
+    if (!run1("T8A", m4, f, IST_XF(IST_OP_READ, IST_MODE_POLL, T_ADDR), 4U, 0U, true, I2C_BM_OK, &bad, r))
+    {
+        return;
+    }
+    verdict((bad == 0U) && (busy_a == 0U) && (busy_b == 0U),
+            "T8(a) %s address 0x43 (no target): Write and IT probe ERR_NACK, BUSY after %lu %lu (0: the STOP was sent); "
+            "the next transfer to 0x42 OK: %lu failed", m4 ? "CM4" : "CM7", (unsigned long)(busy_a != 0U),
+            (unsigned long)(busy_b != 0U), (unsigned long)bad);
+    /* (b), with the scope (taps) on the NACKed write. */
+    uint32_t bb = 0U;
+    if (!host_at("F334 NACK 3"))
+    {
+        return;
+    }
+    if (s_taps && !host_at("SCOPE T8 k=0 f=%lu kernel=%lu timingr=0 model=0 rate=%lu trig=sda", (unsigned long)f,
+                           (unsigned long)(m4 ? s_k123 : s_k4), (unsigned long)((f <= 100000U) ? 20000000U : 50000000U)))
+    {
+        return;
+    }
+    if (!run1("T8B", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_IT, T_ADDR), 8U, 0x0000A55AUL, true, I2C_BM_ERR_NACK, &bb, r))
+    {
+        return;
+    }
+    const uint32_t dtx = r[IST_XR_DONE_TX];
+    if (s_taps && !host_at("SCOPE end"))
+    {
+        return;
+    }
+    if (!host_at("F334 NACK 3"))
+    {
+        return;
+    }
+    if (!run1("T8B", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 8U, 0x0000A55AUL, true, I2C_BM_ERR_NACK, &bb, r))
+    {
+        return;
+    }
+    /* The control: the same write with nothing armed ends well. */
+    if (!run1("T8B", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 8U, 0x0000A55AUL, true, I2C_BM_OK, &bb, r))
+    {
+        return;
+    }
+    verdict((bb == 0U) && (dtx == 3U),
+            "T8(b) %s the target NACKs data byte 3 of a write of 8: IT and polling ERR_NACK, bytes acknowledged by the "
+            "driver's count %lu (3); control without NACK armed OK: %lu failed", m4 ? "CM4" : "CM7",
+            (unsigned long)dtx, (unsigned long)bb);
+}
+
+/* T10: (a) the target stretches SCL 200 us at the address and after every byte; (b) SCL
+   held 50 ms, with the SCL-low timeout of ~10 ms, and without it (the control). */
+static void t10(bool m4)
+{
+    uint32_t r[IST_XR_N];
+    uint32_t bad = 0U;
+    const uint32_t f = s_f_main;
+    uint32_t tr = 0U;
+    if (!host_at("F334 INIT"))
+    {
+        return;
+    }
+    if (!run1("T10A0", m4, f, IST_XF(IST_OP_READ, IST_MODE_POLL, T_ADDR), 4U, 0U, true, I2C_BM_OK, &bad, r))
+    {
+        return;
+    }
+    const uint32_t c_r0 = r[IST_XR_CYCLES];
+    if (!run1("T10A0", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 4U, 0x00004010UL, true, I2C_BM_OK, &bad, r))
+    {
+        return;
+    }
+    const uint32_t c_w0 = r[IST_XR_CYCLES];
+    if (!host_at("F334 INIT") || !host_at("F334 STRETCH ADDR 200") || !host_at("F334 STRETCH BYTE 200"))
+    {
+        return;
+    }
+    if (s_taps && !host_at("SCOPE T10 k=0 f=%lu kernel=0 timingr=0 model=0 rate=4000000 trig=sda", (unsigned long)f))
+    {
+        return;
+    }
+    if (!run1("T10A", m4, f, IST_XF(IST_OP_READ, IST_MODE_POLL, T_ADDR), 4U, 0U, true, I2C_BM_OK, &bad, r))
+    {
+        return;
+    }
+    const uint32_t c_r1 = r[IST_XR_CYCLES];
+    if (s_taps && !host_at("SCOPE end"))
+    {
+        return;
+    }
+    if (!host_at("F334 STRETCH ADDR 200") || !host_at("F334 STRETCH BYTE 200"))
+    {
+        return;
+    }
+    if (s_taps && !host_at("SCOPE T10 k=1 f=%lu kernel=0 timingr=0 model=0 rate=4000000 trig=sda", (unsigned long)f))
+    {
+        return;
+    }
+    if (!run1("T10A", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 4U, 0x00004010UL, true, I2C_BM_OK, &bad, r))
+    {
+        return;
+    }
+    const uint32_t c_w1 = r[IST_XR_CYCLES];
+    if (s_taps && !host_at("SCOPE end"))
+    {
+        return;
+    }
+    /* At least 200 us at the address and after each of the 4 data bytes (5 x 200 us):
+       the write's and the read's own stretches (byte control after each byte). */
+    const uint32_t min_extra = (5U * 200U * core_hz(m4)) / 1000000U;
+    verdict((bad == 0U) && (c_w1 >= (c_w0 + min_extra)) && (c_r1 >= (c_r0 + min_extra)),
+            "T10(a) %s target stretching 200 us at the address and per byte: write and read of 4 OK with the data; "
+            "CYCCNT write %lu -> %lu, read %lu -> %lu cycles (each >= +%lu: 5 x 200 us)", m4 ? "CM4" : "CM7",
+            (unsigned long)c_w0, (unsigned long)c_w1, (unsigned long)c_r0, (unsigned long)c_r1,
+            (unsigned long)min_extra);
+    /* (b): TIMEOUTA for ~10 ms at the kernel clock: (TIMEOUTA + 1) x 2048 / kernel. */
+    const uint32_t k = m4 ? s_k123 : s_k4;
+    const uint32_t tmo = (uint32_t)(((uint64_t)k / 100U + 2047U) / 2048U);   /* 10 ms */
+    uint32_t diff = 0U;
+    (void)inst_deinit(m4, &diff);
+    if (!main_init(m4, tmo, &tr) || !host_at("RPT lenient"))     /* the target is off while it holds SCL */
+    {
+        return;
+    }
+    if (s_taps && !host_at("SCOPE T10B k=0 f=%lu kernel=0 timingr=0 model=0 rate=100000 trig=scl", (unsigned long)f))
+    {
+        return;
+    }
+    if (!host_at("HOLD SCL 50"))
+    {
+        return;
+    }
+    const bool low_b = wait_pin(IST_PIN_SCL, 0U, 20U);
+    const uint32_t seen_b = DWT->CYCCNT;                  /* TIMEOUTA counts from SCL low */
+    if (!xfer(m4, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00002010UL, ms_cyc(100U) / (m4 ? 2U : 1U), r))
+    {
+        return;
+    }
+    const uint32_t cy_b = DWT->CYCCNT - seen_b;             /* before the X line (UART) */
+    xline("T10B", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00002010UL, r, true);
+    const uint32_t st_b = r[IST_XR_STATUS];
+    (void)wait_pin(IST_PIN_SCL, 1U, 100U);
+    if (!host_at("HOLD_END"))
+    {
+        return;
+    }
+    if (s_taps && !host_at("SCOPE end"))
+    {
+        return;
+    }
+    (void)inst_deinit(m4, &diff);
+    if (!main_init(m4, 0U, &tr) || !host_at("HOLD SCL 50"))
+    {
+        return;
+    }
+    const bool low_c = wait_pin(IST_PIN_SCL, 0U, 20U);
+    const uint32_t seen_c = DWT->CYCCNT;
+    if (!xfer(m4, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00002010UL, ms_cyc(30U) / (m4 ? 2U : 1U), r))
+    {
+        return;
+    }
+    const uint32_t cy_c = DWT->CYCCNT - seen_c;             /* before the X line (UART) */
+    xline("T10BC", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00002010UL, r, true);
+    const uint32_t st_c = r[IST_XR_STATUS];
+    (void)wait_pin(IST_PIN_SCL, 1U, 100U);
+    if (!host_at("HOLD_END"))
+    {
+        return;
+    }
+    (void)delay_ms(600U);                                 /* any transfer the target began is cut */
+    if (!host_at("RPT strict"))
+    {
+        return;
+    }
+    const uint32_t ms_b = cy_b / (s_cpu_hz / 1000U);    /* CPU1's CYCCNT, from SCL seen low */
+    const uint32_t ms_c = cy_c / (s_cpu_hz / 1000U);
+    verdict(low_b && (st_b == (uint32_t)I2C_BM_ERR_BUS) && (ms_b >= 9U) && (ms_b <= 15U),
+            "T10(b) %s SCL held 50 ms by the target, timeout_scl_low %lu (%lu ms at %lu Hz): Write %lu (ERR_BUS %u, by "
+            "TIMEOUT, then the software reset) %lu ms after SCL went low (9..15)", m4 ? "CM4" : "CM7",
+            (unsigned long)tmo,
+            (unsigned long)(((uint64_t)tmo * 2048U * 1000U) / k), (unsigned long)k, (unsigned long)st_b,
+            (unsigned)I2C_BM_ERR_BUS, (unsigned long)ms_b);
+    verdict(low_c && (st_c == (uint32_t)I2C_BM_ERR_TIMEOUT) && (ms_c >= 29U) && (ms_c <= 33U),
+            "T10(b) %s control without timeout_scl_low: Write %lu (ERR_TIMEOUT %u) %lu ms after SCL went low "
+            "(max_cycles 30 ms)",
+            m4 ? "CM4" : "CM7", (unsigned long)st_c, (unsigned)I2C_BM_ERR_TIMEOUT, (unsigned long)ms_c);
+    (void)inst_deinit(m4, &diff);
+    (void)main_init(m4, 0U, &tr);
+}
+
+/* T1 with BUSY = 1: the target holds SDA low (a START on the bus); every transfer is
+   refused with ERR_BUS and nothing is written. */
+static void t1_busy(bool m4)
+{
+    if (!host_at("HOLD SDA 100"))
+    {
+        return;
+    }
+    const bool low = wait_pin(IST_PIN_SDA, 0U, 20U);
+    IstT1Result_t t;
+    uint32_t cases;
+    uint32_t bad;
+    uint32_t same;
+    uint32_t isr;
+    if (m4)
+    {
+        if (!cm4_send4(IST_CMD_M4_BUSY, 0U, 0U, 0U, 0U))
+        {
+            return;
+        }
+        cases = IST_AREA->m4_res[0];
+        bad = IST_AREA->m4_res[1];
+        same = IST_AREA->m4_res[2];
+        isr = IST_AREA->m4_res[3];
+    }
+    else
+    {
+        ist_t1_busy(I2C4, &t);
+        t1_print("CM7 BUSY", &t);
+        cases = t.cases;
+        bad = t.bad;
+        same = t.groups_same;
+        isr = t.isr;
+    }
+    (void)wait_pin(IST_PIN_SDA, 1U, 150U);
+    if (!host_at("HOLD_END"))
+    {
+        return;
+    }
+    verdict(low && ((isr & I2C_ISR_BUSY) != 0U) && (bad == 0U) && (same == 1U),
+            "T1 %s with BUSY = 1 (target holding SDA; ISR 0x%08lX): %lu transfers refused, %lu with another status than "
+            "ERR_BUS; registers and RCC unchanged %lu", m4 ? "CM4 I2C1" : "CM7 I2C4", (unsigned long)isr,
+            (unsigned long)cases, (unsigned long)bad, (unsigned long)same);
+}
+
+/* B1: cycles of Init, of a Write of 1 byte, of XferIrq (min/max). */
+static void b1(bool m4, uint32_t timingr)
+{
+    uint32_t ci;
+    uint32_t cw;
+    uint32_t qmin;
+    uint32_t qmax;
+    uint32_t sw;
+    if (m4)
+    {
+        if (!cm4_send4(IST_CMD_M4_B1, timingr, 0U, 0U, 0U))
+        {
+            return;
+        }
+        ci = IST_AREA->m4_res[0];
+        cw = IST_AREA->m4_res[1];
+        qmin = IST_AREA->m4_res[2];
+        qmax = IST_AREA->m4_res[3];
+        sw = IST_AREA->m4_res[4];
+    }
+    else
+    {
+        const I2cBm_Config_t c = { I2C4, timingr, true, 0U, 0U };
+        uint8_t one = 0x80U;
+        (void)I2C_BM_Deinit(I2C4);
+        uint32_t t0 = DWT->CYCCNT;
+        (void)I2C_BM_Init(&c);
+        ci = DWT->CYCCNT - t0;
+        t0 = DWT->CYCCNT;
+        sw = (uint32_t)I2C_BM_Write(I2C4, T_ADDR, &one, 1U, ms_cyc(10U));
+        cw = DWT->CYCCNT - t0;
+        s_irq_min = 0xFFFFFFFFUL;
+        s_irq_max = 0U;
+        uint32_t r[IST_XR_N];
+        cm7_xfer(IST_XF(IST_OP_WRITE, IST_MODE_IT, T_ADDR), 16U, 0x1234567UL, ms_cyc(10U), r);
+        qmin = s_irq_min;
+        qmax = s_irq_max;
+    }
+    LOG("B1 %s at %lu Hz: I2C_BM_Init %lu cycles, I2C_BM_Write of 1 byte %lu cycles (status %lu), I2C_BM_XferIrq "
+        "%lu..%lu cycles per call (IT write of 16)", m4 ? "CM4 (200 MHz)" : "CM7 (400 MHz)", (unsigned long)s_f_main,
+        (unsigned long)ci, (unsigned long)cw, (unsigned long)sw, (unsigned long)qmin, (unsigned long)qmax);
+    (void)pace();
+}
+
+/* ---- T12 (ES0445 2.19.6) on CPU2's I2C1, the kernel clock on the HSI ------------------- */
+#define T12_COUNT   1000U
+
+static bool rcc_cr_set(uint32_t bit, bool on)
+{
+    const uint32_t pm = __get_PRIMASK();
+    __disable_irq();
+    RCC->CR = on ? (RCC->CR | bit) : (RCC->CR & ~bit);
+    const uint32_t rb = RCC->CR;
+    __set_PRIMASK(pm);
+    return ((rb & bit) != 0U) == on;
+}
+
+static bool hsi_ready(void)
+{
+    return (RCC->CR & RCC_CR_HSIRDY) != 0U;
+}
+
+/* I2C123SEL [13:12] of RCC_D2CCIP2R (09:4744-4749): 00 pclk1, 10 hsi_ker_ck. Only
+   in T12, read back (plan C10, instructions 3.5). */
+static bool i2c123sel_set(uint32_t field)
+{
+    const uint32_t pm = __get_PRIMASK();
+    __disable_irq();
+    RCC->D2CCIP2R = (RCC->D2CCIP2R & ~RCC_D2CCIP2R_I2C123SEL_Msk) | (field << RCC_D2CCIP2R_I2C123SEL_Pos);
+    const uint32_t rb = RCC->D2CCIP2R;
+    __set_PRIMASK(pm);
+    return ((rb & RCC_D2CCIP2R_I2C123SEL_Msk) >> RCC_D2CCIP2R_I2C123SEL_Pos) == field;
+}
+
+static void t12(void)
+{
+    static const char *const k_name[4] = { "poll, driver (first byte preloaded)", "DMA, driver (preloaded)",
+                                           "poll, by hand without preload", "DMA, by hand without preload" };
+    const uint32_t cr_was = RCC->CR & RCC_CR_HSION;
+    const uint32_t d2_was = RCC->D2CCIP2R;
+    const uint32_t hsidiv = (RCC->CR & RCC_CR_HSIDIV_Msk) >> RCC_CR_HSIDIV_Pos;
+    uint32_t diff = 0U;
+    (void)inst_deinit(true, &diff);
+    bool ok = rcc_cr_set(RCC_CR_HSION, true) && (wait_until(hsi_ready, 5U) == WAIT_DONE) && (hsidiv == 0U);
+    ok = ok && i2c123sel_set(2U);
+    const uint32_t k = 64000000U;                        /* hsi_ker_ck, HSIDIV = /1 (09:3581-3586) */
+    I2cBm_TimingOut_t o = { 0U, 0U, 0U };
+    uint32_t img[IST_NREG];
+    ok = ok && (bench_timing(k, s_f_main, &o) == I2C_BM_OK) && (inst_init(true, o.timingr, 0U, img) == I2C_BM_OK);
+    log_long("T12 kernel: RCC_CR HSION was %lu, HSIDIV %lu (0: 64 MHz), HSIRDY %lu; RCC_D2CCIP2R 0x%08lX -> 0x%08lX "
+             "(I2C123SEL = 10, HSI); APB1 %lu Hz / kernel %lu Hz = %lu.%02lu (ES0445 2.19.6 window 1.5..3); I2C1 "
+             "TIMINGR 0x%08lX at %lu Hz", (unsigned long)(cr_was != 0U), (unsigned long)hsidiv,
+             (unsigned long)hsi_ready(), (unsigned long)d2_was, (unsigned long)RCC->D2CCIP2R, (unsigned long)s_k123,
+             (unsigned long)k, (unsigned long)(s_k123 / k), (unsigned long)(((s_k123 % k) * 100U) / k),
+             (unsigned long)o.timingr, (unsigned long)s_f_main);
+    uint32_t res[4][4];
+    bool sent = ok;
+    for (uint32_t v = 0U; (v < 4U) && sent; v++)
+    {
+        sent = host_at("F334 STATUS t12=%lu", (unsigned long)v) &&
+               cm4_send4(IST_CMD_M4_T12, v, T12_COUNT, budget(s_cpu_hz / 2U, s_f_main, 3U) + ms_cyc(1U) / 2U, 0U);
+        for (uint32_t i = 0U; (i < 4U) && sent; i++)
+        {
+            res[v][i] = IST_AREA->m4_res[i];
+        }
+        if (sent)
+        {
+            LOG("T12 %s: %lu of %lu OK, %lu stalled (ERR_TIMEOUT, then PE = 0), first other status 0x%lX, slowest "
+                "%lu cycles", k_name[v], (unsigned long)res[v][0], (unsigned long)T12_COUNT, (unsigned long)res[v][1],
+                (unsigned long)res[v][2], (unsigned long)res[v][3]);
+        }
+        (void)delay_ms(500U);                            /* the target's reports drain */
+    }
+    const bool st_ok = sent && host_at("F334 STATUS t12=4");
+    /* Back: I2C1 off the HSI, then the HSI as it was, both read back. */
+    (void)inst_deinit(true, &diff);
+    const bool back = i2c123sel_set((d2_was & RCC_D2CCIP2R_I2C123SEL_Msk) >> RCC_D2CCIP2R_I2C123SEL_Pos) &&
+                      (RCC->D2CCIP2R == d2_was) && ((cr_was != 0U) || rcc_cr_set(RCC_CR_HSION, false));
+    verdict(ok && sent && st_ok && (res[0][0] == T12_COUNT) && (res[1][0] == T12_COUNT),
+            "T12 2.19.6 with the kernel on the HSI: driver poll %lu/%lu and DMA %lu/%lu writes of 2 bytes OK (0 stalls)",
+            (unsigned long)(sent ? res[0][0] : 0U), (unsigned long)T12_COUNT, (unsigned long)(sent ? res[1][0] : 0U),
+            (unsigned long)T12_COUNT);
+    if (sent)
+    {
+        const uint32_t man = res[2][1] + res[3][1];
+        LOG("T12 control (decision 6): without the preload, %lu stalls by hand in polling and %lu with DMA in %lu each: "
+            "%s", (unsigned long)res[2][1], (unsigned long)res[3][1], (unsigned long)T12_COUNT,
+            (man != 0U) ? "reproduced" : "no reproducido (not reproduced)");
+    }
+    verdict(back, "T12 restore: RCC_D2CCIP2R 0x%08lX (0x%08lX before), RCC_CR HSION %lu (%lu before)",
+            (unsigned long)RCC->D2CCIP2R, (unsigned long)d2_was, (unsigned long)((RCC->CR & RCC_CR_HSION) != 0U),
+            (unsigned long)(cr_was != 0U));
+}
+
+/* ---- The bus steps -------------------------------------------------------------------- */
+
+/* PB8/PB9 to AF6 (I2C4) through the claim (S15, S16). */
+static bool cm7_pins_af(void)
+{
+    (void)I2C_BM_EnableClock(I2C4);
+    i2c_release(I2C4);
+    return pin_cfg(GPIOB, IST_PIN_SCL, GPIO_BM_MODE_AF, IST_AF_I2C4, GPIO_BM_OTYPE_OD, GPIO_BM_PULL_NONE) &&
+           pin_cfg(GPIOB, IST_PIN_SDA, GPIO_BM_MODE_AF, IST_AF_I2C4, GPIO_BM_OTYPE_OD, GPIO_BM_PULL_NONE);
+}
+
+static bool cm7_pins_input(void)
+{
+    return pin_cfg(GPIOB, IST_PIN_SCL, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_OTYPE_OD, GPIO_BM_PULL_NONE) &&
+           pin_cfg(GPIOB, IST_PIN_SDA, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_OTYPE_OD, GPIO_BM_PULL_NONE);
+}
+
+/* T9: PB8/PB9 GPIO open-drain, released (ODR = 1 first), claimed together (S16 refuses
+   a second output pin while the first already is one); step F1_RECOVER only (od_out). */
+static bool cm7_pins_od(void)
+{
+    if (!bench_claim(GPIOB, IST_BUS_MASK, GPIO_BM_MODE_OUTPUT, 0U, GPIO_BM_OTYPE_OD, GPIO_BM_PULL_NONE))
+    {
+        bench_abort("claim refused");
+        return false;
+    }
+    const bool ok = (GPIO_BM_ConfigOutput(GPIOB, IST_PIN_SCL, GPIO_BM_OTYPE_OD, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 1U) ==
+                     GPIO_BM_OK) &&
+                    (GPIO_BM_ConfigOutput(GPIOB, IST_PIN_SDA, GPIO_BM_OTYPE_OD, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 1U) ==
+                     GPIO_BM_OK);
+    if (!ok)
+    {
+        bench_abort("config");
+    }
+    return ok;
+}
+
+static void bus_write(void *ctx, bool high, uint32_t pin)
+{
+    (void)ctx;
+    GPIOB->BSRR = high ? (1UL << pin) : (1UL << (pin + 16U));
+    __DSB();
+}
+
+static void rec_scl_w(void *ctx, bool high) { bus_write(ctx, high, IST_PIN_SCL); }
+static void rec_sda_w(void *ctx, bool high) { bus_write(ctx, high, IST_PIN_SDA); }
+static bool rec_scl_r(void *ctx) { (void)ctx; return ((GPIOB->IDR >> IST_PIN_SCL) & 1UL) != 0U; }
+static bool rec_sda_r(void *ctx) { (void)ctx; return ((GPIOB->IDR >> IST_PIN_SDA) & 1UL) != 0U; }
+
+static void t9(void)
+{
+    uint32_t tr = 0U;
+    uint32_t diff = 0U;
+    uint32_t r[IST_XR_N];
+    uint8_t b[2] = { 0x30U, 0x31U };
+    if (!cm7_pins_af() || !main_init(false, 0U, &tr))
+    {
+        return;
+    }
+    if (!host_at("HOLD SDA 300 EDGES 5"))
+    {
+        return;
+    }
+    const bool low = wait_pin(IST_PIN_SDA, 0U, 20U);
+    (void)delay_ms(1U);
+    const uint32_t isr = I2C4->ISR;
+    const uint32_t t0 = DWT->CYCCNT;
+    const I2cBm_Status_t sw = I2C_BM_Write(I2C4, T_ADDR, b, 2U, ms_cyc(5U));
+    const uint32_t cw = DWT->CYCCNT - t0;
+    /* The recovery: PE = 0 (Deinit), the pins to input, then GPIO open-drain. */
+    (void)inst_deinit(false, &diff);
+    bool ok = cm7_pins_input() && delay_ms(1U) && cm7_pins_od();
+    if (!ok)
+    {
+        return;
+    }
+    if (s_taps && !host_at("SCOPE T9 k=0 f=0 kernel=0 timingr=0 model=0 rate=2000000 trig=scl"))
+    {
+        return;
+    }
+    const I2cBm_Recovery_t rec = { rec_scl_w, rec_sda_w, rec_scl_r, rec_sda_r, NULL, 5U * CYC_PER_US };
+    uint32_t pulses = 0xFFU;
+    const I2cBm_Status_t sr = I2C_BM_RecoverBus(&rec, ms_cyc(10U), &pulses);
+    const uint32_t lv = bus_idr() & 3U;
+    if (s_taps && !host_at("SCOPE end"))
+    {
+        return;
+    }
+    ok = cm7_pins_input() && delay_ms(1U) && cm7_pins_af() && main_init(false, 0U, &tr);
+    if (!ok || !host_at("HOLD_END"))
+    {
+        return;
+    }
+    if (!xfer(false, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00009012UL, budget(s_cpu_hz, s_f_main, 3U), r))
+    {
+        return;
+    }
+    xline("T9", false, s_f_main, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00009012UL, r, true);
+    verdict(low && ((isr & I2C_ISR_BUSY) != 0U) && ((sw == I2C_BM_ERR_BUS) || (sw == I2C_BM_ERR_TIMEOUT)) &&
+            (cw <= ms_cyc(6U)) && (sr == I2C_BM_OK) && (pulses == 5U) && (lv == 3U) &&
+            (r[IST_XR_STATUS] == (uint32_t)I2C_BM_OK),
+            "T9 the target holds SDA until 5 SCL edges: I2C4 ISR 0x%08lX (BUSY), Write %u in %lu cycles (ERR_BUS %u or "
+            "ERR_TIMEOUT %u, bounded); PB8/PB9 GPIO open-drain, RecoverBus %u, pulses %lu (5), PB8/PB9 after %lu (3); "
+            "AF6 and Init again, Write %lu (OK)", (unsigned long)isr, (unsigned)sw, (unsigned long)cw,
+            (unsigned)I2C_BM_ERR_BUS, (unsigned)I2C_BM_ERR_TIMEOUT, (unsigned)sr, (unsigned long)pulses,
+            (unsigned long)lv, (unsigned long)r[IST_XR_STATUS]);
+    /* The control: no RecoverBus; SDA stays low until the target's own limit. */
+    if (!host_at("HOLD SDA 100"))
+    {
+        return;
+    }
+    const bool low_c = wait_pin(IST_PIN_SDA, 0U, 20U);
+    const uint32_t t1 = DWT->CYCCNT;
+    const bool high_c = wait_pin(IST_PIN_SDA, 1U, 300U);
+    const uint32_t ms = (DWT->CYCCNT - t1) / (s_cpu_hz / 1000U);
+    if (!host_at("HOLD_END"))
+    {
+        return;
+    }
+    verdict(low_c && high_c && (ms >= 95U) && (ms <= 110U),
+            "T9 control without RecoverBus: SDA low %lu ms (the target's 100 ms limit), then released %u",
+            (unsigned long)ms, (unsigned)high_c);
+    (void)inst_deinit(false, &diff);
+    (void)cm7_pins_input();
+}
+
+static void step_f1_cm4(void)
+{
+    if (!step_begin("F1_CM4"))
+    {
+        return;
+    }
+    uint32_t tr = 0U;
+    uint32_t diff = 0U;
+    if (!cm4_send4(IST_CMD_M4_PINS, 1U, 0U, 0U, 0U) || (IST_AREA->m4_res[0] != 1U))
+    {
+        bench_abort("CM4 pins");
+        return;
+    }
+    t4_t5(true);
+    const bool fm = s_f_main > 400000U;
+    if (!s_bench_abort && (!fm || fmp(true, true)) && main_init(true, 0U, &tr))
+    {
+        t1_busy(true);
+        t6(true);
+        t7(true);
+        t8(true);
+        t10(true);
+        if (host_at("RPT lenient"))                     /* B1 and T12 print no X line */
+        {
+            b1(true, tr);
+            t12();
+            (void)host_at("RPT strict");
+        }
+        (void)inst_deinit(true, &diff);
+        if (fm)
+        {
+            (void)fmp(true, false);
+        }
+    }
+    (void)cm4_send4(IST_CMD_M4_PINS, 0U, 0U, 0U, 0U);
+    if (!host_at("F1_CM4 end"))
+    {
+        return;
+    }
+    step_end();
+}
+
+static void step_f1_cm7(void)
+{
+    if (!step_begin("F1_CM7"))
+    {
+        return;
+    }
+    /* S16: the other instance had the pins until the last step. */
+    if (!delay_ms(2U) || !cm7_pins_af())
+    {
+        bench_abort("CM7 pins");
+        return;
+    }
+    uint32_t tr = 0U;
+    uint32_t diff = 0U;
+    t4_t5(false);
+    const bool fm = s_f_main > 400000U;
+    if (!s_bench_abort && (!fm || fmp(false, true)) && main_init(false, 0U, &tr))
+    {
+        t1_busy(false);
+        t6(false);
+        t7(false);
+        t8(false);
+        t10(false);
+        if (host_at("RPT lenient"))
+        {
+            b1(false, tr);
+            (void)delay_ms(100U);
+            (void)host_at("RPT strict");
+        }
+        (void)inst_deinit(false, &diff);
+        if (fm)
+        {
+            (void)fmp(false, false);
+        }
+    }
+    (void)cm7_pins_input();
+    if (!host_at("F1_CM7 end"))
+    {
+        return;
+    }
+    step_end();
+}
+
+static void step_f1_recover(void)
+{
+    if (!step_begin("F1_RECOVER"))
+    {
+        return;
+    }
+    const bool fm = s_f_main > 400000U;
+    if (!delay_ms(2U) || (fm && !fmp(false, true)))
+    {
+        bench_abort("F1_RECOVER");
+        return;
+    }
+    t9();
+    if (fm)
+    {
+        (void)fmp(false, false);
+    }
+    (void)cm7_pins_input();
+    if (!host_at("F1_RECOVER end"))
+    {
+        return;
+    }
+    step_end();
+}
+
+/* ==========================================================================================
  * Entry points
  * ========================================================================================== */
 
@@ -1287,6 +3135,10 @@ void I2C_Selftest_CM7_Run(void)
     step_t0b();
     step_t0b_cm7();
     step_t0b_timeout();
+    step_f1_nopin();
+    step_f1_cm4();
+    step_f1_cm7();
+    step_f1_recover();
     if (step_begin("DONE"))
     {
         step_end();

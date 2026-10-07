@@ -150,13 +150,19 @@ if(SPI_DRIVER_SELFTEST)
     )
 endif()
 
-# 05_i2c selftest. F0 (the bench) needs only gpio_bm, already linked above for
-# the lock hook; the _i2c_* and _dma_* targets join with the phases that use them.
+# 05_i2c selftest. gpio_bm is linked above for the lock hook; F1 adds i2c_bm and,
+# for T7(b) (I2C4 by BDMA) and T13, the DMA driver tiers; i2c_ll and i2c_hal join
+# with phases F2 and F3.
 if(I2C_DRIVER_SELFTEST)
     target_compile_definitions(${TARGET} PRIVATE I2C_DRIVER_SELFTEST=1)
     target_sources(${TARGET} PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/App/Src/i2c_selftest.c
         ${CMAKE_SOURCE_DIR}/Common/Src/i2c_selftest_common.c
+    )
+    target_link_libraries(${TARGET} PRIVATE
+        stm32h7_driver_i2c_bm
+        stm32h7_driver_dma_bm
+        stm32h7_driver_dma_hal
     )
 endif()
 

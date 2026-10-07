@@ -1,11 +1,15 @@
 /**
   ******************************************************************************
   * @file    i2c_selftest.c
-  * @brief   05_i2c selftest, CPU2 side (preset selftest-i2c), phase F0.
+  * @brief   05_i2c selftest, CPU2 side (preset selftest-i2c), phases F0 and F1.
   *
   *          CPU2 has no console. It publishes its Rev, build id and step-table
   *          version in the SRAM4 block (Common/Inc/i2c_selftest.h), serves the
   *          commands CPU1 writes there, and CPU1 prints and judges the results.
+  *          F1: i2c_bm on I2C1 (CPU2's instance, plan decision 4): its pins
+  *          (AF4, step F1_CM4 only), Init/Deinit, transfers by polling, by
+  *          interrupt (the vectors below, priority 6) and by DMA2 through dma_bm,
+  *          and T1, T2, T12, T13 and B1.
   *
   *          Electrical safety: the only pins CPU2 ever takes out of input are
   *          the two bus pins PB8/PB9, in AF4 (I2C1) open-drain without pull,
@@ -24,12 +28,14 @@
 #include "i2c_selftest.h"
 #include "fw_build_id.h"
 #include "gpio_bm.h"
+#include "i2c_bm.h"
+#include "dma_bm.h"
 #include "stm32h7xx_hal.h"
 
 /* CPU1 sends the next command within seconds; a minute of silence means it
    stopped (a fault, or a bench abort that skipped the DONE). CPU2 then goes to
    S2 and on to the application loop instead of waiting for ever. */
-#define IST_CM4_IDLE_TIMEOUT_MS   60000U
+#define IST_CM4_IDLE_TIMEOUT_MS   120000U
 #define CYC_PER_MS_CM4            200000U     /* CPU2 at 200 MHz (CM7/Core/Src/main.c) */
 #define STALL_READS               1000U
 
@@ -425,6 +431,600 @@ static void run_safe(IstPinPhoto_t *p)
     p->claim_ok = 1U;
 }
 
+/* ==========================================================================================
+ * Phase F1: i2c_bm on I2C1, served for CPU1 (which prints and judges)
+ * ========================================================================================== */
+
+#define M4_BUF_N        65536U
+#define M4_DMA_TX       DMA2_Stream1      /* DMAMUX1 request i2c1_tx_dma (34)       */
+#define M4_DMA_RX       DMA2_Stream0      /* i2c1_rx_dma (33)                        */
+#define M4_SENTINEL     0x5AU
+#define M4_IRQ_PRIO     6U
+
+/* SRAM2 (RAM_D2_M4): DMA1/DMA2 reach it; CPU2 has no data cache. */
+static uint8_t s_buf[M4_BUF_N] __attribute__((aligned(32)));
+static uint8_t s_ptr_byte __attribute__((aligned(32)));
+
+static volatile uint32_t *res(void)
+{
+    return IST_AREA->m4_res;
+}
+
+static void res_clear(void)
+{
+    for (uint32_t i = 0U; i < (sizeof(IST_AREA->m4_res) / sizeof(IST_AREA->m4_res[0])); i++)
+    {
+        IST_AREA->m4_res[i] = 0U;
+    }
+}
+
+/* Cycles without CYCCNT stopping (lesson m1): false if it stopped. */
+static bool delay_cyc(uint32_t n)
+{
+    const uint32_t t0 = DWT->CYCCNT;
+    uint32_t last = t0;
+    uint32_t same = 0U;
+    while ((DWT->CYCCNT - t0) < n)
+    {
+        const uint32_t now = DWT->CYCCNT;
+        same = (now == last) ? (same + 1U) : 0U;
+        last = now;
+        if (same > STALL_READS)
+        {
+            IST_AREA->m4_stalls++;
+            return false;
+        }
+    }
+    return true;
+}
+
+static void regs_to(volatile uint32_t *r)
+{
+    uint32_t g[IST_NREG];
+    ist_regs(I2C1, g);
+    for (uint32_t k = 0U; k < IST_NREG; k++)
+    {
+        r[k] = g[k];
+    }
+}
+
+/* PB8/PB9 in AF4 open-drain without pull through the claim (step F1_CM4, I2C1
+   clocked in this bank at PE = 0), or back to input. */
+static void cmd_pins(uint32_t on)
+{
+    volatile uint32_t *r = res();
+    res_clear();
+    if (on != 0U)
+    {
+        i2c1_clock(true);
+        i2c_release(I2C1);
+        r[0] = (pin_cfg(GPIOB, IST_PIN_SCL, GPIO_BM_MODE_AF, IST_AF_I2C1, GPIO_BM_OTYPE_OD, GPIO_BM_PULL_NONE) &&
+                pin_cfg(GPIOB, IST_PIN_SDA, GPIO_BM_MODE_AF, IST_AF_I2C1, GPIO_BM_OTYPE_OD, GPIO_BM_PULL_NONE)) ? 1U : 0U;
+    }
+    else
+    {
+        bench_safe();
+        r[0] = 1U;
+    }
+}
+
+static void cmd_init(uint32_t timingr, uint32_t filt, uint32_t tmo)
+{
+    volatile uint32_t *r = res();
+    res_clear();
+    const I2cBm_Config_t c = { I2C1, timingr, (filt & 1U) != 0U, (filt >> 8) & 0xFFU, tmo };
+    (void)I2C_BM_EnableClock(I2C1);
+    r[0] = (uint32_t)I2C_BM_Init(&c);
+    regs_to(&r[1]);
+}
+
+static void cmd_deinit(void)
+{
+    volatile uint32_t *r = res();
+    res_clear();
+    r[0] = (uint32_t)I2C_BM_Deinit(I2C1);
+    regs_to(&r[1]);
+}
+
+static void cmd_regs(void)
+{
+    volatile uint32_t *r = res();
+    res_clear();
+    regs_to(r);
+    r[7] = i2c1_clocked() ? 1U : 0U;
+}
+
+/* ---- Interrupt transfers: the project's vectors for the test (C14), priority 6 ---------- */
+static I2cBm_Xfer_t      s_it;
+static volatile bool     s_it_active;
+static volatile uint32_t s_it_irqs;
+static uint32_t          s_irq_min = 0xFFFFFFFFUL;
+static uint32_t          s_irq_max;
+
+static void it_serve(void)
+{
+    s_it_irqs++;
+    if (s_it_active)
+    {
+        const uint32_t t0 = DWT->CYCCNT;
+        const bool done = I2C_BM_XferIrq(I2C1, &s_it);
+        const uint32_t dt = DWT->CYCCNT - t0;
+        s_irq_min = (dt < s_irq_min) ? dt : s_irq_min;
+        s_irq_max = (dt > s_irq_max) ? dt : s_irq_max;
+        if (done)
+        {
+            s_it_active = false;
+        }
+    }
+    else
+    {
+        I2C1->CR1 &= ~(I2C_CR1_TXIE | I2C_CR1_RXIE | I2C_CR1_TCIE | I2C_CR1_STOPIE | I2C_CR1_NACKIE |
+                       I2C_CR1_ERRIE | I2C_CR1_ADDRIE);   /* a stray one: silenced */
+    }
+}
+
+void I2C1_EV_IRQHandler(void)
+{
+    it_serve();
+}
+
+void I2C1_ER_IRQHandler(void)
+{
+    it_serve();
+}
+
+static void nvic_i2c1(bool on)
+{
+    IRQn_Type ev = I2C1_EV_IRQn;
+    IRQn_Type er = I2C1_ER_IRQn;
+    (void)I2C_BM_GetIRQn(I2C1, &ev, &er);
+    const IRQn_Type q[2] = { ev, er };
+    for (uint32_t k = 0U; k < 2U; k++)
+    {
+        if (on)
+        {
+            HAL_NVIC_SetPriority(q[k], M4_IRQ_PRIO, 0U);
+            NVIC_ClearPendingIRQ(q[k]);
+            HAL_NVIC_EnableIRQ(q[k]);
+        }
+        else
+        {
+            HAL_NVIC_DisableIRQ(q[k]);
+            NVIC_ClearPendingIRQ(q[k]);
+        }
+    }
+}
+
+/* ---- DMA1/DMA2 streams of the caller (02_dma) --------------------------------------------- */
+static bool m4_stream(DMA_Stream_TypeDef *s, bool tx, uint8_t *mem, uint32_t n)
+{
+    uint32_t req = 0U;
+    (void)I2C_BM_GetDmaRequest(I2C1, tx, &req);
+    const DmaBm_ConfigEx_t d = {
+        .base = { .stream = s, .request_id = req, .direction = tx ? DMA_BM_DIR_MEM_TO_PERIPH : DMA_BM_DIR_PERIPH_TO_MEM,
+                  .periph_data_size = DMA_BM_DATA_SIZE_BYTE, .mem_data_size = DMA_BM_DATA_SIZE_BYTE,
+                  .periph_inc = false, .mem_inc = true, .circular = false, .priority = DMA_BM_PRIORITY_HIGH,
+                  .enable_it_ht = false, .enable_it_tc = false, .enable_it_te = false, .enable_it_dme = false,
+                  .enable_it_fe = false, .enable_trbuff = false, .enable_fifo = false,
+                  .fifo_threshold = DMA_BM_FIFO_TH_1_2,
+                  .periph_addr = tx ? (uint32_t)&I2C1->TXDR : (uint32_t)&I2C1->RXDR, .mem_addr = (uint32_t)mem,
+                  .buffer_length = n },
+        .mem1_addr = 0U, .mem_burst = DMA_BM_BURST_SINGLE, .periph_burst = DMA_BM_BURST_SINGLE,
+        .periph_flow_ctrl = false, .fail_if_busy = true, .stop_spin_limit = 0U };
+    return DMA_BM_InitStreamEx(&d) && DMA_BM_StartEx(s);
+}
+
+static void m4_stream_end(DMA_Stream_TypeDef *s)
+{
+    (void)DMA_BM_StopEx(s, 0U);
+    (void)DMA_BM_DeinitStream(s);
+}
+
+static uint32_t sentinel_left(uint32_t n)
+{
+    uint32_t left = 0U;
+    for (uint32_t i = 0U; i < n; i++)
+    {
+        if (s_buf[i] == M4_SENTINEL)
+        {
+            left++;
+        }
+    }
+    return left;
+}
+
+/* One transfer on I2C1, initialised by M4_INIT. Writes: s_buf[0..n-1] from the
+   seed (the first byte is the target's pointer); reads and write-reads: the
+   target's known content from pointer `p` (IST_TARGET_REG). */
+static void cmd_xfer(uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cycles)
+{
+    volatile uint32_t *r = res();
+    res_clear();
+    const uint32_t op = IST_XF_OP(xf);
+    const uint32_t mode = IST_XF_MODE(xf);
+    const uint32_t addr = IST_XF_ADDR(xf);
+    if ((n > M4_BUF_N) || (max_cycles == 0U))
+    {
+        r[IST_XR_STATUS] = (uint32_t)I2C_BM_ERR_PARAM;
+        return;
+    }
+    const bool rd = (op == IST_OP_READ) || (op == IST_OP_WRITEREAD);
+    if (op == IST_OP_WRITE)
+    {
+        ist_fill(s_buf, n, arg);
+    }
+    else
+    {
+        for (uint32_t i = 0U; i < n; i++)
+        {
+            s_buf[i] = M4_SENTINEL;
+        }
+    }
+    s_ptr_byte = (uint8_t)arg;
+    I2cBm_Status_t st = I2C_BM_ERR_PARAM;
+    uint32_t done_tx = 0U;
+    uint32_t done_rx = 0U;
+    uint32_t aux = 0U;
+    uint32_t t0 = DWT->CYCCNT;
+    if (mode == IST_MODE_POLL)
+    {
+        if (op == IST_OP_WRITE)
+        {
+            st = I2C_BM_Write(I2C1, addr, s_buf, n, max_cycles);
+        }
+        else if (op == IST_OP_READ)
+        {
+            st = I2C_BM_Read(I2C1, addr, s_buf, n, max_cycles);
+        }
+        else if (op == IST_OP_WRITEREAD)
+        {
+            st = I2C_BM_WriteRead(I2C1, addr, &s_ptr_byte, 1U, s_buf, n, max_cycles);
+        }
+        else
+        {
+            st = I2C_BM_Write(I2C1, addr, NULL, 0U, max_cycles);
+        }
+        done_tx = (op == IST_OP_WRITE) ? n : ((op == IST_OP_WRITEREAD) ? 1U : 0U);
+        done_rx = rd ? n : 0U;
+    }
+    else if ((mode == IST_MODE_IT) || (mode == IST_MODE_IT_CTRL))
+    {
+        s_it.addr7 = addr;
+        s_it.tx = (op == IST_OP_WRITE) ? s_buf : &s_ptr_byte;
+        s_it.ntx = (op == IST_OP_WRITE) ? n : ((op == IST_OP_WRITEREAD) ? 1U : 0U);
+        s_it.rx = s_buf;
+        s_it.nrx = rd ? n : 0U;
+        nvic_i2c1(true);
+        s_it_irqs = 0U;
+        s_it_active = true;
+        t0 = DWT->CYCCNT;
+        st = I2C_BM_StartIt(I2C1, &s_it);
+        if (mode == IST_MODE_IT_CTRL)
+        {
+            /* T6's control: every enable cleared by hand before the first event. */
+            const uint32_t pm = __get_PRIMASK();
+            __disable_irq();
+            I2C1->CR1 &= ~(I2C_CR1_TXIE | I2C_CR1_RXIE | I2C_CR1_TCIE | I2C_CR1_STOPIE | I2C_CR1_NACKIE | I2C_CR1_ERRIE);
+            __set_PRIMASK(pm);
+        }
+        if (st != I2C_BM_OK)
+        {
+            s_it_active = false;
+        }
+        uint32_t last = DWT->CYCCNT;
+        uint32_t same = 0U;
+        while (s_it_active && ((DWT->CYCCNT - t0) < max_cycles))
+        {
+            const uint32_t now = DWT->CYCCNT;
+            same = (now == last) ? (same + 1U) : 0U;
+            last = now;
+            if (same > STALL_READS)
+            {
+                IST_AREA->m4_stalls++;
+                break;
+            }
+        }
+        const bool timed_out = s_it_active;
+        s_it_active = false;
+        if (st == I2C_BM_OK)
+        {
+            st = timed_out ? I2C_BM_ERR_TIMEOUT : s_it.status;
+        }
+        r[IST_XR_IRQS] = s_it_irqs;
+        done_tx = s_it.done_tx;
+        done_rx = s_it.done_rx;
+        r[IST_XR_CYCLES] = DWT->CYCCNT - t0;
+        const uint32_t before = s_it_irqs;
+        (void)delay_cyc(SystemCoreClock / 100U);          /* T6: 10 ms with no I2C1 IRQ */
+        r[IST_XR_IRQS_AFTER] = s_it_irqs - before;
+        nvic_i2c1(false);
+        if (timed_out)
+        {
+            aux = (uint32_t)s_it.status;                   /* still PENDING: no progress */
+        }
+    }
+    else
+    {
+        /* DMA (plan rule 8): the stream first, then DmaStart, WaitEnd, the stream
+           stopped, DmaEnd. */
+        bool sok;
+        if (op == IST_OP_WRITE)
+        {
+            sok = m4_stream(M4_DMA_TX, true, &s_buf[1], n - 1U);
+            t0 = DWT->CYCCNT;
+            const I2cBm_Status_t s1 = I2C_BM_DmaStartWrite(I2C1, addr, s_buf, n);
+            st = (s1 == I2C_BM_OK) ? I2C_BM_WaitEnd(I2C1, n, max_cycles) : s1;
+            m4_stream_end(M4_DMA_TX);
+            done_tx = n;
+        }
+        else
+        {
+            sok = m4_stream(M4_DMA_RX, false, s_buf, n);
+            t0 = DWT->CYCCNT;
+            const I2cBm_Status_t s1 = I2C_BM_DmaStartRead(I2C1, addr, n);
+            if ((s1 == I2C_BM_OK) && (mode == IST_MODE_DMA_CTRL))
+            {
+                const uint32_t pm = __get_PRIMASK();      /* T7's control: RXDMAEN cleared by hand */
+                __disable_irq();
+                I2C1->CR1 &= ~I2C_CR1_RXDMAEN;
+                __set_PRIMASK(pm);
+            }
+            st = (s1 == I2C_BM_OK) ? I2C_BM_WaitEnd(I2C1, n, max_cycles) : s1;
+            const uint32_t w0 = DWT->CYCCNT;               /* the last byte leaves RXDR */
+            while ((DMA_BM_GetRemaining(M4_DMA_RX) != 0U) && ((DWT->CYCCNT - w0) < (SystemCoreClock / 1000U)))
+            {
+            }
+            done_rx = n - DMA_BM_GetRemaining(M4_DMA_RX);
+            m4_stream_end(M4_DMA_RX);
+        }
+        const I2cBm_Status_t se = I2C_BM_DmaEnd(I2C1);
+        aux = (sok ? 0U : 1U) | ((se == I2C_BM_OK) ? 0U : 2U);
+        r[IST_XR_CYCLES] = DWT->CYCCNT - t0;
+    }
+    if ((mode == IST_MODE_POLL))
+    {
+        r[IST_XR_CYCLES] = DWT->CYCCNT - t0;
+    }
+    uint32_t first = 0xFFFFFFFFUL;
+    r[IST_XR_STATUS] = (uint32_t)st;
+    r[IST_XR_CRC] = rd ? ist_crc32(s_buf, n) : ((op == IST_OP_WRITE) ? ist_crc32(s_buf, n) : 0U);
+    r[IST_XR_MISM] = rd ? ist_check_target(s_buf, n, arg & 0xFFU, &first) : 0U;
+    r[IST_XR_FIRST_BAD] = first;
+    r[IST_XR_DONE_TX] = done_tx;
+    r[IST_XR_DONE_RX] = done_rx;
+    r[IST_XR_CR1_AFTER] = I2C1->CR1;
+    r[IST_XR_SENTINEL] = rd ? sentinel_left(n) : 0U;
+    r[IST_XR_ISR_AFTER] = I2C1->ISR;
+    r[IST_XR_AUX] = aux;
+}
+
+static void cmd_t1(void)
+{
+    volatile uint32_t *r = res();
+    static IstT1Result_t t;
+    res_clear();
+    (void)I2C_BM_EnableClock(I2C1);
+    ist_t1(I2C1, IST_AREA->arg0, &t);
+    r[0] = t.cases;
+    r[1] = t.bad;
+    r[2] = t.groups_same;
+    r[3] = t.control_changed;
+    for (uint32_t i = 0U; (i < t.cases) && (i < IST_T1_MAX); i++)
+    {
+        r[4U + (i / 4U)] |= ((uint32_t)t.got[i] & 0xFFU) << (8U * (i % 4U));
+    }
+}
+
+static void cmd_busy(void)
+{
+    volatile uint32_t *r = res();
+    static IstT1Result_t t;
+    res_clear();
+    ist_t1_busy(I2C1, &t);
+    r[0] = t.cases;
+    r[1] = t.bad;
+    r[2] = t.groups_same;
+    r[3] = t.isr;
+    for (uint32_t i = 0U; (i < t.cases) && (i < IST_T1_MAX); i++)
+    {
+        r[4U + (i / 4U)] |= ((uint32_t)t.got[i] & 0xFFU) << (8U * (i % 4U));
+    }
+}
+
+static void cmd_t2(void)
+{
+    volatile uint32_t *r = res();
+    IstT2Result_t t;
+    res_clear();
+    (void)I2C_BM_EnableClock(I2C1);
+    ist_t2(I2C1, &t);
+    r[0] = t.cases;
+    r[1] = t.bad;
+    r[2] = t.bad_deinit;
+    r[3] = t.first_bad;
+    r[4] = t.got;
+    r[5] = t.exp;
+    r[6] = t.control;
+    r[7] = t.bad_status;
+}
+
+/* T13: this core's bank only (RM0399 9.5.10), I2C2 enabled in CPU1's bank. */
+static void cmd_t13(uint32_t what)
+{
+    volatile uint32_t *r = res();
+    res_clear();
+    if (what == 2U)
+    {
+        r[0] = (uint32_t)I2C_BM_EnableClock(I2C2);
+    }
+    r[1] = (uint32_t)I2C_BM_DisableClock(I2C2);
+    r[2] = RCC_C2->APB1LENR;
+}
+
+static void cmd_fmp(uint32_t on)
+{
+    volatile uint32_t *r = res();
+    res_clear();
+    r[0] = (uint32_t)I2C_BM_SetFastModePlus(I2C1, on != 0U);
+    r[1] = SYSCFG->PMCR;
+}
+
+/* T12 (ES0445 2.19.6): `count` writes of 2 bytes, I2C1 initialised on the HSI kernel
+   clock by CPU1 (APB1 / kernel within 1.5..3). The driver preloads the first byte;
+   the manual variants write CR2 themselves without it, the control of the erratum. */
+static I2cBm_Status_t t12_manual(bool dma, uint32_t max_cycles)
+{
+    I2C1->ICR = 0x3F38U;                                 /* every flag of ICR (50:2979-3027) */
+    I2C1->ISR = I2C_ISR_TXE;
+    if (dma)
+    {
+        if (!m4_stream(M4_DMA_TX, true, s_buf, 2U))
+        {
+            return I2C_BM_ERR_HAL;
+        }
+        I2C1->CR1 |= I2C_CR1_TXDMAEN;
+    }
+    I2C1->CR2 = ((uint32_t)IST_TARGET_ADDR << 1) | (2UL << I2C_CR2_NBYTES_Pos) | I2C_CR2_AUTOEND | I2C_CR2_START;
+    uint32_t sent = 0U;
+    const uint32_t t0 = DWT->CYCCNT;
+    I2cBm_Status_t st = I2C_BM_ERR_TIMEOUT;
+    while ((DWT->CYCCNT - t0) < max_cycles)
+    {
+        const uint32_t isr = I2C1->ISR;
+        if (!dma && ((isr & I2C_ISR_TXIS) != 0U) && (sent < 2U))
+        {
+            I2C1->TXDR = s_buf[sent];                     /* as fast as the CPU can */
+            sent++;
+        }
+        if ((isr & I2C_ISR_NACKF) != 0U)
+        {
+            st = I2C_BM_ERR_NACK;
+            break;
+        }
+        if ((isr & I2C_ISR_STOPF) != 0U)
+        {
+            st = I2C_BM_OK;
+            break;
+        }
+    }
+    if (dma)
+    {
+        m4_stream_end(M4_DMA_TX);
+        I2C1->CR1 &= ~I2C_CR1_TXDMAEN;
+    }
+    if (st == I2C_BM_ERR_TIMEOUT)
+    {
+        /* Stalled: only PE = 0 releases it (ES0445 2.19.6). */
+        I2C1->CR1 &= ~I2C_CR1_PE;
+        for (uint32_t i = 0U; (i < 1000U) && ((I2C1->CR1 & I2C_CR1_PE) != 0U); i++)
+        {
+        }
+        (void)I2C1->CR1;
+        I2C1->CR1 |= I2C_CR1_PE;
+    }
+    I2C1->ICR = 0x3F38U;
+    I2C1->CR2 = 0U;
+    return st;
+}
+
+static void cmd_t12(uint32_t what, uint32_t count, uint32_t max_cycles)
+{
+    volatile uint32_t *r = res();
+    res_clear();
+    uint32_t ok = 0U;
+    uint32_t stalled = 0U;
+    uint32_t other = 0U;
+    uint32_t slow = 0U;
+    s_buf[0] = 0xF0U;                                    /* the target's pointer: 0xF0 */
+    for (uint32_t k = 0U; k < count; k++)
+    {
+        s_buf[1] = (uint8_t)k;
+        const uint32_t t0 = DWT->CYCCNT;
+        I2cBm_Status_t st;
+        if (what == IST_T12_POLL_DRIVER)
+        {
+            st = I2C_BM_Write(I2C1, IST_TARGET_ADDR, s_buf, 2U, max_cycles);
+        }
+        else if (what == IST_T12_DMA_DRIVER)
+        {
+            const bool sok = m4_stream(M4_DMA_TX, true, &s_buf[1], 1U);
+            st = I2C_BM_DmaStartWrite(I2C1, IST_TARGET_ADDR, s_buf, 2U);
+            if (st == I2C_BM_OK)
+            {
+                st = I2C_BM_WaitEnd(I2C1, 2U, max_cycles);
+            }
+            m4_stream_end(M4_DMA_TX);
+            (void)I2C_BM_DmaEnd(I2C1);
+            if (!sok)
+            {
+                st = I2C_BM_ERR_HAL;
+            }
+        }
+        else
+        {
+            st = t12_manual(what == IST_T12_DMA_MANUAL, max_cycles);
+        }
+        const uint32_t dt = DWT->CYCCNT - t0;
+        slow = (dt > slow) ? dt : slow;
+        if (st == I2C_BM_OK)
+        {
+            ok++;
+        }
+        else if (st == I2C_BM_ERR_TIMEOUT)
+        {
+            stalled++;
+        }
+        else if (other == 0U)
+        {
+            other = 0x100U | (uint32_t)st;
+        }
+        (void)delay_cyc(SystemCoreClock / 20000U);       /* 50 us between transfers */
+    }
+    r[0] = ok;
+    r[1] = stalled;
+    r[2] = other;
+    r[3] = slow;
+}
+
+/* B1: cycles of Init, of a Write of 1 byte, and of each XferIrq call of an IT write. */
+static void cmd_b1(uint32_t timingr)
+{
+    volatile uint32_t *r = res();
+    res_clear();
+    const I2cBm_Config_t c = { I2C1, timingr, true, 0U, 0U };
+    (void)I2C_BM_Deinit(I2C1);
+    uint32_t t0 = DWT->CYCCNT;
+    (void)I2C_BM_Init(&c);
+    r[0] = DWT->CYCCNT - t0;
+    s_buf[0] = 0x80U;
+    t0 = DWT->CYCCNT;
+    r[4] = (uint32_t)I2C_BM_Write(I2C1, IST_TARGET_ADDR, s_buf, 1U, SystemCoreClock / 100U);
+    r[1] = DWT->CYCCNT - t0;
+    s_irq_min = 0xFFFFFFFFUL;
+    s_irq_max = 0U;
+    ist_fill(&s_buf[1], 15U, 0x1234567U);
+    s_it.addr7 = IST_TARGET_ADDR;
+    s_it.tx = s_buf;
+    s_it.ntx = 16U;
+    s_it.rx = NULL;
+    s_it.nrx = 0U;
+    nvic_i2c1(true);
+    s_it_active = true;
+    t0 = DWT->CYCCNT;
+    if (I2C_BM_StartIt(I2C1, &s_it) != I2C_BM_OK)
+    {
+        s_it_active = false;
+    }
+    while (s_it_active && ((DWT->CYCCNT - t0) < (SystemCoreClock / 100U)))
+    {
+    }
+    s_it_active = false;
+    nvic_i2c1(false);
+    r[2] = s_irq_min;
+    r[3] = s_irq_max;
+    r[5] = (uint32_t)s_it.status;
+}
+
 static void copy_str(volatile char *dst, uint32_t n, const char *src)
 {
     uint32_t i = 0U;
@@ -475,6 +1075,9 @@ void I2C_Selftest_CM4_Run(void)
         s_last_seq = a->cmd_seq;
         const uint32_t cmd = a->cmd;
         const uint32_t a0  = a->arg0;
+        const uint32_t a1  = a->arg1;
+        const uint32_t a2  = a->arg2;
+        const uint32_t a3  = a->arg3;
 
         switch (cmd)
         {
@@ -497,7 +1100,44 @@ void I2C_Selftest_CM4_Run(void)
         case IST_CMD_SAFE:
             run_safe(&a->m4_safe);
             break;
+        case IST_CMD_M4_PINS:
+            cmd_pins(a0);
+            break;
+        case IST_CMD_M4_INIT:
+            cmd_init(a0, a1, a2);
+            break;
+        case IST_CMD_M4_DEINIT:
+            cmd_deinit();
+            break;
+        case IST_CMD_M4_XFER:
+            cmd_xfer(a0, a1, a2, a3);
+            break;
+        case IST_CMD_M4_T1:
+            cmd_t1();
+            break;
+        case IST_CMD_M4_T2:
+            cmd_t2();
+            break;
+        case IST_CMD_M4_T13:
+            cmd_t13(a0);
+            break;
+        case IST_CMD_M4_FMP:
+            cmd_fmp(a0);
+            break;
+        case IST_CMD_M4_T12:
+            cmd_t12(a0, a1, a2);
+            break;
+        case IST_CMD_M4_B1:
+            cmd_b1(a0);
+            break;
+        case IST_CMD_M4_BUSY:
+            cmd_busy();
+            break;
+        case IST_CMD_M4_REGS:
+            cmd_regs();
+            break;
         case IST_CMD_DONE:
+            (void)I2C_BM_Deinit(I2C1);
             bench_safe();
             __DMB();
             a->ack_seq = s_last_seq;

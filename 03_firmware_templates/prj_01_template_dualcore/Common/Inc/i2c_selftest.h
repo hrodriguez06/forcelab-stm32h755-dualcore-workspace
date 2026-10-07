@@ -21,6 +21,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "stm32h7xx.h"
+#include "i2c_bm.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,7 +41,8 @@ void I2C_Selftest_CM4_Run(void);          /* CPU2, after Shared_GpioLockInstall(
  * bus-pin owners. Bump it when any of those change. From v1 on, a step that
  * needs the host to read a state holds it until a HOST_REQ pulse
  * (sync_ack_low(), 06_spi lesson B1).                                         */
-#define I2C_BENCH_VERSION    1U    /* v1: T0A, T0C, T0B, T0B_CM7, T0B_TIMEOUT (plan phase F0) */
+#define I2C_BENCH_VERSION    2U    /* v1: T0A, T0C, T0B, T0B_CM7, T0B_TIMEOUT (plan phase F0);
+                                      v2: + F1_NOPIN, F1_CM4, F1_CM7, F1_RECOVER (phase F1) */
 
 typedef enum
 {
@@ -130,8 +132,124 @@ typedef enum
     IST_CMD_S16,         /* T0b: the S16 pin-state cases on ist_s16_pins_ok()                */
     IST_CMD_AF_ON,       /* T0b: PB8/PB9 claimed and written AF4 open-drain, I2C1 PE = 0     */
     IST_CMD_SAFE,        /* T0b: CPU2's bench_safe(), then a photo                            */
-    IST_CMD_DONE
+    IST_CMD_DONE,
+    /* Phase F1 (i2c_bm on I2C1). Arguments in arg0..arg3, results in m4_res[]. */
+    IST_CMD_M4_PINS,     /* arg0 = 1: PB8/PB9 claimed and written AF4 open-drain (step F1_CM4);
+                            0: bench_safe() of the pins -> res[0] = 1 if done              */
+    IST_CMD_M4_INIT,     /* arg0 = TIMINGR, arg1 = analog | dnf << 8, arg2 = timeout_scl_low:
+                            EnableClock + I2C_BM_Init(I2C1) -> res[0] status, res[1..6] =
+                            CR1, CR2, OAR1, OAR2, TIMINGR, TIMEOUTR, res[7] ISR            */
+    IST_CMD_M4_DEINIT,   /* I2C_BM_Deinit(I2C1) -> res[0] status, res[1..7] as M4_INIT     */
+    IST_CMD_M4_XFER,     /* arg0 = IST_XF(op, mode, addr), arg1 = n, arg2 = seed (write) or
+                            starting pointer of the target (read, write-read), arg3 =
+                            max_cycles -> res[] IST_XR_*                                   */
+    IST_CMD_M4_T1,       /* T1 refusals on I2C1, nothing initialised -> res[0] cases, res[1]
+                            with another status, res[2] snapshot groups unchanged, res[3]
+                            control changed, res[4..] the statuses (IST_T1_MAX)            */
+    IST_CMD_M4_T2,       /* T2 images of I2C1 over the matrix -> res[0] cases, res[1] bad,
+                            res[2] bad Deinit images, res[3] first bad case, res[4] got, res[5]
+                            expected, res[6] control detected                             */
+    IST_CMD_M4_T13,      /* arg0 = 1: DisableClock(I2C2); 2: EnableClock, DisableClock ->
+                            res[0], res[1] statuses, res[2] RCC_C2 APB1LENR after          */
+    IST_CMD_M4_FMP,      /* arg0 = 0/1: I2C_BM_SetFastModePlus(I2C1) -> res[0] status, res[1]
+                            SYSCFG_PMCR after                                              */
+    IST_CMD_M4_T12,      /* arg0 = IST_T12_*, arg1 = count, arg2 = max_cycles of each ->
+                            res[0] OK, res[1] stalled, res[2] first other status, res[3]
+                            cycles of the slowest                                         */
+    IST_CMD_M4_B1,       /* -> res[0] cycles of Init, res[1] Write of 1 byte, res[2..3]
+                            XferIrq min/max, res[4] status of the Write                     */
+    IST_CMD_M4_BUSY,     /* T1 with BUSY = 1 (the target holds SDA) on I2C1 -> res[0] cases,
+                            res[1] with another status, res[2] registers unchanged, res[3]
+                            ISR, res[4..] the statuses                                     */
+    IST_CMD_M4_REGS      /* -> res[0..7] = CR1, CR2, OAR1, OAR2, TIMINGR, TIMEOUTR, ISR, the
+                            I2C1 clock in CPU2's bank                                      */
 } IstCmd_t;
+
+/* ---- Phase F1 transfers ---------------------------------------------------------- */
+#define IST_OP_WRITE        0U
+#define IST_OP_READ         1U
+#define IST_OP_WRITEREAD    2U    /* one pointer byte, repeated start, n bytes read          */
+#define IST_OP_PROBE        3U    /* I2C_BM_Write of 0 bytes                                  */
+#define IST_MODE_POLL       0U
+#define IST_MODE_IT         1U
+#define IST_MODE_DMA        2U
+#define IST_MODE_IT_CTRL    3U    /* T6 control: the interrupt enables cleared by hand        */
+#define IST_MODE_DMA_CTRL   4U    /* T7 control: RXDMAEN cleared by hand (reads)              */
+#define IST_XF(op, mode, addr)  (((uint32_t)(op)) | ((uint32_t)(mode) << 8) | ((uint32_t)(addr) << 16))
+#define IST_XF_OP(x)        ((x) & 0xFFU)
+#define IST_XF_MODE(x)      (((x) >> 8) & 0xFFU)
+#define IST_XF_ADDR(x)      (((x) >> 16) & 0x7FU)
+
+/* The result of one transfer (CPU2's m4_res[], and CPU1's own). */
+#define IST_XR_STATUS       0U    /* I2cBm_Status_t                                          */
+#define IST_XR_CRC          1U    /* CRC-32 (zlib) of the bytes written (W) or read (R, WR)   */
+#define IST_XR_MISM         2U    /* bytes read that differ from the target's known content  */
+#define IST_XR_FIRST_BAD    3U    /* index of the first, 0xFFFFFFFF if none                   */
+#define IST_XR_CYCLES       4U    /* CYCCNT of the call (or StartIt to the end)               */
+#define IST_XR_DONE_TX      5U    /* I2cBm_Xfer_t.done_tx (IT), else the bytes written        */
+#define IST_XR_DONE_RX      6U
+#define IST_XR_IRQS         7U    /* event + error IRQs during an IT transfer                 */
+#define IST_XR_IRQS_AFTER   8U    /* in the 10 ms after the end (T6)                          */
+#define IST_XR_CR1_AFTER    9U    /* CR1 after the end                                        */
+#define IST_XR_SENTINEL     10U   /* bytes of the read buffer still holding the sentinel      */
+#define IST_XR_ISR_AFTER    11U
+#define IST_XR_AUX          12U   /* DMA: the steps' status (0 = all OK)                      */
+#define IST_XR_N            13U
+
+#define IST_T12_POLL_DRIVER  0U   /* I2C_BM_Write of 2 bytes (first byte preloaded)          */
+#define IST_T12_DMA_DRIVER   1U   /* I2C_BM_DmaStartWrite of 2 bytes                          */
+#define IST_T12_POLL_MANUAL  2U   /* by hand, no preload: START, then TXDR at each TXIS       */
+#define IST_T12_DMA_MANUAL   3U   /* by hand, no preload: TXDMAEN, START, the stream sends 2  */
+
+#define IST_T1_MAX           80U
+
+/* The target (tools/i2c_target_f334): 7-bit address, and a free address. */
+#define IST_TARGET_ADDR      0x42U
+#define IST_NO_TARGET_ADDR   0x43U
+/* Its registers after INIT: reg[i] = i ^ 0xA5; a read returns them from the pointer on. */
+#define IST_TARGET_REG(i)    ((uint8_t)(((i) & 0xFFU) ^ 0xA5U))
+
+/* ---- Data (both cores) ------------------------------------------------------------ */
+uint32_t ist_xorshift32(uint32_t *state);                     /* state != 0                */
+void     ist_fill(uint8_t *buf, uint32_t n, uint32_t seed);    /* xorshift32 bytes          */
+uint32_t ist_crc32(const uint8_t *buf, uint32_t n);           /* zlib.crc32 of the bytes   */
+/* Bytes of buf[0..n-1] that differ from the target's content from pointer p0;
+   *first = index of the first (0xFFFFFFFF if none). */
+uint32_t ist_check_target(const uint8_t *buf, uint32_t n, uint32_t p0, uint32_t *first);
+
+/* ---- T1, T2, T14 on any instance, from either core (phase F1) ------------------- */
+#define IST_NREG             7U    /* CR1, CR2, OAR1, OAR2, TIMINGR, TIMEOUTR, ISR          */
+void     ist_regs(const I2C_TypeDef *i2c, uint32_t r[IST_NREG]);
+/* Bit k set: register k differs from the reset image of RM0399 50.7 (T14). */
+uint32_t ist_reset_diff(const I2C_TypeDef *i2c);
+
+typedef struct
+{
+    uint32_t cases;
+    uint32_t bad;              /* cases with another status than the one written by hand  */
+    uint32_t groups_same;      /* bit g: the photo of group g + 1 unchanged                */
+    uint32_t control_changed;  /* a valid Init changed the photo                           */
+    uint32_t init_status;      /* of that Init                                             */
+    uint32_t isr;              /* ist_t1_busy: ISR before the refusals                    */
+    uint8_t  got[IST_T1_MAX];
+    uint8_t  exp[IST_T1_MAX];
+} IstT1Result_t;
+/* The refusals of T1 on `i2c`, clocked in this core's bank; `timingr` valid for it. */
+void     ist_t1(I2C_TypeDef *i2c, uint32_t timingr, IstT1Result_t *r);
+/* T1 with ISR.BUSY = 1: every transfer ERR_BUS, nothing written. */
+void     ist_t1_busy(I2C_TypeDef *i2c, IstT1Result_t *r);
+
+typedef struct
+{
+    uint32_t cases;            /* TIMINGR x filters x DNF x timeout                        */
+    uint32_t bad;              /* images that differ from the RM fields typed by hand     */
+    uint32_t bad_deinit;       /* Deinit not OK or not the reset image                    */
+    uint32_t bad_status;       /* Init neither OK nor ERR_BUS                              */
+    uint32_t first_bad;        /* case << 4 | register, 0xFFFFFFFF if none                 */
+    uint32_t got, exp;
+    uint32_t control;          /* an altered expected image (DNF + 1) was told apart      */
+} IstT2Result_t;
+void     ist_t2(I2C_TypeDef *i2c, IstT2Result_t *r);
 
 /* CPU2's claim cases (T0b). The expected bit patterns are written by hand in
    IST_M4_CLAIMS_EXPECT_*: bit k = case k accepted. CPU1 judges them. */
@@ -200,6 +318,9 @@ typedef struct
 
     volatile uint32_t cmd;
     volatile uint32_t arg0;
+    volatile uint32_t arg1;            /* phase F1                                    */
+    volatile uint32_t arg2;
+    volatile uint32_t arg3;
     volatile uint32_t cmd_seq;         /* CPU1 increments after writing cmd/args      */
     volatile uint32_t ack_seq;         /* CPU2 copies cmd_seq when done               */
     volatile uint32_t m4_timeout;      /* CPU2 gave up waiting for a command          */
@@ -212,6 +333,7 @@ typedef struct
     IstS16Result_t     m4_s16;
     IstPinPhoto_t      m4_af;          /* after IST_CMD_AF_ON                          */
     IstPinPhoto_t      m4_safe;        /* after IST_CMD_SAFE                           */
+    volatile uint32_t  m4_res[96];     /* phase F1: the result of the last command     */
 } IstArea_t;
 
 _Static_assert(sizeof(IstArea_t) <= 0x1000U, "IstArea_t no longer fits its 4 KB slot");

@@ -135,12 +135,17 @@ if(SPI_DRIVER_SELFTEST)
     )
 endif()
 
-# 05_i2c selftest, CPU2 side (see CM7/CMakeLists.txt): F0 needs only gpio_bm.
+# 05_i2c selftest, CPU2 side (see CM7/CMakeLists.txt): F1 adds i2c_bm and dma_bm
+# (T7(a), I2C1 by DMA1/DMA2).
 if(I2C_DRIVER_SELFTEST)
     target_compile_definitions(${TARGET} PRIVATE I2C_DRIVER_SELFTEST=1)
     target_sources(${TARGET} PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/App/Src/i2c_selftest.c
         ${CMAKE_SOURCE_DIR}/Common/Src/i2c_selftest_common.c
+    )
+    target_link_libraries(${TARGET} PRIVATE
+        stm32h7_driver_i2c_bm
+        stm32h7_driver_dma_bm
     )
 endif()
 
