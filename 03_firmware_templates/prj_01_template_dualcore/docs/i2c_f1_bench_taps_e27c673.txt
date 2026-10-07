@@ -1,0 +1,1808 @@
+[+   0.057s] [host] argv: --bench-state taps --checklist-confirmed Hector --checklist-date 2026-10-07
+[+   0.058s] [host] options: bench_state=taps allow_dirty=False preset=selftest-i2c no_reset=False checklist_confirmed=Hector checklist_date=2026-10-07
+[+   0.058s] [host] i2c_hw_check.py, host checkout e27c673, protocol v2, F334 protocol v3, phase F1
+[+   0.058s] [host] checklist [x] GND first: W3 H755 CN8-11 <-> F334 CN5-7; no supply rail between the boards (S20): confirmed by Hector on 2026-10-07 (--checklist-confirmed)
+[+   0.058s] [host] checklist [x] I2C bus: SCL node H755 PB8 (CN7-2) <-> F334 PB8 (CN5-10) W1; SDA node H755 PB9 (CN7-4) <-> F334 PB9 (CN5-9) W2; 1.0 kOhm from each node to H755 3V3 (CN8-7); no series resistors: confirmed by Hector on 2026-10-07 (--checklist-confirmed)
+[+   0.059s] [host] checklist [x] bench state 'taps': J2 (SCL node - PF14, CN9-19) and J3 (SDA node - PF15, CN9-21) in place: confirmed by Hector on 2026-10-07 (--checklist-confirmed)
+[+   0.059s] [host] checklist [x] F334 checks: D15/D14 = PB8/PB9 on CN5-10/CN5-9, GND on CN5-7, BOOT0 its own pin, no pull-up or solder bridge on PB8/PB9; H755 SB39/SB62 open: confirmed by Hector on 2026-10-07 (--checklist-confirmed)
+[+   0.059s] [host] checklist [x] AD2 lines per 00_gpio README section 8 (DIO0..14), the AD2 on USB while the Nucleo is powered: confirmed by Hector on 2026-10-07 (--checklist-confirmed)
+[+   0.059s] [host] checklist [x] both Nucleo boards on USB of this PC, the F334 powered before the session (S20): confirmed by Hector on 2026-10-07 (--checklist-confirmed)
+[+   0.059s] [host] checklist (not an operator item) images: the F334 with tools/i2c_target_f334 and the H755 with selftest-i2c, each through tools/flash.py --sn with this script stopped; checked by T0d below (Rev, id)
+[+   1.005s] [host] checklist [x] WaveForms GUI closed, no debugger attached (tasklist: none of WaveForms.exe, ST-LINK_gdbserver.exe, openocd.exe, STM32CubeProgrammer.exe)
+[+   1.421s] [host] tree clean
+[+   2.385s] [host] build id of this checkout: build/selftest-i2c 3417b1bd4c6653f1; tools/i2c_target_f334/build/f334 83794128d14afc2b
+[+   2.386s] [ad2] T0B(a) ad2_set_oe(0x0200, bus=NONE): refused before the DLL
+[+   2.386s] [ad2] T0B(a) ad2_set_oe(0x0800, bus=NONE): refused before the DLL
+[+   2.386s] [ad2] T0B(a) ad2_set_oe(0x2000, bus=NONE): refused before the DLL
+[+   2.386s] [ad2] T0B(a) ad2_set_oe(0x4000, bus=NONE): refused before the DLL
+[+   2.386s] [ad2] T0B(a) ad2_set_oe(0x8000, bus=NONE): refused before the DLL
+[+   2.386s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=NONE): refused before the DLL
+[+   2.386s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=MCU): refused before the DLL
+[+   2.386s] [ad2] T0B(a) ad2_set_oe(0x10FF, bus=MCU): refused before the DLL
+[+   2.386s] [ad2] T0B(a) control ad2_set_oe(0x1000, bus=NONE): passed to the DLL
+[+   2.386s] [ad2] T0B(a) control ad2_set_oe(0x10FF, bus=AD2): passed to the DLL
+[+   2.386s] [host] T0B(a) i2c_set_oe(0x0100) [DIO8 (S3 would allow it)]: refused, S2, nothing passed to ad2_set_oe
+[+   2.386s] [host] T0B(a) i2c_set_oe(0x0400) [DIO10 (S3 would allow it)]: refused, S2, nothing passed to ad2_set_oe
+[+   2.386s] [host] T0B(a) i2c_set_oe(0x00FF) [the AD2 bus]: refused, S2, nothing passed to ad2_set_oe
+[+   2.386s] [host] T0B(a) i2c_set_oe(0x0200) [DIO9]: refused, S2, nothing passed to ad2_set_oe
+[+   2.386s] [host] T0B(a) i2c_set_oe(0x4000) [DIO14 (PA8)]: refused, S2, nothing passed to ad2_set_oe
+[+   2.386s] [host] T0B(a) i2c_set_oe(0x8000) [DIO15]: refused, S2, nothing passed to ad2_set_oe
+[+   2.386s] [host] T0B(a) i2c_set_oe(0x1100) [HOST_REQ with DIO8]: refused, S2, nothing passed to ad2_set_oe
+[+   2.386s] [host] T0B(a) control i2c_set_oe(0x0000): passed to ad2_set_oe
+[+   2.386s] [host] T0B(a) control i2c_set_oe(0x1000): passed to ad2_set_oe
+[+   2.386s] [host] T0B(a) S15 check of an F334 pin report [both AF4 open-drain]: accepted (ok) -> as expected
+[+   2.386s] [host] T0B(a) S15 check of an F334 pin report [both input]: accepted (ok) -> as expected
+[+   2.386s] [host] T0B(a) S15 check of an F334 pin report [PB8 AF push-pull]: refused (PB8 MODER=2 OTYPER=0 AFR=4) -> as expected
+[+   2.386s] [host] T0B(a) S15 check of an F334 pin report [PB9 pull-up]: refused (PB9 pull 1) -> as expected
+[+   2.386s] [host] T0B(a) S15 check of an F334 pin report [PB8 GPIO output]: refused (PB8 MODER=1 OTYPER=1 AFR=4) -> as expected
+[+   2.386s] [host] T0B(a) S15 check of an F334 pin report [PB9 AF1]: refused (PB9 MODER=2 OTYPER=1 AFR=1) -> as expected
+[+   2.386s] [host] T0B(a) S15 check of an F334 pin report [firmware says violated]: refused (no s15=ok) -> as expected
+[+   2.386s] [host] T0B(a) S15 check of an F334 pin report [PB9 missing]: refused (PB9 missing) -> as expected
+[+   2.386s] [host] T0B(a) S15 check of an F334 pin report [PB8 twice, a bad copy first (m14)]: refused (PB8 reported 2 times) -> as expected
+[+   2.386s] [host] T0B(a) S15 check of an F334 pin report [PB9 only inside another word (m14)]: refused (PB9 missing) -> as expected
+[+   2.386s] [host] T0B(a) S17 levels taps 1+ 3.157 V 2+ 3.301 V [the F0 delivery levels]: accepted -> as expected
+[+   2.386s] [host] T0B(a) S17 levels taps 1+ 3.102 V 2+ 3.245 V [the auditor's session (both 1.7 % lower, same ratio)]: accepted -> as expected
+[+   2.386s] [host] T0B(a) S17 levels taps 1+ 3.000 V 2+ 3.300 V [ratio 0.909: a 2.2 kOhm pull-up]: refused: scope 1+ (SCL) / 2+ (SDA) = 3.000 / 3.300 V = 0.9091, outside 0.941..0.971 (1 kOhm pull-up against PF14's 22 kOhm) -> as expected
+[+   2.386s] [host] T0B(a) S17 levels taps 1+ 2.800 V 2+ 2.950 V [SDA below 3.0 V]: refused: scope 2+ (SDA node through J3) reads 2.950 V < 3.0 V -> as expected
+[+   2.386s] [host] T0B(a) S17 levels taps 1+ 0.036 V 2+ 3.300 V [J2 missing (S19)]: refused: scope 1+ (SCL) / 2+ (SDA) = 0.036 / 3.300 V = 0.0109, outside 0.941..0.971 (1 kOhm pull-up against PF14's 22 kOhm); scope 1+ (SCL node through J2) reads 0.036 V <= 0.10 V: J2 not in place, or the probe not on PF14 -> as expected
+[+   2.386s] [host] T0B(a) S17 levels notaps 1+ 0.057 V 2+ 3.235 V [the F0 notaps levels]: accepted -> as expected
+[+   2.386s] [host] T0B(a) S17 levels notaps 1+ 3.303 V 2+ 3.300 V [probe on the bus side (S19)]: refused: scope 1+ (PF14 alone, J2 removed) reads 3.303 V >= 0.10 V: J2 in place, or the probe on the bus side -> as expected
+[+   2.386s] [host] T0B(a) S17 levels notaps 1+ 0.057 V 2+ 2.900 V [PF15 below 3.0 V]: refused: scope 2+ (PF15 alone, J3 removed) reads 2.900 V < 3.0 V -> as expected
+[+   2.386s] [host] T0B(a) S21 hold guard HOLD SDA 0 EDGES 0: refused (0 ms outside 1..500 (S21)) -> as expected
+[+   2.386s] [host] T0B(a) S21 hold guard HOLD SDA 501 EDGES 0: refused (501 ms outside 1..500 (S21)) -> as expected
+[+   2.386s] [host] T0B(a) S21 hold guard HOLD SCL 50 EDGES 5: refused (EDGES only with SDA) -> as expected
+[+   2.386s] [host] T0B(a) S21 hold guard HOLD SDA 1000 EDGES 5: refused (1000 ms outside 1..500 (S21)) -> as expected
+[+   2.386s] [host] T0B(a) S21 hold guard HOLD XX 50 EDGES 0: refused (line 'XX') -> as expected
+[+   2.386s] [host] T0B(a) S21 hold guard HOLD SDA 50 EDGES 0: sent -> as expected
+[+   2.386s] [host] T0B(a) S21 hold guard HOLD SCL 500 EDGES 0: sent -> as expected
+[+   2.386s] [host] T0B(a) S21 hold guard HOLD SDA 500 EDGES 5: sent -> as expected
+[+   2.386s] [host] T0B(a) S18 probe check [the two expected probes]: accepted (the two expected ST-LINKs, nothing else) -> as expected
+[+   2.386s] [host] T0B(a) S18 probe check [a third]: refused (3 ST-LINKs (['0016000C4142501220353451', '066BFF393731435243254117', '0670FF000000000000000000']), expected exactly 2) -> as expected
+[+   2.386s] [host] T0B(a) S18 probe check [the F334's missing]: refused (1 ST-LINKs (['0016000C4142501220353451']), expected exactly 2) -> as expected
+[+   2.387s] [host] T0B(a) S18 probe check [another F334 SN]: refused (probes {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254118': 'NUCLEO-F334R8'}, expected {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254117': 'NUCLEO-F334R8'}) -> as expected
+[+   2.387s] [host] T0B(a) S18 probe check [boards swapped]: refused (probes {'0016000C4142501220353451': 'NUCLEO-F334R8', '066BFF393731435243254117': 'NUCLEO-H755ZI-Q'}, expected {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254117': 'NUCLEO-F334R8'}) -> as expected
+[+   2.387s] [host] T0B(a) S18 parser on a CubeProgrammer listing: [{'sn': '0016000C4142501220353451', 'fw': 'V3J17M11', 'board': 'NUCLEO-H755ZI-Q'}, {'sn': '066BFF393731435243254117', 'fw': 'V2J38M27', 'board': 'NUCLEO-F334R8'}] -> as expected
+[+   2.387s] [host] T0B(a) T0d identity check [all match]: accepted -> as expected
+[+   2.387s] [host] T0B(a) T0d identity check [F334 Rev from another commit]: aborts: f334 Rev 7654321 is not this checkout (1234567) -> as expected
+[+   2.387s] [host] T0B(a) T0d identity check [CM4 dirty]: aborts: cm4 Rev 1234567-dirty is dirty -> as expected
+[+   2.387s] [host] T0B(a) T0d identity check [CM7 id differs]: aborts: cm7 id cccc != cm4 id aaaa; cm7 id cccc != host id aaaa -> as expected
+[+   2.387s] [host] T0B(a) T0d identity check [F334 id differs]: aborts: f334 id cccc != host id bbbb -> as expected
+[+   2.387s] [host] T0B(a) T0d identity check [F334 SN differs]: aborts: probes {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254110': 'NUCLEO-F334R8'}, expected {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254117': 'NUCLEO-F334R8'} -> as expected
+[+   2.387s] [host] T0B(a) T0d identity check [one port for both]: aborts: ports H755 COM4 F334 COM4 -> as expected
+[+   2.387s] [host] T0B(a) checklist arguments [name and date]: accepted -> as expected
+[+   2.387s] [host] T0B(a) checklist arguments [neither (not evidence)]: accepted -> as expected
+[+   2.387s] [host] T0B(a) checklist arguments [a name without a date]: refused: --checklist-confirmed needs --checklist-date YYYY-MM-DD (the day of the confirmation) -> as expected
+[+   2.387s] [host] T0B(a) checklist arguments [a date alone]: refused: --checklist-date given without --checklist-confirmed NAME -> as expected
+[+   2.387s] [host] T0B(a) checklist arguments [not ISO]: refused: --checklist-date '07/10/2026' is not YYYY-MM-DD -> as expected
+[+   2.387s] [host] T0B(a) checklist arguments [no such day]: refused: --checklist-date '2026-02-30' is not a calendar date -> as expected
+[+   2.387s] [host] T0B(a) checklist arguments [an empty name]: refused: --checklist-date given without --checklist-confirmed NAME -> as expected
+[+   2.387s] [host] T0B(a) T3 calc: 100 MHz, 100 kHz, t_r 250, t_f 20, filter: status 0 TIMINGR 0x30C06D81 model 99700 (99700, RM check clean) -> as expected
+[+   2.387s] [host] T0B(a) T3 control: expected TIMINGR with SCLL + 1 (0x30C06D82) differs from 0x30C06D81: told apart
+[+   2.387s] [host] T0B(a) T3 control: 100 MHz, 100 kHz, t_r 1000, t_f 300: TIMINGR 0x70F3313A (SDADEL 3) passes True; with SDADEL 0 (below 50:319) the RM check refuses: SDADEL below its minimum (50:319) -> as expected
+[+   2.387s] [host] T0B(a) T3 calc refusal k=3999999 f=100000: status 3 (3) -> as expected
+[+   2.387s] [host] T0B(a) T3 calc refusal k=100000000 f=0: status 1 (1) -> as expected
+[+   2.387s] [host] T0B(a) T3 calc refusal k=100000000 f=1000001: status 1 (1) -> as expected
+[+   2.387s] [host] T0B(a) X/RPT pairing [a good read]: accepted -> as expected
+[+   2.387s] [host] T0B(a) X/RPT pairing [the target sent 5]: refused: RPT tx=5 (4) -> as expected
+[+   2.388s] [host] T0B(a) X/RPT pairing [another CRC at the target]: refused: RPT crc_tx=00000000 (5B73EF64) -> as expected
+[+   2.388s] [host] T0B(a) X/RPT pairing [status NACK]: refused: status ERR_NACK (OK) -> as expected
+[+   2.388s] [host] T0B(a) X/RPT pairing [no report]: refused: no RPT from the target -> as expected
+[+   2.397s] [host] T0B(a) decoder on a synthetic capture (20 MS/s, 100 kHz): 'S 84A 07A | Sr 85A A2N P'; tSU;DAT drivers mmmmmsmmmmmsssssssm (want mmmmmsmmmmmsssssssm); swapped 'S  P | S  P | S  P | S  P | S  P | S  P ' -> as expected
+[+   2.402s] [host] T0B(a) decoder on a synthetic capture (50 MS/s, 400 kHz): 'S 84A 07A | Sr 85A A2N P'; tSU;DAT drivers mmmmmsmmmmmsssssssm (want mmmmmsmmmmmsssssssm); swapped 'S  P | S  P | S  P | S  P | S  P | S  P ' -> as expected
+[+   2.402s] [host] T0B(a) S3 (00_gpio) guard on its mock: PASS
+[+   2.402s] [host] T0B(a) HOST_REQ only guard on its mock: PASS
+[+   2.402s] [host] T0B(a) S15 F334 report guard on its mock: PASS
+[+   2.402s] [host] T0B(a) S17 levels guard on its mock: PASS
+[+   2.402s] [host] T0B(a) S21 hold guard on its mock: PASS
+[+   2.402s] [host] T0B(a) S18 probes guard on its mock: PASS
+[+   2.402s] [host] T0B(a) T0d identity guard on its mock: PASS
+[+   2.402s] [host] T0B(a) checklist arguments guard on its mock: PASS
+[+   2.402s] [host] T0B(a) T3 calculation rules guard on its mock: PASS
+[+   2.402s] [host] T0B(a) X/RPT pairing guard on its mock: PASS
+[+   2.402s] [host] T0B(a) I2C decoder guard on its mock: PASS
+[+   2.634s] [host] S18 probe: ST-LINK SN 0016000C4142501220353451 FW V3J17M11 board NUCLEO-H755ZI-Q
+[+   2.634s] [host] S18 probe: ST-LINK SN 066BFF393731435243254117 FW V2J38M27 board NUCLEO-F334R8
+[+   2.634s] [host] S18 the two expected ST-LINKs, nothing else
+[+   2.642s] [host] S18 ports by ST-LINK SN: H755 0016000C4142501220353451 -> COM4, F334 066BFF393731435243254117 -> COM7
+[+   3.529s] [f334] I2C_TARGET v3 Rev e27c673 id 83794128d14afc2b
+[+   3.537s] [f334] I2C_TARGET pins PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   3.550s] [f334] I2C_TARGET addr=0x42 sysclk=64000000 timingr=0x20F10000 idcode=0x10016438 uid=20383337435043060007001E reset_csr=0x00000000 hold_max_ms=500
+[+   3.551s] [f334] I2C_TARGET ready
+[+   3.753s] [host] F334 banner: protocol v3 Rev e27c673 id 83794128d14afc2b addr 0x42 sysclk 64000000 IDCODE 0x10016438 UID 20383337435043060007001E ready; pins: S15 ok
+[+   3.885s] [f334] OK CLR
+[+   3.889s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+   3.896s] [f334] OK DISARM nack=-1 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+   3.901s] [f334] OK FMP 0 timingr=0x20F10000 cfgr1=0x7C000000
+[+   3.916s] [f334] STATUS xfers=0 rx=0 tx=0 nk=0 ev=0 idle_cuts=0 dropped=0 uart_ovr=0 ptr=0 active=0 hold=0 aborted=0 nack=-1 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+   4.409s] [ad2] opened in S2: OE=0x0000 DIO=0x0000 Digital Out enable=0x0000 Zet=0xFFFF
+[+   4.459s] [ad2] first acquisition after opening, DISCARDED (bench lesson): 1+ 3.158 V, 2+ 3.302 V
+[+   4.460s] [host] reset the H755 through SWD (-c port=SWD mode=HOTPLUG sn=0016000C4142501220353451 -rst), AD2 in S2, the F334 idle; a system reset, not a power cycle
+[+   4.575s] [ipc] m7=29 m4=31  (CPU2 alive)
+[+   4.661s]  
+[+   4.666s] === STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[+   4.670s] [sys] build rev=e27c673 id=3417b1bd4c6653f1
+[+   4.674s] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[+   4.677s] [sys] silicon revision id=0x2003
+[+   4.681s] [ipc] shared block at 0x38008000, magic=0x48375353
+[+   4.685s] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[+   4.687s] [i2c] CM7 Rev e27c673
+[+   4.690s] [i2c] CM7 Build id 3417b1bd4c6653f1
+[+   4.693s] [i2c] CM4 Rev e27c673
+[+   4.696s] [i2c] CM4 Build id 3417b1bd4c6653f1
+[+   4.698s] [i2c] I2C_BENCH v2 idle
+[+   4.698s] [host] T0d identity: host HEAD e27c673; CM7 Rev e27c673 id 3417b1bd4c6653f1; CM4 Rev e27c673 id 3417b1bd4c6653f1; host id 3417b1bd4c6653f1; F334 Rev e27c673 id 83794128d14afc2b (host id 83794128d14afc2b); probes H755 0016000C4142501220353451 on COM4, F334 066BFF393731435243254117 on COM7
+[+   4.698s] [host] T0d identity: all match
+[+   4.698s] [host] recorded: T0d identity (S18, A21): Rev and build id of CM7, CM4 and the F334 match this checkout and the host's ids; exactly the two expected ST-LINKs; ports chosen by their SN
+[+   4.705s] [i2c] silicon REV_ID=0x2003, test block at 0x3800D000, CM4 table v2, steps 10
+[+   4.709s] [i2c] STEP T0A owner=NONE v=2 pb8=1 pb9=1 pf14=1 pf15=1
+[+   4.718s] [host] step T0A: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+   4.794s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   4.849s] [host] S17 before T0A: scope SCL(1+) 3.162 V SDA(2+) 3.306 V ratio 0.9564 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 1) pf15=1 -> PASS
+[+   4.902s] [host] T0A loose lines: 13 lines with MCU pull-up 0x4FFF (0x4FFF), pull-down 0x0000 (0x0000); HOST_REQ/MCU_ACK exercised by every handshake -> PASS
+[+   4.902s] [host] T0A walking 1: one line pulled up at a time, the others down: 13 patterns, mismatches [] -> PASS
+[+   4.902s] [host] T0A control: firmware pulls DIO9 (PE5) down where the host expects all up: the check flags 0x0200 (0x0200 expected) -> PASS
+[+   4.910s] [i2c] T0A MCU IDR of the 13 lines, pull-up 0x1FFF (0x1FFF), pull-down 0x0000 (0x0000) -> PASS
+[+   4.917s] [i2c] T0A walking 1 on 13 lines, MCU IDR: lines that differ 0x0000 -> PASS
+[+   4.926s] [i2c] T0A control: DIO9 (PE5) pulled down on purpose, MCU check flags 0x0200 (0x0200 expected) -> PASS
+[+   4.930s] [i2c] STEP T0C owner=NONE v=2 pb8=1 pb9=1 pf14=1 pf15=1
+[+   4.940s] [host] step T0C: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+   5.136s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   5.185s] [host] S17 before T0C: scope SCL(1+) 3.162 V SDA(2+) 3.306 V ratio 0.9565 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 1) pf15=1 -> PASS
+[+   5.189s] [i2c] T0C rest pb8=1 pb9=1 pf14=1 pf15=1
+[+   5.195s] [i2c] T0C bus at rest seen by CM7: PB8 1 PB9 1 (1, 1) -> PASS
+[+   5.259s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   5.310s] [host] S17 T0C at rest: scope SCL(1+) 3.163 V SDA(2+) 3.306 V ratio 0.9568 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 1) pf15=1 -> PASS
+[+   5.377s] [f334] OK HOLD line=SDA ms=50 edges=0
+[+   5.439s] [f334] HOLD_END line=SDA ms=50 us=50001 edges=0 blank=1 edge1_us=- cause=TIME scl=1 sda=1 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   5.919s] [i2c] T0C hold SDA: PB8 lows=0 low_us=0 first_us=0 end_low=0; PB9 lows=1 low_us=50748 first_us=58308 end_low=0; PF14 lows=0
+[+   5.927s] [i2c] | low_us=0 first_us=0 end_low=0; PF15 lows=1 low_us=50748 first_us=58308 end_low=0;
+[+   5.934s] [host] T0C hold SDA: F334: 'OK HOLD line=SDA ms=50 edges=0'; held 50001 us (49000..51000), cause TIME, SCL rising edges counted 0 (0) and in the first 10 us 1 (recorded: the glitch of SDA's own fall), scl=1 sda=1 1 ms after the release, pins after: S15 ok -> PASS
+[+   5.934s] [host] T0C hold SDA: CM7 taps: PF15 (through J3) low 1 time(s) 50748 us like PB9, PF14 0 falls -> PASS
+[+   5.936s] [host] T0C hold SDA: scope: 2+ SDA below 0.99 V for 50.10 ms (47.5..52.5) in 1 run(s), minimum 0.040 V (<= 0.4), high again at the end 3.306 V; the other line's minimum 3.158 V (>= 2.31); 8192 samples at 50000 S/s, trigger falling edge 1.5 V -> PASS
+[+   5.938s] [i2c] T0C hold SDA seen by CM7: PB9 low once for 50748 us (45000..55000, CYCCNT at 400 MHz nominal), PB8 never low (0 falls) -> PASS
+[+   5.990s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   6.037s] [host] S17 T0C after the SDA hold: scope SCL(1+) 3.163 V SDA(2+) 3.306 V ratio 0.9566 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 - -> PASS
+[+   6.109s] [f334] OK HOLD line=SCL ms=50 edges=0
+[+   6.172s] [f334] HOLD_END line=SCL ms=50 us=50001 edges=0 blank=0 edge1_us=- cause=TIME scl=1 sda=1 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   6.647s] [i2c] T0C hold SCL: PB8 lows=1 low_us=50761 first_us=63234 end_low=0; PB9 lows=0 low_us=0 first_us=0 end_low=0; PF14 lows=1
+[+   6.654s] [i2c] | low_us=50760 first_us=63234 end_low=0; PF15 lows=0 low_us=0 first_us=0 end_low=0;
+[+   6.664s] [host] T0C hold SCL: F334: 'OK HOLD line=SCL ms=50 edges=0'; held 50001 us (49000..51000), cause TIME, SCL rising edges counted 0 (0) and in the first 10 us 0 (recorded: the glitch of SDA's own fall), scl=1 sda=1 1 ms after the release, pins after: S15 ok -> PASS
+[+   6.664s] [host] T0C hold SCL: CM7 taps: PF14 (through J2) low 1 time(s) 50760 us like PB8, PF15 0 falls -> PASS
+[+   6.668s] [host] T0C hold SCL: scope: 1+ SCL below 0.99 V for 50.10 ms (47.5..52.5) in 1 run(s), minimum 0.070 V (<= 0.4), high again at the end 3.158 V; the other line's minimum 3.299 V (>= 2.31); 8192 samples at 50000 S/s, trigger falling edge 1.5 V -> PASS
+[+   6.668s] [i2c] T0C hold SCL seen by CM7: PB8 low once for 50761 us (45000..55000, CYCCNT at 400 MHz nominal), PB9 never low (0 falls) -> PASS
+[+   6.722s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   6.774s] [host] S17 T0C after the SCL hold: scope SCL(1+) 3.159 V SDA(2+) 3.303 V ratio 0.9565 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 - -> PASS
+[+   6.780s] [i2c] T0C rest after pb8=1 pb9=1 pf14=1 pf15=1
+[+   6.786s] [i2c] T0C bus at rest after the holds, CM7: PB8 1 PB9 1 (1, 1) -> PASS
+[+   6.844s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   6.896s] [host] S17 T0C at rest after the holds: scope SCL(1+) 3.159 V SDA(2+) 3.303 V ratio 0.9564 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 1) pf15=1 -> PASS
+[+   6.903s] [i2c] STEP T0B owner=CM4 v=2 pb8=1 pb9=1 pf14=1 pf15=1
+[+   6.913s] [host] step T0B: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+   6.967s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   7.017s] [host] S17 before T0B: scope SCL(1+) 3.159 V SDA(2+) 3.303 V ratio 0.9567 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 1) pf15=1 -> PASS
+[+   7.028s] [i2c] T0B CM7 claim in T0B (bus = CM4): 32 refusals (S15 AF/pull/push-pull, S16 owner, S4/S13/S14, R4), accepted by mistake
+[+   7.038s] [i2c] | 0x00000000; 3 controls (plain inputs, a pulled AD2 line) accepted 0x7; GPIO regs untouched 1 -> PASS
+[+   7.048s] [i2c] T0B CM4 claim in T0B (bus = CM4): 20 cases, accepted 0x80007 (0x80007), GPIO regs changed 0x000000 -> PASS
+[+   7.058s] [i2c] T0B S16 CM4, PB8 AF4 against I2C1: PE=1 (read back 1) and clock off refused, PE=0 with ANFOFF and reset accepted:
+[+   7.067s] [i2c] | accepted 0xC (0xC), GPIO regs changed 0x000000, I2C1 CR1 after 0x00000000, clock as before 1 -> PASS
+[+   7.078s] [i2c] T0B S16 pin state, CM4 (AF4): PB9 in AF6, PB9 output, PB8 in AF6, PB8 output refused; both input, both analog, both AF4
+[+   7.082s] [i2c] | accepted: accepted 0x70 (0x70) -> PASS
+[+   7.092s] [i2c] T0B photo CM4 AF4: MODER PB8|PB9<<2=0xA OTYPER=0x3 PUPDR=0x0 AFR PB8|PB9<<4=0x44 IDR=0x3 I2C1 CR1=0x00000000
+[+   7.094s] [i2c] | ISR=0x00000001
+[+   7.105s] [i2c] T0B CM4 writes PB8/PB9 AF4 open-drain no pull with I2C1 at PE=0: claim 1, MODER 0xA (0xA) OTYPER 0x3 (0x3) PUPDR 0x0 (0)
+[+   7.114s] [i2c] | AFR 0x44 (0x44), I2C1 CR1 0x00000000 BUSY 0; bus IDR CM4 0x3 CM7 0x3 (0x3: released) -> PASS
+[+   7.125s] [i2c] T0B CM7 claim of PB8/PB9 AF6 in step T0B (bus = CM4): refused 1, by the step-owner rule (ist_line_rule refuses 1) -> PASS
+[+   7.136s] [i2c] T0B S16 pin check on the live GPIOB registers (PB8/PB9 in AF4 by CM4, MODER 0xDFFAFEBD AFRH 0x00000044): AF6 refused 1,
+[+   7.140s] [i2c] | AF4 accepted 1 (the control) -> PASS
+[+   7.144s] [i2c] T0B levels with CM4 AF4 pb8=1 pb9=1
+[+   7.200s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   7.246s] [host] S17 T0B with PB8/PB9 in AF4 on CM4, I2C1 PE=0 (CM7 reads pb8=1 pb9=1): scope SCL(1+) 3.159 V SDA(2+) 3.303 V ratio 0.9564 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 - -> PASS
+[+   7.256s] [i2c] T0B photo CM4 after bench_safe: MODER PB8|PB9<<2=0x0 OTYPER=0x3 PUPDR=0x0 AFR PB8|PB9<<4=0x00 IDR=0x3 I2C1
+[+   7.260s] [i2c] | CR1=0x00000000 ISR=0x00000001
+[+   7.270s] [i2c] T0B CM4 bench_safe: MODER 0x0 (0: input) OTYPER 0x3 (0x3) PUPDR 0x0 AFR 0x00 (0), I2C1 CR1 0x00000000 (0), clock as
+[+   7.273s] [i2c] | before 1 -> PASS
+[+   7.325s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   7.372s] [host] S17 T0B after CM4's bench_safe: scope SCL(1+) 3.159 V SDA(2+) 3.303 V ratio 0.9565 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 - -> PASS
+[+   7.382s] [i2c] T0B CM4 claim between steps: 20 cases, accepted 0x80000 (0x80000), GPIO regs changed 0x000000 -> PASS
+[+   7.388s] [i2c] STEP T0B_CM7 owner=CM7 v=2 pb8=1 pb9=1 pf14=1 pf15=1
+[+   7.396s] [host] step T0B_CM7: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+   7.448s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   7.502s] [host] S17 before T0B_CM7: scope SCL(1+) 3.159 V SDA(2+) 3.302 V ratio 0.9566 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 1) pf15=1 -> PASS
+[+   7.516s] [i2c] T0B CM7 claim in T0B_CM7 (bus = CM7, I2C4 at reset): 15 cases, accepted 0x4007 (0x4007: AF6 OD no pull on PB8, PB9,
+[+   7.521s] [i2c] | both; a plain input), GPIO regs untouched 1 -> PASS
+[+   7.532s] [i2c] T0B S16 CM7, PB8 AF6 against I2C4: PE=1 (read back 1) and clock off refused, PE=0 with ANFOFF and reset accepted:
+[+   7.537s] [i2c] | accepted 0xC (0xC), I2C4 CR1 after 0x00000000 -> PASS
+[+   7.548s] [i2c] T0B S16 pin state, CM7 (AF6): PB9 in AF4, PB9 output, PB8 in AF4, PB8 output refused; both input, both analog, both AF6
+[+   7.552s] [i2c] | accepted: accepted 0x70 (0x70) -> PASS
+[+   7.562s] [i2c] T0B photo CM7 AF6: MODER PB8|PB9<<2=0xA OTYPER=0x3 PUPDR=0x0 AFR PB8|PB9<<4=0x66 IDR=0x3 I2C4 CR1=0x00000000
+[+   7.564s] [i2c] | ISR=0x00000001
+[+   7.575s] [i2c] T0B CM7 writes PB8/PB9 AF6 open-drain no pull with I2C4 at PE=0: claim 1, MODER 0xA (0xA) OTYPER 0x3 (0x3) PUPDR 0x0 (0)
+[+   7.583s] [i2c] | AFR 0x66 (0x66), I2C4 CR1 0x00000000 BUSY 0, bus IDR 0x3 (0x3: released) -> PASS
+[+   7.587s] [i2c] T0B levels with CM7 AF6 pb8=1 pb9=1
+[+   7.678s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   7.734s] [host] S17 T0B_CM7 with PB8/PB9 in AF6 on CM7, I2C4 PE=0 (CM7 reads pb8=1 pb9=1): scope SCL(1+) 3.158 V SDA(2+) 3.303 V ratio 0.9563 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 - -> PASS
+[+   7.745s] [i2c] T0B photo CM7 after bench_safe: MODER PB8|PB9<<2=0x0 OTYPER=0x3 PUPDR=0x0 AFR PB8|PB9<<4=0x00 IDR=0x3 I2C4
+[+   7.749s] [i2c] | CR1=0x00000000 ISR=0x00000001
+[+   7.760s] [i2c] T0B CM7 bench_safe: MODER 0x0 (0: input) OTYPER 0x3 (0x3) PUPDR 0x0 AFR 0x00 (0), I2C4 CR1 0x00000000 (0); I2C4 clock as
+[+   7.762s] [i2c] | before 0 -> PASS
+[+   7.772s] [i2c] T0B CM4 claim in T0B_CM7 (bus = CM7): 20 cases, accepted 0x80000 (0x80000), GPIO regs changed 0x000000 -> PASS
+[+   7.789s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   7.839s] [host] S17 T0B_CM7 after CM7's bench_safe: scope SCL(1+) 3.158 V SDA(2+) 3.302 V ratio 0.9564 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 - -> PASS
+[+   7.846s] [i2c] STEP T0B_TIMEOUT owner=NONE v=2 pb8=1 pb9=1 pf14=1 pf15=1
+[+   7.864s] [host] step T0B_TIMEOUT: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+   7.913s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   7.966s] [host] S17 before T0B_TIMEOUT: scope SCL(1+) 3.159 V SDA(2+) 3.302 V ratio 0.9565 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 1) pf15=1 -> PASS
+[+   7.970s] [host] T0B(d) MCU_ACK high: the host deliberately does not raise HOST_REQ
+[+  17.848s] [i2c] T0B(d) no HOST_REQ in 10 s -> bench_safe: GPIOE MODER[31:4]=0x00004000 (0x00004000), AFRH=0x00000000, PB8|PB9 MODER 0x0
+[+  17.852s] [i2c] | (0), PF14|PF15 MODER 0x0 (0) -> PASS
+[+  17.854s] [i2c] T0B timeout handled
+[+  17.972s] [host] T0B(d) firmware timeout: MCU_ACK stayed high 9.867 s without HOST_REQ (9.0..11.0 s; the MCU waits 10 s of CYCCNT), then low in 20/20 reads over 100 ms while the MCU waited for the host; `T0B timeout handled` reported -> PASS
+[+  17.977s] [i2c] STEP F1_NOPIN owner=NONE v=2 pb8=1 pb9=1 pf14=1 pf15=1
+[+  17.991s] [host] step F1_NOPIN: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+  18.028s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+  18.077s] [host] S17 before F1_NOPIN: scope SCL(1+) 3.159 V SDA(2+) 3.303 V ratio 0.9566 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 1) pf15=1 -> PASS
+[+  18.089s] [i2c] F1 clocks (HAL, from HSE_VALUE): CPU1 400000000 Hz, I2C1-3 kernel 100000000 Hz, I2C4 kernel 100000000 Hz; bench state
+[+  18.097s] [i2c] | from PF14: taps; CalcTiming bus t_r 300 ns t_f 10 ns; run seed 0xFBA6983B
+[+  18.100s] [i2c] AT CLKREF cyc=40000000 cpu=400000000
+[+  18.563s] [i2c] CLKREF done
+[+  18.568s] [i2c] T3 0 4000000 10000 100 10 0 0 0 0010B3D4 0 10000
+[+  18.572s] [i2c] T3 1 4000000 10000 100 10 1 0 0 0010B3D4 0 10000
+[+  18.577s] [i2c] T3 2 4000000 10000 250 20 0 0 0 0010B3D3 0 10000
+[+  18.582s] [i2c] T3 3 4000000 10000 250 20 1 0 0 0010B3D3 0 10000
+[+  18.587s] [i2c] T3 4 4000000 10000 300 300 0 0 0 0020B2D3 0 10000
+[+  18.592s] [i2c] T3 5 4000000 10000 300 300 1 0 0 0020B2D3 0 10000
+[+  18.597s] [i2c] T3 6 4000000 10000 120 120 0 0 0 0010B3D4 0 10000
+[+  18.602s] [i2c] T3 7 4000000 10000 120 120 1 0 0 0010B3D3 0 10000
+[+  18.606s] [i2c] T3 8 4000000 100000 100 10 0 0 0 00100F12 0 95238
+[+  18.611s] [i2c] T3 9 4000000 100000 100 10 1 0 0 00100F12 0 95238
+[+  18.616s] [host] F1 CLKREF CPU clock against the AD2: MCU_ACK held 40000000 CYCCNT cycles: 98.6656 ms by the AD2 (100.0 ms at 400000000 Hz nominal), ratio 0.98666 (+-0.039 %, one sample); the CPU and the I2C kernels run +1.35 % from nominal (N1) -> PASS
+[+  18.616s] [i2c] T3 10 4000000 100000 250 20 0 0 0 00100F12 0 93023
+[+  18.621s] [i2c] T3 11 4000000 100000 250 20 1 0 0 00100F12 0 93023
+[+  18.626s] [i2c] T3 12 4000000 100000 300 300 0 0 0 00200F12 0 90909
+[+  18.632s] [i2c] T3 13 4000000 100000 300 300 1 0 0 00200F12 0 90909
+[+  18.637s] [i2c] T3 14 4000000 100000 120 120 0 0 0 00100F12 0 95238
+[+  18.642s] [i2c] T3 15 4000000 100000 120 120 1 0 0 00100F12 0 93023
+[+  18.646s] [i2c] T3 16 4000000 250000 100 10 0 0 3 00000000 0 0
+[+  18.651s] [i2c] T3 17 4000000 250000 100 10 1 0 3 00000000 0 0
+[+  18.656s] [i2c] T3 18 4000000 250000 250 20 0 0 3 00000000 0 0
+[+  18.660s] [i2c] T3 19 4000000 250000 250 20 1 0 3 00000000 0 0
+[+  18.665s] [i2c] T3 20 4000000 250000 300 300 0 0 3 00000000 0 0
+[+  18.670s] [i2c] T3 21 4000000 250000 300 300 1 0 3 00000000 0 0
+[+  18.675s] [i2c] T3 22 4000000 250000 120 120 0 0 3 00000000 0 0
+[+  18.679s] [i2c] T3 23 4000000 250000 120 120 1 0 3 00000000 0 0
+[+  18.684s] [i2c] T3 24 4000000 400000 100 10 0 0 3 00000000 0 0
+[+  18.688s] [i2c] T3 25 4000000 400000 100 10 1 0 3 00000000 0 0
+[+  18.693s] [i2c] T3 26 4000000 400000 250 20 0 0 3 00000000 0 0
+[+  18.698s] [i2c] T3 27 4000000 400000 250 20 1 0 3 00000000 0 0
+[+  18.702s] [i2c] T3 28 4000000 400000 300 300 0 0 3 00000000 0 0
+[+  18.707s] [i2c] T3 29 4000000 400000 300 300 1 0 3 00000000 0 0
+[+  18.712s] [i2c] T3 30 4000000 400000 120 120 0 0 3 00000000 0 0
+[+  18.717s] [i2c] T3 31 4000000 400000 120 120 1 0 3 00000000 0 0
+[+  18.721s] [i2c] T3 32 4000000 1000000 100 10 0 0 3 00000000 0 0
+[+  18.726s] [i2c] T3 33 4000000 1000000 100 10 1 0 3 00000000 0 0
+[+  18.731s] [i2c] T3 34 4000000 1000000 250 20 0 0 3 00000000 0 0
+[+  18.736s] [i2c] T3 35 4000000 1000000 250 20 1 0 3 00000000 0 0
+[+  18.740s] [i2c] T3 36 4000000 1000000 300 300 0 0 3 00000000 0 0
+[+  18.745s] [i2c] T3 37 4000000 1000000 300 300 1 0 3 00000000 0 0
+[+  18.750s] [i2c] T3 38 4000000 1000000 120 120 0 0 3 00000000 0 0
+[+  18.755s] [i2c] T3 39 4000000 1000000 120 120 1 0 3 00000000 0 0
+[+  18.760s] [i2c] T3 40 8000000 10000 100 10 0 0 0 1010B5D6 0 9987
+[+  18.765s] [i2c] T3 41 8000000 10000 100 10 1 0 0 1010B5D5 0 10000
+[+  18.769s] [i2c] T3 42 8000000 10000 250 20 0 0 0 1010B5D5 0 9987
+[+  18.774s] [i2c] T3 43 8000000 10000 250 20 1 0 0 1010B5D5 0 9987
+[+  18.779s] [i2c] T3 44 8000000 10000 300 300 0 0 0 1020B4D5 0 9987
+[+  18.784s] [i2c] T3 45 8000000 10000 300 300 1 0 0 1020B4D4 0 10000
+[+  18.789s] [i2c] T3 46 8000000 10000 120 120 0 0 0 1010B5D5 0 10000
+[+  18.794s] [i2c] T3 47 8000000 10000 120 120 1 0 0 1010B5D5 0 9987
+[+  18.799s] [i2c] T3 48 8000000 100000 100 10 0 0 0 00202027 0 100000
+[+  18.804s] [i2c] T3 49 8000000 100000 100 10 1 0 0 00202026 0 100000
+[+  18.809s] [i2c] T3 50 8000000 100000 250 20 0 0 0 00301F26 0 100000
+[+  18.814s] [i2c] T3 51 8000000 100000 250 20 1 0 0 00301F26 0 100000
+[+  18.819s] [i2c] T3 52 8000000 100000 300 300 0 0 0 00401F25 0 98765
+[+  18.824s] [i2c] T3 53 8000000 100000 300 300 1 0 0 00401F25 0 97560
+[+  18.830s] [i2c] T3 54 8000000 100000 120 120 0 0 0 00202026 0 100000
+[+  18.835s] [i2c] T3 55 8000000 100000 120 120 1 0 0 00201F26 0 100000
+[+  18.839s] [i2c] T3 56 8000000 250000 100 10 0 0 3 00000000 0 0
+[+  18.844s] [i2c] T3 57 8000000 250000 100 10 1 0 3 00000000 0 0
+[+  18.849s] [i2c] T3 58 8000000 250000 250 20 0 0 3 00000000 0 0
+[+  18.853s] [i2c] T3 59 8000000 250000 250 20 1 0 3 00000000 0 0
+[+  18.858s] [i2c] T3 60 8000000 250000 300 300 0 0 3 00000000 0 0
+[+  18.863s] [i2c] T3 61 8000000 250000 300 300 1 0 3 00000000 0 0
+[+  18.868s] [i2c] T3 62 8000000 250000 120 120 0 0 3 00000000 0 0
+[+  18.872s] [i2c] T3 63 8000000 250000 120 120 1 0 3 00000000 0 0
+[+  18.877s] [i2c] T3 64 8000000 400000 100 10 0 0 3 00000000 0 0
+[+  18.882s] [i2c] T3 65 8000000 400000 100 10 1 0 3 00000000 0 0
+[+  18.886s] [i2c] T3 66 8000000 400000 250 20 0 0 3 00000000 0 0
+[+  18.891s] [i2c] T3 67 8000000 400000 250 20 1 0 3 00000000 0 0
+[+  18.896s] [i2c] T3 68 8000000 400000 300 300 0 0 3 00000000 0 0
+[+  18.900s] [i2c] T3 69 8000000 400000 300 300 1 0 3 00000000 0 0
+[+  18.905s] [i2c] T3 70 8000000 400000 120 120 0 0 3 00000000 0 0
+[+  18.910s] [i2c] T3 71 8000000 400000 120 120 1 0 3 00000000 0 0
+[+  18.914s] [i2c] T3 72 8000000 1000000 100 10 0 0 3 00000000 0 0
+[+  18.919s] [i2c] T3 73 8000000 1000000 100 10 1 0 3 00000000 0 0
+[+  18.924s] [i2c] T3 74 8000000 1000000 250 20 0 0 3 00000000 0 0
+[+  18.929s] [i2c] T3 75 8000000 1000000 250 20 1 0 3 00000000 0 0
+[+  18.933s] [i2c] T3 76 8000000 1000000 300 300 0 0 3 00000000 0 0
+[+  18.938s] [i2c] T3 77 8000000 1000000 300 300 1 0 3 00000000 0 0
+[+  18.943s] [i2c] T3 78 8000000 1000000 120 120 0 0 3 00000000 0 0
+[+  18.948s] [i2c] T3 79 8000000 1000000 120 120 1 0 3 00000000 0 0
+[+  18.953s] [i2c] T3 80 10000000 10000 100 10 0 0 0 201097B2 0 9990
+[+  18.958s] [i2c] T3 81 10000000 10000 100 10 1 0 0 201097B2 0 9980
+[+  18.963s] [i2c] T3 82 10000000 10000 250 20 0 0 0 201097B2 0 9980
+[+  18.968s] [i2c] T3 83 10000000 10000 250 20 1 0 0 201096B2 0 10000
+[+  18.972s] [i2c] T3 84 10000000 10000 300 300 0 0 0 201096B2 0 9980
+[+  18.978s] [i2c] T3 85 10000000 10000 300 300 1 0 0 201096B1 0 10000
+[+  18.983s] [i2c] T3 86 10000000 10000 120 120 0 0 0 201097B2 0 9980
+[+  18.988s] [i2c] T3 87 10000000 10000 120 120 1 0 0 201096B2 0 10000
+[+  18.993s] [i2c] T3 88 10000000 100000 100 10 0 0 0 00302931 0 100000
+[+  18.998s] [i2c] T3 89 10000000 100000 100 10 1 0 0 00302831 0 100000
+[+  19.003s] [i2c] T3 90 10000000 100000 250 20 0 0 0 00402831 0 100000
+[+  19.008s] [i2c] T3 91 10000000 100000 250 20 1 0 0 00402830 0 100000
+[+  19.014s] [i2c] T3 92 10000000 100000 300 300 0 0 0 0050272F 0 100000
+[+  19.019s] [i2c] T3 93 10000000 100000 300 300 1 0 0 0050272E 0 100000
+[+  19.024s] [i2c] T3 94 10000000 100000 120 120 0 0 0 00302831 0 100000
+[+  19.029s] [i2c] T3 95 10000000 100000 120 120 1 0 0 00302830 0 100000
+[+  19.034s] [i2c] T3 96 10000000 250000 100 10 0 0 0 00100915 1 250000
+[+  19.040s] [i2c] T3 97 10000000 250000 100 10 1 0 0 00100815 1 250000
+[+  19.045s] [i2c] T3 98 10000000 250000 250 20 0 0 0 00300815 1 250000
+[+  19.050s] [i2c] T3 99 10000000 250000 250 20 1 0 0 00300814 1 250000
+[+  19.055s] [i2c] T3 100 10000000 250000 300 300 0 0 0 00300713 1 250000
+[+  19.061s] [i2c] T3 101 10000000 250000 300 300 1 0 0 00300712 1 250000
+[+  19.066s] [i2c] T3 102 10000000 250000 120 120 0 0 0 00200815 1 250000
+[+  19.071s] [i2c] T3 103 10000000 250000 120 120 1 0 0 00200814 1 250000
+[+  19.077s] [i2c] T3 104 10000000 400000 100 10 0 0 0 0010050C 1 370370
+[+  19.082s] [i2c] T3 105 10000000 400000 100 10 1 0 0 0010050C 1 357142
+[+  19.087s] [i2c] T3 106 10000000 400000 250 20 0 0 0 0030050C 1 357142
+[+  19.092s] [i2c] T3 107 10000000 400000 250 20 1 0 0 0030050C 1 344827
+[+  19.098s] [i2c] T3 108 10000000 400000 300 300 0 0 0 0030050C 1 322580
+[+  19.103s] [i2c] T3 109 10000000 400000 300 300 1 0 0 0030050C 1 312500
+[+  19.108s] [i2c] T3 110 10000000 400000 120 120 0 0 0 0020050C 1 357142
+[+  19.114s] [i2c] T3 111 10000000 400000 120 120 1 0 0 0020050C 1 344827
+[+  19.118s] [i2c] T3 112 10000000 1000000 100 10 0 0 3 00000000 0 0
+[+  19.123s] [i2c] T3 113 10000000 1000000 100 10 1 0 3 00000000 0 0
+[+  19.128s] [i2c] T3 114 10000000 1000000 250 20 0 0 3 00000000 0 0
+[+  19.133s] [i2c] T3 115 10000000 1000000 250 20 1 0 3 00000000 0 0
+[+  19.138s] [i2c] T3 116 10000000 1000000 300 300 0 0 3 00000000 0 0
+[+  19.143s] [i2c] T3 117 10000000 1000000 300 300 1 0 3 00000000 0 0
+[+  19.148s] [i2c] T3 118 10000000 1000000 120 120 0 0 3 00000000 0 0
+[+  19.153s] [i2c] T3 119 10000000 1000000 120 120 1 0 3 00000000 0 0
+[+  19.158s] [i2c] T3 120 16000000 10000 100 10 0 0 0 3010B5D7 0 10000
+[+  19.163s] [i2c] T3 121 16000000 10000 100 10 1 0 0 3010B5D7 0 9987
+[+  19.168s] [i2c] T3 122 16000000 10000 250 20 0 0 0 3010B5D7 0 9981
+[+  19.173s] [i2c] T3 123 16000000 10000 250 20 1 0 0 3010B5D6 0 10000
+[+  19.178s] [i2c] T3 124 16000000 10000 300 300 0 0 0 3021B5D5 0 10000
+[+  19.184s] [i2c] T3 125 16000000 10000 300 300 1 0 0 3021B5D5 0 9987
+[+  19.189s] [i2c] T3 126 16000000 10000 120 120 0 0 0 3010B5D7 0 9987
+[+  19.194s] [i2c] T3 127 16000000 10000 120 120 1 0 0 3010B5D6 0 10000
+[+  19.199s] [i2c] T3 128 16000000 100000 100 10 0 0 0 00504452 0 100000
+[+  19.204s] [i2c] T3 129 16000000 100000 100 10 1 0 0 00504351 0 100000
+[+  19.210s] [i2c] T3 130 16000000 100000 250 20 0 0 0 00704350 0 100000
+[+  19.215s] [i2c] T3 131 16000000 100000 250 20 1 0 0 0070434F 0 100000
+[+  19.220s] [i2c] T3 132 16000000 100000 300 300 0 0 0 0082414D 0 100000
+[+  19.225s] [i2c] T3 133 16000000 100000 300 300 1 0 0 0081404C 0 100000
+[+  19.231s] [i2c] T3 134 16000000 100000 120 120 0 0 0 00504351 0 100000
+[+  19.236s] [i2c] T3 135 16000000 100000 120 120 1 0 0 0050434F 0 100000
+[+  19.241s] [i2c] T3 136 16000000 250000 100 10 0 0 0 00301026 1 250000
+[+  19.247s] [i2c] T3 137 16000000 250000 100 10 1 0 0 00301024 1 250000
+[+  19.252s] [i2c] T3 138 16000000 250000 250 20 0 0 0 00500F24 1 250000
+[+  19.257s] [i2c] T3 139 16000000 250000 250 20 1 0 0 00500F23 1 250000
+[+  19.262s] [i2c] T3 140 16000000 250000 300 300 0 0 0 00620E20 1 250000
+[+  19.268s] [i2c] T3 141 16000000 250000 300 300 1 0 0 00610D1F 1 250000
+[+  19.273s] [i2c] T3 142 16000000 250000 120 120 0 0 0 00301024 1 250000
+[+  19.278s] [i2c] T3 143 16000000 250000 120 120 1 0 0 00300F23 1 250000
+[+  19.284s] [i2c] T3 144 16000000 400000 100 10 0 0 0 00300915 1 400000
+[+  19.289s] [i2c] T3 145 16000000 400000 100 10 1 0 0 00300914 1 390243
+[+  19.294s] [i2c] T3 146 16000000 400000 250 20 0 0 0 00500914 1 380952
+[+  19.299s] [i2c] T3 147 16000000 400000 250 20 1 0 0 00500914 1 372093
+[+  19.305s] [i2c] T3 148 16000000 400000 300 300 0 0 0 00620914 1 340425
+[+  19.310s] [i2c] T3 149 16000000 400000 300 300 1 0 0 00610914 1 326530
+[+  19.315s] [i2c] T3 150 16000000 400000 120 120 0 0 0 00300914 1 390243
+[+  19.321s] [i2c] T3 151 16000000 400000 120 120 1 0 0 00300914 1 372093
+[+  19.326s] [i2c] T3 152 16000000 1000000 100 10 0 0 3 00000000 0 0
+[+  19.330s] [i2c] T3 153 16000000 1000000 100 10 1 0 3 00000000 0 0
+[+  19.335s] [i2c] T3 154 16000000 1000000 250 20 0 0 3 00000000 0 0
+[+  19.340s] [i2c] T3 155 16000000 1000000 250 20 1 0 3 00000000 0 0
+[+  19.345s] [i2c] T3 156 16000000 1000000 300 300 0 0 3 00000000 0 0
+[+  19.350s] [i2c] T3 157 16000000 1000000 300 300 1 0 3 00000000 0 0
+[+  19.355s] [i2c] T3 158 16000000 1000000 120 120 0 0 3 00000000 0 0
+[+  19.360s] [i2c] T3 159 16000000 1000000 120 120 1 0 3 00000000 0 0
+[+  19.365s] [i2c] T3 160 20000000 10000 100 10 0 0 0 4010B6D7 0 9980
+[+  19.370s] [i2c] T3 161 20000000 10000 100 10 1 0 0 4010B5D7 0 9995
+[+  19.375s] [i2c] T3 162 20000000 10000 250 20 0 0 0 4010B5D7 0 9990
+[+  19.380s] [i2c] T3 163 20000000 10000 250 20 1 0 0 4010B5D7 0 9980
+[+  19.385s] [i2c] T3 164 20000000 10000 300 300 0 0 0 4021B5D6 0 9985
+[+  19.391s] [i2c] T3 165 20000000 10000 300 300 1 0 0 4021B5D5 0 10000
+[+  19.396s] [i2c] T3 166 20000000 10000 120 120 0 0 0 4010B5D7 0 9995
+[+  19.401s] [i2c] T3 167 20000000 10000 120 120 1 0 0 4010B5D7 0 9985
+[+  19.406s] [i2c] T3 168 20000000 100000 100 10 0 0 0 00605667 0 100000
+[+  19.411s] [i2c] T3 169 20000000 100000 100 10 1 0 0 00605566 0 100000
+[+  19.416s] [i2c] T3 170 20000000 100000 250 20 0 0 0 00905565 0 100000
+[+  19.422s] [i2c] T3 171 20000000 100000 250 20 1 0 0 00905464 0 100000
+[+  19.427s] [i2c] T3 172 20000000 100000 300 300 0 0 0 00A35262 0 100000
+[+  19.432s] [i2c] T3 173 20000000 100000 300 300 1 0 0 00A25161 0 100000
+[+  19.438s] [i2c] T3 174 20000000 100000 120 120 0 0 0 00705566 0 100000
+[+  19.443s] [i2c] T3 175 20000000 100000 120 120 1 0 0 00705465 0 100000
+[+  19.448s] [i2c] T3 176 20000000 250000 100 10 0 0 0 00301530 1 250000
+[+  19.454s] [i2c] T3 177 20000000 250000 100 10 1 0 0 0030142F 1 250000
+[+  19.459s] [i2c] T3 178 20000000 250000 250 20 0 0 0 0060142E 1 250000
+[+  19.464s] [i2c] T3 179 20000000 250000 250 20 1 0 0 0060132D 1 250000
+[+  19.469s] [i2c] T3 180 20000000 250000 300 300 0 0 0 0073122A 1 250000
+[+  19.475s] [i2c] T3 181 20000000 250000 300 300 1 0 0 00721129 1 250000
+[+  19.480s] [i2c] T3 182 20000000 250000 120 120 0 0 0 0040142F 1 250000
+[+  19.485s] [i2c] T3 183 20000000 250000 120 120 1 0 0 0040142D 1 250000
+[+  19.491s] [i2c] T3 184 20000000 400000 100 10 0 0 0 00300B1C 1 400000
+[+  19.496s] [i2c] T3 185 20000000 400000 100 10 1 0 0 00300B1A 1 400000
+[+  19.501s] [i2c] T3 186 20000000 400000 250 20 0 0 0 00600B19 1 400000
+[+  19.506s] [i2c] T3 187 20000000 400000 250 20 1 0 0 00600B19 1 384615
+[+  19.512s] [i2c] T3 188 20000000 400000 300 300 0 0 0 00730B19 1 357142
+[+  19.517s] [i2c] T3 189 20000000 400000 300 300 1 0 0 00720B19 1 344827
+[+  19.522s] [i2c] T3 190 20000000 400000 120 120 0 0 0 00400B1A 1 400000
+[+  19.528s] [i2c] T3 191 20000000 400000 120 120 1 0 0 00400B19 1 392156
+[+  19.533s] [i2c] T3 192 20000000 1000000 100 10 0 0 0 00200509 2 800000
+[+  19.538s] [i2c] T3 193 20000000 1000000 100 10 1 0 0 00200509 2 740740
+[+  19.543s] [i2c] T3 194 20000000 1000000 250 20 0 0 3 00000000 0 0
+[+  19.548s] [i2c] T3 195 20000000 1000000 250 20 1 0 3 00000000 0 0
+[+  19.553s] [i2c] T3 196 20000000 1000000 300 300 0 0 3 00000000 0 0
+[+  19.558s] [i2c] T3 197 20000000 1000000 300 300 1 0 3 00000000 0 0
+[+  19.563s] [i2c] T3 198 20000000 1000000 120 120 0 0 0 00300509 2 740740
+[+  19.569s] [i2c] T3 199 20000000 1000000 120 120 1 0 0 00300509 2 689655
+[+  19.574s] [i2c] T3 200 48000000 10000 100 10 0 0 0 A010C7EB 0 9983
+[+  19.579s] [i2c] T3 201 48000000 10000 100 10 1 0 0 A010C7EA 0 9995
+[+  19.584s] [i2c] T3 202 48000000 10000 250 20 0 0 0 A020C7EA 0 9991
+[+  19.589s] [i2c] T3 203 48000000 10000 250 20 1 0 0 A020C7EA 0 9981
+[+  19.594s] [i2c] T3 204 48000000 10000 300 300 0 0 0 A022C6EA 0 9981
+[+  19.599s] [i2c] T3 205 48000000 10000 300 300 1 0 0 A021C6E9 0 9993
+[+  19.604s] [i2c] T3 206 48000000 10000 120 120 0 0 0 A011C7EA 0 9993
+[+  19.609s] [i2c] T3 207 48000000 10000 120 120 1 0 0 A011C7EA 0 9983
+[+  19.614s] [i2c] T3 208 48000000 100000 100 10 0 0 0 10806A7E 0 100000
+[+  19.620s] [i2c] T3 209 48000000 100000 100 10 1 0 0 1080697D 0 99792
+[+  19.625s] [i2c] T3 210 48000000 100000 250 20 0 0 0 10B0697C 0 99792
+[+  19.630s] [i2c] T3 211 48000000 100000 250 20 1 0 0 10B0677B 0 100000
+[+  19.635s] [i2c] T3 212 48000000 100000 300 300 0 0 0 10D66578 0 99792
+[+  19.641s] [i2c] T3 213 48000000 100000 300 300 1 0 0 10D56476 0 100000
+[+  19.646s] [i2c] T3 214 48000000 100000 120 120 0 0 0 1082697C 0 100000
+[+  19.651s] [i2c] T3 215 48000000 100000 120 120 1 0 0 1081687B 0 99792
+[+  19.656s] [i2c] T3 216 48000000 250000 100 10 0 0 0 0090377B 1 250000
+[+  19.662s] [i2c] T3 217 48000000 250000 100 10 1 0 0 00903677 1 250000
+[+  19.667s] [i2c] T3 218 48000000 250000 250 20 0 0 0 10801A3B 1 248704
+[+  19.672s] [i2c] T3 219 48000000 250000 250 20 1 0 0 10801939 1 250000
+[+  19.677s] [i2c] T3 220 48000000 250000 300 300 0 0 0 10961736 1 248704
+[+  19.683s] [i2c] T3 221 48000000 250000 300 300 1 0 0 10951733 1 250000
+[+  19.688s] [i2c] T3 222 48000000 250000 120 120 0 0 0 00A33577 1 250000
+[+  19.694s] [i2c] T3 223 48000000 250000 120 120 1 0 0 00A13473 1 250000
+[+  19.699s] [i2c] T3 224 48000000 400000 100 10 0 0 0 00902149 1 400000
+[+  19.704s] [i2c] T3 225 48000000 400000 100 10 1 0 0 00901F46 1 400000
+[+  19.709s] [i2c] T3 226 48000000 400000 250 20 0 0 0 10800F22 1 396694
+[+  19.715s] [i2c] T3 227 48000000 400000 250 20 1 0 0 10800E20 1 400000
+[+  19.720s] [i2c] T3 228 48000000 400000 300 300 0 0 0 10960E1F 1 372093
+[+  19.725s] [i2c] T3 229 48000000 400000 300 300 1 0 0 10950E1F 1 358208
+[+  19.731s] [i2c] T3 230 48000000 400000 120 120 0 0 0 00A31F45 1 400000
+[+  19.736s] [i2c] T3 231 48000000 400000 120 120 1 0 0 00A11D42 1 400000
+[+  19.741s] [i2c] T3 232 48000000 1000000 100 10 0 0 0 00700C17 2 979591
+[+  19.746s] [i2c] T3 233 48000000 1000000 100 10 1 0 0 00700C17 2 888888
+[+  19.751s] [i2c] T3 234 48000000 1000000 250 20 0 0 3 00000000 0 0
+[+  19.756s] [i2c] T3 235 48000000 1000000 250 20 1 0 3 00000000 0 0
+[+  19.761s] [i2c] T3 236 48000000 1000000 300 300 0 0 3 00000000 0 0
+[+  19.766s] [i2c] T3 237 48000000 1000000 300 300 1 0 3 00000000 0 0
+[+  19.772s] [i2c] T3 238 48000000 1000000 120 120 0 0 0 00830C17 2 872727
+[+  19.777s] [i2c] T3 239 48000000 1000000 120 120 1 0 0 00810C17 2 800000
+[+  19.782s] [i2c] T3 240 64000000 10000 100 10 0 0 0 D010D1F6 0 9981
+[+  19.787s] [i2c] T3 241 64000000 10000 100 10 1 0 0 D010D0F6 0 9993
+[+  19.792s] [i2c] T3 242 64000000 10000 250 20 0 0 0 D020D0F6 0 9987
+[+  19.797s] [i2c] T3 243 64000000 10000 250 20 1 0 0 D020D0F5 0 10000
+[+  19.802s] [i2c] T3 244 64000000 10000 300 300 0 0 0 D022CFF5 0 9998
+[+  19.807s] [i2c] T3 245 64000000 10000 300 300 1 0 0 D021CFF5 0 9989
+[+  19.813s] [i2c] T3 246 64000000 10000 120 120 0 0 0 D011D0F6 0 9990
+[+  19.818s] [i2c] T3 247 64000000 10000 120 120 1 0 0 D011D0F6 0 9981
+[+  19.823s] [i2c] T3 248 64000000 100000 100 10 0 0 0 10B08EA9 0 100000
+[+  19.828s] [i2c] T3 249 64000000 100000 100 10 1 0 0 10B08DA7 0 100000
+[+  19.833s] [i2c] T3 250 64000000 100000 250 20 0 0 0 10F08CA6 0 100000
+[+  19.839s] [i2c] T3 251 64000000 100000 250 20 1 0 0 10F08BA4 0 100000
+[+  19.844s] [i2c] T3 252 64000000 100000 300 300 0 0 0 20B65A6B 0 99688
+[+  19.849s] [i2c] T3 253 64000000 100000 300 300 1 0 0 20B5596A 0 99688
+[+  19.854s] [i2c] T3 254 64000000 100000 120 120 0 0 0 10B38DA6 0 100000
+[+  19.860s] [i2c] T3 255 64000000 100000 120 120 1 0 0 10B18BA5 0 100000
+[+  19.865s] [i2c] T3 256 64000000 250000 100 10 0 0 0 00C04BA5 1 250000
+[+  19.870s] [i2c] T3 257 64000000 250000 100 10 1 0 0 00C049A1 1 250000
+[+  19.876s] [i2c] T3 258 64000000 250000 250 20 0 0 0 10B0234F 1 250000
+[+  19.881s] [i2c] T3 259 64000000 250000 250 20 1 0 0 10B0224D 1 250000
+[+  19.886s] [i2c] T3 260 64000000 250000 300 300 0 0 0 10C92048 1 249027
+[+  19.892s] [i2c] T3 261 64000000 250000 300 300 1 0 0 10C71F46 1 249027
+[+  19.897s] [i2c] T3 262 64000000 250000 120 120 0 0 0 00E548A0 1 250000
+[+  19.902s] [i2c] T3 263 64000000 250000 120 120 1 0 0 00E2479B 1 250000
+[+  19.907s] [i2c] T3 264 64000000 400000 100 10 0 0 0 00C02D63 1 400000
+[+  19.913s] [i2c] T3 265 64000000 400000 100 10 1 0 0 00C02B5F 1 400000
+[+  19.918s] [i2c] T3 266 64000000 400000 250 20 0 0 0 10B0142E 1 400000
+[+  19.923s] [i2c] T3 267 64000000 400000 250 20 1 0 0 10B0132C 1 400000
+[+  19.928s] [i2c] T3 268 64000000 400000 300 300 0 0 0 10C91329 1 378698
+[+  19.934s] [i2c] T3 269 64000000 400000 300 300 1 0 0 10C71329 1 365714
+[+  19.939s] [i2c] T3 270 64000000 400000 120 120 0 0 0 00E52A5E 1 400000
+[+  19.944s] [i2c] T3 271 64000000 400000 120 120 1 0 0 00E2285A 1 400000
+[+  19.950s] [i2c] T3 272 64000000 1000000 100 10 0 0 0 00901020 2 1000000
+[+  19.955s] [i2c] T3 273 64000000 1000000 100 10 1 0 0 0090101F 2 927536
+[+  19.960s] [i2c] T3 274 64000000 1000000 250 20 0 0 3 00000000 0 0
+[+  19.965s] [i2c] T3 275 64000000 1000000 250 20 1 0 3 00000000 0 0
+[+  19.970s] [i2c] T3 276 64000000 1000000 300 300 0 0 3 00000000 0 0
+[+  19.975s] [i2c] T3 277 64000000 1000000 300 300 1 0 3 00000000 0 0
+[+  19.980s] [i2c] T3 278 64000000 1000000 120 120 0 0 0 00A5101F 2 901408
+[+  19.986s] [i2c] T3 279 64000000 1000000 120 120 1 0 0 00A2101F 2 831168
+[+  19.991s] [i2c] T3 280 100000000 10000 100 10 0 0 3 00000000 0 0
+[+  19.995s] [i2c] T3 281 100000000 10000 100 10 1 0 3 00000000 0 0
+[+  20.000s] [i2c] T3 282 100000000 10000 250 20 0 0 3 00000000 0 0
+[+  20.005s] [i2c] T3 283 100000000 10000 250 20 1 0 3 00000000 0 0
+[+  20.010s] [i2c] T3 284 100000000 10000 300 300 0 0 3 00000000 0 0
+[+  20.015s] [i2c] T3 285 100000000 10000 300 300 1 0 3 00000000 0 0
+[+  20.020s] [i2c] T3 286 100000000 10000 120 120 0 0 3 00000000 0 0
+[+  20.025s] [i2c] T3 287 100000000 10000 120 120 1 0 3 00000000 0 0
+[+  20.030s] [i2c] T3 288 100000000 100000 100 10 0 0 0 20B095B1 0 99900
+[+  20.035s] [i2c] T3 289 100000000 100000 100 10 1 0 0 20B094AF 0 99800
+[+  20.041s] [i2c] T3 290 100000000 100000 250 20 0 0 0 30C06E82 0 99900
+[+  20.046s] [i2c] T3 291 100000000 100000 250 20 1 0 0 30C06D81 0 99700
+[+  20.051s] [i2c] T3 292 100000000 100000 300 300 0 0 0 30D76A7E 0 99800
+[+  20.056s] [i2c] T3 293 100000000 100000 300 300 1 0 0 30D6697C 0 100000
+[+  20.062s] [i2c] T3 294 100000000 100000 120 120 0 0 0 20C393AF 0 99800
+[+  20.067s] [i2c] T3 295 100000000 100000 120 120 1 0 0 20C292AC 0 100000
+[+  20.073s] [i2c] T3 296 100000000 250000 100 10 0 0 0 10903B83 1 249376
+[+  20.078s] [i2c] T3 297 100000000 250000 100 10 1 0 0 10903A7F 1 249376
+[+  20.083s] [i2c] T3 298 100000000 250000 250 20 0 0 0 20B02554 1 248756
+[+  20.089s] [i2c] T3 299 100000000 250000 250 20 1 0 0 20B02451 1 250000
+[+  20.094s] [i2c] T3 300 100000000 250000 300 300 0 0 0 20D9224C 1 248756
+[+  20.099s] [i2c] T3 301 100000000 250000 300 300 1 0 0 20D82149 1 250000
+[+  20.105s] [i2c] T3 302 100000000 250000 120 120 0 0 0 10A5397E 1 250000
+[+  20.110s] [i2c] T3 303 100000000 250000 120 120 1 0 0 10A2377B 1 250000
+[+  20.116s] [i2c] T3 304 100000000 400000 100 10 0 0 0 10902350 1 398406
+[+  20.121s] [i2c] T3 305 100000000 400000 100 10 1 0 0 1090224C 1 398406
+[+  20.126s] [i2c] T3 306 100000000 400000 250 20 0 0 0 20B01631 1 396825
+[+  20.132s] [i2c] T3 307 100000000 400000 250 20 1 0 0 20B0142F 1 400000
+[+  20.137s] [i2c] T3 308 100000000 400000 300 300 0 0 0 20D9132B 1 387596
+[+  20.142s] [i2c] T3 309 100000000 400000 300 300 1 0 0 20D8132B 1 373134
+[+  20.148s] [i2c] T3 310 100000000 400000 120 120 0 0 0 10A5214B 1 400000
+[+  20.153s] [i2c] T3 311 100000000 400000 120 120 1 0 0 10A22047 1 400000
+[+  20.159s] [i2c] T3 312 100000000 1000000 100 10 0 0 0 00E01B36 2 1000000
+[+  20.164s] [i2c] T3 313 100000000 1000000 100 10 1 0 0 00E01931 2 970873
+[+  20.169s] [i2c] T3 314 100000000 1000000 250 20 0 0 3 00000000 0 0
+[+  20.174s] [i2c] T3 315 100000000 1000000 250 20 1 0 3 00000000 0 0
+[+  20.179s] [i2c] T3 316 100000000 1000000 300 300 0 0 3 00000000 0 0
+[+  20.184s] [i2c] T3 317 100000000 1000000 300 300 1 0 3 00000000 0 0
+[+  20.190s] [i2c] T3 318 100000000 1000000 120 120 0 0 0 10850C18 2 943396
+[+  20.195s] [i2c] T3 319 100000000 1000000 120 120 1 0 0 10820C18 2 862068
+[+  20.200s] [i2c] T3 320 125000000 10000 100 10 0 0 3 00000000 0 0
+[+  20.205s] [i2c] T3 321 125000000 10000 100 10 1 0 3 00000000 0 0
+[+  20.210s] [i2c] T3 322 125000000 10000 250 20 0 0 3 00000000 0 0
+[+  20.215s] [i2c] T3 323 125000000 10000 250 20 1 0 3 00000000 0 0
+[+  20.220s] [i2c] T3 324 125000000 10000 300 300 0 0 3 00000000 0 0
+[+  20.224s] [i2c] T3 325 125000000 10000 300 300 1 0 3 00000000 0 0
+[+  20.229s] [i2c] T3 326 125000000 10000 120 120 0 0 3 00000000 0 0
+[+  20.234s] [i2c] T3 327 125000000 10000 120 120 1 0 3 00000000 0 0
+[+  20.240s] [i2c] T3 328 125000000 100000 100 10 0 0 0 20E0BBDD 0 100000
+[+  20.245s] [i2c] T3 329 125000000 100000 100 10 1 0 0 20E0B9DB 0 99920
+[+  20.250s] [i2c] T3 330 125000000 100000 250 20 0 0 0 30F08AA3 0 99840
+[+  20.255s] [i2c] T3 331 125000000 100000 250 20 1 0 0 30F088A2 0 99760
+[+  20.261s] [i2c] T3 332 125000000 100000 300 300 0 0 0 40D76A7E 0 99920
+[+  20.266s] [i2c] T3 333 125000000 100000 300 300 1 0 0 40D6697D 0 99681
+[+  20.271s] [i2c] T3 334 125000000 100000 120 120 0 0 0 20F4B9DA 0 99920
+[+  20.277s] [i2c] T3 335 125000000 100000 120 120 1 0 0 20F2B7D8 0 99840
+[+  20.282s] [i2c] T3 336 125000000 250000 100 10 0 0 0 10C04AA4 1 250000
+[+  20.287s] [i2c] T3 337 125000000 250000 100 10 1 0 0 10C048A0 1 249500
+[+  20.293s] [i2c] T3 338 125000000 250000 250 20 0 0 0 20E02F69 1 249003
+[+  20.298s] [i2c] T3 339 125000000 250000 250 20 1 0 0 20E02E65 1 250000
+[+  20.303s] [i2c] T3 340 125000000 250000 300 300 0 0 0 30C92047 1 249500
+[+  20.309s] [i2c] T3 341 125000000 250000 300 300 1 0 0 30C81F45 1 249003
+[+  20.314s] [i2c] T3 342 125000000 250000 120 120 0 0 0 10D6489E 1 250000
+[+  20.320s] [i2c] T3 343 125000000 250000 120 120 1 0 0 10D3469A 1 249500
+[+  20.325s] [i2c] T3 344 125000000 400000 100 10 0 0 0 10C02D64 1 398089
+[+  20.330s] [i2c] T3 345 125000000 400000 100 10 1 0 0 10C02B5F 1 399361
+[+  20.336s] [i2c] T3 346 125000000 400000 250 20 0 0 0 20E01B3E 1 399361
+[+  20.341s] [i2c] T3 347 125000000 400000 250 20 1 0 0 20E01A3B 1 398089
+[+  20.346s] [i2c] T3 348 125000000 400000 300 300 0 0 0 30C91228 1 389408
+[+  20.352s] [i2c] T3 349 125000000 400000 300 300 1 0 0 30C81228 1 374251
+[+  20.357s] [i2c] T3 350 125000000 400000 120 120 0 0 0 10D62A5F 1 398089
+[+  20.363s] [i2c] T3 351 125000000 400000 120 120 1 0 0 10D3285A 1 399361
+[+  20.368s] [i2c] T3 352 125000000 1000000 100 10 0 0 0 10901122 2 992063
+[+  20.373s] [i2c] T3 353 125000000 1000000 100 10 1 0 0 1090101F 2 954198
+[+  20.378s] [i2c] T3 354 125000000 1000000 250 20 0 0 3 00000000 0 0
+[+  20.383s] [i2c] T3 355 125000000 1000000 250 20 1 0 3 00000000 0 0
+[+  20.389s] [i2c] T3 356 125000000 1000000 300 300 0 0 3 00000000 0 0
+[+  20.394s] [i2c] T3 357 125000000 1000000 300 300 1 0 3 00000000 0 0
+[+  20.399s] [i2c] T3 358 125000000 1000000 120 120 0 0 0 10A6101F 2 932835
+[+  20.405s] [i2c] T3 359 125000000 1000000 120 120 1 0 0 10A3101F 2 850340
+[+  20.410s] [i2c] T3 360 100000000 100000 250 20 1 1 0 30C06C81 0 99900
+[+  20.415s] [i2c] T3 361 100000000 400000 250 20 0 1 0 20B01531 1 398406
+[+  20.421s] [i2c] T3 362 100000000 1000000 40 10 1 1 0 00801932 2 1000000
+[+  20.426s] [i2c] T3 363 20000000 1000000 120 120 1 1 0 00300509 2 645161
+[+  20.431s] [i2c] T3 364 100000000 100000 250 20 1 2 0 30C06C81 0 99700
+[+  20.437s] [i2c] T3 365 100000000 400000 250 20 0 2 0 20B01530 1 400000
+[+  20.442s] [i2c] T3 366 100000000 1000000 40 10 1 2 0 00801931 2 990099
+[+  20.447s] [i2c] T3 367 20000000 1000000 120 120 1 2 3 00000000 0 0
+[+  20.452s] [i2c] T3 368 100000000 100000 250 20 1 4 0 30C06C80 0 99700
+[+  20.457s] [i2c] T3 369 100000000 400000 250 20 0 4 0 20B0152F 1 398406
+[+  20.463s] [i2c] T3 370 100000000 1000000 40 10 1 4 0 00801931 2 952380
+[+  20.468s] [i2c] T3 371 20000000 1000000 120 120 1 4 3 00000000 0 0
+[+  20.473s] [i2c] T3 372 100000000 100000 250 20 1 8 0 30C06B7F 0 99700
+[+  20.478s] [i2c] T3 373 100000000 400000 250 20 0 8 0 20B0142D 1 400000
+[+  20.484s] [i2c] T3 374 100000000 1000000 40 10 1 8 0 00801931 2 884955
+[+  20.489s] [i2c] T3 375 20000000 1000000 120 120 1 8 3 00000000 0 0
+[+  20.494s] [i2c] T3 376 100000000 100000 250 20 1 15 0 30C0697D 0 99900
+[+  20.499s] [i2c] T3 377 100000000 400000 250 20 0 15 0 20B0132B 1 392156
+[+  20.505s] [i2c] T3 378 100000000 1000000 40 10 1 15 0 00801931 2 787401
+[+  20.510s] [i2c] T3 379 20000000 1000000 120 120 1 15 3 00000000 0 0
+[+  20.515s] [i2c] T3 380 4000000 100000 1000 300 1 0 0 00400F12 0 85106
+[+  20.520s] [i2c] T3 381 3999999 100000 100 10 0 0 3 00000000 0 0
+[+  20.525s] [i2c] T3 382 10000000 400000 300 300 1 0 0 0030050C 1 312500
+[+  20.530s] [i2c] T3 383 9999999 400000 100 10 0 0 3 00000000 0 0
+[+  20.535s] [i2c] T3 384 20000000 1000000 120 120 1 0 0 00300509 2 689655
+[+  20.540s] [i2c] T3 385 19999999 1000000 100 10 0 0 3 00000000 0 0
+[+  20.546s] [i2c] T3 386 100000000 100001 250 20 1 0 0 20B063DA 1 100000
+[+  20.551s] [i2c] T3 387 100000000 400001 120 20 1 0 0 10802448 2 400000
+[+  20.556s] [i2c] T3 388 100000000 99900 250 20 1 0 0 30C06D81 0 99700
+[+  20.561s] [i2c] T3 389 101250000 400000 200 10 1 0 0 10F02149 1 398622
+[+  20.567s] [i2c] T3 390 64000000 400000 200 10 1 0 0 1090142D 1 400000
+[+  20.572s] [i2c] T3 391 64000000 1000000 40 10 1 0 0 0050101F 2 984615
+[+  20.576s] [i2c] T3 392 100000000 1 0 0 0 0 3 00000000 0 0
+[+  20.581s] [i2c] T3 393 4294967295 1000000 0 0 0 0 0 D0F068C9 2 997901
+[+  20.587s] [i2c] T3 394 4294967295 10000 1000 300 1 0 3 00000000 0 0
+[+  20.592s] [i2c] T3 395 100000000 100000 1001 20 1 0 3 00000000 0 0
+[+  20.596s] [i2c] T3 396 100000000 400000 301 20 1 0 3 00000000 0 0
+[+  20.601s] [i2c] T3 397 100000000 1000000 121 20 1 0 3 00000000 0 0
+[+  20.607s] [i2c] T3 398 100000000 1000000 40 121 1 0 3 00000000 0 0
+[+  20.611s] [i2c] T3 399 0 100000 100 10 1 0 1 00000000 0 0
+[+  20.615s] [i2c] T3 400 100000000 0 100 10 1 0 1 00000000 0 0
+[+  20.620s] [i2c] T3 401 100000000 1000001 100 10 1 0 1 00000000 0 0
+[+  20.625s] [i2c] T3 402 100000000 100000 250 20 1 16 1 00000000 0 0
+[+  20.633s] [i2c] T3 done: 403 CalcTiming vectors (the host recomputes them); the slowest took 12291 cycles
+[+  20.644s] [i2c] T1/T2 capability table of I2C1..4 against stm32h755xx.h (IRQn EV/ER), stm32h7xx_hal_dma.h (DMAMUX1 33/34 35/36 73/74,
+[+  20.655s] [i2c] | DMAMUX2 13/14) and RCC read directly (I2C123SEL 0, I2C4SEL 0, 0 in prj_01): rows that differ 0x0; I2C1+4, USART3 and
+[+  20.658s] [i2c] | NULL not instances 1 -> PASS
+[+  20.669s] [i2c] T1 CM7 refusals on I2C2: 62 cases, 0 with another status; instance, RCC_C1/C2 APB1LENR/APB4ENR, D2CCIP2R, D3CCIPR,
+[+  20.678s] [i2c] | SYSCFG_PMCR unchanged in the 2 groups: 0x3 (0x3); control (a valid Init) changes them 1 (Init 0) -> PASS
+[+  20.689s] [i2c] T1 CM4 refusals on I2C1 (the same Common cases): 62 cases, 0 with another status; photo unchanged in the 2 groups 0x3
+[+  20.693s] [i2c] | (0x3); control changes it 1 -> PASS
+[+  20.704s] [i2c] T2 CM7 I2C2 images over TIMINGR x filter x DNF x timeout: 120 cases, 0 differ from the RM fields typed by hand (first
+[+  20.715s] [i2c] | case<<4|reg 0xFFFFFFFF got 0x00000000 expected 0x00000000), 0 Deinit not at the reset image, 0 Init neither OK nor
+[+  20.720s] [i2c] | ERR_BUS; control (DNF + 1 expected) told apart 1 -> PASS
+[+  20.732s] [i2c] T2 CM7 I2C3 images over TIMINGR x filter x DNF x timeout: 120 cases, 0 differ from the RM fields typed by hand (first
+[+  20.742s] [i2c] | case<<4|reg 0xFFFFFFFF got 0x00000000 expected 0x00000000), 0 Deinit not at the reset image, 0 Init neither OK nor
+[+  20.748s] [i2c] | ERR_BUS; control (DNF + 1 expected) told apart 1 -> PASS
+[+  20.759s] [i2c] T2 CM7 I2C4 images over TIMINGR x filter x DNF x timeout: 120 cases, 0 differ from the RM fields typed by hand (first
+[+  20.770s] [i2c] | case<<4|reg 0xFFFFFFFF got 0x00000000 expected 0x00000000), 0 Deinit not at the reset image, 0 Init neither OK nor
+[+  20.775s] [i2c] | ERR_BUS; control (DNF + 1 expected) told apart 1 -> PASS
+[+  20.787s] [i2c] T2 CM4 I2C1 images over TIMINGR x filter x DNF x timeout: 120 cases, 0 differ from the RM fields typed by hand (first
+[+  20.797s] [i2c] | case<<4|reg 0xFFFFFFFF got 0x00000000 expected 0x00000000), 0 Deinit not at the reset image, 0 Init neither OK nor
+[+  20.803s] [i2c] | ERR_BUS; control (DNF + 1 expected) told apart 1 -> PASS
+[+  20.815s] [i2c] SetFastModePlus(I2C2): SYSCFG_PMCR 0x03000000 -> on 0x03000002 (bit 1 only) -> off 0x03000000 (as before), statuses 0 0 -> PASS
+[+  20.826s] [i2c] T13 CPU2 DisableClock(I2C2) (RCC_C2 APB1LENR I2C2EN 0) while RCC_C1 enables it (1): a TIMEOUTR write still lands 1 -> PASS
+[+  20.835s] [i2c] T13 CPU2 EnableClock + DisableClock(I2C2): RCC_C2 I2C2EN 0 after; a write still lands 1 -> PASS
+[+  20.845s] [i2c] T13 control: CPU1 DisableClock(I2C2) 0, both banks off; TIMINGR 0x10101010 written then, read with the clock back:
+[+  20.851s] [i2c] | 0x30D06C81 (the earlier 0x30D06C81: the write was lost) -> PASS
+[+  20.872s] [i2c] T15 I2C2 without pins: Init 0, ISR after Init 0x00000001; Write of 2 bytes 6 in 2000731 cycles; registers after: CR1
+[+  20.879s] [i2c] | 0x00000001 CR2 0x00000000 ISR 0x00000001; Read of 2 bytes 6 in 2000592 cycles
+[+  20.890s] [i2c] T15 I2C2 without pins: Write 6, Read 6 (ERR_TIMEOUT 6 or ERR_BUS 9), each within max_cycles + 1 ms (2000731, 2000592 <=
+[+  20.897s] [i2c] | 2400000); Deinit 0, registers that differ from reset 0x00 -> PASS
+[+  20.908s] [i2c] T14 control: I2C3 initialised and not deinitialised differs from the reset image in 0x11 (CR1, TIMINGR); after Deinit 0:
+[+  20.909s] [i2c] | 0x00 -> PASS
+[+  20.911s] [i2c] AT F1_NOPIN end
+[+  21.300s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+  21.356s] [host] S17 after F1_NOPIN: scope SCL(1+) 3.160 V SDA(2+) 3.302 V ratio 0.9569 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 - -> PASS
+[+  21.361s] [host] F1 bench state seen by the firmware (S19): CPU1 reads PF14 as 'taps', the host was told 'taps' (1 MHz only without taps) -> PASS
+[+  21.363s] [i2c] STEP F1_CM4 owner=CM4 v=2 pb8=1 pb9=1 pf14=1 pf15=1
+[+  21.375s] [host] step F1_CM4: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+  21.424s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+  21.480s] [host] S17 before F1_CM4: scope SCL(1+) 3.159 V SDA(2+) 3.302 V ratio 0.9569 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 1) pf15=1 -> PASS
+[+  21.490s] [i2c] TIMING CM4 f=100000 kernel=100000000 timingr=30D06C81 model=99700 calc=0 init=0
+[+  21.492s] [i2c] AT F334 INIT
+[+  21.867s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  21.879s] [f334] RPT n=1 st=1 sr=0 sp=1 dir=R rx=0 tx=1 nk=0 nm=1 crc_rx=00000000 crc_tx=74BEB8EA p0=0 p1=1 ev=00 us=112
+[+  21.880s] [i2c] X T4 cm4 f=100000 op=R mode=poll a=42 n=1 p=0 st=0 crc=74BEB8EA mis=0 bad=-1 cyc=40303 dtx=0 drx=1 irq=0 irqa=0
+[+  21.884s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  21.914s] [f334] RPT n=2 st=1 sr=0 sp=1 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=C3005D59 p0=1 p1=3 ev=00 us=201
+[+  21.915s] [i2c] X T4 cm4 f=100000 op=R mode=poll a=42 n=2 p=1 st=0 crc=C3005D59 mis=0 bad=-1 cyc=57889 dtx=0 drx=2 irq=0 irqa=0
+[+  21.919s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  21.972s] [f334] RPT n=3 st=1 sr=0 sp=1 dir=R rx=0 tx=255 nk=0 nm=1 crc_rx=00000000 crc_tx=44138B35 p0=3 p1=2 ev=00 us=22678
+[+  21.972s] [i2c] X T4 cm4 f=100000 op=R mode=poll a=42 n=255 p=3 st=0 crc=44138B35 mis=0 bad=-1 cyc=4624761 dtx=0 drx=255 irq=0 irqa=0
+[+  21.977s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  22.030s] [f334] RPT n=4 st=1 sr=0 sp=1 dir=R rx=0 tx=256 nk=0 nm=1 crc_rx=00000000 crc_tx=D4A1269E p0=2 p1=2 ev=00 us=22766
+[+  22.030s] [i2c] X T4 cm4 f=100000 op=R mode=poll a=42 n=256 p=2 st=0 crc=D4A1269E mis=0 bad=-1 cyc=4642746 dtx=0 drx=256 irq=0 irqa=0
+[+  22.035s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  22.154s] [f334] RPT n=5 st=1 sr=0 sp=1 dir=R rx=0 tx=1000 nk=0 nm=1 crc_rx=00000000 crc_tx=E584A47C p0=2 p1=234 ev=00 us=88863
+[+  22.155s] [i2c] X T4 cm4 f=100000 op=R mode=poll a=42 n=1000 p=2 st=0 crc=E584A47C mis=0 bad=-1 cyc=18071446 dtx=0 drx=1000 irq=0 irqa=0
+[+  22.160s] [i2c] | cr1=00000001 sen=3 isr=00000001 aux=0 t=1
+[+  28.030s] [f334] RPT n=6 st=1 sr=0 sp=1 dir=R rx=0 tx=65535 nk=0 nm=1 crc_rx=00000000 crc_tx=81A85B3D p0=234 p1=233 ev=00 us=5823916
+[+  28.072s] [i2c] X T4 cm4 f=100000 op=R mode=poll a=42 n=65535 p=234 st=0 crc=81A85B3D mis=0 bad=-1 cyc=1182885104 dtx=0 drx=65535 irq=0
+[+  28.077s] [i2c] | irqa=0 cr1=00000001 sen=256 isr=00000001 aux=0 t=1
+[+  28.108s] [f334] RPT n=7 st=2 sr=1 sp=1 dir=WR rx=1 tx=1 nk=0 nm=1 crc_rx=CFB5FFE9 crc_tx=6909A88E p0=233 p1=17 ev=00 us=305
+[+  28.108s] [i2c] X T4 cm4 f=100000 op=WR mode=poll a=42 n=1 p=16 st=0 crc=6909A88E mis=0 bad=-1 cyc=78993 dtx=1 drx=1 irq=0 irqa=0
+[+  28.112s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  28.143s] [f334] RPT n=8 st=2 sr=1 sp=1 dir=WR rx=1 tx=2 nk=0 nm=1 crc_rx=E96CCF45 crc_tx=EDF839C8 p0=17 p1=34 ev=00 us=396
+[+  28.143s] [i2c] X T4 cm4 f=100000 op=WR mode=poll a=42 n=2 p=32 st=0 crc=EDF839C8 mis=0 bad=-1 cyc=97136 dtx=1 drx=2 irq=0 irqa=0
+[+  28.148s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  28.201s] [f334] RPT n=9 st=2 sr=1 sp=1 dir=WR rx=1 tx=255 nk=0 nm=1 crc_rx=F4DBDF21 crc_tx=35AE3936 p0=34 p1=47 ev=00 us=22876
+[+  28.201s] [i2c] X T4 cm4 f=100000 op=WR mode=poll a=42 n=255 p=48 st=0 crc=35AE3936 mis=0 bad=-1 cyc=4663577 dtx=1 drx=255 irq=0 irqa=0
+[+  28.206s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  28.259s] [f334] RPT n=10 st=2 sr=1 sp=1 dir=WR rx=1 tx=256 nk=0 nm=1 crc_rx=A4DEAE1D crc_tx=9E7A950B p0=47 p1=64 ev=00 us=22976
+[+  28.260s] [i2c] X T4 cm4 f=100000 op=WR mode=poll a=42 n=256 p=64 st=0 crc=9E7A950B mis=0 bad=-1 cyc=4681871 dtx=1 drx=256 irq=0 irqa=0
+[+  28.264s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  28.384s] [f334] RPT n=11 st=2 sr=1 sp=1 dir=WR rx=1 tx=1000 nk=0 nm=1 crc_rx=B969BE79 crc_tx=6677AAF9 p0=64 p1=56 ev=00 us=89098
+[+  28.384s] [i2c] X T4 cm4 f=100000 op=WR mode=poll a=42 n=1000 p=80 st=0 crc=6677AAF9 mis=0 bad=-1 cyc=18110267 dtx=1 drx=1000 irq=0
+[+  28.389s] [i2c] | irqa=0 cr1=00000001 sen=4 isr=00000001 aux=0 t=1
+[+  34.262s] [f334] RPT n=12 st=2 sr=1 sp=1 dir=WR rx=1 tx=65535 nk=0 nm=1 crc_rx=9FB08ED5 crc_tx=946603C0 p0=56 p1=95 ev=00 us=5825621
+[+  34.304s] [i2c] X T4 cm4 f=100000 op=WR mode=poll a=42 n=65535 p=96 st=0 crc=946603C0 mis=0 bad=-1 cyc=1182888671 dtx=1 drx=65535 irq=0
+[+  34.309s] [i2c] | irqa=0 cr1=00000001 sen=256 isr=00000001 aux=0 t=1
+[+  34.339s] [i2c] X T4 cm4 f=100000 op=P mode=poll a=42 n=0 p=0 st=0 crc=00000000 mis=0 bad=-1 cyc=21795 dtx=0 drx=0 irq=0 irqa=0
+[+  34.339s] [f334] RPT n=13 st=1 sr=0 sp=1 dir=W rx=0 tx=0 nk=0 nm=0 crc_rx=00000000 crc_tx=00000000 p0=95 p1=95 ev=10 us=22
+[+  34.343s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  34.373s] [i2c] X T4 cm4 f=100000 op=P mode=poll a=43 n=0 p=0 st=7 crc=00000000 mis=0 bad=-1 cyc=21616 dtx=0 drx=0 irq=0 irqa=0
+[+  34.378s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=0
+[+  34.408s] [f334] RPT n=14 st=1 sr=0 sp=1 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=9AB0D9C6 crc_tx=00000000 p0=95 p1=167 ev=00 us=113
+[+  34.409s] [i2c] X T4 cm4 f=100000 op=W mode=poll a=42 n=1 p=1016881419 st=0 crc=9AB0D9C6 mis=0 bad=-1 cyc=39815 dtx=1 drx=0 irq=0 irqa=0
+[+  34.414s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=A7
+[+  34.444s] [f334] RPT n=15 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=6CAA4CF7 crc_tx=00000000 p0=167 p1=69 ev=00 us=200
+[+  34.445s] [i2c] X T4 cm4 f=100000 op=W mode=poll a=42 n=2 p=2803266549 st=0 crc=6CAA4CF7 mis=0 bad=-1 cyc=57887 dtx=2 drx=0 irq=0 irqa=0
+[+  34.450s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=4476
+[+  34.503s] [f334] RPT n=16 st=1 sr=0 sp=1 dir=W rx=255 tx=0 nk=0 nm=0 crc_rx=184D8136 crc_tx=00000000 p0=69 p1=116 ev=00 us=22690
+[+  34.503s] [i2c] X T4 cm4 f=100000 op=W mode=poll a=42 n=255 p=1148456801 st=0 crc=184D8136 mis=0 bad=-1 cyc=4624290 dtx=255 drx=0 irq=0
+[+  34.508s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  34.562s] [f334] RPT n=17 st=1 sr=0 sp=1 dir=W rx=256 tx=0 nk=0 nm=0 crc_rx=74A782B6 crc_tx=00000000 p0=116 p1=122 ev=00 us=22780
+[+  34.562s] [i2c] X T4 cm4 f=100000 op=W mode=poll a=42 n=256 p=1989277709 st=0 crc=74A782B6 mis=0 bad=-1 cyc=4642314 dtx=256 drx=0 irq=0
+[+  34.567s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  34.687s] [f334] RPT n=18 st=1 sr=0 sp=1 dir=W rx=1000 tx=0 nk=0 nm=0 crc_rx=66AD70C5 crc_tx=00000000 p0=122 p1=76 ev=00 us=88912
+[+  34.687s] [i2c] X T4 cm4 f=100000 op=W mode=poll a=42 n=1000 p=2074076261 st=0 crc=66AD70C5 mis=0 bad=-1 cyc=18069619 dtx=1000 drx=0
+[+  34.693s] [i2c] | irq=0 irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  40.567s] [f334] RPT n=19 st=1 sr=0 sp=1 dir=W rx=65535 tx=0 nk=0 nm=0 crc_rx=E792F53E crc_tx=00000000 p0=76 p1=91 ev=00 us=5824632
+[+  40.602s] [i2c] X T4 cm4 f=100000 op=W mode=poll a=42 n=65535 p=1702099564 st=0 crc=E792F53E mis=0 bad=-1 cyc=1182802754 dtx=65535 drx=0
+[+  40.607s] [i2c] | irq=0 irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  40.638s] [i2c] T4 CM4 at 100000 Hz (TIMINGR 0x30D06C81): 6 reads, 6 write-reads, 2 probes, 6 writes of 1..65535 bytes: 0 with another
+[+  40.644s] [i2c] | status or a byte that differs from the target's content -> PASS
+[+  40.645s] [i2c] AT F334 INIT
+[+  41.005s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  41.009s] [i2c] AT F334 CORRUPT 5
+[+  41.337s] [f334] OK CORRUPT nack=-1 corrupt=5 stretch_addr_us=0 stretch_byte_us=0
+[+  41.351s] [i2c] X T4C cm4 f=100000 op=R mode=poll a=42 n=16 p=0 st=0 crc=83FB516C mis=1 bad=5 cyc=310569 dtx=0 drx=16 irq=0 irqa=0
+[+  41.351s] [f334] RPT n=20 st=1 sr=0 sp=1 dir=R rx=0 tx=16 nk=0 nm=1 crc_rx=00000000 crc_tx=83FB516C p0=0 p1=16 ev=00 us=1446
+[+  41.355s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  41.385s] [i2c] T4 CM4 control at 100000 Hz: target armed CORRUPT 5, read of 16: 1 byte differs, at index 5 (5) -> PASS
+[+  41.386s] [i2c] AT F334 INIT
+[+  41.457s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  41.468s] [i2c] AT SCOPE T5 k=0 f=100000 kernel=100000000 timingr=30D06C81 model=99700 rate=12500000 trig=sda
+[+  41.790s] [f334] RPT n=21 st=1 sr=0 sp=1 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=43123DA2 p0=0 p1=2 ev=00 us=202
+[+  41.790s] [i2c] X T5 cm4 f=100000 op=R mode=poll a=42 n=2 p=0 st=0 crc=43123DA2 mis=0 bad=-1 cyc=57952 dtx=0 drx=2 irq=0 irqa=0
+[+  41.795s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  41.823s] [i2c] AT SCOPE T5 k=1 f=100000 kernel=100000000 timingr=30D06C81 model=99700 rate=12500000 trig=sda
+[+  41.850s] [host] F1 T5 scope k=0 f=100000: decoded 'S 85A A5A A4N P', expected 'S 85A A5A A4N P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S 85A A5A A4N P' (same); 8192 samples at 12500000 S/s, glitches 0
+[+  41.850s] [host] F1 T5 scope k=0 f=100000 times: tLOW 5300/5312 ns (min/median; counter 5131, window 4771..5944), tHIGH 4275/4287 (counter 4302), tSU;DAT min 4818 (H755 bits; target bits 642), tHD;STA 4376, tSU;STA 0, tSU;STO 4390, tBUF 0 ns; t_r 249 t_f 44 ns (median, 30-70 %); f_SCL 101053 Hz, normalised 99705 (asked 100000, model 99700)
+[+  41.870s] [f334] RPT n=22 st=2 sr=1 sp=1 dir=WR rx=1 tx=1 nk=0 nm=1 crc_rx=4C667A2E crc_tx=EADA2D49 p0=2 p1=8 ev=00 us=306
+[+  41.870s] [i2c] X T5 cm4 f=100000 op=WR mode=poll a=42 n=1 p=7 st=0 crc=EADA2D49 mis=0 bad=-1 cyc=79044 dtx=1 drx=1 irq=0 irqa=0
+[+  41.875s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  41.903s] [i2c] AT SCOPE T5 k=2 f=100000 kernel=100000000 timingr=30D06C81 model=99700 rate=12500000 trig=sda
+[+  41.936s] [host] F1 T5 scope k=1 f=100000: decoded 'S 84A 07A | Sr 85A A2N P', expected 'S 84A 07A | Sr 85A A2N P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S 84A 07A | Sr 85A A2N P' (same); 8192 samples at 12500000 S/s, glitches 0
+[+  41.936s] [host] F1 T5 scope k=1 f=100000 times: tLOW 5296/5307 ns (min/median; counter 5131, window 4771..5944), tHIGH 4265/4284 (counter 4302), tSU;DAT min 4804 (H755 bits; target bits 804), tHD;STA 4377, tSU;STA 5113, tSU;STO 4387, tBUF 0 ns; t_r 249 t_f 42 ns (median, 30-70 %); f_SCL 101119 Hz, normalised 99769 (asked 100000, model 99700)
+[+  41.956s] [f334] RPT n=23 st=1 sr=0 sp=1 dir=W rx=0 tx=0 nk=0 nm=0 crc_rx=00000000 crc_tx=00000000 p0=8 p1=8 ev=10 us=23
+[+  41.956s] [i2c] X T5 cm4 f=100000 op=P mode=poll a=42 n=0 p=0 st=0 crc=00000000 mis=0 bad=-1 cyc=21804 dtx=0 drx=0 irq=0 irqa=0
+[+  41.961s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  41.965s] [f334] RPT n=24 st=1 sr=0 sp=1 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=D202EF8D crc_tx=00000000 p0=8 p1=0 ev=00 us=111
+[+  41.971s] [i2c] X T5 cm4 f=100000 op=W mode=poll a=42 n=1 p=32 st=0 crc=D202EF8D mis=0 bad=-1 cyc=39773 dtx=1 drx=0 irq=0 irqa=0
+[+  41.976s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=00
+[+  42.004s] [i2c] AT SCOPE T5 k=3 f=100000 kernel=100000000 timingr=30D06C81 model=99700 rate=12500000 trig=sda
+[+  42.035s] [host] F1 T5 scope k=2 f=100000: decoded 'S 84A P | S 84A 00A P', expected 'S 84A P | S 84A 00A P'; control swapped 'S  P | S  P | S  P | S ', at 0.5 V 'S 84A P | S 84A 00A P' (same); 8192 samples at 12500000 S/s, glitches 0
+[+  42.036s] [host] F1 T5 scope k=2 f=100000 times: tLOW 5299/5308 ns (min/median; counter 5131, window 4771..5944), tHIGH 4269/4285 (counter 4302), tSU;DAT min 4892 (H755 bits; target bits 804), tHD;STA 4388, tSU;STA 0, tSU;STO 4379, tBUF 11611 ns; t_r 249 t_f 42 ns (median, 30-70 %); f_SCL 101015 Hz, normalised 99667 (asked 100000, model 99700)
+[+  42.055s] [f334] RPT n=25 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=E4C97D40 crc_tx=00000000 p0=0 p1=21 ev=00 us=200
+[+  42.056s] [i2c] X T5 cm4 f=100000 op=W mode=poll a=42 n=2 p=49936 st=0 crc=E4C97D40 mis=0 bad=-1 cyc=58065 dtx=2 drx=0 irq=0 irqa=0
+[+  42.061s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=145A
+[+  42.089s] [i2c] AT SCOPE T5 k=4 f=100000 kernel=100000000 timingr=30D06C81 model=99700 rate=12500000 trig=sda
+[+  42.116s] [host] F1 T5 scope k=3 f=100000: decoded 'S 84A 14A 5AA P', expected 'S 84A 14A 5AA P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S ', at 0.5 V 'S 84A 14A 5AA P' (same); 8192 samples at 12500000 S/s, glitches 0
+[+  42.116s] [host] F1 T5 scope k=3 f=100000 times: tLOW 5296/5312 ns (min/median; counter 5131, window 4771..5944), tHIGH 4260/4284 (counter 4302), tSU;DAT min 4885 (H755 bits; target bits 796), tHD;STA 4388, tSU;STA 0, tSU;STO 4388, tBUF 0 ns; t_r 250 t_f 45 ns (median, 30-70 %); f_SCL 101069 Hz, normalised 99721 (asked 100000, model 99700)
+[+  42.137s] [i2c] X T5 cm4 f=100000 op=P mode=poll a=43 n=0 p=0 st=7 crc=00000000 mis=0 bad=-1 cyc=21589 dtx=0 drx=0 irq=0 irqa=0
+[+  42.141s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=0
+[+  42.163s] [i2c] AT SCOPE end
+[+  42.480s] [host] F1 T5 scope k=4 f=100000: decoded 'S 86N P', expected 'S 86N P'; control swapped 'S  P | S  P | S  P | S ', at 0.5 V 'S 86N P' (same); 8192 samples at 12500000 S/s, glitches 0
+[+  42.480s] [host] F1 T5 scope k=4 f=100000 times: tLOW 5300/5310 ns (min/median; counter 5131, window 4771..5944), tHIGH 4266/4282 (counter 4302), tSU;DAT min 4888 (H755 bits; target bits 4897), tHD;STA 4380, tSU;STA 0, tSU;STO 4391, tBUF 0 ns; t_r 250 t_f 44 ns (median, 30-70 %); f_SCL 101061 Hz, normalised 99712 (asked 100000, model 99700)
+[+  42.493s] [i2c] T5 CM4 at 100000 Hz: 5 captured transfers (probe + write 1, write 2, read 2, write-read 1+1, probe 0x43) ended as
+[+  42.500s] [i2c] | expected on the H755 side: 0 did not (the host judges the bus) -> PASS
+[+  42.509s] [i2c] T14 I2C1 after T4/T5 at 100000 Hz: Deinit, registers that differ from the reset image 0x00 -> PASS
+[+  42.516s] [i2c] TIMING CM4 f=400000 kernel=100000000 timingr=20D0142E model=398406 calc=0 init=0
+[+  42.518s] [i2c] AT F334 INIT
+[+  42.827s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  42.840s] [i2c] X T4 cm4 f=400000 op=R mode=poll a=42 n=1 p=0 st=0 crc=74BEB8EA mis=0 bad=-1 cyc=11872 dtx=0 drx=1 irq=0 irqa=0
+[+  42.840s] [f334] RPT n=26 st=1 sr=0 sp=1 dir=R rx=0 tx=1 nk=0 nm=1 crc_rx=00000000 crc_tx=74BEB8EA p0=0 p1=1 ev=00 us=38
+[+  42.845s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  42.874s] [f334] RPT n=27 st=1 sr=0 sp=1 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=C3005D59 p0=1 p1=3 ev=00 us=60
+[+  42.875s] [i2c] X T4 cm4 f=400000 op=R mode=poll a=42 n=2 p=1 st=0 crc=C3005D59 mis=0 bad=-1 cyc=16289 dtx=0 drx=2 irq=0 irqa=0
+[+  42.879s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  42.915s] [f334] RPT n=28 st=1 sr=0 sp=1 dir=R rx=0 tx=255 nk=0 nm=1 crc_rx=00000000 crc_tx=44138B35 p0=3 p1=2 ev=00 us=5681
+[+  42.915s] [i2c] X T4 cm4 f=400000 op=R mode=poll a=42 n=255 p=3 st=0 crc=44138B35 mis=0 bad=-1 cyc=1158017 dtx=0 drx=255 irq=0 irqa=0
+[+  42.920s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  42.956s] [f334] RPT n=29 st=1 sr=0 sp=1 dir=R rx=0 tx=256 nk=0 nm=1 crc_rx=00000000 crc_tx=D4A1269E p0=2 p1=2 ev=00 us=5704
+[+  42.956s] [i2c] X T4 cm4 f=400000 op=R mode=poll a=42 n=256 p=2 st=0 crc=D4A1269E mis=0 bad=-1 cyc=1162532 dtx=0 drx=256 irq=0 irqa=0
+[+  42.961s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  43.013s] [f334] RPT n=30 st=1 sr=0 sp=1 dir=R rx=0 tx=1000 nk=0 nm=1 crc_rx=00000000 crc_tx=E584A47C p0=2 p1=234 ev=00 us=22236
+[+  43.014s] [i2c] X T4 cm4 f=400000 op=R mode=poll a=42 n=1000 p=2 st=0 crc=E584A47C mis=0 bad=-1 cyc=4520059 dtx=0 drx=1000 irq=0 irqa=0
+[+  43.019s] [i2c] | cr1=00000001 sen=3 isr=00000001 aux=0 t=1
+[+  44.512s] [f334] RPT n=31 st=1 sr=0 sp=1 dir=R rx=0 tx=65535 nk=0 nm=1 crc_rx=00000000 crc_tx=81A85B3D p0=234 p1=233 ev=00 us=1456175
+[+  44.554s] [i2c] X T4 cm4 f=400000 op=R mode=poll a=42 n=65535 p=234 st=0 crc=81A85B3D mis=0 bad=-1 cyc=295738522 dtx=0 drx=65535 irq=0
+[+  44.559s] [i2c] | irqa=0 cr1=00000001 sen=256 isr=00000001 aux=0 t=1
+[+  44.589s] [f334] RPT n=32 st=2 sr=1 sp=1 dir=WR rx=1 tx=1 nk=0 nm=1 crc_rx=CFB5FFE9 crc_tx=6909A88E p0=233 p1=17 ev=00 us=89
+[+  44.589s] [i2c] X T4 cm4 f=400000 op=WR mode=poll a=42 n=1 p=16 st=0 crc=6909A88E mis=0 bad=-1 cyc=22566 dtx=1 drx=1 irq=0 irqa=0
+[+  44.593s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  44.623s] [f334] RPT n=33 st=2 sr=1 sp=1 dir=WR rx=1 tx=2 nk=0 nm=1 crc_rx=E96CCF45 crc_tx=EDF839C8 p0=17 p1=34 ev=00 us=110
+[+  44.624s] [i2c] X T4 cm4 f=400000 op=WR mode=poll a=42 n=2 p=32 st=0 crc=EDF839C8 mis=0 bad=-1 cyc=26834 dtx=1 drx=2 irq=0 irqa=0
+[+  44.628s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  44.664s] [f334] RPT n=34 st=2 sr=1 sp=1 dir=WR rx=1 tx=255 nk=0 nm=1 crc_rx=F4DBDF21 crc_tx=35AE3936 p0=34 p1=47 ev=00 us=5733
+[+  44.665s] [i2c] X T4 cm4 f=400000 op=WR mode=poll a=42 n=255 p=48 st=0 crc=35AE3936 mis=0 bad=-1 cyc=1168730 dtx=1 drx=255 irq=0 irqa=0
+[+  44.669s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  44.705s] [f334] RPT n=35 st=2 sr=1 sp=1 dir=WR rx=1 tx=256 nk=0 nm=1 crc_rx=A4DEAE1D crc_tx=9E7A950B p0=47 p1=64 ev=00 us=5755
+[+  44.706s] [i2c] X T4 cm4 f=400000 op=WR mode=poll a=42 n=256 p=64 st=0 crc=9E7A950B mis=0 bad=-1 cyc=1173025 dtx=1 drx=256 irq=0 irqa=0
+[+  44.710s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  44.763s] [f334] RPT n=36 st=2 sr=1 sp=1 dir=WR rx=1 tx=1000 nk=0 nm=1 crc_rx=B969BE79 crc_tx=6677AAF9 p0=64 p1=56 ev=00 us=22289
+[+  44.764s] [i2c] X T4 cm4 f=400000 op=WR mode=poll a=42 n=1000 p=80 st=0 crc=6677AAF9 mis=0 bad=-1 cyc=4530269 dtx=1 drx=1000 irq=0
+[+  44.768s] [i2c] | irqa=0 cr1=00000001 sen=4 isr=00000001 aux=0 t=1
+[+  46.262s] [f334] RPT n=37 st=2 sr=1 sp=1 dir=WR rx=1 tx=65535 nk=0 nm=1 crc_rx=9FB08ED5 crc_tx=946603C0 p0=56 p1=95 ev=00 us=1456635
+[+  46.304s] [i2c] X T4 cm4 f=400000 op=WR mode=poll a=42 n=65535 p=96 st=0 crc=946603C0 mis=0 bad=-1 cyc=295729095 dtx=1 drx=65535 irq=0
+[+  46.309s] [i2c] | irqa=0 cr1=00000001 sen=256 isr=00000001 aux=0 t=1
+[+  46.339s] [f334] RPT n=38 st=1 sr=0 sp=1 dir=W rx=0 tx=0 nk=0 nm=0 crc_rx=00000000 crc_tx=00000000 p0=95 p1=95 ev=10 us=13
+[+  46.339s] [i2c] X T4 cm4 f=400000 op=P mode=poll a=42 n=0 p=0 st=0 crc=00000000 mis=0 bad=-1 cyc=6813 dtx=0 drx=0 irq=0 irqa=0
+[+  46.344s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  46.374s] [i2c] X T4 cm4 f=400000 op=P mode=poll a=43 n=0 p=0 st=7 crc=00000000 mis=0 bad=-1 cyc=5842 dtx=0 drx=0 irq=0 irqa=0
+[+  46.378s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=0
+[+  46.408s] [f334] RPT n=39 st=1 sr=0 sp=1 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=2560B8D0 crc_tx=00000000 p0=95 p1=148 ev=00 us=34
+[+  46.409s] [i2c] X T4 cm4 f=400000 op=W mode=poll a=42 n=1 p=1576048915 st=0 crc=2560B8D0 mis=0 bad=-1 cyc=11394 dtx=1 drx=0 irq=0 irqa=0
+[+  46.414s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=94
+[+  46.443s] [f334] RPT n=40 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=CB686023 crc_tx=00000000 p0=148 p1=100 ev=00 us=56
+[+  46.444s] [i2c] X T4 cm4 f=400000 op=W mode=poll a=42 n=2 p=2492010810 st=0 crc=CB686023 mis=0 bad=-1 cyc=15888 dtx=2 drx=0 irq=0 irqa=0
+[+  46.449s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=63F9
+[+  46.485s] [f334] RPT n=41 st=1 sr=0 sp=1 dir=W rx=255 tx=0 nk=0 nm=0 crc_rx=43A2546C crc_tx=00000000 p0=100 p1=247 ev=00 us=5677
+[+  46.486s] [i2c] X T4 cm4 f=400000 op=W mode=poll a=42 n=255 p=1668237261 st=0 crc=43A2546C mis=0 bad=-1 cyc=1157386 dtx=255 drx=0 irq=0
+[+  46.491s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  46.527s] [f334] RPT n=42 st=1 sr=0 sp=1 dir=W rx=256 tx=0 nk=0 nm=0 crc_rx=373885D4 crc_tx=00000000 p0=247 p1=5 ev=00 us=5700
+[+  46.527s] [i2c] X T4 cm4 f=400000 op=W mode=poll a=42 n=256 p=4181910214 st=0 crc=373885D4 mis=0 bad=-1 cyc=1161775 dtx=256 drx=0 irq=0
+[+  46.532s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  46.585s] [f334] RPT n=43 st=1 sr=0 sp=1 dir=W rx=1000 tx=0 nk=0 nm=0 crc_rx=46052FA5 crc_tx=00000000 p0=5 p1=142 ev=00 us=22232
+[+  46.586s] [i2c] X T4 cm4 f=400000 op=W mode=poll a=42 n=1000 p=106199339 st=0 crc=46052FA5 mis=0 bad=-1 cyc=4518585 dtx=1000 drx=0 irq=0
+[+  46.591s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  48.088s] [f334] RPT n=44 st=1 sr=0 sp=1 dir=W rx=65535 tx=0 nk=0 nm=0 crc_rx=4BBA8271 crc_tx=00000000 p0=142 p1=172 ev=00 us=1456600
+[+  48.122s] [i2c] X T4 cm4 f=400000 op=W mode=poll a=42 n=65535 p=2807754739 st=0 crc=4BBA8271 mis=0 bad=-1 cyc=295668611 dtx=65535 drx=0
+[+  48.128s] [i2c] | irq=0 irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  48.158s] [i2c] T4 CM4 at 400000 Hz (TIMINGR 0x20D0142E): 6 reads, 6 write-reads, 2 probes, 6 writes of 1..65535 bytes: 0 with another
+[+  48.165s] [i2c] | status or a byte that differs from the target's content -> PASS
+[+  48.166s] [i2c] AT F334 INIT
+[+  48.344s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  48.348s] [i2c] AT F334 CORRUPT 5
+[+  48.674s] [f334] OK CORRUPT nack=-1 corrupt=5 stretch_addr_us=0 stretch_byte_us=0
+[+  48.687s] [f334] RPT n=45 st=1 sr=0 sp=1 dir=R rx=0 tx=16 nk=0 nm=1 crc_rx=00000000 crc_tx=83FB516C p0=0 p1=16 ev=00 us=371
+[+  48.688s] [i2c] X T4C cm4 f=400000 op=R mode=poll a=42 n=16 p=0 st=0 crc=83FB516C mis=1 bad=5 cyc=79489 dtx=0 drx=16 irq=0 irqa=0
+[+  48.692s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  48.721s] [i2c] T4 CM4 control at 400000 Hz: target armed CORRUPT 5, read of 16: 1 byte differs, at index 5 (5) -> PASS
+[+  48.723s] [i2c] AT F334 INIT
+[+  48.795s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  48.807s] [i2c] AT SCOPE T5 k=0 f=400000 kernel=100000000 timingr=20D0142E model=398406 rate=25000000 trig=sda
+[+  49.129s] [f334] RPT n=46 st=1 sr=0 sp=1 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=43123DA2 p0=0 p1=2 ev=00 us=60
+[+  49.129s] [i2c] X T5 cm4 f=400000 op=R mode=poll a=42 n=2 p=0 st=0 crc=43123DA2 mis=0 bad=-1 cyc=16289 dtx=0 drx=2 irq=0 irqa=0
+[+  49.134s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  49.162s] [i2c] AT SCOPE T5 k=1 f=400000 kernel=100000000 timingr=20D0142E model=398406 rate=25000000 trig=sda
+[+  49.198s] [host] F1 T5 scope k=0 f=400000: decoded 'S 85A A5A A4N P', expected 'S 85A A5A A4N P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S 85A A5A A4N P' (same); 8192 samples at 25000000 S/s, glitches 0
+[+  49.198s] [host] F1 T5 scope k=0 f=400000 times: tLOW 1573/1578 ns (min/median; counter 1391, window 1192..2025), tHIGH 608/617 (counter 622), tSU;DAT min 1071 (H755 bits; target bits 529), tHD;STA 736, tSU;STA 0, tSU;STO 714, tBUF 0 ns; t_r 250 t_f 24 ns (median, 30-70 %); f_SCL 404442 Hz, normalised 399045 (asked 400000, model 398406)
+[+  49.217s] [f334] RPT n=47 st=2 sr=1 sp=1 dir=WR rx=1 tx=1 nk=0 nm=1 crc_rx=4C667A2E crc_tx=EADA2D49 p0=2 p1=8 ev=00 us=88
+[+  49.218s] [i2c] X T5 cm4 f=400000 op=WR mode=poll a=42 n=1 p=7 st=0 crc=EADA2D49 mis=0 bad=-1 cyc=22639 dtx=1 drx=1 irq=0 irqa=0
+[+  49.222s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  49.251s] [i2c] AT SCOPE T5 k=2 f=400000 kernel=100000000 timingr=20D0142E model=398406 rate=25000000 trig=sda
+[+  49.273s] [host] F1 T5 scope k=1 f=400000: decoded 'S 84A 07A | Sr 85A A2N P', expected 'S 84A 07A | Sr 85A A2N P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S 84A 07A | Sr 85A A2N P' (same); 8192 samples at 25000000 S/s, glitches 0
+[+  49.274s] [host] F1 T5 scope k=1 f=400000 times: tLOW 1574/1581 ns (min/median; counter 1391, window 1192..2025), tHIGH 602/618 (counter 622), tSU;DAT min 1062 (H755 bits; target bits 530), tHD;STA 721, tSU;STA 1410, tSU;STO 709, tBUF 0 ns; t_r 251 t_f 21 ns (median, 30-70 %); f_SCL 403896 Hz, normalised 398507 (asked 400000, model 398406)
+[+  49.290s] [f334] RPT n=48 st=1 sr=0 sp=1 dir=W rx=0 tx=0 nk=0 nm=0 crc_rx=00000000 crc_tx=00000000 p0=8 p1=8 ev=10 us=11
+[+  49.290s] [i2c] X T5 cm4 f=400000 op=P mode=poll a=42 n=0 p=0 st=0 crc=00000000 mis=0 bad=-1 cyc=6756 dtx=0 drx=0 irq=0 irqa=0
+[+  49.294s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  49.299s] [f334] RPT n=49 st=1 sr=0 sp=1 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=D202EF8D crc_tx=00000000 p0=8 p1=0 ev=00 us=34
+[+  49.305s] [i2c] X T5 cm4 f=400000 op=W mode=poll a=42 n=1 p=32 st=0 crc=D202EF8D mis=0 bad=-1 cyc=11262 dtx=1 drx=0 irq=0 irqa=0
+[+  49.310s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=00
+[+  49.338s] [i2c] AT SCOPE T5 k=3 f=400000 kernel=100000000 timingr=20D0142E model=398406 rate=25000000 trig=sda
+[+  49.364s] [host] F1 T5 scope k=2 f=400000: decoded 'S 84A P | S 84A 00A P', expected 'S 84A P | S 84A 00A P'; control swapped 'S  P | S  P | S  P | S ', at 0.5 V 'S 84A P | S 84A 00A P' (same); 8192 samples at 25000000 S/s, glitches 0
+[+  49.365s] [host] F1 T5 scope k=2 f=400000 times: tLOW 1574/1582 ns (min/median; counter 1391, window 1192..2025), tHIGH 606/620 (counter 622), tSU;DAT min 1148 (H755 bits; target bits 812), tHD;STA 719, tSU;STA 0, tSU;STO 699, tBUF 11575 ns; t_r 251 t_f 21 ns (median, 30-70 %); f_SCL 403672 Hz, normalised 398285 (asked 400000, model 398406)
+[+  49.384s] [f334] RPT n=50 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=E4C97D40 crc_tx=00000000 p0=0 p1=21 ev=00 us=56
+[+  49.385s] [i2c] X T5 cm4 f=400000 op=W mode=poll a=42 n=2 p=49936 st=0 crc=E4C97D40 mis=0 bad=-1 cyc=15779 dtx=2 drx=0 irq=0 irqa=0
+[+  49.390s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=145A
+[+  49.418s] [i2c] AT SCOPE T5 k=4 f=400000 kernel=100000000 timingr=20D0142E model=398406 rate=25000000 trig=sda
+[+  49.450s] [host] F1 T5 scope k=3 f=400000: decoded 'S 84A 14A 5AA P', expected 'S 84A 14A 5AA P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S ', at 0.5 V 'S 84A 14A 5AA P' (same); 8192 samples at 25000000 S/s, glitches 0
+[+  49.450s] [host] F1 T5 scope k=3 f=400000 times: tLOW 1574/1582 ns (min/median; counter 1391, window 1192..2025), tHIGH 606/618 (counter 622), tSU;DAT min 1148 (H755 bits; target bits 812), tHD;STA 719, tSU;STA 0, tSU;STO 707, tBUF 0 ns; t_r 250 t_f 25 ns (median, 30-70 %); f_SCL 404173 Hz, normalised 398780 (asked 400000, model 398406)
+[+  49.469s] [i2c] X T5 cm4 f=400000 op=P mode=poll a=43 n=0 p=0 st=7 crc=00000000 mis=0 bad=-1 cyc=5790 dtx=0 drx=0 irq=0 irqa=0
+[+  49.474s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=0
+[+  49.495s] [i2c] AT SCOPE end
+[+  49.837s] [host] F1 T5 scope k=4 f=400000: decoded 'S 86N P', expected 'S 86N P'; control swapped 'S  P | S  P | S  P | S ', at 0.5 V 'S 86N P' (same); 8192 samples at 25000000 S/s, glitches 0
+[+  49.838s] [host] F1 T5 scope k=4 f=400000 times: tLOW 1577/1581 ns (min/median; counter 1391, window 1192..2025), tHIGH 610/615 (counter 622), tSU;DAT min 1146 (H755 bits; target bits 1149), tHD;STA 735, tSU;STA 0, tSU;STO 695, tBUF 0 ns; t_r 252 t_f 22 ns (median, 30-70 %); f_SCL 404071 Hz, normalised 398679 (asked 400000, model 398406)
+[+  49.852s] [i2c] T5 CM4 at 400000 Hz: 5 captured transfers (probe + write 1, write 2, read 2, write-read 1+1, probe 0x43) ended as
+[+  49.859s] [i2c] | expected on the H755 side: 0 did not (the host judges the bus) -> PASS
+[+  49.868s] [i2c] T14 I2C1 after T4/T5 at 400000 Hz: Deinit, registers that differ from the reset image 0x00 -> PASS
+[+  49.870s] [i2c] AT HOLD SDA 100
+[+  50.276s] [f334] OK HOLD line=SDA ms=100 edges=0
+[+  50.375s] [i2c] AT HOLD_END
+[+  50.389s] [f334] HOLD_END line=SDA ms=100 us=100001 edges=0 blank=1 edge1_us=- cause=TIME scl=1 sda=1 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+  50.679s] [host] hold SDA 100 ms edges 0: held 100001 us, SCL edges counted 0 (blank 1), cause TIME, scl=1 sda=1 after, pins S15 ok
+[+  50.692s] [i2c] T1 CM4 I2C1 with BUSY = 1 (target holding SDA; ISR 0x00008001): 8 transfers refused, 0 with another status than ERR_BUS;
+[+  50.696s] [i2c] | registers and RCC unchanged 1 -> PASS
+[+  50.698s] [i2c] AT F334 INIT
+[+  51.034s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  51.046s] [f334] RPT n=51 st=1 sr=0 sp=1 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=9AB0D9C6 crc_tx=00000000 p0=0 p1=167 ev=00 us=34
+[+  51.057s] [i2c] X T6 cm4 f=400000 op=W mode=it a=42 n=1 p=2923079297 st=0 crc=9AB0D9C6 mis=0 bad=-1 cyc=11799 dtx=1 drx=0 irq=1 irqa=0
+[+  51.062s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=A7
+[+  51.084s] [i2c] AT F334 INIT
+[+  51.161s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  51.173s] [f334] RPT n=52 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=95D8F22B crc_tx=00000000 p0=0 p1=245 ev=00 us=57
+[+  51.184s] [i2c] X T6 cm4 f=400000 op=W mode=it a=42 n=2 p=2813691252 st=0 crc=95D8F22B mis=0 bad=-1 cyc=16031 dtx=2 drx=0 irq=2 irqa=0
+[+  51.189s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=F466
+[+  51.210s] [i2c] AT F334 INIT
+[+  51.286s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  51.304s] [f334] RPT n=53 st=1 sr=0 sp=1 dir=W rx=256 tx=0 nk=0 nm=0 crc_rx=86C06628 crc_tx=00000000 p0=0 p1=101 ev=00 us=5705
+[+  51.315s] [i2c] X T6 cm4 f=400000 op=W mode=it a=42 n=256 p=4101689817 st=0 crc=86C06628 mis=0 bad=-1 cyc=1162342 dtx=256 drx=0 irq=257
+[+  51.320s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  51.341s] [i2c] AT F334 INIT
+[+  51.411s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  51.446s] [f334] RPT n=54 st=1 sr=0 sp=1 dir=W rx=1000 tx=0 nk=0 nm=0 crc_rx=91EDDA55 crc_tx=00000000 p0=0 p1=199 ev=00 us=22236
+[+  51.456s] [i2c] X T6 cm4 f=400000 op=W mode=it a=42 n=1000 p=1718974937 st=0 crc=91EDDA55 mis=0 bad=-1 cyc=4518777 dtx=1000 drx=0
+[+  51.462s] [i2c] | irq=1003 irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  51.484s] [i2c] AT F334 INIT
+[+  51.566s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  51.579s] [f334] RPT n=55 st=1 sr=0 sp=1 dir=R rx=0 tx=1 nk=0 nm=1 crc_rx=00000000 crc_tx=74BEB8EA p0=0 p1=1 ev=00 us=36
+[+  51.589s] [i2c] X T6 cm4 f=400000 op=R mode=it a=42 n=1 p=0 st=0 crc=74BEB8EA mis=0 bad=-1 cyc=11955 dtx=0 drx=1 irq=2 irqa=0
+[+  51.593s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  51.623s] [f334] RPT n=56 st=1 sr=0 sp=1 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=C3005D59 p0=1 p1=3 ev=00 us=62
+[+  51.633s] [i2c] X T6 cm4 f=400000 op=R mode=it a=42 n=2 p=1 st=0 crc=C3005D59 mis=0 bad=-1 cyc=16753 dtx=0 drx=2 irq=3 irqa=0
+[+  51.637s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  51.673s] [f334] RPT n=57 st=1 sr=0 sp=1 dir=R rx=0 tx=256 nk=0 nm=1 crc_rx=00000000 crc_tx=CC470E6E p0=3 p1=3 ev=00 us=5706
+[+  51.684s] [i2c] X T6 cm4 f=400000 op=R mode=it a=42 n=256 p=3 st=0 crc=CC470E6E mis=0 bad=-1 cyc=1162941 dtx=0 drx=256 irq=257 irqa=0
+[+  51.688s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  51.741s] [f334] RPT n=58 st=1 sr=0 sp=1 dir=R rx=0 tx=1000 nk=0 nm=1 crc_rx=00000000 crc_tx=8D16DF58 p0=3 p1=235 ev=00 us=22247
+[+  51.752s] [i2c] X T6 cm4 f=400000 op=R mode=it a=42 n=1000 p=3 st=0 crc=8D16DF58 mis=0 bad=-1 cyc=4519581 dtx=0 drx=1000 irq=1001 irqa=0
+[+  51.756s] [i2c] | cr1=00000001 sen=3 isr=00000001 aux=0 t=1
+[+  51.786s] [f334] RPT n=59 st=2 sr=1 sp=1 dir=WR rx=1 tx=1 nk=0 nm=1 crc_rx=A4DEAE1D crc_tx=0262F97A p0=235 p1=65 ev=00 us=92
+[+  51.796s] [i2c] X T6 cm4 f=400000 op=WR mode=it a=42 n=1 p=64 st=0 crc=0262F97A mis=0 bad=-1 cyc=23273 dtx=1 drx=1 irq=3 irqa=0
+[+  51.800s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  51.830s] [f334] RPT n=60 st=2 sr=1 sp=1 dir=WR rx=1 tx=2 nk=0 nm=1 crc_rx=A4DEAE1D crc_tx=C5B73337 p0=65 p1=66 ev=00 us=112
+[+  51.841s] [i2c] X T6 cm4 f=400000 op=WR mode=it a=42 n=2 p=64 st=0 crc=C5B73337 mis=0 bad=-1 cyc=27462 dtx=1 drx=2 irq=4 irqa=0
+[+  51.845s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  51.881s] [f334] RPT n=61 st=2 sr=1 sp=1 dir=WR rx=1 tx=256 nk=0 nm=1 crc_rx=A4DEAE1D crc_tx=9E7A950B p0=66 p1=64 ev=00 us=5758
+[+  51.892s] [i2c] X T6 cm4 f=400000 op=WR mode=it a=42 n=256 p=64 st=0 crc=9E7A950B mis=0 bad=-1 cyc=1173312 dtx=1 drx=256 irq=258 irqa=0
+[+  51.896s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  51.949s] [f334] RPT n=62 st=2 sr=1 sp=1 dir=WR rx=1 tx=1000 nk=0 nm=1 crc_rx=A4DEAE1D crc_tx=04D7D616 p0=64 p1=40 ev=00 us=22298
+[+  51.959s] [i2c] X T6 cm4 f=400000 op=WR mode=it a=42 n=1000 p=64 st=0 crc=04D7D616 mis=0 bad=-1 cyc=4530667 dtx=1 drx=1000 irq=1002
+[+  51.964s] [i2c] | irqa=0 cr1=00000001 sen=4 isr=00000001 aux=0 t=1
+[+  51.994s] [i2c] T6 CM4 by interrupt at 400000 Hz: write, read, write-read of 1, 2, 256, 1000 bytes: 0 with another status or data;
+[+  52.002s] [i2c] | interrupt enables left in CR1 0x00 (0); IRQs in the 10 ms after the end 0 (0) -> PASS
+[+  52.028s] [i2c] X T6C cm4 f=400000 op=W mode=itc a=42 n=2 p=0 st=6 crc=364A4652 mis=0 bad=-1 cyc=1000086 dtx=1 drx=0 irq=0 irqa=0
+[+  52.033s] [i2c] | cr1=00000001 sen=0 isr=00008003 aux=10 t=1 d=E18B
+[+  52.514s] [f334] RPT n=63 st=1 sr=0 sp=0 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=4666D409 crc_tx=00000000 p0=40 p1=137 ev=08 us=500030
+[+  52.636s] [i2c] T6 CM4 control: enables cleared by hand after StartIt: status still PENDING (10), the wait ended by its budget (6 =
+[+  52.643s] [i2c] | ERR_TIMEOUT), 0 IRQs; Deinit, 600 ms (the target's cut), Init again 1 -> PASS
+[+  52.645s] [i2c] AT F334 INIT
+[+  52.735s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  52.747s] [f334] RPT n=64 st=1 sr=0 sp=1 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=43123DA2 p0=0 p1=2 ev=00 us=57
+[+  52.748s] [i2c] X T7 cm4 f=400000 op=R mode=dma a=42 n=2 p=0 st=0 crc=43123DA2 mis=0 bad=-1 cyc=16793 dtx=0 drx=2 irq=0 irqa=0
+[+  52.752s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  52.788s] [f334] RPT n=65 st=1 sr=0 sp=1 dir=R rx=0 tx=255 nk=0 nm=1 crc_rx=00000000 crc_tx=157C0CE1 p0=2 p1=1 ev=00 us=5684
+[+  52.789s] [i2c] X T7 cm4 f=400000 op=R mode=dma a=42 n=255 p=2 st=0 crc=157C0CE1 mis=0 bad=-1 cyc=1158460 dtx=0 drx=255 irq=0 irqa=0
+[+  52.793s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  52.829s] [f334] RPT n=66 st=1 sr=0 sp=1 dir=R rx=0 tx=256 nk=0 nm=1 crc_rx=00000000 crc_tx=0CEA3556 p0=1 p1=1 ev=00 us=5705
+[+  52.829s] [i2c] X T7 cm4 f=400000 op=R mode=dma a=42 n=256 p=1 st=0 crc=0CEA3556 mis=0 bad=-1 cyc=1162959 dtx=0 drx=256 irq=0 irqa=0
+[+  52.834s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  52.955s] [f334] RPT n=67 st=1 sr=0 sp=1 dir=R rx=0 tx=4096 nk=0 nm=1 crc_rx=00000000 crc_tx=23FE7918 p0=1 p1=1 ev=00 us=91056
+[+  52.958s] [i2c] X T7 cm4 f=400000 op=R mode=dma a=42 n=4096 p=1 st=0 crc=23FE7918 mis=0 bad=-1 cyc=18490064 dtx=0 drx=4096 irq=0 irqa=0
+[+  52.963s] [i2c] | cr1=00000001 sen=16 isr=00000001 aux=0 t=1
+[+  52.993s] [f334] RPT n=68 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=AA4AF6B7 crc_tx=00000000 p0=1 p1=134 ev=00 us=56
+[+  52.994s] [i2c] X T7 cm4 f=400000 op=W mode=dma a=42 n=2 p=2300133873 st=0 crc=AA4AF6B7 mis=0 bad=-1 cyc=16384 dtx=2 drx=0 irq=0 irqa=0
+[+  52.999s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=856A
+[+  53.035s] [f334] RPT n=69 st=1 sr=0 sp=1 dir=W rx=255 tx=0 nk=0 nm=0 crc_rx=8B179EC8 crc_tx=00000000 p0=134 p1=104 ev=00 us=5680
+[+  53.035s] [i2c] X T7 cm4 f=400000 op=W mode=dma a=42 n=255 p=2244025634 st=0 crc=8B179EC8 mis=0 bad=-1 cyc=1157631 dtx=255 drx=0 irq=0
+[+  53.040s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  53.076s] [f334] RPT n=70 st=1 sr=0 sp=1 dir=W rx=256 tx=0 nk=0 nm=0 crc_rx=AE553AAD crc_tx=00000000 p0=104 p1=154 ev=00 us=5702
+[+  53.077s] [i2c] X T7 cm4 f=400000 op=W mode=dma a=42 n=256 p=1791282192 st=0 crc=AE553AAD mis=0 bad=-1 cyc=1162167 dtx=256 drx=0 irq=0
+[+  53.082s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  53.205s] [f334] RPT n=71 st=1 sr=0 sp=1 dir=W rx=4096 tx=0 nk=0 nm=0 crc_rx=D855EDD2 crc_tx=00000000 p0=154 p1=229 ev=00 us=91018
+[+  53.206s] [i2c] X T7 cm4 f=400000 op=W mode=dma a=42 n=4096 p=2609906643 st=0 crc=D855EDD2 mis=0 bad=-1 cyc=18487651 dtx=4096 drx=0
+[+  53.211s] [i2c] | irq=0 irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  53.242s] [i2c] T7(a) CM4 I2C1 by DMA2 (dma_bm) at 400000 Hz: read and write of 2, 255, 256, 4096 bytes: 0 with another status or data;
+[+  53.245s] [i2c] | DMA steps not OK 0x0 -> PASS
+[+  53.247s] [i2c] AT F334 INIT
+[+  53.310s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  53.329s] [i2c] X T7C cm4 f=400000 op=R mode=dmac a=42 n=64 p=0 st=6 crc=0EAAB849 mis=64 bad=0 cyc=1201360 dtx=0 drx=0 irq=0 irqa=0
+[+  53.334s] [i2c] | cr1=00000001 sen=64 isr=00000001 aux=0 t=1
+[+  53.824s] [f334] RPT n=72 st=1 sr=0 sp=0 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=43123DA2 p0=0 p1=2 ev=08 us=500037
+[+  53.938s] [i2c] T7(a) control: RXDMAEN cleared by hand, read of 64: WaitEnd 6 (ERR_TIMEOUT 6), bytes still holding the sentinel 64 (64) -> PASS
+[+  53.948s] [i2c] X T8A cm4 f=400000 op=W mode=poll a=43 n=1 p=90 st=7 crc=A505DF1B mis=0 bad=-1 cyc=5829 dtx=1 drx=0 irq=0 irqa=0
+[+  53.953s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=0 d=01
+[+  53.993s] [i2c] X T8A cm4 f=400000 op=P mode=it a=43 n=0 p=0 st=7 crc=00000000 mis=0 bad=-1 cyc=5994 dtx=0 drx=0 irq=2 irqa=0
+[+  53.997s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=0
+[+  54.018s] [i2c] AT F334 INIT
+[+  54.042s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  54.054s] [f334] RPT n=73 st=1 sr=0 sp=1 dir=R rx=0 tx=4 nk=0 nm=1 crc_rx=00000000 crc_tx=5B73EF64 p0=0 p1=4 ev=00 us=102
+[+  54.055s] [i2c] X T8A cm4 f=400000 op=R mode=poll a=42 n=4 p=0 st=0 crc=5B73EF64 mis=0 bad=-1 cyc=25391 dtx=0 drx=4 irq=0 irqa=0
+[+  54.059s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  54.089s] [i2c] T8(a) CM4 address 0x43 (no target): Write and IT probe ERR_NACK, BUSY after 0 0 (0: the STOP was sent); the next
+[+  54.093s] [i2c] | transfer to 0x42 OK: 0 failed -> PASS
+[+  54.095s] [i2c] AT F334 NACK 3
+[+  54.171s] [f334] OK NACK nack=3 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+  54.180s] [i2c] AT SCOPE T8 k=0 f=400000 kernel=100000000 timingr=0 model=0 rate=50000000 trig=sda
+[+  54.506s] [f334] RPT n=74 st=1 sr=0 sp=1 dir=W rx=4 tx=0 nk=1 nm=0 crc_rx=EB2333A9 crc_tx=00000000 p0=4 p1=131 ev=00 us=120
+[+  54.516s] [i2c] X T8B cm4 f=400000 op=W mode=it a=42 n=8 p=42330 st=7 crc=9382016E mis=0 bad=-1 cyc=29150 dtx=3 drx=0 irq=6 irqa=0
+[+  54.522s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=814163E0BD57FD8E
+[+  54.544s] [i2c] AT SCOPE end
+[+  54.582s] [host] F1 T8 scope k=0 f=400000: decoded 'S 84A 81A 41A 63A E0N P', expected 'S 84A 81A 41A 63A E0N P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S C3A 50A 64A 33A 3BN P' (differs); 8192 samples at 50000000 S/s, glitches 0
+[+  54.590s] [i2c] AT F334 NACK 3
+[+  54.952s] [f334] OK NACK nack=3 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+  54.965s] [f334] RPT n=75 st=1 sr=0 sp=1 dir=W rx=4 tx=0 nk=1 nm=0 crc_rx=EB2333A9 crc_tx=00000000 p0=131 p1=131 ev=00 us=120
+[+  54.966s] [i2c] X T8B cm4 f=400000 op=W mode=poll a=42 n=8 p=42330 st=7 crc=9382016E mis=0 bad=-1 cyc=28638 dtx=8 drx=0 irq=0 irqa=0
+[+  54.972s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=814163E0BD57FD8E
+[+  55.002s] [f334] RPT n=76 st=1 sr=0 sp=1 dir=W rx=8 tx=0 nk=0 nm=0 crc_rx=9382016E crc_tx=00000000 p0=131 p1=136 ev=00 us=189
+[+  55.003s] [i2c] X T8B cm4 f=400000 op=W mode=poll a=42 n=8 p=42330 st=0 crc=9382016E mis=0 bad=-1 cyc=43185 dtx=8 drx=0 irq=0 irqa=0
+[+  55.008s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=814163E0BD57FD8E
+[+  55.039s] [i2c] T8(b) CM4 the target NACKs data byte 3 of a write of 8: IT and polling ERR_NACK, bytes acknowledged by the driver's
+[+  55.045s] [i2c] | count 3 (3); control without NACK armed OK: 0 failed -> PASS
+[+  55.046s] [i2c] AT F334 INIT
+[+  55.106s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  55.118s] [f334] RPT n=77 st=1 sr=0 sp=1 dir=R rx=0 tx=4 nk=0 nm=1 crc_rx=00000000 crc_tx=5B73EF64 p0=0 p1=4 ev=00 us=105
+[+  55.119s] [i2c] X T10A0 cm4 f=400000 op=R mode=poll a=42 n=4 p=0 st=0 crc=5B73EF64 mis=0 bad=-1 cyc=25505 dtx=0 drx=4 irq=0 irqa=0
+[+  55.123s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  55.153s] [f334] RPT n=78 st=1 sr=0 sp=1 dir=W rx=4 tx=0 nk=0 nm=0 crc_rx=D92D63A8 crc_tx=00000000 p0=4 p1=11 ev=00 us=101
+[+  55.154s] [i2c] X T10A0 cm4 f=400000 op=W mode=poll a=42 n=4 p=16400 st=0 crc=D92D63A8 mis=0 bad=-1 cyc=24786 dtx=4 drx=0 irq=0 irqa=0
+[+  55.159s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=0841C107
+[+  55.181s] [i2c] AT F334 INIT
+[+  55.261s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  55.266s] [i2c] AT F334 STRETCH ADDR 200
+[+  55.596s] [f334] OK STRETCH nack=-1 corrupt=-1 stretch_addr_us=200 stretch_byte_us=0
+[+  55.601s] [i2c] AT F334 STRETCH BYTE 200
+[+  55.926s] [f334] OK STRETCH nack=-1 corrupt=-1 stretch_addr_us=200 stretch_byte_us=200
+[+  55.936s] [i2c] AT SCOPE T10 k=0 f=400000 kernel=0 timingr=0 model=0 rate=4000000 trig=sda
+[+  56.259s] [f334] RPT n=79 st=1 sr=0 sp=1 dir=R rx=0 tx=4 nk=0 nm=1 crc_rx=00000000 crc_tx=5B73EF64 p0=0 p1=4 ev=00 us=1126
+[+  56.260s] [i2c] X T10A cm4 f=400000 op=R mode=poll a=42 n=4 p=0 st=0 crc=5B73EF64 mis=0 bad=-1 cyc=232782 dtx=0 drx=4 irq=0 irqa=0
+[+  56.264s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  56.286s] [i2c] AT SCOPE end
+[+  56.315s] [host] F1 T10 scope k=0 f=400000: decoded 'S 85A A5A A4A A7A A6N P', expected 'S 85A A5A A4A A7A A6N P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S  P' (differs); 8192 samples at 4000000 S/s, glitches 45
+[+  56.315s] [host] F1 T10 scope k=0 f=400000 SCL held low >= 150 us 5 times: [206, 205, 205, 205, 205] us
+[+  56.320s] [i2c] AT F334 STRETCH ADDR 200
+[+  56.711s] [f334] OK STRETCH nack=-1 corrupt=-1 stretch_addr_us=200 stretch_byte_us=0
+[+  56.716s] [i2c] AT F334 STRETCH BYTE 200
+[+  57.042s] [f334] OK STRETCH nack=-1 corrupt=-1 stretch_addr_us=200 stretch_byte_us=200
+[+  57.052s] [i2c] AT SCOPE T10 k=1 f=400000 kernel=0 timingr=0 model=0 rate=4000000 trig=sda
+[+  57.376s] [f334] RPT n=80 st=1 sr=0 sp=1 dir=W rx=4 tx=0 nk=0 nm=0 crc_rx=D92D63A8 crc_tx=00000000 p0=4 p1=11 ev=00 us=1122
+[+  57.377s] [i2c] X T10A cm4 f=400000 op=W mode=poll a=42 n=4 p=16400 st=0 crc=D92D63A8 mis=0 bad=-1 cyc=232329 dtx=4 drx=0 irq=0 irqa=0
+[+  57.383s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=0841C107
+[+  57.404s] [i2c] AT SCOPE end
+[+  57.431s] [host] F1 T10 scope k=1 f=400000: decoded 'S 84A 08A 41A C1A 07A P', expected 'S 84A 08A 41A C1A 07A P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S  P' (differs); 8192 samples at 4000000 S/s, glitches 45
+[+  57.432s] [host] F1 T10 scope k=1 f=400000 SCL held low >= 150 us 5 times: [208, 206, 207, 209, 207] us
+[+  57.446s] [i2c] T10(a) CM4 target stretching 200 us at the address and per byte: write and read of 4 OK with the data; CYCCNT write
+[+  57.454s] [i2c] | 24786 -> 232329, read 25505 -> 232782 cycles (each >= +2431: 5 x 200 us) -> PASS
+[+  57.455s] [i2c] AT RPT lenient
+[+  57.770s] [i2c] AT SCOPE T10B k=0 f=400000 kernel=100000000 timingr=0 model=0 rate=100000 trig=scl tmo=489
+[+  58.082s] [i2c] AT HOLD SCL 50
+[+  58.480s] [f334] OK HOLD line=SCL ms=50 edges=0
+[+  58.497s] [i2c] X T10B cm4 f=400000 op=W mode=poll a=42 n=2 p=8208 st=9 crc=68EA0E20 mis=0 bad=-1 cyc=842153 dtx=2 drx=0 irq=0 irqa=0
+[+  58.502s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=8440
+[+  58.528s] [i2c] AT HOLD_END
+[+  58.542s] [f334] HOLD_END line=SCL ms=50 us=50001 edges=0 blank=0 edge1_us=- cause=TIME scl=1 sda=1 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+  61.559s] [host] hold SCL 50 ms edges 0: held 50001 us, SCL edges counted 0 (blank 0), cause TIME, scl=1 sda=1 after, pins S15 ok
+[+  61.563s] [i2c] AT SCOPE end
+[+  61.888s] [host] F1 T10B scope k=0 f=400000: SCL low 50.10 ms in 1 run(s), SDA low 4.15 ms in 1 run(s); edges from the first: SCLf 0.000 ms, SDAf 5.733 ms, SDAr 9.885 ms, SCLr 50.108 ms; SDA let go 9.885 ms after SCL fell (TIMEOUTA 9.881 ms); both high at the end True
+[+  61.894s] [i2c] AT HOLD SCL 50
+[+  62.252s] [f334] OK HOLD line=SCL ms=50 edges=0
+[+  62.295s] [i2c] X T10BC cm4 f=400000 op=W mode=poll a=42 n=2 p=8208 st=6 crc=68EA0E20 mis=0 bad=-1 cyc=6000583 dtx=2 drx=0 irq=0 irqa=0
+[+  62.300s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=8440
+[+  62.301s] [i2c] AT HOLD_END
+[+  62.314s] [f334] HOLD_END line=SCL ms=50 us=50001 edges=0 blank=0 edge1_us=- cause=TIME scl=1 sda=1 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+  65.329s] [host] hold SCL 50 ms edges 0: held 50001 us, SCL edges counted 0 (blank 0), cause TIME, scl=1 sda=1 after, pins S15 ok
+[+  65.925s] [i2c] AT RPT strict
+[+  66.242s] [i2c] T10(b) CM4 SCL held 50 ms by the target, timeout_scl_low 489 (10014 us at 100000000 Hz): Write 9 (ERR_BUS 9, by TIMEOUT,
+[+  66.253s] [i2c] | then the software reset) 411316 us after the AT HOLD (>= 9994) and 4220 us after SCL was seen low (<= 11014) -> PASS
+[+  66.264s] [i2c] T10(b) CM4 control without timeout_scl_low: Write 6 (ERR_TIMEOUT 6) 30 ms after SCL went low (max_cycles 30 ms) -> PASS
+[+  66.265s] [i2c] AT RPT lenient
+[+  66.581s] [f334] RPT n=81 st=1 sr=0 sp=1 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=3FBA6CAD crc_tx=00000000 p0=11 p1=128 ev=00 us=33
+[+  66.585s] [i2c] B1 CM4 (200 MHz) at 400000 Hz: I2C_BM_Init 312 cycles, I2C_BM_Write of 1 byte 11690 cycles (status 0), I2C_BM_XferIrq 121..240 cycles per call (IT writ
+[+  66.590s] [f334] RPT n=82 st=1 sr=0 sp=1 dir=W rx=16 tx=0 nk=0 nm=0 crc_rx=6F20F4F7 crc_tx=00000000 p0=128 p1=143 ev=00 us=367
+[+  66.615s] [i2c] T12 kernel: RCC_CR HSION was 1, HSIDIV 0 (0: 64 MHz), HSIRDY 1; RCC_D2CCIP2R 0x00000000 -> 0x00002000 (I2C123SEL = 10,
+[+  66.626s] [i2c] | HSI); APB1 100000000 Hz / kernel 64000000 Hz = 1.56 (ES0445 2.19.6 window 1.5..3); I2C1 TIMINGR 0x10C0132B at 400000 Hz
+[+  66.629s] [i2c] AT F334 STATUS t12=0
+[+  67.048s] [f334] STATUS xfers=82 rx=140032 tx=275375 nk=2 ev=6 idle_cuts=2 dropped=0 uart_ovr=0 ptr=143 active=0 hold=0 aborted=0 nack=-1 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+  67.060s] [f334] RPT n=83 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=5565F342 crc_tx=00000000 p0=143 p1=241 ev=00 us=56
+[+  67.070s] [f334] RPT n=84 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=2262C3D4 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.079s] [f334] RPT n=85 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=BB6B926E crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.089s] [f334] RPT n=86 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=CC6CA2F8 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.098s] [f334] RPT n=87 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=5208375B crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.108s] [f334] RPT n=88 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=250F07CD crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.117s] [f334] RPT n=89 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=BC065677 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.127s] [f334] RPT n=158 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=B46B6B5A crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.137s] [f334] RPT n=233 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=4C09C533 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.146s] [f334] RPT n=308 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=826821AC crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.156s] [f334] RPT n=383 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=67BD9FA1 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.165s] [f334] RPT n=458 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=9B0417DD crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.175s] [f334] RPT n=533 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=200F50DE crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.184s] [f334] RPT n=608 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=2BD48FFF crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.189s] [i2c] T12 poll, driver (first byte preloaded): 1000 of 1000 OK, 0 stalled (ERR_TIMEOUT, then PE = 0), first other status 0x0, slowest 15716 cycles
+[+  67.194s] [f334] RPT n=683 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=30D52A84 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.204s] [f334] RPT n=759 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=84DE94B3 crc_tx=00000000 p0=241 p1=241 ev=00 us=57
+[+  67.213s] [f334] RPT n=835 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=E8D8015E crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.223s] [f334] RPT n=910 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=E46E1A66 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.232s] [f334] RPT n=986 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=26B9E5C1 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.242s] [f334] RPT n=1062 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=4ABF702C crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  67.686s] [i2c] AT F334 STATUS t12=1
+[+  68.020s] [f334] STATUS xfers=1082 rx=142032 tx=275375 nk=2 ev=6 idle_cuts=2 dropped=980 uart_ovr=0 ptr=241 active=0 hold=0 aborted=0 nack=-1 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+  68.032s] [f334] RPT n=1083 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=5565F342 crc_tx=00000000 p0=241 p1=241 ev=00 us=57
+[+  68.041s] [f334] RPT n=1084 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=2262C3D4 crc_tx=00000000 p0=241 p1=241 ev=00 us=57
+[+  68.051s] [f334] RPT n=1085 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=BB6B926E crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.061s] [f334] RPT n=1086 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=CC6CA2F8 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.070s] [f334] RPT n=1087 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=5208375B crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.080s] [f334] RPT n=1088 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=250F07CD crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.090s] [f334] RPT n=1089 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=BC065677 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.099s] [f334] RPT n=1154 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=BDDD2771 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.109s] [f334] RPT n=1225 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=5F655D65 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.119s] [f334] RPT n=1296 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=A3DCD519 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.128s] [f334] RPT n=1367 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=4164AF0D crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.138s] [f334] RPT n=1437 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=F6D9F336 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.148s] [f334] RPT n=1508 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=FA6FE80E crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.157s] [f334] RPT n=1579 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=E8D8015E crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.167s] [f334] RPT n=1650 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=EDD8564D crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.169s] [i2c] T12 DMA, driver (preloaded): 1000 of 1000 OK, 0 stalled (ERR_TIMEOUT, then PE = 0), first other status 0x0, slowest 17631 cycles
+[+  68.177s] [f334] RPT n=1721 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=E2D8AF79 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.186s] [f334] RPT n=1792 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=BE6BC57D crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.196s] [f334] RPT n=1863 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=5CD3BF69 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.205s] [f334] RPT n=1934 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=A707F30C crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.215s] [f334] RPT n=2005 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=45BF8918 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.225s] [f334] RPT n=2075 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=F56F113A crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  68.665s] [i2c] AT F334 STATUS t12=2
+[+  69.002s] [f334] STATUS xfers=2082 rx=144032 tx=275375 nk=2 ev=6 idle_cuts=2 dropped=1959 uart_ovr=0 ptr=241 active=0 hold=0 aborted=0 nack=-1 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+  69.015s] [f334] RPT n=2083 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=5565F342 crc_tx=00000000 p0=241 p1=241 ev=00 us=57
+[+  69.025s] [f334] RPT n=2084 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=2262C3D4 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.035s] [f334] RPT n=2085 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=BB6B926E crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.044s] [f334] RPT n=2086 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=CC6CA2F8 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.054s] [f334] RPT n=2087 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=5208375B crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.064s] [f334] RPT n=2088 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=250F07CD crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.073s] [f334] RPT n=2089 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=BC065677 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.083s] [f334] RPT n=2160 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=5D08CE6F crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.093s] [f334] RPT n=2238 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=32B8B98E crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.102s] [f334] RPT n=2315 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=FBB49908 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.112s] [f334] RPT n=2392 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=03D63761 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.122s] [f334] RPT n=2470 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=21D421D8 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.131s] [f334] RPT n=2547 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=D3B62196 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.141s] [f334] RPT n=2624 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=36639F9B crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.142s] [i2c] T12 poll, by hand without preload: 1000 of 1000 OK, 0 stalled (ERR_TIMEOUT, then PE = 0), first other status 0x0, slowest 15296 cycles
+[+  69.151s] [f334] RPT n=2701 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=F8027B04 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.160s] [f334] RPT n=2779 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=90DFC8FC crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.170s] [f334] RPT n=2856 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=250F07CD crc_tx=00000000 p0=241 p1=241 ev=00 us=57
+[+  69.180s] [f334] RPT n=2933 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=D000C39A crc_tx=00000000 p0=241 p1=241 ev=00 us=57
+[+  69.189s] [f334] RPT n=3011 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=83B350AA crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.638s] [i2c] AT F334 STATUS t12=3
+[+  69.968s] [f334] STATUS xfers=3082 rx=146032 tx=275375 nk=2 ev=6 idle_cuts=2 dropped=2940 uart_ovr=0 ptr=241 active=0 hold=0 aborted=0 nack=-1 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+  69.981s] [f334] RPT n=3083 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=5565F342 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  69.991s] [f334] RPT n=3084 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=2262C3D4 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.000s] [f334] RPT n=3085 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=BB6B926E crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.010s] [f334] RPT n=3086 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=CC6CA2F8 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.020s] [f334] RPT n=3087 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=5208375B crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.029s] [f334] RPT n=3088 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=250F07CD crc_tx=00000000 p0=241 p1=241 ev=00 us=57
+[+  70.039s] [f334] RPT n=3089 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=BC065677 crc_tx=00000000 p0=241 p1=241 ev=00 us=57
+[+  70.049s] [f334] RPT n=3155 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=2D623AE0 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.058s] [f334] RPT n=3227 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=A56A6006 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.068s] [f334] RPT n=3299 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=DD6DA9A4 crc_tx=00000000 p0=241 p1=241 ev=00 us=57
+[+  70.078s] [f334] RPT n=3371 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=6E0BD38A crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.087s] [f334] RPT n=3443 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=160C1A28 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.097s] [f334] RPT n=3515 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=9E0440CE crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.107s] [f334] RPT n=3587 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=E603896C crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.116s] [f334] RPT n=3659 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=23B9B2D2 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.117s] [i2c] T12 DMA, by hand without preload: 1000 of 1000 OK, 0 stalled (ERR_TIMEOUT, then PE = 0), first other status 0x0, slowest 17317 cycles
+[+  70.126s] [f334] RPT n=3730 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=26B9E5C1 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.136s] [f334] RPT n=3802 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=5EBE2C63 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.145s] [f334] RPT n=3874 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=D6B67685 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.155s] [f334] RPT n=3946 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=AEB1BF27 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.165s] [f334] RPT n=4018 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=1DD7C509 crc_tx=00000000 p0=241 p1=241 ev=00 us=56
+[+  70.613s] [i2c] AT F334 STATUS t12=4
+[+  70.954s] [f334] STATUS xfers=4082 rx=148032 tx=275375 nk=2 ev=6 idle_cuts=2 dropped=3920 uart_ovr=0 ptr=241 active=0 hold=0 aborted=0 nack=-1 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+  70.967s] [i2c] T12 2.19.6 with the kernel on the HSI: driver poll 1000/1000 and DMA 1000/1000 writes of 2 bytes OK (0 stalls) -> PASS
+[+  70.980s] [i2c] T12 control (decision 6): without the preload, 0 stalls by hand in polling and 0 with DMA in 1000 each: no reproducido (not reproduced)
+[+  70.988s] [i2c] T12 restore: RCC_D2CCIP2R 0x00000000 (0x00000000 before), RCC_CR HSION 1 (1 before) -> PASS
+[+  70.990s] [i2c] AT RPT strict
+[+  71.297s] [i2c] AT F1_CM4 end
+[+  71.621s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+  71.669s] [host] S17 after F1_CM4: scope SCL(1+) 3.159 V SDA(2+) 3.303 V ratio 0.9564 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 - -> PASS
+[+  71.671s] [host] F1 T4 CM4 100000 Hz: transfer, host data and target report: 20 items, 0 with a problem -> PASS
+[+  71.671s] [host] F1 T4C CM4 100000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+  71.671s] [host] F1 T5 CM4 100000 Hz: transfer, host data and target report: 6 items, 0 with a problem -> PASS
+[+  71.671s] [host] F1 T5 scope: decode: 10 items, 0 with a problem -> PASS
+[+  71.671s] [host] F1 T5 CM4 100000 Hz scope: times: 5 items, 0 with a problem -> PASS
+[+  71.671s] [host] F1 T4 CM4 400000 Hz: transfer, host data and target report: 20 items, 0 with a problem -> PASS
+[+  71.672s] [host] F1 T4C CM4 400000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+  71.672s] [host] F1 T5 CM4 400000 Hz: transfer, host data and target report: 6 items, 0 with a problem -> PASS
+[+  71.672s] [host] F1 T5 CM4 400000 Hz scope: times: 5 items, 0 with a problem -> PASS
+[+  71.672s] [host] F1 target holds (S21): 3 items, 0 with a problem -> PASS
+[+  71.672s] [host] F1 T6 CM4 400000 Hz: transfer, host data and target report: 12 items, 0 with a problem -> PASS
+[+  71.672s] [host] F1 T6C CM4 400000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+  71.672s] [host] F1 T7 CM4 400000 Hz: transfer, host data and target report: 8 items, 0 with a problem -> PASS
+[+  71.672s] [host] F1 T7C CM4 400000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+  71.672s] [host] F1 T8A CM4 400000 Hz: transfer, host data and target report: 3 items, 0 with a problem -> PASS
+[+  71.672s] [host] F1 T8B CM4 400000 Hz: transfer, host data and target report: 3 items, 0 with a problem -> PASS
+[+  71.672s] [host] F1 T8 scope: decode: 1 items, 0 with a problem -> PASS
+[+  71.673s] [host] F1 T10A0 CM4 400000 Hz: transfer, host data and target report: 2 items, 0 with a problem -> PASS
+[+  71.673s] [host] F1 T10A CM4 400000 Hz: transfer, host data and target report: 2 items, 0 with a problem -> PASS
+[+  71.673s] [host] F1 T10 scope: decode: 2 items, 0 with a problem -> PASS
+[+  71.673s] [host] F1 T10(a) scope: stretching: 2 items, 0 with a problem -> PASS
+[+  71.673s] [host] F1 T10B CM4 400000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+  71.673s] [host] F1 T10(b) scope: SCL held, TIMEOUT, bus free after: 1 items, 0 with a problem -> PASS
+[+  71.673s] [host] F1 T10BC CM4 400000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+  71.676s] [i2c] STEP F1_CM7 owner=CM7 v=2 pb8=1 pb9=1 pf14=1 pf15=1
+[+  71.686s] [host] step F1_CM7: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+  71.744s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+  71.797s] [host] S17 before F1_CM7: scope SCL(1+) 3.159 V SDA(2+) 3.303 V ratio 0.9565 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 1) pf15=1 -> PASS
+[+  71.808s] [i2c] TIMING CM7 f=100000 kernel=100000000 timingr=30D06C81 model=99700 calc=0 init=0
+[+  71.810s] [i2c] AT F334 INIT
+[+  72.183s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  72.196s] [f334] RPT n=4083 st=1 sr=0 sp=1 dir=R rx=0 tx=1 nk=0 nm=1 crc_rx=00000000 crc_tx=74BEB8EA p0=0 p1=1 ev=00 us=112
+[+  72.196s] [i2c] X T4 cm7 f=100000 op=R mode=poll a=42 n=1 p=0 st=0 crc=74BEB8EA mis=0 bad=-1 cyc=79427 dtx=0 drx=1 irq=0 irqa=0
+[+  72.201s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  72.231s] [i2c] X T4 cm7 f=100000 op=R mode=poll a=42 n=2 p=1 st=0 crc=C3005D59 mis=0 bad=-1 cyc=115133 dtx=0 drx=2 irq=0 irqa=0
+[+  72.231s] [f334] RPT n=4084 st=1 sr=0 sp=1 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=C3005D59 p0=1 p1=3 ev=00 us=201
+[+  72.235s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  72.288s] [f334] RPT n=4085 st=1 sr=0 sp=1 dir=R rx=0 tx=255 nk=0 nm=1 crc_rx=00000000 crc_tx=44138B35 p0=3 p1=2 ev=00 us=22689
+[+  72.289s] [i2c] X T4 cm7 f=100000 op=R mode=poll a=42 n=255 p=3 st=0 crc=44138B35 mis=0 bad=-1 cyc=9248163 dtx=0 drx=255 irq=0 irqa=0
+[+  72.293s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  72.346s] [f334] RPT n=4086 st=1 sr=0 sp=1 dir=R rx=0 tx=256 nk=0 nm=1 crc_rx=00000000 crc_tx=D4A1269E p0=2 p1=2 ev=00 us=22782
+[+  72.347s] [i2c] X T4 cm7 f=100000 op=R mode=poll a=42 n=256 p=2 st=0 crc=D4A1269E mis=0 bad=-1 cyc=9284388 dtx=0 drx=256 irq=0 irqa=0
+[+  72.351s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  72.470s] [f334] RPT n=4087 st=1 sr=0 sp=1 dir=R rx=0 tx=1000 nk=0 nm=1 crc_rx=00000000 crc_tx=E584A47C p0=2 p1=234 ev=00 us=88933
+[+  72.471s] [i2c] X T4 cm7 f=100000 op=R mode=poll a=42 n=1000 p=2 st=0 crc=E584A47C mis=0 bad=-1 cyc=36140425 dtx=0 drx=1000 irq=0 irqa=0
+[+  72.475s] [i2c] | cr1=00000001 sen=3 isr=00000001 aux=0 t=1
+[+  78.345s] [f334] RPT n=4088 st=1 sr=0 sp=1 dir=R rx=0 tx=65535 nk=0 nm=1 crc_rx=00000000 crc_tx=81A85B3D p0=234 p1=233 ev=00 us=5825340
+[+  78.353s] [i2c] X T4 cm7 f=100000 op=R mode=poll a=42 n=65535 p=234 st=0 crc=81A85B3D mis=0 bad=-1 cyc=2365723995 dtx=0 drx=65535 irq=0
+[+  78.359s] [i2c] | irqa=0 cr1=00000001 sen=256 isr=00000001 aux=0 t=1
+[+  78.389s] [f334] RPT n=4089 st=2 sr=1 sp=1 dir=WR rx=1 tx=1 nk=0 nm=1 crc_rx=CFB5FFE9 crc_tx=6909A88E p0=233 p1=17 ev=00 us=306
+[+  78.389s] [i2c] X T4 cm7 f=100000 op=WR mode=poll a=42 n=1 p=16 st=0 crc=6909A88E mis=0 bad=-1 cyc=157479 dtx=1 drx=1 irq=0 irqa=0
+[+  78.393s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  78.424s] [f334] RPT n=4090 st=2 sr=1 sp=1 dir=WR rx=1 tx=2 nk=0 nm=1 crc_rx=E96CCF45 crc_tx=EDF839C8 p0=17 p1=34 ev=00 us=393
+[+  78.424s] [i2c] X T4 cm7 f=100000 op=WR mode=poll a=42 n=2 p=32 st=0 crc=EDF839C8 mis=0 bad=-1 cyc=194320 dtx=1 drx=2 irq=0 irqa=0
+[+  78.429s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  78.482s] [f334] RPT n=4091 st=2 sr=1 sp=1 dir=WR rx=1 tx=255 nk=0 nm=1 crc_rx=F4DBDF21 crc_tx=35AE3936 p0=34 p1=47 ev=00 us=22885
+[+  78.482s] [i2c] X T4 cm7 f=100000 op=WR mode=poll a=42 n=255 p=48 st=0 crc=35AE3936 mis=0 bad=-1 cyc=9327239 dtx=1 drx=255 irq=0 irqa=0
+[+  78.487s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  78.540s] [f334] RPT n=4092 st=2 sr=1 sp=1 dir=WR rx=1 tx=256 nk=0 nm=1 crc_rx=A4DEAE1D crc_tx=9E7A950B p0=47 p1=64 ev=00 us=22973
+[+  78.541s] [i2c] X T4 cm7 f=100000 op=WR mode=poll a=42 n=256 p=64 st=0 crc=9E7A950B mis=0 bad=-1 cyc=9363135 dtx=1 drx=256 irq=0 irqa=0
+[+  78.545s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  78.665s] [i2c] X T4 cm7 f=100000 op=WR mode=poll a=42 n=1000 p=80 st=0 crc=6677AAF9 mis=0 bad=-1 cyc=36219730 dtx=1 drx=1000 irq=0
+[+  78.666s] [f334] RPT n=4093 st=2 sr=1 sp=1 dir=WR rx=1 tx=1000 nk=0 nm=1 crc_rx=B969BE79 crc_tx=6677AAF9 p0=64 p1=56 ev=00 us=89093
+[+  78.670s] [i2c] | irqa=0 cr1=00000001 sen=4 isr=00000001 aux=0 t=1
+[+  84.539s] [f334] RPT n=4094 st=2 sr=1 sp=1 dir=WR rx=1 tx=65535 nk=0 nm=1 crc_rx=9FB08ED5 crc_tx=946603C0 p0=56 p1=95 ev=00 us=5825023
+[+  84.547s] [i2c] X T4 cm7 f=100000 op=WR mode=poll a=42 n=65535 p=96 st=0 crc=946603C0 mis=0 bad=-1 cyc=2365815531 dtx=1 drx=65535 irq=0
+[+  84.553s] [i2c] | irqa=0 cr1=00000001 sen=256 isr=00000001 aux=0 t=1
+[+  84.582s] [f334] RPT n=4095 st=1 sr=0 sp=1 dir=W rx=0 tx=0 nk=0 nm=0 crc_rx=00000000 crc_tx=00000000 p0=95 p1=95 ev=10 us=22
+[+  84.583s] [i2c] X T4 cm7 f=100000 op=P mode=poll a=42 n=0 p=0 st=0 crc=00000000 mis=0 bad=-1 cyc=42985 dtx=0 drx=0 irq=0 irqa=0
+[+  84.587s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  84.617s] [i2c] X T4 cm7 f=100000 op=P mode=poll a=43 n=0 p=0 st=7 crc=00000000 mis=0 bad=-1 cyc=42666 dtx=0 drx=0 irq=0 irqa=0
+[+  84.621s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=0
+[+  84.652s] [f334] RPT n=4096 st=1 sr=0 sp=1 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=EFDA7A5A crc_tx=00000000 p0=95 p1=101 ev=00 us=113
+[+  84.652s] [i2c] X T4 cm7 f=100000 op=W mode=poll a=42 n=1 p=3870288614 st=0 crc=EFDA7A5A mis=0 bad=-1 cyc=78929 dtx=1 drx=0 irq=0 irqa=0
+[+  84.657s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=65
+[+  84.687s] [f334] RPT n=4097 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=D624A40B crc_tx=00000000 p0=101 p1=61 ev=00 us=201
+[+  84.688s] [i2c] X T4 cm7 f=100000 op=W mode=poll a=42 n=2 p=1704445183 st=0 crc=D624A40B mis=0 bad=-1 cyc=115092 dtx=2 drx=0 irq=0
+[+  84.693s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=3C8C
+[+  84.746s] [f334] RPT n=4098 st=1 sr=0 sp=1 dir=W rx=255 tx=0 nk=0 nm=0 crc_rx=7151164B crc_tx=00000000 p0=61 p1=138 ev=00 us=22679
+[+  84.747s] [i2c] X T4 cm7 f=100000 op=W mode=poll a=42 n=255 p=1006970139 st=0 crc=7151164B mis=0 bad=-1 cyc=9247866 dtx=255 drx=0 irq=0
+[+  84.752s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  84.805s] [f334] RPT n=4099 st=1 sr=0 sp=1 dir=W rx=256 tx=0 nk=0 nm=0 crc_rx=A8FB93D3 crc_tx=00000000 p0=138 p1=100 ev=00 us=22767
+[+  84.805s] [i2c] X T4 cm7 f=100000 op=W mode=poll a=42 n=256 p=2355568712 st=0 crc=A8FB93D3 mis=0 bad=-1 cyc=9284267 dtx=256 drx=0 irq=0
+[+  84.810s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  84.930s] [f334] RPT n=4100 st=1 sr=0 sp=1 dir=W rx=1000 tx=0 nk=0 nm=0 crc_rx=19F31584 crc_tx=00000000 p0=100 p1=20 ev=00 us=88867
+[+  84.930s] [i2c] X T4 cm7 f=100000 op=W mode=poll a=42 n=1000 p=1705810847 st=0 crc=19F31584 mis=0 bad=-1 cyc=36141976 dtx=1000 drx=0
+[+  84.936s] [i2c] | irq=0 irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  90.806s] [f334] RPT n=4101 st=1 sr=0 sp=1 dir=W rx=65535 tx=0 nk=0 nm=0 crc_rx=2D2F50BF crc_tx=00000000 p0=20 p1=16 ev=00 us=5825182
+[+  90.813s] [i2c] X T4 cm7 f=100000 op=W mode=poll a=42 n=65535 p=759111408 st=0 crc=2D2F50BF mis=0 bad=-1 cyc=2365590599 dtx=65535 drx=0
+[+  90.818s] [i2c] | irq=0 irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  90.849s] [i2c] T4 CM7 at 100000 Hz (TIMINGR 0x30D06C81): 6 reads, 6 write-reads, 2 probes, 6 writes of 1..65535 bytes: 0 with another
+[+  90.855s] [i2c] | status or a byte that differs from the target's content -> PASS
+[+  90.857s] [i2c] AT F334 INIT
+[+  91.049s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  91.053s] [i2c] AT F334 CORRUPT 5
+[+  91.380s] [f334] OK CORRUPT nack=-1 corrupt=5 stretch_addr_us=0 stretch_byte_us=0
+[+  91.394s] [f334] RPT n=4102 st=1 sr=0 sp=1 dir=R rx=0 tx=16 nk=0 nm=1 crc_rx=00000000 crc_tx=83FB516C p0=0 p1=16 ev=00 us=1444
+[+  91.394s] [i2c] X T4C cm7 f=100000 op=R mode=poll a=42 n=16 p=0 st=0 crc=83FB516C mis=1 bad=5 cyc=620769 dtx=0 drx=16 irq=0 irqa=0
+[+  91.398s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  91.428s] [i2c] T4 CM7 control at 100000 Hz: target armed CORRUPT 5, read of 16: 1 byte differs, at index 5 (5) -> PASS
+[+  91.429s] [i2c] AT F334 INIT
+[+  91.713s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  91.723s] [i2c] AT SCOPE T5 k=0 f=100000 kernel=100000000 timingr=30D06C81 model=99700 rate=12500000 trig=sda
+[+  92.044s] [f334] RPT n=4103 st=1 sr=0 sp=1 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=43123DA2 p0=0 p1=2 ev=00 us=200
+[+  92.045s] [i2c] X T5 cm7 f=100000 op=R mode=poll a=42 n=2 p=0 st=0 crc=43123DA2 mis=0 bad=-1 cyc=115366 dtx=0 drx=2 irq=0 irqa=0
+[+  92.049s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  92.078s] [i2c] AT SCOPE T5 k=1 f=100000 kernel=100000000 timingr=30D06C81 model=99700 rate=12500000 trig=sda
+[+  92.104s] [host] F1 T5 scope k=0 f=100000: decoded 'S 85A A5A A4N P', expected 'S 85A A5A A4N P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S 85A A5A A4N P' (same); 8192 samples at 12500000 S/s, glitches 0
+[+  92.104s] [host] F1 T5 scope k=0 f=100000 times: tLOW 5300/5314 ns (min/median; counter 5131, window 4771..5944), tHIGH 4270/4288 (counter 4302), tSU;DAT min 4821 (H755 bits; target bits 804), tHD;STA 4379, tSU;STA 0, tSU;STO 4381, tBUF 0 ns; t_r 248 t_f 42 ns (median, 30-70 %); f_SCL 101030 Hz, normalised 99682 (asked 100000, model 99700)
+[+  92.120s] [i2c] X T5 cm7 f=100000 op=WR mode=poll a=42 n=1 p=7 st=0 crc=EADA2D49 mis=0 bad=-1 cyc=157336 dtx=1 drx=1 irq=0 irqa=0
+[+  92.120s] [f334] RPT n=4104 st=2 sr=1 sp=1 dir=WR rx=1 tx=1 nk=0 nm=1 crc_rx=4C667A2E crc_tx=EADA2D49 p0=2 p1=8 ev=00 us=306
+[+  92.124s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  92.153s] [i2c] AT SCOPE T5 k=2 f=100000 kernel=100000000 timingr=30D06C81 model=99700 rate=12500000 trig=sda
+[+  92.177s] [host] F1 T5 scope k=1 f=100000: decoded 'S 84A 07A | Sr 85A A2N P', expected 'S 84A 07A | Sr 85A A2N P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S 84A 07A | Sr 85A A2N P' (same); 8192 samples at 12500000 S/s, glitches 0
+[+  92.178s] [host] F1 T5 scope k=1 f=100000 times: tLOW 5297/5312 ns (min/median; counter 5131, window 4771..5934), tHIGH 4266/4290 (counter 4302), tSU;DAT min 4815 (H755 bits; target bits 802), tHD;STA 4375, tSU;STA 5145, tSU;STO 4396, tBUF 0 ns; t_r 249 t_f 40 ns (median, 30-70 %); f_SCL 101011 Hz, normalised 99663 (asked 100000, model 99700)
+[+  92.194s] [f334] RPT n=4105 st=1 sr=0 sp=1 dir=W rx=0 tx=0 nk=0 nm=0 crc_rx=00000000 crc_tx=00000000 p0=8 p1=8 ev=10 us=23
+[+  92.194s] [i2c] X T5 cm7 f=100000 op=P mode=poll a=42 n=0 p=0 st=0 crc=00000000 mis=0 bad=-1 cyc=42866 dtx=0 drx=0 irq=0 irqa=0
+[+  92.199s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  92.203s] [f334] RPT n=4106 st=1 sr=0 sp=1 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=D202EF8D crc_tx=00000000 p0=8 p1=0 ev=00 us=111
+[+  92.209s] [i2c] X T5 cm7 f=100000 op=W mode=poll a=42 n=1 p=32 st=0 crc=D202EF8D mis=0 bad=-1 cyc=79984 dtx=1 drx=0 irq=0 irqa=0
+[+  92.214s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=00
+[+  92.242s] [i2c] AT SCOPE T5 k=3 f=100000 kernel=100000000 timingr=30D06C81 model=99700 rate=12500000 trig=sda
+[+  92.281s] [host] F1 T5 scope k=2 f=100000: decoded 'S 84A P | S 84A 00A P', expected 'S 84A P | S 84A 00A P'; control swapped 'S  P | S  P | S  P | S ', at 0.5 V 'S 84A P | S 84A 00A P' (same); 8192 samples at 12500000 S/s, glitches 0
+[+  92.281s] [host] F1 T5 scope k=2 f=100000 times: tLOW 5299/5315 ns (min/median; counter 5131, window 4771..5944), tHIGH 4269/4287 (counter 4302), tSU;DAT min 4893 (H755 bits; target bits 806), tHD;STA 4380, tSU;STA 0, tSU;STO 4382, tBUF 5147 ns; t_r 250 t_f 44 ns (median, 30-70 %); f_SCL 100979 Hz, normalised 99632 (asked 100000, model 99700)
+[+  92.300s] [f334] RPT n=4107 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=E4C97D40 crc_tx=00000000 p0=0 p1=21 ev=00 us=200
+[+  92.301s] [i2c] X T5 cm7 f=100000 op=W mode=poll a=42 n=2 p=49936 st=0 crc=E4C97D40 mis=0 bad=-1 cyc=115337 dtx=2 drx=0 irq=0 irqa=0
+[+  92.305s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=145A
+[+  92.334s] [i2c] AT SCOPE T5 k=4 f=100000 kernel=100000000 timingr=30D06C81 model=99700 rate=12500000 trig=sda
+[+  92.353s] [host] F1 T5 scope k=3 f=100000: decoded 'S 84A 14A 5AA P', expected 'S 84A 14A 5AA P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S ', at 0.5 V 'S 84A 14A 5AA P' (same); 8192 samples at 12500000 S/s, glitches 0
+[+  92.354s] [host] F1 T5 scope k=3 f=100000 times: tLOW 5299/5311 ns (min/median; counter 5131, window 4771..5944), tHIGH 4272/4286 (counter 4302), tSU;DAT min 4892 (H755 bits; target bits 806), tHD;STA 4402, tSU;STA 0, tSU;STO 4392, tBUF 0 ns; t_r 249 t_f 43 ns (median, 30-70 %); f_SCL 101048 Hz, normalised 99699 (asked 100000, model 99700)
+[+  92.373s] [i2c] X T5 cm7 f=100000 op=P mode=poll a=43 n=0 p=0 st=7 crc=00000000 mis=0 bad=-1 cyc=42597 dtx=0 drx=0 irq=0 irqa=0
+[+  92.377s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=0
+[+  92.398s] [i2c] AT SCOPE end
+[+  92.712s] [host] F1 T5 scope k=4 f=100000: decoded 'S 86N P', expected 'S 86N P'; control swapped 'S  P | S  P | S  P | S ', at 0.5 V 'S 86N P' (same); 8192 samples at 12500000 S/s, glitches 0
+[+  92.712s] [host] F1 T5 scope k=4 f=100000 times: tLOW 5305/5314 ns (min/median; counter 5131, window 4771..5944), tHIGH 4266/4288 (counter 4302), tSU;DAT min 4888 (H755 bits; target bits 4897), tHD;STA 4376, tSU;STA 0, tSU;STO 4394, tBUF 0 ns; t_r 253 t_f 43 ns (median, 30-70 %); f_SCL 100995 Hz, normalised 99647 (asked 100000, model 99700)
+[+  92.725s] [i2c] T5 CM7 at 100000 Hz: 5 captured transfers (probe + write 1, write 2, read 2, write-read 1+1, probe 0x43) ended as
+[+  92.732s] [i2c] | expected on the H755 side: 0 did not (the host judges the bus) -> PASS
+[+  92.741s] [i2c] T14 I2C4 after T4/T5 at 100000 Hz: Deinit, registers that differ from the reset image 0x00 -> PASS
+[+  92.749s] [i2c] TIMING CM7 f=400000 kernel=100000000 timingr=20D0142E model=398406 calc=0 init=0
+[+  92.750s] [i2c] AT F334 INIT
+[+  93.076s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  93.088s] [f334] RPT n=4108 st=1 sr=0 sp=1 dir=R rx=0 tx=1 nk=0 nm=1 crc_rx=00000000 crc_tx=74BEB8EA p0=0 p1=1 ev=00 us=37
+[+  93.089s] [i2c] X T4 cm7 f=400000 op=R mode=poll a=42 n=1 p=0 st=0 crc=74BEB8EA mis=0 bad=-1 cyc=23069 dtx=0 drx=1 irq=0 irqa=0
+[+  93.093s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  93.122s] [f334] RPT n=4109 st=1 sr=0 sp=1 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=C3005D59 p0=1 p1=3 ev=00 us=57
+[+  93.123s] [i2c] X T4 cm7 f=400000 op=R mode=poll a=42 n=2 p=1 st=0 crc=C3005D59 mis=0 bad=-1 cyc=32201 dtx=0 drx=2 irq=0 irqa=0
+[+  93.127s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  93.163s] [f334] RPT n=4110 st=1 sr=0 sp=1 dir=R rx=0 tx=255 nk=0 nm=1 crc_rx=00000000 crc_tx=44138B35 p0=3 p1=2 ev=00 us=5680
+[+  93.163s] [i2c] X T4 cm7 f=400000 op=R mode=poll a=42 n=255 p=3 st=0 crc=44138B35 mis=0 bad=-1 cyc=2315726 dtx=0 drx=255 irq=0 irqa=0
+[+  93.168s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  93.204s] [f334] RPT n=4111 st=1 sr=0 sp=1 dir=R rx=0 tx=256 nk=0 nm=1 crc_rx=00000000 crc_tx=D4A1269E p0=2 p1=2 ev=00 us=5705
+[+  93.204s] [i2c] X T4 cm7 f=400000 op=R mode=poll a=42 n=256 p=2 st=0 crc=D4A1269E mis=0 bad=-1 cyc=2325069 dtx=0 drx=256 irq=0 irqa=0
+[+  93.208s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  93.261s] [f334] RPT n=4112 st=1 sr=0 sp=1 dir=R rx=0 tx=1000 nk=0 nm=1 crc_rx=00000000 crc_tx=E584A47C p0=2 p1=234 ev=00 us=22241
+[+  93.262s] [i2c] X T4 cm7 f=400000 op=R mode=poll a=42 n=1000 p=2 st=0 crc=E584A47C mis=0 bad=-1 cyc=9038399 dtx=0 drx=1000 irq=0 irqa=0
+[+  93.266s] [i2c] | cr1=00000001 sen=3 isr=00000001 aux=0 t=1
+[+  94.757s] [f334] RPT n=4113 st=1 sr=0 sp=1 dir=R rx=0 tx=65535 nk=0 nm=1 crc_rx=00000000 crc_tx=81A85B3D p0=234 p1=233 ev=00 us=1456255
+[+  94.765s] [i2c] X T4 cm7 f=400000 op=R mode=poll a=42 n=65535 p=234 st=0 crc=81A85B3D mis=0 bad=-1 cyc=591479271 dtx=0 drx=65535 irq=0
+[+  94.770s] [i2c] | irqa=0 cr1=00000001 sen=256 isr=00000001 aux=0 t=1
+[+  94.801s] [i2c] X T4 cm7 f=400000 op=WR mode=poll a=42 n=1 p=16 st=0 crc=6909A88E mis=0 bad=-1 cyc=44420 dtx=1 drx=1 irq=0 irqa=0
+[+  94.801s] [f334] RPT n=4114 st=2 sr=1 sp=1 dir=WR rx=1 tx=1 nk=0 nm=1 crc_rx=CFB5FFE9 crc_tx=6909A88E p0=233 p1=17 ev=00 us=92
+[+  94.805s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  94.835s] [f334] RPT n=4115 st=2 sr=1 sp=1 dir=WR rx=1 tx=2 nk=0 nm=1 crc_rx=E96CCF45 crc_tx=EDF839C8 p0=17 p1=34 ev=00 us=110
+[+  94.835s] [i2c] X T4 cm7 f=400000 op=WR mode=poll a=42 n=2 p=32 st=0 crc=EDF839C8 mis=0 bad=-1 cyc=53044 dtx=1 drx=2 irq=0 irqa=0
+[+  94.840s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  94.876s] [f334] RPT n=4116 st=2 sr=1 sp=1 dir=WR rx=1 tx=255 nk=0 nm=1 crc_rx=F4DBDF21 crc_tx=35AE3936 p0=34 p1=47 ev=00 us=5733
+[+  94.876s] [i2c] X T4 cm7 f=400000 op=WR mode=poll a=42 n=255 p=48 st=0 crc=35AE3936 mis=0 bad=-1 cyc=2336410 dtx=1 drx=255 irq=0 irqa=0
+[+  94.881s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  94.917s] [i2c] X T4 cm7 f=400000 op=WR mode=poll a=42 n=256 p=64 st=0 crc=9E7A950B mis=0 bad=-1 cyc=2345481 dtx=1 drx=256 irq=0 irqa=0
+[+  94.917s] [f334] RPT n=4117 st=2 sr=1 sp=1 dir=WR rx=1 tx=256 nk=0 nm=1 crc_rx=A4DEAE1D crc_tx=9E7A950B p0=47 p1=64 ev=00 us=5756
+[+  94.921s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+  94.974s] [f334] RPT n=4118 st=2 sr=1 sp=1 dir=WR rx=1 tx=1000 nk=0 nm=1 crc_rx=B969BE79 crc_tx=6677AAF9 p0=64 p1=56 ev=00 us=22288
+[+  94.974s] [i2c] X T4 cm7 f=400000 op=WR mode=poll a=42 n=1000 p=80 st=0 crc=6677AAF9 mis=0 bad=-1 cyc=9060755 dtx=1 drx=1000 irq=0
+[+  94.979s] [i2c] | irqa=0 cr1=00000001 sen=4 isr=00000001 aux=0 t=1
+[+  96.471s] [f334] RPT n=4119 st=2 sr=1 sp=1 dir=WR rx=1 tx=65535 nk=0 nm=1 crc_rx=9FB08ED5 crc_tx=946603C0 p0=56 p1=95 ev=00 us=1456702
+[+  96.479s] [i2c] X T4 cm7 f=400000 op=WR mode=poll a=42 n=65535 p=96 st=0 crc=946603C0 mis=0 bad=-1 cyc=591468375 dtx=1 drx=65535 irq=0
+[+  96.484s] [i2c] | irqa=0 cr1=00000001 sen=256 isr=00000001 aux=0 t=1
+[+  96.514s] [f334] RPT n=4120 st=1 sr=0 sp=1 dir=W rx=0 tx=0 nk=0 nm=0 crc_rx=00000000 crc_tx=00000000 p0=95 p1=95 ev=10 us=12
+[+  96.514s] [i2c] X T4 cm7 f=400000 op=P mode=poll a=42 n=0 p=0 st=0 crc=00000000 mis=0 bad=-1 cyc=13291 dtx=0 drx=0 irq=0 irqa=0
+[+  96.518s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  96.549s] [i2c] X T4 cm7 f=400000 op=P mode=poll a=43 n=0 p=0 st=7 crc=00000000 mis=0 bad=-1 cyc=11056 dtx=0 drx=0 irq=0 irqa=0
+[+  96.553s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=0
+[+  96.583s] [f334] RPT n=4121 st=1 sr=0 sp=1 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=03B9887C crc_tx=00000000 p0=95 p1=164 ev=00 us=34
+[+  96.583s] [i2c] X T4 cm7 f=400000 op=W mode=poll a=42 n=1 p=315509120 st=0 crc=03B9887C mis=0 bad=-1 cyc=22537 dtx=1 drx=0 irq=0 irqa=0
+[+  96.588s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=A4
+[+  96.618s] [f334] RPT n=4122 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=A23211B7 crc_tx=00000000 p0=164 p1=217 ev=00 us=57
+[+  96.619s] [i2c] X T4 cm7 f=400000 op=W mode=poll a=42 n=2 p=2755308447 st=0 crc=A23211B7 mis=0 bad=-1 cyc=31264 dtx=2 drx=0 irq=0 irqa=0
+[+  96.624s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=D86E
+[+  96.660s] [f334] RPT n=4123 st=1 sr=0 sp=1 dir=W rx=255 tx=0 nk=0 nm=0 crc_rx=005C64E2 crc_tx=00000000 p0=217 p1=108 ev=00 us=5679
+[+  96.661s] [i2c] X T4 cm7 f=400000 op=W mode=poll a=42 n=255 p=3631174747 st=0 crc=005C64E2 mis=0 bad=-1 cyc=2314174 dtx=255 drx=0 irq=0
+[+  96.666s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  96.702s] [f334] RPT n=4124 st=1 sr=0 sp=1 dir=W rx=256 tx=0 nk=0 nm=0 crc_rx=D0688F03 crc_tx=00000000 p0=108 p1=178 ev=00 us=5702
+[+  96.702s] [i2c] X T4 cm7 f=400000 op=W mode=poll a=42 n=256 p=1851885577 st=0 crc=D0688F03 mis=0 bad=-1 cyc=2322958 dtx=256 drx=0 irq=0
+[+  96.707s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  96.760s] [i2c] X T4 cm7 f=400000 op=W mode=poll a=42 n=1000 p=3010490521 st=0 crc=4A107CFE mis=0 bad=-1 cyc=9037479 dtx=1000 drx=0
+[+  96.760s] [f334] RPT n=4125 st=1 sr=0 sp=1 dir=W rx=1000 tx=0 nk=0 nm=0 crc_rx=4A107CFE crc_tx=00000000 p0=178 p1=248 ev=00 us=22230
+[+  96.765s] [i2c] | irq=0 irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  98.258s] [f334] RPT n=4126 st=1 sr=0 sp=1 dir=W rx=65535 tx=0 nk=0 nm=0 crc_rx=240420E7 crc_tx=00000000 p0=248 p1=66 ev=00 us=1456723
+[+  98.265s] [i2c] X T4 cm7 f=400000 op=W mode=poll a=42 n=65535 p=285395752 st=0 crc=240420E7 mis=0 bad=-1 cyc=591361745 dtx=65535 drx=0
+[+  98.270s] [i2c] | irq=0 irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  98.301s] [i2c] T4 CM7 at 400000 Hz (TIMINGR 0x20D0142E): 6 reads, 6 write-reads, 2 probes, 6 writes of 1..65535 bytes: 0 with another
+[+  98.307s] [i2c] | status or a byte that differs from the target's content -> PASS
+[+  98.308s] [i2c] AT F334 INIT
+[+  98.471s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  98.476s] [i2c] AT F334 CORRUPT 5
+[+  98.803s] [f334] OK CORRUPT nack=-1 corrupt=5 stretch_addr_us=0 stretch_byte_us=0
+[+  98.817s] [f334] RPT n=4127 st=1 sr=0 sp=1 dir=R rx=0 tx=16 nk=0 nm=1 crc_rx=00000000 crc_tx=83FB516C p0=0 p1=16 ev=00 us=369
+[+  98.817s] [i2c] X T4C cm7 f=400000 op=R mode=poll a=42 n=16 p=0 st=0 crc=83FB516C mis=1 bad=5 cyc=158073 dtx=0 drx=16 irq=0 irqa=0
+[+  98.822s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  98.851s] [i2c] T4 CM7 control at 400000 Hz: target armed CORRUPT 5, read of 16: 1 byte differs, at index 5 (5) -> PASS
+[+  98.853s] [i2c] AT F334 INIT
+[+  98.923s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+  98.934s] [i2c] AT SCOPE T5 k=0 f=400000 kernel=100000000 timingr=20D0142E model=398406 rate=25000000 trig=sda
+[+  99.253s] [f334] RPT n=4128 st=1 sr=0 sp=1 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=43123DA2 p0=0 p1=2 ev=00 us=58
+[+  99.253s] [i2c] X T5 cm7 f=400000 op=R mode=poll a=42 n=2 p=0 st=0 crc=43123DA2 mis=0 bad=-1 cyc=32078 dtx=0 drx=2 irq=0 irqa=0
+[+  99.258s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  99.286s] [i2c] AT SCOPE T5 k=1 f=400000 kernel=100000000 timingr=20D0142E model=398406 rate=25000000 trig=sda
+[+  99.321s] [host] F1 T5 scope k=0 f=400000: decoded 'S 85A A5A A4N P', expected 'S 85A A5A A4N P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S 85A A5A A4N P' (same); 8192 samples at 25000000 S/s, glitches 0
+[+  99.322s] [host] F1 T5 scope k=0 f=400000 times: tLOW 1576/1582 ns (min/median; counter 1391, window 1192..2025), tHIGH 605/617 (counter 622), tSU;DAT min 1070 (H755 bits; target bits 531), tHD;STA 729, tSU;STA 0, tSU;STO 713, tBUF 0 ns; t_r 251 t_f 23 ns (median, 30-70 %); f_SCL 403592 Hz, normalised 398206 (asked 400000, model 398406)
+[+  99.338s] [f334] RPT n=4129 st=2 sr=1 sp=1 dir=WR rx=1 tx=1 nk=0 nm=1 crc_rx=4C667A2E crc_tx=EADA2D49 p0=2 p1=8 ev=00 us=90
+[+  99.339s] [i2c] X T5 cm7 f=400000 op=WR mode=poll a=42 n=1 p=7 st=0 crc=EADA2D49 mis=0 bad=-1 cyc=44116 dtx=1 drx=1 irq=0 irqa=0
+[+  99.343s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  99.371s] [i2c] AT SCOPE T5 k=2 f=400000 kernel=100000000 timingr=20D0142E model=398406 rate=25000000 trig=sda
+[+  99.390s] [host] F1 T5 scope k=1 f=400000: decoded 'S 84A 07A | Sr 85A A2N P', expected 'S 84A 07A | Sr 85A A2N P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S 84A 07A | Sr 85A A2N P' (same); 8192 samples at 25000000 S/s, glitches 0
+[+  99.390s] [host] F1 T5 scope k=1 f=400000 times: tLOW 1577/1583 ns (min/median; counter 1391, window 1192..2025), tHIGH 602/621 (counter 622), tSU;DAT min 1073 (H755 bits; target bits 534), tHD;STA 719, tSU;STA 1393, tSU;STO 713, tBUF 0 ns; t_r 251 t_f 21 ns (median, 30-70 %); f_SCL 403493 Hz, normalised 398109 (asked 400000, model 398406)
+[+  99.404s] [f334] RPT n=4130 st=1 sr=0 sp=1 dir=W rx=0 tx=0 nk=0 nm=0 crc_rx=00000000 crc_tx=00000000 p0=8 p1=8 ev=10 us=13
+[+  99.404s] [i2c] X T5 cm7 f=400000 op=P mode=poll a=42 n=0 p=0 st=0 crc=00000000 mis=0 bad=-1 cyc=13165 dtx=0 drx=0 irq=0 irqa=0
+[+  99.409s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+  99.414s] [f334] RPT n=4131 st=1 sr=0 sp=1 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=D202EF8D crc_tx=00000000 p0=8 p1=0 ev=00 us=34
+[+  99.419s] [i2c] X T5 cm7 f=400000 op=W mode=poll a=42 n=1 p=32 st=0 crc=D202EF8D mis=0 bad=-1 cyc=21816 dtx=1 drx=0 irq=0 irqa=0
+[+  99.424s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=00
+[+  99.453s] [i2c] AT SCOPE T5 k=3 f=400000 kernel=100000000 timingr=20D0142E model=398406 rate=25000000 trig=sda
+[+  99.489s] [host] F1 T5 scope k=2 f=400000: decoded 'S 84A P | S 84A 00A P', expected 'S 84A P | S 84A 00A P'; control swapped 'S  P | S  P | S  P | S ', at 0.5 V 'S 84A P | S 84A 00A P' (same); 8192 samples at 25000000 S/s, glitches 0
+[+  99.490s] [host] F1 T5 scope k=2 f=400000 times: tLOW 1575/1579 ns (min/median; counter 1391, window 1192..2025), tHIGH 605/618 (counter 622), tSU;DAT min 1150 (H755 bits; target bits 812), tHD;STA 731, tSU;STA 0, tSU;STO 700, tBUF 2610 ns; t_r 251 t_f 28 ns (median, 30-70 %); f_SCL 403606 Hz, normalised 398220 (asked 400000, model 398406)
+[+  99.510s] [f334] RPT n=4132 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=E4C97D40 crc_tx=00000000 p0=0 p1=21 ev=00 us=57
+[+  99.511s] [i2c] X T5 cm7 f=400000 op=W mode=poll a=42 n=2 p=49936 st=0 crc=E4C97D40 mis=0 bad=-1 cyc=31209 dtx=2 drx=0 irq=0 irqa=0
+[+  99.516s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=145A
+[+  99.544s] [i2c] AT SCOPE T5 k=4 f=400000 kernel=100000000 timingr=20D0142E model=398406 rate=25000000 trig=sda
+[+  99.575s] [host] F1 T5 scope k=3 f=400000: decoded 'S 84A 14A 5AA P', expected 'S 84A 14A 5AA P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S ', at 0.5 V 'S 84A 14A 5AA P' (same); 8192 samples at 25000000 S/s, glitches 0
+[+  99.576s] [host] F1 T5 scope k=3 f=400000 times: tLOW 1575/1580 ns (min/median; counter 1391, window 1192..2025), tHIGH 605/617 (counter 622), tSU;DAT min 1149 (H755 bits; target bits 817), tHD;STA 736, tSU;STA 0, tSU;STO 710, tBUF 0 ns; t_r 251 t_f 20 ns (median, 30-70 %); f_SCL 403438 Hz, normalised 398054 (asked 400000, model 398406)
+[+  99.595s] [i2c] X T5 cm7 f=400000 op=P mode=poll a=43 n=0 p=0 st=7 crc=00000000 mis=0 bad=-1 cyc=11032 dtx=0 drx=0 irq=0 irqa=0
+[+  99.599s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=0
+[+  99.620s] [i2c] AT SCOPE end
+[+  99.939s] [host] F1 T5 scope k=4 f=400000: decoded 'S 86N P', expected 'S 86N P'; control swapped 'S  P | S  P | S  P | S ', at 0.5 V 'S 86N P' (same); 8192 samples at 25000000 S/s, glitches 0
+[+  99.939s] [host] F1 T5 scope k=4 f=400000 times: tLOW 1576/1586 ns (min/median; counter 1391, window 1192..2025), tHIGH 614/618 (counter 622), tSU;DAT min 1153 (H755 bits; target bits 1151), tHD;STA 725, tSU;STA 0, tSU;STO 707, tBUF 0 ns; t_r 252 t_f 23 ns (median, 30-70 %); f_SCL 403317 Hz, normalised 397935 (asked 400000, model 398406)
+[+  99.952s] [i2c] T5 CM7 at 400000 Hz: 5 captured transfers (probe + write 1, write 2, read 2, write-read 1+1, probe 0x43) ended as
+[+  99.959s] [i2c] | expected on the H755 side: 0 did not (the host judges the bus) -> PASS
+[+  99.968s] [i2c] T14 I2C4 after T4/T5 at 400000 Hz: Deinit, registers that differ from the reset image 0x00 -> PASS
+[+  99.970s] [i2c] AT HOLD SDA 100
+[+ 100.379s] [f334] OK HOLD line=SDA ms=100 edges=0
+[+ 100.478s] [i2c] AT HOLD_END
+[+ 100.492s] [f334] HOLD_END line=SDA ms=100 us=100001 edges=0 blank=1 edge1_us=- cause=TIME scl=1 sda=1 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+ 100.781s] [host] hold SDA 100 ms edges 0: held 100001 us, SCL edges counted 0 (blank 1), cause TIME, scl=1 sda=1 after, pins S15 ok
+[+ 100.794s] [i2c] T1 CM7 I2C4 with BUSY = 1 (target holding SDA; ISR 0x00008001): 8 transfers refused, 0 with another status than ERR_BUS;
+[+ 100.798s] [i2c] | registers and RCC unchanged 1 -> PASS
+[+ 100.799s] [i2c] AT F334 INIT
+[+ 101.155s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+ 101.168s] [f334] RPT n=4133 st=1 sr=0 sp=1 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=9AB0D9C6 crc_tx=00000000 p0=0 p1=167 ev=00 us=33
+[+ 101.178s] [i2c] X T6 cm7 f=400000 op=W mode=it a=42 n=1 p=1150946427 st=0 crc=9AB0D9C6 mis=0 bad=-1 cyc=23182 dtx=1 drx=0 irq=1 irqa=0
+[+ 101.183s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=A7
+[+ 101.204s] [i2c] AT F334 INIT
+[+ 101.279s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+ 101.291s] [f334] RPT n=4134 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=D3964E13 crc_tx=00000000 p0=0 p1=134 ev=00 us=56
+[+ 101.302s] [i2c] X T6 cm7 f=400000 op=W mode=it a=42 n=2 p=2813898961 st=0 crc=D3964E13 mis=0 bad=-1 cyc=31180 dtx=2 drx=0 irq=2 irqa=0
+[+ 101.307s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=8563
+[+ 101.328s] [i2c] AT F334 INIT
+[+ 101.403s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+ 101.421s] [f334] RPT n=4135 st=1 sr=0 sp=1 dir=W rx=256 tx=0 nk=0 nm=0 crc_rx=D25D683E crc_tx=00000000 p0=0 p1=98 ev=00 us=5702
+[+ 101.432s] [i2c] X T6 cm7 f=400000 op=W mode=it a=42 n=256 p=2247870464 st=0 crc=D25D683E mis=0 bad=-1 cyc=2323668 dtx=256 drx=0 irq=257
+[+ 101.437s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 101.458s] [i2c] AT F334 INIT
+[+ 101.637s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+ 101.672s] [f334] RPT n=4136 st=1 sr=0 sp=1 dir=W rx=1000 tx=0 nk=0 nm=0 crc_rx=13A397EB crc_tx=00000000 p0=0 p1=65 ev=00 us=22232
+[+ 101.682s] [i2c] X T6 cm7 f=400000 op=W mode=it a=42 n=1000 p=1670216157 st=0 crc=13A397EB mis=0 bad=-1 cyc=9036805 dtx=1000 drx=0
+[+ 101.688s] [i2c] | irq=1003 irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 101.709s] [i2c] AT F334 INIT
+[+ 101.776s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+ 101.788s] [f334] RPT n=4137 st=1 sr=0 sp=1 dir=R rx=0 tx=1 nk=0 nm=1 crc_rx=00000000 crc_tx=74BEB8EA p0=0 p1=1 ev=00 us=36
+[+ 101.798s] [i2c] X T6 cm7 f=400000 op=R mode=it a=42 n=1 p=0 st=0 crc=74BEB8EA mis=0 bad=-1 cyc=23124 dtx=0 drx=1 irq=2 irqa=0
+[+ 101.802s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 101.832s] [f334] RPT n=4138 st=1 sr=0 sp=1 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=C3005D59 p0=1 p1=3 ev=00 us=58
+[+ 101.842s] [i2c] X T6 cm7 f=400000 op=R mode=it a=42 n=2 p=1 st=0 crc=C3005D59 mis=0 bad=-1 cyc=32020 dtx=0 drx=2 irq=3 irqa=0
+[+ 101.847s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 101.882s] [f334] RPT n=4139 st=1 sr=0 sp=1 dir=R rx=0 tx=256 nk=0 nm=1 crc_rx=00000000 crc_tx=CC470E6E p0=3 p1=3 ev=00 us=5704
+[+ 101.893s] [i2c] X T6 cm7 f=400000 op=R mode=it a=42 n=256 p=3 st=0 crc=CC470E6E mis=0 bad=-1 cyc=2325310 dtx=0 drx=256 irq=257 irqa=0
+[+ 101.897s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+ 101.950s] [f334] RPT n=4140 st=1 sr=0 sp=1 dir=R rx=0 tx=1000 nk=0 nm=1 crc_rx=00000000 crc_tx=8D16DF58 p0=3 p1=235 ev=00 us=22238
+[+ 101.960s] [i2c] X T6 cm7 f=400000 op=R mode=it a=42 n=1000 p=3 st=0 crc=8D16DF58 mis=0 bad=-1 cyc=9038679 dtx=0 drx=1000 irq=1001 irqa=0
+[+ 101.964s] [i2c] | cr1=00000001 sen=3 isr=00000001 aux=0 t=1
+[+ 101.995s] [f334] RPT n=4141 st=2 sr=1 sp=1 dir=WR rx=1 tx=1 nk=0 nm=1 crc_rx=A4DEAE1D crc_tx=0262F97A p0=235 p1=65 ev=00 us=92
+[+ 102.004s] [i2c] X T6 cm7 f=400000 op=WR mode=it a=42 n=1 p=64 st=0 crc=0262F97A mis=0 bad=-1 cyc=44807 dtx=1 drx=1 irq=3 irqa=0
+[+ 102.009s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 102.039s] [f334] RPT n=4142 st=2 sr=1 sp=1 dir=WR rx=1 tx=2 nk=0 nm=1 crc_rx=A4DEAE1D crc_tx=C5B73337 p0=65 p1=66 ev=00 us=112
+[+ 102.049s] [i2c] X T6 cm7 f=400000 op=WR mode=it a=42 n=2 p=64 st=0 crc=C5B73337 mis=0 bad=-1 cyc=53371 dtx=1 drx=2 irq=4 irqa=0
+[+ 102.053s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 102.089s] [f334] RPT n=4143 st=2 sr=1 sp=1 dir=WR rx=1 tx=256 nk=0 nm=1 crc_rx=A4DEAE1D crc_tx=9E7A950B p0=66 p1=64 ev=00 us=5756
+[+ 102.100s] [i2c] X T6 cm7 f=400000 op=WR mode=it a=42 n=256 p=64 st=0 crc=9E7A950B mis=0 bad=-1 cyc=2346009 dtx=1 drx=256 irq=258 irqa=0
+[+ 102.104s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+ 102.157s] [f334] RPT n=4144 st=2 sr=1 sp=1 dir=WR rx=1 tx=1000 nk=0 nm=1 crc_rx=A4DEAE1D crc_tx=04D7D616 p0=64 p1=40 ev=00 us=22286
+[+ 102.167s] [i2c] X T6 cm7 f=400000 op=WR mode=it a=42 n=1000 p=64 st=0 crc=04D7D616 mis=0 bad=-1 cyc=9060786 dtx=1 drx=1000 irq=1002
+[+ 102.172s] [i2c] | irqa=0 cr1=00000001 sen=4 isr=00000001 aux=0 t=1
+[+ 102.202s] [i2c] T6 CM7 by interrupt at 400000 Hz: write, read, write-read of 1, 2, 256, 1000 bytes: 0 with another status or data;
+[+ 102.210s] [i2c] | interrupt enables left in CR1 0x00 (0); IRQs in the 10 ms after the end 0 (0) -> PASS
+[+ 102.235s] [i2c] X T6C cm7 f=400000 op=W mode=itc a=42 n=2 p=0 st=6 crc=A68F3199 mis=0 bad=-1 cyc=2000045 dtx=1 drx=0 irq=0 irqa=0
+[+ 102.241s] [i2c] | cr1=00000001 sen=0 isr=00008003 aux=10 t=1 d=E18B
+[+ 102.722s] [f334] RPT n=4145 st=1 sr=0 sp=0 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=3C0C8EA1 crc_tx=00000000 p0=40 p1=2 ev=08 us=500031
+[+ 102.843s] [i2c] T6 CM7 control: enables cleared by hand after StartIt: status still PENDING (10), the wait ended by its budget (6 =
+[+ 102.851s] [i2c] | ERR_TIMEOUT), 0 IRQs; Deinit, 600 ms (the target's cut), Init again 1 -> PASS
+[+ 102.852s] [i2c] AT F334 INIT
+[+ 103.058s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+ 103.070s] [f334] RPT n=4146 st=1 sr=0 sp=1 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=43123DA2 p0=0 p1=2 ev=00 us=60
+[+ 103.071s] [i2c] X T7 cm7 f=400000 op=R mode=dma a=42 n=2 p=0 st=0 crc=43123DA2 mis=0 bad=-1 cyc=32239 dtx=0 drx=2 irq=0 irqa=0
+[+ 103.075s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 103.111s] [f334] RPT n=4147 st=1 sr=0 sp=1 dir=R rx=0 tx=255 nk=0 nm=1 crc_rx=00000000 crc_tx=157C0CE1 p0=2 p1=1 ev=00 us=5682
+[+ 103.111s] [i2c] X T7 cm7 f=400000 op=R mode=dma a=42 n=255 p=2 st=0 crc=157C0CE1 mis=0 bad=-1 cyc=2315442 dtx=0 drx=255 irq=0 irqa=0
+[+ 103.115s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+ 103.151s] [f334] RPT n=4148 st=1 sr=0 sp=1 dir=R rx=0 tx=256 nk=0 nm=1 crc_rx=00000000 crc_tx=0CEA3556 p0=1 p1=1 ev=00 us=5704
+[+ 103.152s] [i2c] X T7 cm7 f=400000 op=R mode=dma a=42 n=256 p=1 st=0 crc=0CEA3556 mis=0 bad=-1 cyc=2323924 dtx=0 drx=256 irq=0 irqa=0
+[+ 103.156s] [i2c] | cr1=00000001 sen=1 isr=00000001 aux=0 t=1
+[+ 103.278s] [f334] RPT n=4149 st=1 sr=0 sp=1 dir=R rx=0 tx=4096 nk=0 nm=1 crc_rx=00000000 crc_tx=23FE7918 p0=1 p1=1 ev=00 us=91060
+[+ 103.279s] [i2c] X T7 cm7 f=400000 op=R mode=dma a=42 n=4096 p=1 st=0 crc=23FE7918 mis=0 bad=-1 cyc=36978799 dtx=0 drx=4096 irq=0 irqa=0
+[+ 103.284s] [i2c] | cr1=00000001 sen=16 isr=00000001 aux=0 t=1
+[+ 103.313s] [f334] RPT n=4150 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=DCDE0511 crc_tx=00000000 p0=1 p1=35 ev=00 us=57
+[+ 103.314s] [i2c] X T7 cm7 f=400000 op=W mode=dma a=42 n=2 p=46098114 st=0 crc=DCDE0511 mis=0 bad=-1 cyc=30819 dtx=2 drx=0 irq=0 irqa=0
+[+ 103.319s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=2261
+[+ 103.355s] [f334] RPT n=4151 st=1 sr=0 sp=1 dir=W rx=255 tx=0 nk=0 nm=0 crc_rx=2B9A6CD0 crc_tx=00000000 p0=35 p1=95 ev=00 us=5679
+[+ 103.355s] [i2c] X T7 cm7 f=400000 op=W mode=dma a=42 n=255 p=579694545 st=0 crc=2B9A6CD0 mis=0 bad=-1 cyc=2313749 dtx=255 drx=0 irq=0
+[+ 103.360s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 103.396s] [f334] RPT n=4152 st=1 sr=0 sp=1 dir=W rx=256 tx=0 nk=0 nm=0 crc_rx=26C8710A crc_tx=00000000 p0=95 p1=134 ev=00 us=5704
+[+ 103.397s] [i2c] X T7 cm7 f=400000 op=W mode=dma a=42 n=256 p=1637221674 st=0 crc=26C8710A mis=0 bad=-1 cyc=2322907 dtx=256 drx=0 irq=0
+[+ 103.402s] [i2c] | irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 103.524s] [i2c] X T7 cm7 f=400000 op=W mode=dma a=42 n=4096 p=2270274515 st=0 crc=59C697CE mis=0 bad=-1 cyc=36973849 dtx=4096 drx=0
+[+ 103.524s] [f334] RPT n=4153 st=1 sr=0 sp=1 dir=W rx=4096 tx=0 nk=0 nm=0 crc_rx=59C697CE crc_tx=00000000 p0=134 p1=213 ev=00 us=91067
+[+ 103.529s] [i2c] | irq=0 irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 103.560s] [i2c] T7(b) CM7 I2C4 by BDMA (dma_hal, .d3_ram) at 400000 Hz: read and write of 2, 255, 256, 4096 bytes: 0 with another status
+[+ 103.564s] [i2c] | or data; DMA steps not OK 0x0 -> PASS
+[+ 103.566s] [i2c] AT F334 INIT
+[+ 103.639s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+ 103.657s] [i2c] X T7C cm7 f=400000 op=R mode=dmac a=42 n=64 p=0 st=6 crc=0EAAB849 mis=64 bad=0 cyc=2000819 dtx=0 drx=0 irq=0 irqa=0
+[+ 103.661s] [i2c] | cr1=00000001 sen=64 isr=00000001 aux=0 t=1
+[+ 104.152s] [f334] RPT n=4154 st=1 sr=0 sp=0 dir=R rx=0 tx=2 nk=0 nm=1 crc_rx=00000000 crc_tx=43123DA2 p0=0 p1=2 ev=08 us=500036
+[+ 104.265s] [i2c] T7(b) control: RXDMAEN cleared by hand, read of 64: WaitEnd 6 (ERR_TIMEOUT 6), bytes still holding the sentinel 64 (64) -> PASS
+[+ 104.276s] [i2c] X T8A cm7 f=400000 op=W mode=poll a=43 n=1 p=90 st=7 crc=A505DF1B mis=0 bad=-1 cyc=11162 dtx=1 drx=0 irq=0 irqa=0
+[+ 104.281s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=0 d=01
+[+ 104.320s] [i2c] X T8A cm7 f=400000 op=P mode=it a=43 n=0 p=0 st=7 crc=00000000 mis=0 bad=-1 cyc=11471 dtx=0 drx=0 irq=2 irqa=0
+[+ 104.325s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=0
+[+ 104.346s] [i2c] AT F334 INIT
+[+ 104.479s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+ 104.492s] [i2c] X T8A cm7 f=400000 op=R mode=poll a=42 n=4 p=0 st=0 crc=5B73EF64 mis=0 bad=-1 cyc=50382 dtx=0 drx=4 irq=0 irqa=0
+[+ 104.492s] [f334] RPT n=4155 st=1 sr=0 sp=1 dir=R rx=0 tx=4 nk=0 nm=1 crc_rx=00000000 crc_tx=5B73EF64 p0=0 p1=4 ev=00 us=105
+[+ 104.496s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 104.526s] [i2c] T8(a) CM7 address 0x43 (no target): Write and IT probe ERR_NACK, BUSY after 0 0 (0: the STOP was sent); the next
+[+ 104.530s] [i2c] | transfer to 0x42 OK: 0 failed -> PASS
+[+ 104.532s] [i2c] AT F334 NACK 3
+[+ 104.607s] [f334] OK NACK nack=3 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+ 104.617s] [i2c] AT SCOPE T8 k=0 f=400000 kernel=100000000 timingr=0 model=0 rate=50000000 trig=sda
+[+ 104.941s] [f334] RPT n=4156 st=1 sr=0 sp=1 dir=W rx=4 tx=0 nk=1 nm=0 crc_rx=EB2333A9 crc_tx=00000000 p0=4 p1=131 ev=00 us=120
+[+ 104.951s] [i2c] X T8B cm7 f=400000 op=W mode=it a=42 n=8 p=42330 st=7 crc=9382016E mis=0 bad=-1 cyc=56902 dtx=3 drx=0 irq=6 irqa=0
+[+ 104.957s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=814163E0BD57FD8E
+[+ 104.979s] [i2c] AT SCOPE end
+[+ 104.995s] [host] F1 T8 scope k=0 f=400000: decoded 'S 84A 81A 41A 63A E0N P', expected 'S 84A 81A 41A 63A E0N P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S 84N 40N 90A CCA EFA P' (differs); 8192 samples at 50000000 S/s, glitches 0
+[+ 104.999s] [i2c] AT F334 NACK 3
+[+ 105.494s] [f334] OK NACK nack=3 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+ 105.507s] [f334] RPT n=4157 st=1 sr=0 sp=1 dir=W rx=4 tx=0 nk=1 nm=0 crc_rx=EB2333A9 crc_tx=00000000 p0=131 p1=131 ev=00 us=119
+[+ 105.508s] [i2c] X T8B cm7 f=400000 op=W mode=poll a=42 n=8 p=42330 st=7 crc=9382016E mis=0 bad=-1 cyc=56364 dtx=8 drx=0 irq=0 irqa=0
+[+ 105.514s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=814163E0BD57FD8E
+[+ 105.544s] [f334] RPT n=4158 st=1 sr=0 sp=1 dir=W rx=8 tx=0 nk=0 nm=0 crc_rx=9382016E crc_tx=00000000 p0=131 p1=136 ev=00 us=190
+[+ 105.544s] [i2c] X T8B cm7 f=400000 op=W mode=poll a=42 n=8 p=42330 st=0 crc=9382016E mis=0 bad=-1 cyc=85473 dtx=8 drx=0 irq=0 irqa=0
+[+ 105.550s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=814163E0BD57FD8E
+[+ 105.581s] [i2c] T8(b) CM7 the target NACKs data byte 3 of a write of 8: IT and polling ERR_NACK, bytes acknowledged by the driver's
+[+ 105.587s] [i2c] | count 3 (3); control without NACK armed OK: 0 failed -> PASS
+[+ 105.588s] [i2c] AT F334 INIT
+[+ 105.770s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+ 105.783s] [f334] RPT n=4159 st=1 sr=0 sp=1 dir=R rx=0 tx=4 nk=0 nm=1 crc_rx=00000000 crc_tx=5B73EF64 p0=0 p1=4 ev=00 us=103
+[+ 105.783s] [i2c] X T10A0 cm7 f=400000 op=R mode=poll a=42 n=4 p=0 st=0 crc=5B73EF64 mis=0 bad=-1 cyc=49731 dtx=0 drx=4 irq=0 irqa=0
+[+ 105.788s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 105.817s] [f334] RPT n=4160 st=1 sr=0 sp=1 dir=W rx=4 tx=0 nk=0 nm=0 crc_rx=D92D63A8 crc_tx=00000000 p0=4 p1=11 ev=00 us=102
+[+ 105.818s] [i2c] X T10A0 cm7 f=400000 op=W mode=poll a=42 n=4 p=16400 st=0 crc=D92D63A8 mis=0 bad=-1 cyc=48969 dtx=4 drx=0 irq=0 irqa=0
+[+ 105.823s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=0841C107
+[+ 105.845s] [i2c] AT F334 INIT
+[+ 105.925s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+ 105.930s] [i2c] AT F334 STRETCH ADDR 200
+[+ 106.258s] [f334] OK STRETCH nack=-1 corrupt=-1 stretch_addr_us=200 stretch_byte_us=0
+[+ 106.263s] [i2c] AT F334 STRETCH BYTE 200
+[+ 106.601s] [f334] OK STRETCH nack=-1 corrupt=-1 stretch_addr_us=200 stretch_byte_us=200
+[+ 106.610s] [i2c] AT SCOPE T10 k=0 f=400000 kernel=0 timingr=0 model=0 rate=4000000 trig=sda
+[+ 106.929s] [f334] RPT n=4161 st=1 sr=0 sp=1 dir=R rx=0 tx=4 nk=0 nm=1 crc_rx=00000000 crc_tx=5B73EF64 p0=0 p1=4 ev=00 us=1122
+[+ 106.929s] [i2c] X T10A cm7 f=400000 op=R mode=poll a=42 n=4 p=0 st=0 crc=5B73EF64 mis=0 bad=-1 cyc=463603 dtx=0 drx=4 irq=0 irqa=0
+[+ 106.933s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1
+[+ 106.955s] [i2c] AT SCOPE end
+[+ 106.992s] [host] F1 T10 scope k=0 f=400000: decoded 'S 85A A5A A4A A7A A6N P', expected 'S 85A A5A A4A A7A A6N P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S  P' (differs); 8192 samples at 4000000 S/s, glitches 45
+[+ 106.993s] [host] F1 T10 scope k=0 f=400000 SCL held low >= 150 us 5 times: [207, 203, 205, 205, 205] us
+[+ 106.998s] [i2c] AT F334 STRETCH ADDR 200
+[+ 107.364s] [f334] OK STRETCH nack=-1 corrupt=-1 stretch_addr_us=200 stretch_byte_us=0
+[+ 107.368s] [i2c] AT F334 STRETCH BYTE 200
+[+ 107.691s] [f334] OK STRETCH nack=-1 corrupt=-1 stretch_addr_us=200 stretch_byte_us=200
+[+ 107.699s] [i2c] AT SCOPE T10 k=1 f=400000 kernel=0 timingr=0 model=0 rate=4000000 trig=sda
+[+ 108.020s] [f334] RPT n=4162 st=1 sr=0 sp=1 dir=W rx=4 tx=0 nk=0 nm=0 crc_rx=D92D63A8 crc_tx=00000000 p0=4 p1=11 ev=00 us=1120
+[+ 108.021s] [i2c] X T10A cm7 f=400000 op=W mode=poll a=42 n=4 p=16400 st=0 crc=D92D63A8 mis=0 bad=-1 cyc=462980 dtx=4 drx=0 irq=0 irqa=0
+[+ 108.027s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=0841C107
+[+ 108.048s] [i2c] AT SCOPE end
+[+ 108.061s] [host] F1 T10 scope k=1 f=400000: decoded 'S 84A 08A 41A C1A 07A P', expected 'S 84A 08A 41A C1A 07A P'; control swapped 'S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P | S  P', at 0.5 V 'S  P' (differs); 8192 samples at 4000000 S/s, glitches 45
+[+ 108.061s] [host] F1 T10 scope k=1 f=400000 SCL held low >= 150 us 5 times: [206, 207, 208, 206, 207] us
+[+ 108.075s] [i2c] T10(a) CM7 target stretching 200 us at the address and per byte: write and read of 4 OK with the data; CYCCNT write
+[+ 108.082s] [i2c] | 48969 -> 462980, read 49731 -> 463603 cycles (each >= +568: 5 x 200 us) -> PASS
+[+ 108.084s] [i2c] AT RPT lenient
+[+ 108.401s] [i2c] AT SCOPE T10B k=0 f=400000 kernel=100000000 timingr=0 model=0 rate=100000 trig=scl tmo=489
+[+ 108.713s] [i2c] AT HOLD SCL 50
+[+ 109.106s] [f334] OK HOLD line=SCL ms=50 edges=0
+[+ 109.123s] [i2c] X T10B cm7 f=400000 op=W mode=poll a=42 n=2 p=8208 st=9 crc=68EA0E20 mis=0 bad=-1 cyc=1717701 dtx=2 drx=0 irq=0 irqa=0
+[+ 109.128s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=8440
+[+ 109.154s] [i2c] AT HOLD_END
+[+ 109.168s] [f334] HOLD_END line=SCL ms=50 us=50001 edges=0 blank=0 edge1_us=- cause=TIME scl=1 sda=1 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+ 112.182s] [host] hold SCL 50 ms edges 0: held 50001 us, SCL edges counted 0 (blank 0), cause TIME, scl=1 sda=1 after, pins S15 ok
+[+ 112.185s] [i2c] AT SCOPE end
+[+ 112.512s] [host] F1 T10B scope k=0 f=400000: SCL low 50.11 ms in 1 run(s), SDA low 4.23 ms in 1 run(s); edges from the first: SCLf 0.000 ms, SDAf 5.650 ms, SDAr 9.890 ms, SCLr 50.111 ms; SDA let go 9.890 ms after SCL fell (TIMEOUTA 9.881 ms); both high at the end True
+[+ 112.518s] [i2c] AT HOLD SCL 50
+[+ 112.881s] [f334] OK HOLD line=SCL ms=50 edges=0
+[+ 112.923s] [i2c] X T10BC cm7 f=400000 op=W mode=poll a=42 n=2 p=8208 st=6 crc=68EA0E20 mis=0 bad=-1 cyc=12000693 dtx=2 drx=0 irq=0 irqa=0
+[+ 112.928s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=8440
+[+ 112.930s] [i2c] AT HOLD_END
+[+ 112.944s] [f334] HOLD_END line=SCL ms=50 us=50001 edges=0 blank=0 edge1_us=- cause=TIME scl=1 sda=1 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+ 115.959s] [host] hold SCL 50 ms edges 0: held 50001 us, SCL edges counted 0 (blank 0), cause TIME, scl=1 sda=1 after, pins S15 ok
+[+ 116.555s] [i2c] AT RPT strict
+[+ 116.873s] [i2c] T10(b) CM7 SCL held 50 ms by the target, timeout_scl_low 489 (10014 us at 100000000 Hz): Write 9 (ERR_BUS 9, by TIMEOUT,
+[+ 116.883s] [i2c] | then the software reset) 406497 us after the AT HOLD (>= 9994) and 4295 us after SCL was seen low (<= 11014) -> PASS
+[+ 116.894s] [i2c] T10(b) CM7 control without timeout_scl_low: Write 6 (ERR_TIMEOUT 6) 30 ms after SCL went low (max_cycles 30 ms) -> PASS
+[+ 116.896s] [i2c] AT RPT lenient
+[+ 117.211s] [f334] RPT n=4163 st=1 sr=0 sp=1 dir=W rx=1 tx=0 nk=0 nm=0 crc_rx=3FBA6CAD crc_tx=00000000 p0=11 p1=128 ev=00 us=33
+[+ 117.221s] [f334] RPT n=4164 st=1 sr=0 sp=1 dir=W rx=16 tx=0 nk=0 nm=0 crc_rx=73DBC9A2 crc_tx=00000000 p0=128 p1=103 ev=00 us=367
+[+ 117.225s] [i2c] B1 CM7 (400 MHz) at 400000 Hz: I2C_BM_Init 588 cycles, I2C_BM_Write of 1 byte 22036 cycles (status 0), I2C_BM_XferIrq 118..332 cycles per call (IT writ
+[+ 117.346s] [i2c] AT RPT strict
+[+ 117.654s] [i2c] AT F1_CM7 end
+[+ 118.003s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+ 118.052s] [host] S17 after F1_CM7: scope SCL(1+) 3.159 V SDA(2+) 3.304 V ratio 0.9560 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 - -> PASS
+[+ 118.054s] [host] F1 T4 CM7 100000 Hz: transfer, host data and target report: 20 items, 0 with a problem -> PASS
+[+ 118.054s] [host] F1 T4C CM7 100000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+ 118.054s] [host] F1 T5 CM7 100000 Hz: transfer, host data and target report: 6 items, 0 with a problem -> PASS
+[+ 118.054s] [host] F1 T5 scope: decode: 10 items, 0 with a problem -> PASS
+[+ 118.054s] [host] F1 T5 CM7 100000 Hz scope: times: 5 items, 0 with a problem -> PASS
+[+ 118.054s] [host] F1 T4 CM7 400000 Hz: transfer, host data and target report: 20 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T4C CM7 400000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T5 CM7 400000 Hz: transfer, host data and target report: 6 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T5 CM7 400000 Hz scope: times: 5 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 target holds (S21): 3 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T6 CM7 400000 Hz: transfer, host data and target report: 12 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T6C CM7 400000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T7 CM7 400000 Hz: transfer, host data and target report: 8 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T7C CM7 400000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T8A CM7 400000 Hz: transfer, host data and target report: 3 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T8B CM7 400000 Hz: transfer, host data and target report: 3 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T8 scope: decode: 1 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T10A0 CM7 400000 Hz: transfer, host data and target report: 2 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T10A CM7 400000 Hz: transfer, host data and target report: 2 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T10 scope: decode: 2 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T10(a) scope: stretching: 2 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T10B CM7 400000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T10(b) scope: SCL held, TIMEOUT, bus free after: 1 items, 0 with a problem -> PASS
+[+ 118.055s] [host] F1 T10BC CM7 400000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+ 118.059s] [i2c] STEP F1_RECOVER owner=CM7 v=2 pb8=1 pb9=1 pf14=1 pf15=1
+[+ 118.068s] [host] step F1_RECOVER: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+ 118.128s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+ 118.178s] [host] S17 before F1_RECOVER: scope SCL(1+) 3.159 V SDA(2+) 3.304 V ratio 0.9559 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 1) pf15=1 -> PASS
+[+ 118.188s] [i2c] AT SCOPE T9 k=0 f=0 kernel=0 timingr=0 model=0 rate=2000000 trig=scl
+[+ 118.500s] [i2c] AT HOLD SDA 300 EDGES 5
+[+ 119.009s] [f334] OK HOLD line=SDA ms=300 edges=5
+[+ 119.015s] [i2c] AT SCOPE end
+[+ 119.029s] [f334] HOLD_END line=SDA ms=300 us=7265 edges=5 blank=1 edge1_us=7222 cause=EDGES scl=1 sda=1 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+ 119.336s] [host] F1 T9 scope k=0 f=0: SDA low at the start True, SCL pulses 5 falls / 5 rises, SDA released after 5 rises, then SDA falls 1 rises 2 (the STOP)
+[+ 119.343s] [i2c] AT HOLD_END
+[+ 119.647s] [host] hold SDA 300 ms edges 5: held 7265 us, SCL edges counted 5 (blank 1), cause EDGES, scl=1 sda=1 after, pins S15 ok
+[+ 119.660s] [i2c] X T9 cm7 f=400000 op=W mode=poll a=42 n=2 p=36882 st=0 crc=C5E23611 mis=0 bad=-1 cyc=30897 dtx=2 drx=0 irq=0 irqa=0
+[+ 119.661s] [f334] RPT n=4165 st=1 sr=0 sp=1 dir=W rx=2 tx=0 nk=0 nm=0 crc_rx=C5E23611 crc_tx=00000000 p0=103 p1=83 ev=00 us=56
+[+ 119.665s] [i2c] | cr1=00000001 sen=0 isr=00000001 aux=0 t=1 d=52CB
+[+ 119.676s] [i2c] T9 the target holds SDA until 5 SCL edges: I2C4 ISR 0x00008001 (BUSY), Write 9 in 326 cycles (ERR_BUS 9 or ERR_TIMEOUT
+[+ 119.688s] [i2c] | 6, bounded); PB8/PB9 GPIO open-drain, RecoverBus 0, pulses 5 (5), PB8/PB9 after 3 (3); AF6 and Init again, Write 0 (OK) -> PASS
+[+ 119.690s] [i2c] AT HOLD SDA 100
+[+ 119.774s] [f334] OK HOLD line=SDA ms=100 edges=0
+[+ 119.872s] [i2c] AT HOLD_END
+[+ 119.886s] [f334] HOLD_END line=SDA ms=100 us=100001 edges=0 blank=1 edge1_us=- cause=TIME scl=1 sda=1 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+ 120.176s] [host] hold SDA 100 ms edges 0: held 100001 us, SCL edges counted 0 (blank 1), cause TIME, scl=1 sda=1 after, pins S15 ok
+[+ 120.187s] [i2c] T9 control without RecoverBus: SDA low 95 ms (the target's 100 ms limit), then released 1 -> PASS
+[+ 120.189s] [i2c] AT F1_RECOVER end
+[+ 120.771s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+ 120.823s] [host] S17 after F1_RECOVER: scope SCL(1+) 3.158 V SDA(2+) 3.303 V ratio 0.9561 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 - -> PASS
+[+ 120.826s] [host] F1 T9 scope: recovery: 1 items, 0 with a problem -> PASS
+[+ 120.826s] [host] F1 target holds (S21): 2 items, 0 with a problem -> PASS
+[+ 120.826s] [host] F1 T9 CM7 400000 Hz: transfer, host data and target report: 1 items, 0 with a problem -> PASS
+[+ 120.830s] [i2c] STEP DONE owner=NONE v=2 pb8=1 pb9=1 pf14=1 pf15=1
+[+ 120.846s] [host] step DONE: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+ 120.897s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+ 120.951s] [host] S17 before DONE: scope SCL(1+) 3.159 V SDA(2+) 3.304 V ratio 0.9562 (taps: 2+ >= 3.0 V, 1+/2+ 0.941..0.971); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 1) pf15=1 -> PASS
+[+ 120.971s] [host] F1 T3 CalcTiming against the host's own rules: 403 vectors (>= 300), 0 differ from the host's computation -> PASS
+[+ 120.971s] [i2c] bench completed without abort -> PASS
+[+ 120.971s] [host] F1 T3 every TIMINGR meets RM0399: 286 OK vectors checked on their fields (50:342, 50:319-331, table 407, 50:162-163, 2.19.1, model <= f): 0 do not -> PASS
+[+ 120.972s] [i2c] CM4 finished: timeout 0, aborts 0; CYCCNT stall exits CM4 0, CM7 0 -> PASS
+[+ 120.972s] [host] F1 T12 target totals (driver: 1000 writes of 2 bytes each, nothing else): driver poll: xfers +1000 rx +2000 nk +0 ev +0 cuts +0; driver DMA: xfers +1000 rx +2000 nk +0 ev +0 cuts +0; by hand poll: xfers +1000 rx +2000 nk +0 ev +0 cuts +0; by hand DMA: xfers +1000 rx +2000 nk +0 ev +0 cuts +0 -> PASS
+[+ 120.972s] [host] recorded: No Digital Out: enable read back 0x0000 at all 10 step boundaries of 10 (any other value aborts the session in step())
+[+ 120.972s] [i2c] Status_Task stack high-water mark 710 words
+[+ 120.973s] [i2c] FW VERDICT=PASS failures=0
+[+ 120.974s] [host] Status_Task stack: high-water mark 710 words free (>= 128) -> PASS
+[+ 120.987s] [sys] cpu2 build rev=e27c673 id=3417b1bd4c6653f1
+[+ 120.989s] [ipc] m7=5 m4=1  (CPU2 alive)
+[+ 121.023s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+ 121.040s] [f334] STATUS xfers=4165 rx=288066 tx=550750 nk=4 ev=12 idle_cuts=4 dropped=3920 uart_ovr=0 ptr=83 active=0 hold=0 aborted=0 nack=-1 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+ 121.040s] [host] F334 at the end: scl=1 sda=1, S15 ok; xfers/rx/tx/nk/ev/idle/dropped/uart_ovr [4165, 288066, 550750, 4, 12, 4, 3920, 0] (uart_ovr 0; reports dropped only in T12's flood); unexpected lines [] -> PASS
+[+ 121.421s] [ad2] closing in S2: OE=0x0000 Digital Out enable=0x0000 Zet=0xFFFF
+[+ 121.489s] [host] T0B(a) S3 (00_gpio): PASS
+[+ 121.489s] [host] T0B(a) HOST_REQ only: PASS
+[+ 121.489s] [host] T0B(a) S15 F334 report: PASS
+[+ 121.489s] [host] T0B(a) S17 levels: PASS
+[+ 121.489s] [host] T0B(a) S21 hold: PASS
+[+ 121.489s] [host] T0B(a) S18 probes: PASS
+[+ 121.489s] [host] T0B(a) T0d identity: PASS
+[+ 121.489s] [host] T0B(a) checklist arguments: PASS
+[+ 121.489s] [host] T0B(a) T3 calculation rules: PASS
+[+ 121.489s] [host] T0B(a) X/RPT pairing: PASS
+[+ 121.489s] [host] T0B(a) I2C decoder: PASS
+[+ 121.489s] [host] CHECK S17 before T0A: PASS
+[+ 121.489s] [host] CHECK T0A loose lines: PASS
+[+ 121.489s] [host] CHECK T0A walking 1: PASS
+[+ 121.489s] [host] CHECK T0A control: PASS
+[+ 121.489s] [host] CHECK S17 before T0C: PASS
+[+ 121.490s] [host] CHECK S17 T0C at rest: PASS
+[+ 121.490s] [host] CHECK T0C hold SDA: F334: PASS
+[+ 121.490s] [host] CHECK T0C hold SDA: CM7 taps: PASS
+[+ 121.490s] [host] CHECK T0C hold SDA: scope: PASS
+[+ 121.490s] [host] CHECK S17 T0C after the SDA hold: PASS
+[+ 121.490s] [host] CHECK T0C hold SCL: F334: PASS
+[+ 121.490s] [host] CHECK T0C hold SCL: CM7 taps: PASS
+[+ 121.490s] [host] CHECK T0C hold SCL: scope: PASS
+[+ 121.490s] [host] CHECK S17 T0C after the SCL hold: PASS
+[+ 121.490s] [host] CHECK S17 T0C at rest after the holds: PASS
+[+ 121.490s] [host] CHECK S17 before T0B: PASS
+[+ 121.490s] [host] CHECK S17 T0B with PB8/PB9 in AF4 on CM4, I2C1 PE=0 (CM7 reads pb8=1 pb9=1): PASS
+[+ 121.490s] [host] CHECK S17 T0B after CM4's bench_safe: PASS
+[+ 121.490s] [host] CHECK S17 before T0B_CM7: PASS
+[+ 121.490s] [host] CHECK S17 T0B_CM7 with PB8/PB9 in AF6 on CM7, I2C4 PE=0 (CM7 reads pb8=1 pb9=1): PASS
+[+ 121.490s] [host] CHECK S17 T0B_CM7 after CM7's bench_safe: PASS
+[+ 121.490s] [host] CHECK S17 before T0B_TIMEOUT: PASS
+[+ 121.490s] [host] CHECK T0B(d) firmware timeout: PASS
+[+ 121.490s] [host] CHECK S17 before F1_NOPIN: PASS
+[+ 121.490s] [host] CHECK F1 CLKREF CPU clock against the AD2: PASS
+[+ 121.490s] [host] CHECK S17 after F1_NOPIN: PASS
+[+ 121.490s] [host] CHECK F1 bench state seen by the firmware (S19): PASS
+[+ 121.490s] [host] CHECK S17 before F1_CM4: PASS
+[+ 121.490s] [host] CHECK S17 after F1_CM4: PASS
+[+ 121.490s] [host] CHECK F1 T4 CM4 100000 Hz: transfer, host data and target report: PASS
+[+ 121.490s] [host] CHECK F1 T4C CM4 100000 Hz: transfer, host data and target report: PASS
+[+ 121.490s] [host] CHECK F1 T5 CM4 100000 Hz: transfer, host data and target report: PASS
+[+ 121.490s] [host] CHECK F1 T5 scope: decode: PASS
+[+ 121.490s] [host] CHECK F1 T5 CM4 100000 Hz scope: times: PASS
+[+ 121.490s] [host] CHECK F1 T4 CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.490s] [host] CHECK F1 T4C CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.490s] [host] CHECK F1 T5 CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T5 CM4 400000 Hz scope: times: PASS
+[+ 121.491s] [host] CHECK F1 target holds (S21): PASS
+[+ 121.491s] [host] CHECK F1 T6 CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T6C CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T7 CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T7C CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T8A CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T8B CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T8 scope: decode: PASS
+[+ 121.491s] [host] CHECK F1 T10A0 CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T10A CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T10 scope: decode: PASS
+[+ 121.491s] [host] CHECK F1 T10(a) scope: stretching: PASS
+[+ 121.491s] [host] CHECK F1 T10B CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T10(b) scope: SCL held, TIMEOUT, bus free after: PASS
+[+ 121.491s] [host] CHECK F1 T10BC CM4 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK S17 before F1_CM7: PASS
+[+ 121.491s] [host] CHECK S17 after F1_CM7: PASS
+[+ 121.491s] [host] CHECK F1 T4 CM7 100000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T4C CM7 100000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T5 CM7 100000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T5 scope: decode: PASS
+[+ 121.491s] [host] CHECK F1 T5 CM7 100000 Hz scope: times: PASS
+[+ 121.491s] [host] CHECK F1 T4 CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T4C CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T5 CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T5 CM7 400000 Hz scope: times: PASS
+[+ 121.491s] [host] CHECK F1 target holds (S21): PASS
+[+ 121.491s] [host] CHECK F1 T6 CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T6C CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T7 CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T7C CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.491s] [host] CHECK F1 T8A CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.492s] [host] CHECK F1 T8B CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.492s] [host] CHECK F1 T8 scope: decode: PASS
+[+ 121.492s] [host] CHECK F1 T10A0 CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.492s] [host] CHECK F1 T10A CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.492s] [host] CHECK F1 T10 scope: decode: PASS
+[+ 121.492s] [host] CHECK F1 T10(a) scope: stretching: PASS
+[+ 121.492s] [host] CHECK F1 T10B CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.492s] [host] CHECK F1 T10(b) scope: SCL held, TIMEOUT, bus free after: PASS
+[+ 121.492s] [host] CHECK F1 T10BC CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.492s] [host] CHECK S17 before F1_RECOVER: PASS
+[+ 121.492s] [host] CHECK S17 after F1_RECOVER: PASS
+[+ 121.492s] [host] CHECK F1 T9 scope: recovery: PASS
+[+ 121.492s] [host] CHECK F1 target holds (S21): PASS
+[+ 121.492s] [host] CHECK F1 T9 CM7 400000 Hz: transfer, host data and target report: PASS
+[+ 121.492s] [host] CHECK S17 before DONE: PASS
+[+ 121.492s] [host] CHECK F1 T3 CalcTiming against the host's own rules: PASS
+[+ 121.492s] [host] CHECK F1 T3 every TIMINGR meets RM0399: PASS
+[+ 121.492s] [host] CHECK F1 T12 target totals (driver: 1000 writes of 2 bytes each, nothing else): PASS
+[+ 121.492s] [host] CHECK Status_Task stack: PASS
+[+ 121.492s] [host] CHECK F334 at the end: PASS
+[+ 121.492s] [host] RECORD T0d identity (S18, A21): Rev and build id of CM7, CM4 and the F334 match this checkout and the host's ids; exactly the two expected ST-LINKs; ports chosen by their SN
+[+ 121.492s] [host] RECORD No Digital Out: enable read back 0x0000 at all 10 step boundaries of 10 (any other value aborts the session in step())
+[+ 121.492s] [host] 90/90 host checks passed (2 records not counted), FW VERDICT=PASS, stack free 710, abort=None
+[+ 121.492s] HOST VERDICT=PASS
