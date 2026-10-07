@@ -12,7 +12,8 @@
   *          the F1 steps: F1_NOPIN (T1-T3, T13-T15 without the bus), F1_CM4
   *          (CPU2's I2C1: T1 with BUSY, T4, T5, T6, T7(a), T8, T10, T12, B1),
   *          F1_CM7 (CPU1's I2C4: the same with T7(b) by BDMA) and F1_RECOVER
-  *          (T9); and prints the global verdict, CPU2's results included. Plan
+  *          (T9, and T9(b): the bus held before Init, plan R3-6); and prints the
+  *          global verdict, CPU2's results included. Plan
   *          and meaning of every test: 01_shared_drivers/05_i2c/IMPLEMENTATION_PLAN.md.
   *
   *          Electrical safety (no series resistors anywhere on the bench):
@@ -24,7 +25,9 @@
   *                output or AF, or a bus or tap pin gets a pull (pin_cfg() is
   *                the only caller of the GPIO driver for them). The permission
   *                comes from the CURRENT step of k_ist_steps[], which only
-  *                step_begin() sets.
+  *                step_begin() sets. One raw write is the injected fault of
+  *                t0b_cm7_live_s16() (PB9 in AF4 with I2C1 at PE = 0, audit F1
+  *                m18); the Fm+ bits are cleared raw by bench_safe() (m20).
   *            S7  every step is announced and waits for the host before it
   *                moves anything; 10 s without the host -> S2 and abort.
   *            S15 PB8/PB9 never push-pull nor with a pull, on either core;
@@ -244,6 +247,33 @@ static void i2c_release(I2C_TypeDef *i2c)
 
 /* ---- S2: safe state ------------------------------------------------------------------ */
 
+/* The Fm+ bits of the bench's instances (SYSCFG_PMCR I2C1FMP bit 0, I2C4FMP bit 3,
+   13:122-137) back to 0, each by its own one-bit read-modify-write and only if
+   set; readable only with the SYSCFG clock on in a bank (audit F1, m20). */
+#define FMP_BENCH_BITS      (SYSCFG_PMCR_I2C1_FMP | SYSCFG_PMCR_I2C4_FMP)
+
+static bool syscfg_clocked(void)
+{
+    return ((RCC_C1->APB4ENR | RCC_C2->APB4ENR) & RCC_APB4ENR_SYSCFGEN) != 0U;
+}
+
+static void fmp_off_raw(void)
+{
+    if (!syscfg_clocked())
+    {
+        return;
+    }
+    if ((SYSCFG->PMCR & SYSCFG_PMCR_I2C1_FMP) != 0U)
+    {
+        SYSCFG->PMCR &= ~SYSCFG_PMCR_I2C1_FMP;
+    }
+    if ((SYSCFG->PMCR & SYSCFG_PMCR_I2C4_FMP) != 0U)
+    {
+        SYSCFG->PMCR &= ~SYSCFG_PMCR_I2C4_FMP;
+    }
+    (void)SYSCFG->PMCR;
+}
+
 /* Every AD2 line, PA8, the bus pins and the scope taps in input without pull
    (PE2 with pull-down, so HOST_REQ reads 0 while the AD2 does not drive it),
    their AF fields at 0, PB8/PB9 with the open-drain type, MCU_ACK driven low.
@@ -309,6 +339,7 @@ static void bench_safe(void)
     {
         i2c_release(I2C4);
     }
+    fmp_off_raw();
 
     __set_PRIMASK(pm);
     if (locked)
@@ -394,7 +425,7 @@ static bool pin_cfg(GPIO_TypeDef *port, uint32_t pin, uint32_t mode, uint32_t af
     }
     else
     {
-        st = GPIO_BM_ERR_PARAM;    /* no GPIO output in this F0 selftest (MCU_ACK is raw) */
+        st = GPIO_BM_ERR_PARAM;    /* no GPIO output here: MCU_ACK is raw, PB8/PB9 for T9 go through cm7_pins_od() */
     }
     if (st != GPIO_BM_OK)
     {
@@ -1105,6 +1136,60 @@ static const I2cCase_t k_i2c4_cases[IST_I2C_CASES] = {
     { 0U,             1U, "reset" },
 };
 
+/* The live control of S16 in a step of CPU1, through bench_claim() (audit F1, m18;
+   F0, m8). PB9 is put in AF4 (I2C1) here by a raw write: the injected fault, the
+   only raw write of a bus pin outside bench_safe(). It is done only while I2C1,
+   clocked, reads back PE = 0 (then I2C1 drives nothing: PB9 stays an open-drain
+   pin let go) and PB9 is open-drain without pull, with interrupts masked, for a
+   few microseconds. bench_claim() of PB8 in AF6 must be refused by the pin check
+   alone (the step-owner rule accepts it in this step); with PB9 back in input the
+   same claim is accepted (the control). Nothing is written for PB8. */
+static void t0b_cm7_live_s16(void)
+{
+    const uint32_t sda_m = 3UL << (IST_PIN_SDA * 2U);
+    const uint32_t sda_a = 0xFUL << ((IST_PIN_SDA - 8U) * 4U);
+    const bool clk_was = (RCC->APB1LENR & RCC_APB1LENR_I2C1EN) != 0U;       /* CPU1's bank */
+    RCC->APB1LENR |= RCC_APB1LENR_I2C1EN;
+    (void)RCC->APB1LENR;
+    const bool safe = ((I2C1->CR1 & I2C_CR1_PE) == 0U) && ((GPIOB->MODER & sda_m) == 0U) &&
+                      ((GPIOB->OTYPER & (1UL << IST_PIN_SDA)) != 0U) && ((GPIOB->PUPDR & sda_m) == 0U);
+    bool rule_ok = false;
+    bool refused = false;
+    bool control = false;
+    uint32_t moder = 0U;
+    uint32_t afrh = 0U;
+    if (safe)
+    {
+        const uint32_t pm = __get_PRIMASK();
+        __disable_irq();
+        GPIOB->AFR[1] = (GPIOB->AFR[1] & ~sda_a) | (IST_AF_I2C1 << ((IST_PIN_SDA - 8U) * 4U));
+        GPIOB->MODER  = (GPIOB->MODER & ~sda_m) | (2UL << (IST_PIN_SDA * 2U));
+        moder = GPIOB->MODER;
+        afrh  = GPIOB->AFR[1];
+        rule_ok = ist_line_rule(0U, s_step, GPIOB, IST_PIN_SCL, GPIO_BM_MODE_AF, IST_AF_I2C4, GPIO_BM_OTYPE_OD,
+                                GPIO_BM_PULL_NONE);
+        refused = !bench_claim(GPIOB, 1UL << IST_PIN_SCL, GPIO_BM_MODE_AF, IST_AF_I2C4, GPIO_BM_OTYPE_OD,
+                               GPIO_BM_PULL_NONE);
+        GPIOB->MODER  &= ~sda_m;                     /* input first, then the AF field */
+        GPIOB->AFR[1] &= ~sda_a;
+        __DSB();
+        __set_PRIMASK(pm);
+        control = bench_claim(GPIOB, 1UL << IST_PIN_SCL, GPIO_BM_MODE_AF, IST_AF_I2C4, GPIO_BM_OTYPE_OD,
+                              GPIO_BM_PULL_NONE);
+    }
+    if (!clk_was)
+    {
+        RCC->APB1LENR &= ~RCC_APB1LENR_I2C1EN;
+        (void)RCC->APB1LENR;
+    }
+    const bool back = ((GPIOB->MODER & sda_m) == 0U) && ((GPIOB->AFR[1] & sda_a) == 0U);
+    verdict(safe && rule_ok && refused && control && back,
+            "T0B S16 live in T0B_CM7 through bench_claim: PB9 put in AF4 (I2C1 PE=0, MODER 0x%08lX AFRH 0x%08lX): "
+            "PB8 AF6 refused %u by the pin check (owner rule accepts %u); PB9 back in input %u, the same claim "
+            "accepted %u (the control)", (unsigned long)moder, (unsigned long)afrh, (unsigned)refused,
+            (unsigned)rule_ok, (unsigned)back, (unsigned)control);
+}
+
 static void step_t0b_cm7(void)
 {
     if (!step_begin("T0B_CM7"))
@@ -1163,6 +1248,7 @@ static void step_t0b_cm7(void)
             "T0B S16 pin state, CM7 (AF6): PB9 in AF4, PB9 output, PB8 in AF4, PB8 output refused; both input, both "
             "analog, both AF6 accepted: accepted 0x%02lX (0x%02lX)", (unsigned long)s16,
             (unsigned long)IST_S16_CASES_EXPECT);
+    t0b_cm7_live_s16();
 
     /* The accepted case, written: PB8/PB9 AF6 open-drain on CPU1, I2C4 at PE = 0. */
     IstPinPhoto_t p;
@@ -1331,10 +1417,14 @@ static void f1_clocks(void)
              (unsigned long)s_fall_ns, (unsigned long)s_seed);
 }
 
-/* TIMINGR of the bench for kernel k and speed f (CalcTiming with the bus figures above). */
+/* TIMINGR of the bench for kernel k and speed f (CalcTiming with the bus figures above),
+   with the filters every Init of the bench uses (analog on, DNF 0; T5 tells the host). */
+#define BENCH_ANALOG_FILTER   1U
+#define BENCH_DNF             0U
+
 static I2cBm_Status_t bench_timing(uint32_t k, uint32_t f, I2cBm_TimingOut_t *o)
 {
-    const I2cBm_TimingIn_t in = { k, f, s_rise_ns, s_fall_ns, true, 0U };
+    const I2cBm_TimingIn_t in = { k, f, s_rise_ns, s_fall_ns, BENCH_ANALOG_FILTER != 0U, BENCH_DNF };
     return I2C_BM_CalcTiming(&in, o);
 }
 
@@ -1441,6 +1531,12 @@ static uint32_t sentinel_left(const uint8_t *b, uint32_t n)
 
 /* One transfer on I2C4 (initialised), the twin of CPU2's cmd_xfer(): polling and IT on
    s_big (AXI SRAM, CPU only), DMA on s_bd_tx/s_bd_rx (SRAM4, BDMA, non-cacheable). */
+/* The last byte of a BDMA read has left RXDR: the channel's count is 0. */
+static bool bd_rx_empty(void)
+{
+    return __HAL_DMA_GET_COUNTER(&s_hbd_rx) == 0U;
+}
+
 static void cm7_xfer(uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cycles, uint32_t r[IST_XR_N])
 {
     for (uint32_t k = 0U; k < IST_XR_N; k++)
@@ -1587,7 +1683,7 @@ static void cm7_xfer(uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cycles,
             r[IST_XR_CYCLES] = DWT->CYCCNT - t0;
             if (st == I2C_BM_OK)
             {
-                (void)HAL_DMA_PollForTransfer(&s_hbd_rx, HAL_DMA_FULL_TRANSFER, 10U);
+                (void)wait_until(bd_rx_empty, 10U);       /* CYCCNT, not the HAL tick (m21) */
             }
             done_rx = n - __HAL_DMA_GET_COUNTER(&s_hbd_rx);
             (void)HAL_DMA_Abort(&s_hbd_rx);
@@ -1661,7 +1757,7 @@ static I2cBm_Status_t inst_init(bool m4, uint32_t timingr, uint32_t tmo, uint32_
 {
     if (m4)
     {
-        if (!cm4_send4(IST_CMD_M4_INIT, timingr, 1U, tmo, 0U))
+        if (!cm4_send4(IST_CMD_M4_INIT, timingr, BENCH_ANALOG_FILTER | (BENCH_DNF << 8), tmo, 0U))
         {
             return I2C_BM_ERR_HAL;
         }
@@ -1671,7 +1767,7 @@ static I2cBm_Status_t inst_init(bool m4, uint32_t timingr, uint32_t tmo, uint32_
         }
         return (I2cBm_Status_t)IST_AREA->m4_res[0];
     }
-    const I2cBm_Config_t c = { I2C4, timingr, true, 0U, tmo };
+    const I2cBm_Config_t c = { I2C4, timingr, BENCH_ANALOG_FILTER != 0U, BENCH_DNF, tmo };
     (void)I2C_BM_EnableClock(I2C4);
     const I2cBm_Status_t st = I2C_BM_Init(&c);
     ist_regs(I2C4, img);
@@ -1712,6 +1808,16 @@ static bool inst_deinit(bool m4, uint32_t *diff)
     }
     *diff = d;
     return (st == I2C_BM_OK) && (d == 0U);
+}
+
+/* T14 after every test (audit F1, m24): the Deinit that ends it, judged against the
+   reset image of the RM typed above. */
+static void deinit_judged(bool m4, const char *what)
+{
+    uint32_t diff = 0U;
+    const bool ok = inst_deinit(m4, &diff);
+    verdict(ok, "T14 %s after %s: Deinit, registers that differ from the reset image 0x%02lX", m4 ? "I2C1" : "I2C4",
+            what, (unsigned long)diff);
 }
 
 /* ---- T3: CalcTiming, printed for the host to recompute (C15) -------------------------- */
@@ -1803,8 +1909,8 @@ static void f1_t1(void)
     (void)I2C_BM_EnableClock(I2C2);
     ist_t1(I2C2, o.timingr, &t);
     t1_print("CM7 I2C2", &t);
-    verdict((t.bad == 0U) && (t.cases <= IST_T1_MAX) && (t.groups_same == 3U) && (t.control_changed == 1U),
-            "T1 CM7 refusals on I2C2: %lu cases, %lu with another status; instance, RCC_C1/C2 APB1LENR/APB4ENR, "
+    verdict((t.bad == 0U) && (t.cases == IST_T1_CASES) && (t.groups_same == 3U) && (t.control_changed == 1U),
+            "T1 CM7 refusals on I2C2: %lu cases (62), %lu with another status; instance, RCC_C1/C2 APB1LENR/APB4ENR, "
             "D2CCIP2R, D3CCIPR, SYSCFG_PMCR unchanged in the 2 groups: 0x%lX (0x3); control (a valid Init) changes "
             "them %lu (Init %lu)", (unsigned long)t.cases, (unsigned long)t.bad, (unsigned long)t.groups_same,
             (unsigned long)t.control_changed, (unsigned long)t.init_status);
@@ -1813,10 +1919,8 @@ static void f1_t1(void)
     if (cm4_send4(IST_CMD_M4_T1, o.timingr, 0U, 0U, 0U))
     {
         const volatile uint32_t *r = IST_AREA->m4_res;
-        static const uint8_t k_exp_dummy = 0U;
-        (void)k_exp_dummy;
-        verdict((r[1] == 0U) && (r[0] <= IST_T1_MAX) && (r[2] == 3U) && (r[3] == 1U),
-                "T1 CM4 refusals on I2C1 (the same Common cases): %lu cases, %lu with another status; photo unchanged "
+        verdict((r[1] == 0U) && (r[0] == IST_T1_CASES) && (r[2] == 3U) && (r[3] == 1U),
+                "T1 CM4 refusals on I2C1 (the same Common cases): %lu cases (62), %lu with another status; photo unchanged "
                 "in the 2 groups 0x%lX (0x3); control changes it %lu", (unsigned long)r[0], (unsigned long)r[1],
                 (unsigned long)r[2], (unsigned long)r[3]);
     }
@@ -1824,10 +1928,12 @@ static void f1_t1(void)
 
 static void t2_print(const char *who, const IstT2Result_t *t)
 {
-    verdict((t->bad == 0U) && (t->bad_deinit == 0U) && (t->bad_status == 0U) && (t->control == 1U) && (t->cases == 120U),
+    verdict((t->bad == 0U) && (t->bad_deinit == 0U) && (t->bad_status == 0U) && (t->control == t->cases) &&
+            (t->cases == 120U),
             "T2 %s images over TIMINGR x filter x DNF x timeout: %lu cases, %lu differ from the RM fields typed by hand "
             "(first case<<4|reg 0x%lX got 0x%08lX expected 0x%08lX), %lu Deinit not at the reset image, %lu Init "
-            "neither OK nor ERR_BUS; control (DNF + 1 expected) told apart %lu", who, (unsigned long)t->cases,
+            "neither OK nor ERR_BUS; control (expected with DNF + 1, the same comparison) told apart in %lu cases "
+            "(all)", who, (unsigned long)t->cases,
             (unsigned long)t->bad, (unsigned long)t->first_bad, (unsigned long)t->got, (unsigned long)t->exp,
             (unsigned long)t->bad_deinit, (unsigned long)t->bad_status, (unsigned long)t->control);
 }
@@ -2032,13 +2138,28 @@ static void f1_clkref(void)
     const uint32_t pm = __get_PRIMASK();
     __disable_irq();
     const uint32_t t0 = DWT->CYCCNT;
+    uint32_t last = t0;
+    uint32_t same = 0U;
+    bool stalled = false;
     ack(true);
-    while ((DWT->CYCCNT - t0) < CLKREF_CYC)
+    while ((DWT->CYCCNT - t0) < CLKREF_CYC)          /* masked: also ends if CYCCNT stops (m21) */
     {
+        const uint32_t now = DWT->CYCCNT;
+        same = (now == last) ? (same + 1U) : 0U;
+        last = now;
+        if (same > STALL_READS)
+        {
+            stalled = true;
+            break;
+        }
     }
     ack(false);
     __set_PRIMASK(pm);
-    LOG("CLKREF done");
+    if (stalled)
+    {
+        s_stalls++;
+    }
+    LOG("CLKREF done%s", stalled ? " (CYCCNT stopped)" : "");
 }
 
 static void step_f1_nopin(void)
@@ -2180,9 +2301,10 @@ static void t5_speed(bool m4, uint32_t f, uint32_t timingr, uint32_t k, uint32_t
     };
     for (uint32_t i = 0U; i < 5U; i++)
     {
-        if (!host_at("SCOPE T5 k=%lu f=%lu kernel=%lu timingr=%08lX model=%lu rate=%lu trig=sda", (unsigned long)i,
-                     (unsigned long)f, (unsigned long)k, (unsigned long)timingr, (unsigned long)model,
-                     (unsigned long)((f <= 100000U) ? 12500000U : 25000000U)))
+        if (!host_at("SCOPE T5 k=%lu f=%lu kernel=%lu timingr=%08lX model=%lu rate=%lu trig=sda af=%u dnf=%u",
+                     (unsigned long)i, (unsigned long)f, (unsigned long)k, (unsigned long)timingr,
+                     (unsigned long)model, (unsigned long)((f <= 100000U) ? 12500000U : 25000000U),
+                     (unsigned)BENCH_ANALOG_FILTER, (unsigned)BENCH_DNF))
         {
             return;
         }
@@ -2252,6 +2374,19 @@ static bool fmp(bool m4, bool on)
     LOG("Fm+ %s %s: SetFastModePlus %u, SYSCFG_PMCR 0x%08lX", m4 ? "I2C1" : "I2C4", on ? "on" : "off", (unsigned)st,
         (unsigned long)SYSCFG->PMCR);
     return (st == I2C_BM_OK) && host_at("F334 FMP %u", on ? 1U : 0U);
+}
+
+/* At the end of every bus step: the Fm+ bits must be 0 again, put back by the
+   step itself; if not they are cleared here and the step fails (audit F1, m20).
+   Every abort clears them too (bench_safe()). */
+static void fmp_judge(const char *step)
+{
+    const uint32_t left = syscfg_clocked() ? (SYSCFG->PMCR & FMP_BENCH_BITS) : 0U;
+    fmp_off_raw();
+    const uint32_t now = syscfg_clocked() ? (SYSCFG->PMCR & FMP_BENCH_BITS) : 0U;
+    verdict(syscfg_clocked() && (left == 0U) && (now == 0U),
+            "Fm+ after %s: SYSCFG_PMCR I2C1FMP|I2C4FMP 0x%lX at the end of the step (0: put back by the step), 0x%lX "
+            "after the check", step, (unsigned long)left, (unsigned long)now);
 }
 
 /* T4 and T5 at every speed of the session. */
@@ -2372,8 +2507,7 @@ static void t6(bool m4)
     xline("T6C", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_IT_CTRL, T_ADDR), 2U, 0U, r, true);
     uint32_t img[IST_NREG];
     uint32_t tr = 0U;
-    uint32_t diff = 0U;
-    (void)inst_deinit(m4, &diff);
+    deinit_judged(m4, "the T6 control");
     (void)delay_ms(600U);
     const bool re = main_init(m4, 0U, &tr);
     (void)img;
@@ -2589,8 +2723,7 @@ static void t10(bool m4)
     /* (b): TIMEOUTA for ~10 ms at the kernel clock: (TIMEOUTA + 1) x 2048 / kernel. */
     const uint32_t k = m4 ? s_k123 : s_k4;
     const uint32_t tmo = (uint32_t)(((uint64_t)k / 100U + 2047U) / 2048U);   /* 10 ms */
-    uint32_t diff = 0U;
-    (void)inst_deinit(m4, &diff);
+    deinit_judged(m4, "T10(a)");
     if (!main_init(m4, tmo, &tr) || !host_at("RPT lenient"))     /* the target is off while it holds SCL */
     {
         return;
@@ -2628,7 +2761,7 @@ static void t10(bool m4)
     {
         return;
     }
-    (void)inst_deinit(m4, &diff);
+    deinit_judged(m4, "T10(b)");
     if (!main_init(m4, 0U, &tr) || !host_at("HOLD SCL 50"))
     {
         return;
@@ -2667,7 +2800,7 @@ static void t10(bool m4)
             "T10(b) %s control without timeout_scl_low: Write %lu (ERR_TIMEOUT %u) %lu ms after SCL went low "
             "(max_cycles 30 ms)",
             m4 ? "CM4" : "CM7", (unsigned long)st_c, (unsigned)I2C_BM_ERR_TIMEOUT, (unsigned long)ms_c);
-    (void)inst_deinit(m4, &diff);
+    deinit_judged(m4, "the T10(b) control");
     (void)main_init(m4, 0U, &tr);
 }
 
@@ -2710,8 +2843,8 @@ static void t1_busy(bool m4)
     {
         return;
     }
-    verdict(low && ((isr & I2C_ISR_BUSY) != 0U) && (bad == 0U) && (same == 1U),
-            "T1 %s with BUSY = 1 (target holding SDA; ISR 0x%08lX): %lu transfers refused, %lu with another status than "
+    verdict(low && ((isr & I2C_ISR_BUSY) != 0U) && (bad == 0U) && (same == 1U) && (cases == IST_T1_BUSY_CASES),
+            "T1 %s with BUSY = 1 (target holding SDA; ISR 0x%08lX): %lu transfers refused (8), %lu with another status than "
             "ERR_BUS; registers and RCC unchanged %lu", m4 ? "CM4 I2C1" : "CM7 I2C4", (unsigned long)isr,
             (unsigned long)cases, (unsigned long)bad, (unsigned long)same);
 }
@@ -2797,15 +2930,17 @@ static void t12(void)
     const uint32_t cr_was = RCC->CR & RCC_CR_HSION;
     const uint32_t d2_was = RCC->D2CCIP2R;
     const uint32_t hsidiv = (RCC->CR & RCC_CR_HSIDIV_Msk) >> RCC_CR_HSIDIV_Pos;
-    uint32_t diff = 0U;
-    (void)inst_deinit(true, &diff);
-    bool ok = rcc_cr_set(RCC_CR_HSION, true) && (wait_until(hsi_ready, 5U) == WAIT_DONE) && (hsidiv == 0U);
+    deinit_judged(true, "the tests before T12 (I2C1 off the PCLK kernel)");
+    /* HSION written only if it was 0 (plan R3-4, audit F1 m19). */
+    const bool hsi_wrote = (cr_was == 0U);
+    bool ok = (!hsi_wrote || rcc_cr_set(RCC_CR_HSION, true)) && (wait_until(hsi_ready, 5U) == WAIT_DONE) &&
+              (hsidiv == 0U);
     ok = ok && i2c123sel_set(2U);
     const uint32_t k = 64000000U;                        /* hsi_ker_ck, HSIDIV = /1 (09:3581-3586) */
     I2cBm_TimingOut_t o = { 0U, 0U, 0U };
     uint32_t img[IST_NREG];
     ok = ok && (bench_timing(k, s_f_main, &o) == I2C_BM_OK) && (inst_init(true, o.timingr, 0U, img) == I2C_BM_OK);
-    log_long("T12 kernel: RCC_CR HSION was %lu, HSIDIV %lu (0: 64 MHz), HSIRDY %lu; RCC_D2CCIP2R 0x%08lX -> 0x%08lX "
+    log_long("T12 kernel: RCC_CR HSION was %lu (written only if 0), HSIDIV %lu (0: 64 MHz), HSIRDY %lu; RCC_D2CCIP2R 0x%08lX -> 0x%08lX "
              "(I2C123SEL = 10, HSI); APB1 %lu Hz / kernel %lu Hz = %lu.%02lu (ES0445 2.19.6 window 1.5..3); I2C1 "
              "TIMINGR 0x%08lX at %lu Hz", (unsigned long)(cr_was != 0U), (unsigned long)hsidiv,
              (unsigned long)hsi_ready(), (unsigned long)d2_was, (unsigned long)RCC->D2CCIP2R, (unsigned long)s_k123,
@@ -2830,10 +2965,13 @@ static void t12(void)
         (void)delay_ms(500U);                            /* the target's reports drain */
     }
     const bool st_ok = sent && host_at("F334 STATUS t12=4");
-    /* Back: I2C1 off the HSI, then the HSI as it was, both read back. */
-    (void)inst_deinit(true, &diff);
-    const bool back = i2c123sel_set((d2_was & RCC_D2CCIP2R_I2C123SEL_Msk) >> RCC_D2CCIP2R_I2C123SEL_Pos) &&
-                      (RCC->D2CCIP2R == d2_was) && ((cr_was != 0U) || rcc_cr_set(RCC_CR_HSION, false));
+    /* Back: I2C1 off the HSI, then the HSI as it was; each restored on its own and
+       read back, so one failing does not skip the other (R3-4, m19). */
+    deinit_judged(true, "T12 (I2C1 off the HSI kernel)");
+    const bool sel_back = i2c123sel_set((d2_was & RCC_D2CCIP2R_I2C123SEL_Msk) >> RCC_D2CCIP2R_I2C123SEL_Pos) &&
+                          (RCC->D2CCIP2R == d2_was);
+    const bool hsi_back = !hsi_wrote || rcc_cr_set(RCC_CR_HSION, false);
+    const bool back = sel_back && hsi_back && ((RCC->CR & RCC_CR_HSION) == cr_was);
     verdict(ok && sent && st_ok && (res[0][0] == T12_COUNT) && (res[1][0] == T12_COUNT),
             "T12 2.19.6 with the kernel on the HSI: driver poll %lu/%lu and DMA %lu/%lu writes of 2 bytes OK (0 stalls)",
             (unsigned long)(sent ? res[0][0] : 0U), (unsigned long)T12_COUNT, (unsigned long)(sent ? res[1][0] : 0U),
@@ -2845,9 +2983,10 @@ static void t12(void)
             "%s", (unsigned long)res[2][1], (unsigned long)res[3][1], (unsigned long)T12_COUNT,
             (man != 0U) ? "reproduced" : "no reproducido (not reproduced)");
     }
-    verdict(back, "T12 restore: RCC_D2CCIP2R 0x%08lX (0x%08lX before), RCC_CR HSION %lu (%lu before)",
-            (unsigned long)RCC->D2CCIP2R, (unsigned long)d2_was, (unsigned long)((RCC->CR & RCC_CR_HSION) != 0U),
-            (unsigned long)(cr_was != 0U));
+    verdict(back, "T12 restore: RCC_D2CCIP2R 0x%08lX (0x%08lX before, restored %u), RCC_CR HSION %lu (%lu before; "
+            "written %u, restored %u)", (unsigned long)RCC->D2CCIP2R, (unsigned long)d2_was, (unsigned)sel_back,
+            (unsigned long)((RCC->CR & RCC_CR_HSION) != 0U), (unsigned long)(cr_was != 0U), (unsigned)hsi_wrote,
+            (unsigned)hsi_back);
 }
 
 /* ---- The bus steps -------------------------------------------------------------------- */
@@ -2902,7 +3041,6 @@ static bool rec_sda_r(void *ctx) { (void)ctx; return ((GPIOB->IDR >> IST_PIN_SDA
 static void t9(void)
 {
     uint32_t tr = 0U;
-    uint32_t diff = 0U;
     uint32_t r[IST_XR_N];
     uint8_t b[2] = { 0x30U, 0x31U };
     if (!cm7_pins_af() || !main_init(false, 0U, &tr))
@@ -2926,7 +3064,7 @@ static void t9(void)
     const I2cBm_Status_t sw = I2C_BM_Write(I2C4, T_ADDR, b, 2U, ms_cyc(5U));
     const uint32_t cw = DWT->CYCCNT - t0;
     /* The recovery: PE = 0 (Deinit), the pins to input, then GPIO open-drain. */
-    (void)inst_deinit(false, &diff);
+    deinit_judged(false, "the T9 Write on the held bus");
     bool ok = cm7_pins_input() && delay_ms(1U) && cm7_pins_od();
     if (!ok)
     {
@@ -2974,7 +3112,84 @@ static void t9(void)
     verdict(low_c && high_c && (ms >= 95U) && (ms <= 110U),
             "T9 control without RecoverBus: SDA low %lu ms (the target's 100 ms limit), then released %u",
             (unsigned long)ms, (unsigned)high_c);
-    (void)inst_deinit(false, &diff);
+    deinit_judged(false, "T9");
+    (void)cm7_pins_input();
+}
+
+/* T9(b), plan R3-6 (audit F1, M2): the target holds SDA BEFORE Init. ISR.BUSY is set
+   only by a START seen with PE = 1 (50:2897-2899), so Init returns OK with the bus
+   held, and the transfer then ends, bounded by its max_cycles, with the code the
+   silicon gives: recorded, and judged to be ERR_ARLO, ERR_BUS or ERR_TIMEOUT. Then
+   the recovery of T9 (RecoverBus gives the pulses the target still needs of its 5
+   edges: the refused transfer may have clocked some), Init and a transfer that
+   works. The control is T9 itself: the hold after Init gives ERR_BUS. */
+#define T9B_BUDGET_MS   2U
+
+static void t9b(void)
+{
+    uint32_t r[IST_XR_N];
+    uint32_t img[IST_NREG];
+    uint8_t b[2] = { 0x32U, 0x33U };
+    I2cBm_TimingOut_t o = { 0U, 0U, 0U };
+    (void)bench_timing(s_k4, s_f_main, &o);
+    if (!cm7_pins_af())                                   /* AF6 with I2C4 at PE = 0: nothing drives */
+    {
+        return;
+    }
+    if (s_taps && !host_at("SCOPE T9B k=0 f=%lu kernel=0 timingr=0 model=0 rate=1000000 trig=scl",
+                           (unsigned long)s_f_main))
+    {
+        return;
+    }
+    if (!host_at("HOLD SDA 300 EDGES 5"))
+    {
+        return;
+    }
+    const bool low = wait_pin(IST_PIN_SDA, 0U, 20U);
+    (void)delay_ms(1U);
+    const I2cBm_Status_t si = inst_init(false, o.timingr, 0U, img);   /* the hold is already there */
+    const uint32_t isr = I2C4->ISR;
+    const uint32_t chk = (uint32_t)I2C_BM_CheckTransfer(I2C4, T_ADDR, 2U, 0U);
+    const uint32_t lim = ms_cyc(T9B_BUDGET_MS);
+    const uint32_t t0 = DWT->CYCCNT;
+    const I2cBm_Status_t sw = I2C_BM_Write(I2C4, T_ADDR, b, 2U, lim);
+    const uint32_t cw = DWT->CYCCNT - t0;
+    const uint32_t lv0 = bus_idr() & 3U;
+    deinit_judged(false, "the T9(b) Write on the bus held before Init");
+    if (!cm7_pins_input() || !delay_ms(1U) || !cm7_pins_od())
+    {
+        return;
+    }
+    const I2cBm_Recovery_t rec = { rec_scl_w, rec_sda_w, rec_scl_r, rec_sda_r, NULL, 5U * CYC_PER_US };
+    uint32_t pulses = 0xFFU;
+    const I2cBm_Status_t sr = I2C_BM_RecoverBus(&rec, ms_cyc(10U), &pulses);
+    const uint32_t lv = bus_idr() & 3U;
+    if (s_taps && !host_at("SCOPE end"))
+    {
+        return;
+    }
+    uint32_t tr = 0U;
+    if (!cm7_pins_input() || !delay_ms(1U) || !cm7_pins_af() || !main_init(false, 0U, &tr) || !host_at("HOLD_END"))
+    {
+        return;
+    }
+    if (!xfer(false, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00009B12UL, budget(s_cpu_hz, s_f_main, 3U), r))
+    {
+        return;
+    }
+    xline("T9B", false, s_f_main, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00009B12UL, r, true);
+    const bool in_set = (sw == I2C_BM_ERR_ARLO) || (sw == I2C_BM_ERR_BUS) || (sw == I2C_BM_ERR_TIMEOUT);
+    const bool bounded = cw <= (lim + ms_cyc(1U));
+    verdict(low && (si == I2C_BM_OK) && ((isr & I2C_ISR_BUSY) == 0U) && (chk == (uint32_t)I2C_BM_OK) && in_set &&
+            bounded && (sr == I2C_BM_OK) && (pulses <= 5U) && (lv == 3U) && (r[IST_XR_STATUS] == (uint32_t)I2C_BM_OK),
+            "T9(b) the target holds SDA from before Init: Init %u (OK), I2C4 ISR 0x%08lX (BUSY 0: no START seen), "
+            "CheckTransfer %lu (OK); Write %u in %lu cycles (one of ERR_ARLO %u, ERR_BUS %u, ERR_TIMEOUT %u; budget "
+            "%lu + 1 ms), PB8/PB9 after it %lu; RecoverBus %u, pulses %lu (<= 5: the rest of the target's 5 edges), "
+            "PB8/PB9 after %lu (3); AF6 and Init again, Write %lu (OK)", (unsigned)si, (unsigned long)isr,
+            (unsigned long)chk, (unsigned)sw, (unsigned long)cw, (unsigned)I2C_BM_ERR_ARLO, (unsigned)I2C_BM_ERR_BUS,
+            (unsigned)I2C_BM_ERR_TIMEOUT, (unsigned long)lim, (unsigned long)lv0, (unsigned)sr,
+            (unsigned long)pulses, (unsigned long)lv, (unsigned long)r[IST_XR_STATUS]);
+    deinit_judged(false, "T9(b)");
     (void)cm7_pins_input();
 }
 
@@ -2985,7 +3200,6 @@ static void step_f1_cm4(void)
         return;
     }
     uint32_t tr = 0U;
-    uint32_t diff = 0U;
     if (!cm4_send4(IST_CMD_M4_PINS, 1U, 0U, 0U, 0U) || (IST_AREA->m4_res[0] != 1U))
     {
         bench_abort("CM4 pins");
@@ -2993,7 +3207,8 @@ static void step_f1_cm4(void)
     }
     t4_t5(true);
     const bool fm = s_f_main > 400000U;
-    if (!s_bench_abort && (!fm || fmp(true, true)) && main_init(true, 0U, &tr))
+    const bool fm_on = !s_bench_abort && fm && fmp(true, true);
+    if (!s_bench_abort && (!fm || fm_on) && main_init(true, 0U, &tr))
     {
         t1_busy(true);
         t6(true);
@@ -3006,13 +3221,14 @@ static void step_f1_cm4(void)
             t12();
             (void)host_at("RPT strict");
         }
-        (void)inst_deinit(true, &diff);
-        if (fm)
-        {
-            (void)fmp(true, false);
-        }
+        deinit_judged(true, "the F1_CM4 tests at the main speed");
+    }
+    if (fm_on)
+    {
+        (void)fmp(true, false);
     }
     (void)cm4_send4(IST_CMD_M4_PINS, 0U, 0U, 0U, 0U);
+    fmp_judge("F1_CM4");
     if (!host_at("F1_CM4 end"))
     {
         return;
@@ -3033,10 +3249,10 @@ static void step_f1_cm7(void)
         return;
     }
     uint32_t tr = 0U;
-    uint32_t diff = 0U;
     t4_t5(false);
     const bool fm = s_f_main > 400000U;
-    if (!s_bench_abort && (!fm || fmp(false, true)) && main_init(false, 0U, &tr))
+    const bool fm_on = !s_bench_abort && fm && fmp(false, true);
+    if (!s_bench_abort && (!fm || fm_on) && main_init(false, 0U, &tr))
     {
         t1_busy(false);
         t6(false);
@@ -3049,13 +3265,14 @@ static void step_f1_cm7(void)
             (void)delay_ms(100U);
             (void)host_at("RPT strict");
         }
-        (void)inst_deinit(false, &diff);
-        if (fm)
-        {
-            (void)fmp(false, false);
-        }
+        deinit_judged(false, "the F1_CM7 tests at the main speed");
+    }
+    if (fm_on)
+    {
+        (void)fmp(false, false);
     }
     (void)cm7_pins_input();
+    fmp_judge("F1_CM7");
     if (!host_at("F1_CM7 end"))
     {
         return;
@@ -3076,11 +3293,13 @@ static void step_f1_recover(void)
         return;
     }
     t9();
+    t9b();
     if (fm)
     {
         (void)fmp(false, false);
     }
     (void)cm7_pins_input();
+    fmp_judge("F1_RECOVER");
     if (!host_at("F1_RECOVER end"))
     {
         return;

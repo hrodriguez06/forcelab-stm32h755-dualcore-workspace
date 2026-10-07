@@ -458,6 +458,31 @@ static void res_clear(void)
     }
 }
 
+/* Polls until `done()` or n CYCCNT cycles; false on the limit or when CYCCNT
+   stopped (counted). No HAL tick (audit F1, m21). */
+static bool cyc_until(bool (*done)(void), uint32_t n)
+{
+    const uint32_t t0 = DWT->CYCCNT;
+    uint32_t last = t0;
+    uint32_t same = 0U;
+    while (!done())
+    {
+        const uint32_t now = DWT->CYCCNT;
+        same = (now == last) ? (same + 1U) : 0U;
+        last = now;
+        if (same > STALL_READS)
+        {
+            IST_AREA->m4_stalls++;
+            return false;
+        }
+        if ((now - t0) >= n)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 /* Cycles without CYCCNT stopping (lesson m1): false if it stopped. */
 static bool delay_cyc(uint32_t n)
 {
@@ -571,6 +596,17 @@ void I2C1_EV_IRQHandler(void)
 void I2C1_ER_IRQHandler(void)
 {
     it_serve();
+}
+
+/* The conditions the bounded waits poll (cyc_until). */
+static bool it_idle(void)
+{
+    return !s_it_active;
+}
+
+static bool rx_stream_empty(void)
+{
+    return DMA_BM_GetRemaining(M4_DMA_RX) == 0U;
 }
 
 static void nvic_i2c1(bool on)
@@ -770,10 +806,7 @@ static void cmd_xfer(uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cycles)
                 __set_PRIMASK(pm);
             }
             st = (s1 == I2C_BM_OK) ? I2C_BM_WaitEnd(I2C1, n, max_cycles) : s1;
-            const uint32_t w0 = DWT->CYCCNT;               /* the last byte leaves RXDR */
-            while ((DMA_BM_GetRemaining(M4_DMA_RX) != 0U) && ((DWT->CYCCNT - w0) < (SystemCoreClock / 1000U)))
-            {
-            }
+            (void)cyc_until(rx_stream_empty, SystemCoreClock / 1000U);   /* the last byte leaves RXDR */
             done_rx = n - DMA_BM_GetRemaining(M4_DMA_RX);
             m4_stream_end(M4_DMA_RX);
         }
@@ -887,9 +920,19 @@ static I2cBm_Status_t t12_manual(bool dma, uint32_t max_cycles)
     I2C1->CR2 = ((uint32_t)IST_TARGET_ADDR << 1) | (2UL << I2C_CR2_NBYTES_Pos) | I2C_CR2_AUTOEND | I2C_CR2_START;
     uint32_t sent = 0U;
     const uint32_t t0 = DWT->CYCCNT;
+    uint32_t last = t0;
+    uint32_t same = 0U;
     I2cBm_Status_t st = I2C_BM_ERR_TIMEOUT;
     while ((DWT->CYCCNT - t0) < max_cycles)
     {
+        const uint32_t now = DWT->CYCCNT;            /* ends if CYCCNT stops (m21) */
+        same = (now == last) ? (same + 1U) : 0U;
+        last = now;
+        if (same > STALL_READS)
+        {
+            IST_AREA->m4_stalls++;
+            break;
+        }
         const uint32_t isr = I2C1->ISR;
         if (!dma && ((isr & I2C_ISR_TXIS) != 0U) && (sent < 2U))
         {
@@ -1015,9 +1058,7 @@ static void cmd_b1(uint32_t timingr)
     {
         s_it_active = false;
     }
-    while (s_it_active && ((DWT->CYCCNT - t0) < (SystemCoreClock / 100U)))
-    {
-    }
+    (void)cyc_until(it_idle, SystemCoreClock / 100U);   /* ends if CYCCNT stops (m21) */
     s_it_active = false;
     nvic_i2c1(false);
     r[2] = s_irq_min;

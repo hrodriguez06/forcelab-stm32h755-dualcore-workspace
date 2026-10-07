@@ -151,7 +151,7 @@ if(SPI_DRIVER_SELFTEST)
 endif()
 
 # 05_i2c selftest. gpio_bm is linked above for the lock hook; F1 adds i2c_bm and,
-# for T7(b) (I2C4 by BDMA) and T13, the DMA driver tiers; i2c_ll and i2c_hal join
+# for T7(b) (I2C4 by BDMA, .d3_ram), dma_hal with dma_bm; i2c_ll and i2c_hal join
 # with phases F2 and F3.
 if(I2C_DRIVER_SELFTEST)
     target_compile_definitions(${TARGET} PRIVATE I2C_DRIVER_SELFTEST=1)

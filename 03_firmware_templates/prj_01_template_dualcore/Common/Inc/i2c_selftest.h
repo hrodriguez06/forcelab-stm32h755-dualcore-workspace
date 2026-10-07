@@ -202,6 +202,8 @@ typedef enum
 #define IST_T12_DMA_MANUAL   3U   /* by hand, no preload: TXDMAEN, START, the stream sends 2  */
 
 #define IST_T1_MAX           80U
+#define IST_T1_CASES         62U   /* ist_t1()'s cases (O15: judged exactly)    */
+#define IST_T1_BUSY_CASES    8U    /* ist_t1_busy()'s transfers                 */
 
 /* The target (tools/i2c_target_f334): 7-bit address, and a free address. */
 #define IST_TARGET_ADDR      0x42U
@@ -247,7 +249,8 @@ typedef struct
     uint32_t bad_status;       /* Init neither OK nor ERR_BUS                              */
     uint32_t first_bad;        /* case << 4 | register, 0xFFFFFFFF if none                 */
     uint32_t got, exp;
-    uint32_t control;          /* an altered expected image (DNF + 1) was told apart      */
+    uint32_t control;          /* cases whose image differs from an altered expected one
+                                  (DNF + 1 mod 16) through the same comparison: all of them */
 } IstT2Result_t;
 void     ist_t2(I2C_TypeDef *i2c, IstT2Result_t *r);
 

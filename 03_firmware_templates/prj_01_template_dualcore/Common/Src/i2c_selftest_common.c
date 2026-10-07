@@ -456,6 +456,27 @@ static void t2_expect(uint32_t timingr, bool analog, uint32_t dnf, uint32_t tmo,
     e[5] = (tmo == 0U) ? 0U : ((tmo - 1U) | (1UL << 15));
 }
 
+/* True when an image differs from the expected one in any of the six registers;
+   the first difference is recorded in r (NULL: not recorded). */
+static bool t2_differs(const uint32_t g[IST_NREG], const uint32_t e[IST_NREG], uint32_t cs, IstT2Result_t *r)
+{
+    bool differs = false;
+    for (uint32_t k = 0U; k < 6U; k++)
+    {
+        if (g[k] != e[k])
+        {
+            if ((r != NULL) && (r->first_bad == 0xFFFFFFFFUL))
+            {
+                r->first_bad = (cs << 4) | k;
+                r->got = g[k];
+                r->exp = e[k];
+            }
+            differs = true;
+        }
+    }
+    return differs;
+}
+
 void ist_t2(I2C_TypeDef *i2c, IstT2Result_t *r)
 {
     r->cases = 0U;
@@ -485,31 +506,18 @@ void ist_t2(I2C_TypeDef *i2c, IstT2Result_t *r)
                     {
                         r->bad_status++;
                     }
-                    bool same = true;
-                    for (uint32_t k = 0U; k < 6U; k++)
-                    {
-                        if (g[k] != e[k])
-                        {
-                            if (r->first_bad == 0xFFFFFFFFUL)
-                            {
-                                r->first_bad = (r->cases << 4) | k;
-                                r->got = g[k];
-                                r->exp = e[k];
-                            }
-                            same = false;
-                        }
-                    }
-                    if (!same)
+                    if (t2_differs(g, e, r->cases, r))
                     {
                         r->bad++;
                     }
-                    /* The control, once: the same image against an expected one with
-                       DNF + 1 must differ. */
-                    if ((r->cases == 0U) && same)
+                    /* The control (audit F1, m22): the same image through the same
+                       comparison against the expected one with DNF + 1 (mod 16): it
+                       must differ in every case. */
+                    uint32_t e2[IST_NREG];
+                    t2_expect(k_t2_timingr[a], analog, (k_t2_dnf[d] + 1U) & 15U, k_t2_tmo[m], e2);
+                    if (t2_differs(g, e2, r->cases, NULL))
                     {
-                        uint32_t e2[IST_NREG];
-                        t2_expect(k_t2_timingr[a], analog, k_t2_dnf[d] + 1U, k_t2_tmo[m], e2);
-                        r->control = (g[0] != e2[0]) ? 1U : 0U;
+                        r->control++;
                     }
                     if ((I2C_BM_Deinit(i2c) != I2C_BM_OK) || (ist_reset_diff(i2c) != 0U))
                     {
