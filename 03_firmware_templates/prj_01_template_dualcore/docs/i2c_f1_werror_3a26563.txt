@@ -1,0 +1,10 @@
+﻿-Werror builds of prj_01 at 3a26563 docs(i2c): add the F1 delivery captures of the 05_i2c bench at e27c673, tree clean, in fresh scratch build dirs (not the presets' build/<preset>), CMAKE_C_FLAGS=-Werror
+selftest-i2c (Debug, I2C_DRIVER_SELFTEST=ON; CMakeCache CMAKE_C_FLAGS=-Werror): configure_exit=0 build_exit=0; lines with 'warning:' or 'error:' = 0; text data bss dec hex filename:
+    78488     140  130452  209080   330b8  <scratch>/weselftest-i2c/CM7/cm7_firmware.elf
+    22076      28   78576  100680   18948  <scratch>/weselftest-i2c/CM4/cm4_firmware.elf
+debug (Debug, I2C_DRIVER_SELFTEST=OFF; CMakeCache CMAKE_C_FLAGS=-Werror): configure_exit=0 build_exit=0; lines with 'warning:' or 'error:' = 0; text data bss dec hex filename:
+    29304     132   55668   85104   14c70  <scratch>/wedebug/CM7/cm7_firmware.elf
+     3456      24   12560   16040    3ea8  <scratch>/wedebug/CM4/cm4_firmware.elf
+release (Release, I2C_DRIVER_SELFTEST=OFF; CMakeCache CMAKE_C_FLAGS=-Werror): configure_exit=0 build_exit=0; lines with 'warning:' or 'error:' = 0; text data bss dec hex filename:
+    28356     132   55672   84160   148c0  <scratch>/werelease/CM7/cm7_firmware.elf
+     3112      24   12560   15696    3d50  <scratch>/werelease/CM4/cm4_firmware.elf
