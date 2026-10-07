@@ -891,13 +891,15 @@ static void t0c_hold(const char *line, uint32_t held, uint32_t other)
         return;
     }
     static const char *const k_name[W_N] = { "PB8", "PB9", "PF14", "PF15" };
-    log_long("T0C hold %s: %s lows=%lu low_us=%lu first_us=%lu end_low=%u; %s lows=%lu low_us=%lu; "
-             "%s lows=%lu low_us=%lu; %s lows=%lu low_us=%lu", line,
-             k_name[W_PB8], (unsigned long)w[W_PB8].lows, (unsigned long)cyc_to_us(w[W_PB8].low_cyc),
-             (unsigned long)cyc_to_us(w[W_PB8].first_cyc), (unsigned)w[W_PB8].low_at_end,
-             k_name[W_PB9], (unsigned long)w[W_PB9].lows, (unsigned long)cyc_to_us(w[W_PB9].low_cyc),
-             k_name[W_PF14], (unsigned long)w[W_PF14].lows, (unsigned long)cyc_to_us(w[W_PF14].low_cyc),
-             k_name[W_PF15], (unsigned long)w[W_PF15].lows, (unsigned long)cyc_to_us(w[W_PF15].low_cyc));
+    /* Every pin: falls, time low, first fall after the window opened, low at the end. */
+    int n = snprintf(s_line, sizeof(s_line), "T0C hold %s:", line);
+    for (uint32_t k = 0U; (k < W_N) && (n > 0) && ((size_t)n < sizeof(s_line)); k++)
+    {
+        n += snprintf(&s_line[n], sizeof(s_line) - (size_t)n, " %s lows=%lu low_us=%lu first_us=%lu end_low=%u;",
+                      k_name[k], (unsigned long)w[k].lows, (unsigned long)cyc_to_us(w[k].low_cyc),
+                      (unsigned long)cyc_to_us(w[k].first_cyc), (unsigned)w[k].low_at_end);
+    }
+    log_text("");
     const uint32_t us = cyc_to_us(w[held].low_cyc);
     verdict((w[held].lows == 1U) && !w[held].low_at_end && (us >= T0C_HOLD_MIN_US) && (us <= T0C_HOLD_MAX_US) &&
             (w[other].lows == 0U),
