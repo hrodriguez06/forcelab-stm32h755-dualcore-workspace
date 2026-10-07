@@ -59,7 +59,7 @@ stopped (S20).
 Rev and build id come from the same `cmake/fw_build_id.cmake` as prj_01, over
 `build/f334/CMakeCache.txt` (`FW_PRESET = f334`): the host recomputes the id.
 
-## Console protocol (v2)
+## Console protocol (v3)
 
 One command per line (CR or LF). Every command gets exactly one reply line,
 `OK ...` or `ERR <command> <reason>`; `HOLD_END` and `RPT` lines come by
@@ -69,6 +69,12 @@ argument it does not take, or one too many, is refused with `ERR`.
 v2 (05_i2c phase F1) against v1: `CORRUPT k` counts the bytes of the transfer
 that went on the bus (v1 counted every byte written to `TXDR`, across
 segments); `EDGES 0` and extra tokens are refused; `ev` bit `0x20`.
+
+v3 against v2: `FMP` also selects the target's `TIMINGR` (it sets the data
+setup of the bits the target drives after a stretch): `FMP 0` (the default)
+`0x20F10000`, SCLDEL 750 ns, for Sm/Fm with the taps' rise time; `FMP 1`
+`0x00A20000`, SCLDEL 172 ns, for Fm+. `FMP` is refused while a transfer or a
+hold is running, and its reply gives the `TIMINGR` read back.
 
 | Command | Effect |
 | --- | --- |
@@ -83,7 +89,7 @@ segments); `EDGES 0` and extra tokens are refused; `ev` bit `0x20`.
 | `STRETCH ADDR <us>` | the next transfer holds SCL `us` (0..5000) at the address match |
 | `STRETCH BYTE <us>` | the next transfer holds SCL `us` after each byte (byte control, before the ACK bit in reception) |
 | `DISARM` | clears every armed fault |
-| `FMP 0\|1` | `SYSCFG_CFGR1.I2C_PB8_FMP/I2C_PB9_FMP` (Fm+ drive), read back |
+| `FMP 0\|1` | `SYSCFG_CFGR1.I2C_PB8_FMP/I2C_PB9_FMP` (Fm+ drive) and `TIMINGR` (`0x20F10000` / `0x00A20000`), with I2C1 off for the write, read back: `OK FMP <0/1> timingr=0x... cfgr1=0x...` |
 | `HOLD SDA\|SCL <ms> [EDGES <n>]` | I2C1 off, the line driven low now; released at `ms` (1..500) or at the `n`-th (1..255) SCL rising edge |
 
 Armed faults apply to the NEXT transfer only (the first address match takes
@@ -104,9 +110,9 @@ master NACKs is taken back).
 ### Banner
 
 ```text
-I2C_TARGET v2 Rev <git rev> id <build id>
+I2C_TARGET v3 Rev <git rev> id <build id>
 I2C_TARGET pins PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
-I2C_TARGET addr=0x42 sysclk=64000000 timingr=0x00A20000 idcode=0x... uid=... reset_csr=0x... hold_max_ms=500
+I2C_TARGET addr=0x42 sysclk=64000000 timingr=0x20F10000 idcode=0x... uid=... reset_csr=0x... hold_max_ms=500
 I2C_TARGET ready
 ```
 

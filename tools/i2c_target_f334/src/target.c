@@ -132,8 +132,14 @@ static void ln_pins(Line_t *l)
 
 /* ---- I2C1 ------------------------------------------------------------------------------ */
 
-/* PRESC = 0, SCLDEL = 10, SDADEL = 2 at a 64 MHz kernel clock (15.6 ns), by the
-   rules of 50:319-353 (RM0364 28.4.5 describes the same IP):
+/* Two TIMINGR, by the rules of 50:319-353 (RM0364 28.4.5 describes the same IP),
+   chosen by FMP (protocol v3): SCLDEL sets how long the target keeps SCL low
+   after it changes SDA, which is the data setup of its own bits whenever it
+   stretches (after the address match and the byte control the stretch ends with
+   the SDA change, so SCL rises SCLDEL later, whatever the master's tLOW).
+
+   FMP 1 (Fm+, notaps): PRESC = 0, SCLDEL = 10, SDADEL = 2 at a 64 MHz kernel
+   clock (15.6 ns):
    - data setup: SCL is held low (SCLDEL + 1) x 15.6 = 172 ns after SDA
      changes, >= t_r + tSU;DAT up to Fm+ (120 + 50 ns);
    - data output: SDA changes tSYNC1 + (SDADEL + 1) x 15.6 = tSYNC1 + 47 ns
@@ -144,11 +150,20 @@ static void ln_pins(Line_t *l)
      notaps bench (t_r ~ 50 ns), not on the taps one (225..270 ns, where the
      bench runs 400 kHz at most and tVD;DAT is 900 ns). As a receiver the
      target has no tVD;DAT to meet.
+   FMP 0 (Sm and Fm, the default): PRESC = 2 (46.9 ns), SCLDEL = 15, SDADEL = 1:
+   - data setup: 16 x 46.9 = 750 ns after SDA changes, >= t_r + tSU;DAT of Sm
+     (300 + 250 ns) on the taps bench, whose t_r is 225..270 ns: with 172 ns
+     the first bit after a stretch measured -27 ns (05_i2c F1 development run,
+     docs/i2c_dev_f1_bench_taps_32cd2e5.txt, T5 at 400 kHz);
+   - data output: tSYNC1 + 2 x 46.9 = tSYNC1 + 94 ns, + t_r 300 well inside
+     the tVD;DAT of Fm (900 ns).
    SCLH/SCLL are not used in slave mode. These numbers need SYSCLK = 64 MHz:
    the host refuses a banner with another sysclk (the PLL did not lock and
    the kernel is the 8 MHz HSI, audit F0 m7). */
-#define TARGET_TIMINGR   ((0UL << I2C_TIMINGR_PRESC_Pos) | (10UL << I2C_TIMINGR_SCLDEL_Pos) | \
-                          (2UL << I2C_TIMINGR_SDADEL_Pos))
+#define TARGET_TIMINGR_FMP ((0UL << I2C_TIMINGR_PRESC_Pos) | (10UL << I2C_TIMINGR_SCLDEL_Pos) | \
+                            (2UL << I2C_TIMINGR_SDADEL_Pos))
+#define TARGET_TIMINGR     ((2UL << I2C_TIMINGR_PRESC_Pos) | (15UL << I2C_TIMINGR_SCLDEL_Pos) | \
+                            (1UL << I2C_TIMINGR_SDADEL_Pos))
 
 #define EV_BERR   0x01U
 #define EV_ARLO   0x02U
@@ -1260,15 +1275,31 @@ void target_command(char *line)
             reply_err(c, "usage: FMP 0|1");
             return;
         }
+        if (s_active || s_hold.on || s_hold.done)
+        {
+            reply_err(c, "busy");
+            return;
+        }
         const uint32_t bits = SYSCFG_CFGR1_I2C_PB8_FMP | SYSCFG_CFGR1_I2C_PB9_FMP;
+        const uint32_t tr = (on != 0U) ? TARGET_TIMINGR_FMP : TARGET_TIMINGR;
         __disable_irq();
+        /* TIMINGR is written with PE = 0 only (RM0364 28.7.5). */
+        i2c_pe(false);
+        I2C1->TIMINGR = tr;
         SYSCFG->CFGR1 = (on != 0U) ? (SYSCFG->CFGR1 | bits) : (SYSCFG->CFGR1 & ~bits);
+        if (!s_aborted && target_s15_ok())
+        {
+            i2c_pe(true);
+        }
         __enable_irq();
         const uint32_t got = SYSCFG->CFGR1 & bits;
         s_fmp = (got == bits) ? 1U : 0U;
+        const bool ok = ((got == bits) == (on != 0U)) && (I2C1->TIMINGR == tr);
         Line_t l;
-        ln_start(&l, ((got == bits) == (on != 0U)) ? "OK FMP " : "ERR FMP read back ");
+        ln_start(&l, ok ? "OK FMP " : "ERR FMP read back ");
         ln_u32(&l, s_fmp);
+        ln_str(&l, " timingr=0x");
+        ln_hex(&l, I2C1->TIMINGR, 8U);
         ln_str(&l, " cfgr1=0x");
         ln_hex(&l, SYSCFG->CFGR1, 8U);
         ln_send(&l);

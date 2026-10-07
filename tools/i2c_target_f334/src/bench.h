@@ -28,7 +28,7 @@
 #include <stdint.h>
 #include "stm32f3xx.h"
 
-#define TARGET_PROTOCOL       2U          /* "I2C_TARGET v2": bump on any change of the protocol.
+#define TARGET_PROTOCOL       3U          /* "I2C_TARGET v2": bump on any change of the protocol.
                                              v2 (05_i2c F1): CORRUPT k counts the bytes that went
                                              on the bus in this transfer; a command with a token
                                              it does not take, or EDGES 0, is refused; ev 0x20 */
