@@ -12,11 +12,18 @@
   *          so (sysclk=8000000). The HSI is +-1 % (DS9994), enough for the
   *          console; nothing on the bench times itself against this clock.
   *
-  *          Watchdog: the IWDG (LSI, 40 kHz typical, /32, reload 500: 400 ms,
-  *          320..533 ms over the LSI range of DS9994) is refreshed by the main
-  *          loop only. If the firmware stops, the reset puts PB8/PB9 back in
-  *          input: a hold can never outlive the firmware (S21). The holds
+  *          Watchdog: the IWDG (LSI 30..50 kHz, DS9994; /32, reload 449: 450
+  *          counts, 288..480 ms, 360 ms at 40 kHz) is refreshed by the main loop
+  *          only. If the firmware stops, the reset puts PB8/PB9 back in input: a
+  *          hold can never outlive the firmware by more than 480 ms, inside the
+  *          500 ms of S21 even when TIM2 cannot run (audit F0, m1). The holds
   *          themselves end in the TIM2 interrupt, not here.
+  *
+  *          Interrupt priorities (audit F0, m3): TIM2 0 (the end of a hold),
+  *          I2C1 1, EXTI9_5 2 (the SCL edges of a hold), USART2 3. A fast,
+  *          endless SCL during an SDA hold cannot delay the release by time.
+  *          Every vector this firmware does not use ends in bench_fault_release()
+  *          (src/vectors.c, audit F0, m2).
   ******************************************************************************
   */
 
@@ -70,9 +77,9 @@ static void timebase_init(uint32_t tim_clk_hz)
     TIM2->EGR  = TIM_EGR_UG;           /* load PSC */
     TIM2->SR   = 0U;
     TIM2->CR1  = TIM_CR1_CEN;
-    NVIC_SetPriority(TIM2_IRQn, 1U);
+    NVIC_SetPriority(TIM2_IRQn, 0U);       /* above everything: the end of a hold (m3) */
     NVIC_EnableIRQ(TIM2_IRQn);
-    NVIC_SetPriority(EXTI9_5_IRQn, 1U);
+    NVIC_SetPriority(EXTI9_5_IRQn, 2U);
     NVIC_EnableIRQ(EXTI9_5_IRQn);
 }
 
@@ -116,7 +123,7 @@ static void iwdg_init(void)
     IWDG->KR  = 0xCCCCU;               /* start (and the LSI with it) */
     IWDG->KR  = 0x5555U;               /* unlock PR and RLR */
     IWDG->PR  = 3U;                    /* /32 */
-    IWDG->RLR = 499U;                  /* 500 counts: 400 ms at 40 kHz */
+    IWDG->RLR = 449U;                  /* 450 counts: 288..480 ms over 30..50 kHz (m1) */
     for (uint32_t n = 0U; (IWDG->SR != 0U) && (n < CLOCK_SPIN_MAX); n++)
     {
     }
@@ -125,7 +132,7 @@ static void iwdg_init(void)
 
 /* ---- Faults: the bus pins are released before anything else --------------------------- */
 
-static void fault_release(void)
+void bench_fault_release(void)
 {
     __disable_irq();
     target_pins_safe();
@@ -135,11 +142,11 @@ static void fault_release(void)
     }
 }
 
-void NMI_Handler(void)        { fault_release(); }
-void HardFault_Handler(void)  { fault_release(); }
-void MemManage_Handler(void)  { fault_release(); }
-void BusFault_Handler(void)   { fault_release(); }
-void UsageFault_Handler(void) { fault_release(); }
+void NMI_Handler(void)        { bench_fault_release(); }
+void HardFault_Handler(void)  { bench_fault_release(); }
+void MemManage_Handler(void)  { bench_fault_release(); }
+void BusFault_Handler(void)   { bench_fault_release(); }
+void UsageFault_Handler(void) { bench_fault_release(); }
 
 /* ---- Main ------------------------------------------------------------------------------- */
 

@@ -52,6 +52,7 @@ add_executable(${TARGET}
     src/main.c
     src/serial.c
     src/target.c
+    src/vectors.c
     src/system_f334.c
     cmsis/Source/gcc/startup_stm32f334x8.s
 )

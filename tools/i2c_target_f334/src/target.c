@@ -132,11 +132,21 @@ static void ln_pins(Line_t *l)
 
 /* ---- I2C1 ------------------------------------------------------------------------------ */
 
-/* PRESC = 0, SCLDEL = 10, SDADEL = 2 at a 64 MHz kernel clock: data setup of
-   11 x 15.6 = 172 ns (>= t_r 120 + tSU;DAT 50 of Fm+), data hold of 2 x 15.6 ns
-   after the analog filter and the synchronisation (RM0364 28.4.5; the same
-   rules as 50:319-353). SCLH/SCLL are not used in slave mode. One setting for
-   Sm, Fm and Fm+: the masters of this bench hold tLOW >= 500 ns. */
+/* PRESC = 0, SCLDEL = 10, SDADEL = 2 at a 64 MHz kernel clock (15.6 ns), by the
+   rules of 50:319-353 (RM0364 28.4.5 describes the same IP):
+   - data setup: SCL is held low (SCLDEL + 1) x 15.6 = 172 ns after SDA
+     changes, >= t_r + tSU;DAT up to Fm+ (120 + 50 ns);
+   - data output: SDA changes tSYNC1 + (SDADEL + 1) x 15.6 = tSYNC1 + 47 ns
+     after SCL falls, tSYNC1 being the SCL fall, the analog filter (tAF) and
+     2..3 kernel cycles. The tVD;DAT of Fm+ (450 ns) also contains the SDA
+     rise, so it holds only while tSYNC1 + 47 ns + t_r <= 450 ns: a t_r of
+     about 90 ns at most with the F334's largest tAF (audit F0, m7), as on the
+     notaps bench (t_r ~ 50 ns), not on the taps one (225..270 ns, where the
+     bench runs 400 kHz at most and tVD;DAT is 900 ns). As a receiver the
+     target has no tVD;DAT to meet.
+   SCLH/SCLL are not used in slave mode. These numbers need SYSCLK = 64 MHz:
+   the host refuses a banner with another sysclk (the PLL did not lock and
+   the kernel is the 8 MHz HSI, audit F0 m7). */
 #define TARGET_TIMINGR   ((0UL << I2C_TIMINGR_PRESC_Pos) | (10UL << I2C_TIMINGR_SCLDEL_Pos) | \
                           (2UL << I2C_TIMINGR_SDADEL_Pos))
 
@@ -145,6 +155,7 @@ static void ln_pins(Line_t *l)
 #define EV_OVR    0x04U
 #define EV_TOUT   0x08U     /* cut by XFER_IDLE_US (PE = 0) */
 #define EV_HALF   0x10U     /* a write segment ended right after its address (no pointer byte) */
+#define EV_LATE   0x20U     /* a TCR of reception with no byte to close (acknowledged)          */
 
 typedef struct
 {
@@ -189,7 +200,6 @@ static bool              s_seg_first;           /* the next byte received is the
 static bool              s_rx_nack_this;
 static bool              s_tx_pending;          /* a byte written to TXDR, not yet shifted out */
 static uint8_t           s_tx_pending_byte;
-static uint32_t          s_tx_written;
 static uint32_t          s_seq;
 
 static Xfer_t            s_rpt[RPT_RING];
@@ -271,8 +281,8 @@ void target_init(void)
     i2c_init_regs();                       /* PE = 0: the pins can go to AF, nothing drives */
     pin_af_od(TARGET_PIN_SCL);
     pin_af_od(TARGET_PIN_SDA);
-    NVIC_SetPriority(I2C1_EV_IRQn, 0U);
-    NVIC_SetPriority(I2C1_ER_IRQn, 0U);
+    NVIC_SetPriority(I2C1_EV_IRQn, 1U);   /* below TIM2, the end of a hold (main.c, m3) */
+    NVIC_SetPriority(I2C1_ER_IRQn, 1U);
     NVIC_EnableIRQ(I2C1_EV_IRQn);
     NVIC_EnableIRQ(I2C1_ER_IRQn);
     if (target_s15_ok())
@@ -342,7 +352,6 @@ static void xfer_begin(uint32_t now)
     s_x.arm = s_arm;                             /* one-shot: the arming is consumed here */
     s_arm = k_disarmed;
     s_tx_pending = false;
-    s_tx_written = 0U;
     s_rx_nack_this = false;
     s_active = true;
 }
@@ -374,6 +383,64 @@ static void xfer_end(uint32_t ev)
     I2C1->CR2  = 0U;
 }
 
+/* One received byte: counted, folded into the CRC and, unless it is the byte
+   armed to be NACKed, stored (the first of a write segment sets the pointer).
+   Whether to NACK it is decided here and applied at its TCR (byte control). */
+static void rx_take(uint32_t now)
+{
+    const uint8_t b = (uint8_t)I2C1->RXDR;
+    if (!s_active)
+    {
+        return;
+    }
+    const uint32_t idx = s_x.rx;
+    s_x.rx++;
+    s_x.crc_rx = crc_byte(s_x.crc_rx, b);
+    s_rx_nack_this = (s_x.arm.nack_at >= 0) && (idx == (uint32_t)s_x.arm.nack_at);
+    if (!s_rx_nack_this)
+    {
+        if (s_seg_first)
+        {
+            s_ptr = b;
+            s_seg_first = false;
+        }
+        else
+        {
+            s_reg[s_ptr] = b;
+            s_ptr = (s_ptr + 1U) & 0xFFU;
+        }
+    }
+    s_last_us = now;
+}
+
+/* A TCR of reception read before the RXNE of its own byte (audit F0, M1): the
+   byte is waited for, a few bus bits at most, and taken first, so the ACK or
+   NACK written at this TCR is the one of this byte. Bounded by TIM2 and by a
+   count of ISR reads (TIM2 may be the thing that stopped). */
+#define TCR_RXNE_WAIT_US     200U
+#define TCR_RXNE_WAIT_READS  20000U
+
+static bool rx_wait_take(uint32_t now)
+{
+    for (uint32_t n = 0U; n < TCR_RXNE_WAIT_READS; n++)
+    {
+        if ((I2C1->ISR & I2C_ISR_RXNE) != 0U)
+        {
+            rx_take(now);
+            return true;
+        }
+        if ((us_now() - now) > TCR_RXNE_WAIT_US)
+        {
+            break;
+        }
+    }
+    return false;
+}
+
+/* The flags of one ISR read, in this order (audit F0, M1 and m4): errors; RXNE
+   before TCR (the TCR of reception closes the byte RXNE delivers); TXIS; NACKF
+   and STOPF, which close the transfer, before ADDR, which opens the next one.
+   A flag that appears while this runs is served by the next interrupt. */
 static void i2c_irq(void)
 {
     const uint32_t isr = I2C1->ISR;
@@ -395,88 +462,35 @@ static void i2c_irq(void)
         }
     }
 
-    if ((isr & I2C_ISR_ADDR) != 0U)
-    {
-        const bool rd = (isr & I2C_ISR_DIR) != 0U;
-        if (!s_active)
-        {
-            xfer_begin(now);
-        }
-        else
-        {
-            tx_settle();                         /* a repeated start ends the previous segment */
-            s_x.rs++;
-        }
-        if (s_x.starts < 16U)
-        {
-            s_x.dirs |= (rd ? 1UL : 0UL) << s_x.starts;
-        }
-        s_x.starts++;
-        s_seg_first = !rd;
-        const bool sbc = (s_x.arm.stretch_byte_us != 0U) || (!rd && (s_x.arm.nack_at >= 0));
-        if (sbc)
-        {
-            I2C1->CR1 |= I2C_CR1_SBC;            /* allowed with ADDR = 1 (50:646-648) */
-            I2C1->CR2  = I2C_CR2_RELOAD | (1UL << I2C_CR2_NBYTES_Pos);
-        }
-        else
-        {
-            I2C1->CR1 &= ~I2C_CR1_SBC;
-            I2C1->CR2  = 0U;
-        }
-        if (rd)
-        {
-            I2C1->ISR = I2C_ISR_TXE;             /* flush a stale TXDR before the first byte */
-        }
-        if (s_x.arm.stretch_addr_us != 0U)
-        {
-            (void)wait_us(s_x.arm.stretch_addr_us);   /* SCL is held low while ADDR = 1 */
-        }
-        I2C1->ICR = I2C_ICR_ADDRCF;
-        s_last_us = now;
-    }
-
     if ((isr & I2C_ISR_RXNE) != 0U)
     {
-        const uint8_t b = (uint8_t)I2C1->RXDR;
-        if (s_active)
-        {
-            const uint32_t idx = s_x.rx;
-            s_x.rx++;
-            s_x.crc_rx = crc_byte(s_x.crc_rx, b);
-            s_rx_nack_this = (s_x.arm.nack_at >= 0) && (idx == (uint32_t)s_x.arm.nack_at);
-            if (!s_rx_nack_this)
-            {
-                if (s_seg_first)
-                {
-                    s_ptr = b;
-                    s_seg_first = false;
-                }
-                else
-                {
-                    s_reg[s_ptr] = b;
-                    s_ptr = (s_ptr + 1U) & 0xFFU;
-                }
-            }
-            s_last_us = now;
-        }
+        rx_take(now);
     }
 
     if ((isr & I2C_ISR_TCR) != 0U)
     {
         /* Byte control: SCL is stretched until NBYTES is written again; in
-           reception the ACK bit of this byte is sent then (50:636-643). */
+           reception the ACK bit of this byte is sent then (50:632-643). */
+        bool late = false;
+        if (((isr & I2C_ISR_DIR) == 0U) && ((isr & I2C_ISR_RXNE) == 0U))
+        {
+            late = !rx_wait_take(now);           /* M1: this TCR's byte first */
+        }
         if (s_x.arm.stretch_byte_us != 0U)
         {
             (void)wait_us(s_x.arm.stretch_byte_us);
         }
         uint32_t cr2 = I2C_CR2_RELOAD | (1UL << I2C_CR2_NBYTES_Pos);
-        if (s_rx_nack_this)
+        if (s_rx_nack_this && !late)
         {
             cr2 |= I2C_CR2_NACK;
             s_x.nk++;
-            s_rx_nack_this = false;
         }
+        if (late && s_active)
+        {
+            s_x.ev |= EV_LATE;                   /* no byte for this TCR: ACKed, recorded */
+        }
+        s_rx_nack_this = false;
         I2C1->CR2 = cr2;
         s_last_us = now;
     }
@@ -489,15 +503,17 @@ static void i2c_irq(void)
             {
                 tx_commit();                     /* TXDR empty: the pending byte was shifted out */
             }
+            /* CORRUPT k: the k-th byte of this transfer that goes on the bus
+               (audit F0, m5). A byte flushed before it went out did not count,
+               so its replacement carries the same index. */
             uint8_t b = s_reg[s_ptr];
-            if ((s_x.arm.corrupt_at >= 0) && (s_tx_written == (uint32_t)s_x.arm.corrupt_at))
+            if ((s_x.arm.corrupt_at >= 0) && (s_x.tx == (uint32_t)s_x.arm.corrupt_at))
             {
                 b = (uint8_t)~b;
             }
             I2C1->TXDR = b;
             s_tx_pending = true;
             s_tx_pending_byte = b;
-            s_tx_written++;
             s_ptr = (s_ptr + 1U) & 0xFFU;
             s_last_us = now;
         }
@@ -525,6 +541,48 @@ static void i2c_irq(void)
             s_x.stop = 1U;
             xfer_end(0U);
         }
+    }
+
+    if ((isr & I2C_ISR_ADDR) != 0U)
+    {
+        const bool rd = (isr & I2C_ISR_DIR) != 0U;
+        if (!s_active)
+        {
+            xfer_begin(now);
+        }
+        else
+        {
+            tx_settle();                         /* a repeated start ends the previous segment */
+            s_x.rs++;
+        }
+        if (s_x.starts < 16U)
+        {
+            s_x.dirs |= (rd ? 1UL : 0UL) << s_x.starts;
+        }
+        s_x.starts++;
+        s_seg_first = !rd;
+        s_rx_nack_this = false;
+        const bool sbc = (s_x.arm.stretch_byte_us != 0U) || (!rd && (s_x.arm.nack_at >= 0));
+        if (sbc)
+        {
+            I2C1->CR1 |= I2C_CR1_SBC;            /* allowed with ADDR = 1 (50:646-648) */
+            I2C1->CR2  = I2C_CR2_RELOAD | (1UL << I2C_CR2_NBYTES_Pos);
+        }
+        else
+        {
+            I2C1->CR1 &= ~I2C_CR1_SBC;
+            I2C1->CR2  = 0U;
+        }
+        if (rd)
+        {
+            I2C1->ISR = I2C_ISR_TXE;             /* flush a stale TXDR before the first byte */
+        }
+        if (s_x.arm.stretch_addr_us != 0U)
+        {
+            (void)wait_us(s_x.arm.stretch_addr_us);   /* SCL is held low while ADDR = 1 */
+        }
+        I2C1->ICR = I2C_ICR_ADDRCF;
+        s_last_us = now;
     }
 }
 
@@ -627,7 +685,7 @@ static const char *hold_start(uint32_t pin, uint32_t ms, uint32_t edges)
     }
     if (edges > 255U)
     {
-        return "edges must be 0..255";
+        return "edges must be 1..255";
     }
     if (s_active || s_hold.on || s_hold.done)
     {
@@ -1024,11 +1082,16 @@ static void cmd_dump(const char *sa, const char *sn)
     ln_send(&l);
 }
 
+/* Tokens of a command line; a line with more than MAX_TOK is refused whole,
+   and every command checks its own count (audit F0, m6: a token nobody reads
+   must not pass silently). */
+#define MAX_TOK   5U
+
 void target_command(char *line)
 {
-    const char *tok[5] = { NULL, NULL, NULL, NULL, NULL };
+    const char *tok[MAX_TOK] = { NULL, NULL, NULL, NULL, NULL };
     uint32_t ntok = 0U;
-    for (char *p = line; (*p != '\0') && (ntok < 5U);)
+    for (char *p = line; *p != '\0';)
     {
         while (*p == ' ')
         {
@@ -1038,7 +1101,11 @@ void target_command(char *line)
         {
             break;
         }
-        tok[ntok++] = p;
+        if (ntok < MAX_TOK)
+        {
+            tok[ntok] = p;
+        }
+        ntok++;
         while ((*p != '\0') && (*p != ' '))
         {
             p++;
@@ -1049,6 +1116,17 @@ void target_command(char *line)
         return;
     }
     const char *c = tok[0];
+    if (ntok > MAX_TOK)
+    {
+        reply_err(c, "too many arguments");
+        return;
+    }
+    if ((same(c, "ID") || same(c, "LEVELS") || same(c, "STATUS") || same(c, "CLR") || same(c, "INIT") ||
+         same(c, "DISARM")) && (ntok != 1U))
+    {
+        reply_err(c, "takes no argument");
+        return;
+    }
 
     if (same(c, "ID"))
     {
@@ -1067,6 +1145,11 @@ void target_command(char *line)
     }
     if (same(c, "DUMP"))
     {
+        if (ntok != 3U)
+        {
+            reply_err(c, "usage: DUMP <addr 0..255> <n 1..32>");
+            return;
+        }
         cmd_dump(tok[1], tok[2]);
         return;
     }
@@ -1111,7 +1194,7 @@ void target_command(char *line)
     if (same(c, "NACK") || same(c, "CORRUPT"))
     {
         uint32_t k;
-        if (!parse_u32(tok[1], &k) || (k > 65535U))
+        if ((ntok != 2U) || !parse_u32(tok[1], &k) || (k > 65535U))
         {
             reply_err(c, "usage: NACK|CORRUPT <byte index 0..65535>");
             return;
@@ -1134,7 +1217,7 @@ void target_command(char *line)
         uint32_t us;
         const bool addr = same(tok[1], "ADDR");
         const bool byte = same(tok[1], "BYTE");
-        if ((!addr && !byte) || !parse_u32(tok[2], &us) || (us > STRETCH_MAX_US))
+        if ((ntok != 3U) || (!addr && !byte) || !parse_u32(tok[2], &us) || (us > STRETCH_MAX_US))
         {
             reply_err(c, "usage: STRETCH ADDR|BYTE <us 0..5000>");
             return;
@@ -1155,7 +1238,7 @@ void target_command(char *line)
     if (same(c, "FMP"))
     {
         uint32_t on;
-        if (!parse_u32(tok[1], &on) || (on > 1U))
+        if ((ntok != 2U) || !parse_u32(tok[1], &on) || (on > 1U))
         {
             reply_err(c, "usage: FMP 0|1");
             return;
@@ -1181,10 +1264,10 @@ void target_command(char *line)
         uint32_t edges = 0U;
         const bool sda = same(tok[1], "SDA");
         const bool scl = same(tok[1], "SCL");
-        bool ok = (sda || scl) && parse_u32(tok[2], &ms);
-        if (ok && (tok[3] != NULL))
+        bool ok = (sda || scl) && ((ntok == 3U) || (ntok == 5U)) && parse_u32(tok[2], &ms);
+        if (ok && (ntok == 5U))
         {
-            ok = same(tok[3], "EDGES") && parse_u32(tok[4], &edges);
+            ok = same(tok[3], "EDGES") && parse_u32(tok[4], &edges) && (edges >= 1U);
         }
         if (!ok)
         {

@@ -16,8 +16,8 @@
   *          GPIOB fields; target_s15_ok() checks the registers.
   *          S21: a hold drives one line low, open-drain, for 1..HOLD_MAX_MS ms;
   *          TIM2 channel 1 releases it in its interrupt at the limit whatever
-  *          the main loop does, and the independent watchdog resets the chip
-  *          (all pins input) if the firmware stops.
+  *          the main loop does, and the independent watchdog (<= 480 ms)
+  *          resets the chip (all pins input) if the firmware stops.
   ******************************************************************************
   */
 
@@ -28,7 +28,10 @@
 #include <stdint.h>
 #include "stm32f3xx.h"
 
-#define TARGET_PROTOCOL       1U          /* "I2C_TARGET v1": bump on any change of the protocol */
+#define TARGET_PROTOCOL       2U          /* "I2C_TARGET v2": bump on any change of the protocol.
+                                             v2 (05_i2c F1): CORRUPT k counts the bytes that went
+                                             on the bus in this transfer; a command with a token
+                                             it does not take, or EDGES 0, is refused; ev 0x20 */
 #define TARGET_ADDR7          0x42U
 #define TARGET_PIN_SCL        8U          /* PB8 */
 #define TARGET_PIN_SDA        9U          /* PB9 */
@@ -45,6 +48,7 @@
 
 /* ---- main.c ------------------------------------------------------------------ */
 extern uint32_t g_sysclk_hz;              /* 64 MHz, or 8 MHz if the PLL did not lock */
+void     bench_fault_release(void) __attribute__((noreturn));   /* PB8/PB9 input, wait for the IWDG */
 
 uint32_t us_now(void);                    /* TIM2, 1 MHz, free running                  */
 bool     wait_us(uint32_t us);            /* false if TIM2 stopped counting             */

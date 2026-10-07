@@ -28,10 +28,13 @@ pins in input, turns I2C1 off and prints `I2C_TARGET ABORT S15`. The banner,
 **S21:** `HOLD` drives one line low (open-drain) for 1 to 500 ms. TIM2 channel 1
 releases it in its interrupt at the limit, whatever the main loop does; with
 `EDGES n` (SDA only) the EXTI8 interrupt releases it at the n-th rising edge of
-SCL first. The independent watchdog (about 400 ms, refreshed by the main loop
-only) resets the chip, and with it puts every pin in input, if the firmware
-stops; the fault handlers release the pins before waiting for it. A transfer
-that makes no progress for 500 ms is cut with `PE = 0` (`ev` bit `0x08`).
+SCL first. TIM2 has the highest interrupt priority (0; I2C1 1, EXTI9_5 2,
+USART2 3), so no other interrupt delays the release by time. The independent
+watchdog (288..480 ms over the LSI range, refreshed by the main loop only)
+resets the chip, and with it puts every pin in input, if the firmware stops;
+the fault handlers, and every vector the firmware does not use
+(`src/vectors.c`), release the pins before waiting for it. A transfer that
+makes no progress for 500 ms is cut with `PE = 0` (`ev` bit `0x08`).
 
 ## Build and flash
 
@@ -56,11 +59,16 @@ stopped (S20).
 Rev and build id come from the same `cmake/fw_build_id.cmake` as prj_01, over
 `build/f334/CMakeCache.txt` (`FW_PRESET = f334`): the host recomputes the id.
 
-## Console protocol (v1)
+## Console protocol (v2)
 
 One command per line (CR or LF). Every command gets exactly one reply line,
 `OK ...` or `ERR <command> <reason>`; `HOLD_END` and `RPT` lines come by
-themselves. Numbers are decimal, or hexadecimal with `0x`.
+themselves. Numbers are decimal, or hexadecimal with `0x`. A command with an
+argument it does not take, or one too many, is refused with `ERR`.
+
+v2 (05_i2c phase F1) against v1: `CORRUPT k` counts the bytes of the transfer
+that went on the bus (v1 counted every byte written to `TXDR`, across
+segments); `EDGES 0` and extra tokens are refused; `ev` bit `0x20`.
 
 | Command | Effect |
 | --- | --- |
@@ -71,17 +79,21 @@ themselves. Numbers are decimal, or hexadecimal with `0x`.
 | `INIT` | `reg[i] = i ^ 0xA5`, pointer 0 |
 | `DUMP <a> <n>` | `n` (1..32) registers from `a` |
 | `NACK <k>` | the next transfer NACKs its received data byte `k` (0 = the first, the pointer byte); that byte is not stored |
-| `CORRUPT <k>` | the next transfer inverts its returned byte `k` |
+| `CORRUPT <k>` | the next transfer inverts the `k`-th byte it puts on the bus (0 = the first returned byte of the transfer, counted across its read segments) |
 | `STRETCH ADDR <us>` | the next transfer holds SCL `us` (0..5000) at the address match |
 | `STRETCH BYTE <us>` | the next transfer holds SCL `us` after each byte (byte control, before the ACK bit in reception) |
 | `DISARM` | clears every armed fault |
 | `FMP 0\|1` | `SYSCFG_CFGR1.I2C_PB8_FMP/I2C_PB9_FMP` (Fm+ drive), read back |
-| `HOLD SDA\|SCL <ms> [EDGES <n>]` | I2C1 off, the line driven low now; released at `ms` (1..500) or at the `n`-th SCL rising edge |
+| `HOLD SDA\|SCL <ms> [EDGES <n>]` | I2C1 off, the line driven low now; released at `ms` (1..500) or at the `n`-th (1..255) SCL rising edge |
 
 Armed faults apply to the NEXT transfer only (the first address match takes
 them). `NACK` and `STRETCH BYTE` switch on slave byte control (`SBC = 1`,
 `RELOAD = 1`, `NBYTES = 1`) for that transfer; without them every byte is
-acknowledged by the hardware with no software in the clock path.
+acknowledged by the hardware with no software in the clock path. With byte
+control, the ACK or NACK of a received byte is written at its `TCR`, once its
+`RXNE` has been read: a `TCR` read before its byte's `RXNE` waits for it
+(200 µs at most; if it never comes, the byte is acknowledged and `ev` gets
+`0x20`).
 
 Registers: 256, `reg[i] = i ^ 0xA5` at start. In a write, the first data byte
 after the address sets the pointer and the next ones are stored from there; a
@@ -92,7 +104,7 @@ master NACKs is taken back).
 ### Banner
 
 ```text
-I2C_TARGET v1 Rev <git rev> id <build id>
+I2C_TARGET v2 Rev <git rev> id <build id>
 I2C_TARGET pins PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
 I2C_TARGET addr=0x42 sysclk=64000000 timingr=0x00A20000 idcode=0x... uid=... reset_csr=0x... hold_max_ms=500
 I2C_TARGET ready
@@ -113,7 +125,8 @@ RPT n=<seq> st=<address matches> sr=<repeated starts> sp=<1: STOP> dir=<W/R per 
 
 (one line). CRC-32 is zlib's (`zlib.crc32`) over the bytes in bus order.
 `ev`: `0x01` BERR, `0x02` ARLO, `0x04` OVR, `0x08` cut after 500 ms without
-progress, `0x10` a write ended with no data byte. `us` is measured with TIM2
+progress, `0x10` a write ended with no data byte, `0x20` a `TCR` of
+reception without its byte (acknowledged). `us` is measured with TIM2
 (the F334's HSI, ±1 %).
 
 ### Hold
