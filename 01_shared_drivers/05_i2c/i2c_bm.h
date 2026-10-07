@@ -10,7 +10,7 @@
   *          numbers) lives in one table of capabilities per instance in i2c_bm.c,
   *          each row citing RM0399 rev 4 (C1).
   *
-  *          Scope (05_i2c plan, revision 2): master, 7-bit addresses 0x08..0x77;
+  *          Scope (05_i2c plan, revision 3): master, 7-bit addresses 0x08..0x77;
   *          write, read, write + repeated start + read, and the address probe (a
   *          write of 0 bytes); 1 to 65 535 bytes per transfer (NBYTES in chunks of
   *          255 with RELOAD); Sm, Fm and Fm+ up to 1 MHz; analog and digital
@@ -44,9 +44,35 @@
   *              transfer goes on (ES0445 2.19.2); NACK leaves the STOP the
   *              hardware sends (50:1192-1194) and returns ERR_NACK;
   *            - CalcTiming is pure, 64-bit integer arithmetic, the plan's
-  *              "Reglas de calculo" (C15);
+  *              "Reglas de calculo" (C15), with N rounded up in both places
+  *              (revision 3, R3-1);
   *            - no interrupt handler, no callback, no interrupt controller call:
   *              I2C_BM_GetIRQn only returns the numbers (C14).
+  *
+  *          A bus held before Init is not seen (revision 3, R3-6): ISR.BUSY is
+  *          set only when the peripheral detects a START with PE = 1, and cleared
+  *          by a STOP or PE = 0 (RM0399 50:2897-2899). A target that holds SDA low
+  *          since before Init (a reset in the middle of a read, the case
+  *          RecoverBus exists for) leaves BUSY = 0: Init and CheckTransfer return
+  *          OK, and the next transfer ends with ERR_ARLO, ERR_BUS or ERR_TIMEOUT,
+  *          not with the ERR_BUS of "bus busy". So before the first Init after a
+  *          reset the caller reads SCL and SDA with the functions of its
+  *          I2cBm_Recovery_t, with the pins in GPIO open-drain (or calls
+  *          I2C_BM_RecoverBus, which reads SDA first and drives nothing if it is
+  *          high). On a bus with one master, ERR_ARLO is the sign of a hung bus:
+  *          recover it, then Init again.
+  *
+  *          Timeouts in master mode (R3-5): a TIMEOUT (SCL low longer than
+  *          TIMEOUTA) ends the transfer with ERR_BUS and a software reset of the
+  *          instance at once (PE = 0 lets go of SCL and SDA). There is no STOP on
+  *          the bus: RM0399 50:2286-2287 says the master sends one, but on rev V
+  *          it went on holding both lines (05_i2c F1).
+  *
+  *          Interrupts: I2C_BM_XferIrq runs from both the event and the error
+  *          vector of the instance; the two must have the same priority (one
+  *          cannot interrupt the other in the middle of a call). An interrupt
+  *          transfer is abandoned only with I2C_BM_Deinit: Init refuses with
+  *          ERR_BUSY while an interrupt enable is set.
   *
   *          ES0445 2.19.1 (data sampled wrong when tSU;DAT is shorter than one
   *          kernel clock period) is checked by CalcTiming only, which knows the
@@ -83,7 +109,8 @@ typedef enum
     I2C_BM_ERR_TIMEOUT,      /*!< max_cycles expired or CYCCNT stopped (C13)                    */
     I2C_BM_ERR_NACK,         /*!< address or data not acknowledged (STOP sent by hardware)      */
     I2C_BM_ERR_ARLO,         /*!< arbitration lost                                               */
-    I2C_BM_ERR_BUS,          /*!< bus not free (BUSY), SCL held low (TIMEOUT), or not recovered  */
+    I2C_BM_ERR_BUS,          /*!< bus not free (BUSY seen), SCL held low (TIMEOUT), a transfer that
+                                  ended short at STOPF, or not recovered                       */
     I2C_BM_PENDING,          /*!< interrupt transfer running (I2cBm_Xfer_t.status)               */
     I2C_BM_ERR_HAL           /*!< i2c_hal only                                                   */
 } I2cBm_Status_t;
@@ -122,9 +149,13 @@ typedef struct
 typedef struct { uint32_t timingr; uint32_t mode; uint32_t scl_hz_model; } I2cBm_TimingOut_t;
 /** The first PRESC 0..15 whose SCLDEL, SDADEL window, SCLL and SCLH meet the mode
     (tables 405/407, 50:159-171, 319-342); scl_hz_model is the frequency the model of
-    50:977-989 predicts, never above scl_hz. ERR_PARAM: NULL, kernel_hz 0, scl_hz 0 or
-    > 1 000 000, dnf > 15. ERR_RANGE: t_r or t_f above the mode's maximum, kernel below
-    the minimum of ES0445 2.19.1 (4, 10, 20 MHz), or no PRESC fits. */
+    50:977-989 predicts, never above scl_hz (it is the kernel clock's arithmetic: a
+    board whose clock runs fast runs the bus as much faster). The SCL period in
+    prescaled clocks is N = ceil((ceil(kernel_hz / scl_hz) - sync) / (PRESC + 1)),
+    rounded up in both places (plan revision 3, R3-1), split into SCLL and SCLH.
+    ERR_PARAM: NULL, kernel_hz 0, scl_hz 0 or > 1 000 000, dnf > 15. ERR_RANGE: t_r or
+    t_f above the mode's maximum, kernel below the minimum of ES0445 2.19.1 (4, 10,
+    20 MHz; checked here only, R3-3), or no PRESC fits. */
 I2cBm_Status_t I2C_BM_CalcTiming(const I2cBm_TimingIn_t *in, I2cBm_TimingOut_t *out);
 
 /* ---- Configuration -------------------------------------------------------------- */
@@ -146,26 +177,46 @@ typedef struct
     with a transfer running (START/STOP pending, an interrupt or DMA enable set). */
 I2cBm_Status_t I2C_BM_CheckConfig(const I2cBm_Config_t *cfg);
 /** Plan rule 3 (50:404-425, 441-445): PE = 0 read back (the software reset, at least
-    three APB cycles), ANFOFF/DNF, TIMINGR, TIMEOUTR (TIMEOUTA with TIMOUTEN = 0,
-    50:2845), OAR1 = OAR2 = 0, CR2 = 0, CR1 with NOSTRETCH = 0 and every interrupt and
-    DMA enable 0, PE = 1; read-back of CR1, TIMINGR, TIMEOUTR, OAR1/OAR2 = 0. ERR_BUS
-    when ISR.BUSY = 1 after PE = 1 (the bus is not free: I2C_BM_RecoverBus). With PE = 1
-    and the same configuration in force, Init is a software reset. */
+    three APB cycles), ANFOFF/DNF, TIMINGR, TIMEOUTR (TIMOUTEN = 0 first, then TIMEOUTA,
+    then TIMOUTEN: TIMEOUTA is written only with TIMOUTEN = 0, 50:2861), OAR1 = OAR2 =
+    0, CR2 = 0, CR1 with NOSTRETCH = 0 and every interrupt and DMA enable 0, PE = 1;
+    read-back of CR1, TIMINGR, TIMEOUTR, OAR1/OAR2 = 0. With PE = 1 and the same
+    configuration in force, Init is a software reset.
+    Returns the codes of CheckConfig; ERR_VERIFY: PE did not read 0, or a read-back
+    differs (the instance may be left with PE = 1); ERR_BUS: ISR.BUSY = 1 after PE = 1,
+    a START seen since (I2C_BM_RecoverBus). OK does not mean the bus is free: a line
+    held since before PE = 1 is not seen (see the top of this file, R3-6). */
 I2cBm_Status_t I2C_BM_Init(const I2cBm_Config_t *cfg);
 /** Plan rule 4: CR1 interrupt and DMA enables 0, PE = 0 (SCL and SDA let go) read
     back, CR2, TIMINGR, TIMEOUTR, OAR1, OAR2 at reset, ICR = every flag; read-back of
-    the reset image (ISR = 0x00000001). No RCC or SYSCFG write. */
+    the reset image (ISR = 0x00000001). No RCC or SYSCFG write. Also the way to abandon
+    an interrupt or DMA transfer. ERR_PARAM: not an instance; ERR_VERIFY: the reset
+    image does not read back. */
 I2cBm_Status_t I2C_BM_Deinit(I2C_TypeDef *i2c);
 
 /* ---- Blocking transfers (7-bit address 0x08..0x77; n 0..65 535, 0 only for Write) ---- */
 /** The checks of a transfer of ntx bytes written then nrx read (ntx = nrx = 0: the
     address probe), in the C6 order, nothing written. ERR_PARAM: instance, addr7
     outside 0x08..0x77, ntx or nrx > 65 535. ERR_BUSY: PE = 0 (no Init), START or STOP
-    pending, an interrupt or DMA enable set. ERR_BUS: ISR.BUSY = 1 (rule 5). */
+    pending, an interrupt or DMA enable set. ERR_BUS: ISR.BUSY = 1 (rule 5; a bus held
+    since before Init does not set it, R3-6). */
 I2cBm_Status_t I2C_BM_CheckTransfer(const I2C_TypeDef *i2c, uint32_t addr7, uint32_t ntx, uint32_t nrx);
 /** n = 0 is the address probe: START, address, STOP (ERR_NACK when nobody answers).
-    tx may be NULL only with n = 0. max_cycles >= 1 bounds the whole call; on expiry
-    the instance is software-reset (PE = 0, read back, PE = 1) and ERR_TIMEOUT. */
+    tx may be NULL only with n = 0. max_cycles >= 1 bounds the whole call.
+    Returns (Write, Read and WriteRead alike):
+      OK            every byte went (or came) and STOPF;
+      ERR_PARAM     NULL buffer, instance, addr7, n, max_cycles 0;
+      ERR_BUSY      no Init (PE = 0), or another transfer owns the instance;
+      ERR_BUS       ISR.BUSY = 1 before START; a TIMEOUT (SCL held low longer than
+                    TIMEOUTA: software reset, both lines let go, no STOP, R3-5); or
+                    STOPF before every byte was counted;
+      ERR_NACK      the address or a data byte was not acknowledged (the hardware
+                    sent the STOP);
+      ERR_ARLO      arbitration lost (the peripheral is a slave and has let go); on a
+                    bus with one master, a line held since before Init (R3-6);
+      ERR_TIMEOUT   max_cycles spent, CYCCNT stopped or not running, or no STOP
+                    after a NACK: the instance is software-reset (PE = 0, read back,
+                    PE = 1). */
 I2cBm_Status_t I2C_BM_Write(I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *tx, uint32_t n, uint32_t max_cycles);
 /** n 1..65 535 (0 is ERR_PARAM). */
 I2cBm_Status_t I2C_BM_Read(I2C_TypeDef *i2c, uint32_t addr7, uint8_t *rx, uint32_t n, uint32_t max_cycles);
@@ -180,36 +231,51 @@ typedef struct
     uint32_t                 addr7;
     const uint8_t           *tx;   uint32_t ntx;
     uint8_t                 *rx;   uint32_t nrx;
-    uint32_t                 done_tx, done_rx;     /*!< driver-maintained: bytes the target
-                                                        acknowledged, bytes read           */
-    volatile I2cBm_Status_t  status;               /*!< I2C_BM_PENDING until the end */
+    uint32_t                 done_tx, done_rx;     /*!< driver-maintained. done_rx: bytes
+                                                        read. done_tx: after OK or ERR_NACK,
+                                                        the bytes the target acknowledged;
+                                                        after ERR_ARLO or ERR_BUS, the bytes
+                                                        written to TXDR (some may not have
+                                                        gone out)                          */
+    volatile I2cBm_Status_t  status;               /*!< I2C_BM_PENDING until the end; then
+                                                        OK, ERR_NACK, ERR_ARLO or ERR_BUS
+                                                        (TIMEOUT, or STOPF with a count
+                                                        short), as for Write          */
 } I2cBm_Xfer_t;
 /** The checks of CheckTransfer (and x, tx and rx not NULL where they are used), then
     CR2 without START, the interrupt enables, START (plan rule 7). The first byte of a
-    write is in TXDR before START (2.19.6). */
+    write is in TXDR before START (2.19.6). Returns OK (x->status = PENDING) or the
+    codes of CheckTransfer (ERR_PARAM, ERR_BUSY, ERR_BUS); nothing is written then. A
+    running transfer is abandoned with I2C_BM_Deinit; there is no timeout of its own:
+    the caller bounds its wait for x->status. */
 I2cBm_Status_t I2C_BM_StartIt(I2C_TypeDef *i2c, I2cBm_Xfer_t *x);
-/** From both the event and the error vector of the instance: serves TXIS, RXNE, TCR,
-    TC, STOPF, NACKF and the errors; true when x->status is final, and then every
-    interrupt enable of CR1 is 0 again. */
+/** From both the event and the error vector of the instance, which must have the
+    same priority (one must not interrupt the other inside this call): serves TXIS,
+    RXNE, TCR, TC, STOPF, NACKF and the errors; true when x->status is final, and then
+    every interrupt enable of CR1 is 0 again. */
 bool           I2C_BM_XferIrq(I2C_TypeDef *i2c, I2cBm_Xfer_t *x);
 
 /* ---- DMA (the caller owns streams and channels, 02_dma) ------------------------- */
 /** n 2..65 535: buf[0] goes to TXDR before START (2.19.6); the caller's TX stream,
-    enabled before this call, sends buf[1..n-1] (n - 1 items). TXDMAEN is set before
-    START (50:2300-2337). */
+    enabled before this call, sends buf[1..n-1] (n - 1 items). TXDMAEN is set and read
+    back before START (50:2300-2337). Returns OK (started), the codes of CheckTransfer,
+    or ERR_VERIFY: TXDMAEN did not read back; then TXDMAEN is 0 again, TXDR flushed
+    and no START was written. */
 I2cBm_Status_t I2C_BM_DmaStartWrite(I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *buf, uint32_t n);
-/** n 1..65 535; the caller's RX stream (n items) is enabled first, then RXDMAEN and
-    START here. */
+/** n 1..65 535; the caller's RX stream (n items) is enabled first, then RXDMAEN (read
+    back) and START here. Returns as DmaStartWrite. */
 I2cBm_Status_t I2C_BM_DmaStartRead(I2C_TypeDef *i2c, uint32_t addr7, uint32_t n);
 /** The end of a DMA transfer of n bytes (the n of DmaStartWrite/DmaStartRead): every
     TCR is served with the next chunk of NBYTES (a local count, no RAM state), then
-    STOPF (OK), NACKF (ERR_NACK, after the STOP), ARLO, TIMEOUT (ERR_BUS). On expiry
-    of max_cycles the instance is software-reset and ERR_TIMEOUT; the caller then
-    stops its streams. (Plan revision 2 had WaitEnd(i2c, max_cycles): with more than
-    255 bytes the reloads need n, approved 2026-10-07.) */
+    STOPF (OK), NACKF (ERR_NACK, after the STOP), ARLO (ERR_ARLO), TIMEOUT (ERR_BUS,
+    software reset). ERR_PARAM: instance, n 0 or > 65 535, max_cycles 0. On expiry of
+    max_cycles, a stopped CYCCNT or no STOP after a NACK, the instance is
+    software-reset and ERR_TIMEOUT. In every case the caller then stops its streams
+    and calls I2C_BM_DmaEnd. (n: plan revision 3, R3-2.) */
 I2cBm_Status_t I2C_BM_WaitEnd(I2C_TypeDef *i2c, uint32_t n, uint32_t max_cycles);
 /** After the caller stopped its streams: TXDMAEN = RXDMAEN = 0, CR2 = 0, TXDR flushed,
-    every flag cleared; read back. */
+    every flag cleared; read back. ERR_PARAM: not an instance; ERR_VERIFY: a DMA enable
+    still reads 1. */
 I2cBm_Status_t I2C_BM_DmaEnd(I2C_TypeDef *i2c);
 I2cBm_Status_t I2C_BM_GetDmaRequest(const I2C_TypeDef *i2c, bool tx, uint32_t *request_id);
 I2cBm_Status_t I2C_BM_GetIRQn(const I2C_TypeDef *i2c, IRQn_Type *ev, IRQn_Type *er);
@@ -228,16 +294,22 @@ typedef struct
     reads high, nothing is driven and *pulses = 0. Otherwise up to 9 SCL pulses until
     SDA reads high, then a STOP (SDA low while SCL is high, then SDA high), and both
     lines must read high. ERR_BUS: SCL does not rise when released (someone holds it),
-    or SDA still low after 9 pulses, or the lines are not high at the end. *pulses =
-    pulses given. ERR_PARAM: NULL, half_period_cycles or max_cycles 0. */
+    or SDA still low after 9 pulses, or the lines are not high at the end.
+    ERR_TIMEOUT: max_cycles spent, or CYCCNT stopped or not running (SCL is left
+    released). *pulses = pulses given. ERR_PARAM: NULL, half_period_cycles or
+    max_cycles 0. The end is a STOP after SCL high (SDA low, then high); UM10204 calls
+    a START + STOP with nothing between an illegal format, which most devices accept.
+    It is also the check before the first Init (R3-6): with SDA high it drives nothing. */
 I2cBm_Status_t I2C_BM_RecoverBus(const I2cBm_Recovery_t *r, uint32_t max_cycles, uint32_t *pulses);
 
-/* ---- Errors --------------------------------------------------------------------- */
+/* ---- Errors (part of the API, plan revision 3, R3-8) ----------------------------- */
 #define I2C_BM_ERRF_BERR     I2C_ISR_BERR       /* bit positions of ISR / ICR */
 #define I2C_BM_ERRF_ARLO     I2C_ISR_ARLO
 #define I2C_BM_ERRF_OVR      I2C_ISR_OVR
 #define I2C_BM_ERRF_TIMEOUT  I2C_ISR_TIMEOUT
-uint32_t       I2C_BM_TakeErrors(I2C_TypeDef *i2c);   /* BERR/ARLO/OVR/TIMEOUT; one ICR write */
+/** The error flags set now, as an OR of I2C_BM_ERRF_*, cleared with one ICR write.
+    0 for a pointer that is not an instance. */
+uint32_t       I2C_BM_TakeErrors(I2C_TypeDef *i2c);
 
 #ifdef __cplusplus
 }

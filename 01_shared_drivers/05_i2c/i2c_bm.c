@@ -59,19 +59,19 @@ static const I2cEntry_t k_i2c[] = {
 #define I2C_COUNT   ((uint32_t)(sizeof(k_i2c) / sizeof(k_i2c[0])))
 
 /* ---- Register facts (RM0399 50.7) ------------------------------------------------- */
-#define TIMINGR_RESERVED  0x0F000000UL                       /* bits 27:24, 50:2775 */
+#define TIMINGR_RESERVED  0x0F000000UL                       /* bits 27:24, 50:2782 */
 #define ICR_ALL           (I2C_ICR_ADDRCF | I2C_ICR_NACKCF | I2C_ICR_STOPCF | I2C_ICR_BERRCF | I2C_ICR_ARLOCF | \
                            I2C_ICR_OVRCF | I2C_ICR_PECCF | I2C_ICR_TIMOUTCF | I2C_ICR_ALERTCF)
 #define CR1_IE_ALL        (I2C_CR1_TXIE | I2C_CR1_RXIE | I2C_CR1_ADDRIE | I2C_CR1_NACKIE | I2C_CR1_STOPIE | \
                            I2C_CR1_TCIE | I2C_CR1_ERRIE)
 #define CR1_DMA_ALL       (I2C_CR1_TXDMAEN | I2C_CR1_RXDMAEN)
 #define CR1_FILTERS       (I2C_CR1_ANFOFF | I2C_CR1_DNF_Msk)
-#define ISR_RESET         I2C_ISR_TXE                        /* 0x00000001, 50:2867 */
+#define ISR_RESET         I2C_ISR_TXE                        /* 0x00000001, 50:2866 */
 #define ADDR_MIN          0x08U                              /* 7-bit addresses outside the reserved */
 #define ADDR_MAX          0x77U                              /* groups 0000xxx and 1111xxx           */
 #define N_MAX             0xFFFFU
 #define CHUNK             255U                               /* NBYTES[7:0], 50:1081-1082 */
-#define TIMEOUT_MAX       4096U                              /* TIMEOUTA[11:0] + 1, 50:2862 */
+#define TIMEOUT_MAX       4096U                              /* TIMEOUTA[11:0] + 1, 50:2858 */
 #define PE_LOW_READS      3U                                 /* PE = 0 for >= 3 APB cycles (50:441-445) */
 #define PE_LOW_MAX        1000U
 
@@ -422,7 +422,7 @@ static bool pe_off(I2C_TypeDef *i2c)
 static void soft_reset(I2C_TypeDef *i2c)
 {
     (void)pe_off(i2c);
-    i2c->CR2 = 0U;                                   /* START = 0 now (50:2652) */
+    i2c->CR2 = 0U;                                   /* START = 0 now (50:2645) */
     cr1_update(i2c, 0U, I2C_CR1_PE);
 }
 
@@ -443,12 +443,13 @@ I2cBm_Status_t I2C_BM_Init(const I2cBm_Config_t *cfg)
     }
     i2c->CR1 = filters;                              /* ANFOFF, DNF; NOSTRETCH = 0, IE = DMA = 0 */
     i2c->TIMINGR = cfg->timingr;
-    i2c->TIMEOUTR = 0U;                              /* TIMOUTEN = 0 before TIMEOUTA (50:2845, 2861) */
-    if (tmo != 0U)
-    {
-        i2c->TIMEOUTR = tmo & ~I2C_TIMEOUTR_TIMOUTEN;
-        i2c->TIMEOUTR = tmo;
-    }
+    /* TIMEOUTA is written only with TIMOUTEN = 0 (50:2861): the first write clears
+       TIMOUTEN (a TIMEOUTA written with it would be ignored), the second writes
+       TIMEOUTA, the third sets TIMOUTEN. Always all three, also with the timeout off,
+       so a TIMEOUTA left from before (no Deinit) does not survive (audit F1, m29). */
+    i2c->TIMEOUTR = 0U;
+    i2c->TIMEOUTR = tmo & ~I2C_TIMEOUTR_TIMOUTEN;
+    i2c->TIMEOUTR = tmo;
     i2c->OAR1 = 0U;                                  /* OA1EN = 0 first: then OA1 may be written */
     i2c->OAR1 = 0U;
     i2c->OAR2 = 0U;
@@ -475,7 +476,7 @@ I2cBm_Status_t I2C_BM_Deinit(I2C_TypeDef *i2c)
     const bool off = pe_off(i2c);                    /* lets go of SCL and SDA */
     i2c->CR1      = 0U;
     i2c->CR2      = 0U;
-    i2c->TIMEOUTR = 0U;                              /* TIMOUTEN, then the fields (one write, 0) */
+    i2c->TIMEOUTR = 0U;                              /* TIMOUTEN = 0, then TIMEOUTA (50:2861) */
     i2c->TIMEOUTR = 0U;
     i2c->TIMINGR  = 0U;
     i2c->OAR1     = 0U;
@@ -1009,8 +1010,14 @@ I2cBm_Status_t I2C_BM_DmaStartWrite(I2C_TypeDef *i2c, uint32_t addr7, const uint
     tx_flush(i2c);
     i2c->TXDR = buf[0];                             /* ES0445 2.19.6, also with DMA */
     cr1_update(i2c, 0U, I2C_CR1_TXDMAEN);           /* before START (50:2309-2311) */
+    if ((i2c->CR1 & I2C_CR1_TXDMAEN) == 0U)
+    {
+        cr1_update(i2c, I2C_CR1_TXDMAEN, 0U);       /* read back before START (audit F1, m31) */
+        tx_flush(i2c);
+        return I2C_BM_ERR_VERIFY;
+    }
     i2c->CR2 = cr2_addr(addr7, false) | cr2_chunk(n, true) | I2C_CR2_START;
-    return ((i2c->CR1 & I2C_CR1_TXDMAEN) != 0U) ? I2C_BM_OK : I2C_BM_ERR_VERIFY;
+    return I2C_BM_OK;
 }
 
 I2cBm_Status_t I2C_BM_DmaStartRead(I2C_TypeDef *i2c, uint32_t addr7, uint32_t n)
@@ -1030,8 +1037,13 @@ I2cBm_Status_t I2C_BM_DmaStartRead(I2C_TypeDef *i2c, uint32_t addr7, uint32_t n)
     }
     i2c->ICR = ICR_ALL;
     cr1_update(i2c, 0U, I2C_CR1_RXDMAEN);           /* before START (50:2326-2328) */
+    if ((i2c->CR1 & I2C_CR1_RXDMAEN) == 0U)
+    {
+        cr1_update(i2c, I2C_CR1_RXDMAEN, 0U);       /* read back before START (audit F1, m31) */
+        return I2C_BM_ERR_VERIFY;
+    }
     i2c->CR2 = cr2_addr(addr7, true) | cr2_chunk(n, true) | I2C_CR2_START;
-    return ((i2c->CR1 & I2C_CR1_RXDMAEN) != 0U) ? I2C_BM_OK : I2C_BM_ERR_VERIFY;
+    return I2C_BM_OK;
 }
 
 I2cBm_Status_t I2C_BM_WaitEnd(I2C_TypeDef *i2c, uint32_t n, uint32_t max_cycles)
