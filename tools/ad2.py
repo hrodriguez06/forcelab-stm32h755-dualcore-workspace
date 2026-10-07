@@ -311,6 +311,259 @@ def spi_decode(samples: list[int], sck_bit: int, data_bit: int, cpol: int, cpha:
     return frames, len(edges)
 
 
+# ---- I2C on two analog channels (05_i2c plan, "Herramientas", T5) --------------------
+# The scope samples SCL and SDA as voltages; the decoder below turns them into the
+# events and times of the I2C-bus specification: levels with hysteresis between
+# V_lo = 0.3 VDD and V_hi = 0.7 VDD (VIL/VIH), each edge with the interpolated
+# times it crossed both thresholds, START/Sr/STOP, 9-bit frames (8 data bits and
+# the acknowledge), and tLOW, tHIGH, t_r, t_f, tSU;DAT, tHD;STA, tSU;STA, tSU;STO,
+# tBUF and f_SCL, measured between the threshold crossings the specification uses
+# (UM10204 figure 38: rises and falls between 30 % and 70 %; tLOW from the 30 %
+# of the fall to the 30 % of the rise; tHIGH between the 70 % points; START and
+# STOP conditions on SDA while SCL is above 70 %). Only listens: it works on a
+# capture already made, and never drives a line.
+
+
+def i2c_edges_analog(v: list[float], rate_hz: float, v_lo: float, v_hi: float) -> tuple[int, list[dict]]:
+    """Edges of one trace with hysteresis: a fall when the trace, having been at
+    the high level (above v_hi), goes below v_lo; a rise the other way. Returns
+    (initial level 0/1, edges), each edge {"rise": bool, "t_lo": s, "t_hi": s,
+    "t": s}, where t_lo/t_hi are the linearly interpolated times of its last
+    crossing of v_lo and of v_hi, and t is the time the new level is reached (t_lo
+    for a fall, t_hi for a rise). A trace that starts between the thresholds
+    takes the level of the nearer one."""
+    if not v:
+        return 1, []
+    level = 1 if v[0] >= (v_lo + v_hi) / 2.0 else 0
+    first = level
+    edges: list[dict] = []
+    t_cross_hi = None        # last downward crossing of v_hi while high (for a fall)
+    t_cross_lo = None        # last upward crossing of v_lo while low (for a rise)
+
+    def cross(i: int, thr: float) -> float:
+        a, b = v[i - 1], v[i]
+        frac = (thr - a) / (b - a) if b != a else 0.0
+        return (i - 1 + frac) / rate_hz
+
+    for i in range(1, len(v)):
+        a, b = v[i - 1], v[i]
+        if level == 1:
+            if a >= v_hi > b:
+                t_cross_hi = cross(i, v_hi)
+            elif b >= v_hi:
+                t_cross_hi = None
+            if b < v_lo <= a:
+                t_lo = cross(i, v_lo)
+                t_hi = t_cross_hi if t_cross_hi is not None else t_lo
+                edges.append({"rise": False, "t_lo": t_lo, "t_hi": t_hi, "t": t_lo})
+                level = 0
+                t_cross_lo = None
+        else:
+            if a <= v_lo < b:
+                t_cross_lo = cross(i, v_lo)
+            elif b <= v_lo:
+                t_cross_lo = None
+            if b > v_hi >= a:
+                t_hi = cross(i, v_hi)
+                t_lo = t_cross_lo if t_cross_lo is not None else t_hi
+                edges.append({"rise": True, "t_lo": t_lo, "t_hi": t_hi, "t": t_hi})
+                level = 1
+                t_cross_hi = None
+    return first, edges
+
+
+def _level_at(first: int, edges: list[dict], t: float) -> int:
+    """The level of a trace at time t, from its edges."""
+    lv = first
+    for e in edges:
+        if e["t"] > t:
+            break
+        lv = 1 if e["rise"] else 0
+    return lv
+
+
+def i2c_decode_analog(scl: list[float], sda: list[float], rate_hz: float, vdd: float = 3.3,
+                      lo_frac: float = 0.3, hi_frac: float = 0.7) -> dict:
+    """Decodes an I2C capture of two analog traces.
+
+    Returns a dict:
+      "frames": [{"kind": "S"|"Sr", "t": s, "bytes": [(value, ack_bit)], "stop": bool,
+                  "bits_left": n}]: one entry per START or repeated START, its
+                 9-bit frames in order (ack_bit 0 = ACK, 1 = NACK), whether a STOP
+                 ended it, and the bits of an unfinished frame;
+      "events":  [(t, "S"|"Sr"|"P")];
+      "t_low", "t_high": SCL low and high periods inside the frames (s), the high
+                 periods that contain a START/STOP excluded;
+      "t_r_scl", "t_f_scl", "t_r_sda", "t_f_sda": 30-70 % edge times (s);
+      "t_su_dat": [(s, bit index in its frame 0..8, value)]: SDA settled (its 70 %
+                 for a rise, its 30 % for a fall) to the 30 % of the next SCL rise,
+                 for SDA edges while SCL is low;
+      "t_hd_sta": SDA's 30 % of a START/Sr to SCL's next 70 % fall;
+      "t_su_sta": SCL's 70 % rise to SDA's 70 % of a repeated START;
+      "t_su_sto": SCL's 70 % rise to SDA's 30 % of the STOP;
+      "t_buf":    SDA's 70 % rise of a STOP to the 70 % of the next START;
+      "f_scl":    1 / median of the SCL rise-to-rise periods inside frames (Hz), 0
+                 if fewer than 2 rises;
+      "scl_rises": number of SCL rises; "glitches": SCL or SDA pulses shorter than
+                 3 samples (counted, not decoded).
+    Thresholds: lo_frac and hi_frac of vdd (0.3/0.7 by default; T5's control
+    decodes the same capture at 0.5 V, or with the channels swapped, and must
+    disagree)."""
+    v_lo, v_hi = lo_frac * vdd, hi_frac * vdd
+    s0, se = i2c_edges_analog(scl, rate_hz, v_lo, v_hi)
+    d0, de = i2c_edges_analog(sda, rate_hz, v_lo, v_hi)
+    min_w = 3.0 / rate_hz
+    glitches = 0
+    for edges in (se, de):
+        for a, b in zip(edges, edges[1:]):
+            if b["t"] - a["t"] < min_w:
+                glitches += 1
+    out: dict = {"frames": [], "events": [], "t_low": [], "t_high": [], "t_r_scl": [], "t_f_scl": [],
+                 "t_r_sda": [], "t_f_sda": [], "t_su_dat": [], "t_hd_sta": [], "t_su_sta": [], "t_su_sto": [],
+                 "t_buf": [], "f_scl": 0.0, "scl_rises": sum(1 for e in se if e["rise"]), "glitches": glitches}
+    for e in se:
+        (out["t_r_scl"] if e["rise"] else out["t_f_scl"]).append(abs(e["t_hi"] - e["t_lo"]))
+    for e in de:
+        (out["t_r_sda"] if e["rise"] else out["t_f_sda"]).append(abs(e["t_hi"] - e["t_lo"]))
+
+    # One time line of the edges of both lines.
+    tl = sorted([(e["t"], "scl", e) for e in se] + [(e["t"], "sda", e) for e in de], key=lambda x: x[0])
+    scl_lv, sda_lv = s0, d0
+    frame: Optional[dict] = None
+    bits: list[int] = []
+    in_xfer = False
+    last_scl_rise: Optional[dict] = None
+    last_scl_fall: Optional[dict] = None
+    last_sda_change: Optional[dict] = None     # SDA edge while SCL low, for tSU;DAT
+    last_stop_t70: Optional[float] = None
+    pending_hd_sta: Optional[float] = None
+    high_has_cond = False
+    rise_times: list[float] = []
+    for t, line, e in tl:
+        if line == "sda":
+            if scl_lv == 1:
+                # A condition: SDA changes while SCL is high.
+                high_has_cond = True
+                if not e["rise"]:
+                    kind = "Sr" if in_xfer else "S"
+                    if kind == "Sr" and last_scl_rise is not None:
+                        out["t_su_sta"].append(e["t_hi"] - last_scl_rise["t_hi"])
+                    if kind == "S" and last_stop_t70 is not None:
+                        out["t_buf"].append(e["t_hi"] - last_stop_t70)
+                    if frame is not None:
+                        frame["bits_left"] = len(bits)
+                    frame = {"kind": kind, "t": e["t_lo"], "bytes": [], "stop": False, "bits_left": 0}
+                    out["frames"].append(frame)
+                    out["events"].append((e["t_lo"], kind))
+                    bits = []
+                    in_xfer = True
+                    pending_hd_sta = e["t_lo"]
+                else:
+                    if last_scl_rise is not None and in_xfer:
+                        out["t_su_sto"].append(e["t_lo"] - last_scl_rise["t_hi"])
+                    if frame is not None:
+                        frame["stop"] = True
+                        frame["bits_left"] = len(bits)
+                    out["events"].append((e["t_hi"], "P"))
+                    last_stop_t70 = e["t_hi"]
+                    frame = None
+                    bits = []
+                    in_xfer = False
+            else:
+                last_sda_change = e
+            sda_lv = 1 if e["rise"] else 0
+            continue
+        # SCL
+        if e["rise"]:
+            if in_xfer:
+                if last_scl_fall is not None:
+                    out["t_low"].append(e["t_lo"] - last_scl_fall["t_lo"])
+                if last_sda_change is not None:
+                    settled = last_sda_change["t_hi"] if last_sda_change["rise"] else last_sda_change["t_lo"]
+                    out["t_su_dat"].append((e["t_lo"] - settled, len(bits) % 9, 1 if last_sda_change["rise"] else 0))
+                rise_times.append(e["t_hi"])
+            last_sda_change = None
+            last_scl_rise = e
+            high_has_cond = False
+            scl_lv = 1
+        else:
+            if in_xfer:
+                if pending_hd_sta is not None:
+                    out["t_hd_sta"].append(e["t_hi"] - pending_hd_sta)
+                    pending_hd_sta = None
+                elif last_scl_rise is not None and not high_has_cond:
+                    out["t_high"].append(e["t_hi"] - last_scl_rise["t_hi"])
+                # The bit of this SCL high: SDA as it was during the high.
+                if last_scl_rise is not None and not high_has_cond:
+                    bits.append(_level_at(d0, de, (last_scl_rise["t"] + e["t"]) / 2.0))
+                    if len(bits) == 9 and frame is not None:
+                        val = 0
+                        for b in bits[:8]:
+                            val = (val << 1) | b
+                        frame["bytes"].append((val, bits[8]))
+                        bits = []
+            last_scl_fall = e
+            scl_lv = 0
+    if frame is not None:
+        frame["bits_left"] = len(bits)
+    if len(rise_times) >= 2:
+        periods = sorted(b - a for a, b in zip(rise_times, rise_times[1:]))
+        med = periods[len(periods) // 2]
+        out["f_scl"] = 1.0 / med if med > 0 else 0.0
+    return out
+
+
+def i2c_frames_text(dec: dict) -> str:
+    """One line per START of a decode: kind, bytes as hex with A/N, and P."""
+    parts = []
+    for f in dec["frames"]:
+        body = " ".join(f"{v:02X}{'N' if a else 'A'}" for v, a in f["bytes"])
+        parts.append(f"{f['kind']} {body}{' +' + str(f['bits_left']) + 'b' if f['bits_left'] else ''}"
+                     f"{' P' if f['stop'] else ''}")
+    return " | ".join(parts) if parts else "(nothing)"
+
+
+def i2c_synth_analog(frames: list[tuple[str, list[int], bool]], rate_hz: float, bit_s: float,
+                     vdd: float = 3.3, rise_s: float = 0.0) -> tuple[list[float], list[float]]:
+    """A synthetic capture for the decoder's own test: each entry (kind "S"/"Sr",
+    the 9-bit symbols as ints with the ACK bit in bit 0 (value << 1 | ack), stop)
+    drawn as ideal levels with linear rises of rise_s. Used on the host before any
+    instrument is opened."""
+    n_half = max(2, int(round(bit_s / 2.0 * rate_hz)))
+    scl: list[float] = []
+    sda: list[float] = []
+
+    def put(c: float, d: float, n: int) -> None:
+        scl.extend([c] * n)
+        sda.extend([d] * n)
+
+    hi, lo = vdd, 0.0
+    put(hi, hi, 4 * n_half)
+    for kind, syms, stop in frames:
+        if kind == "Sr":
+            put(lo, hi, n_half)            # SDA high while SCL low
+            put(hi, hi, n_half)            # SCL high
+        put(hi, lo, n_half)                # START: SDA falls with SCL high
+        put(lo, lo, n_half)
+        for s in syms:
+            for k in range(8, -1, -1):
+                b = (s >> k) & 1
+                put(lo, hi if b else lo, n_half)
+                put(hi, hi if b else lo, n_half)
+                put(lo, hi if b else lo, n_half // 2)
+        if stop:
+            put(lo, lo, n_half)
+            put(hi, lo, n_half)
+            put(hi, hi, 4 * n_half)
+    if rise_s > 0:
+        step = vdd / max(1.0, rise_s * rate_hz)       # a rise slew-limited to rise_s (falls ideal)
+        for trace in (scl, sda):
+            for i in range(1, len(trace)):
+                if trace[i] > trace[i - 1] + step:
+                    trace[i] = trace[i - 1] + step
+    return scl, sda
+
+
 class AD2:
     """Analog Discovery 2 instrument controller with safety guards."""
 
@@ -690,6 +943,14 @@ class AD2:
             self._dwf.FDwfAnalogInStatusData(self._hdwf, ctypes.c_int(ch), buf, ctypes.c_int(samples))
             out.append([float(v) for v in buf])
         return out[0], out[1]
+
+    def scope_buffer_max(self) -> int:
+        """FDwfAnalogInBufferSizeInfo: the largest scope buffer per channel, in
+        samples (8192 on the AD2 in its default configuration). Only reads."""
+        size_min = ctypes.c_int()
+        size_max = ctypes.c_int()
+        self._dwf.FDwfAnalogInBufferSizeInfo(self._hdwf, ctypes.byref(size_min), ctypes.byref(size_max))
+        return int(size_max.value)
 
     def analog_in_average(self, channel: int, samples: int = 8192, rate_hz: float = 100e3,
                           range_v: float = 10.0) -> float:
