@@ -75,3 +75,30 @@ Las desviaciones del informe §5.5 amplían el plan sin rebajar nada; las acepto
 ### Estado
 
 La parte 1 pasa: ningún hallazgo bloqueante. M1 debe resolverse antes de la primera prueba de F1 que use NACK en el byte k o stretching por byte; m1–m16 pueden corregirse al empezar F1, con su línea en la "Respuesta a la auditoría". **F0 queda pendiente de mi ejecución en la placa (parte 2)**: taps y notaps con imágenes de `d1fb188`, tras la confirmación del checklist por el responsable.
+
+## F0, parte 2: ejecución del auditor en la placa (`85f9d29`)
+
+Checklist físico confirmado por el responsable el 2026-10-07 (banco en taps; después, J2/J3 quitados para notaps). `selftest-i2c` y el firmware de la F334 recompilados en `85f9d29` (`--fresh`, 0 avisos), flasheados con `tools/flash.py --sn` (H755 `0016000C4142501220353451`, Device ID 0x450; F334 `066BFF393731435243254117`, Device ID 0x438; las dos "Download verified successfully") con el script parado. Una ejecución de `i2c_hw_check.py` por estado. Capturas sin editar:
+
+- `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f0_audit_bench_taps_85f9d29.txt`
+- `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f0_audit_bench_notaps_85f9d29.txt`
+
+| Resultado | taps | notaps |
+| --- | --- | --- |
+| Identidad | Rev `85f9d29`; id `76e34b076c5812d8` en CM7, CM4 y host; F334 id `8862f04d55606362` (el del host); `tree clean`; los dos ST-LINK por SN (COM4, COM7) | Igual |
+| Firmware | `FW VERDICT=PASS failures=0`; sin aborto | Igual |
+| Host | **28/28**, `HOST VERDICT=PASS` | **26/26**, `HOST VERDICT=PASS` |
+| Frente a la entrega | Quitando marcas de tiempo, Rev, ids y valores medidos, las líneas de resultado (`-> PASS/FAIL`, veredictos, recuentos) son idénticas a `i2c_f0_bench_taps_f7323f2_5.txt` | Idénticas a `i2c_f0_bench_notaps_f7323f2_2.txt` |
+| Niveles en reposo | 1+ 3,102 V, 2+ 3,245 V | 1+ 0,021 V (S19), 2+ 3,237 V; PF14 = 0, PF15 = 1 |
+| Retenciones de 50 ms | SDA: F334 50001 µs, `blank=1`; CM7 PB9 50641 µs, PB8 0 caídas; osciloscopio 50,10 ms, mínimo 0,017 V. SCL: F334 50001 µs; CM7 PB8 50632 µs, PB9 0; osciloscopio 50,08 ms | SDA y SCL vistas por la F334 y CM7, PF14/PF15 sin caídas, `blank=0` |
+| T0B(d) | MCU_ACK alto 9,890 s, luego bajo 20/20 | Igual en forma |
+
+`blank=1` con tomas y `blank=0` sin ellas se reproduce (O1).
+
+### Observación nueva
+
+- **O5. Los umbrales absolutos de S17 tienen poco margen.** En mi sesión taps los dos niveles salieron un 1,7 % más bajos que en la entrega (1+ 3,102 V frente a 3,157 V; 2+ 3,245 V frente a 3,301 V), con la misma razón SCL/SDA (0,956, el divisor 1 kΩ / 22 kΩ). Minutos después, en notaps, 2+ leyó 3,237 V, como en la entrega (3,235 V). No sé si fue el riel de 3V3 o el AD2 recién conectado. Pasó con 42 mV de margen sobre el mínimo de SCL (3,06 V). Antes de la sesión había previsto que notaps abortaría por m13 suponiendo el riel bajo; no ocurrió, lo que apunta a que el desplazamiento fue de esa sesión y no del riel. **Propuesta para el responsable (D9, revisión 2 del plan):** S17 "con tomas" como razón: SCL/SDA = 0,956 ± 0,015 (detecta el 22 kΩ a GND en el nodo de SCL y un pull-up distinto de 1 kΩ) y SDA ≥ 3,0 V; en notaps, 2+ dentro de 0,97–0,99 del nivel de SDA de taps o simplemente ≥ 3,0 V (m13). La regla de seguridad no cambia: un bus en reposo, alto y con los dos nodos separados.
+
+### Estado
+
+**F0 pasa.** El implementador puede empezar F1. Antes de la primera prueba de F1 que use NACK en el byte k o stretching por byte, M1 debe estar corregido; m1–m16 se contestan en la "Respuesta a la auditoría" de F1, con su commit. O5/D9 queda a decisión del responsable. El banco quedó en notaps (J2/J3 quitados).
