@@ -34,6 +34,11 @@
 #define TARGET_PIN_SDA        9U          /* PB9 */
 #define TARGET_AF_I2C1        4U          /* DS9994 table 14: PB8 I2C1_SCL, PB9 I2C1_SDA */
 #define HOLD_MAX_MS           500U        /* S21 */
+/* SCL edges seen during the first 10 us of an SDA hold are not counted (but are
+   reported as blank=): in the first bench runs (2026-10-06) the F334's own fall
+   of SDA, with the 150 pF tap and no series resistor, put one rising edge on
+   its PB8 input 2 us later (EXTI has no filter) that no other view of SCL saw. */
+#define HOLD_EDGE_BLANK_US    10U
 #define STRETCH_MAX_US        5000U       /* longest armed clock stretch, per event */
 #define XFER_IDLE_US          500000U     /* a transfer with no progress for this long is cut */
 #define WAIT_STALL_READS      1000U       /* a timer that reads the same this often has stopped */

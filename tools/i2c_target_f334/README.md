@@ -120,7 +120,14 @@ progress, `0x10` a write ended with no data byte. `us` is measured with TIM2
 
 ```text
 OK HOLD line=SDA ms=50 edges=0
-HOLD_END line=SDA ms=50 us=<held> edges=<SCL rising edges seen> cause=TIME|EDGES|ABORT scl=<0/1> sda=<0/1> PB8 ... s15=ok
+HOLD_END line=SDA ms=50 us=<held> edges=<counted> blank=<in the first 10 us> edge1_us=<first counted, or -> cause=TIME|EDGES|ABORT scl=<0/1> sda=<0/1> PB8 ... s15=ok
 ```
 
 `scl`/`sda` are read 1 ms after the release, before the pins go back to AF4.
+
+SCL rising edges (EXTI8, no filter) are counted during SDA holds only, and
+not in the first 10 µs (`HOLD_EDGE_BLANK_US`): in the first bench runs
+(2026-10-06) the F334's own fall of SDA, discharging the 150 pF scope tap with
+no series resistor, put one rising edge on its PB8 input 2 µs later, which
+neither the scope nor the H755's PB8/PF14 saw. Those are reported as `blank`,
+not counted towards `EDGES n`.

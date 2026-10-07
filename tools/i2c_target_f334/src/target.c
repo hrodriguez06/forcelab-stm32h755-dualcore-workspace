@@ -260,6 +260,13 @@ void target_init(void)
 
     RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
     (void)RCC->APB2ENR;
+    /* EXTI line 8 from PB8 (SCL), once: the SDA holds count SCL rising edges
+       on it. Masked and with no trigger edge until a hold arms it. */
+    EXTI->IMR  &= ~EXTI_IMR_MR8;
+    EXTI->RTSR &= ~EXTI_RTSR_TR8;
+    EXTI->FTSR &= ~EXTI_FTSR_TR8;
+    SYSCFG->EXTICR[2] = (SYSCFG->EXTICR[2] & ~SYSCFG_EXTICR3_EXTI8) | SYSCFG_EXTICR3_EXTI8_PB;
+    EXTI->PR = EXTI_PR_PR8;
     target_pins_safe();
     i2c_init_regs();                       /* PE = 0: the pins can go to AF, nothing drives */
     pin_af_od(TARGET_PIN_SCL);
@@ -542,7 +549,9 @@ typedef struct
     uint32_t          pin;
     uint32_t          ms;
     uint32_t          edges_wanted;     /* 0: release on time only */
-    volatile uint32_t edges;            /* SCL rising edges seen while SDA is held */
+    volatile uint32_t edges;            /* SCL rising edges counted while SDA is held */
+    volatile uint32_t blank;            /* ... and seen in the first HOLD_EDGE_BLANK_US */
+    volatile uint32_t edge1;            /* TIM2 time of the first counted one          */
     volatile uint32_t t0, t1;
     volatile uint32_t cause;
     volatile bool     on;
@@ -587,6 +596,16 @@ void EXTI9_5_IRQHandler(void)
         EXTI->PR = EXTI_PR_PR8;
         if (s_hold.on)
         {
+            const uint32_t now = us_now();
+            if ((now - s_hold.t0) < HOLD_EDGE_BLANK_US)
+            {
+                s_hold.blank++;                 /* the glitch of SDA's own fall: not a clock */
+                return;
+            }
+            if (s_hold.edges == 0U)
+            {
+                s_hold.edge1 = now;
+            }
             s_hold.edges++;
             if ((s_hold.edges_wanted != 0U) && (s_hold.edges >= s_hold.edges_wanted))
             {
@@ -630,14 +649,21 @@ static const char *hold_start(uint32_t pin, uint32_t ms, uint32_t edges)
     s_hold.ms = ms;
     s_hold.edges_wanted = edges;
     s_hold.edges = 0U;
+    s_hold.blank = 0U;
     s_hold.done = false;
 
     __disable_irq();
     if (pin == TARGET_PIN_SDA)
     {
-        SYSCFG->EXTICR[2] = (SYSCFG->EXTICR[2] & ~SYSCFG_EXTICR3_EXTI8) | SYSCFG_EXTICR3_EXTI8_PB;
-        EXTI->PR    = EXTI_PR_PR8;
+        /* EXTI8 has been on PB8 since target_init(): switching the mux here
+           (PA8 -> PB8) can itself latch a rising edge, which the first
+           version of this firmware counted (edges=1 in the first bench run).
+           The edge detector is armed, then its pending bit cleared, then the
+           interrupt unmasked. */
         EXTI->RTSR |= EXTI_RTSR_TR8;
+        (void)EXTI->RTSR;
+        __DSB();
+        EXTI->PR    = EXTI_PR_PR8;
         EXTI->IMR  |= EXTI_IMR_MR8;
     }
     s_hold.t0   = us_now();
@@ -664,6 +690,17 @@ static void hold_finish(void)
     ln_u32(&l, s_hold.t1 - s_hold.t0);
     ln_str(&l, " edges=");
     ln_u32(&l, s_hold.edges);
+    ln_str(&l, " blank=");
+    ln_u32(&l, s_hold.blank);
+    ln_str(&l, " edge1_us=");
+    if (s_hold.edges != 0U)
+    {
+        ln_u32(&l, s_hold.edge1 - s_hold.t0);       /* after the line went low */
+    }
+    else
+    {
+        ln_str(&l, "-");
+    }
     ln_str(&l, " cause=");
     ln_str(&l, (s_hold.cause == CAUSE_TIME) ? "TIME" : ((s_hold.cause == CAUSE_EDGES) ? "EDGES" : "ABORT"));
     ln_str(&l, " scl=");
