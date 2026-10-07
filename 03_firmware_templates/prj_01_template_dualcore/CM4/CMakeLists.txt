@@ -135,6 +135,15 @@ if(SPI_DRIVER_SELFTEST)
     )
 endif()
 
+# 05_i2c selftest, CPU2 side (see CM7/CMakeLists.txt): F0 needs only gpio_bm.
+if(I2C_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE I2C_DRIVER_SELFTEST=1)
+    target_sources(${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/App/Src/i2c_selftest.c
+        ${CMAKE_SOURCE_DIR}/Common/Src/i2c_selftest_common.c
+    )
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"

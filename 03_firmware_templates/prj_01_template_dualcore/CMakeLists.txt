@@ -48,6 +48,17 @@ if(SPI_DRIVER_SELFTEST AND (GPIO_DRIVER_SELFTEST OR TIM_DRIVER_SELFTEST))
         "each owns the AD2 bench lines through its own step table. Configure one of them "
         "(presets selftest-gpio, selftest-tim or selftest-spi).")
 endif()
+# 05_i2c: the Analog Discovery 2 bench, the I2C bus on PB8/PB9 and the
+# NUCLEO-F334R8 target of 01_shared_drivers/05_i2c/IMPLEMENTATION_PLAN.md.
+# Preset selftest-i2c; never in a product image. It drives the same bench lines
+# from its own step table, so one image never carries it with another selftest.
+option(I2C_DRIVER_SELFTEST "Build the 05_i2c selftest (needs the AD2 bench, the I2C bus and the F334 target)" OFF)
+if(I2C_DRIVER_SELFTEST AND (GPIO_DRIVER_SELFTEST OR TIM_DRIVER_SELFTEST OR SPI_DRIVER_SELFTEST))
+    message(FATAL_ERROR
+        "I2C_DRIVER_SELFTEST is incompatible with GPIO_DRIVER_SELFTEST, TIM_DRIVER_SELFTEST and "
+        "SPI_DRIVER_SELFTEST: each owns the AD2 bench lines through its own step table. Configure one "
+        "of them (presets selftest-gpio, selftest-tim, selftest-spi or selftest-i2c).")
+endif()
 
 # Every selftest capture starts with the revision it was built from, and says
 # -dirty when tracked files differ from it, so a capture can be traced to a

@@ -41,6 +41,14 @@
       "binaryDir": "${sourceDir}/build/selftest-spi",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "SPI_DRIVER_SELFTEST": "ON", "FW_PRESET": "selftest-spi" }
+    },
+    {
+      "name": "selftest-i2c",
+      "displayName": "Dual-Core Debug with the 05_i2c selftest (AD2 bench, I2C bus, F334 target)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/selftest-i2c",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "I2C_DRIVER_SELFTEST": "ON", "FW_PRESET": "selftest-i2c" }
     }
   ],
   "buildPresets": [
@@ -48,6 +56,7 @@
     { "name": "release",       "configurePreset": "release"       },
     { "name": "selftest-gpio", "configurePreset": "selftest-gpio" },
     { "name": "selftest-tim",  "configurePreset": "selftest-tim"  },
-    { "name": "selftest-spi",  "configurePreset": "selftest-spi"  }
+    { "name": "selftest-spi",  "configurePreset": "selftest-spi"  },
+    { "name": "selftest-i2c",  "configurePreset": "selftest-i2c"  }
   ]
 }

@@ -36,6 +36,9 @@
 #if defined(SPI_DRIVER_SELFTEST)
 #include "spi_selftest.h"
 #endif
+#if defined(I2C_DRIVER_SELFTEST)
+#include "i2c_selftest.h"
+#endif
 
 #define HEARTBEAT_DELAY_LOOPS   2000000UL
 
@@ -89,6 +92,10 @@ int main(void)
 #if defined(SPI_DRIVER_SELFTEST)
     /* Serves CPU1's 06_spi bench commands until it says it is done. */
     SPI_Selftest_CM4_Run();
+#endif
+#if defined(I2C_DRIVER_SELFTEST)
+    /* Serves CPU1's 05_i2c bench commands until it says it is done. */
+    I2C_Selftest_CM4_Run();
 #endif
 
     for (;;)
