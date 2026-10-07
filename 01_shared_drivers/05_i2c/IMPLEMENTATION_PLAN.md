@@ -1,6 +1,6 @@
 # Plan del driver I2C 05\_i2c
 
-Oct 7, 2026 · @Hector · revisión 2 (sustituye a la revisión 1, `3d9c830`)
+Oct 7, 2026 · @Hector · revisión 3 (sustituye a la revisión 2, `4abd264`)
 
 Este plan cubre el paso 5 de `DRIVER_ROADMAP.md`: el driver I2C `05_i2c` en sus tres tiers, `i2c_bm`, `i2c_ll` e `i2c_hal`, en modo maestro. Tiene una fase F0 de preparación del banco (con el target externo), tres fases de implementación (F1 BM, F2 LL, F3 HAL) y una de cierre.
 
@@ -9,6 +9,22 @@ Cada fase pasa una auditoría independiente antes de empezar la siguiente, con l
 Base: `cc8aa2c` de `main` (cierre de `06_spi` y corrección N3 de `02_dma`), árbol limpio, rama `driver/i2c`.
 
 **Decisiones del responsable ya tomadas (2026-10-05/06):** banco de opción A (bus en la Nucleo, sin dispositivo comercial) con una **NUCLEO-F334R8 como target I2C independiente**, con su propio firmware de banco; se acepta ese firmware como desviación del encargo (D2) y la descarga del CMSIS de STM32F3 (`STMicroelectronics/cmsis_device_f3`, v2.3.9).
+
+## Cambios respecto a la revisión 2
+
+Salen de la entrega de F1 (informe, §F1 5.5 y §5.7) y de la auditoría de F1, parte 1 (`AUDIT.md`, `16964d1`). El responsable del catálogo confirmó el 2026-10-07 las cinco decisiones que tomó durante F1 (R3-1 a R3-5) y aprobó D10 (R3-6) y D11 (R3-7). Afectan a F1 (correcciones) y a F2 y F3.
+
+| # | Cambio | Por qué |
+| --- | --- | --- |
+| R3-1 | **Reglas de cálculo, N:** `N = ceil((ceil(kernel_hz / scl_hz) − sync) / (p + 1))` (techo en los dos sitios) | Con la división hacia abajo de la revisión 2, `scl_hz_model` salía por encima de `scl_hz` (100 MHz, 100 kHz, t\_r 250, t\_f 20: 100 100 Hz), contra la regla 4. Aprobado el 2026-10-07 |
+| R3-2 | **`I2C_BM_WaitEnd(i2c, n, max_cycles)`**: `n` es la cuenta total de la transferencia | Una transferencia DMA de más de 255 bytes recarga `NBYTES` en cada `TCR`; sin estado en RAM (C7), `WaitEnd` necesita la cuenta. Aprobado el 2026-10-07 |
+| R3-3 | **2.19.1 (kernel mínimo por modo) solo en `CalcTiming`**; `CheckConfig` no puede comprobarlo | `I2cBm_Config_t` no lleva la frecuencia del kernel. Aprobado el 2026-10-07 |
+| R3-4 | **T12:** `HSION` se escribe solo si estaba a 0, y se restaura; cada restauración (`I2C123SEL`, `HSION`) por separado, con read-back | Aprobado el 2026-10-07 ("HSION solo en T12"); m19 |
+| R3-5 | **TIMEOUT en maestro (T10(b)):** `ERR_BUS` por `TIMEOUT` y reset por software inmediato (`PE = 0`), que suelta SCL y SDA; **no hay STOP** en el bus. Criterio de T10(b): `ERR_BUS`, SDA libre al vencer `TIMEOUTA` y el bus en reposo al final | RM0399 50:2286-2287 dice que el maestro manda un STOP; en rev V el maestro siguió reteniendo el bus hasta el presupuesto del llamador (informe §F1 5.5, 5.7). Aprobado el 2026-10-07 |
+| R3-6 | **D10, bus colgado antes del `Init` (M2).** `BUSY` solo se pone al detectar un START con `PE = 1` (50:2897-2899): `Init` y las transferencias **no ven** un bus retenido desde antes. El contrato lo dice; antes del primer `Init` tras un arranque, el llamador comprueba SCL y SDA con las funciones de `I2cBm_Recovery_t` (o llama a `RecoverBus`, que lee SDA); en un bus de un solo maestro, `ERR_ARLO` se documenta como síntoma de bus colgado. **T9(b), nueva:** la F334 retiene SDA **antes** del `Init` de la H755 → `Init` OK, la transferencia siguiente termina acotada con el código que dé el silicio (se registra y se juzga que es `ERR_ARLO`, `ERR_BUS` o `ERR_TIMEOUT` dentro de su presupuesto), después `RecoverBus` (`pulses` según la F334), `Init` y una transferencia correcta. Control: lo mismo con la retención después del `Init` (T9, `ERR_BUS`) | La regla 3 y la regla 5 de la revisión 2 prometían `ERR_BUS` en ese caso, y T1/T9 solo retenían con `PE = 1` ya puesto |
+| R3-7 | **D11, f\_SCL frente a lo pedido (M3).** T5 juzga "≤ la pedida" y "± 5 % de `scl_hz_model`" sobre la frecuencia normalizada con CLKREF (la aritmética del driver), e imprime en cada captura el valor en bruto como registro. El informe y el README dicen que en esta placa el bus va un +1,3 % por encima de lo pedido (101 kHz con 100 kHz pedidos; 403–404 kHz con 400 kHz) y que un producto debe pedir con margen | El HSE de la placa va +1,3 % (N1); el driver no puede verlo. Juzgar en bruto haría fallar T5 siempre en esta placa |
+| R3-8 | **Contrato:** las macros `I2C_BM_ERRF_BERR/ARLO/OVR/TIMEOUT` (valor de retorno de `TakeErrors`) forman parte de la API congelada | O8 de la auditoría de F1 |
+| R3-9 | **Cita:** `TIMEOUTA` se escribe con `TIMOUTEN = 0` según 50:2861 (no 50:2845) | O10 de la auditoría de F1 |
 
 ## Cambios respecto a la revisión 1
 
@@ -234,7 +250,7 @@ I2cBm_Status_t I2C_BM_DmaStartWrite(I2C_TypeDef *i2c, uint32_t addr7, const uint
                          /* n >= 2: buf[0] preloaded in TXDR (2.19.6); the caller's TX stream sends
                             buf[1..n-1] (n - 1 items), started before this call */
 I2cBm_Status_t I2C_BM_DmaStartRead(I2C_TypeDef *i2c, uint32_t addr7, uint32_t n);   /* RX stream first */
-I2cBm_Status_t I2C_BM_WaitEnd(I2C_TypeDef *i2c, uint32_t max_cycles);   /* STOPF, NACK, ARLO, TIMEOUT */
+I2cBm_Status_t I2C_BM_WaitEnd(I2C_TypeDef *i2c, uint32_t n, uint32_t max_cycles);   /* R3-2; STOPF, NACK, ARLO, TIMEOUT */
 I2cBm_Status_t I2C_BM_DmaEnd(I2C_TypeDef *i2c);   /* after the caller stopped its streams */
 I2cBm_Status_t I2C_BM_GetDmaRequest(const I2C_TypeDef *i2c, bool tx, uint32_t *request_id);
 I2cBm_Status_t I2C_BM_GetIRQn(const I2C_TypeDef *i2c, IRQn_Type *ev, IRQn_Type *er);
@@ -250,16 +266,16 @@ typedef struct
     uint32_t half_period_cycles;                /*!< CPU cycles, >= 1 (5 us at Sm is safe)        */
 } I2cBm_Recovery_t;
 I2cBm_Status_t I2C_BM_RecoverBus(const I2cBm_Recovery_t *r, uint32_t max_cycles, uint32_t *pulses);
-uint32_t       I2C_BM_TakeErrors(I2C_TypeDef *i2c);   /* BERR/ARLO/OVR/TIMEOUT; one ICR write */
+uint32_t       I2C_BM_TakeErrors(I2C_TypeDef *i2c);   /* I2C_BM_ERRF_* (R3-8); one ICR write */
 ```
 
 ### Reglas de implementación
 
 1. **C6 completo antes del primer acceso;** un rechazo no toca RCC, SYSCFG ni el periférico.
 2. **Tabla de capacidades** `static const`, una fila por instancia con su cita: base (`I2C1..4_BASE`); RCC (`APB1LENR` bits 21/22/23, `APB4ENR` bit 7; 09:7224-7240, 7683-7688); campo de kernel; `SYSCFG_PMCR` I2C1FMP..I2C4FMP bits 0..3 (13:33-137); DMAMUX1 RX/TX 33/34, 35/36, 73/74 y DMAMUX2 13/14 (18:110-116, 235-236); IRQ EV/ER 31/32, 33/34, 72/73, 95/96 (`stm32h755xx.h`).
-3. **`Init`** (50:404-425, 441-445): exige `PE = 0` o hace el reset software: `PE = 0` → read-back `PE = 0` (≥ 3 ciclos de APB) → `ANFOFF`, `DNF` → `TIMINGR` (máscara de reservados) → `TIMEOUTR` (con `TIMOUTEN = 0` al escribir `TIMEOUTA`, 50:2845) → `CR1` con `NOSTRETCH = 0` y todas las IE y DMA a 0 → `PE = 1` → read-back de `CR1`, `TIMINGR`, `TIMEOUTR`, `OAR1 = 0`, e `ISR` sin `BUSY`. Si `BUSY = 1` tras `PE = 1`: `ERR_BUS` (el bus no está libre; hace falta `RecoverBus`).
+3. **`Init`** (50:404-425, 441-445): exige `PE = 0` o hace el reset software: `PE = 0` → read-back `PE = 0` (≥ 3 ciclos de APB) → `ANFOFF`, `DNF` → `TIMINGR` (máscara de reservados) → `TIMEOUTR` (con `TIMOUTEN = 0` al escribir `TIMEOUTA`, 50:2861) → `CR1` con `NOSTRETCH = 0` y todas las IE y DMA a 0 → `PE = 1` → read-back de `CR1`, `TIMINGR`, `TIMEOUTR`, `OAR1 = 0`, e `ISR` sin `BUSY`. Si `BUSY = 1` tras `PE = 1`: `ERR_BUS` (el bus no está libre; hace falta `RecoverBus`). `BUSY` solo refleja un START visto con `PE = 1`: un bus retenido desde antes no se ve (R3-6).
 4. **`Deinit`:** `CR1` IE/DMA = 0 → `PE = 0` (suelta SCL/SDA) → read-back → `CR2 = 0`, `TIMINGR`, `TIMEOUTR`, `OAR1`, `OAR2` a reset → `ICR` = todos → read-back de la imagen de reset (`ISR = 0x1`). No escribe RCC ni SYSCFG.
-5. **Transferencias** (50:517-559, 1072-1103, 1185-1194, 1367-1387): antes de `START`, `BUSY = 0` (si no, `ERR_BUS`). `NBYTES` y `RELOAD` por tramos de 255 (`TCR`); `AUTOEND = 1` en el último tramo, salvo el de escritura de `WriteRead` (`AUTOEND = 0`, `TC`, repeated start). En escritura, **el primer byte se escribe en `TXDR` antes de `START`** (2.19.6). Fin normal: `STOPF` → `ICR.STOPCF` → `CR2 = 0`. Ningún campo de `CR2` se cambia con `START = 1` (C12).
+5. **Transferencias** (50:517-559, 1072-1103, 1185-1194, 1367-1387): antes de `START`, `BUSY = 0` (si no, `ERR_BUS`; con el límite de R3-6). `NBYTES` y `RELOAD` por tramos de 255 (`TCR`); `AUTOEND = 1` en el último tramo, salvo el de escritura de `WriteRead` (`AUTOEND = 0`, `TC`, repeated start). En escritura, **el primer byte se escribe en `TXDR` antes de `START`** (2.19.6). Fin normal: `STOPF` → `ICR.STOPCF` → `CR2 = 0`. Ningún campo de `CR2` se cambia con `START = 1` (C12).
 6. **Errores:** `NACKF` → el hardware manda STOP (50:1192-1194): esperar `STOPF` acotado, limpiar, `ERR_NACK`. `ARLO` → `ERR_ARLO` (el periférico pasa a esclavo, 50:2239-2249). `BERR` en maestro → **se borra y la transferencia sigue** (2.19.2). `TIMEOUT` → `ERR_BUS`. Toda espera acotada por `max_cycles` (C13); al vencer: `PE = 0` → read-back → `PE = 1` (reset software), `ERR_TIMEOUT`.
 7. **IRQ:** `StartIt` escribe las IE después de configurar `CR2` y antes de `START`; `XferIrq` sirve `TXIS`/`RXNE`/`TCR`/`TC`/`STOPF`/`NACKF` y los errores, y deja `CR1` IE = 0 al terminar. Se llama desde los dos vectores (EV y ER).
 8. **DMA** (50:2300-2337): el stream del llamador se inicializa antes de `START`; `TXDMAEN`/`RXDMAEN` antes de `START`; escritura con el primer byte precargado (regla 5); `WaitEnd` espera `STOPF` o error; `DmaEnd` borra `TXDMAEN`/`RXDMAEN` y los flags.
@@ -284,7 +300,7 @@ uint32_t       I2C_BM_TakeErrors(I2C_TypeDef *i2c);   /* BERR/ARLO/OVR/TIMEOUT; 
    - `SCLDEL = max(0, ticks(t_r + tSU;DAT, p) − 1)`; debe ser ≤ 15 (50:342).
    - `SDADEL_min = max(0, ceil((t_f + tHD;DAT − t_af,min)·k − (dnf + 3)) / (p + 1))` y `SDADEL_max = floor(((tVD;DAT − t_r − t_af,max)·k − (dnf + 4)) / (p + 1))`, con `k` en ciclos de kernel por ns (50:319-331); exige `SDADEL_min ≤ SDADEL_max` y ≤ 15; `SDADEL = SDADEL_min`.
    - `sync = ceil((t_r + t_f + 2·t_af,min)·kernel_hz / 10⁹) + 2·(dnf + 3)` ciclos de kernel (modelo de tSYNC1 + tSYNC2, 50:977-989).
-   - `N = floor((floor(kernel_hz / scl_hz) − sync) / (p + 1))`; `Lmin = ticks(tLOW), Hmin = ticks(tHIGH)`; `L = max(Lmin, ceil(N · tLOW / (tLOW + tHIGH)))`; `H = max(Hmin, N − L)`; exige `L, H ≤ 256` y las dos condiciones de 50:159-171 (`t_kernel < (tLOW − t_filtros)/4`, `t_kernel < tHIGH`).
+   - `N = ceil((ceil(kernel_hz / scl_hz) − sync) / (p + 1))` (R3-1); `Lmin = ticks(tLOW), Hmin = ticks(tHIGH)`; `L = max(Lmin, ceil(N · tLOW / (tLOW + tHIGH)))`; `H = max(Hmin, N − L)`; exige `L, H ≤ 256` y las dos condiciones de 50:159-171 (`t_kernel < (tLOW − t_filtros)/4`, `t_kernel < tHIGH`).
    - `TIMINGR = p << 28 | SCLDEL << 20 | SDADEL << 16 | (H − 1) << 8 | (L − 1)`; `scl_hz_model = floor(kernel_hz / (sync + (L + H)·(p + 1)))`.
 4. Si ningún `p` cumple: `ERR_RANGE`. `scl_hz_model ≤ scl_hz` siempre (el bus nunca va más rápido de lo pedido).
 
@@ -307,7 +323,7 @@ uint32_t       I2C_BM_TakeErrors(I2C_TypeDef *i2c);   /* BERR/ARLO/OVR/TIMEOUT; 
 | 50:1793-1800: `TIMEOUTA` detecta SCL bajo | `timeout_scl_low` | T10(b) |
 | 50:2300-2337: DMA antes de `START` | Regla 8 | T7 |
 | 50:159-171, tablas 405/407 | `CalcTiming` | T3, T5 |
-| ES0445 2.19.1: tSU;DAT < un ciclo de kernel | Kernel mínimo por modo en `CalcTiming`/`CheckConfig` (`ERR_RANGE`) | T1, T3 |
+| ES0445 2.19.1: tSU;DAT < un ciclo de kernel | Kernel mínimo por modo en `CalcTiming` (`ERR_RANGE`; R3-3) | T1, T3 |
 | ES0445 2.19.2: `BERR` espurio en maestro | Se borra y se sigue (regla 6) | Revisión (no se puede provocar) |
 | ES0445 2.19.3: transferencia espuria al coincidir la dirección propia | Fuera: sin esclavo ni multimaestro; README | Revisión |
 | ES0445 2.19.4: errata de documentación (`START` y `ADDRCF`) | README | — |
@@ -389,7 +405,7 @@ El AD2 no usa Digital Out ni conduce el bus: solo `HOST_REQ` (handshake) y sus d
 
 Cada prueba tiene un control negativo (R1) y un oráculo que no es el driver. **Oráculos:** la F334 (lo que recibió y envió, con CRC-32), el osciloscopio del AD2 decodificado por el host (estado "con tomas"), `CYCCNT`, registros leídos directamente y la tabla del RM escrita a mano. **Datos:** xorshift32 con semilla impresa, CRC-32 y cobertura de bits, como `06_spi`.
 
-**Tolerancias del AD2** (estado "con tomas"): osciloscopio a 20 MS/s (100 kHz) y 50 MS/s (400 kHz), con el buffer que dé `FDwfAnalogInBufferSizeInfo`. Los tiempos se juzgan contra los **mínimos del modo** (tablas 405/407) y contra la predicción de `CalcTiming` (± 2 muestras + 2 ciclos de kernel por flanco, más la desviación del reloj de la placa, N1). f\_SCL: ≤ la pedida y dentro de ± 5 % de `scl_hz_model`.
+**Tolerancias del AD2** (estado "con tomas"): osciloscopio a 20 MS/s (100 kHz) y 50 MS/s (400 kHz), con el buffer que dé `FDwfAnalogInBufferSizeInfo`. Los tiempos se juzgan contra los **mínimos del modo** (tablas 405/407) y contra la predicción de `CalcTiming` (± 2 muestras + 2 ciclos de kernel por flanco, más la desviación del reloj de la placa, N1). f\_SCL: ≤ la pedida y dentro de ± 5 % de `scl_hz_model`, sobre la frecuencia normalizada con CLKREF; el valor en bruto se imprime como registro (R3-7).
 
 | ID | Fase / tier | Qué | Oráculo | Control negativo | Criterio |
 | --- | --- | --- | --- | --- | --- |
@@ -405,8 +421,8 @@ Cada prueba tiene un control negativo (R1) y un oráculo que no es el driver. **
 | T6 | F1, F2, F3 | Por interrupción: `Write`, `Read`, `WriteRead` de 1, 2, 256 y 1000 bytes | La F334 + CRC | IE a 0 a mano antes del primer evento: no hay progreso y el `max_cycles` del sondeo vence | 0 discrepancias; IE = 0 al terminar; 0 IRQ en 10 ms tras el fin |
 | T7 | F1, F2, F3 | DMA: (a) I2C1 por DMA1/2 (CM4, `dma_bm`); (b) **I2C4 por BDMA** (CM7, `dma_hal`, buffers en `.d3_ram`): 2…4096 bytes, lectura y escritura | La F334 + CRC | `RXDMAEN = 0` en lectura: el buffer conserva su centinela y la espera vence | 0 discrepancias |
 | T8 | F1 | NACK: (a) dirección 0x43 (sin target) → `ERR_NACK`, STOP en el bus, `BUSY = 0` después; (b) la F334 hace NACK en el byte k de una escritura → `ERR_NACK` y k bytes contados | La F334, el osciloscopio (STOP) | La transferencia a 0x42 sin NACK armado termina bien | Estado exacto; el bus queda libre; la transferencia siguiente funciona |
-| T9 | F1 | Bus colgado y recuperación: la F334 retiene SDA hasta ver 5 flancos de SCL; la H755 encuentra el bus ocupado (`ERR_BUS` o `ERR_TIMEOUT` acotado); el selftest pone PB8/PB9 en GPIO open-drain y llama a `RecoverBus` → SDA libre, STOP, `pulses` = 5; después `Init` y una transferencia correcta | La F334 (flancos contados), `IDR`, osciloscopio | Sin `RecoverBus`, SDA sigue abajo hasta el límite de la F334 | Estados exactos; `pulses` = 5; transferencia posterior correcta |
-| T10 | F1 | (a) Stretching: la F334 estira SCL 200 µs en la dirección y en cada byte → datos correctos y duración mayor en `CYCCNT`; (b) SCL retenido 50 ms con `timeout_scl_low` de ~10 ms → `ERR_BUS` por `TIMEOUT` y STOP | La F334, `CYCCNT`, osciloscopio | (b) sin `timeout_scl_low`: la espera acaba solo por `max_cycles` (`ERR_TIMEOUT`) | Estados exactos; el bus libre al final |
+| T9 | F1 | Bus colgado y recuperación: la F334 retiene SDA hasta ver 5 flancos de SCL; la H755 encuentra el bus ocupado (`ERR_BUS` o `ERR_TIMEOUT` acotado); el selftest pone PB8/PB9 en GPIO open-drain y llama a `RecoverBus` → SDA libre, STOP, `pulses` = 5; después `Init` y una transferencia correcta. **(b)** La retención empieza antes del `Init` (R3-6) | La F334 (flancos contados), `IDR`, osciloscopio | Sin `RecoverBus`, SDA sigue abajo hasta el límite de la F334 | Estados exactos; `pulses` = 5; transferencia posterior correcta |
+| T10 | F1 | (a) Stretching: la F334 estira SCL 200 µs en la dirección y en cada byte → datos correctos y duración mayor en `CYCCNT`; (b) SCL retenido 50 ms con `timeout_scl_low` de ~10 ms → `ERR_BUS` por `TIMEOUT` y reset por software, sin STOP (R3-5) | La F334, `CYCCNT`, osciloscopio | (b) sin `timeout_scl_low`: la espera acaba solo por `max_cycles` (`ERR_TIMEOUT`) | Estados exactos; el bus libre al final |
 | T11 | F1 | `ARLO` | — | — | **No ejercitado** (un solo maestro); revisión |
 | T12 | F1 | 2.19.6: con `I2C123SEL = HSI` (64 MHz; APB/kernel ≈ 1,56, dentro de la ventana) escrito y restaurado por el selftest con read-back: 1000 escrituras de 2 bytes por sondeo y por DMA | La F334 | A mano, sin precargar el primer byte: se registra si la transmisión se detiene (decisión 6 de `06_spi`: "no reproducido" si no) | 0 detenciones con el driver |
 | T13 | F1 | Bancos de RCC: CM4 `DisableClock(I2C2)` mientras CM7 lo tiene habilitado | Registros de RCC y de I2C2 leídos por CM7 | CM7 deshabilita: se para | Como `06_spi` T13 |

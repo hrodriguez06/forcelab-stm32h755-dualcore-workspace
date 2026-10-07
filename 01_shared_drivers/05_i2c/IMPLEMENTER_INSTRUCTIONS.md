@@ -2,7 +2,7 @@
 
 Oct 6, 2026 · @Hector
 
-Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta: el driver I2C maestro en tres tiers, `i2c_bm` (F1), `i2c_ll` (F2) e `i2c_hal` (F3), con una fase F0 que prepara el banco en `prj_01_template_dualcore`: el AD2 de siempre, el bus I2C en PB8/PB9 y una **NUCLEO-F334R8** como target, con un firmware de banco que también escribes tú. Otra persona audita cada fase y repite tus pruebas en la placa.
+Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 3) de esta carpeta: el driver I2C maestro en tres tiers, `i2c_bm` (F1), `i2c_ll` (F2) e `i2c_hal` (F3), con una fase F0 que prepara el banco en `prj_01_template_dualcore`: el AD2 de siempre, el bus I2C en PB8/PB9 y una **NUCLEO-F334R8** como target, con un firmware de banco que también escribes tú. Otra persona audita cada fase y repite tus pruebas en la placa.
 
 Si algo de aquí choca con el plan, manda el plan, salvo lo que este documento **prohíbe**, que sigue prohibido.
 
