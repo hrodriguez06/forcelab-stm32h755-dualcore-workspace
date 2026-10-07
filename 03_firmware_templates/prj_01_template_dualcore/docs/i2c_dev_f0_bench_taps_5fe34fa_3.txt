@@ -1,0 +1,269 @@
+[+   0.000s] [host] argv: --bench-state taps --checklist-confirmed 'Hector Rodriguez' --checklist-date 2026-10-06 --allow-dirty
+[+   0.000s] [host] options: bench_state=taps allow_dirty=True preset=selftest-i2c no_reset=False checklist_confirmed=Hector Rodriguez checklist_date=2026-10-06
+[+   0.088s] [host] i2c_hw_check.py, host checkout 5fe34fa, protocol v1, F334 protocol v1, phase F0
+[+   0.088s] [host] checklist [x] GND first: W3 H755 CN8-11 <-> F334 CN5-7; no supply rail between the boards (S20): confirmed by Hector Rodriguez on 2026-10-06 (--checklist-confirmed)
+[+   0.088s] [host] checklist [x] I2C bus: SCL node H755 PB8 (CN7-2) <-> F334 PB8 (CN5-10) W1; SDA node H755 PB9 (CN7-4) <-> F334 PB9 (CN5-9) W2; 1.0 kOhm from each node to H755 3V3 (CN8-7); no series resistors: confirmed by Hector Rodriguez on 2026-10-06 (--checklist-confirmed)
+[+   0.088s] [host] checklist [x] bench state 'taps': J2 (SCL node - PF14, CN9-19) and J3 (SDA node - PF15, CN9-21) in place: confirmed by Hector Rodriguez on 2026-10-06 (--checklist-confirmed)
+[+   0.088s] [host] checklist [x] F334 checks: D15/D14 = PB8/PB9 on CN5-10/CN5-9, GND on CN5-7, BOOT0 its own pin, no pull-up or solder bridge on PB8/PB9; H755 SB39/SB62 open: confirmed by Hector Rodriguez on 2026-10-06 (--checklist-confirmed)
+[+   0.088s] [host] checklist [x] AD2 lines per 00_gpio README section 8 (DIO0..14), the AD2 on USB while the Nucleo is powered: confirmed by Hector Rodriguez on 2026-10-06 (--checklist-confirmed)
+[+   0.088s] [host] checklist [x] both Nucleo boards on USB of this PC, the F334 powered before the session (S20): confirmed by Hector Rodriguez on 2026-10-06 (--checklist-confirmed)
+[+   0.088s] [host] checklist (not an operator item) images: the F334 with tools/i2c_target_f334 and the H755 with selftest-i2c, each through tools/flash.py --sn with this script stopped; checked by T0d below (Rev, id)
+[+   0.933s] [host] checklist [x] WaveForms GUI closed, no debugger attached (tasklist: none of WaveForms.exe, ST-LINK_gdbserver.exe, openocd.exe, STM32CubeProgrammer.exe)
+[+   1.718s] [host] dirty diff sha256=faa40a8b52f41da98144598a4188773864e80f8c6edf37cfa808497f026256f3 lines=184
+[+   1.718s] [host] diff| diff --git a/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/i2c_selftest.c b/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/i2c_selftest.c
+[+   1.718s] [host] diff| index a36b215..eed02be 100644
+[+   1.718s] [host] diff| --- a/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/i2c_selftest.c
+[+   1.718s] [host] diff| +++ b/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/i2c_selftest.c
+[+   1.718s] [host] diff| @@ -891,13 +891,15 @@ static void t0c_hold(const char *line, uint32_t held, uint32_t other)
+[+   1.718s] [host] diff|          return;
+[+   1.718s] [host] diff|      }
+[+   1.718s] [host] diff|      static const char *const k_name[W_N] = { "PB8", "PB9", "PF14", "PF15" };
+[+   1.718s] [host] diff| -    log_long("T0C hold %s: %s lows=%lu low_us=%lu first_us=%lu end_low=%u; %s lows=%lu low_us=%lu; "
+[+   1.718s] [host] diff| -             "%s lows=%lu low_us=%lu; %s lows=%lu low_us=%lu", line,
+[+   1.718s] [host] diff| -             k_name[W_PB8], (unsigned long)w[W_PB8].lows, (unsigned long)cyc_to_us(w[W_PB8].low_cyc),
+[+   1.718s] [host] diff| -             (unsigned long)cyc_to_us(w[W_PB8].first_cyc), (unsigned)w[W_PB8].low_at_end,
+[+   1.718s] [host] diff| -             k_name[W_PB9], (unsigned long)w[W_PB9].lows, (unsigned long)cyc_to_us(w[W_PB9].low_cyc),
+[+   1.718s] [host] diff| -             k_name[W_PF14], (unsigned long)w[W_PF14].lows, (unsigned long)cyc_to_us(w[W_PF14].low_cyc),
+[+   1.718s] [host] diff| -             k_name[W_PF15], (unsigned long)w[W_PF15].lows, (unsigned long)cyc_to_us(w[W_PF15].low_cyc));
+[+   1.718s] [host] diff| +    /* Every pin: falls, time low, first fall after the window opened, low at the end. */
+[+   1.718s] [host] diff| +    int n = snprintf(s_line, sizeof(s_line), "T0C hold %s:", line);
+[+   1.718s] [host] diff| +    for (uint32_t k = 0U; (k < W_N) && (n > 0) && ((size_t)n < sizeof(s_line)); k++)
+[+   1.718s] [host] diff| +    {
+[+   1.718s] [host] diff| +        n += snprintf(&s_line[n], sizeof(s_line) - (size_t)n, " %s lows=%lu low_us=%lu first_us=%lu end_low=%u;",
+[+   1.718s] [host] diff| +                      k_name[k], (unsigned long)w[k].lows, (unsigned long)cyc_to_us(w[k].low_cyc),
+[+   1.718s] [host] diff| +                      (unsigned long)cyc_to_us(w[k].first_cyc), (unsigned)w[k].low_at_end);
+[+   1.718s] [host] diff| +    }
+[+   1.718s] [host] diff| +    log_text("");
+[+   1.718s] [host] diff|      const uint32_t us = cyc_to_us(w[held].low_cyc);
+[+   1.718s] [host] diff|      verdict((w[held].lows == 1U) && !w[held].low_at_end && (us >= T0C_HOLD_MIN_US) && (us <= T0C_HOLD_MAX_US) &&
+[+   1.718s] [host] diff|              (w[other].lows == 0U),
+[+   1.718s] [host] diff| diff --git a/03_firmware_templates/prj_01_template_dualcore/tools/i2c_hw_check.py b/03_firmware_templates/prj_01_template_dualcore/tools/i2c_hw_check.py
+[+   1.718s] [host] diff| index 400bca2..13f5398 100644
+[+   1.718s] [host] diff| --- a/03_firmware_templates/prj_01_template_dualcore/tools/i2c_hw_check.py
+[+   1.718s] [host] diff| +++ b/03_firmware_templates/prj_01_template_dualcore/tools/i2c_hw_check.py
+[+   1.718s] [host] diff| @@ -400,11 +400,11 @@ def checklist(stamp: Callable[[str], None], operator: Optional[str], date: Optio
+[+   1.719s] [host] diff|          "bridge on PB8/PB9; H755 SB39/SB62 open",
+[+   1.719s] [host] diff|          "AD2 lines per 00_gpio README section 8 (DIO0..14), the AD2 on USB while the Nucleo is powered",
+[+   1.719s] [host] diff|          "both Nucleo boards on USB of this PC, the F334 powered before the session (S20)",
+[+   1.719s] [host] diff| -        "the F334 flashed with tools/i2c_target_f334 of this commit and the H755 with selftest-i2c, each with "
+[+   1.719s] [host] diff| -        "tools/flash.py --sn and this script stopped; then a cold start",
+[+   1.719s] [host] diff|      ]
+[+   1.719s] [host] diff|      for item in items:
+[+   1.719s] [host] diff|          stamp(f"[host] checklist [{mark}] {item}: {who}")
+[+   1.719s] [host] diff| +    stamp("[host] checklist (not an operator item) images: the F334 with tools/i2c_target_f334 and the H755 with "
+[+   1.719s] [host] diff| +          "selftest-i2c, each through tools/flash.py --sn with this script stopped; checked by T0d below (Rev, id)")
+[+   1.719s] [host] diff|      running = running_forbidden()
+[+   1.719s] [host] diff|      if running is None:
+[+   1.719s] [host] diff|          stamp("[host] checklist [ ] WaveForms GUI closed, no debugger attached: tasklist failed, not checked")
+[+   1.719s] [host] diff| @@ -475,11 +475,18 @@ class LineReader:
+[+   1.719s] [host] diff|              while b"\n" in buf:
+[+   1.719s] [host] diff|                  raw, buf = buf.split(b"\n", 1)
+[+   1.719s] [host] diff|                  line = raw.decode("utf-8", errors="replace").rstrip("\r")
+[+   1.719s] [host] diff| -                self._sink(f"{self._prefix}{line}")
+[+   1.719s] [host] diff|                  with self._lock:
+[+   1.719s] [host] diff|                      self.lines.append(line)
+[+   1.719s] [host] diff|                  self._q.put(line)
+[+   1.719s] [host] diff| -                self.on_line(line)
+[+   1.719s] [host] diff| +                # A line this thread cannot log or judge must not end the thread: in
+[+   1.719s] [host] diff| +                # the second development run the byte a reset leaves on the line
+[+   1.719s] [host] diff| +                # (U+FFFD once decoded) made print() raise UnicodeEncodeError on a
+[+   1.719s] [host] diff| +                # cp1252 console, and every later line of the session was lost.
+[+   1.719s] [host] diff| +                try:
+[+   1.719s] [host] diff| +                    self._sink(f"{self._prefix}{line}")
+[+   1.719s] [host] diff| +                    self.on_line(line)
+[+   1.719s] [host] diff| +                except Exception as e:          # noqa: BLE001
+[+   1.719s] [host] diff| +                    self._sink(f"{self._prefix}(reader: {type(e).__name__} on this line, going on)")
+[+   1.719s] [host] diff|  
+[+   1.719s] [host] diff|      def on_line(self, line: str) -> None:
+[+   1.719s] [host] diff|          pass
+[+   1.719s] [host] diff| @@ -736,11 +743,11 @@ class Session:
+[+   1.719s] [host] diff|          self.wait_ack(False)
+[+   1.719s] [host] diff|          self.req(False)
+[+   1.719s] [host] diff|          ok_line = self.f334.hold(line, T0C_HOLD_MS)
+[+   1.719s] [host] diff| -        end = self.f334.expect(rf"^HOLD_END line={line} ms=(\d+) us=(\d+) edges=(\d+) cause=(\w+) scl=(\d) sda=(\d)(.*)$",
+[+   1.719s] [host] diff| +        end = self.f334.expect(rf"^HOLD_END line={line} ms=(\d+) us=(\d+) edges=(\d+) edge1_us=\S+ cause=(\w+) scl=(\d) sda=(\d)(.*)$",
+[+   1.719s] [host] diff|                                 3.0)
+[+   1.719s] [host] diff|          cap = self.ad2.scope_read(SCOPE_N, 3.0) if self.state == "taps" else None
+[+   1.719s] [host] diff| -        mrx = (rf"\[i2c\] T0C hold {line}: PB8 lows=(\d+) low_us=(\d+) first_us=(\d+) end_low=(\d); PB9 lows=(\d+) "
+[+   1.719s] [host] diff| -               rf"low_us=(\d+); PF14 lows=(\d+) low_us=(\d+); PF15 lows=(\d+) low_us=(\d+)")
+[+   1.719s] [host] diff| +        mrx = rf"\[i2c\] T0C hold {line}:" + "".join(
+[+   1.719s] [host] diff| +            rf" {p} lows=(\d+) low_us=(\d+) first_us=(\d+) end_low=(\d);" for p in ("PB8", "PB9", "PF14", "PF15"))
+[+   1.719s] [host] diff|          mm = None
+[+   1.719s] [host] diff|          t_end = time.monotonic() + 5.0
+[+   1.719s] [host] diff|          while mm is None and time.monotonic() < t_end:
+[+   1.719s] [host] diff| @@ -759,7 +766,7 @@ class Session:
+[+   1.719s] [host] diff|                     f"(0), scl={end.group(5)} sda={end.group(6)} 1 ms after the release, pins after: S15 {why15}")
+[+   1.719s] [host] diff|          g = [int(x) for x in mm.groups()]
+[+   1.720s] [host] diff|          pb = {"PB8": (g[0], g[1]), "PB9": (g[4], g[5])}
+[+   1.720s] [host] diff| -        pf = {"PF14": (g[6], g[7]), "PF15": (g[8], g[9])}
+[+   1.720s] [host] diff| +        pf = {"PF14": (g[8], g[9]), "PF15": (g[12], g[13])}
+[+   1.720s] [host] diff|          held_pb, other_pb = ("PB9", "PB8") if line == "SDA" else ("PB8", "PB9")
+[+   1.720s] [host] diff|          held_pf, other_pf = ("PF15", "PF14") if line == "SDA" else ("PF14", "PF15")
+[+   1.720s] [host] diff|          if self.state == "taps":
+[+   1.720s] [host] diff| @@ -868,6 +875,9 @@ def main() -> int:
+[+   1.720s] [host] diff|      ap.add_argument("--checklist-date", metavar="YYYY-MM-DD", help="date of that confirmation")
+[+   1.720s] [host] diff|      args = ap.parse_args()
+[+   1.720s] [host] diff|  
+[+   1.720s] [host] diff| +    # The console may not encode every character a board sends (a reset leaves a
+[+   1.720s] [host] diff| +    # stray byte on the line): print what it can; the capture file keeps UTF-8.
+[+   1.720s] [host] diff| +    sys.stdout.reconfigure(errors="backslashreplace")
+[+   1.720s] [host] diff|      lines: list[str] = []
+[+   1.720s] [host] diff|      t0 = time.monotonic()
+[+   1.720s] [host] diff|      lock = threading.Lock()
+[+   1.720s] [host] diff| @@ -997,8 +1007,11 @@ def run_bench(args, stamp, cli, f334: F334, h755_port: str, probes, head, h755_i
+[+   1.720s] [host] diff|                  raise BenchAbort(f"Digital Out enable 0x{en:04X} after open")
+[+   1.720s] [host] diff|              if not args.no_reset:
+[+   1.720s] [host] diff|                  cmd = [cli, "-c", "port=SWD", "mode=HOTPLUG", f"sn={H755_SN}", "-rst"]
+[+   1.720s] [host] diff| -                stamp(f"[host] reset the H755 through SWD ({' '.join(cmd[1:])}), AD2 in S2, the F334 idle")
+[+   1.720s] [host] diff| +                stamp(f"[host] reset the H755 through SWD ({' '.join(cmd[1:])}), AD2 in S2, the F334 idle; "
+[+   1.720s] [host] diff| +                      f"a system reset, not a power cycle")
+[+   1.720s] [host] diff|                  subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=60)
+[+   1.720s] [host] diff| +            else:
+[+   1.720s] [host] diff| +                stamp("[host] --no-reset: the H755 is not reset by this script; waiting for its banner")
+[+   1.720s] [host] diff|              revs["cm7"] = con.expect(r"\[i2c\] CM7 Rev (\S+)", 20.0).group(1)
+[+   1.720s] [host] diff|              ids = {"cm7": con.expect(r"\[i2c\] CM7 Build id (\S+)", 10.0).group(1)}
+[+   1.720s] [host] diff|              revs["cm4"] = con.expect(r"\[i2c\] CM4 Rev (\S+)", 10.0).group(1)
+[+   1.720s] [host] diff| diff --git a/tools/i2c_target_f334/src/target.c b/tools/i2c_target_f334/src/target.c
+[+   1.720s] [host] diff| index 4191304..6c85d05 100644
+[+   1.720s] [host] diff| --- a/tools/i2c_target_f334/src/target.c
+[+   1.720s] [host] diff| +++ b/tools/i2c_target_f334/src/target.c
+[+   1.720s] [host] diff| @@ -260,6 +260,13 @@ void target_init(void)
+[+   1.720s] [host] diff|  
+[+   1.720s] [host] diff|      RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+[+   1.720s] [host] diff|      (void)RCC->APB2ENR;
+[+   1.720s] [host] diff| +    /* EXTI line 8 from PB8 (SCL), once: the SDA holds count SCL rising edges
+[+   1.720s] [host] diff| +       on it. Masked and with no trigger edge until a hold arms it. */
+[+   1.720s] [host] diff| +    EXTI->IMR  &= ~EXTI_IMR_MR8;
+[+   1.720s] [host] diff| +    EXTI->RTSR &= ~EXTI_RTSR_TR8;
+[+   1.720s] [host] diff| +    EXTI->FTSR &= ~EXTI_FTSR_TR8;
+[+   1.720s] [host] diff| +    SYSCFG->EXTICR[2] = (SYSCFG->EXTICR[2] & ~SYSCFG_EXTICR3_EXTI8) | SYSCFG_EXTICR3_EXTI8_PB;
+[+   1.720s] [host] diff| +    EXTI->PR = EXTI_PR_PR8;
+[+   1.720s] [host] diff|      target_pins_safe();
+[+   1.720s] [host] diff|      i2c_init_regs();                       /* PE = 0: the pins can go to AF, nothing drives */
+[+   1.720s] [host] diff|      pin_af_od(TARGET_PIN_SCL);
+[+   1.720s] [host] diff| @@ -543,6 +550,7 @@ typedef struct
+[+   1.720s] [host] diff|      uint32_t          ms;
+[+   1.720s] [host] diff|      uint32_t          edges_wanted;     /* 0: release on time only */
+[+   1.720s] [host] diff|      volatile uint32_t edges;            /* SCL rising edges seen while SDA is held */
+[+   1.720s] [host] diff| +    volatile uint32_t edge1;            /* TIM2 time of the first one              */
+[+   1.720s] [host] diff|      volatile uint32_t t0, t1;
+[+   1.720s] [host] diff|      volatile uint32_t cause;
+[+   1.720s] [host] diff|      volatile bool     on;
+[+   1.720s] [host] diff| @@ -587,6 +595,10 @@ void EXTI9_5_IRQHandler(void)
+[+   1.720s] [host] diff|          EXTI->PR = EXTI_PR_PR8;
+[+   1.720s] [host] diff|          if (s_hold.on)
+[+   1.720s] [host] diff|          {
+[+   1.720s] [host] diff| +            if (s_hold.edges == 0U)
+[+   1.720s] [host] diff| +            {
+[+   1.720s] [host] diff| +                s_hold.edge1 = us_now();
+[+   1.721s] [host] diff| +            }
+[+   1.721s] [host] diff|              s_hold.edges++;
+[+   1.721s] [host] diff|              if ((s_hold.edges_wanted != 0U) && (s_hold.edges >= s_hold.edges_wanted))
+[+   1.721s] [host] diff|              {
+[+   1.721s] [host] diff| @@ -635,9 +647,15 @@ static const char *hold_start(uint32_t pin, uint32_t ms, uint32_t edges)
+[+   1.721s] [host] diff|      __disable_irq();
+[+   1.721s] [host] diff|      if (pin == TARGET_PIN_SDA)
+[+   1.721s] [host] diff|      {
+[+   1.721s] [host] diff| -        SYSCFG->EXTICR[2] = (SYSCFG->EXTICR[2] & ~SYSCFG_EXTICR3_EXTI8) | SYSCFG_EXTICR3_EXTI8_PB;
+[+   1.721s] [host] diff| -        EXTI->PR    = EXTI_PR_PR8;
+[+   1.721s] [host] diff| +        /* EXTI8 has been on PB8 since target_init(): switching the mux here
+[+   1.721s] [host] diff| +           (PA8 -> PB8) can itself latch a rising edge, which the first
+[+   1.721s] [host] diff| +           version of this firmware counted (edges=1 in the first bench run).
+[+   1.721s] [host] diff| +           The edge detector is armed, then its pending bit cleared, then the
+[+   1.721s] [host] diff| +           interrupt unmasked. */
+[+   1.721s] [host] diff|          EXTI->RTSR |= EXTI_RTSR_TR8;
+[+   1.721s] [host] diff| +        (void)EXTI->RTSR;
+[+   1.721s] [host] diff| +        __DSB();
+[+   1.721s] [host] diff| +        EXTI->PR    = EXTI_PR_PR8;
+[+   1.721s] [host] diff|          EXTI->IMR  |= EXTI_IMR_MR8;
+[+   1.721s] [host] diff|      }
+[+   1.721s] [host] diff|      s_hold.t0   = us_now();
+[+   1.721s] [host] diff| @@ -664,6 +682,15 @@ static void hold_finish(void)
+[+   1.721s] [host] diff|      ln_u32(&l, s_hold.t1 - s_hold.t0);
+[+   1.721s] [host] diff|      ln_str(&l, " edges=");
+[+   1.721s] [host] diff|      ln_u32(&l, s_hold.edges);
+[+   1.721s] [host] diff| +    ln_str(&l, " edge1_us=");
+[+   1.721s] [host] diff| +    if (s_hold.edges != 0U)
+[+   1.721s] [host] diff| +    {
+[+   1.721s] [host] diff| +        ln_u32(&l, s_hold.edge1 - s_hold.t0);       /* after the line went low */
+[+   1.721s] [host] diff| +    }
+[+   1.721s] [host] diff| +    else
+[+   1.721s] [host] diff| +    {
+[+   1.721s] [host] diff| +        ln_str(&l, "-");
+[+   1.721s] [host] diff| +    }
+[+   1.721s] [host] diff|      ln_str(&l, " cause=");
+[+   1.721s] [host] diff|      ln_str(&l, (s_hold.cause == CAUSE_TIME) ? "TIME" : ((s_hold.cause == CAUSE_EDGES) ? "EDGES" : "ABORT"));
+[+   1.721s] [host] diff|      ln_str(&l, " scl=");
+[+   2.792s] [host] build id of this checkout: build/selftest-i2c 925a1e68f8623a38; tools/i2c_target_f334/build/f334 5643a2d9acef59ed
+[+   2.792s] [ad2] T0B(a) ad2_set_oe(0x0200, bus=NONE): refused before the DLL
+[+   2.792s] [ad2] T0B(a) ad2_set_oe(0x0800, bus=NONE): refused before the DLL
+[+   2.792s] [ad2] T0B(a) ad2_set_oe(0x2000, bus=NONE): refused before the DLL
+[+   2.792s] [ad2] T0B(a) ad2_set_oe(0x4000, bus=NONE): refused before the DLL
+[+   2.792s] [ad2] T0B(a) ad2_set_oe(0x8000, bus=NONE): refused before the DLL
+[+   2.792s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=NONE): refused before the DLL
+[+   2.792s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=MCU): refused before the DLL
+[+   2.792s] [ad2] T0B(a) ad2_set_oe(0x10FF, bus=MCU): refused before the DLL
+[+   2.792s] [ad2] T0B(a) control ad2_set_oe(0x1000, bus=NONE): passed to the DLL
+[+   2.792s] [ad2] T0B(a) control ad2_set_oe(0x10FF, bus=AD2): passed to the DLL
+[+   2.792s] [host] T0B(a) i2c_set_oe(0x0100) [DIO8 (S3 would allow it)]: refused, S2, nothing passed to ad2_set_oe
+[+   2.792s] [host] T0B(a) i2c_set_oe(0x0400) [DIO10 (S3 would allow it)]: refused, S2, nothing passed to ad2_set_oe
+[+   2.792s] [host] T0B(a) i2c_set_oe(0x00FF) [the AD2 bus]: refused, S2, nothing passed to ad2_set_oe
+[+   2.792s] [host] T0B(a) i2c_set_oe(0x0200) [DIO9]: refused, S2, nothing passed to ad2_set_oe
+[+   2.792s] [host] T0B(a) i2c_set_oe(0x4000) [DIO14 (PA8)]: refused, S2, nothing passed to ad2_set_oe
+[+   2.792s] [host] T0B(a) i2c_set_oe(0x8000) [DIO15]: refused, S2, nothing passed to ad2_set_oe
+[+   2.792s] [host] T0B(a) i2c_set_oe(0x1100) [HOST_REQ with DIO8]: refused, S2, nothing passed to ad2_set_oe
+[+   2.792s] [host] T0B(a) control i2c_set_oe(0x0000): passed to ad2_set_oe
+[+   2.792s] [host] T0B(a) control i2c_set_oe(0x1000): passed to ad2_set_oe
+[+   2.792s] [host] T0B(a) S15 check of an F334 pin report [both AF4 open-drain]: accepted (ok) -> as expected
+[+   2.792s] [host] T0B(a) S15 check of an F334 pin report [both input]: accepted (ok) -> as expected
+[+   2.792s] [host] T0B(a) S15 check of an F334 pin report [PB8 AF push-pull]: refused (PB8 MODER=2 OTYPER=0 AFR=4) -> as expected
+[+   2.792s] [host] T0B(a) S15 check of an F334 pin report [PB9 pull-up]: refused (PB9 pull 1) -> as expected
+[+   2.792s] [host] T0B(a) S15 check of an F334 pin report [PB8 GPIO output]: refused (PB8 MODER=1 OTYPER=1 AFR=4) -> as expected
+[+   2.792s] [host] T0B(a) S15 check of an F334 pin report [PB9 AF1]: refused (PB9 MODER=2 OTYPER=1 AFR=1) -> as expected
+[+   2.792s] [host] T0B(a) S15 check of an F334 pin report [firmware says violated]: refused (no s15=ok) -> as expected
+[+   2.792s] [host] T0B(a) S15 check of an F334 pin report [PB9 missing]: refused (PB9 missing) -> as expected
+[+   2.792s] [host] T0B(a) S21 hold guard HOLD SDA 0 EDGES 0: refused (0 ms outside 1..500 (S21)) -> as expected
+[+   2.792s] [host] T0B(a) S21 hold guard HOLD SDA 501 EDGES 0: refused (501 ms outside 1..500 (S21)) -> as expected
+[+   2.792s] [host] T0B(a) S21 hold guard HOLD SCL 50 EDGES 5: refused (EDGES only with SDA) -> as expected
+[+   2.792s] [host] T0B(a) S21 hold guard HOLD SDA 1000 EDGES 5: refused (1000 ms outside 1..500 (S21)) -> as expected
+[+   2.792s] [host] T0B(a) S21 hold guard HOLD XX 50 EDGES 0: refused (line 'XX') -> as expected
+[+   2.792s] [host] T0B(a) S21 hold guard HOLD SDA 50 EDGES 0: sent -> as expected
+[+   2.792s] [host] T0B(a) S21 hold guard HOLD SCL 500 EDGES 0: sent -> as expected
+[+   2.792s] [host] T0B(a) S21 hold guard HOLD SDA 500 EDGES 5: sent -> as expected
+[+   2.792s] [host] T0B(a) S18 probe check [the two expected probes]: accepted (the two expected ST-LINKs, nothing else) -> as expected
+[+   2.792s] [host] T0B(a) S18 probe check [a third]: refused (3 ST-LINKs (['0016000C4142501220353451', '066BFF393731435243254117', '0670FF000000000000000000']), expected exactly 2) -> as expected
+[+   2.792s] [host] T0B(a) S18 probe check [the F334's missing]: refused (1 ST-LINKs (['0016000C4142501220353451']), expected exactly 2) -> as expected
+[+   2.792s] [host] T0B(a) S18 probe check [another F334 SN]: refused (probes {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254118': 'NUCLEO-F334R8'}, expected {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254117': 'NUCLEO-F334R8'}) -> as expected
+[+   2.792s] [host] T0B(a) S18 probe check [boards swapped]: refused (probes {'0016000C4142501220353451': 'NUCLEO-F334R8', '066BFF393731435243254117': 'NUCLEO-H755ZI-Q'}, expected {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254117': 'NUCLEO-F334R8'}) -> as expected
+[+   2.793s] [host] T0B(a) S18 parser on a CubeProgrammer listing: [{'sn': '0016000C4142501220353451', 'fw': 'V3J17M11', 'board': 'NUCLEO-H755ZI-Q'}, {'sn': '066BFF393731435243254117', 'fw': 'V2J38M27', 'board': 'NUCLEO-F334R8'}] -> as expected
+[+   2.793s] [host] T0B(a) T0d identity check [all match]: accepted -> as expected
+[+   2.793s] [host] T0B(a) T0d identity check [F334 Rev from another commit]: aborts: f334 Rev 7654321 is not this checkout (1234567) -> as expected
+[+   2.793s] [host] T0B(a) T0d identity check [CM4 dirty]: aborts: cm4 Rev 1234567-dirty is dirty -> as expected
+[+   2.793s] [host] T0B(a) T0d identity check [CM7 id differs]: aborts: cm7 id cccc != cm4 id aaaa; cm7 id cccc != host id aaaa -> as expected
+[+   2.793s] [host] T0B(a) T0d identity check [F334 id differs]: aborts: f334 id cccc != host id bbbb -> as expected
+[+   2.793s] [host] T0B(a) T0d identity check [F334 SN differs]: aborts: probes {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254110': 'NUCLEO-F334R8'}, expected {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254117': 'NUCLEO-F334R8'} -> as expected
+[+   2.793s] [host] T0B(a) T0d identity check [one port for both]: aborts: ports H755 COM4 F334 COM4 -> as expected
+[+   2.793s] [host] T0B(a) S3 (00_gpio) guard on its mock: PASS
+[+   2.793s] [host] T0B(a) HOST_REQ only guard on its mock: PASS
+[+   2.793s] [host] T0B(a) S15 F334 report guard on its mock: PASS
+[+   2.793s] [host] T0B(a) S21 hold guard on its mock: PASS
+[+   2.793s] [host] T0B(a) S18 probes guard on its mock: PASS
+[+   2.793s] [host] T0B(a) T0d identity guard on its mock: PASS
+[+   3.040s] [host] S18 probe: ST-LINK SN 0016000C4142501220353451 FW V3J17M11 board NUCLEO-H755ZI-Q
+[+   3.040s] [host] S18 probe: ST-LINK SN 066BFF393731435243254117 FW V2J38M27 board NUCLEO-F334R8
+[+   3.040s] [host] S18 the two expected ST-LINKs, nothing else
+[+   3.044s] [host] S18 ports by ST-LINK SN: H755 0016000C4142501220353451 -> COM4, F334 066BFF393731435243254117 -> COM7
+[+   3.046s] [f334]  v1 Rev 5fe34fa-dirty id 5643a2d9acef59ed
+[+   3.167s] [f334] I2C_TI2C_TARGET v1 Rev 5fe34fa-dirty id 5643a2d9acef59ed
+[+   3.175s] [f334] I2C_TARGET pins PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   3.187s] [f334] I2C_TARGET addr=0x42 sysclk=64000000 timingr=0x00A20000 idcode=0x10016438 uid=20383337435043060007001E reset_csr=0x00000000 hold_max_ms=500
+[+   3.189s] [f334] I2C_TARGET ready
+[+   6.257s] [host] ABORT: [f334] timeout waiting for /^I2C_TARGET v(\d+) Rev (\S+) id (\S+)/
+[+   6.257s] [host] T0B(a) S3 (00_gpio): PASS
+[+   6.257s] [host] T0B(a) HOST_REQ only: PASS
+[+   6.257s] [host] T0B(a) S15 F334 report: PASS
+[+   6.257s] [host] T0B(a) S21 hold: PASS
+[+   6.257s] [host] T0B(a) S18 probes: PASS
+[+   6.257s] [host] T0B(a) T0d identity: PASS
+[+   6.257s] [host] 0/0 host checks passed, FW VERDICT=None, stack free None, abort=[f334] timeout waiting for /^I2C_TARGET v(\d+) Rev (\S+) id (\S+)/
+[+   6.257s] HOST VERDICT=FAIL
