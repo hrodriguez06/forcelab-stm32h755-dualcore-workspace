@@ -1323,7 +1323,7 @@ static void f1_clocks(void)
     s_seed   = DWT->CYCCNT | 1U;
     s_taps   = ((GPIOF->IDR >> IST_PIN_TAP_SCL) & 1UL) != 0U;
     s_f_main = s_taps ? 400000U : 1000000U;
-    s_rise_ns = s_taps ? 200U : 40U;
+    s_rise_ns = s_taps ? 300U : 40U;                    /* taps: the scope measures 250 ns (30-70 %) */
     s_fall_ns = 10U;
     log_long("F1 clocks (HAL, from HSE_VALUE): CPU1 %lu Hz, I2C1-3 kernel %lu Hz, I2C4 kernel %lu Hz; bench state "
              "from PF14: %s; CalcTiming bus t_r %lu ns t_f %lu ns; run seed 0x%08lX", (unsigned long)s_cpu_hz,
@@ -2182,22 +2182,25 @@ static void t5_speed(bool m4, uint32_t f, uint32_t timingr, uint32_t k, uint32_t
     {
         if (!host_at("SCOPE T5 k=%lu f=%lu kernel=%lu timingr=%08lX model=%lu rate=%lu trig=sda", (unsigned long)i,
                      (unsigned long)f, (unsigned long)k, (unsigned long)timingr, (unsigned long)model,
-                     (unsigned long)((f <= 100000U) ? 20000000U : 50000000U)))
+                     (unsigned long)((f <= 100000U) ? 12500000U : 25000000U)))
+        {
+            return;
+        }
+        /* The probe and the write back to back, both in one capture: their X lines after. */
+        uint32_t rp[IST_XR_N];
+        if (c[i].probe_first &&
+            !xfer(m4, IST_XF(IST_OP_PROBE, IST_MODE_POLL, T_ADDR), 0U, 0U, budget(core_hz(m4), f, 1U), rp))
+        {
+            return;
+        }
+        if (!xfer(m4, IST_XF(c[i].op, IST_MODE_POLL, c[i].addr), c[i].n, c[i].arg, budget(core_hz(m4), f, 4U), r))
         {
             return;
         }
         if (c[i].probe_first)
         {
-            if (!xfer(m4, IST_XF(IST_OP_PROBE, IST_MODE_POLL, T_ADDR), 0U, 0U, budget(core_hz(m4), f, 1U), r))
-            {
-                return;
-            }
-            xline("T5", m4, f, IST_XF(IST_OP_PROBE, IST_MODE_POLL, T_ADDR), 0U, 0U, r, true);
-            bad += (r[IST_XR_STATUS] != (uint32_t)I2C_BM_OK) ? 1U : 0U;
-        }
-        if (!xfer(m4, IST_XF(c[i].op, IST_MODE_POLL, c[i].addr), c[i].n, c[i].arg, budget(core_hz(m4), f, 4U), r))
-        {
-            return;
+            xline("T5", m4, f, IST_XF(IST_OP_PROBE, IST_MODE_POLL, T_ADDR), 0U, 0U, rp, true);
+            bad += (rp[IST_XR_STATUS] != (uint32_t)I2C_BM_OK) ? 1U : 0U;
         }
         xline("T5", m4, f, IST_XF(c[i].op, IST_MODE_POLL, c[i].addr), c[i].n, c[i].arg, r, c[i].target);
         bad += ((r[IST_XR_STATUS] != (uint32_t)c[i].st) ||
@@ -2592,10 +2595,15 @@ static void t10(bool m4)
     {
         return;
     }
-    if (s_taps && !host_at("SCOPE T10B k=0 f=%lu kernel=0 timingr=0 model=0 rate=100000 trig=scl", (unsigned long)f))
+    if (s_taps && !host_at("SCOPE T10B k=0 f=%lu kernel=%lu timingr=0 model=0 rate=100000 trig=scl tmo=%lu",
+                           (unsigned long)f, (unsigned long)k, (unsigned long)tmo))
     {
         return;
     }
+    /* The target pulls SCL after this AT and the host answers a few ms later, so the
+       TIMEOUT comes at least TIMEOUTA after the AT and at most TIMEOUTA after SCL is
+       seen low; the scope (taps) times it from the SCL fall itself. */
+    const uint32_t at_b = DWT->CYCCNT;
     if (!host_at("HOLD SCL 50"))
     {
         return;
@@ -2606,7 +2614,9 @@ static void t10(bool m4)
     {
         return;
     }
-    const uint32_t cy_b = DWT->CYCCNT - seen_b;             /* before the X line (UART) */
+    const uint32_t end_b = DWT->CYCCNT;                     /* before the X line (UART) */
+    const uint32_t cy_b = end_b - seen_b;
+    const uint32_t cy_at_b = end_b - at_b;
     xline("T10B", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00002010UL, r, true);
     const uint32_t st_b = r[IST_XR_STATUS];
     (void)wait_pin(IST_PIN_SCL, 1U, 100U);
@@ -2642,14 +2652,17 @@ static void t10(bool m4)
     {
         return;
     }
-    const uint32_t ms_b = cy_b / (s_cpu_hz / 1000U);    /* CPU1's CYCCNT, from SCL seen low */
+    const uint32_t us_b = cy_b / (s_cpu_hz / 1000000U);    /* CPU1's CYCCNT */
+    const uint32_t us_at_b = cy_at_b / (s_cpu_hz / 1000000U);
+    const uint32_t us_tmo = (uint32_t)(((uint64_t)tmo * 2048U * 1000000U) / k);
+    const uint32_t us_tmo_lo = (uint32_t)(((uint64_t)(tmo - 1U) * 2048U * 1000000U) / k);   /* a first tick cut short */
     const uint32_t ms_c = cy_c / (s_cpu_hz / 1000U);
-    verdict(low_b && (st_b == (uint32_t)I2C_BM_ERR_BUS) && (ms_b >= 9U) && (ms_b <= 15U),
-            "T10(b) %s SCL held 50 ms by the target, timeout_scl_low %lu (%lu ms at %lu Hz): Write %lu (ERR_BUS %u, by "
-            "TIMEOUT, then the software reset) %lu ms after SCL went low (9..15)", m4 ? "CM4" : "CM7",
-            (unsigned long)tmo,
-            (unsigned long)(((uint64_t)tmo * 2048U * 1000U) / k), (unsigned long)k, (unsigned long)st_b,
-            (unsigned)I2C_BM_ERR_BUS, (unsigned long)ms_b);
+    verdict(low_b && (st_b == (uint32_t)I2C_BM_ERR_BUS) && (us_at_b >= us_tmo_lo) && (us_b <= (us_tmo + 1000U)),
+            "T10(b) %s SCL held 50 ms by the target, timeout_scl_low %lu (%lu us at %lu Hz): Write %lu (ERR_BUS %u, by "
+            "TIMEOUT, then the software reset) %lu us after the AT HOLD (>= %lu) and %lu us after SCL was seen low "
+            "(<= %lu)", m4 ? "CM4" : "CM7", (unsigned long)tmo, (unsigned long)us_tmo, (unsigned long)k,
+            (unsigned long)st_b, (unsigned)I2C_BM_ERR_BUS, (unsigned long)us_at_b, (unsigned long)us_tmo_lo,
+            (unsigned long)us_b, (unsigned long)(us_tmo + 1000U));
     verdict(low_c && (st_c == (uint32_t)I2C_BM_ERR_TIMEOUT) && (ms_c >= 29U) && (ms_c <= 33U),
             "T10(b) %s control without timeout_scl_low: Write %lu (ERR_TIMEOUT %u) %lu ms after SCL went low "
             "(max_cycles 30 ms)",
@@ -2896,6 +2909,12 @@ static void t9(void)
     {
         return;
     }
+    /* The scope first: arming it takes longer than the 300 ms hold. It triggers on the
+       first SCL fall, the first recovery pulse (the refused Write drives nothing). */
+    if (s_taps && !host_at("SCOPE T9 k=0 f=0 kernel=0 timingr=0 model=0 rate=2000000 trig=scl"))
+    {
+        return;
+    }
     if (!host_at("HOLD SDA 300 EDGES 5"))
     {
         return;
@@ -2910,10 +2929,6 @@ static void t9(void)
     (void)inst_deinit(false, &diff);
     bool ok = cm7_pins_input() && delay_ms(1U) && cm7_pins_od();
     if (!ok)
-    {
-        return;
-    }
-    if (s_taps && !host_at("SCOPE T9 k=0 f=0 kernel=0 timingr=0 model=0 rate=2000000 trig=scl"))
     {
         return;
     }

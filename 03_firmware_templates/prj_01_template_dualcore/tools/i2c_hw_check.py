@@ -101,7 +101,7 @@ from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E40
                            t0b_guard_selftest, tree_record)
 
 BENCH_VERSION = 2          # I2C_BENCH_VERSION of Common/Inc/i2c_selftest.h
-F334_PROTOCOL = 2          # TARGET_PROTOCOL of tools/i2c_target_f334/src/bench.h
+F334_PROTOCOL = 3          # TARGET_PROTOCOL of tools/i2c_target_f334/src/bench.h
 F334_SYSCLK = 64000000     # the kernel its TIMINGR was computed for (audit F0, m7)
 
 # ---- Probes (S18): the bench of 2026-10-06 ---------------------------------------------
@@ -1067,20 +1067,45 @@ def frames_text(fr: list[tuple[str, list[tuple[int, int]], bool]]) -> str:
                       for k, b, s in fr) or "(nothing)"
 
 
+def t0b_su_drivers(syms: list) -> list[tuple[int, str]]:
+    """The (bit, driver) of every data or acknowledge bit of a synthetic capture
+    whose SDA changes while SCL is low, written from the I2C rules: the master
+    drives the address and written data and acknowledges read data; the target
+    acknowledges the address and written data and drives read data."""
+    out: list[tuple[int, str]] = []
+    for _, frame, _ in syms:
+        lvl = 0                                         # SDA low after the (repeated) START
+        rd = bool(frame[0] & 2)
+        for j, s in enumerate(frame):
+            for k in range(8, -1, -1):
+                v, b = (s >> k) & 1, 8 - k
+                if v != lvl:
+                    master = (b < 8 and (j == 0 or not rd)) or (b == 8 and j >= 1 and rd)
+                    out.append((b, "m" if master else "s"))
+                lvl = v
+    return out
+
+
 def t0b_decoder_selftest(log: Callable[[str], None]) -> bool:
     """ad2.i2c_decode_analog() on a synthetic write-read before the instrument is
-    opened: decoded exactly; with SCL and SDA swapped (T5's control) it is not."""
+    opened: decoded exactly, each tSU;DAT given to the side that drives its bit;
+    with SCL and SDA swapped (T5's control) it is not."""
     want = [("S", [(0x84, 0), (0x07, 0)], False), ("Sr", [(0x85, 0), (0xA2, 1)], True)]
     syms = [("S", [(0x84 << 1) | 0, (0x07 << 1) | 0], False), ("Sr", [(0x85 << 1) | 0, (0xA2 << 1) | 1], True)]
+    want_su = t0b_su_drivers(syms)
     ok = True
     for rate, bit, rise in ((20e6, 10e-6, 250e-9), (50e6, 2.5e-6, 250e-9)):
         scl, sda = ad2mod.i2c_synth_analog(syms, rate, bit, VDD, rise)
-        got = frames_of(ad2mod.i2c_decode_analog(scl, sda, rate, VDD))
+        dec = ad2mod.i2c_decode_analog(scl, sda, rate, VDD)
+        got = frames_of(dec)
+        su = [(b, who) for _, b, _, who in dec["t_su_dat"]]
         swapped = frames_of(ad2mod.i2c_decode_analog(sda, scl, rate, VDD))
-        good = got == want and swapped != want
+        good = got == want and swapped != want and su == want_su and "s" in [w for _, w in su]
         ok = ok and good
         log(f"[host] T0B(a) decoder on a synthetic capture ({rate / 1e6:.0f} MS/s, {1 / bit / 1e3:.0f} kHz): "
-            f"'{frames_text(got)}'; swapped '{frames_text(swapped)[:40]}' -> {'as expected' if good else 'WRONG'}")
+            f"'{frames_text(got)}'; tSU;DAT drivers {''.join(w for _, w in su)} (want "
+            f"{''.join(w for _, w in want_su)}); swapped '{frames_text(swapped)[:40]}' -> "
+            f"{'as expected' if good else 'WRONG'}")
     return ok
 
 
@@ -1101,7 +1126,10 @@ def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: flo
         return v[len(v) // 2] if v else float("nan")
 
     tlow, thigh = dec["t_low"], dec["t_high"]
-    tsud = [d for d, _, _ in dec["t_su_dat"]]
+    # tSU;DAT of the bits the H755 drives is judged; the target's own (its TIMINGR,
+    # tools/i2c_target_f334) is recorded: the driver is not what sets it.
+    tsud = [d for d, _, _, who in dec["t_su_dat"] if who == "m"]
+    tsud_s = [d for d, _, _, who in dec["t_su_dat"] if who == "s"]
     pairs = [("tLOW", tlow, tl_min), ("tHIGH", thigh, th_min), ("tSU;DAT", tsud, tsu_min),
              ("tHD;STA", dec["t_hd_sta"], thdsta_min), ("tSU;STA", dec["t_su_sta"], tsusta_min),
              ("tSU;STO", dec["t_su_sto"], tsusto_min), ("tBUF", dec["t_buf"], tbuf_min)]
@@ -1137,7 +1165,8 @@ def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: flo
             bad.append(f"f_SCL {f_norm:.0f} Hz (normalised) not within 5 % of the model {model}")
     txt = (f"tLOW {min(tlow, default=0) / ns:.0f}/{med(tlow) / ns:.0f} ns (min/median; counter {scll * tk / ns:.0f}, "
            f"window {lo_l / ns:.0f}..{hi_l / ns:.0f}), tHIGH {min(thigh, default=0) / ns:.0f}/{med(thigh) / ns:.0f} "
-           f"(counter {sclh * tk / ns:.0f}), tSU;DAT min {min(tsud, default=0) / ns:.0f}, tHD;STA "
+           f"(counter {sclh * tk / ns:.0f}), tSU;DAT min {min(tsud, default=0) / ns:.0f} (H755 bits; target bits "
+           f"{min(tsud_s, default=0) / ns:.0f}), tHD;STA "
            f"{min(dec['t_hd_sta'], default=0) / ns:.0f}, tSU;STA {min(dec['t_su_sta'], default=0) / ns:.0f}, tSU;STO "
            f"{min(dec['t_su_sto'], default=0) / ns:.0f}, tBUF {min(dec['t_buf'], default=0) / ns:.0f} ns; t_r "
            f"{tr_m / ns:.0f} t_f {tf_m / ns:.0f} ns (median, 30-70 %); f_SCL {dec['f_scl']:.0f} Hz, normalised "
@@ -1490,7 +1519,7 @@ class Session:
     def scope_arm(self, spec: dict) -> None:
         n = self.ad2.scope_buffer_max()
         ch = SCOPE_SDA if spec["trig"] == "sda" else SCOPE_SCL
-        rate, n = self.ad2.scope_arm_fall(float(spec["rate"]), n, ch, 1.5, 0.05, 10.0)
+        rate, n = self.ad2.scope_arm_fall(float(spec["rate"]), n, ch, 1.5, 0.01, 10.0)
         spec["rate_actual"], spec["samples"] = rate, n
         self.scope_pending = spec
 
@@ -1507,7 +1536,7 @@ class Session:
             self.scope_t9(name, scl, sda, rate)
             return
         if test == "T10B":
-            self.scope_t10b(name, scl, sda, rate)
+            self.scope_t10b(name, scl, sda, rate, spec)
             return
         dec = ad2mod.i2c_decode_analog(scl, sda, rate, VDD)
         got = frames_of(dec)
@@ -1546,7 +1575,7 @@ class Session:
                 cur = 0
         return out
 
-    def scope_t10b(self, name: str, scl: list[float], sda: list[float], rate: float) -> None:
+    def scope_t10b(self, name: str, scl: list[float], sda: list[float], rate: float, spec: dict) -> None:
         """T10(b): SCL held 50 ms by the target while the master under test starts
         a transfer; TIMEOUTA (~10 ms) ends it. Recorded: how long each line stays
         low and what the bus does when the target lets SCL go. Judged: SCL low one
@@ -1560,11 +1589,24 @@ class Session:
         t0 = ev[0][0] if ev else 0.0
         seq = ", ".join(f"{n} {1e3 * (t - t0):.3f} ms" for t, n in ev[:12])
         ok = 45.0 <= lo_scl <= 55.0 and scl[-1] >= V_HIGH and sda[-1] >= V_HIGH
+        rel_txt = "no SDA release seen"
+        if spec.get("tmo"):
+            # With timeout_scl_low the master lets SDA go (its software reset at TIMEOUT)
+            # (TIMEOUTA + 1) x 2048 kernel cycles after SCL fell, in AD2 time (CLKREF).
+            want = spec["tmo"] * 2048 / spec["kernel"] * self.clk_ratio
+            fall = next((e["t"] for e in se if not e["rise"]), None)
+            rel = next((e["t"] for e in de if e["rise"]), None)
+            if fall is not None and rel is not None:
+                dt = rel - fall
+                rel_txt = f"SDA let go {dt * 1e3:.3f} ms after SCL fell (TIMEOUTA {want * 1e3:.3f} ms)"
+                ok = ok and abs(dt - want) <= 0.05 * want
+            else:
+                ok = False
         self.log(f"[host] {name}: SCL low {lo_scl:.2f} ms in {runs_scl} run(s), SDA low {lo_sda:.2f} ms in "
-                 f"{runs_sda} run(s); edges from the first: {seq}; both high at the end "
+                 f"{runs_sda} run(s); edges from the first: {seq}; {rel_txt}; both high at the end "
                  f"{scl[-1] >= V_HIGH and sda[-1] >= V_HIGH}")
-        self.group("F1 T10(b) scope: SCL held, bus free after", ok,
-                   f"{name}: SCL low {lo_scl:.2f} ms ({runs_scl} runs), SDA low {lo_sda:.2f} ms, end levels "
+        self.group("F1 T10(b) scope: SCL held, TIMEOUT, bus free after", ok,
+                   f"{name}: SCL low {lo_scl:.2f} ms ({runs_scl} runs), {rel_txt}, end levels "
                    f"{scl[-1]:.2f}/{sda[-1]:.2f} V")
 
     def scope_t9(self, name: str, scl: list[float], sda: list[float], rate: float) -> None:
@@ -1598,11 +1640,12 @@ class Session:
             return (lambda: self.hold_start(line, ms, edges)), None
         if tag == "HOLD_END":
             return self.hold_end, None
-        m = re.match(r"SCOPE (\S+) k=(\d+) f=(\d+) kernel=(\d+) timingr=([0-9A-F]+) model=(\d+) rate=(\d+) trig=(sda|scl)$", tag)
+        m = re.match(r"SCOPE (\S+) k=(\d+) f=(\d+) kernel=(\d+) timingr=([0-9A-F]+) model=(\d+) rate=(\d+) "
+                     r"trig=(sda|scl)(?: tmo=(\d+))?$", tag)
         if m:
             spec = {"test": m.group(1), "k": int(m.group(2)), "f": int(m.group(3)), "kernel": int(m.group(4)),
                     "timingr": int(m.group(5), 16), "model": int(m.group(6)), "rate": int(m.group(7)),
-                    "trig": m.group(8)}
+                    "trig": m.group(8), "tmo": int(m.group(9) or 0)}
             if self.state != "taps":
                 raise BenchAbort(f"S19: a scope capture announced without taps: {tag}")
             return (lambda: self.scope_arm(spec)), None
