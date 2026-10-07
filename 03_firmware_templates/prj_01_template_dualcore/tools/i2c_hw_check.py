@@ -38,8 +38,11 @@ Electrical safety (no series resistors on the bench; plan S1-S21):
   S18 exactly the two expected ST-LINKs (SN and board) or the session does
       not start; every STM32_Programmer_CLI call carries sn=; both COM ports
       chosen by ST-LINK serial number (monitor.port_for_sn()).
+  S17 (plan revision 2, R2-1): with taps, scope 2+ (SDA) >= 3.0 V and 1+/2+
+      (SCL/SDA) = 0.956 +- 0.015; without taps, 1+ < 0.10 V and 2+ >= 3.0 V;
+      every failure names its line (s17_scope_problems()).
   S19 --bench-state taps|notaps is required and checked: with taps the scope
-      sees the bus (SCL 3.16 +- 0.10 V), without them PF14 reads < 0.1 V.
+      sees the bus (1+ above 0.10 V), without them PF14 reads < 0.10 V.
   S20 the F334 answers (banner) before the H755 is reset; procedure items in
       the checklist.
   S21 the host sends no HOLD outside 1..500 ms (f334_hold_guard()), and checks
@@ -53,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import datetime
 import os
 import pathlib
 import queue
@@ -82,7 +86,8 @@ from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E40
                            t0b_guard_selftest, tree_record)
 
 BENCH_VERSION = 1          # I2C_BENCH_VERSION of Common/Inc/i2c_selftest.h
-F334_PROTOCOL = 1          # TARGET_PROTOCOL of tools/i2c_target_f334/src/bench.h
+F334_PROTOCOL = 2          # TARGET_PROTOCOL of tools/i2c_target_f334/src/bench.h
+F334_SYSCLK = 64000000     # the kernel its TIMINGR was computed for (audit F0, m7)
 
 # ---- Probes (S18): the bench of 2026-10-06 ---------------------------------------------
 H755_SN, H755_BOARD = "0016000C4142501220353451", "NUCLEO-H755ZI-Q"
@@ -103,10 +108,14 @@ SCOPE_SCL, SCOPE_SDA = 0, 1    # scope 1+ on PF14 (SCL through J2), 2+ on PF15 (
 STEPS = [("T0A", "NONE"), ("T0C", "NONE"), ("T0B", "CM4"), ("T0B_CM7", "CM7"),
          ("T0B_TIMEOUT", "NONE"), ("DONE", "NONE")]
 
-# ---- Levels (S17, S19), plan "Reglas nuevas" ---------------------------------------------
-SCL_TAPS_V = (3.06, 3.26)      # 3.16 +- 0.10 V: 1 kOhm to 3V3 against 22 kOhm to GND
-SDA_MIN_V = 3.20
-NOTAPS_SCL_MAX_V = 0.10        # PF14 alone: its 22 kOhm to GND
+# ---- Levels (S17, S19), plan revision 2, R2-1 (D9) -----------------------------------------
+# With taps, SCL/SDA is the divider of the 1 kOhm pull-up with PF14's 22 kOhm to
+# GND (22/23 = 0.9565): a ratio does not depend on the 3V3 rail nor on the AD2's
+# gain, which moved both levels 1.7 % between two sessions (audit F0, O5). A
+# 2.2 kOhm pull-up gives 0.909, 10 kOhm 0.688.
+TAPS_RATIO = (0.956 - 0.015, 0.956 + 0.015)
+SDA_MIN_V = 3.0                # 2+: the SDA node (taps) or PF15 alone (notaps), both states
+NOTAPS_SCL_MAX_V = 0.10        # PF14 alone: its 22 kOhm to GND (S19)
 VDD = 3.3
 V_LOW = 0.3 * VDD              # I2C input thresholds (0.3/0.7 VDD)
 V_HIGH = 0.7 * VDD
@@ -179,19 +188,26 @@ def t0b_oe_selftest(log: Callable[[str], None]) -> bool:
     return ok
 
 
-PIN_RX = re.compile(r"(PB8|PB9) MODER=(\d+) OTYPER=(\d+) PUPDR=(\d+) AFR=(\d+)")
+PIN_RX = re.compile(r"\b(PB8|PB9) MODER=(\d+) OTYPER=(\d+) PUPDR=(\d+) AFR=(\d+)\b")
 
 
 def s15_report_ok(line: str) -> tuple[bool, str]:
-    """S15 on the F334's own report of PB8/PB9: each pin input without pull,
-    or AF4 open-drain without pull, and the firmware's own "s15=ok"."""
-    pins = {m.group(1): tuple(int(x) for x in m.groups()[1:]) for m in PIN_RX.finditer(line)}
+    """S15 on the F334's own report of PB8/PB9: each pin exactly once (audit
+    F0, m14: a report with a pin twice is refused, not judged on its last
+    copy), input without pull or AF4 open-drain without pull, and the
+    firmware's own "s15=ok"."""
+    found: dict[str, list[tuple[int, ...]]] = {}
+    for m in PIN_RX.finditer(line):
+        found.setdefault(m.group(1), []).append(tuple(int(x) for x in m.groups()[1:]))
     bad = []
     for name in ("PB8", "PB9"):
-        if name not in pins:
+        if name not in found:
             bad.append(f"{name} missing")
             continue
-        moder, otyper, pupdr, afr = pins[name]
+        if len(found[name]) != 1:
+            bad.append(f"{name} reported {len(found[name])} times")
+            continue
+        moder, otyper, pupdr, afr = found[name][0]
         if pupdr != 0:
             bad.append(f"{name} pull {pupdr}")
         elif moder == 0:
@@ -214,6 +230,8 @@ def t0b_s15_selftest(log: Callable[[str], None]) -> bool:
         (ok_af.replace("PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4", "PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=1"), False, "PB9 AF1"),
         (ok_af.replace(" s15=ok", " s15=VIOLATED"), False, "firmware says violated"),
         ("PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok", False, "PB9 missing"),
+        ("PB8 MODER=2 OTYPER=0 PUPDR=0 AFR=4 " + ok_af, False, "PB8 twice, a bad copy first (m14)"),
+        (ok_af.replace("PB9 MODER", "XPB9 MODER"), False, "PB9 only inside another word (m14)"),
     ]
     ok = True
     for text, want, why in cases:
@@ -251,6 +269,53 @@ def t0b_s21_selftest(log: Callable[[str], None]) -> bool:
         ok = ok and good
         log(f"[host] T0B(a) S21 hold guard HOLD {args[0]} {args[1]} EDGES {args[2]}: "
             f"{'sent' if why is None else 'refused (' + why + ')'} -> {'as expected' if good else 'WRONG'}")
+    return ok
+
+
+def s17_scope_problems(state: str, v_scl: float, v_sda: float) -> tuple[list[str], list[str]]:
+    """S17 (plan R2-1) and S19 on the two scope readings at rest: (every
+    problem, each naming the line it is about; the subset that is S19, the
+    declared bench state). Pure."""
+    bad: list[str] = []
+    s19: list[str] = []
+    if state == "taps":
+        if v_scl <= NOTAPS_SCL_MAX_V:
+            s19.append(f"scope 1+ (SCL node through J2) reads {v_scl:.3f} V <= {NOTAPS_SCL_MAX_V:.2f} V: "
+                       f"J2 not in place, or the probe not on PF14")
+        if v_sda < SDA_MIN_V:
+            bad.append(f"scope 2+ (SDA node through J3) reads {v_sda:.3f} V < {SDA_MIN_V:.1f} V")
+        else:
+            r = v_scl / v_sda
+            if not (TAPS_RATIO[0] <= r <= TAPS_RATIO[1]):
+                bad.append(f"scope 1+ (SCL) / 2+ (SDA) = {v_scl:.3f} / {v_sda:.3f} V = {r:.4f}, outside "
+                           f"{TAPS_RATIO[0]:.3f}..{TAPS_RATIO[1]:.3f} (1 kOhm pull-up against PF14's 22 kOhm)")
+    else:
+        if v_scl >= NOTAPS_SCL_MAX_V:
+            s19.append(f"scope 1+ (PF14 alone, J2 removed) reads {v_scl:.3f} V >= {NOTAPS_SCL_MAX_V:.2f} V: "
+                       f"J2 in place, or the probe on the bus side")
+        if v_sda < SDA_MIN_V:
+            bad.append(f"scope 2+ (PF15 alone, J3 removed) reads {v_sda:.3f} V < {SDA_MIN_V:.1f} V")
+    return bad + s19, s19
+
+
+def t0b_s17_selftest(log: Callable[[str], None]) -> bool:
+    """S17/S19 thresholds on readings typed by hand (plan R2-1); each refusal
+    must name its line."""
+    cases = [("taps", 3.157, 3.301, True, "", "the F0 delivery levels"),
+             ("taps", 3.102, 3.245, True, "", "the auditor's session (both 1.7 % lower, same ratio)"),
+             ("taps", 3.000, 3.300, False, "1+ (SCL) / 2+ (SDA)", "ratio 0.909: a 2.2 kOhm pull-up"),
+             ("taps", 2.800, 2.950, False, "2+ (SDA node", "SDA below 3.0 V"),
+             ("taps", 0.036, 3.300, False, "1+ (SCL node", "J2 missing (S19)"),
+             ("notaps", 0.057, 3.235, True, "", "the F0 notaps levels"),
+             ("notaps", 3.303, 3.300, False, "1+ (PF14 alone", "probe on the bus side (S19)"),
+             ("notaps", 0.057, 2.900, False, "2+ (PF15 alone", "PF15 below 3.0 V")]
+    ok = True
+    for state, v1, v2, want, line, why in cases:
+        bad, _ = s17_scope_problems(state, v1, v2)
+        good = (not bad) == want and (want or any(line in b for b in bad))
+        ok = ok and good
+        log(f"[host] T0B(a) S17 levels {state} 1+ {v1:.3f} V 2+ {v2:.3f} V [{why}]: "
+            f"{'accepted' if not bad else 'refused: ' + '; '.join(bad)} -> {'as expected' if good else 'WRONG'}")
     return ok
 
 
@@ -491,14 +556,14 @@ class LineReader:
     def on_line(self, line: str) -> None:
         pass
 
-    def expect(self, pattern: str, timeout_s: float) -> re.Match:
+    def expect(self, pattern: str, timeout_s: float, stop_on_abort: bool = False) -> re.Match:
         rx = re.compile(pattern)
         end = time.monotonic() + timeout_s
         while True:
             left = end - time.monotonic()
             if left <= 0:
                 raise BenchAbort(f"{self._prefix.strip()} timeout waiting for /{pattern}/")
-            self.check_abort()
+            self.check_abort(stop_on_abort and self._q.empty())
             try:
                 line = self._q.get(timeout=min(left, 0.2))
             except queue.Empty:
@@ -507,7 +572,7 @@ class LineReader:
             if m:
                 return m
 
-    def check_abort(self) -> None:
+    def check_abort(self, firmware_abort_ends: bool = False) -> None:
         pass
 
     def drain(self) -> None:
@@ -530,6 +595,13 @@ class H755Console(LineReader):
     def on_line(self, line: str) -> None:
         if "[i2c] ABORT" in line:
             self.fw_abort = line
+
+    def check_abort(self, firmware_abort_ends: bool = False) -> None:
+        # Audit F0, m16 (as spi_hw_check.py after 06_spi B1): an expect() that
+        # asks for it ends at once when the firmware has printed ABORT and every
+        # line before it has been looked at, instead of waiting out its timeout.
+        if firmware_abort_ends and self.fw_abort:
+            raise BenchAbort(f"firmware aborted: {self.fw_abort}")
 
     def since(self, mark: int) -> list[str]:
         """Lines from `mark` on, log_long() continuations ("[i2c] | ...") joined."""
@@ -564,7 +636,7 @@ class F334(LineReader):
         if "ABORT" in line:
             self.unexpected.append(line)
 
-    def check_abort(self) -> None:
+    def check_abort(self, firmware_abort_ends: bool = False) -> None:
         if self.unexpected:
             raise BenchAbort(f"F334: {self.unexpected[0]}")
 
@@ -641,12 +713,18 @@ class Session:
         self.state = state
         self.log = log
         self.checks: list[tuple[str, bool]] = []
+        self.records: list[str] = []
         self.step_idx = 0
         self.dout_seen: list[tuple[str, int]] = []
 
     def check(self, name: str, ok: bool, detail: str) -> None:
         self.checks.append((name, ok))
         self.log(f"[host] {name}: {detail} -> {'PASS' if ok else 'FAIL'}")
+
+    def record(self, text: str) -> None:
+        """What the session saw but cannot fail here: logged, not counted."""
+        self.records.append(text)
+        self.log(f"[host] recorded: {text}")
 
     # -- handshake
     def req(self, high: bool) -> None:
@@ -686,32 +764,34 @@ class Session:
         lv, raw = self.f334.levels()
         ok15, why15 = s15_report_ok(raw)
         v_scl, v_sda = self.scope_levels()
-        if self.state == "taps":
-            scope_ok = SCL_TAPS_V[0] <= v_scl <= SCL_TAPS_V[1] and v_sda >= SDA_MIN_V
-            s19_ok = v_scl > NOTAPS_SCL_MAX_V
-        else:
-            scope_ok = v_scl < NOTAPS_SCL_MAX_V and v_sda >= SDA_MIN_V
-            s19_ok = scope_ok
-        f_ok = lv["scl"] == 1 and lv["sda"] == 1 and lv["busy"] == 0 and ok15
-        m_ok = True
+        bad, s19_bad = s17_scope_problems(self.state, v_scl, v_sda)
+        if lv["scl"] != 1 or lv["sda"] != 1 or lv["busy"] != 0:
+            bad.append(f"F334 reads SCL {lv['scl']} SDA {lv['sda']} BUSY {lv['busy']} (1, 1, 0)")
+        if not ok15:
+            bad.append(f"F334 pins: S15 {why15}")
         mtxt = "-"
         if mcu is not None:
             want_pf14 = 1 if self.state == "taps" else 0
-            m_ok = (mcu["pb8"], mcu["pb9"], mcu["pf14"], mcu["pf15"]) == (1, 1, want_pf14, 1)
+            for name, want in (("pb8", 1), ("pb9", 1), ("pf14", want_pf14), ("pf15", 1)):
+                if mcu[name] != want:
+                    bad.append(f"CM7 reads {name.upper()} {mcu[name]} ({want})")
             mtxt = f"pb8={mcu['pb8']} pb9={mcu['pb9']} pf14={mcu['pf14']} (want {want_pf14}) pf15={mcu['pf15']}"
-        ok = scope_ok and f_ok and m_ok
+        ratio = v_scl / v_sda if v_sda > 0.1 else float("nan")
+        crit = (f"taps: 2+ >= {SDA_MIN_V:.1f} V, 1+/2+ {TAPS_RATIO[0]:.3f}..{TAPS_RATIO[1]:.3f}"
+                if self.state == "taps" else f"notaps: 1+ < {NOTAPS_SCL_MAX_V:.2f} V, 2+ >= {SDA_MIN_V:.1f} V")
         self.check(f"S17 {label}",
-                   ok, f"scope SCL(1+) {v_scl:.3f} V SDA(2+) {v_sda:.3f} V "
-                   f"({'taps: SCL 3.16+-0.10, SDA >= 3.20' if self.state == 'taps' else 'notaps: 1+ < 0.10 V, 2+ >= 3.20'}); "
-                   f"F334 scl={lv['scl']} sda={lv['sda']} busy={lv['busy']} S15 {why15}; CM7 {mtxt}")
-        if not s19_ok:
-            raise BenchAbort(f"S19: declared '{self.state}', scope 1+ reads {v_scl:.3f} V")
-        if not ok:
-            raise BenchAbort(f"S17: bus not at rest at '{label}'")
+                   not bad, f"scope SCL(1+) {v_scl:.3f} V SDA(2+) {v_sda:.3f} V ratio {ratio:.4f} ({crit}); "
+                   f"F334 scl={lv['scl']} sda={lv['sda']} busy={lv['busy']} S15 {why15}; CM7 {mtxt}"
+                   + (f"; failing: {'; '.join(bad)}" if bad else ""))
+        if s19_bad:
+            raise BenchAbort(f"S19: declared '{self.state}': {'; '.join(s19_bad)}")
+        if bad:
+            raise BenchAbort(f"S17 at '{label}': {'; '.join(bad)}")
 
     # -- S7, S2 at every step boundary, S17 before the step
     def step(self, name: str) -> None:
-        m = self.con.expect(r"\[i2c\] STEP (\S+) owner=(\S+) v=(\d+) pb8=(\d) pb9=(\d) pf14=(\d) pf15=(\d)", 120.0)
+        m = self.con.expect(r"\[i2c\] STEP (\S+) owner=(\S+) v=(\d+) pb8=(\d) pb9=(\d) pf14=(\d) pf15=(\d)", 120.0,
+                            stop_on_abort=True)
         got, owner, ver = m.group(1), m.group(2), int(m.group(3))
         exp_name, exp_owner = STEPS[self.step_idx]
         if (got, owner, ver) != (name, exp_owner, BENCH_VERSION) or exp_name != name:
@@ -883,10 +963,45 @@ class Session:
         self.t0b_cm7()
         self.t0b_timeout()
         self.step("DONE")
-        bad = [(s, f"0x{en:04X}") for s, en in self.dout_seen if en != 0]
-        self.check("No Digital Out", not bad and len(self.dout_seen) == len(STEPS),
-                   f"Digital Out enable read back at {len(self.dout_seen)} step boundaries of {len(STEPS)}: "
-                   f"all 0x0000 {not bad} {bad}")
+        # Not a counted check (audit F0, m12): step() aborts on any enable bit.
+        self.record(f"No Digital Out: enable read back 0x0000 at all {len(self.dout_seen)} step boundaries of "
+                    f"{len(STEPS)} (any other value aborts the session in step())")
+
+
+ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def checklist_args_problem(operator: Optional[str], date: Optional[str]) -> Optional[str]:
+    """Audit F0, m15: --checklist-confirmed and --checklist-date go together,
+    the date in ISO form (YYYY-MM-DD) and a real day. The reason, or None."""
+    if operator is None and date is None:
+        return None
+    if operator is None or not operator.strip():
+        return "--checklist-date given without --checklist-confirmed NAME"
+    if date is None:
+        return "--checklist-confirmed needs --checklist-date YYYY-MM-DD (the day of the confirmation)"
+    if not ISO_DATE.match(date):
+        return f"--checklist-date {date!r} is not YYYY-MM-DD"
+    try:
+        datetime.date.fromisoformat(date)
+    except ValueError:
+        return f"--checklist-date {date!r} is not a calendar date"
+    return None
+
+
+def t0b_checklist_selftest(log: Callable[[str], None]) -> bool:
+    cases = [(("Hector", "2026-10-07"), True, "name and date"), ((None, None), True, "neither (not evidence)"),
+             (("Hector", None), False, "a name without a date"), ((None, "2026-10-07"), False, "a date alone"),
+             (("Hector", "07/10/2026"), False, "not ISO"), (("Hector", "2026-02-30"), False, "no such day"),
+             (("  ", "2026-10-07"), False, "an empty name")]
+    ok = True
+    for (who, day), want, why in cases:
+        problem = checklist_args_problem(who, day)
+        good = (problem is None) == want
+        ok = ok and good
+        log(f"[host] T0B(a) checklist arguments [{why}]: {'accepted' if problem is None else 'refused: ' + problem}"
+            f" -> {'as expected' if good else 'WRONG'}")
+    return ok
 
 
 def main() -> int:
@@ -900,8 +1015,12 @@ def main() -> int:
     ap.add_argument("--preset", default="selftest-i2c", help="configure preset of the H755 image (build id)")
     ap.add_argument("--checklist-confirmed", metavar="NAME",
                     help="the person at the bench confirms the wiring and flashing items of the checklist")
-    ap.add_argument("--checklist-date", metavar="YYYY-MM-DD", help="date of that confirmation")
+    ap.add_argument("--checklist-date", metavar="YYYY-MM-DD",
+                    help="date of that confirmation (required with --checklist-confirmed)")
     args = ap.parse_args()
+    why = checklist_args_problem(args.checklist_confirmed, args.checklist_date)
+    if why:
+        ap.error(why)
 
     # The console may not encode every character a board sends (a reset leaves a
     # stray byte on the line): print what it can; the capture file keeps UTF-8.
@@ -916,11 +1035,69 @@ def main() -> int:
             lines.append(entry)
         print(entry, flush=True)
 
+    head = git_rev()
+    res: dict = {"abort": None, "session": None, "verdict_fw": None, "revs": {}, "stack_free": None,
+                 "guards": {}}
+    all_ok = False
+    # Audit F0, m11: whatever ends the session (an AD2 or programmer error, a
+    # subprocess timeout, Ctrl+C), the summary, HOST VERDICT and the capture
+    # are written. The AD2 is in S2 by then: run_bench() puts it there in its
+    # finally, and closing it keeps it there (DwfParamOnClose = 1).
+    try:
+        session_body(args, stamp, head, res)
+    except KeyboardInterrupt:
+        res["abort"] = res["abort"] or "interrupted by the operator (Ctrl+C)"
+        stamp(f"[host] ABORT: {res['abort']}")
+    except Exception as e:                    # noqa: BLE001 - every error ends in a capture
+        res["abort"] = res["abort"] or f"{type(e).__name__}: {e}"
+        stamp(f"[host] ABORT: {res['abort']}")
+    finally:
+        all_ok = summary(args, stamp, res)
+        out = args.out
+        if out is None:
+            rev = res["revs"].get("cm7", head)
+            prefix = f"i2c_dev_f0_bench_{args.bench_state}" if args.allow_dirty else f"i2c_f0_bench_{args.bench_state}"
+            out = PROJECT / "docs" / f"{prefix}_{rev}.txt"
+            n = 2
+            while out.exists():
+                out = PROJECT / "docs" / f"{prefix}_{rev}_{n}.txt"
+                n += 1
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with lock:
+            out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print(f"capture: {out}")
+    return 0 if all_ok else 1
+
+
+def summary(args, stamp, res: dict) -> bool:
+    """The closing lines of a capture and the host verdict (always written).
+    Only checks that can fail are counted (audit F0, m12); what is recorded
+    but cannot fail (a mismatch aborts the session before it) is a RECORD."""
+    session = res["session"]
+    guards = res["guards"]
+    checks = session.checks if session else []
+    records = session.records if session else []
+    for name, ok in guards.items():
+        stamp(f"[host] T0B(a) {name}: {'PASS' if ok else 'FAIL'}")
+    for name, ok in checks:
+        stamp(f"[host] CHECK {name}: {'PASS' if ok else 'FAIL'}")
+    for text in records:
+        stamp(f"[host] RECORD {text}")
+    all_ok = (bool(guards) and all(guards.values()) and res["abort"] is None and res["verdict_fw"] == "PASS" and
+              bool(checks) and all(ok for _, ok in checks))
+    if not args.checklist_confirmed:
+        stamp("[host] the wiring checklist was not confirmed by an operator: this capture is not evidence")
+    stamp(f"[host] {sum(1 for _, ok in checks if ok)}/{len(checks)} host checks passed ({len(records)} records not "
+          f"counted), FW VERDICT={res['verdict_fw']}, stack free {res['stack_free']}, abort={res['abort']}")
+    stamp(f"HOST VERDICT={'PASS' if all_ok else 'FAIL'}")
+    return all_ok
+
+
+def session_body(args, stamp, head: str, res: dict) -> None:
     stamp(f"[host] argv: {shlex.join(sys.argv[1:])}")
     stamp(f"[host] options: bench_state={args.bench_state} allow_dirty={args.allow_dirty} preset={args.preset} "
           f"no_reset={args.no_reset} checklist_confirmed={args.checklist_confirmed} "
           f"checklist_date={args.checklist_date}")
-    head = git_rev()
     stamp(f"[host] i2c_hw_check.py, host checkout {head}, protocol v{BENCH_VERSION}, F334 protocol "
           f"v{F334_PROTOCOL}, phase F0")
     procs_ok = checklist(stamp, args.checklist_confirmed, args.checklist_date, args.bench_state)
@@ -930,9 +1107,11 @@ def main() -> int:
     stamp(f"[host] build id of this checkout: build/{args.preset} {h755_id}; "
           f"tools/i2c_target_f334/build/{F334_PRESET} {f334_host_id}")
 
-    guards = {"S3 (00_gpio)": t0b_guard_selftest(stamp), "HOST_REQ only": t0b_oe_selftest(stamp),
-              "S15 F334 report": t0b_s15_selftest(stamp), "S21 hold": t0b_s21_selftest(stamp),
-              "S18 probes": t0b_s18_selftest(stamp), "T0d identity": t0b_t0d_selftest(stamp)}
+    guards = res["guards"]
+    guards.update({"S3 (00_gpio)": t0b_guard_selftest(stamp), "HOST_REQ only": t0b_oe_selftest(stamp),
+                   "S15 F334 report": t0b_s15_selftest(stamp), "S17 levels": t0b_s17_selftest(stamp),
+                   "S21 hold": t0b_s21_selftest(stamp), "S18 probes": t0b_s18_selftest(stamp),
+                   "T0d identity": t0b_t0d_selftest(stamp), "checklist arguments": t0b_checklist_selftest(stamp)})
     for name, ok in guards.items():
         stamp(f"[host] T0B(a) {name} guard on its mock: {'PASS' if ok else 'FAIL'}")
 
@@ -947,10 +1126,6 @@ def main() -> int:
     stamp(f"[host] S18 ports by ST-LINK SN: H755 {H755_SN} -> {h755_port}, F334 {F334_SN} -> {f334_port}")
 
     abort: Optional[str] = None
-    session: Optional[Session] = None
-    verdict_fw = None
-    revs: dict[str, str] = {}
-    stack_free = None
     if not all(guards.values()):
         abort = "a host guard failed on its mock: nothing is opened"
     elif not procs_ok:
@@ -960,64 +1135,36 @@ def main() -> int:
     elif not h755_port or not f334_port:
         abort = "S18: a COM port could not be found by ST-LINK serial number"
     if abort:
+        res["abort"] = abort
         stamp(f"[host] ABORT: {abort}")
-    else:
-        try:
-            with RwSerialPort(f334_port, 115200) as fser:
-                f334 = F334(fser, stamp)
-                try:
-                    abort, session, verdict_fw, revs, stack_free = run_bench(
-                        args, stamp, cli, f334, h755_port, probes, head, h755_id, f334_host_id)
-                finally:
-                    f334.close()
-        except (OSError, BenchAbort) as e:
-            abort = abort or str(e)
-            stamp(f"[host] ABORT: {abort}")
-
-    checks = session.checks if session else []
-    for name, ok in guards.items():
-        stamp(f"[host] T0B(a) {name}: {'PASS' if ok else 'FAIL'}")
-    for name, ok in checks:
-        stamp(f"[host] CHECK {name}: {'PASS' if ok else 'FAIL'}")
-    all_ok = (all(guards.values()) and abort is None and verdict_fw == "PASS" and bool(checks) and
-              all(ok for _, ok in checks))
-    if not args.checklist_confirmed:
-        stamp("[host] the wiring checklist was not confirmed by an operator: this capture is not evidence")
-    stamp(f"[host] {sum(1 for _, ok in checks if ok)}/{len(checks)} host checks passed, FW VERDICT={verdict_fw}, "
-          f"stack free {stack_free}, abort={abort}")
-    stamp(f"HOST VERDICT={'PASS' if all_ok else 'FAIL'}")
-
-    out = args.out
-    if out is None:
-        rev = revs.get("cm7", head)
-        prefix = f"i2c_dev_f0_bench_{args.bench_state}" if args.allow_dirty else f"i2c_f0_bench_{args.bench_state}"
-        out = PROJECT / "docs" / f"{prefix}_{rev}.txt"
-        n = 2
-        while out.exists():
-            out = PROJECT / "docs" / f"{prefix}_{rev}_{n}.txt"
-            n += 1
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with lock:
-        out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"capture: {out}")
-    return 0 if all_ok else 1
+        return
+    try:
+        with RwSerialPort(f334_port, 115200) as fser:
+            f334 = F334(fser, stamp)
+            try:
+                run_bench(args, stamp, cli, f334, h755_port, probes, head, h755_id, f334_host_id, res)
+            finally:
+                f334.close()
+    except (OSError, BenchAbort) as e:
+        res["abort"] = res["abort"] or str(e)
+        stamp(f"[host] ABORT: {res['abort']}")
 
 
-def run_bench(args, stamp, cli, f334: F334, h755_port: str, probes, head, h755_id, f334_host_id):
-    """F334 identity first (S20), then the AD2 and the H755: one session."""
-    abort: Optional[str] = None
-    session: Optional[Session] = None
-    verdict_fw = None
-    revs: dict[str, str] = {}
-    stack_free = None
-
+def run_bench(args, stamp, cli, f334: F334, h755_port: str, probes, head, h755_id, f334_host_id,
+              res: dict) -> None:
+    """F334 identity first (S20), then the AD2 and the H755: one session. The
+    results go into `res` as they come, so an exception keeps what was done."""
+    revs = res["revs"]
     b = f334.banner()
     ok15, why15 = s15_report_ok(b["pins"])
     stamp(f"[host] F334 banner: protocol v{b['proto']} Rev {b['rev']} id {b['id']} addr 0x{b['addr']:02X} sysclk "
           f"{b['sysclk']} IDCODE 0x{b['idcode']:08X} UID {b['uid']} {b['ready']}; pins: S15 {why15}")
-    if not ok15 or b["ready"] != "ready" or b["addr"] != 0x42 or (b["idcode"] & 0xFFF) != 0x438:
+    # Audit F0, m7: the target's TIMINGR is right for a 64 MHz kernel only; a
+    # banner with the 8 MHz HSI (the PLL did not lock) ends the session.
+    if (not ok15 or b["ready"] != "ready" or b["addr"] != 0x42 or (b["idcode"] & 0xFFF) != 0x438 or
+            b["sysclk"] != F334_SYSCLK):
         raise BenchAbort(f"F334: S15 {why15}, state '{b['ready']}', address 0x{b['addr']:02X}, "
-                         f"DEV_ID 0x{b['idcode'] & 0xFFF:03X} (0x438)")
+                         f"DEV_ID 0x{b['idcode'] & 0xFFF:03X} (0x438), sysclk {b['sysclk']} ({F334_SYSCLK})")
     for cmd, rx in (("CLR", r"^OK CLR"), ("INIT", r"^OK INIT"), ("DISARM", r"^OK DISARM"),
                     ("FMP 0", r"^OK FMP 0"), ("STATUS", r"^STATUS ")):
         f334.command(cmd, rx)
@@ -1059,17 +1206,20 @@ def run_bench(args, stamp, cli, f334: F334, h755_port: str, probes, head, h755_i
                 raise BenchAbort("T0d: " + "; ".join(problems))
             stamp("[host] T0d identity: all match")
             session = Session(ad2, con, f334, args.bench_state, stamp)
-            session.check("T0d identity (S18, A21)", True,
-                          "Rev and build id of CM7, CM4 and the F334 match this checkout and the host's ids; exactly "
-                          "the two expected ST-LINKs; ports chosen by their SN")
+            res["session"] = session
+            # Not a counted check (audit F0, m12): a mismatch aborted above.
+            session.record("T0d identity (S18, A21): Rev and build id of CM7, CM4 and the F334 match this checkout "
+                           "and the host's ids; exactly the two expected ST-LINKs; ports chosen by their SN")
             session.set_oe(DIO_REQ)          # S8: only now, after the banner of the right image
             session.req(False)
             session.run()
-            verdict_fw = con.expect(r"\[i2c\] FW VERDICT=(\w+)", 30.0).group(1)
+            res["verdict_fw"] = con.expect(r"\[i2c\] FW VERDICT=(\w+)", 30.0).group(1)
+            stack_free = None
             for text in con.since(0):
                 m = re.search(r"Status_Task stack high-water mark (\d+) words", text)
                 if m:
                     stack_free = int(m.group(1))
+            res["stack_free"] = stack_free
             session.check("Status_Task stack", stack_free is not None and stack_free >= STACK_FREE_MIN,
                           f"high-water mark {stack_free} words free (>= {STACK_FREE_MIN})")
             lv, raw = f334.levels()
@@ -1083,11 +1233,11 @@ def run_bench(args, stamp, cli, f334: F334, h755_port: str, probes, head, h755_i
                           f"{f334.unexpected}")
         except (BenchAbort, AD2SafetyViolation, ad2mod.AD2Error, subprocess.CalledProcessError,
                 subprocess.TimeoutExpired, OSError) as e:
-            abort = str(e)
+            res["abort"] = f"{type(e).__name__}: {e}" if not isinstance(e, BenchAbort) else str(e)
             ad2.set_safe_state()
-            stamp(f"[ad2] ABORT: {abort}; AD2 back in S2 (OE=0x{ad2.get_oe():04X})")
+            stamp(f"[ad2] ABORT: {res['abort']}; AD2 back in S2 (OE=0x{ad2.get_oe():04X})")
             try:
-                verdict_fw = con.expect(r"\[i2c\] FW VERDICT=(\w+)", 60.0).group(1)
+                res["verdict_fw"] = con.expect(r"\[i2c\] FW VERDICT=(\w+)", 60.0).group(1)
             except BenchAbort:
                 pass
         finally:
@@ -1096,7 +1246,6 @@ def run_bench(args, stamp, cli, f334: F334, h755_port: str, probes, head, h755_i
             con.close()
         en, zet = ad2.dout_state()
         stamp(f"[ad2] closing in S2: OE=0x{ad2.get_oe():04X} Digital Out enable=0x{en:04X} Zet=0x{zet:04X}")
-    return abort, session, verdict_fw, revs, stack_free
 
 
 if __name__ == "__main__":
