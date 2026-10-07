@@ -1,0 +1,123 @@
+[+   0.000s] [host] argv: --bench-state notaps --checklist-confirmed 'Hector Rodriguez' --checklist-date 2026-10-07
+[+   0.000s] [host] options: bench_state=notaps allow_dirty=False preset=selftest-i2c no_reset=False checklist_confirmed=Hector Rodriguez checklist_date=2026-10-07
+[+   0.047s] [host] i2c_hw_check.py, host checkout f7323f2, protocol v1, F334 protocol v1, phase F0
+[+   0.047s] [host] checklist [x] GND first: W3 H755 CN8-11 <-> F334 CN5-7; no supply rail between the boards (S20): confirmed by Hector Rodriguez on 2026-10-07 (--checklist-confirmed)
+[+   0.047s] [host] checklist [x] I2C bus: SCL node H755 PB8 (CN7-2) <-> F334 PB8 (CN5-10) W1; SDA node H755 PB9 (CN7-4) <-> F334 PB9 (CN5-9) W2; 1.0 kOhm from each node to H755 3V3 (CN8-7); no series resistors: confirmed by Hector Rodriguez on 2026-10-07 (--checklist-confirmed)
+[+   0.047s] [host] checklist [x] bench state 'notaps': J2 and J3 removed: PF14/PF15 not on the bus: confirmed by Hector Rodriguez on 2026-10-07 (--checklist-confirmed)
+[+   0.047s] [host] checklist [x] F334 checks: D15/D14 = PB8/PB9 on CN5-10/CN5-9, GND on CN5-7, BOOT0 its own pin, no pull-up or solder bridge on PB8/PB9; H755 SB39/SB62 open: confirmed by Hector Rodriguez on 2026-10-07 (--checklist-confirmed)
+[+   0.047s] [host] checklist [x] AD2 lines per 00_gpio README section 8 (DIO0..14), the AD2 on USB while the Nucleo is powered: confirmed by Hector Rodriguez on 2026-10-07 (--checklist-confirmed)
+[+   0.047s] [host] checklist [x] both Nucleo boards on USB of this PC, the F334 powered before the session (S20): confirmed by Hector Rodriguez on 2026-10-07 (--checklist-confirmed)
+[+   0.047s] [host] checklist (not an operator item) images: the F334 with tools/i2c_target_f334 and the H755 with selftest-i2c, each through tools/flash.py --sn with this script stopped; checked by T0d below (Rev, id)
+[+   0.910s] [host] checklist [x] WaveForms GUI closed, no debugger attached (tasklist: none of WaveForms.exe, ST-LINK_gdbserver.exe, openocd.exe, STM32CubeProgrammer.exe)
+[+   1.286s] [host] tree clean
+[+   2.220s] [host] build id of this checkout: build/selftest-i2c ce8319fd1f61c8ea; tools/i2c_target_f334/build/f334 23a92e5573a53db7
+[+   2.221s] [ad2] T0B(a) ad2_set_oe(0x0200, bus=NONE): refused before the DLL
+[+   2.221s] [ad2] T0B(a) ad2_set_oe(0x0800, bus=NONE): refused before the DLL
+[+   2.221s] [ad2] T0B(a) ad2_set_oe(0x2000, bus=NONE): refused before the DLL
+[+   2.221s] [ad2] T0B(a) ad2_set_oe(0x4000, bus=NONE): refused before the DLL
+[+   2.221s] [ad2] T0B(a) ad2_set_oe(0x8000, bus=NONE): refused before the DLL
+[+   2.221s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=NONE): refused before the DLL
+[+   2.221s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=MCU): refused before the DLL
+[+   2.221s] [ad2] T0B(a) ad2_set_oe(0x10FF, bus=MCU): refused before the DLL
+[+   2.221s] [ad2] T0B(a) control ad2_set_oe(0x1000, bus=NONE): passed to the DLL
+[+   2.221s] [ad2] T0B(a) control ad2_set_oe(0x10FF, bus=AD2): passed to the DLL
+[+   2.221s] [host] T0B(a) i2c_set_oe(0x0100) [DIO8 (S3 would allow it)]: refused, S2, nothing passed to ad2_set_oe
+[+   2.221s] [host] T0B(a) i2c_set_oe(0x0400) [DIO10 (S3 would allow it)]: refused, S2, nothing passed to ad2_set_oe
+[+   2.221s] [host] T0B(a) i2c_set_oe(0x00FF) [the AD2 bus]: refused, S2, nothing passed to ad2_set_oe
+[+   2.221s] [host] T0B(a) i2c_set_oe(0x0200) [DIO9]: refused, S2, nothing passed to ad2_set_oe
+[+   2.221s] [host] T0B(a) i2c_set_oe(0x4000) [DIO14 (PA8)]: refused, S2, nothing passed to ad2_set_oe
+[+   2.221s] [host] T0B(a) i2c_set_oe(0x8000) [DIO15]: refused, S2, nothing passed to ad2_set_oe
+[+   2.221s] [host] T0B(a) i2c_set_oe(0x1100) [HOST_REQ with DIO8]: refused, S2, nothing passed to ad2_set_oe
+[+   2.221s] [host] T0B(a) control i2c_set_oe(0x0000): passed to ad2_set_oe
+[+   2.221s] [host] T0B(a) control i2c_set_oe(0x1000): passed to ad2_set_oe
+[+   2.221s] [host] T0B(a) S15 check of an F334 pin report [both AF4 open-drain]: accepted (ok) -> as expected
+[+   2.221s] [host] T0B(a) S15 check of an F334 pin report [both input]: accepted (ok) -> as expected
+[+   2.221s] [host] T0B(a) S15 check of an F334 pin report [PB8 AF push-pull]: refused (PB8 MODER=2 OTYPER=0 AFR=4) -> as expected
+[+   2.221s] [host] T0B(a) S15 check of an F334 pin report [PB9 pull-up]: refused (PB9 pull 1) -> as expected
+[+   2.221s] [host] T0B(a) S15 check of an F334 pin report [PB8 GPIO output]: refused (PB8 MODER=1 OTYPER=1 AFR=4) -> as expected
+[+   2.221s] [host] T0B(a) S15 check of an F334 pin report [PB9 AF1]: refused (PB9 MODER=2 OTYPER=1 AFR=1) -> as expected
+[+   2.221s] [host] T0B(a) S15 check of an F334 pin report [firmware says violated]: refused (no s15=ok) -> as expected
+[+   2.221s] [host] T0B(a) S15 check of an F334 pin report [PB9 missing]: refused (PB9 missing) -> as expected
+[+   2.221s] [host] T0B(a) S21 hold guard HOLD SDA 0 EDGES 0: refused (0 ms outside 1..500 (S21)) -> as expected
+[+   2.221s] [host] T0B(a) S21 hold guard HOLD SDA 501 EDGES 0: refused (501 ms outside 1..500 (S21)) -> as expected
+[+   2.221s] [host] T0B(a) S21 hold guard HOLD SCL 50 EDGES 5: refused (EDGES only with SDA) -> as expected
+[+   2.221s] [host] T0B(a) S21 hold guard HOLD SDA 1000 EDGES 5: refused (1000 ms outside 1..500 (S21)) -> as expected
+[+   2.221s] [host] T0B(a) S21 hold guard HOLD XX 50 EDGES 0: refused (line 'XX') -> as expected
+[+   2.221s] [host] T0B(a) S21 hold guard HOLD SDA 50 EDGES 0: sent -> as expected
+[+   2.221s] [host] T0B(a) S21 hold guard HOLD SCL 500 EDGES 0: sent -> as expected
+[+   2.221s] [host] T0B(a) S21 hold guard HOLD SDA 500 EDGES 5: sent -> as expected
+[+   2.221s] [host] T0B(a) S18 probe check [the two expected probes]: accepted (the two expected ST-LINKs, nothing else) -> as expected
+[+   2.221s] [host] T0B(a) S18 probe check [a third]: refused (3 ST-LINKs (['0016000C4142501220353451', '066BFF393731435243254117', '0670FF000000000000000000']), expected exactly 2) -> as expected
+[+   2.221s] [host] T0B(a) S18 probe check [the F334's missing]: refused (1 ST-LINKs (['0016000C4142501220353451']), expected exactly 2) -> as expected
+[+   2.221s] [host] T0B(a) S18 probe check [another F334 SN]: refused (probes {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254118': 'NUCLEO-F334R8'}, expected {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254117': 'NUCLEO-F334R8'}) -> as expected
+[+   2.221s] [host] T0B(a) S18 probe check [boards swapped]: refused (probes {'0016000C4142501220353451': 'NUCLEO-F334R8', '066BFF393731435243254117': 'NUCLEO-H755ZI-Q'}, expected {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254117': 'NUCLEO-F334R8'}) -> as expected
+[+   2.221s] [host] T0B(a) S18 parser on a CubeProgrammer listing: [{'sn': '0016000C4142501220353451', 'fw': 'V3J17M11', 'board': 'NUCLEO-H755ZI-Q'}, {'sn': '066BFF393731435243254117', 'fw': 'V2J38M27', 'board': 'NUCLEO-F334R8'}] -> as expected
+[+   2.221s] [host] T0B(a) T0d identity check [all match]: accepted -> as expected
+[+   2.221s] [host] T0B(a) T0d identity check [F334 Rev from another commit]: aborts: f334 Rev 7654321 is not this checkout (1234567) -> as expected
+[+   2.221s] [host] T0B(a) T0d identity check [CM4 dirty]: aborts: cm4 Rev 1234567-dirty is dirty -> as expected
+[+   2.221s] [host] T0B(a) T0d identity check [CM7 id differs]: aborts: cm7 id cccc != cm4 id aaaa; cm7 id cccc != host id aaaa -> as expected
+[+   2.221s] [host] T0B(a) T0d identity check [F334 id differs]: aborts: f334 id cccc != host id bbbb -> as expected
+[+   2.221s] [host] T0B(a) T0d identity check [F334 SN differs]: aborts: probes {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254110': 'NUCLEO-F334R8'}, expected {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254117': 'NUCLEO-F334R8'} -> as expected
+[+   2.222s] [host] T0B(a) T0d identity check [one port for both]: aborts: ports H755 COM4 F334 COM4 -> as expected
+[+   2.222s] [host] T0B(a) S3 (00_gpio) guard on its mock: PASS
+[+   2.222s] [host] T0B(a) HOST_REQ only guard on its mock: PASS
+[+   2.222s] [host] T0B(a) S15 F334 report guard on its mock: PASS
+[+   2.222s] [host] T0B(a) S21 hold guard on its mock: PASS
+[+   2.222s] [host] T0B(a) S18 probes guard on its mock: PASS
+[+   2.222s] [host] T0B(a) T0d identity guard on its mock: PASS
+[+   2.475s] [host] S18 probe: ST-LINK SN 0016000C4142501220353451 FW V3J17M11 board NUCLEO-H755ZI-Q
+[+   2.475s] [host] S18 probe: ST-LINK SN 066BFF393731435243254117 FW V2J38M27 board NUCLEO-F334R8
+[+   2.475s] [host] S18 the two expected ST-LINKs, nothing else
+[+   2.479s] [host] S18 ports by ST-LINK SN: H755 0016000C4142501220353451 -> COM4, F334 066BFF393731435243254117 -> COM7
+[+   3.261s] [f334] I2C_TARGET v1 Rev f7323f2 id 23a92e5573a53db7
+[+   3.269s] [f334] I2C_TARGET pins PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   3.281s] [f334] I2C_TARGET addr=0x42 sysclk=64000000 timingr=0x00A20000 idcode=0x10016438 uid=20383337435043060007001E reset_csr=0x00000000 hold_max_ms=500
+[+   3.283s] [f334] I2C_TARGET ready
+[+   3.485s] [host] F334 banner: protocol v1 Rev f7323f2 id 23a92e5573a53db7 addr 0x42 sysclk 64000000 IDCODE 0x10016438 UID 20383337435043060007001E ready; pins: S15 ok
+[+   3.506s] [f334] OK CLR
+[+   3.728s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+   3.839s] [f334] OK DISARM nack=-1 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+   3.843s] [f334] OK FMP 0 cfgr1=0x7C000000
+[+   3.974s] [f334] STATUS xfers=0 rx=0 tx=0 nk=0 ev=0 idle_cuts=0 dropped=0 uart_ovr=0 ptr=0 active=0 hold=0 aborted=0 nack=-1 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+   4.467s] [ad2] opened in S2: OE=0x0000 DIO=0x0000 Digital Out enable=0x0000 Zet=0xFFFF
+[+   4.516s] [ad2] first acquisition after opening, DISCARDED (bench lesson): 1+ 3.299 V, 2+ 3.301 V
+[+   4.517s] [host] reset the H755 through SWD (-c port=SWD mode=HOTPLUG sn=0016000C4142501220353451 -rst), AD2 in S2, the F334 idle; a system reset, not a power cycle
+[+   4.672s]  
+[+   4.677s] === STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[+   4.681s] [sys] build rev=f7323f2 id=ce8319fd1f61c8ea
+[+   4.685s] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[+   4.688s] [sys] silicon revision id=0x2003
+[+   4.692s] [ipc] shared block at 0x38008000, magic=0x48375353
+[+   4.696s] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[+   4.698s] [i2c] CM7 Rev f7323f2
+[+   4.701s] [i2c] CM7 Build id ce8319fd1f61c8ea
+[+   4.703s] [i2c] CM4 Rev f7323f2
+[+   4.706s] [i2c] CM4 Build id ce8319fd1f61c8ea
+[+   4.708s] [i2c] I2C_BENCH v1 idle
+[+   4.709s] [host] T0d identity: host HEAD f7323f2; CM7 Rev f7323f2 id ce8319fd1f61c8ea; CM4 Rev f7323f2 id ce8319fd1f61c8ea; host id ce8319fd1f61c8ea; F334 Rev f7323f2 id 23a92e5573a53db7 (host id 23a92e5573a53db7); probes H755 0016000C4142501220353451 on COM4, F334 066BFF393731435243254117 on COM7
+[+   4.709s] [host] T0d identity: all match
+[+   4.709s] [host] T0d identity (S18, A21): Rev and build id of CM7, CM4 and the F334 match this checkout and the host's ids; exactly the two expected ST-LINKs; ports chosen by their SN -> PASS
+[+   4.715s] [i2c] silicon REV_ID=0x2003, test block at 0x3800D000, CM4 table v1, steps 6
+[+   4.720s] [i2c] STEP T0A owner=NONE v=1 pb8=1 pb9=1 pf14=0 pf15=1
+[+   4.729s] [host] step T0A: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+   4.751s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   4.801s] [host] S17 before T0A: scope SCL(1+) 3.303 V SDA(2+) 3.304 V (notaps: 1+ < 0.10 V, 2+ >= 3.20); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=0 (want 0) pf15=1 -> FAIL
+[+   4.811s] [ad2] ABORT: S19: declared 'notaps', scope 1+ reads 3.303 V; AD2 back in S2 (OE=0x0000)
+[+  14.587s] [i2c] ABORT step=T0A reason=host timeout
+[+  14.591s] [i2c] bench completed without abort -> FAIL
+[+  14.598s] [i2c] CM4 finished: timeout 0, aborts 0; CYCCNT stall exits CM4 0, CM7 0 -> PASS
+[+  14.602s] [i2c] Status_Task stack high-water mark 856 words
+[+  14.605s] [i2c] FW VERDICT=FAIL failures=2
+[+  14.610s] [sys] cpu2 build rev=f7323f2 id=ce8319fd1f61c8ea
+[+  14.613s] [ipc] m7=5 m4=1  (CPU2 alive)
+[+  14.946s] [ad2] closing in S2: OE=0x0000 Digital Out enable=0x0000 Zet=0xFFFF
+[+  15.030s] [host] T0B(a) S3 (00_gpio): PASS
+[+  15.030s] [host] T0B(a) HOST_REQ only: PASS
+[+  15.030s] [host] T0B(a) S15 F334 report: PASS
+[+  15.030s] [host] T0B(a) S21 hold: PASS
+[+  15.030s] [host] T0B(a) S18 probes: PASS
+[+  15.030s] [host] T0B(a) T0d identity: PASS
+[+  15.030s] [host] CHECK T0d identity (S18, A21): PASS
+[+  15.030s] [host] CHECK S17 before T0A: FAIL
+[+  15.030s] [host] 1/2 host checks passed, FW VERDICT=FAIL, stack free None, abort=S19: declared 'notaps', scope 1+ reads 3.303 V
+[+  15.030s] HOST VERDICT=FAIL

@@ -1,0 +1,31 @@
+05_i2c F0: linked .map sizes of prj_01 ("Discarded input sections" excluded: parsing starts at
+"Linker script and memory map"). 2481396: the rows of docs/tim_f0_map_sizes_2481396.txt (the reference of the
+plan, A16); f7323f2: build/<preset> of tools/build_all.ps1 -Clean (docs/i2c_f0_build_all_f7323f2.txt), tree clean.
+Allocated output sections only (address != 0). text = .isr_vector+.text+.rodata+.ARM, data = .data+.init_array+
+.fini_array, bss = .bss+._user_heap_stack+.shared_ram (the grouping arm-none-eabi-size and build_all.ps1 report).
+
+image        commit   .isr_vector       .text     .rodata        .ARM   .init_arr   .fini_arr       .data        .bss  ._heap_stk .shared_ram    text  data    bss
+debug CM7    2481396          664       27900         732           8           4           4         124       30868       24576         224   29304   132  55668
+debug CM7    f7323f2          664       27900         732           8           4           4         124       30868       24576         224   29304   132  55668
+             delta       0 in every allocated section
+debug CM4    2481396          664        2736          56           0           4           4          16          44       12292         224    3456    24  12560
+debug CM4    f7323f2          664        2736          56           0           4           4          16          44       12292         224    3456    24  12560
+             delta       0 in every allocated section
+release CM7  2481396          664       26952         732           8           4           4         124       30872       24576         224   28356   132  55672
+release CM7  f7323f2          664       26952         732           8           4           4         124       30872       24576         224   28356   132  55672
+             delta       0 in every allocated section
+release CM4  2481396          664        2392          56           0           4           4          16          44       12292         224    3112    24  12560
+release CM4  f7323f2          664        2392          56           0           4           4          16          44       12292         224    3112    24  12560
+             delta       0 in every allocated section
+
+selftest-i2c (f7323f2, build/selftest-i2c from an empty dir, docs/i2c_f0_selftest_build_f7323f2.txt): objects of the
+selftest; F0 has no driver object (i2c_bm.c.obj, i2c_ll.c.obj, i2c_hal.c.obj of 05_i2c do not exist yet).
+text = .text+.rodata input sections:
+  CM7 image: text 41972 data 136 bss 56088
+  CM7 i2c_selftest.c.obj               text= 11077 data=   4 bss= 413
+  CM7 i2c_selftest_common.c.obj        text=   583 data=   0 bss=   0
+  CM7 05_i2c driver objects in the map: 0
+  CM4 image: text 7056 data 24 bss 12568
+  CM4 i2c_selftest.c.obj               text=  2143 data=   0 bss=   5
+  CM4 i2c_selftest_common.c.obj        text=   543 data=   0 bss=   0
+  CM4 05_i2c driver objects in the map: 0
