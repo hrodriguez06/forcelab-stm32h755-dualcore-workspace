@@ -98,6 +98,14 @@ target_sources(stm32h7_driver_uart_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uar
 target_link_libraries(stm32h7_driver_uart_ll INTERFACE stm32h7_driver_gpio)
 
 
+# 05_i2c: I2C1-I2C4, master. No unsuffixed target (rule C4) and the umbrella below
+# does not link the tiers: a project picks one. stm32h7_driver_i2c_bm holds the single
+# capability table and validation; the LL and HAL tiers will link it (05_i2c plan,
+# phases F2 and F3).
+add_library(stm32h7_driver_i2c_bm INTERFACE)
+target_include_directories(stm32h7_driver_i2c_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/05_i2c)
+target_sources(stm32h7_driver_i2c_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/05_i2c/i2c_bm.c)
+
 # 06_spi: SPI1-SPI6. No unsuffixed target (rule C4) and the umbrella below does not
 # link the tiers: a project picks one. stm32h7_driver_spi_bm holds the single
 # capability table and validation; the LL and HAL tiers will link it (06_spi plan,
