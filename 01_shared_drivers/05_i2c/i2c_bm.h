@@ -137,7 +137,8 @@ typedef struct
     uint32_t     timeout_scl_low;/*!< 0 = off; else TIMEOUTA + 1 (1..4096), TIDLE = 0, TIMOUTEN:
                                       SCL low for timeout_scl_low x 2048 kernel clocks is a
                                       TIMEOUT (50:1793-1800), which ends a transfer with
-                                      ERR_BUS and a STOP from the hardware                    */
+                                      ERR_BUS and a software reset of the instance (both
+                                      lines let go)                                           */
 } I2cBm_Config_t;
 /** The checks of Init, in the C6 order, nothing written. ERR_PARAM: NULL, instance,
     dnf > 15, timeout_scl_low > 4096, TIMINGR reserved bits set. ERR_BUSY: PE = 1 with
