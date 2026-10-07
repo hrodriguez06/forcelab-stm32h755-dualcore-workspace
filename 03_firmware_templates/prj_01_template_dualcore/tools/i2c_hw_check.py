@@ -400,11 +400,11 @@ def checklist(stamp: Callable[[str], None], operator: Optional[str], date: Optio
         "bridge on PB8/PB9; H755 SB39/SB62 open",
         "AD2 lines per 00_gpio README section 8 (DIO0..14), the AD2 on USB while the Nucleo is powered",
         "both Nucleo boards on USB of this PC, the F334 powered before the session (S20)",
-        "the F334 flashed with tools/i2c_target_f334 of this commit and the H755 with selftest-i2c, each with "
-        "tools/flash.py --sn and this script stopped; then a cold start",
     ]
     for item in items:
         stamp(f"[host] checklist [{mark}] {item}: {who}")
+    stamp("[host] checklist (not an operator item) images: the F334 with tools/i2c_target_f334 and the H755 with "
+          "selftest-i2c, each through tools/flash.py --sn with this script stopped; checked by T0d below (Rev, id)")
     running = running_forbidden()
     if running is None:
         stamp("[host] checklist [ ] WaveForms GUI closed, no debugger attached: tasklist failed, not checked")
@@ -475,11 +475,18 @@ class LineReader:
             while b"\n" in buf:
                 raw, buf = buf.split(b"\n", 1)
                 line = raw.decode("utf-8", errors="replace").rstrip("\r")
-                self._sink(f"{self._prefix}{line}")
                 with self._lock:
                     self.lines.append(line)
                 self._q.put(line)
-                self.on_line(line)
+                # A line this thread cannot log or judge must not end the thread: in
+                # the second development run the byte a reset leaves on the line
+                # (U+FFFD once decoded) made print() raise UnicodeEncodeError on a
+                # cp1252 console, and every later line of the session was lost.
+                try:
+                    self._sink(f"{self._prefix}{line}")
+                    self.on_line(line)
+                except Exception as e:          # noqa: BLE001
+                    self._sink(f"{self._prefix}(reader: {type(e).__name__} on this line, going on)")
 
     def on_line(self, line: str) -> None:
         pass
@@ -569,15 +576,42 @@ class F334(LineReader):
         self.send(text)
         return self.expect(reply, timeout_s)
 
+    def settle(self, quiet_s: float = 0.5, limit_s: float = 5.0) -> None:
+        """Waits until the port has been silent for `quiet_s` (a board just
+        flashed prints its boot banner), then drops what came."""
+        end = time.monotonic() + limit_s
+        n = len(self.lines)
+        quiet_from = time.monotonic()
+        while time.monotonic() < end:
+            time.sleep(0.05)
+            if len(self.lines) != n:
+                n = len(self.lines)
+                quiet_from = time.monotonic()
+            elif time.monotonic() - quiet_from >= quiet_s:
+                break
+        self.drain()
+
     def banner(self) -> dict:
+        """The banner, asked for with ID (up to 3 times: the first request
+        after a flash can meet the boot banner on the line)."""
         self._banner_wanted = True
         try:
-            self.drain()
-            self.send("ID")
-            m1 = self.expect(r"^I2C_TARGET v(\d+) Rev (\S+) id (\S+)", 3.0)
-            pins = self.expect(r"^I2C_TARGET pins (.*)$", 2.0).group(1)
-            m3 = self.expect(r"^I2C_TARGET addr=0x([0-9A-F]+) sysclk=(\d+) .*idcode=0x([0-9A-F]+) uid=([0-9A-F]+)", 2.0)
-            ready = self.expect(r"^I2C_TARGET (ready|aborted.*)$", 2.0).group(1)
+            for attempt in range(3):
+                self.settle()
+                self.send("")                       # ends any partial line the target holds
+                self.settle(0.2, 1.0)
+                self.send("ID")
+                try:
+                    m1 = self.expect(r"^I2C_TARGET v(\d+) Rev (\S+) id (\S+)", 3.0)
+                    pins = self.expect(r"^I2C_TARGET pins (.*)$", 2.0).group(1)
+                    m3 = self.expect(r"^I2C_TARGET addr=0x([0-9A-F]+) sysclk=(\d+) .*idcode=0x([0-9A-F]+) "
+                                     r"uid=([0-9A-F]+)", 2.0)
+                    ready = self.expect(r"^I2C_TARGET (ready|aborted.*)$", 2.0).group(1)
+                    break
+                except BenchAbort:
+                    if attempt == 2:
+                        raise
+            self.settle(0.2, 1.0)
         finally:
             self._banner_wanted = False
         return {"proto": int(m1.group(1)), "rev": m1.group(2), "id": m1.group(3), "pins": pins,
@@ -736,11 +770,11 @@ class Session:
         self.wait_ack(False)
         self.req(False)
         ok_line = self.f334.hold(line, T0C_HOLD_MS)
-        end = self.f334.expect(rf"^HOLD_END line={line} ms=(\d+) us=(\d+) edges=(\d+) cause=(\w+) scl=(\d) sda=(\d)(.*)$",
+        end = self.f334.expect(rf"^HOLD_END line={line} ms=(\d+) us=(\d+) edges=(\d+) blank=(\d+) edge1_us=\S+ cause=(\w+) scl=(\d) sda=(\d)(.*)$",
                                3.0)
         cap = self.ad2.scope_read(SCOPE_N, 3.0) if self.state == "taps" else None
-        mrx = (rf"\[i2c\] T0C hold {line}: PB8 lows=(\d+) low_us=(\d+) first_us=(\d+) end_low=(\d); PB9 lows=(\d+) "
-               rf"low_us=(\d+); PF14 lows=(\d+) low_us=(\d+); PF15 lows=(\d+) low_us=(\d+)")
+        mrx = rf"\[i2c\] T0C hold {line}:" + "".join(
+            rf" {p} lows=(\d+) low_us=(\d+) first_us=(\d+) end_low=(\d);" for p in ("PB8", "PB9", "PF14", "PF15"))
         mm = None
         t_end = time.monotonic() + 5.0
         while mm is None and time.monotonic() < t_end:
@@ -750,16 +784,17 @@ class Session:
                 time.sleep(0.05)
         if mm is None:
             raise BenchAbort(f"no CM7 line for the {line} hold")
-        us, edges, cause = int(end.group(2)), int(end.group(3)), end.group(4)
-        after_ok = end.group(5) == "1" and end.group(6) == "1"
+        us, edges, blank, cause = int(end.group(2)), int(end.group(3)), int(end.group(4)), end.group(5)
+        after_ok = end.group(6) == "1" and end.group(7) == "1"
         ok15, why15 = s15_report_ok(end.group(0))
         self.check(f"T0C hold {line}: F334", ok_line.startswith("OK") and F334_HOLD_US[0] <= us <= F334_HOLD_US[1] and
                    cause == "TIME" and edges == 0 and after_ok and ok15,
-                   f"'{ok_line}'; held {us} us ({F334_HOLD_US[0]}..{F334_HOLD_US[1]}), cause {cause}, SCL edges {edges} "
-                   f"(0), scl={end.group(5)} sda={end.group(6)} 1 ms after the release, pins after: S15 {why15}")
+                   f"'{ok_line}'; held {us} us ({F334_HOLD_US[0]}..{F334_HOLD_US[1]}), cause {cause}, SCL rising edges "
+                   f"counted {edges} (0) and in the first 10 us {blank} (recorded: the glitch of SDA's own fall), "
+                   f"scl={end.group(6)} sda={end.group(7)} 1 ms after the release, pins after: S15 {why15}")
         g = [int(x) for x in mm.groups()]
         pb = {"PB8": (g[0], g[1]), "PB9": (g[4], g[5])}
-        pf = {"PF14": (g[6], g[7]), "PF15": (g[8], g[9])}
+        pf = {"PF14": (g[8], g[9]), "PF15": (g[12], g[13])}
         held_pb, other_pb = ("PB9", "PB8") if line == "SDA" else ("PB8", "PB9")
         held_pf, other_pf = ("PF15", "PF14") if line == "SDA" else ("PF14", "PF15")
         if self.state == "taps":
@@ -868,6 +903,9 @@ def main() -> int:
     ap.add_argument("--checklist-date", metavar="YYYY-MM-DD", help="date of that confirmation")
     args = ap.parse_args()
 
+    # The console may not encode every character a board sends (a reset leaves a
+    # stray byte on the line): print what it can; the capture file keeps UTF-8.
+    sys.stdout.reconfigure(errors="backslashreplace")
     lines: list[str] = []
     t0 = time.monotonic()
     lock = threading.Lock()
@@ -997,8 +1035,11 @@ def run_bench(args, stamp, cli, f334: F334, h755_port: str, probes, head, h755_i
                 raise BenchAbort(f"Digital Out enable 0x{en:04X} after open")
             if not args.no_reset:
                 cmd = [cli, "-c", "port=SWD", "mode=HOTPLUG", f"sn={H755_SN}", "-rst"]
-                stamp(f"[host] reset the H755 through SWD ({' '.join(cmd[1:])}), AD2 in S2, the F334 idle")
+                stamp(f"[host] reset the H755 through SWD ({' '.join(cmd[1:])}), AD2 in S2, the F334 idle; "
+                      f"a system reset, not a power cycle")
                 subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=60)
+            else:
+                stamp("[host] --no-reset: the H755 is not reset by this script; waiting for its banner")
             revs["cm7"] = con.expect(r"\[i2c\] CM7 Rev (\S+)", 20.0).group(1)
             ids = {"cm7": con.expect(r"\[i2c\] CM7 Build id (\S+)", 10.0).group(1)}
             revs["cm4"] = con.expect(r"\[i2c\] CM4 Rev (\S+)", 10.0).group(1)
