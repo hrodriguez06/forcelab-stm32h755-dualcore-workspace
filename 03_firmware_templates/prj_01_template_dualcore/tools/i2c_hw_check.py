@@ -1175,6 +1175,13 @@ def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: flo
         return v[len(v) // 2] if v else float("nan")
 
     tlow, thigh = dec["t_low"], dec["t_high"]
+    # The low periods at a byte boundary after the address (bit 0 of byte j >= 1)
+    # may be stretched by the target (its address match, a byte it has not written
+    # yet; UM10204 3.1.9): only the lower bound applies to them, the upper one to
+    # every other low period, the master's own counter (05_i2c F1, m25).
+    at = dec.get("t_low_at") or [(1, 0)] * len(tlow)
+    tlow_bit = [v for v, (b, j) in zip(tlow, at) if not (b == 0 and j >= 1)]
+    tlow_byte = [v for v, (b, j) in zip(tlow, at) if b == 0 and j >= 1]
     # tSU;DAT of the bits the H755 drives is judged; the target's own (its TIMINGR,
     # tools/i2c_target_f334) is recorded: the driver is not what sets it.
     tsud = [d for d, _, _, who in dec["t_su_dat"] if who == "m"]
@@ -1200,11 +1207,11 @@ def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: flo
     tol = 2 * (2 / rate + 2 * tk)
     lo_l, hi_l = scll * tk - tol, (scll + sync) * tk + tol
     lo_h, hi_h = sclh * tk - tol, (sclh + sync) * tk + tol
-    out_l = [v for v in tlow if not lo_l <= v <= hi_l]
+    out_l = [v for v in tlow_bit if not lo_l <= v <= hi_l] + [v for v in tlow_byte if v < lo_l]
     out_h = [v for v in thigh if not lo_h <= v <= hi_h]
     if out_l:
         bad.append(f"{len(out_l)} of {len(tlow)} tLOW outside {lo_l / ns:.0f}..{hi_l / ns:.0f} ns (first "
-                   f"{out_l[0] / ns:.0f})")
+                   f"{out_l[0] / ns:.0f}; at byte boundaries only the lower bound)")
     if out_h:
         bad.append(f"{len(out_h)} of {len(thigh)} tHIGH outside {lo_h / ns:.0f}..{hi_h / ns:.0f} ns (first "
                    f"{out_h[0] / ns:.0f})")
@@ -1217,7 +1224,8 @@ def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: flo
         if abs(f_norm - model) > 0.05 * model:
             bad.append(f"f_SCL {f_norm:.0f} Hz (normalised) not within 5 % of the model {model}")
     txt = (f"tLOW {min(tlow, default=0) / ns:.0f}/{med(tlow) / ns:.0f}/{max(tlow, default=0) / ns:.0f} ns "
-           f"(min/median/max of {len(tlow)}; counter {scll * tk / ns:.0f}, window {lo_l / ns:.0f}..{hi_l / ns:.0f}), "
+           f"(min/median/max of {len(tlow)}; counter {scll * tk / ns:.0f}, window {lo_l / ns:.0f}..{hi_l / ns:.0f}; "
+           f"{len(tlow_byte)} at byte boundaries, max {max(tlow_byte, default=0) / ns:.0f}, lower bound only), "
            f"tHIGH {min(thigh, default=0) / ns:.0f}/{med(thigh) / ns:.0f}/{max(thigh, default=0) / ns:.0f} "
            f"(counter {sclh * tk / ns:.0f}, window {lo_h / ns:.0f}..{hi_h / ns:.0f}; filter {'analog' if af else 'off'}, "
            f"DNF {dnf}), tSU;DAT min {min(tsud, default=0) / ns:.0f} (H755 bits; target bits "

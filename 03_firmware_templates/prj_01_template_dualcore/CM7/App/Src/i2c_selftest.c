@@ -3063,8 +3063,11 @@ static void t9(void)
     const uint32_t t0 = DWT->CYCCNT;
     const I2cBm_Status_t sw = I2C_BM_Write(I2C4, T_ADDR, b, 2U, ms_cyc(5U));
     const uint32_t cw = DWT->CYCCNT - t0;
-    /* The recovery: PE = 0 (Deinit), the pins to input, then GPIO open-drain. */
-    deinit_judged(false, "the T9 Write on the held bus");
+    /* The recovery: PE = 0 (Deinit), the pins to input, then GPIO open-drain. The
+       Deinit is judged after the recovery: a verdict line here (blocking UART) would
+       delay it by ms. */
+    uint32_t d_diff = 0U;
+    const bool d_ok = inst_deinit(false, &d_diff);
     bool ok = cm7_pins_input() && delay_ms(1U) && cm7_pins_od();
     if (!ok)
     {
@@ -3088,6 +3091,8 @@ static void t9(void)
         return;
     }
     xline("T9", false, s_f_main, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00009012UL, r, true);
+    verdict(d_ok, "T14 I2C4 after the T9 Write on the held bus: Deinit, registers that differ from the reset image "
+            "0x%02lX", (unsigned long)d_diff);
     verdict(low && ((isr & I2C_ISR_BUSY) != 0U) && ((sw == I2C_BM_ERR_BUS) || (sw == I2C_BM_ERR_TIMEOUT)) &&
             (cw <= ms_cyc(6U)) && (sr == I2C_BM_OK) && (pulses == 5U) && (lv == 3U) &&
             (r[IST_XR_STATUS] == (uint32_t)I2C_BM_OK),
@@ -3155,7 +3160,8 @@ static void t9b(void)
     const I2cBm_Status_t sw = I2C_BM_Write(I2C4, T_ADDR, b, 2U, lim);
     const uint32_t cw = DWT->CYCCNT - t0;
     const uint32_t lv0 = bus_idr() & 3U;
-    deinit_judged(false, "the T9(b) Write on the bus held before Init");
+    uint32_t d_diff = 0U;
+    const bool d_ok = inst_deinit(false, &d_diff);       /* judged after the recovery (blocking UART) */
     if (!cm7_pins_input() || !delay_ms(1U) || !cm7_pins_od())
     {
         return;
@@ -3178,6 +3184,8 @@ static void t9b(void)
         return;
     }
     xline("T9B", false, s_f_main, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00009B12UL, r, true);
+    verdict(d_ok, "T14 I2C4 after the T9(b) Write on the bus held before Init: Deinit, registers that differ from "
+            "the reset image 0x%02lX", (unsigned long)d_diff);
     const bool in_set = (sw == I2C_BM_ERR_ARLO) || (sw == I2C_BM_ERR_BUS) || (sw == I2C_BM_ERR_TIMEOUT);
     const bool bounded = cw <= (lim + ms_cyc(1U));
     verdict(low && (si == I2C_BM_OK) && ((isr & I2C_ISR_BUSY) == 0U) && (chk == (uint32_t)I2C_BM_OK) && in_set &&
