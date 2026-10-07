@@ -619,7 +619,7 @@ static void xfer_close(I2C_TypeDef *i2c, uint32_t icr)
 }
 
 /* TIMEOUT in master mode (SCL low longer than TIMEOUTA, 50:1793-1800): RM0399 says
-   the hardware then sends a STOP (50:2276-2278), but on the bench (05_i2c F1,
+   the hardware then sends a STOP (50:2286-2287), but on the bench (05_i2c F1,
    docs/i2c_dev_f1_bench_notaps_*) the master went on holding SCL and SDA low after
    the other device had let SCL go, until the caller's budget ran out. So the
    instance is software-reset at once (PE = 0 lets go of both lines, rule 6) and the
