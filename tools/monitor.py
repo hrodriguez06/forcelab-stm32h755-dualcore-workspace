@@ -23,6 +23,11 @@ alias stub and does not run.
     py tools/monitor.py --port COM4      # skip the autodetection
     py tools/monitor.py --timestamps     # prefix each line with elapsed time
     py tools/monitor.py --log boot.txt   # also append to a file
+    py tools/monitor.py --list-sn        # the ST-LINK VCPs with their serial numbers
+    py tools/monitor.py --sn 0016000C4142501220353451   # the VCP of that ST-LINK
+
+With two boards on USB, autodetection takes whichever ST-LINK port sorts first;
+--sn picks the board (port_for_sn() does the same for scripts).
 
 Ctrl-C exits. The port is reopened automatically when it disappears - resetting
 or reflashing the board drops the VCP for a moment - so the monitor can be left
@@ -245,6 +250,81 @@ def autodetect() -> str | None:
     return None
 
 
+# --- Finding the port of one ST-LINK, by its serial number -----------------
+# With two boards on USB, autodetect() returns whichever ST-LINK port sorts
+# first, which may be the other board's (05_i2c plan D7, S18). The ST-LINK's
+# serial number is what STM32_Programmer_CLI prints as "ST-LINK SN" and takes
+# as sn=. The VCP is one interface of a composite USB device: the interface
+# node (USB\VID_0483&PID_374B&MI_02\<id>) carries PortName, and its parent
+# (USB\VID_0483&PID_374B\<serial>) carries the serial number as the last part
+# of its instance id. CM_Locate_DevNodeW finds present devices only, so a
+# board unplugged since Windows last saw it is not reported.
+
+_CR_SUCCESS = 0
+
+
+def _usb_serial_instances() -> dict[str, str]:
+    """Map COM port -> full USB instance id (USB\\<vid_pid>\\<instance>)."""
+    found: dict[str, str] = {}
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Enum\USB") as usb:
+            for i in range(winreg.QueryInfoKey(usb)[0]):
+                vid_pid = winreg.EnumKey(usb, i)
+                try:
+                    with winreg.OpenKey(usb, vid_pid) as dev:
+                        for j in range(winreg.QueryInfoKey(dev)[0]):
+                            instance = winreg.EnumKey(dev, j)
+                            try:
+                                with winreg.OpenKey(dev, instance + r"\Device Parameters") as params:
+                                    port, _ = winreg.QueryValueEx(params, "PortName")
+                                    found[str(port)] = f"USB\\{vid_pid}\\{instance}"
+                            except OSError:
+                                continue
+                except OSError:
+                    continue
+    except OSError:
+        pass
+    return found
+
+
+def _parent_instance_id(instance_id: str) -> str | None:
+    """Instance id of the parent of a PRESENT device node, through cfgmgr32."""
+    try:
+        cm = ctypes.WinDLL("cfgmgr32")
+    except OSError:
+        return None
+    node = wintypes.DWORD()
+    if cm.CM_Locate_DevNodeW(ctypes.byref(node), ctypes.c_wchar_p(instance_id), 0) != _CR_SUCCESS:
+        return None
+    parent = wintypes.DWORD()
+    if cm.CM_Get_Parent(ctypes.byref(parent), node, 0) != _CR_SUCCESS:
+        return None
+    size = wintypes.ULONG()
+    if cm.CM_Get_Device_ID_Size(ctypes.byref(size), parent, 0) != _CR_SUCCESS:
+        return None
+    buf = ctypes.create_unicode_buffer(size.value + 1)
+    if cm.CM_Get_Device_IDW(parent, buf, size.value + 1, 0) != _CR_SUCCESS:
+        return None
+    return buf.value
+
+
+def stlink_ports_by_sn() -> dict[str, str]:
+    """Map ST-LINK serial number -> COM port, for the ST-LINK VCPs present now."""
+    out: dict[str, str] = {}
+    for port, inst in _usb_serial_instances().items():
+        if not inst.upper().startswith("USB\\" + STLINK_VID):
+            continue
+        parent = _parent_instance_id(inst)
+        if parent and parent.upper().startswith("USB\\" + STLINK_VID):
+            out[parent.rsplit("\\", 1)[-1].upper()] = port
+    return out
+
+
+def port_for_sn(sn: str) -> str | None:
+    """The COM port of the ST-LINK whose serial number is `sn`, or None."""
+    return stlink_ports_by_sn().get(sn.strip().upper())
+
+
 # --- Following the log -----------------------------------------------------
 
 def follow(port_name: str, baud: int, args: argparse.Namespace) -> int:
@@ -323,6 +403,11 @@ def build_parser() -> argparse.ArgumentParser:
                    help="exit instead of waiting when the port disappears")
     p.add_argument("--timeout", type=float, default=None, metavar="SECONDS",
                    help="exit automatically after SECONDS (useful for automated testing)")
+    p.add_argument("--sn", metavar="SN",
+                   help="open the VCP of the ST-LINK with this serial number (STM32_Programmer_CLI "
+                        "'ST-LINK SN'); for two boards on USB")
+    p.add_argument("--list-sn", action="store_true",
+                   help="list the ST-LINK VCPs present with their ST-LINK serial numbers and exit")
     return p
 
 
@@ -338,6 +423,26 @@ def main(argv: list[str] | None = None) -> int:
         for port, desc in rows:
             print(f"  {port:<{width}}  {desc}")
         return 0
+
+    if args.list_sn:
+        rows = sorted(stlink_ports_by_sn().items(), key=lambda r: r[1])
+        if not rows:
+            print("No ST-LINK Virtual COM Port found.")
+            return 1
+        for sn, port in rows:
+            print(f"  {port:<6}  ST-LINK SN {sn}")
+        return 0
+
+    if args.sn:
+        if args.port:
+            print("ERROR: --port and --sn name the port twice; pass one of them.", file=sys.stderr)
+            return 1
+        port_name = port_for_sn(args.sn)
+        if not port_name:
+            print(f"ERROR: no ST-LINK Virtual COM Port with serial number {args.sn}.", file=sys.stderr)
+            print("  Run --list-sn to see the ST-LINKs present.", file=sys.stderr)
+            return 1
+        return follow(port_name, args.baud, args)
 
     port_name = args.port or autodetect()
     if not port_name:

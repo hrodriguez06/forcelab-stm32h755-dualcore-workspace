@@ -25,6 +25,8 @@ Microsoft Store alias stub and does not run.
     py tools/flash.py --tool openocd
     py tools/flash.py --dry-run          # print the commands, run nothing
 
+    py tools/flash.py --sn 0016000C4142501220353451   # this ST-LINK only (sn=)
+
     py tools/flash.py --list             # probes the ST-LINK can see
     py tools/flash.py --read-ob          # dump option bytes
     py tools/flash.py --erase            # full chip erase, then flash
@@ -302,7 +304,10 @@ def confirm(question: str, assume_yes: bool) -> bool:
 # --------------------------------------------------------------------------
 
 def cubeprog_connect(args: argparse.Namespace) -> list[str]:
-    return ["-c", "port=SWD", f"mode={args.mode}"]
+    # sn= picks the probe when two ST-LINKs are connected; without it the CLI
+    # takes the first one it enumerates (05_i2c plan D7, S18).
+    sn = getattr(args, "sn", None)
+    return ["-c", "port=SWD", f"mode={args.mode}"] + ([f"sn={sn}"] if sn else [])
 
 
 def cmd_cubeprog(args: argparse.Namespace, images: list[tuple[str, Path]]) -> list[str]:
@@ -418,6 +423,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-reset", action="store_true", help="leave the target halted after programming")
     p.add_argument("--dry-run", action="store_true", help="print commands, execute nothing")
     p.add_argument("--yes", action="store_true", help="skip confirmation prompts")
+    p.add_argument("--sn", metavar="SN",
+                   help="serial number of the ST-LINK to use (passed as sn=; see --list). Without it "
+                        "CubeProgrammer takes the first probe it finds. cubeprog backend only")
 
     g = p.add_argument_group("inspection (these never write flash)")
     g.add_argument("--list", action="store_true", help="list connected ST-LINK probes and exit")
@@ -429,6 +437,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.sn is not None:
+        if not args.sn.isalnum():
+            die(f"--sn expects the ST-LINK serial number as --list prints it, got {args.sn!r}")
+        if args.tool != "cubeprog":
+            die("--sn is implemented for the cubeprog backend only; this OpenOCD setup "
+                "has no probe selection, so it would use whichever ST-LINK it finds first")
 
     if args.list:
         return do_list(args)
@@ -469,6 +484,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\nTarget   : STM32H755ZI / Nucleo-H755ZI-Q")
     print(f"Backend  : {args.tool}" + (f"  (connect mode {args.mode})" if args.tool == "cubeprog" else ""))
     print(f"Preset   : {args.preset}")
+    if args.sn:
+        print(f"Probe    : ST-LINK SN {args.sn}")
     for core, elf in images:
         size = elf.stat().st_size
         print(f"  {CORES[core]['cpu']:<22} bank {CORES[core]['bank']} @ 0x{CORES[core]['base']:08X}"
