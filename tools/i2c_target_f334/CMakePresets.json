@@ -1,0 +1,17 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 22, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "f334",
+      "displayName": "05_i2c bench target, NUCLEO-F334R8 (Ninja)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/f334",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": { "FW_PRESET": "f334" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "f334", "configurePreset": "f334" }
+  ]
+}
