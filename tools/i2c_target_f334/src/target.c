@@ -127,7 +127,13 @@ static void ln_pins(Line_t *l)
 {
     ln_pin(l, " PB8", TARGET_PIN_SCL);
     ln_pin(l, " PB9", TARGET_PIN_SDA);
-    ln_str(l, target_s15_ok() ? " s15=ok" : " s15=VIOLATED");
+    /* Masked, as in target_poll(): a hold released by its interrupt between the
+       MODER read and s_hold_pin would look like an output pin with no hold. */
+    const uint32_t pm = __get_PRIMASK();
+    __disable_irq();
+    const bool ok = target_s15_ok();
+    __set_PRIMASK(pm);
+    ln_str(l, ok ? " s15=ok" : " s15=VIOLATED");
 }
 
 /* ---- I2C1 ------------------------------------------------------------------------------ */
@@ -152,11 +158,15 @@ static void ln_pins(Line_t *l)
      target has no tVD;DAT to meet.
    FMP 0 (Sm and Fm, the default): PRESC = 2 (46.9 ns), SCLDEL = 15, SDADEL = 1:
    - data setup: 16 x 46.9 = 750 ns after SDA changes, >= t_r + tSU;DAT of Sm
-     (300 + 250 ns) on the taps bench, whose t_r is 225..270 ns: with 172 ns
-     the first bit after a stretch measured -27 ns (05_i2c F1 development run,
+     (the 300 ns the H755 gives CalcTiming for the taps bench, whose measured
+     t_r is 225..270 ns, + 250 ns): with 172 ns the first bit after a stretch
+     measured -27 ns (05_i2c F1 development run,
      docs/i2c_dev_f1_bench_taps_32cd2e5.txt, T5 at 400 kHz);
-   - data output: tSYNC1 + 2 x 46.9 = tSYNC1 + 94 ns, + t_r 300 well inside
-     the tVD;DAT of Fm (900 ns).
+   - data output: tSYNC1 + [SDADEL x (PRESC + 1) + 1] x 15.6 = tSYNC1 + 62.5 ns
+     (50:309-310), + t_r 300 well inside the tVD;DAT of Fm (900 ns);
+   - every SCL low is stretched to at least [(SDADEL + SCLDEL + 1) x (PRESC + 1)
+     + 1] x 15.6 = 812 ns (50:347-349): fine for 100 and 400 kHz (tLOW >= 1.3
+     us), not for Fm+, so 1 MHz traffic needs FMP 1.
    SCLH/SCLL are not used in slave mode. These numbers need SYSCLK = 64 MHz:
    the host refuses a banner with another sysclk (the PLL did not lock and
    the kernel is the 8 MHz HSI, audit F0 m7). */
@@ -213,6 +223,7 @@ static volatile bool     s_active;
 static volatile uint32_t s_last_us;
 static bool              s_seg_first;           /* the next byte received is the pointer       */
 static bool              s_rx_nack_this;
+static bool              s_rx_open;             /* a byte taken under byte control, its TCR not yet */
 static bool              s_tx_pending;          /* a byte written to TXDR, not yet shifted out */
 static uint8_t           s_tx_pending_byte;
 static uint32_t          s_seq;
@@ -368,6 +379,7 @@ static void xfer_begin(uint32_t now)
     s_arm = k_disarmed;
     s_tx_pending = false;
     s_rx_nack_this = false;
+    s_rx_open = false;
     s_active = true;
 }
 
@@ -412,6 +424,9 @@ static void rx_take(uint32_t now)
     s_x.rx++;
     s_x.crc_rx = crc_byte(s_x.crc_rx, b);
     s_rx_nack_this = (s_x.arm.nack_at >= 0) && (idx == (uint32_t)s_x.arm.nack_at);
+    /* With byte control the byte stays open until its TCR (audit F1, m17): a TCR
+       that comes in a later ISR pass, with RXNE = 0, belongs to this byte. */
+    s_rx_open = (I2C1->CR1 & I2C_CR1_SBC) != 0U;
     if (!s_rx_nack_this)
     {
         if (s_seg_first)
@@ -487,9 +502,9 @@ static void i2c_irq(void)
         /* Byte control: SCL is stretched until NBYTES is written again; in
            reception the ACK bit of this byte is sent then (50:632-643). */
         bool late = false;
-        if (((isr & I2C_ISR_DIR) == 0U) && ((isr & I2C_ISR_RXNE) == 0U))
+        if (((isr & I2C_ISR_DIR) == 0U) && ((isr & I2C_ISR_RXNE) == 0U) && !s_rx_open)
         {
-            late = !rx_wait_take(now);           /* M1: this TCR's byte first */
+            late = !rx_wait_take(now);           /* M1: this TCR's byte first (none open) */
         }
         if (s_x.arm.stretch_byte_us != 0U)
         {
@@ -506,6 +521,7 @@ static void i2c_irq(void)
             s_x.ev |= EV_LATE;                   /* no byte for this TCR: ACKed, recorded */
         }
         s_rx_nack_this = false;
+        s_rx_open = false;
         I2C1->CR2 = cr2;
         s_last_us = now;
     }
@@ -577,6 +593,7 @@ static void i2c_irq(void)
         s_x.starts++;
         s_seg_first = !rd;
         s_rx_nack_this = false;
+        s_rx_open = false;
         const bool sbc = (s_x.arm.stretch_byte_us != 0U) || (!rd && (s_x.arm.nack_at >= 0));
         if (sbc)
         {
@@ -636,8 +653,13 @@ static Hold_t s_hold;
 /* Releases the held line. Interrupt context (TIM2 CC1, EXTI8) or masked. */
 static void hold_release(uint32_t cause)
 {
+    /* Masked: TIM2 (priority 0) may preempt EXTI9_5 here, and the second caller
+       would overwrite the cause of the first (audit F1, O14). */
+    const uint32_t pm = __get_PRIMASK();
+    __disable_irq();
     if (!s_hold.on)
     {
+        __set_PRIMASK(pm);
         return;
     }
     GPIOB->BSRR = 1UL << s_hold.pin;              /* ODR = 1: released first */
@@ -651,6 +673,7 @@ static void hold_release(uint32_t cause)
     s_hold.on = false;
     s_hold_pin = 0xFFU;
     s_hold.done = true;
+    __set_PRIMASK(pm);
 }
 
 void TIM2_IRQHandler(void)
@@ -702,11 +725,14 @@ static const char *hold_start(uint32_t pin, uint32_t ms, uint32_t edges)
     {
         return "edges must be 1..255";
     }
+    __disable_irq();                              /* check and act in one masked section (O14) */
     if (s_active || s_hold.on || s_hold.done)
     {
+        __enable_irq();
         return "busy";
     }
     i2c_pe(false);                                /* the I2C lets go of both lines */
+    __enable_irq();                               /* with PE = 0 no transfer can begin */
     pin_input(TARGET_PIN_SCL);
     pin_input(TARGET_PIN_SDA);
     s_hold_pin = pin;
@@ -1202,8 +1228,10 @@ void target_command(char *line)
     }
     if (same(c, "INIT"))
     {
+        __disable_irq();                         /* check and act in one masked section (O14) */
         if (s_active)
         {
+            __enable_irq();
             reply_err(c, "busy");
             return;
         }
@@ -1212,6 +1240,7 @@ void target_command(char *line)
             s_reg[i] = (uint8_t)(i ^ 0xA5U);
         }
         s_ptr = 0U;
+        __enable_irq();
         serial_puts("OK INIT reg[i]=i^0xA5 ptr=0");
         return;
     }
@@ -1275,14 +1304,15 @@ void target_command(char *line)
             reply_err(c, "usage: FMP 0|1");
             return;
         }
+        const uint32_t bits = SYSCFG_CFGR1_I2C_PB8_FMP | SYSCFG_CFGR1_I2C_PB9_FMP;
+        const uint32_t tr = (on != 0U) ? TARGET_TIMINGR_FMP : TARGET_TIMINGR;
+        __disable_irq();                         /* check and act in one masked section (O14) */
         if (s_active || s_hold.on || s_hold.done)
         {
+            __enable_irq();
             reply_err(c, "busy");
             return;
         }
-        const uint32_t bits = SYSCFG_CFGR1_I2C_PB8_FMP | SYSCFG_CFGR1_I2C_PB9_FMP;
-        const uint32_t tr = (on != 0U) ? TARGET_TIMINGR_FMP : TARGET_TIMINGR;
-        __disable_irq();
         /* TIMINGR is written with PE = 0 only (RM0364 28.7.5). */
         i2c_pe(false);
         I2C1->TIMINGR = tr;

@@ -97,9 +97,11 @@ them). `NACK` and `STRETCH BYTE` switch on slave byte control (`SBC = 1`,
 `RELOAD = 1`, `NBYTES = 1`) for that transfer; without them every byte is
 acknowledged by the hardware with no software in the clock path. With byte
 control, the ACK or NACK of a received byte is written at its `TCR`, once its
-`RXNE` has been read: a `TCR` read before its byte's `RXNE` waits for it
-(200 µs at most; if it never comes, the byte is acknowledged and `ev` gets
-`0x20`).
+`RXNE` has been read: a byte read stays open until its `TCR`, also when the
+`TCR` comes in a later interrupt; a `TCR` with no open byte waits for its
+`RXNE` (200 µs at most; if it never comes, the byte is acknowledged and `ev`
+gets `0x20`). With `FMP 0` the target stretches every SCL low to at least
+812 ns: 1 MHz traffic needs `FMP 1`.
 
 Registers: 256, `reg[i] = i ^ 0xA5` at start. In a write, the first data byte
 after the address sets the pointer and the next ones are stored from there; a
