@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host side of the 05_i2c selftest on prj_01 (preset selftest-i2c), phase F0.
+"""Host side of the 05_i2c selftest on prj_01 (preset selftest-i2c), phases F0 and F1.
 
 Runs one complete bench session against CM7/App/Src/i2c_selftest.c, the
 Analog Discovery 2 and the NUCLEO-F334R8 target (tools/i2c_target_f334), and
@@ -13,11 +13,25 @@ AD2 wiring and rules S1-S10: 01_shared_drivers/00_gpio/README.md section 8.
     py tools/i2c_hw_check.py --allow-dirty ...      # development only (capture i2c_dev_...)
 
 F0 tests: T0b(a) host guards on mocks before anything is opened (S3, the
-HOST_REQ-only wrapper, S15 on the F334 pin report, S18 probe check, S21 hold
-guard, the T0d identity check); T0d identity of the two probes, CM7, CM4 and
-the F334; T0a (AD2 lines); T0c (bus levels, S17/S19, and the F334's holds seen
-by CPU1, the F334 and, with taps, the scope); T0b (claims on both cores, judged
-by the firmware; the host reads the bus with the pins in AF); T0b(d) timeout.
+HOST_REQ-only wrapper, S15 on the F334 pin report, S17 levels, S18 probe check,
+S21 hold guard, the T0d identity check, the checklist arguments, and for F1 the
+CalcTiming rules, the X/RPT pairing rules and the I2C decoder); T0d identity of
+the two probes, CM7, CM4 and the F334; T0a (AD2 lines); T0c (bus levels, S17/S19,
+and the F334's holds seen by CPU1, the F334 and, with taps, the scope); T0b
+(claims on both cores, judged by the firmware; the host reads the bus with the
+pins in AF); T0b(d) timeout.
+
+F1 tests (i2c_bm): the firmware leads and stops at "AT <tag>" points where the
+host acts (the target's commands and holds, the scope, the logic analyzer for
+CLKREF). Each transfer prints an X line; the host pairs those with t=1, in
+order, with the target's RPT lines and judges both against its own expectation
+(x_expect(): the data regenerated from the seed or the target's known content,
+the CRC-32, the counts). T3 is recomputed with the plan's rules written again
+here (calc_timing()) and every OK TIMINGR checked on its fields against RM0399
+(timingr_rm_problems()); T5 decodes the scope captures (ad2.i2c_decode_analog)
+and judges the frames and the times; T8(b), T9 and T10(a) add the scope's view
+of the NACK, the recovery pulses and the stretching; T12 compares the target's
+totals; the holds of S21 are checked at every HOLD_END.
 
 Electrical safety (no series resistors on the bench; plan S1-S21):
   S2  the AD2 opens and closes in S2 and goes back to it at every step
@@ -66,6 +80,7 @@ import subprocess
 import sys
 import threading
 import time
+import zlib
 from ctypes import wintypes
 from typing import Callable, Optional
 
@@ -85,7 +100,7 @@ from monitor import SerialPort                         # noqa: E402
 from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E402
                            t0b_guard_selftest, tree_record)
 
-BENCH_VERSION = 1          # I2C_BENCH_VERSION of Common/Inc/i2c_selftest.h
+BENCH_VERSION = 2          # I2C_BENCH_VERSION of Common/Inc/i2c_selftest.h
 F334_PROTOCOL = 2          # TARGET_PROTOCOL of tools/i2c_target_f334/src/bench.h
 F334_SYSCLK = 64000000     # the kernel its TIMINGR was computed for (audit F0, m7)
 
@@ -106,7 +121,8 @@ SCOPE_SCL, SCOPE_SDA = 0, 1    # scope 1+ on PF14 (SCL through J2), 2+ on PF15 (
 
 # S7: the host's own copy of the firmware's step table (name, bus-pin owner), in order.
 STEPS = [("T0A", "NONE"), ("T0C", "NONE"), ("T0B", "CM4"), ("T0B_CM7", "CM7"),
-         ("T0B_TIMEOUT", "NONE"), ("DONE", "NONE")]
+         ("T0B_TIMEOUT", "NONE"), ("F1_NOPIN", "NONE"), ("F1_CM4", "CM4"), ("F1_CM7", "CM7"),
+         ("F1_RECOVER", "CM7"), ("DONE", "NONE")]
 
 # ---- Levels (S17, S19), plan revision 2, R2-1 (D9) -----------------------------------------
 # With taps, SCL/SDA is the divider of the 1 kOhm pull-up with PF14's 22 kOhm to
@@ -703,6 +719,432 @@ class F334(LineReader):
         return self.command(text, r"^(OK|ERR) HOLD.*$").group(0)
 
 
+# ==== Phase F1: the host's own oracles (pure functions, each with its mock test) ============
+
+ST = {0: "OK", 1: "ERR_PARAM", 2: "ERR_UNSUPPORTED", 3: "ERR_RANGE", 4: "ERR_BUSY", 5: "ERR_VERIFY",
+      6: "ERR_TIMEOUT", 7: "ERR_NACK", 8: "ERR_ARLO", 9: "ERR_BUS", 10: "PENDING", 11: "ERR_HAL"}
+ST_OK, ST_PARAM, ST_RANGE, ST_TIMEOUT, ST_NACK, ST_BUS, ST_PENDING = 0, 1, 3, 6, 7, 9, 10
+TARGET, NO_TARGET = 0x42, 0x43
+
+# Plan "Reglas de cálculo": tables 405/407 (ns) and the kernel minimum of ES0445 2.19.1, per mode.
+MODES = [  # scl max, tLOW, tHIGH, tSU;DAT, tHD;DAT, tVD;DAT, t_r max, t_f max, kernel min, tHD;STA, tSU;STA, tSU;STO, tBUF
+    (100000, 4700, 4000, 250, 0, 3450, 1000, 300, 4000000, 4000, 4700, 4000, 4700),
+    (400000, 1300, 600, 100, 0, 900, 300, 300, 10000000, 600, 600, 600, 1300),
+    (1000000, 500, 260, 50, 0, 450, 120, 120, 20000000, 260, 260, 260, 500)]
+T_AF = (50, 80)          # DS12923 table 105, ns
+G = 10 ** 9
+
+
+def _cdiv(a: int, b: int) -> int:
+    return -((-a) // b)
+
+
+def calc_timing(k: int, f: int, tr: int, tf: int, af: bool, dnf: int) -> tuple[int, int, int, int]:
+    """The plan's calculation rules, written again from the plan (not from
+    i2c_bm.c), with N rounded up as approved on 2026-10-07: (status, TIMINGR,
+    mode, scl_hz_model). Status 1 ERR_PARAM, 3 ERR_RANGE."""
+    if k == 0 or f == 0 or f > 1000000 or dnf > 15:
+        return ST_PARAM, 0, 0, 0
+    m = 0 if f <= 100000 else (1 if f <= 400000 else 2)
+    _, tl, th, tsu, thd, tvd, trm, tfm, kmin = MODES[m][:9]
+    if tr > trm or tf > tfm or k < kmin:
+        return ST_RANGE, 0, 0, 0
+    afmin, afmax = T_AF if af else (0, 0)
+    sync = _cdiv((tr + tf + 2 * afmin) * k, G) + 2 * (dnf + 3)
+    for p in range(16):
+        d = G * (p + 1)
+        scldel = max(0, _cdiv((tr + tsu) * k, d) - 1)
+        if scldel > 15:
+            continue
+        smin = max(0, _cdiv((tf + thd - afmin) * k - (dnf + 3) * G, d))
+        smax = ((tvd - tr - afmax) * k - (dnf + 4) * G) // d
+        if smin > smax or smin > 15:
+            continue
+        n = _cdiv(_cdiv(k, f) - sync, p + 1)
+        lmin, hmin = _cdiv(tl * k, d), _cdiv(th * k, d)
+        lo = max(lmin, _cdiv(n * tl, tl + th))
+        hi = max(hmin, n - lo)
+        if lo > 256 or hi > 256:
+            continue
+        if (lo * (p + 1) - dnf - 4) * G <= afmax * k:
+            continue
+        if hi * (p + 1) <= 1:
+            continue
+        t = (p << 28) | (scldel << 20) | (smin << 16) | ((hi - 1) << 8) | (lo - 1)
+        return ST_OK, t, m, k // (sync + (lo + hi) * (p + 1))
+    return ST_RANGE, 0, 0, 0
+
+
+def timingr_rm_problems(k: int, f: int, tr: int, tf: int, af: bool, dnf: int, t: int, model: int) -> list[str]:
+    """What an OK TIMINGR must meet, checked on its fields against RM0399 itself
+    (not against the rules): 50:342 (SCLDEL), 50:319/331 (SDADEL window), the
+    counters at least tLOW/tHIGH of table 407, 50:162-163, the kernel of 2.19.1,
+    reserved bits 0, and the model frequency not above the one asked."""
+    m = 0 if f <= 100000 else (1 if f <= 400000 else 2)
+    _, tl, th, tsu, thd, tvd, trm, tfm, kmin = MODES[m][:9]
+    p, scldel, sdadel = (t >> 28) & 0xF, (t >> 20) & 0xF, (t >> 16) & 0xF
+    scll, sclh = (t & 0xFF) + 1, ((t >> 8) & 0xFF) + 1
+    afmin, afmax = T_AF if af else (0, 0)
+    bad = []
+    if t & 0x0F000000:
+        bad.append("reserved bits 27:24 set")
+    if (scldel + 1) * (p + 1) * G < (tr + tsu) * k:
+        bad.append("SCLDEL below t_r + tSU;DAT (50:342)")
+    if sdadel * (p + 1) * G < (tf + thd - afmin) * k - (dnf + 3) * G:
+        bad.append("SDADEL below its minimum (50:319)")
+    if sdadel * (p + 1) * G > (tvd - tr - afmax) * k - (dnf + 4) * G:
+        bad.append("SDADEL above its maximum (50:331)")
+    if scll * (p + 1) * G < tl * k:
+        bad.append("SCLL counter below tLOW (table 407)")
+    if sclh * (p + 1) * G < th * k:
+        bad.append("SCLH counter below tHIGH (table 407)")
+    if 4 * G >= (scll * (p + 1) - dnf) * G - afmax * k:
+        bad.append("t_kernel >= (tLOW - t_filters)/4 (50:162)")
+    if sclh * (p + 1) <= 1:
+        bad.append("t_kernel >= tHIGH (50:163)")
+    if k < kmin:
+        bad.append("kernel below ES0445 2.19.1")
+    if model > f:
+        bad.append(f"model {model} above {f}")
+    return bad
+
+
+def t0b_calc_selftest(log: Callable[[str], None]) -> bool:
+    """T3's two oracles on vectors typed here: the bench's own case (with the
+    plan's floor of N the model came out at 100 100 Hz; rounded up 99 700), the
+    RM check of a good TIMINGR, and the two controls of the plan: an expected
+    value altered (SCLL + 1) is told apart, and SDADEL outside its window is
+    refused by the RM check."""
+    ok = True
+    st, t, m, model = calc_timing(100000000, 100000, 250, 20, True, 0)
+    good = st == ST_OK and model == 99700 and model <= 100000 and not timingr_rm_problems(
+        100000000, 100000, 250, 20, True, 0, t, model)
+    ok = ok and good
+    log(f"[host] T0B(a) T3 calc: 100 MHz, 100 kHz, t_r 250, t_f 20, filter: status {st} TIMINGR 0x{t:08X} model "
+        f"{model} (99700, RM check clean) -> {'as expected' if good else 'WRONG'}")
+    altered = t + 1
+    good = altered != t
+    ok = ok and good
+    log(f"[host] T0B(a) T3 control: expected TIMINGR with SCLL + 1 (0x{altered:08X}) differs from 0x{t:08X}: "
+        f"{'told apart' if good else 'NOT told apart'}")
+    # With t_f = 300 ns the SDADEL window starts above 0 (50:319): the vector's own
+    # TIMINGR passes, the same with SDADEL = 0 must not.
+    st2, t2, _, model2 = calc_timing(100000000, 100000, 1000, 300, True, 0)
+    clean = st2 == ST_OK and not timingr_rm_problems(100000000, 100000, 1000, 300, True, 0, t2, model2)
+    bad_sda = t2 & ~(0xF << 16)
+    probs = timingr_rm_problems(100000000, 100000, 1000, 300, True, 0, bad_sda, model2)
+    good = clean and ((t2 >> 16) & 0xF) > 0 and any("SDADEL" in x for x in probs)
+    ok = ok and good
+    log(f"[host] T0B(a) T3 control: 100 MHz, 100 kHz, t_r 1000, t_f 300: TIMINGR 0x{t2:08X} (SDADEL "
+        f"{(t2 >> 16) & 0xF}) passes {clean}; with SDADEL 0 (below 50:319) the RM check "
+        f"{'refuses: ' + '; '.join(probs) if probs else 'accepts'} -> {'as expected' if good else 'WRONG'}")
+    for k, f, want in ((3999999, 100000, ST_RANGE), (100000000, 0, ST_PARAM), (100000000, 1000001, ST_PARAM)):
+        got = calc_timing(k, f, 100, 10, True, 0)[0]
+        good = got == want
+        ok = ok and good
+        log(f"[host] T0B(a) T3 calc refusal k={k} f={f}: status {got} ({want}) -> {'as expected' if good else 'WRONG'}")
+    return ok
+
+
+def ist_fill(n: int, seed: int) -> bytes:
+    """The selftest's ist_fill(): xorshift32 bytes (bits 31:24 of each state)."""
+    x = seed if seed else 0x2545F491
+    out = bytearray()
+    for _ in range(n):
+        x ^= (x << 13) & 0xFFFFFFFF
+        x ^= x >> 17
+        x ^= (x << 5) & 0xFFFFFFFF
+        out.append((x >> 24) & 0xFF)
+    return bytes(out)
+
+
+def target_reg(i: int) -> int:
+    """The target's register i after INIT (tools/i2c_target_f334: reg[i] = i ^ 0xA5)."""
+    return (i & 0xFF) ^ 0xA5
+
+
+def target_bytes(p: int, n: int) -> bytes:
+    return bytes(target_reg(p + i) for i in range(n))
+
+
+X_RX = re.compile(r"\[i2c\] X (\S+) (cm4|cm7) f=(\d+) op=(\S+) mode=(\S+) a=([0-9A-F]+) n=(\d+) p=(\d+) st=(\d+) "
+                  r"crc=([0-9A-F]+) mis=(\d+) bad=(-?\d+) cyc=(\d+) dtx=(\d+) drx=(\d+) irq=(\d+) irqa=(\d+) "
+                  r"cr1=([0-9A-F]+) sen=(\d+) isr=([0-9A-F]+) aux=(\d+) t=(\d)(?: d=([0-9A-F]+))?")
+
+
+def parse_x(text: str) -> Optional[dict]:
+    m = X_RX.search(text)
+    if not m:
+        return None
+    g = m.groups()
+    return {"test": g[0], "core": g[1], "f": int(g[2]), "op": g[3], "mode": g[4], "a": int(g[5], 16), "n": int(g[6]),
+            "p": int(g[7]), "st": int(g[8]), "crc": int(g[9], 16), "mis": int(g[10]), "bad": int(g[11]),
+            "cyc": int(g[12]), "dtx": int(g[13]), "drx": int(g[14]), "irq": int(g[15]), "irqa": int(g[16]),
+            "cr1": int(g[17], 16), "sen": int(g[18]), "isr": int(g[19], 16), "aux": int(g[20]), "t": int(g[21]),
+            "d": bytes.fromhex(g[22]) if g[22] else None, "text": text}
+
+
+RPT_RX = re.compile(r"^RPT n=(\d+) st=(\d+) sr=(\d+) sp=(\d+) dir=(\S*) rx=(\d+) tx=(\d+) nk=(\d+) nm=(\d+) "
+                    r"crc_rx=([0-9A-F]+) crc_tx=([0-9A-F]+) p0=(\d+) p1=(\d+) ev=([0-9A-F]+) us=(\d+)")
+
+
+def parse_rpt(text: str) -> Optional[dict]:
+    m = RPT_RX.search(text)
+    if not m:
+        return None
+    g = m.groups()
+    return {"seq": int(g[0]), "st": int(g[1]), "sr": int(g[2]), "sp": int(g[3]), "dir": g[4], "rx": int(g[5]),
+            "tx": int(g[6]), "nk": int(g[7]), "nm": int(g[8]), "crc_rx": int(g[9], 16), "crc_tx": int(g[10], 16),
+            "p0": int(g[11]), "p1": int(g[12]), "ev": int(g[13], 16), "us": int(g[14]), "text": text}
+
+
+def crc32(b: bytes) -> int:
+    return zlib.crc32(b) & 0xFFFFFFFF
+
+
+def x_expect(x: dict) -> dict:
+    """What the host itself expects of a transfer the selftest made (independent of
+    the firmware's own verdicts): its status, the data, and the target's report.
+    x["armed"] is what the host armed in the target for this transfer (NACK k,
+    CORRUPT k), from its own AT handling."""
+    test, op, n, p = x["test"], x["op"], x["n"], x["p"]
+    armed = x.get("armed") or {}
+    e: dict = {"st": ST_OK, "rpt": None}
+    if op == "W":
+        data = ist_fill(n, p)
+        e["data"] = data
+        e["crc"] = crc32(data)
+        e["rpt"] = {"st": 1, "sr": 0, "sp": 1, "dir": "W", "rx": n, "tx": 0, "nk": 0, "crc_rx": crc32(data), "ev": 0}
+        k = armed.get("nack")
+        if k is not None and k < n:
+            # The target NACKs data byte k: bytes 0..k received, byte k refused (R2-2)
+            e["st"] = ST_NACK
+            e["rpt"] = {"st": 1, "sr": 0, "sp": 1, "dir": "W", "rx": k + 1, "tx": 0, "nk": 1,
+                        "crc_rx": crc32(data[:k + 1]), "ev": 0}
+            if x["mode"] == "it":
+                e["dtx"] = k
+    elif op in ("R", "WR"):
+        data = bytearray(target_bytes(p, n))
+        k = armed.get("corrupt")
+        if k is not None and k < n:
+            data[k] ^= 0xFF                              # the target inverts the k-th byte it sends
+            e["mis"] = 1
+            e["bad"] = k
+        data = bytes(data)
+        e["data"] = data
+        e["crc"] = crc32(data)
+        if op == "R":
+            e["rpt"] = {"st": 1, "sr": 0, "sp": 1, "dir": "R", "rx": 0, "tx": n, "nm": 1, "crc_tx": crc32(data),
+                        "ev": 0, "p0": p & 0xFF}
+        else:
+            e["rpt"] = {"st": 2, "sr": 1, "sp": 1, "dir": "WR", "rx": 1, "tx": n, "nm": 1,
+                        "crc_rx": crc32(bytes([p & 0xFF])), "crc_tx": crc32(data), "ev": 0, "p1": (p + n) & 0xFF}
+    elif op == "P":
+        e["rpt"] = {"st": 1, "sr": 0, "sp": 1, "dir": "W", "rx": 0, "tx": 0, "ev": 0x10}
+    if x["a"] == NO_TARGET:
+        e["st"] = ST_NACK
+        e["rpt"] = None
+    if test == "T6C":
+        e["st"] = ST_TIMEOUT
+        e["aux"] = ST_PENDING
+        e["rpt"] = {"sp": 0, "ev_has": 0x08, "dir": "W", "rx_max": 2}
+    if test == "T7C":
+        e["st"] = ST_TIMEOUT
+        e["sen"] = n
+        e["rpt"] = {"sp": 0, "ev_has": 0x08, "dir": "R", "tx_max": 3}
+    if test.startswith("T10B"):
+        e["st"] = ST_BUS if test == "T10B" else ST_TIMEOUT
+        e["rpt"] = None                                  # the target is off while it holds SCL
+    return e
+
+
+def x_problems(x: dict, rpt: Optional[dict]) -> list[str]:
+    """Everything that differs between a transfer as the selftest reports it, as
+    the host expects it, and as the target saw it."""
+    e = x_expect(x)
+    bad = []
+    if x["st"] != e["st"]:
+        bad.append(f"status {ST.get(x['st'], x['st'])} ({ST[e['st']]})")
+    if "crc" in e and e["st"] == ST_OK and x["crc"] != e["crc"]:
+        bad.append(f"crc {x['crc']:08X} (host {e['crc']:08X})")
+    if x["op"] in ("R", "WR") and e["st"] == ST_OK and (x["mis"], max(x["bad"], -1)) != (e.get("mis", 0), e.get("bad", -1)):
+        bad.append(f"{x['mis']} bytes differ from the target's known content, first at {x['bad']} "
+                   f"(the host expects {e.get('mis', 0)} at {e.get('bad', -1)})")
+    if x["d"] is not None and "data" in e and x["d"] != e["data"][:len(x["d"])]:
+        bad.append(f"d={x['d'].hex().upper()} (host {e['data'][:len(x['d'])].hex().upper()})")
+    if "dtx" in e and x["dtx"] != e["dtx"]:
+        bad.append(f"acknowledged count {x['dtx']} ({e['dtx']})")
+    if "aux" in e and x["aux"] != e["aux"]:
+        bad.append(f"aux {x['aux']} ({e['aux']})")
+    if "sen" in e and x["sen"] != e["sen"]:
+        bad.append(f"sentinel bytes {x['sen']} ({e['sen']})")
+    if x["mode"] == "it" and (x["irqa"] != 0 or (x["cr1"] & 0xFE) != 0):
+        bad.append(f"after the end: IRQs {x['irqa']}, CR1 0x{x['cr1']:08X}")
+    if x["mode"] == "dma" and x["aux"] != 0:
+        bad.append(f"DMA steps 0x{x['aux']:X}")
+    want = e["rpt"]
+    if (x["t"] == 1) != (want is not None) and not x["test"].startswith("T10B"):
+        bad.append(f"t={x['t']} but the host expects {'a' if want else 'no'} report")
+    if want is not None:
+        if rpt is None:
+            bad.append("no RPT from the target")
+        else:
+            for key, val in want.items():
+                if key == "ev_has":
+                    if not rpt["ev"] & val:
+                        bad.append(f"RPT ev 0x{rpt['ev']:02X} without 0x{val:02X}")
+                elif key == "rx_max":
+                    if rpt["rx"] > val:
+                        bad.append(f"RPT rx {rpt['rx']} (<= {val})")
+                elif key == "tx_max":
+                    if rpt["tx"] > val:
+                        bad.append(f"RPT tx {rpt['tx']} (<= {val})")
+                elif rpt.get(key) != val:
+                    got = rpt.get(key)
+                    bad.append(f"RPT {key}={got:08X} ({val:08X})" if key.startswith("crc") else f"RPT {key}={got} ({val})")
+    return bad
+
+
+def t0b_pairing_selftest(log: Callable[[str], None]) -> bool:
+    """The X/RPT rules on lines typed here: a good read, its target report with the
+    CRC of the bytes it sent, and four faults that must be found."""
+    data = target_bytes(0, 4)
+    x = (f"[i2c] X T4 cm7 f=400000 op=R mode=poll a=42 n=4 p=0 st=0 crc={crc32(data):08X} mis=0 bad=-1 cyc=1 "
+         f"dtx=0 drx=4 irq=0 irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1")
+    r = (f"RPT n=1 st=1 sr=0 sp=1 dir=R rx=0 tx=4 nk=0 nm=1 crc_rx=FFFFFFFF crc_tx={crc32(data):08X} p0=0 p1=4 "
+         f"ev=00 us=100")
+    cases = [(x, r, True, "a good read"),
+             (x, r.replace("tx=4", "tx=5"), False, "the target sent 5"),
+             (x, r.replace(f"crc_tx={crc32(data):08X}", "crc_tx=00000000"), False, "another CRC at the target"),
+             (x.replace("st=0", "st=7"), r, False, "status NACK"),
+             (x, None, False, "no report")]
+    ok = True
+    for xt, rt, want, why in cases:
+        px = parse_x(xt)
+        pr = parse_rpt(rt) if rt else None
+        probs = x_problems(px, pr) if px else ["X line not parsed"]
+        good = (not probs) == want
+        ok = ok and good
+        log(f"[host] T0B(a) X/RPT pairing [{why}]: {'accepted' if not probs else 'refused: ' + '; '.join(probs)} -> "
+            f"{'as expected' if good else 'WRONG'}")
+    return ok
+
+
+def expected_frames(xs: list[dict]) -> list[tuple[str, list[tuple[int, int]], bool]]:
+    """The bus frames a group of transfers must show: one entry per START/Sr, its
+    bytes with the acknowledge bit (0 ACK, 1 NACK), and whether a STOP ends it."""
+    out = []
+    for x in xs:
+        a, op, n, p = x["a"], x["op"], x["n"], x["p"]
+        nack_addr = 1 if a == NO_TARGET else 0
+        if op == "P":
+            out.append(("S", [(a << 1, nack_addr)], True))
+        elif op == "W":
+            d = ist_fill(n, p)
+            k = (x.get("armed") or {}).get("nack")
+            if k is not None and k < n:
+                out.append(("S", [(a << 1, 0)] + [(b, 0) for b in d[:k]] + [(d[k], 1)], True))
+            elif nack_addr:
+                out.append(("S", [(a << 1, 1)], True))
+            else:
+                out.append(("S", [(a << 1, 0)] + [(b, 0) for b in d], True))
+        elif op == "R":
+            d = target_bytes(p, n)
+            out.append(("S", [((a << 1) | 1, 0)] + [(b, 1 if i == n - 1 else 0) for i, b in enumerate(d)], True))
+        elif op == "WR":
+            d = target_bytes(p, n)
+            out.append(("S", [(a << 1, 0), (p & 0xFF, 0)], False))
+            out.append(("Sr", [((a << 1) | 1, 0)] + [(b, 1 if i == n - 1 else 0) for i, b in enumerate(d)], True))
+    return out
+
+
+def frames_of(dec: dict) -> list[tuple[str, list[tuple[int, int]], bool]]:
+    return [(f["kind"], list(f["bytes"]), f["stop"]) for f in dec["frames"]]
+
+
+def frames_text(fr: list[tuple[str, list[tuple[int, int]], bool]]) -> str:
+    return " | ".join(f"{k} " + " ".join(f"{v:02X}{'N' if a else 'A'}" for v, a in b) + (" P" if s else "")
+                      for k, b, s in fr) or "(nothing)"
+
+
+def t0b_decoder_selftest(log: Callable[[str], None]) -> bool:
+    """ad2.i2c_decode_analog() on a synthetic write-read before the instrument is
+    opened: decoded exactly; with SCL and SDA swapped (T5's control) it is not."""
+    want = [("S", [(0x84, 0), (0x07, 0)], False), ("Sr", [(0x85, 0), (0xA2, 1)], True)]
+    syms = [("S", [(0x84 << 1) | 0, (0x07 << 1) | 0], False), ("Sr", [(0x85 << 1) | 0, (0xA2 << 1) | 1], True)]
+    ok = True
+    for rate, bit, rise in ((20e6, 10e-6, 250e-9), (50e6, 2.5e-6, 250e-9)):
+        scl, sda = ad2mod.i2c_synth_analog(syms, rate, bit, VDD, rise)
+        got = frames_of(ad2mod.i2c_decode_analog(scl, sda, rate, VDD))
+        swapped = frames_of(ad2mod.i2c_decode_analog(sda, scl, rate, VDD))
+        good = got == want and swapped != want
+        ok = ok and good
+        log(f"[host] T0B(a) decoder on a synthetic capture ({rate / 1e6:.0f} MS/s, {1 / bit / 1e3:.0f} kHz): "
+            f"'{frames_text(got)}'; swapped '{frames_text(swapped)[:40]}' -> {'as expected' if good else 'WRONG'}")
+    return ok
+
+
+def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: float, rate: float) -> tuple[list[str], str]:
+    """T5's times of one capture: every measured time at least the mode's minimum
+    (tables 405/407), tLOW and tHIGH between their counters (SCLL, SCLH) and the
+    counters plus the synchronisation of CalcTiming's model (recomputed with the
+    t_r and t_f measured here), f_SCL not above the one asked and within 5 % of the
+    model, both normalised by the CPU clock ratio (CLKREF, plan N1). Tolerance per
+    interval: 2 x (2 samples + 2 kernel cycles)."""
+    m = 0 if f <= 100000 else (1 if f <= 400000 else 2)
+    _, tl_min, th_min, tsu_min, _, _, tr_max, tf_max, _, thdsta_min, tsusta_min, tsusto_min, tbuf_min = MODES[m]
+    ns = 1e-9
+    bad: list[str] = []
+
+    def med(v: list) -> float:
+        v = sorted(v)
+        return v[len(v) // 2] if v else float("nan")
+
+    tlow, thigh = dec["t_low"], dec["t_high"]
+    tsud = [d for d, _, _ in dec["t_su_dat"]]
+    pairs = [("tLOW", tlow, tl_min), ("tHIGH", thigh, th_min), ("tSU;DAT", tsud, tsu_min),
+             ("tHD;STA", dec["t_hd_sta"], thdsta_min), ("tSU;STA", dec["t_su_sta"], tsusta_min),
+             ("tSU;STO", dec["t_su_sto"], tsusto_min), ("tBUF", dec["t_buf"], tbuf_min)]
+    for name, vals, lo in pairs:
+        if vals and min(vals) < lo * ns:
+            bad.append(f"{name} min {min(vals) / ns:.0f} ns < {lo}")
+    trs = dec["t_r_scl"] + dec["t_r_sda"]
+    tfs = dec["t_f_scl"] + dec["t_f_sda"]
+    tr_m, tf_m = med(trs), med(tfs)
+    if trs and max(trs) > tr_max * ns:
+        bad.append(f"t_r max {max(trs) / ns:.0f} ns > {tr_max}")
+    if tfs and max(tfs) > tf_max * ns:
+        bad.append(f"t_f max {max(tfs) / ns:.0f} ns > {tf_max}")
+    p = (t >> 28) & 0xF
+    scll, sclh = ((t & 0xFF) + 1) * (p + 1), (((t >> 8) & 0xFF) + 1) * (p + 1)
+    tk = ratio / k                                     # one kernel cycle, in seconds of the AD2
+    sync = _cdiv(int(round((tr_m + tf_m) / ns)) * k + 2 * T_AF[0] * k, G) + 6 if trs and tfs else 0
+    tol = 2 * (2 / rate + 2 * tk)
+    lo_l, hi_l = scll * tk - tol, (scll + sync) * tk + tol
+    lo_h, hi_h = sclh * tk - tol, (sclh + sync) * tk + tol
+    if tlow and (min(tlow) < lo_l or med(tlow) > hi_l):
+        bad.append(f"tLOW min {min(tlow) / ns:.0f} median {med(tlow) / ns:.0f} ns outside {lo_l / ns:.0f}..{hi_l / ns:.0f}")
+    if thigh and (min(thigh) < lo_h or med(thigh) > hi_h):
+        bad.append(f"tHIGH min {min(thigh) / ns:.0f} median {med(thigh) / ns:.0f} ns outside "
+                   f"{lo_h / ns:.0f}..{hi_h / ns:.0f}")
+    f_norm = dec["f_scl"] * ratio
+    if dec["f_scl"] <= 0:
+        bad.append("no f_SCL")
+    else:
+        if f_norm > f:
+            bad.append(f"f_SCL {f_norm:.0f} Hz (normalised) above {f}")
+        if abs(f_norm - model) > 0.05 * model:
+            bad.append(f"f_SCL {f_norm:.0f} Hz (normalised) not within 5 % of the model {model}")
+    txt = (f"tLOW {min(tlow, default=0) / ns:.0f}/{med(tlow) / ns:.0f} ns (min/median; counter {scll * tk / ns:.0f}, "
+           f"window {lo_l / ns:.0f}..{hi_l / ns:.0f}), tHIGH {min(thigh, default=0) / ns:.0f}/{med(thigh) / ns:.0f} "
+           f"(counter {sclh * tk / ns:.0f}), tSU;DAT min {min(tsud, default=0) / ns:.0f}, tHD;STA "
+           f"{min(dec['t_hd_sta'], default=0) / ns:.0f}, tSU;STA {min(dec['t_su_sta'], default=0) / ns:.0f}, tSU;STO "
+           f"{min(dec['t_su_sto'], default=0) / ns:.0f}, tBUF {min(dec['t_buf'], default=0) / ns:.0f} ns; t_r "
+           f"{tr_m / ns:.0f} t_f {tf_m / ns:.0f} ns (median, 30-70 %); f_SCL {dec['f_scl']:.0f} Hz, normalised "
+           f"{f_norm:.0f} (asked {f}, model {model})")
+    return bad, txt
+
+
 # ---- The session ---------------------------------------------------------------------------
 
 class Session:
@@ -956,13 +1398,394 @@ class Session:
                    f"the MCU waits 10 s of CYCCNT), then low in {sum(reads)}/{T0B_LOW_READS} reads over "
                    f"{T0B_LOW_READS * 5} ms while the MCU waited for the host; `T0B timeout handled` reported")
 
+    # ================================================================ phase F1
+    # The firmware leads; at every "AT <tag>" line it waits for a handshake, and
+    # the host does its part before raising HOST_REQ (the target, the scope, the
+    # LA). Between two AT lines the host collects the X lines (one per transfer)
+    # and the target's RPT lines, and pairs those with t=1 in order.
+
+    def f1_init(self) -> None:
+        self.at_mark = self.con.mark()
+        self.rpt_mark = len(self.f334.lines)
+        self.f334_mark = len(self.f334.lines)
+        self.lenient = False
+        self.armed: dict = {}
+        self.scope_pending: Optional[dict] = None
+        self.scope_xs: list[dict] = []
+        self.hold_pending: Optional[dict] = None
+        self.groups: dict = {}
+        self.t12_status: dict = {}
+        self.clk_ratio = 1.0
+        self.clk_measured = False
+        self.t3_lines: list[str] = []
+        self.timing: dict = {}
+
+    def group(self, key: str, ok: bool, detail: str) -> None:
+        g = self.groups.setdefault(key, {"n": 0, "bad": []})
+        g["n"] += 1
+        if not ok:
+            g["bad"].append(detail)
+            self.log(f"[host] {key}: {detail}")
+
+    def flush_groups(self) -> None:
+        for key, g in self.groups.items():
+            self.check(key, not g["bad"], f"{g['n']} items, {len(g['bad'])} with a problem"
+                       + (f"; first: {g['bad'][0]}" if g["bad"] else ""))
+        self.groups = {}
+
+    def f1_lines_since_at(self) -> list[str]:
+        lines = self.con.since(self.at_mark)
+        self.at_mark = self.con.mark()
+        return lines
+
+    def f334_lines(self) -> list[str]:
+        out = self.f334.lines[self.f334_mark:]
+        self.f334_mark = len(self.f334.lines)
+        return out
+
+    def settle(self, label: str) -> None:
+        """The group that ended at this AT line: its X lines paired with the target's
+        RPT lines, the scope capture made during it, the T3 lines."""
+        lines = self.f1_lines_since_at()
+        xs = [x for x in (parse_x(t) for t in lines) if x]
+        self.t3_lines += [t for t in lines if re.search(r"\[i2c\] T3 \d+ ", t)]
+        for t in lines:
+            m = re.search(r"\[i2c\] TIMING (CM4|CM7) f=(\d+) kernel=(\d+) timingr=([0-9A-F]+) model=(\d+)", t)
+            if m:
+                self.timing[(m.group(1), int(m.group(2)))] = (int(m.group(3)), int(m.group(4), 16), int(m.group(5)))
+        want = sum(1 for x in xs if x["t"] == 1)
+        end = time.monotonic() + (3.0 if want else 0.3)
+        rpts: list[dict] = []
+        while time.monotonic() < end:
+            rpts = [r for r in (parse_rpt(t) for t in self.f334.lines[self.rpt_mark:]) if r]
+            if want and len(rpts) >= want:
+                break
+            time.sleep(0.05)
+        self.rpt_mark = len(self.f334.lines)
+        it = iter(rpts)
+        for x in xs:
+            if x["t"] == 1 and self.armed:
+                x["armed"] = self.armed
+                self.armed = {}
+            rpt = next(it, None) if x["t"] == 1 else None
+            probs = x_problems(x, rpt)
+            key = f"{x['test']} {x['core'].upper()} {x['f']} Hz {x['op']} {x['mode']}"
+            self.group(f"F1 {x['test']} {x['core'].upper()} {x['f']} Hz: transfer, host data and target report",
+                       not probs, f"{key} n={x['n']} p={x['p']}: {'; '.join(probs)}")
+            x["rpt"] = rpt
+        extra = list(it)
+        if extra and not self.lenient:
+            self.group("F1 target reports without a transfer", False,
+                       f"{len(extra)} RPT line(s) the selftest did not announce, before '{label}': {extra[0]['text']}")
+        if self.scope_pending is not None:
+            # A capture spans everything from its SCOPE point to the next SCOPE point
+            # (the next capture, or "SCOPE end"): a hold and its transfer may come between.
+            self.scope_xs += xs
+            if label.startswith("SCOPE "):
+                self.scope_finish(self.scope_pending, self.scope_xs)
+                self.scope_pending = None
+                self.scope_xs = []
+
+    # -- scope ----------------------------------------------------------------------
+    def scope_arm(self, spec: dict) -> None:
+        n = self.ad2.scope_buffer_max()
+        ch = SCOPE_SDA if spec["trig"] == "sda" else SCOPE_SCL
+        rate, n = self.ad2.scope_arm_fall(float(spec["rate"]), n, ch, 1.5, 0.05, 10.0)
+        spec["rate_actual"], spec["samples"] = rate, n
+        self.scope_pending = spec
+
+    def scope_finish(self, spec: dict, xs: list[dict]) -> None:
+        cap = self.ad2.scope_read(spec["samples"], 2.0)
+        test = spec["test"]
+        name = f"F1 {test} scope k={spec['k']} f={spec['f']}"
+        if cap is None:
+            self.group(f"F1 {test} scope", False, f"{name}: the scope did not trigger")
+            return
+        scl, sda = cap
+        rate = spec["rate_actual"]
+        if test == "T9":
+            self.scope_t9(name, scl, sda, rate)
+            return
+        if test == "T10B":
+            self.scope_t10b(name, scl, sda, rate)
+            return
+        dec = ad2mod.i2c_decode_analog(scl, sda, rate, VDD)
+        got = frames_of(dec)
+        want = expected_frames([x for x in xs])
+        swapped = frames_of(ad2mod.i2c_decode_analog(sda, scl, rate, VDD))
+        half = frames_of(ad2mod.i2c_decode_analog(scl, sda, rate, 1.0, 0.5, 0.5))
+        self.log(f"[host] {name}: decoded '{frames_text(got)}', expected '{frames_text(want)}'; control swapped "
+                 f"'{frames_text(swapped)[:60]}', at 0.5 V '{frames_text(half)[:60]}' ({'same' if half == got else 'differs'}); "
+                 f"{spec['samples']} samples at {rate:.0f} S/s, glitches {dec['glitches']}")
+        self.group(f"F1 {test} scope: decode", got == want and swapped != want,
+                   f"{name}: decoded '{frames_text(got)}', expected '{frames_text(want)}', swapped "
+                   f"{'differs' if swapped != want else 'SAME'}")
+        if test == "T5":
+            key = ("CM4" if xs and xs[0]["core"] == "cm4" else "CM7", spec["f"])
+            k, t, model = self.timing.get(key, (spec["kernel"], spec["timingr"], spec["model"]))
+            probs, txt = t5_timing_problems(dec, spec["f"], k, t, model, self.clk_ratio, rate)
+            self.log(f"[host] {name} times: {txt}")
+            self.group(f"F1 T5 {key[0]} {spec['f']} Hz scope: times", not probs, f"{name}: {'; '.join(probs)}")
+        if test == "T10":
+            runs = self.low_runs(scl, rate, 150e-6)
+            lens = [round(r * 1e6) for r in runs]
+            want_n = 5
+            ok = len(runs) >= want_n and all(190e-6 <= r <= 260e-6 for r in runs[:want_n])
+            self.log(f"[host] {name} SCL held low >= 150 us {len(runs)} times: {lens} us")
+            self.group("F1 T10(a) scope: stretching", ok, f"{name}: SCL low runs {lens} us (>= {want_n} of 200 us)")
+
+    @staticmethod
+    def low_runs(v: list[float], rate: float, min_s: float) -> list[float]:
+        out, cur = [], 0
+        for x in v:
+            if x < V_LOW:
+                cur += 1
+            else:
+                if cur / rate >= min_s:
+                    out.append(cur / rate)
+                cur = 0
+        return out
+
+    def scope_t10b(self, name: str, scl: list[float], sda: list[float], rate: float) -> None:
+        """T10(b): SCL held 50 ms by the target while the master under test starts
+        a transfer; TIMEOUTA (~10 ms) ends it. Recorded: how long each line stays
+        low and what the bus does when the target lets SCL go. Judged: SCL low one
+        run of about the hold, both lines high at the end of the capture."""
+        lo_scl, _, runs_scl = self.low_run(scl, rate)
+        lo_sda, _, runs_sda = self.low_run(sda, rate)
+        s0, se = ad2mod.i2c_edges_analog(scl, rate, V_LOW, V_HIGH)
+        d0, de = ad2mod.i2c_edges_analog(sda, rate, V_LOW, V_HIGH)
+        ev = sorted([(e["t"], "SCL" + ("r" if e["rise"] else "f")) for e in se] +
+                    [(e["t"], "SDA" + ("r" if e["rise"] else "f")) for e in de])
+        t0 = ev[0][0] if ev else 0.0
+        seq = ", ".join(f"{n} {1e3 * (t - t0):.3f} ms" for t, n in ev[:12])
+        ok = 45.0 <= lo_scl <= 55.0 and scl[-1] >= V_HIGH and sda[-1] >= V_HIGH
+        self.log(f"[host] {name}: SCL low {lo_scl:.2f} ms in {runs_scl} run(s), SDA low {lo_sda:.2f} ms in "
+                 f"{runs_sda} run(s); edges from the first: {seq}; both high at the end "
+                 f"{scl[-1] >= V_HIGH and sda[-1] >= V_HIGH}")
+        self.group("F1 T10(b) scope: SCL held, bus free after", ok,
+                   f"{name}: SCL low {lo_scl:.2f} ms ({runs_scl} runs), SDA low {lo_sda:.2f} ms, end levels "
+                   f"{scl[-1]:.2f}/{sda[-1]:.2f} V")
+
+    def scope_t9(self, name: str, scl: list[float], sda: list[float], rate: float) -> None:
+        s0, se = ad2mod.i2c_edges_analog(scl, rate, V_LOW, V_HIGH)
+        d0, de = ad2mod.i2c_edges_analog(sda, rate, V_LOW, V_HIGH)
+        falls = [e["t"] for e in se if not e["rise"]]
+        rises = [e["t"] for e in se if e["rise"]]
+        sda_rise = [e["t"] for e in de if e["rise"]]
+        sda_fall = [e["t"] for e in de if not e["rise"]]
+        # SDA released after the 5th SCL rise and before a 6th; then the STOP (SDA low
+        # and high again while SCL stays high).
+        rel = sda_rise[0] if sda_rise else None
+        before = sum(1 for t in rises if rel is not None and t < rel)
+        stop_ok = len(sda_fall) >= 1 and len(sda_rise) >= 2 and rel is not None and sda_fall[-1] > rel
+        ok = d0 == 0 and before == 5 and len(falls) == 5 and stop_ok
+        self.log(f"[host] {name}: SDA low at the start {d0 == 0}, SCL pulses {len(falls)} falls / {len(rises)} rises, "
+                 f"SDA released after {before} rises, then SDA falls {len(sda_fall)} rises {len(sda_rise)} (the STOP)")
+        self.group("F1 T9 scope: recovery", ok, f"{name}: {len(falls)} SCL pulses, SDA released after {before}, "
+                   f"STOP seen {stop_ok}")
+
+    # -- the AT points ----------------------------------------------------------------
+    def at_action(self, tag: str) -> tuple[Optional[Callable[[], None]], Optional[Callable[[], None]]]:
+        """(before the handshake, after it) for one AT tag."""
+        m = re.match(r"F334 (.+)$", tag)
+        if m:
+            cmd = m.group(1).split()
+            return (lambda: self.f334_cmd(cmd)), None
+        m = re.match(r"HOLD (SDA|SCL) (\d+)(?: EDGES (\d+))?$", tag)
+        if m:
+            line, ms, edges = m.group(1), int(m.group(2)), int(m.group(3) or 0)
+            return (lambda: self.hold_start(line, ms, edges)), None
+        if tag == "HOLD_END":
+            return self.hold_end, None
+        m = re.match(r"SCOPE (\S+) k=(\d+) f=(\d+) kernel=(\d+) timingr=([0-9A-F]+) model=(\d+) rate=(\d+) trig=(sda|scl)$", tag)
+        if m:
+            spec = {"test": m.group(1), "k": int(m.group(2)), "f": int(m.group(3)), "kernel": int(m.group(4)),
+                    "timingr": int(m.group(5), 16), "model": int(m.group(6)), "rate": int(m.group(7)),
+                    "trig": m.group(8)}
+            if self.state != "taps":
+                raise BenchAbort(f"S19: a scope capture announced without taps: {tag}")
+            return (lambda: self.scope_arm(spec)), None
+        if tag == "SCOPE end":
+            return None, None
+        m = re.match(r"CLKREF cyc=(\d+) cpu=(\d+)$", tag)
+        if m:
+            cyc, cpu = int(m.group(1)), int(m.group(2))
+            box: dict = {}
+            return (lambda: self.clkref_arm(box)), (lambda: self.clkref_read(box, cyc, cpu))
+        if tag == "RPT lenient":
+            return None, (lambda: setattr(self, "lenient", True))
+        if tag == "RPT strict":
+            return None, (lambda: setattr(self, "lenient", False))
+        raise BenchAbort(f"unknown AT point '{tag}'")
+
+    def f334_cmd(self, cmd: list[str]) -> None:
+        c = cmd[0].upper()
+        if c == "INIT" and len(cmd) == 1:
+            self.f334.command("INIT", r"^OK INIT")
+            self.armed = {}
+        elif c in ("NACK", "CORRUPT") and len(cmd) == 2:
+            self.f334.command(f"{c} {int(cmd[1])}", rf"^OK {c} ")
+            self.armed[c.lower()] = int(cmd[1])
+        elif c == "STRETCH" and len(cmd) == 3 and cmd[1] in ("ADDR", "BYTE"):
+            self.f334.command(f"STRETCH {cmd[1]} {int(cmd[2])}", r"^OK STRETCH ")
+            self.armed["stretch"] = True
+        elif c == "FMP" and len(cmd) == 2 and cmd[1] in ("0", "1"):
+            self.f334.command(f"FMP {cmd[1]}", rf"^OK FMP {cmd[1]}")
+        elif c == "STATUS" and len(cmd) == 2 and cmd[1].startswith("t12="):
+            m = self.f334.command("STATUS", r"^STATUS xfers=(\d+) rx=(\d+) tx=(\d+) nk=(\d+) ev=(\d+) idle_cuts=(\d+) "
+                                            r"dropped=(\d+) uart_ovr=(\d+)")
+            self.t12_status[int(cmd[1][4:])] = [int(v) for v in m.groups()]
+        else:
+            raise BenchAbort(f"F334 command not on the host's list: {' '.join(cmd)}")
+
+    def hold_start(self, line: str, ms: int, edges: int) -> None:
+        mark = len(self.f334.lines)
+        reply = self.f334.hold(line, ms, edges)                  # S21 guard inside
+        if not reply.startswith("OK"):
+            raise BenchAbort(f"F334 refused the hold: {reply}")
+        self.hold_pending = {"line": line, "ms": ms, "edges": edges, "mark": mark}
+
+    def hold_end(self) -> None:
+        h = self.hold_pending
+        if h is None:
+            raise BenchAbort("HOLD_END with no hold running")
+        end = time.monotonic() + 3.0
+        m = None
+        while m is None and time.monotonic() < end:
+            for t in self.f334.lines[h["mark"]:]:
+                m = re.search(r"^HOLD_END line=(\w+) ms=(\d+) us=(\d+) edges=(\d+) blank=(\d+) edge1_us=(\S+) "
+                              r"cause=(\w+) scl=(\d) sda=(\d)(.*)$", t) or m
+            if m is None:
+                time.sleep(0.05)
+        self.hold_pending = None
+        if m is None:
+            raise BenchAbort(f"no HOLD_END for HOLD {h['line']} {h['ms']}")
+        us, edges, blank, cause = int(m.group(3)), int(m.group(4)), int(m.group(5)), m.group(7)
+        ok15, why15 = s15_report_ok(m.group(0))
+        after = m.group(8) == "1" and m.group(9) == "1"
+        if h["edges"]:
+            ok = cause == "EDGES" and edges == h["edges"] and us < h["ms"] * 1000
+            want = f"released at SCL rising edge {h['edges']} (cause EDGES)"
+        else:
+            ok = cause == "TIME" and h["ms"] * 1000 * 0.98 <= us <= h["ms"] * 1000 * 1.02 and \
+                (h["line"] == "SCL" or edges == 0)
+            want = f"released by time after {h['ms']} ms"
+        # After an SCL hold the master under test is in the middle of its transfer
+        # (T10(b)): the lines 1 ms after the release are recorded, not judged; the
+        # bus at rest is checked at the end of the step (S17).
+        ok = ok and (after or h["line"] == "SCL") and ok15
+        self.log(f"[host] hold {h['line']} {h['ms']} ms edges {h['edges']}: held {us} us, SCL edges counted {edges} "
+                 f"(blank {blank}), cause {cause}, scl={m.group(8)} sda={m.group(9)} after, pins S15 {why15}")
+        self.group("F1 target holds (S21)", ok, f"HOLD {h['line']} {h['ms']} EDGES {h['edges']}: {want}; got cause "
+                   f"{cause} after {us} us with {edges} edges, lines after {m.group(8)}{m.group(9)}")
+
+    def clkref_arm(self, box: dict) -> None:
+        nmax = self.ad2.digital_in_buffer_max()
+        rate = nmax / 0.16                                       # the 100 ms pulse inside the window
+        box["rate"], box["n"] = self.ad2.la_arm(rate, nmax, DIO_ACK, prefill=nmax // 16)
+
+    def clkref_read(self, box: dict, cyc: int, cpu: int) -> None:
+        cap = self.ad2.la_read(box["n"], 3.0)
+        if cap is None:
+            self.check("F1 CLKREF CPU clock against the AD2", False, "the logic analyzer did not trigger on MCU_ACK")
+            return
+        runs = ad2mod.la_segments(cap, 13, 1)
+        full = [r for r in runs if r[0] > 0 and r[1] < len(cap)]
+        if not full:
+            self.check("F1 CLKREF CPU clock against the AD2", False, f"no complete MCU_ACK pulse in {len(cap)} samples")
+            return
+        w = (full[0][1] - full[0][0]) / box["rate"]
+        nominal = cyc / cpu
+        self.clk_ratio = w / nominal
+        self.clk_measured = True
+        self.check("F1 CLKREF CPU clock against the AD2", 0.95 <= self.clk_ratio <= 1.05,
+                   f"MCU_ACK held {cyc} CYCCNT cycles: {w * 1e3:.4f} ms by the AD2 ({nominal * 1e3:.1f} ms at "
+                   f"{cpu} Hz nominal), ratio {self.clk_ratio:.5f} (+-{100 / box['rate'] / nominal:.3f} %, one sample); "
+                   f"the CPU and the I2C kernels run {(1 / self.clk_ratio - 1) * 100:+.2f} % from nominal (N1)")
+
+    def f1_step(self, name: str) -> None:
+        self.step(name)
+        self.at_mark = self.con.mark()
+        while True:
+            m = self.con.expect(r"\[i2c\] AT (.+?)\s*$", 120.0, stop_on_abort=True)
+            tag = m.group(1)
+            self.settle(tag)
+            if tag == f"{name} end":
+                self.sync(pre=lambda: self.bus_rest(f"after {name}"))
+                break
+            pre, post = self.at_action(tag)
+            self.sync(pre=pre)
+            if post:
+                post()
+        self.flush_groups()
+
+    # -- what is judged once the firmware has finished ------------------------------------
+    def f1_t3(self) -> None:
+        rx = re.compile(r"\[i2c\] T3 (\d+) (\d+) (\d+) (\d+) (\d+) (\d) (\d+) (\d+) ([0-9A-F]+) (\d+) (\d+)")
+        n = bad = rm_bad = ok_n = 0
+        first = first_rm = ""
+        for t in self.t3_lines:
+            m = rx.search(t)
+            if not m:
+                continue
+            i, k, f, tr, tf, af, dnf, st = (int(m.group(j)) for j in range(1, 9))
+            tim, mode, model = int(m.group(9), 16), int(m.group(10)), int(m.group(11))
+            n += 1
+            want = calc_timing(k, f, tr, tf, bool(af), dnf)
+            if (st, tim, mode, model) != (want[0], want[1] if want[0] == 0 else 0, want[2] if want[0] == 0 else 0,
+                                          want[3] if want[0] == 0 else 0):
+                bad += 1
+                first = first or f"vector {i}: firmware {st} 0x{tim:08X} {model}, host {want[0]} 0x{want[1]:08X} {want[3]}"
+            if st == 0:
+                ok_n += 1
+                probs = timingr_rm_problems(k, f, tr, tf, bool(af), dnf, tim, model)
+                if probs:
+                    rm_bad += 1
+                    first_rm = first_rm or f"vector {i}: {'; '.join(probs)}"
+        self.check("F1 T3 CalcTiming against the host's own rules", n >= 300 and bad == 0,
+                   f"{n} vectors (>= 300), {bad} differ from the host's computation{(': ' + first) if first else ''}")
+        self.check("F1 T3 every TIMINGR meets RM0399", ok_n > 0 and rm_bad == 0,
+                   f"{ok_n} OK vectors checked on their fields (50:342, 50:319-331, table 407, 50:162-163, 2.19.1, "
+                   f"model <= f): {rm_bad} do not{(': ' + first_rm) if first_rm else ''}")
+
+    def f1_t12(self) -> None:
+        s = self.t12_status
+        if not all(v in s for v in range(5)):
+            self.check("F1 T12 target totals", False, f"STATUS before/after the 4 variants missing: {sorted(s)}")
+            return
+        names = ["driver poll", "driver DMA", "by hand poll", "by hand DMA"]
+        parts = []
+        ok = True
+        for v in range(4):
+            d = [b - a for a, b in zip(s[v], s[v + 1])]
+            parts.append(f"{names[v]}: xfers +{d[0]} rx +{d[1]} nk +{d[3]} ev +{d[4]} cuts +{d[5]}")
+            if v < 2:
+                ok = ok and d[0] == 1000 and d[1] == 2000 and d[3] == 0 and d[4] == 0 and d[5] == 0
+        self.check("F1 T12 target totals (driver: 1000 writes of 2 bytes each, nothing else)", ok, "; ".join(parts))
+
     def run(self) -> None:
         self.t0a()
         self.t0c()
         self.t0b()
         self.t0b_cm7()
         self.t0b_timeout()
+        self.f1_init()
+        self.f1_step("F1_NOPIN")
+        state = None
+        for text in self.con.since(0):
+            m = re.search(r"bench state from PF14: (taps|notaps)", text)
+            state = m.group(1) if m else state
+        self.check("F1 bench state seen by the firmware (S19)", state == self.state,
+                   f"CPU1 reads PF14 as '{state}', the host was told '{self.state}' (1 MHz only without taps)")
+        if state != self.state:
+            raise BenchAbort(f"S19: firmware state {state}, declared {self.state}")
+        self.f1_step("F1_CM4")
+        self.f1_step("F1_CM7")
+        self.f1_step("F1_RECOVER")
         self.step("DONE")
+        self.f1_t3()
+        self.f1_t12()
         # Not a counted check (audit F0, m12): step() aborts on any enable bit.
         self.record(f"No Digital Out: enable read back 0x0000 at all {len(self.dout_seen)} step boundaries of "
                     f"{len(STEPS)} (any other value aborts the session in step())")
@@ -1009,7 +1832,7 @@ def main() -> int:
     ap.add_argument("--bench-state", required=True, choices=("taps", "notaps"),
                     help="J2/J3 in place (taps) or removed (notaps); checked against the scope (S19)")
     ap.add_argument("--out", type=pathlib.Path,
-                    help="capture file (default: docs/i2c_f0_bench_<state>_<rev>.txt, i2c_dev_... with --allow-dirty)")
+                    help="capture file (default: docs/i2c_f1_bench_<state>_<rev>.txt, i2c_dev_... with --allow-dirty)")
     ap.add_argument("--allow-dirty", action="store_true", help="accept a -dirty Rev (development runs)")
     ap.add_argument("--no-reset", action="store_true", help="do not reset the H755; wait for the banner")
     ap.add_argument("--preset", default="selftest-i2c", help="configure preset of the H755 image (build id)")
@@ -1056,7 +1879,7 @@ def main() -> int:
         out = args.out
         if out is None:
             rev = res["revs"].get("cm7", head)
-            prefix = f"i2c_dev_f0_bench_{args.bench_state}" if args.allow_dirty else f"i2c_f0_bench_{args.bench_state}"
+            prefix = f"i2c_dev_f1_bench_{args.bench_state}" if args.allow_dirty else f"i2c_f1_bench_{args.bench_state}"
             out = PROJECT / "docs" / f"{prefix}_{rev}.txt"
             n = 2
             while out.exists():
@@ -1099,7 +1922,7 @@ def session_body(args, stamp, head: str, res: dict) -> None:
           f"no_reset={args.no_reset} checklist_confirmed={args.checklist_confirmed} "
           f"checklist_date={args.checklist_date}")
     stamp(f"[host] i2c_hw_check.py, host checkout {head}, protocol v{BENCH_VERSION}, F334 protocol "
-          f"v{F334_PROTOCOL}, phase F0")
+          f"v{F334_PROTOCOL}, phase F1")
     procs_ok = checklist(stamp, args.checklist_confirmed, args.checklist_date, args.bench_state)
     tree_record(stamp)
     h755_id = host_build_id(args.preset)
@@ -1111,7 +1934,9 @@ def session_body(args, stamp, head: str, res: dict) -> None:
     guards.update({"S3 (00_gpio)": t0b_guard_selftest(stamp), "HOST_REQ only": t0b_oe_selftest(stamp),
                    "S15 F334 report": t0b_s15_selftest(stamp), "S17 levels": t0b_s17_selftest(stamp),
                    "S21 hold": t0b_s21_selftest(stamp), "S18 probes": t0b_s18_selftest(stamp),
-                   "T0d identity": t0b_t0d_selftest(stamp), "checklist arguments": t0b_checklist_selftest(stamp)})
+                   "T0d identity": t0b_t0d_selftest(stamp), "checklist arguments": t0b_checklist_selftest(stamp),
+                   "T3 calculation rules": t0b_calc_selftest(stamp), "X/RPT pairing": t0b_pairing_selftest(stamp),
+                   "I2C decoder": t0b_decoder_selftest(stamp)})
     for name, ok in guards.items():
         stamp(f"[host] T0B(a) {name} guard on its mock: {'PASS' if ok else 'FAIL'}")
 
@@ -1227,10 +2052,10 @@ def run_bench(args, stamp, cli, f334: F334, h755_port: str, probes, head, h755_i
                                         r"dropped=(\d+) uart_ovr=(\d+)")
             counts = [int(x) for x in st.groups()]
             session.check("F334 at the end", lv["scl"] == 1 and lv["sda"] == 1 and s15_report_ok(raw)[0] and
-                          counts == [0] * 8 and not f334.unexpected,
+                          counts[7] == 0 and not f334.unexpected,
                           f"scl={lv['scl']} sda={lv['sda']}, S15 {s15_report_ok(raw)[1]}; xfers/rx/tx/nk/ev/idle/"
-                          f"dropped/uart_ovr {counts} (all 0: in F0 nothing addresses it); unexpected lines "
-                          f"{f334.unexpected}")
+                          f"dropped/uart_ovr {counts} (uart_ovr 0; reports dropped only in T12's flood); unexpected "
+                          f"lines {f334.unexpected}")
         except (BenchAbort, AD2SafetyViolation, ad2mod.AD2Error, subprocess.CalledProcessError,
                 subprocess.TimeoutExpired, OSError) as e:
             res["abort"] = f"{type(e).__name__}: {e}" if not isinstance(e, BenchAbort) else str(e)
