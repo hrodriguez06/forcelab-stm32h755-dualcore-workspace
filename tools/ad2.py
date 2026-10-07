@@ -643,6 +643,42 @@ class AD2:
         self._dwf.FDwfAnalogInConfigure(self._hdwf, ctypes.c_int(1), ctypes.c_int(1))
         return rate, n
 
+    def scope_arm_fall(self, rate_hz: float, samples: int, trigger_channel: int,
+                       level_v: float, pre_fraction: float = 0.1, range_v: float = 10.0) -> tuple[float, int]:
+        """Arm both scope channels, triggered by a FALLING edge of `trigger_channel`
+        through `level_v` (an I2C START, or a line pulled low), with
+        `pre_fraction` of the buffer before the trigger. Same setup as
+        scope_arm_rise() but for the trigger condition (SDK AnalogIn,
+        FDwfAnalogInTriggerConditionSet: trigcondFallingNegative = 1) and a
+        default range of 10 V, which the AD2 serves with its 50 V range, so a
+        3.3 V bus is not clipped. Only listens. Returns (actual rate in Hz,
+        buffer size in samples)."""
+        size_min = ctypes.c_int()
+        size_max = ctypes.c_int()
+        self._dwf.FDwfAnalogInReset(self._hdwf)
+        self._dwf.FDwfAnalogInBufferSizeInfo(self._hdwf, ctypes.byref(size_min), ctypes.byref(size_max))
+        n = min(samples, size_max.value) if size_max.value > 0 else samples
+        for ch in (0, 1):
+            self._dwf.FDwfAnalogInChannelEnableSet(self._hdwf, ctypes.c_int(ch), ctypes.c_int(1))
+            self._dwf.FDwfAnalogInChannelRangeSet(self._hdwf, ctypes.c_int(ch), ctypes.c_double(range_v))
+            self._dwf.FDwfAnalogInChannelOffsetSet(self._hdwf, ctypes.c_int(ch), ctypes.c_double(0.0))
+        self._dwf.FDwfAnalogInFrequencySet(self._hdwf, ctypes.c_double(rate_hz))
+        self._dwf.FDwfAnalogInBufferSizeSet(self._hdwf, ctypes.c_int(n))
+        self._dwf.FDwfAnalogInAcquisitionModeSet(self._hdwf, ctypes.c_int(0))            # acqmodeSingle
+        self._dwf.FDwfAnalogInTriggerSourceSet(self._hdwf, ctypes.c_ubyte(2))            # trigsrcDetectorAnalogIn
+        self._dwf.FDwfAnalogInTriggerAutoTimeoutSet(self._hdwf, ctypes.c_double(0.0))    # wait for a real edge
+        self._dwf.FDwfAnalogInTriggerTypeSet(self._hdwf, ctypes.c_int(0))                # trigtypeEdge
+        self._dwf.FDwfAnalogInTriggerChannelSet(self._hdwf, ctypes.c_int(trigger_channel))
+        self._dwf.FDwfAnalogInTriggerLevelSet(self._hdwf, ctypes.c_double(level_v))
+        self._dwf.FDwfAnalogInTriggerConditionSet(self._hdwf, ctypes.c_int(1))           # fall
+        actual = ctypes.c_double()
+        self._dwf.FDwfAnalogInFrequencyGet(self._hdwf, ctypes.byref(actual))
+        rate = actual.value if actual.value > 0 else rate_hz
+        # Trigger position is relative to the centre of the buffer.
+        self._dwf.FDwfAnalogInTriggerPositionSet(self._hdwf, ctypes.c_double((0.5 - pre_fraction) * n / rate))
+        self._dwf.FDwfAnalogInConfigure(self._hdwf, ctypes.c_int(1), ctypes.c_int(1))
+        return rate, n
+
     def scope_read(self, samples: int, timeout_s: float = 1.0) -> Optional[tuple[list[float], list[float]]]:
         """Both channels of the armed capture, or None when nothing triggered."""
         if not self._wait_state(self._dwf.FDwfAnalogInStatus, 2, timeout_s):
