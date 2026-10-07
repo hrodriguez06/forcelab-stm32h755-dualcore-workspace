@@ -1,10 +1,37 @@
 # Informe de implementación 05_i2c
 
-Implementador: Claude (Claude Code), para Hector Rodriguez · Rama: driver/i2c · Plan: IMPLEMENTATION_PLAN.md revisión 1
+Implementador: Claude (Claude Code), para Hector Rodriguez · Rama: driver/i2c · Plan: IMPLEMENTATION_PLAN.md revisión 2 (F0 se hizo con la revisión 1)
 
 ## Resumen
 
-F0 (banco) está implementada y entregada para auditoría. Contiene:
+**F1 (`i2c_bm`) está entregada para auditoría** (§F1). F0 pasó la auditoría (`AUDIT.md`, `85f9d29`); su respuesta está en §F1 5.6.
+
+F1 contiene:
+
+- `01_shared_drivers/05_i2c/i2c_bm.h/.c` y el target `stm32h7_driver_i2c_bm`: el contrato de la revisión 2 con las tres respuestas del 2026-10-07 (§F1 5.5), la tabla de capacidades (al final), `.data = .bss = 0`;
+- `tools/ad2.py`: solo añadidos, el decodificador I2C analógico y su control;
+- la F334 con M1 y m1–m7 corregidos (protocolo v2) y, después, su `TIMINGR` según `FMP` (protocolo v3);
+- el selftest de F1 en los dos núcleos (T1–T15, B1; I2C1 con DMA2 en CM4, I2C4 con BDMA y `.d3_ram` en CM7) y su host en `i2c_hw_check.py`.
+
+Las sesiones de entrega, con las imágenes de `e27c673` en las dos placas:
+
+- **taps:** `docs/i2c_f1_bench_taps_e27c673.txt`, 90/90, `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`;
+- **notaps:** `docs/i2c_f1_bench_notaps_e27c673.txt`, 69/69, `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`.
+
+Antes hubo cuatro sesiones de desarrollo, todas commiteadas (§F1 5.8). T10(b) se entrega sin el STOP que piden el plan y el RM: el silicio no lo manda y el driver suelta el bus con un reset por software; el responsable lo aceptó (§F1 5.5).
+
+F2 no ha empezado: espera a que `AUDIT.md` diga que F1 pasa.
+
+| Fase | Estado | Último commit | Captura |
+| --- | --- | --- | --- |
+| F0 | pasa (`AUDIT.md`, `85f9d29`) | `bdaf752` (código); evidencia en `f7323f2` (desarrollo) y `6322f49` | `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f0_bench_taps_f7323f2_5.txt`, `.../i2c_f0_bench_notaps_f7323f2_2.txt` |
+| F1 | entregada para auditoría (el commit de esta sección) | `d326575` (código; imágenes de `e27c673`, evidencia de build en `3a26563`) | `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f1_bench_taps_e27c673.txt`, `.../i2c_f1_bench_notaps_e27c673.txt` |
+| F2 | sin empezar | — | — |
+| F3 | sin empezar | — | — |
+
+### Resumen de F0
+
+F0 (banco) contiene:
 
 - `--sn` en `tools/flash.py` y la elección del puerto COM por número de serie del ST-LINK en `tools/monitor.py` (D7, S18);
 - el respaldo de la flash de fábrica de la F334, fuera del repositorio (§5.8, "Respaldo");
@@ -20,14 +47,7 @@ Las sesiones de entrega, con las imágenes de `f7323f2` en las dos placas:
 
 Antes hubo seis sesiones de desarrollo y cinco de entrega que fallaron o abortaron. Están todas commiteadas y la §5.3 y la §5.8 dicen por qué. Dos de ellas destaparon cosas del banco que corrigió el responsable: PB9 de la H755 flotando, y las sondas del osciloscopio en el lado del bus de J2/J3. Otras dos destaparon fallos míos, ya corregidos: el hilo lector del host moría con un byte del reset, y la F334 contaba un flanco de SCL espurio.
 
-No hay código del driver ni targets `_i2c_*`, porque F0 no los lleva. F1 no ha empezado: espera a que `AUDIT.md` diga que F0 pasa.
-
-| Fase | Estado | Último commit | Captura |
-| --- | --- | --- | --- |
-| F0 | entregada para auditoría (el commit de este informe) | `bdaf752` (código); evidencia en `f7323f2` (desarrollo) y `6322f49` | `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f0_bench_taps_f7323f2_5.txt`, `.../i2c_f0_bench_notaps_f7323f2_2.txt` |
-| F1 | sin empezar | — | — |
-| F2 | sin empezar | — | — |
-| F3 | sin empezar | — | — |
+No hay código del driver ni targets `_i2c_*`, porque F0 no los lleva.
 
 ## F0
 
@@ -165,7 +185,7 @@ Notas sobre las comprobaciones:
 
 ### 5.6 Respuesta a la auditoría
 
-Todavía no hay auditoría.
+La de F0 está en §F1 5.6.
 
 ### 5.7 Erratas del plan encontradas
 
@@ -239,20 +259,247 @@ Confirmaciones del checklist:
 - **notaps, sonda 2+:** sin J3 lee PF15 y no el bus, con 35 mV de margen sobre el umbral (§5.5).
 - **El estado "GPIO" del banco** (J2/J3 quitados para los bancos de `00_gpio`) no se ejercitó: no forma parte de F0. Las sesiones notaps dejan J2/J3 quitados, pero con la F334 conectada.
 
+## F1
+
+### 5.1 Commits
+
+Rango de la entrega: `4abd264..` el commit que añade esta sección, en `driver/i2c`.
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `8b5fd00` | fix(tools): answer the F0 audit in the F334 bench target, protocol v2 (M1, m1-m7) | M1, m1–m7 (§5.6) |
+| `eeac84f` | test(prj_01): answer the F0 audit in i2c_hw_check.py; S17 as a ratio (R2-1, m7, m11-m16) | R2-1, m7 (host), m11–m16 |
+| `fc4338e` | test(prj_01): answer the F0 audit in the 05_i2c selftest (m8, m9, m10) | m8–m10 |
+| `e74de3c` | feat(i2c): add i2c_bm, the bare-metal tier of 05_i2c, and its target | — |
+| `3aa49e3` | feat(tools): add an analog I2C decoder to ad2.py (05_i2c T5) | — |
+| `9a8f918` | fix(tools): read the F334's idle time and S15 state with interrupts masked | dos carreras de la F334 que destaparon las sesiones de desarrollo (§5.8) |
+| `610e057` | fix(i2c): software-reset the instance at once on TIMEOUT | T10(b) en desarrollo (§5.5, §5.8) |
+| `8cb32ac` | docs(i2c): say in i2c_bm.h what a TIMEOUT does since 610e057 | — |
+| `3e877d4` | test(prj_01): add the F1 steps of the 05_i2c selftest on both cores (T1-T15, B1) | — |
+| `32cd2e5` | test(prj_01): add the F1 host of the 05_i2c bench to i2c_hw_check.py | — |
+| `e346766` | fix(tools): give each tSU;DAT of the I2C decoder the side that drives its bit | T5 en desarrollo (§5.8) |
+| `3bb1569` | fix(tools): select the F334 target's TIMINGR with FMP (protocol v3) | T5 en desarrollo (§5.8) |
+| `7a22a3f` | test(prj_01): fix the taps findings of the first F1 development run | T5, T9, T10(b) en desarrollo (§5.8) |
+| `e27c673` | docs(prj_01): add the F1 development captures of the 05_i2c bench so far | — |
+| `3a26563` | docs(i2c): add the F1 delivery captures of the 05_i2c bench at e27c673 | — |
+| `eea9f6e` | docs(i2c): add the F1 build evidence at 3a26563 | — |
+| `d326575` | docs(i2c): cite the RM0399 lines of the automatic STOP on TIMEOUT | cita mía equivocada (§5.7) |
+| (este) | docs(i2c): add the F1 section of the implementation report | — |
+
+Notas sobre el orden:
+
+- Las imágenes de las dos capturas de entrega se compilaron y flashearon en `e27c673`, con el árbol limpio. Su código es el de `7a22a3f`.
+- La evidencia de build y de `.map` es de `3a26563`, cuyo código es el mismo que el de `e27c673`.
+- `d326575` cambia solo un comentario de `i2c_bm.c`: `git diff e27c673 d326575 -- 01_shared_drivers 03_firmware_templates/prj_01_template_dualcore/CM7 03_firmware_templates/prj_01_template_dualcore/CM4 03_firmware_templates/prj_01_template_dualcore/Common tools` da esa línea y nada más, con el mismo número de líneas.
+
+### 5.2 Build y tamaños
+
+Todo en `3a26563`, con el árbol limpio:
+
+- **`build_all -Clean`:** 8/8 (`docs/i2c_f1_build_all_3a26563.txt`).
+- **`selftest-i2c` desde un directorio vacío:** configure 0, build 0 y 0 líneas `warning:` o `error:` (`docs/i2c_f1_selftest_build_3a26563.txt`).
+- **`-Werror`:** `selftest-i2c`, `debug` y `release` con `CMAKE_C_FLAGS=-Werror` en directorios de scratch: configure 0, build 0 y 0 avisos en las tres; el `CMakeCache.txt` de cada una dice `-Werror` (`docs/i2c_f1_werror_3a26563.txt`).
+- **Firmware de la F334:** `build.ps1 -Clean` y `build.ps1 -Clean -Werror` dan `Warnings : 0` y `exit=0` (`docs/i2c_f1_f334_build_3a26563.txt`).
+- **`git diff cc8aa2c -- 02_firmware_projects`:** vacío.
+
+Tamaños del `.map` enlazado (`docs/i2c_f1_map_sizes_3a26563.txt`, mismo método y agrupación que F0):
+
+| Imagen | .text | .data | .bss | Δ frente a 2481396 | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| prj_01 debug CM7 | 29304 | 132 | 55668 | 0 en cada sección de la referencia | `build/debug/cm7_firmware.map` |
+| prj_01 debug CM4 | 3456 | 24 | 12560 | ídem | `build/debug/cm4_firmware.map` |
+| prj_01 release CM7 | 28356 | 132 | 55672 | ídem | `build/release/cm7_firmware.map` |
+| prj_01 release CM4 | 3112 | 24 | 12560 | ídem | `build/release/cm4_firmware.map` |
+| F334 `i2c_target_f334.elf` | 11288 | 20 | 3392 | — (FLASH 11308 B de 64 KB, RAM 3408 B de 12 KB) | `arm-none-eabi-size` |
+
+Las secciones que el `.map` tiene y la referencia no (`.axi_ram`, `.d3_ram`, `.dma_buf`, `.eth_ram`, `.igot.plt`, `.iplt`, `.preinit_array`, `.rel.dyn`, `.v4_bx`, `.vfp11_veneer`) miden 0 en las cuatro imágenes; el archivo las lista.
+
+| Objeto | Núcleo | .text (+.rodata) | .data | .bss | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| `i2c_bm.c.obj` | CM7 | 5142 | 0 | 0 | `build/selftest-i2c/cm7_firmware.map` |
+| `i2c_bm.c.obj` | CM4 | 5124 | 0 | 0 | `build/selftest-i2c/cm4_firmware.map` |
+| `i2c_selftest.c.obj` (selftest) | CM7 | 32648 | 8 | 911 | CM7 |
+| `i2c_selftest_common.c.obj` (selftest) | CM7 | 4175 | 0 | 0 | CM7 |
+| `dma_hal.c.obj` (BDMA de T7(b)) | CM7 | 872 | 0 | 96 | CM7 |
+| `dma_bm.c.obj` | CM7 | 352 | 0 | 0 | CM7 |
+| `i2c_selftest.c.obj` (selftest) | CM4 | 5443 | 4 | 65951 | CM4 (65536 son `s_buf` de T4/T7 en SRAM2) |
+| `i2c_selftest_common.c.obj` (selftest) | CM4 | 4135 | 0 | 0 | CM4 |
+| `dma_bm.c.obj` | CM4 | 1974 | 0 | 0 | CM4 |
+
+La imagen `selftest-i2c` mide 78488/140/56692 en CM7 y 22076/28/78576 en CM4 (agrupación de la tabla de arriba). `arm-none-eabi-size` da 130452 de bss en CM7 porque suma `.d3_ram` y las otras secciones de RAM.
+
+### 5.3 Pruebas
+
+Las cifras salen de las dos capturas de entrega:
+
+- **taps:** `docs/i2c_f1_bench_taps_e27c673.txt`: 90/90 comprobaciones del host, `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`;
+- **notaps:** `docs/i2c_f1_bench_notaps_e27c673.txt`: 69/69, `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`.
+
+Las dos tienen Rev `e27c673` e id `3417b1bd4c6653f1` en el host, CM7 y CM4, y la F334 con Rev `e27c673`, id `83794128d14afc2b` (el que calcula el host) y protocolo v3. Las dos dicen `tree clean` y llevan el checklist confirmado por Hector el 2026-10-07: taps con "J2/J3 puestos, confirmado"; notaps con "Listo ya removí los jumpers", la respuesta a mi petición de quitar J2/J3 y confirmar. Sin depurador ni WaveForms (tasklist en la línea 11 de cada una). CLKREF: la CPU y los kernels I2C van un +1,35 % (taps) y un +1,31 % (notaps) por encima del nominal; el host normaliza con eso las frecuencias medidas (N1).
+
+Las comprobaciones de F0 (T0a, T0b, T0c, T0d) se repiten en las dos y pasan como en F0. S17 (R2-1): taps 1+ 3,159–3,162 V, 2+ 3,304–3,306 V, razón 0,956; notaps 1+ 0,020–0,028 V, 2+ 3,238–3,241 V; 22 lecturas por sesión, todas dentro.
+
+"Igual" en notaps quiere decir el mismo resultado que en taps. Velocidades: taps 100 y 400 kHz en T4/T5 y 400 kHz en T6–T10; notaps 400 kHz y 1 MHz en T4 y 1 MHz en T6–T10 (S19, D3).
+
+| ID | Tier | Núcleo | Estado del banco | Resultado | Valor medido | Control negativo: valor | Oráculo | Oráculo F334/AD2 | Captura |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Tabla de capacidades | BM | CM7 | taps y notaps | PASS | I2C1..4 frente a `stm32h755xx.h` (IRQn EV/ER), `stm32h7xx_hal_dma.h` (DMAMUX1 33/34, 35/36, 73/74; DMAMUX2 13/14) y RCC leído directamente: filas distintas `0x0` | I2C1+4, USART3 y `NULL` no son instancias | cabeceras de ST y registros | — | las dos |
+| T1 | BM | CM7 (I2C2) y CM4 (I2C1) | taps y notaps | PASS | 62 rechazos en cada núcleo, 0 con otro estado; foto de la instancia, `RCC_C1/C2` `APB1LENR`/`APB4ENR`, `D2CCIP2R`, `D3CCIPR` y `SYSCFG_PMCR` sin cambios en los 2 grupos | Un `Init` válido cambia la foto | casos escritos a mano (`ist_t1`) | — | las dos |
+| T1 con `BUSY = 1` | BM | CM4 (I2C1) y CM7 (I2C4) | taps y notaps | PASS | La F334 retiene SDA (`ISR 0x00008001`): 8 transferencias rechazadas con `ERR_BUS`; registros y RCC sin cambios | — (el propio caso) | `ISR` leído | `HOLD_END` | las dos |
+| T2 | BM | CM7 (I2C2, I2C3, I2C4), CM4 (I2C1) | taps y notaps | PASS | 120 imágenes por instancia (TIMINGR × filtro × DNF × timeout): 0 distintas de los campos del RM escritos a mano; `Deinit` siempre a la imagen de reset | Imagen esperada con `DNF + 1`: distinguida | campos del RM a mano | — | las dos |
+| T3 | BM | CM7 + host | taps y notaps | PASS | 403 vectores (≥ 300); el host los recalcula con sus reglas: 0 distintos. Las 286 salidas OK cumplen 50:342, 50:319-331, tabla 407, 50:162-163, 2.19.1 y modelo ≤ f: 0 no. El más lento, 12291 ciclos | En T0B(a), sobre el mock: `SCLL + 1` y `SDADEL` fuera de su ventana (vector de 100 MHz, 100 kHz, t\_r 1000, t\_f 300): los dos detectados | `calc_timing()` y `timingr_rm_problems()` del host | — | las dos |
+| T4 | BM | CM4 (I2C1) y CM7 (I2C4) | taps (100, 400 kHz) y notaps (400 kHz, 1 MHz) | PASS | Por velocidad y núcleo: 6 `Read`, 6 `WriteRead`, 2 sondeos y 6 `Write` de 1, 2, 255, 256, 1000 y 65 535 bytes: 0 con otro estado o con un byte distinto. Host: 20 transferencias por grupo emparejadas con su `RPT`, 0 con problema. TIMINGR: taps `0x30D06C81` (100 k) y `0x20D0142E` (400 k); notaps `0x00D0479C` (400 k) y `0x00801A33` (1 M) | F334 con `CORRUPT 5`, lectura de 16: 1 byte distinto, en el índice 5 | datos regenerados por el host desde la semilla o el contenido conocido; CRC-32 | `RPT` de la F334 (bytes, CRC, punteros, STOP) | las dos |
+| T5 | BM | CM4 y CM7 | taps | PASS | 5 transferencias por velocidad y núcleo, decodificadas exactas (`S 85A A5A A4N P`, `S 84A 07A \| Sr 85A A2N P`, `S 84A P \| S 84A 00A P`, `S 84A 14A 5AA P`, `S 86N P`), 0 glitches. 100 kHz: tLOW 5,30 µs (ventana 4,77–5,94), tHIGH 4,26–4,29 µs (contador 4,30), tSU;DAT de la H755 ≥ 4,80 µs, tHD;STA ≥ 4,38 µs, tSU;STO ≥ 4,38 µs, t\_r 248–253 ns, f\_SCL normalizada 99,63–99,77 kHz (modelo 99,70). 400 kHz: tLOW 1,57 µs (1,19–2,03), tHIGH 0,60–0,62 µs (0,62), tSU;DAT de la H755 ≥ 1,06 µs, tHD;STA ≥ 0,72 µs, tSU;STA 1,39–1,41 µs, tSU;STO ≥ 0,70 µs, f\_SCL normalizada 397,9–399,0 kHz (modelo 398,4). tSU;DAT de los bits de la F334, registrado: 529–806 ns | Cada captura decodificada con SCL y SDA intercambiados: distinta en las 20. Con umbral 0,5 V: igual en las 20 | `expected_frames()`, `t5_timing_problems()` | AD2 (12,5 MS/s a 100 kHz, 25 MS/s a 400 kHz) | taps |
+| T6 | BM | CM4 y CM7 | taps (400 kHz) y notaps (1 MHz) | PASS | `Write`, `Read`, `WriteRead` de 1, 2, 256 y 1000 bytes por interrupción: 0 con otro estado o dato; IE en `CR1` al terminar `0x00`; 0 IRQ en los 10 ms siguientes | IE a 0 a mano tras `StartIt`: sigue `PENDING`, la espera acaba por su presupuesto (`ERR_TIMEOUT`), 0 IRQ | datos del host + CRC | `RPT` (la F334 corta la transferencia abandonada a los 500 ms: `ev=08`) | las dos |
+| T7(a) | BM | CM4 (I2C1, DMA2 con `dma_bm`) | taps (400 kHz) y notaps (1 MHz) | PASS | Lectura y escritura de 2, 255, 256 y 4096 bytes: 0 con otro estado o dato | `RXDMAEN` a 0 a mano, lectura de 64: `WaitEnd` `ERR_TIMEOUT`, los 64 bytes conservan el centinela | ídem | `RPT` | las dos |
+| T7(b) | BM | CM7 (I2C4, BDMA con `dma_hal`, `.d3_ram`) | ídem | PASS | Igual que T7(a) | Igual | ídem | `RPT` | las dos |
+| T8(a) | BM | CM4 y CM7 | taps y notaps | PASS | Dirección 0x43: `Write` y sondeo IT `ERR_NACK`, `BUSY = 0` después (el STOP salió); la transferencia siguiente a 0x42 bien | — (la siguiente a 0x42 es el control) | `ISR` | `RPT` de la siguiente; osciloscopio de T5 k=4 (`S 86N P`) | las dos |
+| T8(b) | BM | CM4 y CM7 | taps y notaps | PASS | La F334 hace NACK en el dato 3 de una escritura de 8: `ERR_NACK` en IT y sondeo; bytes reconocidos según el driver 3 | Sin NACK armado: la escritura termina bien | contador del driver (`done_tx`) | Tres vistas (M1): `RPT` `nk=1 rx=4`; osciloscopio (taps) `S 84A 81A 41A 63A E0N P` | las dos |
+| T9 | BM | CM7 (I2C4, PB8/PB9 en GPIO open-drain) | taps y notaps | PASS | Con SDA retenido, `ISR 0x00008001` (BUSY), `Write` `ERR_BUS` en 326 (taps) y 350 (notaps) ciclos; `RecoverBus` OK, `pulses` 5, PB8/PB9 = 3 después; AF6, `Init` y una escritura correcta. F334: liberada en el 5.º flanco (`cause=EDGES`). Osciloscopio (taps): SDA bajo al empezar, 5 pulsos de SCL, SDA libre tras el 5.º y después el STOP | Sin `RecoverBus`: SDA abajo 95 ms (taps) y 96 ms (notaps), hasta el límite de 100 ms de la F334 | `IDR`, `pulses` | `HOLD_END` (`edges=5`); osciloscopio (taps) | las dos |
+| T10(a) | BM | CM4 y CM7 | taps y notaps | PASS | La F334 estira 200 µs en la dirección y tras cada byte: escritura y lectura de 4 bytes correctas; CYCCNT ≥ +5 × 200 µs en las dos. Osciloscopio (taps): SCL retenido 203–209 µs, 5 veces en la escritura y 5 en la lectura (el stretching por byte en lectura, M1) | La misma transferencia sin `STRETCH` (`c_w0`, `c_r0`) | CYCCNT | `RPT`; osciloscopio (taps) | las dos |
+| T10(b) | BM | CM4 y CM7 | taps y notaps | PASS (con la desviación de §5.5) | SCL retenido 50 ms, `timeout_scl_low` 489 (10 014 µs a 100 MHz): `ERR_BUS` por TIMEOUT; el driver termina con el reset por software. Fin ≤ 11 014 µs después de ver SCL bajo: taps 4220/4295 µs, notaps 5638/5028 µs (CM4/CM7). Osciloscopio (taps): SDA libre 9,885 y 9,890 ms después de la bajada de SCL (TIMEOUTA en tiempo del AD2: 9,881 ms); los dos altos al final; **sin STOP** | Sin `timeout_scl_low`: `ERR_TIMEOUT` 30 ms después (su `max_cycles`) | CYCCNT; `ISR` | osciloscopio (taps); `HOLD_END` | las dos |
+| T11 | BM | — | — | **No ejercitado** | `ARLO`: un solo maestro en el banco (§5.8) | — | — | — | — |
+| T12 | BM | CM4 (I2C1) | taps (400 kHz) y notaps (1 MHz) | PASS | `I2C123SEL = HSI` (64 MHz; APB1/kernel = 1,56) escrito y restaurado con read-back. Driver: 1000/1000 escrituras de 2 bytes por sondeo y 1000/1000 por DMA, 0 detenciones. F334: +1000 transferencias y +2000 bytes en cada variante, 0 NACK, 0 eventos, 0 cortes | A mano sin precargar el primer byte, por sondeo y por DMA: 0 detenciones en 1000 cada una: **no reproducido** (decisión 6) | estado del driver | totales de `STATUS` de la F334 | las dos |
+| T13 | BM | CM4 sobre I2C2, leído por CM7 | taps y notaps | PASS | CPU2 `DisableClock(I2C2)` mientras CPU1 lo habilita: una escritura en `TIMEOUTR` llega igual; `EnableClock` + `DisableClock` de CPU2: igual | CPU1 deshabilita también: `TIMINGR 0x10101010` escrito se pierde (se lee el `0x209095B0` anterior) | registros de RCC e I2C2 | — | las dos |
+| T14 | BM | CM4 (I2C1), CM7 (I2C4) | taps y notaps | PASS | `Deinit` tras T4/T5 en cada velocidad: 0 registros distintos de la imagen de reset. Bus en reposo: S17 tras cada paso | I2C3 inicializado y sin `Deinit`: distinto en `CR1` y `TIMINGR` (`0x11`); tras `Deinit`, 0 | tabla de reset del RM a mano | — | las dos |
+| T15 | BM | CM7 (I2C2 sin pines) | taps y notaps | PASS | `Write` y `Read` `ERR_TIMEOUT` (6), cada una dentro de `max_cycles` + 1 ms (2 000 731 y 2 000 592 ≤ 2 400 000 ciclos); `Deinit`, 0 registros distintos del reset | I2C4 con sus pines en AF termina bien: es T4 en I2C4 (§5.5) | registros, CYCCNT | — | las dos |
+| `SetFastModePlus` | BM | CM7 (I2C2) | taps y notaps | PASS | `SYSCFG_PMCR` `0x03000000` → `0x03000002` (solo el bit 1) → `0x03000000` | — | `SYSCFG_PMCR` leído | — | las dos |
+| B1 | BM | CM4 y CM7 | taps y notaps | registro | §5.4 | — | DWT, `.map` | — | las dos |
+| F334 al final | — | host | taps y notaps | PASS | `scl=1 sda=1`, S15 ok, `uart_ovr 0`, ninguna línea no pedida. `ev`: solo `0x10` (sondeos: 8 en taps, 4 en notaps) y `0x08` (los cortes de los controles de T6 y T7: 4 en cada estado); ningún `BERR`, `ARLO`, `OVR` ni `0x20` | — | — | `STATUS` | las dos |
+| Veredicto | — | CM7 + host | taps y notaps | PASS | `bench completed without abort`; CM4 `timeout 0, aborts 0`; salidas por CYCCNT parado 0 en los dos núcleos; pila de `Status_Task` 710 (taps) y 712 (notaps) palabras libres de 1024; host 90/90 y 69/69 | — | — | — | las dos |
+
+Notas:
+
+- **Notaps tiene 21 comprobaciones menos:** sin tomas no hay T5 ni vistas del osciloscopio (T8, T9, T10), y T4 de 100 kHz pasa a 400 kHz.
+- **O1, por estado del banco.** `blank` de la F334: 1 en las 5 retenciones de SDA de taps (50 ms de T0C, tres de 100 ms y la de T9 con `EDGES 5`) y 0 en las 5 de notaps. Discrepancias de T4: 0 en taps (80 transferencias) y 0 en notaps (80); de T5: 0 en 20 capturas. Ningún `RPT` con `BERR`, `ARLO` ni `OVR` en ningún estado. El glitch de O1 no aparece en las transferencias.
+- **Sesiones de desarrollo** (commiteadas sin editar en `e27c673`): `i2c_dev_f1_bench_notaps_3aa49e3-dirty{,_2,_3}.txt` y `i2c_dev_f1_bench_taps_32cd2e5.txt`. Qué destaparon: §5.8.
+
+### 5.4 Medidas (B1)
+
+| Medida | CM4 (200 MHz) | CM7 (400 MHz) | Fuente |
+| --- | --- | --- | --- |
+| `I2C_BM_Init` | 312 ciclos | 588 ciclos | DWT, las dos capturas |
+| `I2C_BM_Write` de 1 byte | 11 690 (400 kHz) / 5750 (1 MHz) | 22 036 (400 kHz) / 11 472 (1 MHz) | ídem |
+| `I2C_BM_XferIrq` por llamada (escritura IT de 16) | 121–240 | 118–332 | ídem |
+| `i2c_bm.c.obj` | 5124 / 0 / 0 | 5142 / 0 / 0 | §5.2 |
+| `Status_Task` | — | 710 y 712 palabras libres | las dos capturas |
+
+La línea B1 del firmware se corta a 160 caracteres (`App_Log`): pierde el texto fijo "(IT write of 16)", no cifras (§5.8).
+
+### 5.5 Desviaciones del plan
+
+| Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- |
+| `CalcTiming`: N con la división hacia abajo | N = ceil((ceil(k/f) − sync)/(p+1)) | Con el redondeo del plan la frecuencia del modelo salía por encima de `scl_hz` (100 MHz, 100 kHz, t\_r 250, t\_f 20: 100 100 Hz), contra la regla 4 | Hector, 2026-10-07: "ceil en los dos" |
+| `WaitEnd(i2c, max_cycles)` | `WaitEnd(i2c, n, max_cycles)` | Una transferencia DMA de más de 255 bytes necesita la cuenta en cada `TCR`; `WaitEnd` cuenta los trozos en su pila (C7) | Hector, 2026-10-07 |
+| 2.19.1 en `CheckConfig` | Solo en `CalcTiming` | `I2cBm_Config_t` no tiene la frecuencia del kernel | Hector, 2026-10-07 |
+| T12: encender el HSI (`HSION`) | `HSION` se escribe solo si estaba a 0; estaba a 1, así que no se escribe. `D2CCIP2R` sí, guardado y restaurado con read-back | La premisa de mi pregunta 3 era falsa: `RCC_CR` dice `HSION 1`, `HSIRDY 1` antes de T12 | Hector, 2026-10-07 ("HSION solo en T12"); la premisa equivocada la digo aquí |
+| T10(b): "`ERR_BUS` por `TIMEOUT` y STOP" | `ERR_BUS` por TIMEOUT y reset por software inmediato (`PE = 0`): las dos líneas libres, **sin STOP** en el bus | RM0399 50:2286-2287 dice que el maestro manda un STOP; en el banco el maestro siguió reteniendo SCL y SDA hasta el presupuesto del llamador (desarrollo, `610e057`). Con el reset, el osciloscopio ve SDA libre a TIMEOUTA (9,885/9,890 ms frente a 9,881) y los dos altos cuando la F334 suelta | Hector, 2026-10-07: "Accept and deliver" |
+| T10(b): tiempo del TIMEOUT | El firmware acota el fin por arriba desde que ve SCL bajo (≤ TIMEOUTA + 1 ms) y por abajo desde el `AT HOLD` (≥ (TIMEOUTA − 1) × 2048 / kernel); el tiempo exacto lo mide el osciloscopio (taps, ±5 %) | La F334 baja SCL dentro del intercambio del `AT`, unos 5 ms antes de que CM7 lo vea (desarrollo); la cota inferior desde el `AT` es débil (~400 ms) | No consultado |
+| T5: "tiempos ≥ mínimos del modo" | tSU;DAT se juzga en los bits que conduce la H755 (dirección, datos escritos, ACK de lectura); el de la F334 se registra | El tSU;DAT de los bits del esclavo lo pone el SCLDEL de la F334, no el driver. Con 172 ns, el primer bit tras un stretching midió −27 ns a 400 kHz (desarrollo) | No consultado |
+| T5: entrada de `CalcTiming` | t\_r del banco con tomas: 300 ns (en notaps, 40 ns) | El osciloscopio mide 248–253 ns (30–70 %); con 200 ns el tSU;DAT de la H755 quedaba por debajo de 250 ns a 100 kHz | No consultado; valor del banco, no del plan |
+| T4: 400 kHz "con tomas" | También en notaps (400 kHz y 1 MHz) | Así T4 compara los dos estados a la misma velocidad (O1) | No consultado; ampliación |
+| T6–T10: velocidad | La principal de cada sesión: 400 kHz en taps, 1 MHz en notaps | El plan no la fija | No consultado |
+| T15: control "I2C4 con sus pines en AF termina bien" | El control es T4 en I2C4 (el mismo paso, mismas funciones), no una línea propia de T15 | T15 corre en F1_NOPIN, sin pines; I2C4 en AF solo existe en F1_CM7 | No consultado |
+| F334: un solo `TIMINGR` | `FMP 0` (por defecto) usa `0x20F10000` (SCLDEL 750 ns) y `FMP 1` el de Fm+ (`0x00A20000`); protocolo v3 | El SCLDEL de la F334 es el tSU;DAT de sus bits tras un stretching (fila de T5) | No consultado; herramienta del banco |
+
+### 5.6 Respuesta a la auditoría de F0
+
+Cada corrección: "corregido en <hash>, pendiente de verificación".
+
+| ID | Respuesta |
+| --- | --- |
+| M1 | Corregido en `8b5fd00`, pendiente de verificación. En recepción con control de byte, el `TCR` consume primero su propio byte (espera `RXNE` 200 µs y 20 000 lecturas como mucho; si no llega, ACK y `ev 0x20`). Orden del ISR: errores, `RXNE`, `TCR`, `TXIS`, `NACKF`, `STOPF`, `ADDR`. T8(b) comprueba las tres vistas: el driver cuenta 3, la F334 `nk=1 rx=4` y el osciloscopio (taps) `… 63A E0N P`. T10(a) comprueba el stretching por byte también en lectura, con el osciloscopio (5 tramos de 203–209 µs). Ningún `ev 0x20` en las capturas |
+| m1 | Corregido en `8b5fd00`, pendiente de verificación: IWDG `RLR = 449` (288–480 ms) |
+| m2 | Corregido en `8b5fd00`, pendiente de verificación: `src/vectors.c` define los 49 vectores no usados y cada uno llama a `bench_fault_release()`; el startup del CMSIS queda como viene |
+| m3 | Corregido en `8b5fd00`, pendiente de verificación: TIM2 0, I2C1 1, EXTI9_5 2, USART2 3 |
+| m4 | Corregido en `8b5fd00`, pendiente de verificación: `STOPF` antes que `ADDR` |
+| m5 | Corregido en `8b5fd00`, pendiente de verificación: `CORRUPT k` cuenta los bytes que salen al bus, por transferencia (T4 control: índice 5) |
+| m6 | Corregido en `8b5fd00`, pendiente de verificación: tokens sobrantes y `EDGES 0` rechazados |
+| m7 | Corregido en `8b5fd00` (comentario) y `eeac84f` (el host aborta con `sysclk ≠ 64000000`), pendiente de verificación. `3bb1569` cambia el comentario otra vez: ahora hay dos `TIMINGR` |
+| m8 | Corregido en `fc4338e`, pendiente de verificación: la línea dice que la rechaza la regla de dueño, y un segundo veredicto pasa `ist_s16_pins_ok()` sobre los registros vivos de GPIOB con PB8/PB9 en AF4 (AF6 rechazado, AF4 aceptado como control) |
+| m9 | Corregido en `fc4338e`, pendiente de verificación: `bench_abort()` publica `IST_STEP_NONE` |
+| m10 | Corregido en `fc4338e`, pendiente de verificación: `_Static_assert` de ≤ 32 casos en cada tabla de los dos núcleos |
+| m11 | Corregido en `eeac84f`, pendiente de verificación: `main()` escribe el resumen, `HOST VERDICT` y la captura en un `finally`, termine como termine |
+| m12 | Corregido en `eeac84f`, pendiente de verificación: T0d y "No Digital Out" son líneas `RECORD`, no se cuentan ("2 records not counted") |
+| m13 | Corregido en `eeac84f`, pendiente de verificación: S17 según R2-1 (taps: razón 0,956 ± 0,015 y 2+ ≥ 3,0 V; notaps: 1+ < 0,10 V y 2+ ≥ 3,0 V) y cada fallo nombra su línea y su sonda; el mock de T0B(a) lo prueba |
+| m14 | Corregido en `eeac84f`, pendiente de verificación: exactamente una aparición de cada pin, con límite de palabra |
+| m15 | Corregido en `eeac84f`, pendiente de verificación: `--checklist-confirmed` y `--checklist-date` van juntas, fecha ISO; mock en T0B(a) |
+| m16 | Corregido en `eeac84f`, pendiente de verificación: `H755Console.expect(stop_on_abort=True)` en `step()` |
+| O1 | Respondido en §5.3 (notas): `blank` y discrepancias separadas por estado |
+| O2 | Sin cambio: el mock sigue probando `f334_hold_guard`; `F334.hold()` lo llama antes de escribir y en F1 cada `HOLD_END` se juzga contra lo pedido |
+| O3 | Sin cambio: en `tools/monitor.py` solo puedo añadir (A23); falla en seguro |
+| O4 | Sin cambio en el `_sink` de respaldo; con m11, un hilo muerto acaba en `BenchAbort` y la captura se escribe igual |
+| O5 | R2-1 del plan: implementado en `eeac84f` (ver m13) |
+
+### 5.7 Erratas del plan encontradas
+
+| Sección del plan | Qué dice | Qué es correcto | Fuente |
+| --- | --- | --- | --- |
+| Reglas de cálculo, N | Los paréntesis del redondeo de N admiten dos lecturas, y la de división hacia abajo da f > `scl_hz` | ceil en los dos (aprobado) | §5.5 |
+| Contrato, `CheckConfig` | Comprueba 2.19.1 | No puede: `I2cBm_Config_t` no lleva la frecuencia del kernel | §5.5 |
+| Contrato, `WaitEnd` | `WaitEnd(i2c, max_cycles)` | Necesita `n` | §5.5 |
+| T10(b) | "→ `ERR_BUS` por `TIMEOUT` y STOP" | En rev V no hay STOP; el driver suelta el bus con el reset por software. Lo que se ve: `ERR_BUS`, SDA libre a TIMEOUTA, bus libre al final | RM0399 50:2286-2287 frente a las capturas |
+| (mío) `i2c_bm.c` y `610e057` | Citaban 50:2276-2278 para el STOP automático | 50:2286-2287. Corregido en `d326575` (el comentario); el mensaje de `610e057` no se puede cambiar | RM0399 cap. 50 |
+
+### 5.8 Problemas abiertos y no ejercitado
+
+**Lo que pasó en las sesiones de desarrollo** (capturas en `e27c673`):
+
+1. **La F334 cortaba transferencias vivas** (`notaps_3aa49e3-dirty`: 37 informes, `_2`: 73): `RPT ev=08` con `us` de unos cientos y el maestro leyendo `0xFF` desde ahí. El corte por inactividad leía `us_now()` y luego `s_last_us`; una interrupción entre las dos hacía negativa la diferencia. Corregido en `9a8f918`.
+2. **Aborto S15 falso en la F334** al soltar una retención por `EDGES` (T9, `notaps_3aa49e3-dirty`): la comprobación leía `MODER` y luego `s_hold_pin`. Corregido en `9a8f918`.
+3. **T10(b): el maestro no soltaba el bus tras un TIMEOUT** hasta el presupuesto del llamador (§5.5, §5.7). Corregido en `610e057`.
+4. **T10(b): la medida incluía la impresión por UART** (`notaps_3aa49e3-dirty_3`: 46 ms en el control). Corregido en `7a22a3f`, que además acota el tiempo como dice §5.5.
+5. **T5 con tomas** (`taps_32cd2e5`): tSU;DAT de −27 ns, que era el primer bit de la F334 tras su stretching, no un bit de la H755 (`e346766`, `3bb1569`). tSU;DAT de la H755 por debajo de 250 ns a 100 kHz con t\_r = 200 ns de entrada (`7a22a3f`). Capturas que no llegaban al STOP de un `WriteRead` o a la escritura que sigue a un sondeo (`7a22a3f`).
+6. **T9 con tomas** (`taps_32cd2e5`): armar el osciloscopio tardó más que la retención de 300 ms y la F334 soltó por tiempo, sin flancos (`RecoverBus` vio el bus libre, `pulses 0`). Corregido en `7a22a3f`: el osciloscopio se arma antes de la retención.
+
+**Abierto:**
+
+- **T10 en el osciloscopio: 45 glitches** en cada una de las 4 capturas de T10(a) (4 MS/s, tramos de 250 ns frente a un tHIGH de unos 600 ns). La decodificación es exacta y el umbral de 0,5 V da otra cosa. Creo que el contador de glitches (pulsos más cortos que su mínimo) es demasiado estricto para 4 MS/s, pero no lo he comprobado. T10 no juzga glitches.
+- **La línea B1** pierde su texto final por el corte de 160 caracteres de `App_Log` (§5.4).
+- **T10(b) en notaps:** sin osciloscopio, el tiempo del TIMEOUT queda acotado por arriba (≤ 11 ms desde que CM7 ve SCL bajo) y solo débilmente por abajo (§5.5).
+
+**No ejercitado en F1** (el README del cierre debe copiarlo entero):
+
+- **T11 (`ARLO`) y multimaestro:** un solo maestro en el banco (S16). `TakeErrors` con `ARLO` no se ha visto nunca a 1.
+- **ES0445 2.19.2** (`BERR` en modo maestro): no se puede provocar; el driver lo borra y sigue (regla), sin evidencia en el banco: ningún `BERR` en las capturas. **2.19.3, 2.19.5, 2.19.7:** fuera de alcance (plan).
+- **2.19.6 (T12):** el control a mano no reprodujo la detención: "no reproducido" (decisión 6).
+- **Esclavo, 10 bits, SMBus/PEC, `TIDLE = 1`, `TIMEOUTB`:** fuera del contrato.
+- **I2C2 e I2C3:** sin pines; solo imagen (T2), bancos (T13), rechazos (T1) y T15. I2C1 con DMA solo desde CM4 (DMA2; DMA1 no) e I2C4 con BDMA solo desde CM7.
+- **Tiempos a 1 MHz:** no medidos (D3); 1 MHz se valida por datos (T4, T6–T10, T12) y duración.
+- **Fm+ (`SetFastModePlus`):** el bit de I2C2 sin bus (fila propia de §5.3), y los de I2C1 e I2C4 puestos y quitados alrededor del tráfico a 1 MHz (`SYSCFG_PMCR 0x03000001` y `0x03000008`, notaps), con `FMP 1` en la F334. El efecto eléctrico del bit no se midió (sin osciloscopio a 1 MHz, D3).
+- **`RecoverBus` con la línea SCL retenida:** solo SDA (T9); la rama de SCL bajo devuelve `ERR_BUS` por lectura del código, sin prueba.
+- **`I2C_BM_DmaStartWrite` con `n` < 2:** rechazo probado (T1); `n` de más de 65 535 por DMA: rechazado (T1); el reparto en trozos de 255 solo con 256 y 4096 bytes (T7).
+- **`I2C_BM_GetKernelSource`:** solo con el kernel de `prj_01` (PCLK), en la tabla de capacidades; no se llamó con el HSI de T12 ni con otra fuente.
+- **El estado "GPIO" del banco** y los otros bancos (`gpio`, `tim`, `spi`): no se ejecutaron en F1.
+- **Arranque en frío:** las sesiones empiezan con un reset de sistema por SWD (igual que F0, §5.5 de F0).
+- **Silicio distinto de rev V** y árboles de reloj distintos del de `prj_01`, salvo `CalcTiming` (T3).
+
 ## Decisiones abiertas usadas
 
 | # | Opción usada | Consultada |
 | --- | --- | --- |
-| 1 | `I2cBm_Status_t` en los tres tiers (sin uso en F0) | Por defecto (encargo de F0) |
+| 1 | `I2cBm_Status_t` en los tres tiers (F1: `i2c_bm`) | Por defecto (encargo de F0) |
 | 2 | Pull-ups de 1,0 kΩ al 3V3 de la H755 (el banco del responsable) | Por defecto |
-| 3 | 1 MHz en una sesión sin tomas (`--bench-state notaps`; en F0 no hay 1 MHz) | Por defecto |
-| 4 | CM4 I2C1; CM7 I2C2, I2C3, I2C4 (`bench_claim`/`bench_safe` de cada núcleo) | Por defecto |
-| 5 | Recuperación con funciones del llamador (sin uso en F0) | Por defecto |
-| 6 | "No reproducido" para los controles de erratas (sin uso en F0) | Por defecto |
+| 3 | 1 MHz en una sesión sin tomas (`--bench-state notaps`; F1: T4, T6–T10, T12 a 1 MHz solo en notaps, con PF14 leído por el firmware) | Por defecto |
+| 4 | CM4 I2C1; CM7 I2C2, I2C3, I2C4 (`bench_claim`/`bench_safe` de cada núcleo; F1: I2C1 desde CM4 e I2C4 desde CM7 en el bus) | Por defecto |
+| 5 | Recuperación con funciones del llamador (`I2cBm_Recovery_t`; T9) | Por defecto |
+| 6 | "No reproducido" para los controles de erratas (T12: no reproducido) | Por defecto |
 | 7 | HAL I2C en CM7 solo con la opción (sin uso en F0) | Por defecto |
 | 8 | Firmware de la F334 en `tools/i2c_target_f334/`, con el subconjunto del CMSIS de F3 y su licencia Apache-2.0 | Por defecto |
 | 9 | Documentos de proceso borrados al cierre (sin uso en F0) | Por defecto |
 
 ## Tabla de capacidades
 
-Llega con F1 (`i2c_bm`).
+`k_i2c` en `i2c_bm.c` (C1, regla 2): la única fuente de hechos de silicio del driver. La comprueba en el banco la fila "Tabla de capacidades" de §F1 5.3.
+
+| Instancia | Base | Dominio y bus | Habilitación (RCC) | Reloj del kernel | Bit de Fm+ | DMAMUX: RX / TX | IRQ EV / ER |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| I2C1 | `I2C1_BASE` | D2, APB1 | `RCC_APB1LENR.I2C1EN` bit 21 (09:7236) | `RCC_D2CCIP2R.I2C123SEL` [13:12] (09:4744-4749) | `SYSCFG_PMCR.I2C1FMP` bit 0 (13:122-137) | DMAMUX1 33 / 34 (tabla 126) | 31 / 32 |
+| I2C2 | `I2C2_BASE` | D2, APB1 | bit 22 (09:7230) | ídem | bit 1 | DMAMUX1 35 / 36 (18:113-116) | 33 / 34 |
+| I2C3 | `I2C3_BASE` | D2, APB1 | bit 23 (09:7224) | ídem | bit 2 | DMAMUX1 73 / 74 (18:110-111) | 72 / 73 |
+| I2C4 | `I2C4_BASE` | D3, APB4 | `RCC_APB4ENR.I2C4EN` bit 7 (09:7683) | `RCC_D3CCIPR.I2C4SEL` [9:8] (09:4868-4873) | bit 3 | DMAMUX2 13 / 14 (tabla 130, 18:235-236) | 95 / 96 |
+
+- **Banco de RCC:** cada núcleo escribe su propio banco (`RCC_C1`/`RCC_C2`, RM0399 9.7.1); un reloj sigue encendido mientras cualquiera de los dos bancos lo habilite (T13).
+- **Bases e IRQn:** `stm32h755xx.h`. Los números de DMAMUX los contrasta la prueba con `stm32h7xx_hal_dma.h`.
+- **Hechos de registro** (también en `i2c_bm.c`): bits reservados de `TIMINGR` 27:24 (50:2775); `NBYTES` de 8 bits, trozos de 255 (50:1081-1082); `TIMEOUTA` + 1 ≤ 4096 (50:2862); `PE = 0` al menos 3 ciclos de APB (50:441-445); `ISR` en reset `0x00000001` (50:2867).
