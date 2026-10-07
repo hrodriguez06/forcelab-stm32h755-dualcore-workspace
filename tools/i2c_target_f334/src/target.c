@@ -838,8 +838,17 @@ void target_poll(void)
         hold_finish();
     }
     /* A transfer that stopped making progress (a master gone mid-byte while
-       this target drives SDA, say) is cut: PE = 0 releases both lines. */
-    if (s_active && ((us_now() - s_last_us) > XFER_IDLE_US))
+       this target drives SDA, say) is cut: PE = 0 releases both lines. The time
+       since the last progress is read with interrupts masked: read in two steps,
+       an I2C interrupt between them made s_last_us newer than the time read
+       first, the difference wrapped, and live transfers were cut after a few
+       bytes (05_i2c F1 development runs, docs/i2c_dev_f1_bench_notaps_*: RPT
+       ev=08 with us of a few hundred). */
+    __disable_irq();
+    const uint32_t idle_us = us_now() - s_last_us;
+    const bool cut = s_active && (idle_us > XFER_IDLE_US) && (idle_us < 0x80000000UL);
+    __enable_irq();
+    if (cut)
     {
         __disable_irq();
         if (s_active)
@@ -854,7 +863,15 @@ void target_poll(void)
         }
         __enable_irq();
     }
-    if (!s_aborted && !target_s15_ok())
+    /* The S15 check reads MODER and then s_hold_pin; a hold released by its
+       interrupt (TIM2, or EXTI8 at the n-th SCL edge) between the two reads
+       looked like an output pin with no hold, and aborted (05_i2c F1
+       development run, docs/i2c_dev_f1_bench_notaps_*: the first hold released
+       by EDGES). The check runs with interrupts masked, so it sees one state. */
+    __disable_irq();
+    const bool s15 = s_aborted || target_s15_ok();
+    __enable_irq();
+    if (!s15)
     {
         __disable_irq();
         hold_release(CAUSE_ABORT);
