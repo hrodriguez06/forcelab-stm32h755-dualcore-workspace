@@ -444,13 +444,46 @@ static void ack(bool high)
     __DSB();
 }
 
+/* The SCL fall of an SCL hold, timed by CPU1 while it waits for the handshake of
+   the AT HOLD point (audit F1 part 3, B1): the target pulls SCL during the host's
+   part of the exchange, whose length depends on USB. Armed by scl_watch_arm(),
+   polled by the handshake's own polling, read once by scl_watch_take(). */
+static bool     s_scl_watch;
+static bool     s_scl_fell;
+static uint32_t s_scl_fall_cyc;
+
+static void scl_watch_poll(void)
+{
+    if (s_scl_watch && !s_scl_fell && (((GPIOB->IDR >> IST_PIN_SCL) & 1UL) == 0UL))
+    {
+        s_scl_fall_cyc = DWT->CYCCNT;
+        s_scl_fell = true;
+    }
+}
+
+static void scl_watch_arm(void)
+{
+    s_scl_fell = false;
+    s_scl_watch = true;
+}
+
+static bool scl_watch_take(uint32_t *cyc)
+{
+    scl_watch_poll();
+    s_scl_watch = false;
+    *cyc = s_scl_fall_cyc;
+    return s_scl_fell;
+}
+
 static bool req_high(void)
 {
+    scl_watch_poll();
     return ((GPIOE->IDR >> PE_REQ) & 1UL) != 0UL;
 }
 
 static bool req_low(void)
 {
+    scl_watch_poll();
     return ((GPIOE->IDR >> PE_REQ) & 1UL) == 0UL;
 }
 
@@ -2734,28 +2767,56 @@ static void t10(bool m4)
     {
         return;
     }
-    if (s_taps && !host_at("SCOPE T10B k=0 f=%lu kernel=%lu timingr=0 model=0 rate=100000 trig=scl tmo=%lu",
-                           (unsigned long)f, (unsigned long)k, (unsigned long)tmo))
+    /* With SCL held low the TIMEOUT fires again every TIMEOUTA (silicon fact, audit F1
+       part 3, O22): the Write ends at the first multiple of TIMEOUTA, counted from the
+       SCL fall, after its own START, n = ceil((start - fall) / TIMEOUTA). CPU1 times the
+       fall itself, during the handshake (B1); CPU2's Write starts as soon as the
+       handshake ends (n is what the latency gives, usually 1); CPU1's starts on
+       purpose 1.5 x TIMEOUTA after the fall, so that its first expiry ends nothing
+       and the second ends the Write (n = 2). */
+    const uint32_t nwant = m4 ? 0U : 2U;
+    if (s_taps && !host_at("SCOPE T10B k=0 f=%lu kernel=%lu timingr=0 model=0 rate=100000 trig=scl tmo=%lu nwant=%lu",
+                           (unsigned long)f, (unsigned long)k, (unsigned long)tmo, (unsigned long)nwant))
     {
         return;
     }
-    /* The target pulls SCL after this AT and the host answers a few ms later, so the
-       TIMEOUT comes at least TIMEOUTA after the AT and at most TIMEOUTA after SCL is
-       seen low; the scope (taps) times it from the SCL fall itself. */
-    const uint32_t at_b = DWT->CYCCNT;
+    const uint32_t tmo_cyc = (uint32_t)(((uint64_t)tmo * 2048U * s_cpu_hz) / k);   /* TIMEOUTA in CPU1 cycles */
+    scl_watch_arm();
     if (!host_at("HOLD SCL 50"))
     {
         return;
     }
     const bool low_b = wait_pin(IST_PIN_SCL, 0U, 20U);
-    const uint32_t seen_b = DWT->CYCCNT;                  /* TIMEOUTA counts from SCL low */
+    const uint32_t seen_b = DWT->CYCCNT;
+    uint32_t fall_b = seen_b;
+    const bool timed_b = scl_watch_take(&fall_b);
+    if (!timed_b)
+    {
+        fall_b = seen_b;                                  /* not seen during the handshake: a later bound */
+    }
+    if (!m4)
+    {
+        const uint32_t until = (tmo_cyc / 2U) * 3U;       /* 1.5 x TIMEOUTA after the fall */
+        uint32_t last = DWT->CYCCNT;
+        uint32_t same = 0U;
+        while ((DWT->CYCCNT - fall_b) < until)
+        {
+            const uint32_t now = DWT->CYCCNT;
+            same = (now == last) ? (same + 1U) : 0U;
+            last = now;
+            if (same > STALL_READS)
+            {
+                s_stalls++;
+                break;
+            }
+        }
+    }
+    const uint32_t start_b = DWT->CYCCNT;
     if (!xfer(m4, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00002010UL, ms_cyc(100U) / (m4 ? 2U : 1U), r))
     {
         return;
     }
     const uint32_t end_b = DWT->CYCCNT;                     /* before the X line (UART) */
-    const uint32_t cy_b = end_b - seen_b;
-    const uint32_t cy_at_b = end_b - at_b;
     xline("T10B", m4, f, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00002010UL, r, true);
     const uint32_t st_b = r[IST_XR_STATUS];
     (void)wait_pin(IST_PIN_SCL, 1U, 100U);
@@ -2791,17 +2852,24 @@ static void t10(bool m4)
     {
         return;
     }
-    const uint32_t us_b = cy_b / (s_cpu_hz / 1000000U);    /* CPU1's CYCCNT */
-    const uint32_t us_at_b = cy_at_b / (s_cpu_hz / 1000000U);
-    const uint32_t us_tmo = (uint32_t)(((uint64_t)tmo * 2048U * 1000000U) / k);
-    const uint32_t us_tmo_lo = (uint32_t)(((uint64_t)(tmo - 1U) * 2048U * 1000000U) / k);   /* a first tick cut short */
+    const uint32_t cpu_us = s_cpu_hz / 1000000U;
+    const uint32_t us_start = (start_b - fall_b) / cpu_us;  /* CPU1's CYCCNT, from the SCL fall */
+    const uint32_t us_end = (end_b - fall_b) / cpu_us;
+    const uint32_t us_tmo = tmo_cyc / cpu_us;
+    const uint32_t us_tick = (uint32_t)((2048ULL * 1000000U) / k);             /* a first tick cut short */
+    const uint32_t n_b = ((start_b - fall_b) / tmo_cyc) + 1U;                   /* first multiple after START */
+    const bool n_ok = (nwant == 0U) || (n_b == nwant);
+    const uint32_t lo = (n_b * us_tmo) - us_tick;
+    const uint32_t hi = (n_b * us_tmo) + 1000U;
+    verdict(low_b && timed_b && (st_b == (uint32_t)I2C_BM_ERR_BUS) && n_ok && (us_end >= lo) && (us_end <= hi),
+            "T10(b) %s SCL held 50 ms by the target, timeout_scl_low %lu (TIMEOUTA %lu us at %lu Hz): from the SCL "
+            "fall (timed %u during the AT HOLD), Write started at %lu us, so n = %lu (%s); it ended %lu us after the "
+            "fall with %lu (ERR_BUS %u, by TIMEOUT, then the software reset), n x TIMEOUTA %lu..%lu",
+            m4 ? "CM4" : "CM7", (unsigned long)tmo, (unsigned long)us_tmo, (unsigned long)k, (unsigned)timed_b,
+            (unsigned long)us_start, (unsigned long)n_b, m4 ? "as the handshake gave it" : "2 wanted: started after "
+            "1.5 x TIMEOUTA, the first expiry ends nothing", (unsigned long)us_end, (unsigned long)st_b,
+            (unsigned)I2C_BM_ERR_BUS, (unsigned long)lo, (unsigned long)hi);
     const uint32_t ms_c = cy_c / (s_cpu_hz / 1000U);
-    verdict(low_b && (st_b == (uint32_t)I2C_BM_ERR_BUS) && (us_at_b >= us_tmo_lo) && (us_b <= (us_tmo + 1000U)),
-            "T10(b) %s SCL held 50 ms by the target, timeout_scl_low %lu (%lu us at %lu Hz): Write %lu (ERR_BUS %u, by "
-            "TIMEOUT, then the software reset) %lu us after the AT HOLD (>= %lu) and %lu us after SCL was seen low "
-            "(<= %lu)", m4 ? "CM4" : "CM7", (unsigned long)tmo, (unsigned long)us_tmo, (unsigned long)k,
-            (unsigned long)st_b, (unsigned)I2C_BM_ERR_BUS, (unsigned long)us_at_b, (unsigned long)us_tmo_lo,
-            (unsigned long)us_b, (unsigned long)(us_tmo + 1000U));
     verdict(low_c && (st_c == (uint32_t)I2C_BM_ERR_TIMEOUT) && (ms_c >= 29U) && (ms_c <= 33U),
             "T10(b) %s control without timeout_scl_low: Write %lu (ERR_TIMEOUT %u) %lu ms after SCL went low "
             "(max_cycles 30 ms)",

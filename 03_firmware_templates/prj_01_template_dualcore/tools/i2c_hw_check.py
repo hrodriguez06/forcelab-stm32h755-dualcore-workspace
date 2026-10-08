@@ -71,6 +71,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import datetime
+import math
 import os
 import pathlib
 import queue
@@ -1286,6 +1287,48 @@ def t0b_t5min_selftest(log: Callable[[str], None]) -> bool:
     return ok
 
 
+def t0b_t10b_selftest(log: Callable[[str], None]) -> bool:
+    """T10(b)'s scope judgement (audit F1 part 3, B1/O22) on captures typed here:
+    SCL held 50 ms; the Write's START (SDA falls) at 3 or 15 ms; SDA let go at
+    n x TIMEOUTA from the SCL fall. Judged good: START at 3 ms released at 1 x,
+    START at 15 ms released at 2 x (nwant 2). Refused: START at 15 ms released at
+    1 x; START at 3 ms when 2 was wanted; a release 1 ms late."""
+    import types
+    rate, n_s = 100000.0, 6000
+    want = 489 * 2048 / 1e8
+
+    def wave(edges: list, start: int) -> list:
+        out, lvl, k = [], start, 0
+        edges = sorted(edges)
+        for i in range(n_s):
+            while k < len(edges) and i / rate >= edges[k][0]:
+                lvl = edges[k][1]
+                k += 1
+            out.append(3.3 if lvl else 0.0)
+        return out
+
+    cases = [(0.003, 1, 0, 0.0, True, "START at 3 ms, released at 1 x TIMEOUTA"),
+             (0.015, 2, 2, 0.0, True, "START at 15 ms, released at 2 x (2 wanted)"),
+             (0.015, 1, 0, 0.0, False, "START at 15 ms, released at 1 x"),
+             (0.003, 1, 2, 0.0, False, "START at 3 ms when 2 was wanted"),
+             (0.003, 1, 0, 0.001, False, "released 1 ms late")]
+    ok = True
+    for sdaf, k_rel, nwant, late, good_want, why in cases:
+        scl = wave([(0.001, 0), (0.051, 1)], 1)
+        sda = wave([(0.001 + sdaf, 0), (0.001 + k_rel * want + late, 1)], 1)
+        groups: list = []
+        fake = types.SimpleNamespace(clk_ratio=1.0, clk_measured=True, low_run=Session.low_run,
+                                     record=lambda t: None, log=lambda t: None,
+                                     group=lambda key, g, d: groups.append(g))
+        Session.scope_t10b(fake, "T10B mock", scl, sda, rate, {"tmo": 489, "kernel": 100000000, "nwant": nwant})
+        got = bool(groups) and groups[0]
+        good = got == good_want
+        ok = ok and good
+        log(f"[host] T0B(a) T10(b) judgement [{why}]: {'accepted' if got else 'refused'} -> "
+            f"{'as expected' if good else 'WRONG'}")
+    return ok
+
+
 # ---- What the selftest must do in a session (audit F1, m26) ------------------------------
 
 T4_SIZES = (1, 2, 255, 256, 1000, 65535)
@@ -1888,15 +1931,28 @@ class Session:
             ok = False
             rel_txt = "no CLKREF: TIMEOUTA cannot be timed (O13)"
         elif spec.get("tmo"):
-            # With timeout_scl_low the master lets SDA go (its software reset at TIMEOUT)
-            # (TIMEOUTA + 1) x 2048 kernel cycles after SCL fell, in AD2 time (CLKREF).
+            # With timeout_scl_low the master lets SDA go (its software reset at TIMEOUT).
+            # With SCL held low TIMEOUT fires again every TIMEOUTA (silicon fact, audit F1
+            # part 3, O22), counted from the SCL fall: the Write ends at the first multiple
+            # after its own START, the SDA fall: n = ceil(SDAf / TIMEOUTA) (B1), in AD2
+            # time (CLKREF). nwant (from the firmware): the n its START was placed for.
             want = spec["tmo"] * 2048 / spec["kernel"] * self.clk_ratio
             fall = next((e["t"] for e in se if not e["rise"]), None)
-            rel = next((e["t"] for e in de if e["rise"]), None)
-            if fall is not None and rel is not None:
+            sdaf = next((e["t"] for e in de if not e["rise"] and fall is not None and e["t"] > fall), None)
+            rel = next((e["t"] for e in de if e["rise"] and sdaf is not None and e["t"] > sdaf), None)
+            if fall is not None and sdaf is not None and rel is not None:
+                n = max(1, math.ceil((sdaf - fall) / want))
                 dt = rel - fall
-                rel_txt = f"SDA let go {dt * 1e3:.3f} ms after SCL fell (TIMEOUTA {want * 1e3:.3f} ms)"
-                ok = ok and abs(dt - want) <= 0.05 * want
+                quiet = all(not (fall < e["t"] < sdaf) for e in de) and d0 == 1
+                rel_txt = (f"Write's START (SDA falls) {(sdaf - fall) * 1e3:.3f} ms after SCL fell, n = {n}; SDA let go "
+                           f"{dt * 1e3:.3f} ms after SCL fell (n x TIMEOUTA {n * want * 1e3:.3f} ms)")
+                ok = ok and abs(dt - n * want) <= 0.05 * want and (spec.get("nwant", 0) in (0, n))
+                if n >= 2:
+                    rel_txt += (f"; the {n - 1} expiry(ies) before the START ended nothing (SDA high, no SDA edge "
+                                f"until the START: {quiet})")
+                    ok = ok and quiet
+                self.record(f"T10(b) {name}: n = {n} (wanted {spec.get('nwant') or 'any'}); TIMEOUT fires every "
+                            f"TIMEOUTA while SCL is low and ends the Write at the first one after its START")
             else:
                 ok = False
         self.log(f"[host] {name}: SCL low {lo_scl:.2f} ms in {runs_scl} run(s), SDA low {lo_sda:.2f} ms in "
@@ -1948,12 +2004,12 @@ class Session:
         if tag == "HOLD_END":
             return self.hold_end, None
         m = re.match(r"SCOPE (\S+) k=(\d+) f=(\d+) kernel=(\d+) timingr=([0-9A-F]+) model=(\d+) rate=(\d+) "
-                     r"trig=(sda|scl)(?: tmo=(\d+))?(?: af=(\d) dnf=(\d+))?$", tag)
+                     r"trig=(sda|scl)(?: tmo=(\d+))?(?: nwant=(\d+))?(?: af=(\d) dnf=(\d+))?$", tag)
         if m:
             spec = {"test": m.group(1), "k": int(m.group(2)), "f": int(m.group(3)), "kernel": int(m.group(4)),
                     "timingr": int(m.group(5), 16), "model": int(m.group(6)), "rate": int(m.group(7)),
-                    "trig": m.group(8), "tmo": int(m.group(9) or 0), "af": int(m.group(10) or 1),
-                    "dnf": int(m.group(11) or 0)}
+                    "trig": m.group(8), "tmo": int(m.group(9) or 0), "nwant": int(m.group(10) or 0),
+                    "af": int(m.group(11) or 1), "dnf": int(m.group(12) or 0)}
             if self.state != "taps":
                 raise BenchAbort(f"S19: a scope capture announced without taps: {tag}")
             if spec["f"] > 400000:
@@ -2325,7 +2381,8 @@ def session_body(args, stamp, head: str, res: dict) -> None:
                    "T0d identity": t0b_t0d_selftest(stamp), "checklist arguments": t0b_checklist_selftest(stamp),
                    "T3 calculation rules": t0b_calc_selftest(stamp), "X/RPT pairing": t0b_pairing_selftest(stamp),
                    "I2C decoder": t0b_decoder_selftest(stamp), "m26 lists": t0b_manifest_selftest(stamp),
-                   "S19 aborts": t0b_s19_selftest(stamp), "T5 minimums": t0b_t5min_selftest(stamp)})
+                   "S19 aborts": t0b_s19_selftest(stamp), "T5 minimums": t0b_t5min_selftest(stamp),
+                   "T10(b) n x TIMEOUTA": t0b_t10b_selftest(stamp)})
     for name, ok in guards.items():
         stamp(f"[host] T0B(a) {name} guard on its mock: {'PASS' if ok else 'FAIL'}")
 
