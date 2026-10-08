@@ -161,6 +161,7 @@ if(I2C_DRIVER_SELFTEST)
     )
     target_link_libraries(${TARGET} PRIVATE
         stm32h7_driver_i2c_bm
+        stm32h7_driver_i2c_ll
         stm32h7_driver_dma_bm
         stm32h7_driver_dma_hal
     )

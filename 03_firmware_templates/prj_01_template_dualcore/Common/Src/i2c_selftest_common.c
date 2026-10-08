@@ -37,6 +37,11 @@ const IstStep_t k_ist_steps[] = {
                                                     T10, B1                                  */
     { "F1_RECOVER",    IST_OWN_CM7,  1U, 1U },   /* T9: I2C4, and GPIO open-drain for
                                                     I2C_BM_RecoverBus                        */
+    { "F2_NOPIN",      IST_OWN_NONE, 0U, 0U },   /* T1, T2 with i2c_ll: no bus pin         */
+    { "F2_CM4",        IST_OWN_CM4,  1U, 0U },   /* I2C1 with i2c_ll: T1 (BUSY), T4, T6,
+                                                    T7(a), T14                              */
+    { "F2_CM7",        IST_OWN_CM7,  1U, 0U },   /* I2C4 with i2c_ll: T1 (BUSY), T4, T5, T6,
+                                                    T7(b), T14                              */
     { "DONE",          IST_OWN_NONE, 0U, 0U },
 };
 
@@ -272,6 +277,46 @@ static bool snap_eq(const uint32_t *a, const uint32_t *b)
     return true;
 }
 
+/* ---- Phase F2: Init and CheckConfig through either tier -------------------------- */
+static void to_ll(const I2cBm_Config_t *c, I2cLl_Config_t *l)
+{
+    l->i2c             = c->i2c;
+    l->timing          = c->timingr;
+    l->analog_filter   = c->analog_filter ? LL_I2C_ANALOGFILTER_ENABLE : LL_I2C_ANALOGFILTER_DISABLE;
+    l->digital_filter  = c->dnf;
+    l->timeout_scl_low = c->timeout_scl_low;
+}
+
+I2cBm_Status_t ist_init(bool ll, const I2cBm_Config_t *c)
+{
+    if (!ll)
+    {
+        return I2C_BM_Init(c);
+    }
+    if (c == NULL)
+    {
+        return I2C_LL_Init(NULL);
+    }
+    I2cLl_Config_t l;
+    to_ll(c, &l);
+    return I2C_LL_Init(&l);
+}
+
+I2cBm_Status_t ist_checkconfig(bool ll, const I2cBm_Config_t *c)
+{
+    if (!ll)
+    {
+        return I2C_BM_CheckConfig(c);
+    }
+    if (c == NULL)
+    {
+        return I2C_LL_CheckConfig(NULL);
+    }
+    I2cLl_Config_t l;
+    to_ll(c, &l);
+    return I2C_LL_CheckConfig(&l);
+}
+
 static void t1_case(IstT1Result_t *r, I2cBm_Status_t got, I2cBm_Status_t exp)
 {
     if (r->cases < IST_T1_MAX)
@@ -302,7 +347,7 @@ static bool rec_r(void *ctx)
    written by hand; group 1 with the instance at reset, group 2 initialised with
    `timingr`. A valid Init must change the photo (the control). Leaves the
    instance at reset. */
-void ist_t1(I2C_TypeDef *i2c, uint32_t timingr, IstT1Result_t *r)
+void ist_t1(I2C_TypeDef *i2c, uint32_t timingr, bool ll, IstT1Result_t *r)
 {
     uint32_t a[T1_SNAP];
     uint32_t b[T1_SNAP];
@@ -325,13 +370,19 @@ void ist_t1(I2C_TypeDef *i2c, uint32_t timingr, IstT1Result_t *r)
     /* 1. The instance at reset: parameters, ranges, and what needs an Init. */
     (void)I2C_BM_Deinit(i2c);
     t1_snap(i2c, a);
-    t1_case(r, I2C_BM_CheckConfig(NULL), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_Init(NULL), I2C_BM_ERR_PARAM);
-    k = c; k.i2c = (I2C_TypeDef *)USART3;                       t1_case(r, I2C_BM_Init(&k), I2C_BM_ERR_PARAM);
-    k = c; k.i2c = (I2C_TypeDef *)((uint32_t)I2C1 + 4U);        t1_case(r, I2C_BM_Init(&k), I2C_BM_ERR_PARAM);
-    k = c; k.dnf = 16U;                                          t1_case(r, I2C_BM_Init(&k), I2C_BM_ERR_PARAM);
-    k = c; k.timeout_scl_low = 4097U;                            t1_case(r, I2C_BM_Init(&k), I2C_BM_ERR_PARAM);
-    k = c; k.timingr = timingr | 0x01000000UL;                   t1_case(r, I2C_BM_Init(&k), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_checkconfig(ll, NULL), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_init(ll, NULL), I2C_BM_ERR_PARAM);
+    k = c; k.i2c = (I2C_TypeDef *)USART3;                       t1_case(r, ist_init(ll, &k), I2C_BM_ERR_PARAM);
+    k = c; k.i2c = (I2C_TypeDef *)((uint32_t)I2C1 + 4U);        t1_case(r, ist_init(ll, &k), I2C_BM_ERR_PARAM);
+    k = c; k.dnf = 16U;                                          t1_case(r, ist_init(ll, &k), I2C_BM_ERR_PARAM);
+    k = c; k.timeout_scl_low = 4097U;                            t1_case(r, ist_init(ll, &k), I2C_BM_ERR_PARAM);
+    k = c; k.timingr = timingr | 0x01000000UL;                   t1_case(r, ist_init(ll, &k), I2C_BM_ERR_PARAM);
+    if (ll)
+    {
+        /* LL only: an analog_filter that is not one of the two LL constants. */
+        const I2cLl_Config_t lc = { i2c, timingr, 0x00001234UL, 0U, 0U };
+        t1_case(r, I2C_LL_Init(&lc), I2C_BM_ERR_PARAM);
+    }
     t1_case(r, I2C_BM_CalcTiming(NULL, &to), I2C_BM_ERR_PARAM);
     t1_case(r, I2C_BM_CalcTiming(&t0, NULL), I2C_BM_ERR_PARAM);
     ti = t0; ti.kernel_hz = 0U;                                   t1_case(r, I2C_BM_CalcTiming(&ti, &to), I2C_BM_ERR_PARAM);
@@ -361,15 +412,15 @@ void ist_t1(I2C_TypeDef *i2c, uint32_t timingr, IstT1Result_t *r)
     rk = rec; rk.sda_read = NULL;                                 t1_case(r, I2C_BM_RecoverBus(&rk, 1U, &v), I2C_BM_ERR_PARAM);
     rk = rec; rk.half_period_cycles = 0U;                         t1_case(r, I2C_BM_RecoverBus(&rk, 1U, &v), I2C_BM_ERR_PARAM);
     t1_case(r, I2C_BM_RecoverBus(&rec, 0U, &v), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_Write(i2c, IST_TARGET_ADDR, buf, 1U, 1000U), I2C_BM_ERR_BUSY);   /* PE = 0 */
-    t1_case(r, I2C_BM_Read(i2c, IST_TARGET_ADDR, buf, 1U, 1000U), I2C_BM_ERR_BUSY);
-    t1_case(r, I2C_BM_StartIt(i2c, NULL), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_WaitEnd(i2c, 0U, 1000U), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_WaitEnd(i2c, 1U, 0U), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_DmaStartWrite(i2c, IST_TARGET_ADDR, buf, 1U), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_DmaStartWrite(i2c, IST_TARGET_ADDR, buf, 0U), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_DmaStartWrite(i2c, IST_TARGET_ADDR, NULL, 2U), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_DmaStartRead(i2c, IST_TARGET_ADDR, 0U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_write(ll, i2c, IST_TARGET_ADDR, buf, 1U, 1000U), I2C_BM_ERR_BUSY);   /* PE = 0 */
+    t1_case(r, ist_read(ll, i2c, IST_TARGET_ADDR, buf, 1U, 1000U), I2C_BM_ERR_BUSY);
+    t1_case(r, ist_startit(ll, i2c, NULL), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_waitend(ll, i2c, 0U, 1000U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_waitend(ll, i2c, 1U, 0U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_dmaw(ll, i2c, IST_TARGET_ADDR, buf, 1U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_dmaw(ll, i2c, IST_TARGET_ADDR, buf, 0U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_dmaw(ll, i2c, IST_TARGET_ADDR, NULL, 2U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_dmar(ll, i2c, IST_TARGET_ADDR, 0U), I2C_BM_ERR_PARAM);
     t1_case(r, I2C_BM_CheckTransfer((I2C_TypeDef *)USART3, IST_TARGET_ADDR, 1U, 0U), I2C_BM_ERR_PARAM);
     t1_snap(i2c, b);
     r->groups_same |= snap_eq(a, b) ? 1U : 0U;
@@ -377,26 +428,26 @@ void ist_t1(I2C_TypeDef *i2c, uint32_t timingr, IstT1Result_t *r)
     /* 2. Initialised (PE = 1): what the hardware would ignore, and the transfers'
        own fields. */
     k = c;
-    const I2cBm_Status_t i2 = I2C_BM_Init(&k);
+    const I2cBm_Status_t i2 = ist_init(ll, &k);
     t1_snap(i2c, a);
-    k = c; k.timingr = timingr ^ 0x00000001UL;                   t1_case(r, I2C_BM_Init(&k), I2C_BM_ERR_BUSY);
-    t1_case(r, I2C_BM_CheckConfig(&k), I2C_BM_ERR_BUSY);
-    k = c; k.dnf = 1U;                                           t1_case(r, I2C_BM_Init(&k), I2C_BM_ERR_BUSY);
-    k = c; k.analog_filter = false;                              t1_case(r, I2C_BM_Init(&k), I2C_BM_ERR_BUSY);
-    k = c; k.timeout_scl_low = 10U;                              t1_case(r, I2C_BM_Init(&k), I2C_BM_ERR_BUSY);
-    t1_case(r, I2C_BM_Write(i2c, 0x07U, buf, 1U, 1000U), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_Write(i2c, 0x78U, buf, 1U, 1000U), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_Write(i2c, IST_TARGET_ADDR, buf, 65536UL, 1000U), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_Read(i2c, IST_TARGET_ADDR, buf, 0U, 1000U), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_Write(i2c, IST_TARGET_ADDR, NULL, 1U, 1000U), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_WriteRead(i2c, IST_TARGET_ADDR, buf, 0U, buf, 1U, 1000U), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_WriteRead(i2c, IST_TARGET_ADDR, buf, 1U, buf, 0U, 1000U), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_Write(i2c, IST_TARGET_ADDR, buf, 1U, 0U), I2C_BM_ERR_PARAM);
-    x.tx = NULL;                                                 t1_case(r, I2C_BM_StartIt(i2c, &x), I2C_BM_ERR_PARAM);
-    x.tx = buf; x.addr7 = 0x78U;                                 t1_case(r, I2C_BM_StartIt(i2c, &x), I2C_BM_ERR_PARAM);
+    k = c; k.timingr = timingr ^ 0x00000001UL;                   t1_case(r, ist_init(ll, &k), I2C_BM_ERR_BUSY);
+    t1_case(r, ist_checkconfig(ll, &k), I2C_BM_ERR_BUSY);
+    k = c; k.dnf = 1U;                                           t1_case(r, ist_init(ll, &k), I2C_BM_ERR_BUSY);
+    k = c; k.analog_filter = false;                              t1_case(r, ist_init(ll, &k), I2C_BM_ERR_BUSY);
+    k = c; k.timeout_scl_low = 10U;                              t1_case(r, ist_init(ll, &k), I2C_BM_ERR_BUSY);
+    t1_case(r, ist_write(ll, i2c, 0x07U, buf, 1U, 1000U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_write(ll, i2c, 0x78U, buf, 1U, 1000U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_write(ll, i2c, IST_TARGET_ADDR, buf, 65536UL, 1000U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_read(ll, i2c, IST_TARGET_ADDR, buf, 0U, 1000U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_write(ll, i2c, IST_TARGET_ADDR, NULL, 1U, 1000U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_writeread(ll, i2c, IST_TARGET_ADDR, buf, 0U, buf, 1U, 1000U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_writeread(ll, i2c, IST_TARGET_ADDR, buf, 1U, buf, 0U, 1000U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_write(ll, i2c, IST_TARGET_ADDR, buf, 1U, 0U), I2C_BM_ERR_PARAM);
+    x.tx = NULL;                                                 t1_case(r, ist_startit(ll, i2c, &x), I2C_BM_ERR_PARAM);
+    x.tx = buf; x.addr7 = 0x78U;                                 t1_case(r, ist_startit(ll, i2c, &x), I2C_BM_ERR_PARAM);
     t1_case(r, I2C_BM_CheckTransfer(i2c, IST_TARGET_ADDR, 0U, 65536UL), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_DmaStartWrite(i2c, IST_TARGET_ADDR, buf, 65536UL), I2C_BM_ERR_PARAM);
-    t1_case(r, I2C_BM_WaitEnd(i2c, 65536UL, 1000U), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_dmaw(ll, i2c, IST_TARGET_ADDR, buf, 65536UL), I2C_BM_ERR_PARAM);
+    t1_case(r, ist_waitend(ll, i2c, 65536UL, 1000U), I2C_BM_ERR_PARAM);
     t1_snap(i2c, b);
     r->groups_same |= snap_eq(a, b) ? 2U : 0U;
     (void)I2C_BM_Deinit(i2c);
@@ -404,7 +455,7 @@ void ist_t1(I2C_TypeDef *i2c, uint32_t timingr, IstT1Result_t *r)
     /* The control: a valid Init changes the photo. */
     t1_snap(i2c, a);
     k = c;
-    const I2cBm_Status_t ic = I2C_BM_Init(&k);
+    const I2cBm_Status_t ic = ist_init(ll, &k);
     t1_snap(i2c, b);
     r->control_changed = (!snap_eq(a, b) && ((ic == I2C_BM_OK) || (ic == I2C_BM_ERR_BUS)) &&
                           ((i2 == I2C_BM_OK) || (i2 == I2C_BM_ERR_BUS))) ? 1U : 0U;
@@ -415,7 +466,7 @@ void ist_t1(I2C_TypeDef *i2c, uint32_t timingr, IstT1Result_t *r)
 /* T1 with BUSY = 1 (the target holds SDA low after a START on the bus): every
    transfer refused with ERR_BUS, nothing written. `i2c` is initialised and its
    pins in AF. */
-void ist_t1_busy(I2C_TypeDef *i2c, IstT1Result_t *r)
+void ist_t1_busy(I2C_TypeDef *i2c, bool ll, IstT1Result_t *r)
 {
     uint32_t a[T1_SNAP];
     uint32_t b[T1_SNAP];
@@ -427,13 +478,13 @@ void ist_t1_busy(I2C_TypeDef *i2c, IstT1Result_t *r)
     r->isr = i2c->ISR;
     t1_snap(i2c, a);
     t1_case(r, I2C_BM_CheckTransfer(i2c, IST_TARGET_ADDR, 1U, 0U), I2C_BM_ERR_BUS);
-    t1_case(r, I2C_BM_Write(i2c, IST_TARGET_ADDR, buf, 1U, 100000U), I2C_BM_ERR_BUS);
-    t1_case(r, I2C_BM_Write(i2c, IST_TARGET_ADDR, NULL, 0U, 100000U), I2C_BM_ERR_BUS);
-    t1_case(r, I2C_BM_Read(i2c, IST_TARGET_ADDR, buf, 2U, 100000U), I2C_BM_ERR_BUS);
-    t1_case(r, I2C_BM_WriteRead(i2c, IST_TARGET_ADDR, buf, 1U, buf, 2U, 100000U), I2C_BM_ERR_BUS);
-    t1_case(r, I2C_BM_StartIt(i2c, &x), I2C_BM_ERR_BUS);
-    t1_case(r, I2C_BM_DmaStartWrite(i2c, IST_TARGET_ADDR, buf, 2U), I2C_BM_ERR_BUS);
-    t1_case(r, I2C_BM_DmaStartRead(i2c, IST_TARGET_ADDR, 2U), I2C_BM_ERR_BUS);
+    t1_case(r, ist_write(ll, i2c, IST_TARGET_ADDR, buf, 1U, 100000U), I2C_BM_ERR_BUS);
+    t1_case(r, ist_write(ll, i2c, IST_TARGET_ADDR, NULL, 0U, 100000U), I2C_BM_ERR_BUS);
+    t1_case(r, ist_read(ll, i2c, IST_TARGET_ADDR, buf, 2U, 100000U), I2C_BM_ERR_BUS);
+    t1_case(r, ist_writeread(ll, i2c, IST_TARGET_ADDR, buf, 1U, buf, 2U, 100000U), I2C_BM_ERR_BUS);
+    t1_case(r, ist_startit(ll, i2c, &x), I2C_BM_ERR_BUS);
+    t1_case(r, ist_dmaw(ll, i2c, IST_TARGET_ADDR, buf, 2U), I2C_BM_ERR_BUS);
+    t1_case(r, ist_dmar(ll, i2c, IST_TARGET_ADDR, 2U), I2C_BM_ERR_BUS);
     t1_snap(i2c, b);
     r->groups_same = snap_eq(a, b) ? 1U : 0U;
 }
@@ -475,6 +526,77 @@ static bool t2_differs(const uint32_t g[IST_NREG], const uint32_t e[IST_NREG], u
         }
     }
     return differs;
+}
+
+/* T2 with i2c_ll: parity with i2c_bm over the same matrix (phase F2). */
+void ist_t2_ll(I2C_TypeDef *i2c, IstT2LlResult_t *r)
+{
+    r->cases = 0U;
+    r->bad_rm = 0U;
+    r->bad_parity = 0U;
+    r->bad_status = 0U;
+    r->bad_deinit = 0U;
+    r->first_bad = 0xFFFFFFFFUL;
+    r->got = 0U;
+    r->exp = 0U;
+    r->control = 0U;
+    IstT2Result_t first;                               /* where the first parity difference is */
+    first.first_bad = 0xFFFFFFFFUL;
+    for (uint32_t a = 0U; a < T2_N(k_t2_timingr); a++)
+    {
+        for (uint32_t f = 0U; f < 2U; f++)
+        {
+            for (uint32_t d = 0U; d < T2_N(k_t2_dnf); d++)
+            {
+                for (uint32_t m = 0U; m < T2_N(k_t2_tmo); m++)
+                {
+                    const bool analog = (f == 0U);
+                    const I2cBm_Config_t c = { i2c, k_t2_timingr[a], analog, k_t2_dnf[d], k_t2_tmo[m] };
+                    I2cBm_Config_t c2 = c;
+                    c2.dnf = (k_t2_dnf[d] + 1U) & 15U;
+                    uint32_t e[IST_NREG];
+                    uint32_t g_ll[IST_NREG];
+                    uint32_t g_bm[IST_NREG];
+                    uint32_t g_bm2[IST_NREG];
+                    t2_expect(k_t2_timingr[a], analog, k_t2_dnf[d], k_t2_tmo[m], e);
+                    const I2cBm_Status_t s_bm = I2C_BM_Init(&c);
+                    ist_regs(i2c, g_bm);
+                    const bool d1 = (I2C_BM_Deinit(i2c) == I2C_BM_OK) && (ist_reset_diff(i2c) == 0U);
+                    const I2cBm_Status_t s_bm2 = I2C_BM_Init(&c2);
+                    ist_regs(i2c, g_bm2);
+                    const bool d2 = (I2C_BM_Deinit(i2c) == I2C_BM_OK) && (ist_reset_diff(i2c) == 0U);
+                    const I2cBm_Status_t s_ll = ist_init(true, &c);
+                    ist_regs(i2c, g_ll);
+                    const bool d3 = (I2C_BM_Deinit(i2c) == I2C_BM_OK) && (ist_reset_diff(i2c) == 0U);
+                    if (((s_ll != I2C_BM_OK) && (s_ll != I2C_BM_ERR_BUS)) || (s_ll != s_bm) ||
+                        ((s_bm2 != I2C_BM_OK) && (s_bm2 != I2C_BM_ERR_BUS)))
+                    {
+                        r->bad_status++;
+                    }
+                    if (!d1 || !d2 || !d3)
+                    {
+                        r->bad_deinit++;
+                    }
+                    if (t2_differs(g_ll, e, r->cases, NULL))
+                    {
+                        r->bad_rm++;
+                    }
+                    if (t2_differs(g_ll, g_bm, r->cases, &first))
+                    {
+                        r->bad_parity++;
+                    }
+                    if (t2_differs(g_ll, g_bm2, r->cases, NULL))
+                    {
+                        r->control++;                  /* the parity comparison sees DNF + 1 */
+                    }
+                    r->cases++;
+                }
+            }
+        }
+    }
+    r->first_bad = first.first_bad;
+    r->got = first.got;
+    r->exp = first.exp;
 }
 
 void ist_t2(I2C_TypeDef *i2c, IstT2Result_t *r)

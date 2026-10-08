@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include "stm32h7xx.h"
 #include "i2c_bm.h"
+#include "i2c_ll.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,8 +42,9 @@ void I2C_Selftest_CM4_Run(void);          /* CPU2, after Shared_GpioLockInstall(
  * bus-pin owners. Bump it when any of those change. From v1 on, a step that
  * needs the host to read a state holds it until a HOST_REQ pulse
  * (sync_ack_low(), 06_spi lesson B1).                                         */
-#define I2C_BENCH_VERSION    2U    /* v1: T0A, T0C, T0B, T0B_CM7, T0B_TIMEOUT (plan phase F0);
-                                      v2: + F1_NOPIN, F1_CM4, F1_CM7, F1_RECOVER (phase F1) */
+#define I2C_BENCH_VERSION    3U    /* v1: T0A, T0C, T0B, T0B_CM7, T0B_TIMEOUT (plan phase F0);
+                                      v2: + F1_NOPIN, F1_CM4, F1_CM7, F1_RECOVER (phase F1);
+                                      v3: + F2_NOPIN, F2_CM4, F2_CM7 (phase F2, i2c_ll)     */
 
 typedef enum
 {
@@ -161,8 +163,11 @@ typedef enum
     IST_CMD_M4_BUSY,     /* T1 with BUSY = 1 (the target holds SDA) on I2C1 -> res[0] cases,
                             res[1] with another status, res[2] registers unchanged, res[3]
                             ISR, res[4..] the statuses                                     */
-    IST_CMD_M4_REGS      /* -> res[0..7] = CR1, CR2, OAR1, OAR2, TIMINGR, TIMEOUTR, ISR, the
+    IST_CMD_M4_REGS,     /* -> res[0..7] = CR1, CR2, OAR1, OAR2, TIMINGR, TIMEOUTR, ISR, the
                             I2C1 clock in CPU2's bank                                      */
+    /* Phase F2 (i2c_ll on I2C1). IST_CMD_M4_INIT's arg3 = 1, IST_CMD_M4_T1's arg1 = 1,
+       IST_CMD_M4_BUSY's arg0 = 1 and IST_XF_TIER_LL in a transfer select i2c_ll. */
+    IST_CMD_M4_T2LL      /* T2 with i2c_ll on I2C1 -> res[] as IstT2LlResult_t, in order    */
 } IstCmd_t;
 
 /* ---- Phase F1 transfers ---------------------------------------------------------- */
@@ -179,6 +184,52 @@ typedef enum
 #define IST_XF_OP(x)        ((x) & 0xFFU)
 #define IST_XF_MODE(x)      (((x) >> 8) & 0xFFU)
 #define IST_XF_ADDR(x)      (((x) >> 16) & 0x7FU)
+#define IST_XF_TIER_LL      (1UL << 24)   /* phase F2: the transfer through i2c_ll            */
+#define IST_XF_IS_LL(x)     ((((x) >> 24) & 1U) != 0U)
+
+/* ---- Phase F2: one call through i2c_bm or i2c_ll (ll), the same arguments ---------- */
+static inline I2cBm_Status_t ist_write(bool ll, I2C_TypeDef *i, uint32_t a, const uint8_t *tx, uint32_t n,
+                                       uint32_t mc)
+{
+    return ll ? I2C_LL_Write(i, a, tx, n, mc) : I2C_BM_Write(i, a, tx, n, mc);
+}
+static inline I2cBm_Status_t ist_read(bool ll, I2C_TypeDef *i, uint32_t a, uint8_t *rx, uint32_t n, uint32_t mc)
+{
+    return ll ? I2C_LL_Read(i, a, rx, n, mc) : I2C_BM_Read(i, a, rx, n, mc);
+}
+static inline I2cBm_Status_t ist_writeread(bool ll, I2C_TypeDef *i, uint32_t a, const uint8_t *tx, uint32_t ntx,
+                                           uint8_t *rx, uint32_t nrx, uint32_t mc)
+{
+    return ll ? I2C_LL_WriteRead(i, a, tx, ntx, rx, nrx, mc) : I2C_BM_WriteRead(i, a, tx, ntx, rx, nrx, mc);
+}
+static inline I2cBm_Status_t ist_startit(bool ll, I2C_TypeDef *i, I2cBm_Xfer_t *x)
+{
+    return ll ? I2C_LL_StartIt(i, x) : I2C_BM_StartIt(i, x);
+}
+static inline bool ist_xferirq(bool ll, I2C_TypeDef *i, I2cBm_Xfer_t *x)
+{
+    return ll ? I2C_LL_XferIrq(i, x) : I2C_BM_XferIrq(i, x);
+}
+static inline I2cBm_Status_t ist_dmaw(bool ll, I2C_TypeDef *i, uint32_t a, const uint8_t *b, uint32_t n)
+{
+    return ll ? I2C_LL_DmaStartWrite(i, a, b, n) : I2C_BM_DmaStartWrite(i, a, b, n);
+}
+static inline I2cBm_Status_t ist_dmar(bool ll, I2C_TypeDef *i, uint32_t a, uint32_t n)
+{
+    return ll ? I2C_LL_DmaStartRead(i, a, n) : I2C_BM_DmaStartRead(i, a, n);
+}
+static inline I2cBm_Status_t ist_waitend(bool ll, I2C_TypeDef *i, uint32_t n, uint32_t mc)
+{
+    return ll ? I2C_LL_WaitEnd(i, n, mc) : I2C_BM_WaitEnd(i, n, mc);
+}
+static inline I2cBm_Status_t ist_dmaend(bool ll, I2C_TypeDef *i)
+{
+    return ll ? I2C_LL_DmaEnd(i) : I2C_BM_DmaEnd(i);
+}
+/* Init / CheckConfig of an i2c_bm configuration, or of its i2c_ll translation (the
+   analog filter as LL_I2C_ANALOGFILTER_*; NULL stays NULL). */
+I2cBm_Status_t ist_init(bool ll, const I2cBm_Config_t *c);
+I2cBm_Status_t ist_checkconfig(bool ll, const I2cBm_Config_t *c);
 
 /* The result of one transfer (CPU2's m4_res[], and CPU1's own). */
 #define IST_XR_STATUS       0U    /* I2cBm_Status_t                                          */
@@ -203,6 +254,7 @@ typedef enum
 
 #define IST_T1_MAX           80U
 #define IST_T1_CASES         62U   /* ist_t1()'s cases (O15: judged exactly)    */
+#define IST_T1_LL_CASES      63U   /* with ll: + the unknown analog constant     */
 #define IST_T1_BUSY_CASES    8U    /* ist_t1_busy()'s transfers                 */
 
 /* The target (tools/i2c_target_f334): 7-bit address, and a free address. */
@@ -236,10 +288,12 @@ typedef struct
     uint8_t  got[IST_T1_MAX];
     uint8_t  exp[IST_T1_MAX];
 } IstT1Result_t;
-/* The refusals of T1 on `i2c`, clocked in this core's bank; `timingr` valid for it. */
-void     ist_t1(I2C_TypeDef *i2c, uint32_t timingr, IstT1Result_t *r);
+/* The refusals of T1 on `i2c`, clocked in this core's bank; `timingr` valid for it.
+   ll: the calls i2c_ll mirrors go through i2c_ll (the rest is i2c_bm's in both
+   tiers), plus the LL-only case of an unknown analog-filter constant. */
+void     ist_t1(I2C_TypeDef *i2c, uint32_t timingr, bool ll, IstT1Result_t *r);
 /* T1 with ISR.BUSY = 1: every transfer ERR_BUS, nothing written. */
-void     ist_t1_busy(I2C_TypeDef *i2c, IstT1Result_t *r);
+void     ist_t1_busy(I2C_TypeDef *i2c, bool ll, IstT1Result_t *r);
 
 typedef struct
 {
@@ -253,6 +307,24 @@ typedef struct
                                   (DNF + 1 mod 16) through the same comparison: all of them */
 } IstT2Result_t;
 void     ist_t2(I2C_TypeDef *i2c, IstT2Result_t *r);
+
+/* T2 with i2c_ll (phase F2): over the same matrix, the LL image against the RM fields
+   typed by hand and against the image i2c_bm leaves for the same configuration, bit
+   for bit; the parity control compares, through the same comparison, the LL image
+   with the BM image of the configuration with DNF + 1 (mod 16): all must differ. */
+typedef struct
+{
+    uint32_t cases;
+    uint32_t bad_rm;           /* LL images that differ from the RM fields                */
+    uint32_t bad_parity;       /* LL images that differ from BM's                         */
+    uint32_t bad_status;       /* an Init (LL or BM) neither OK nor ERR_BUS, or not the same */
+    uint32_t bad_deinit;
+    uint32_t first_bad;        /* case << 4 | register of the first parity difference      */
+    uint32_t got, exp;         /* LL and BM values there                                   */
+    uint32_t control;          /* cases told apart by the parity control: all of them     */
+} IstT2LlResult_t;
+#define IST_T2LL_N           9U
+void     ist_t2_ll(I2C_TypeDef *i2c, IstT2LlResult_t *r);
 
 /* CPU2's claim cases (T0b). The expected bit patterns are written by hand in
    IST_M4_CLAIMS_EXPECT_*: bit k = case k accepted. CPU1 judges them. */
