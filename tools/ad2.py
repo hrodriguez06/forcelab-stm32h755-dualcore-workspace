@@ -395,8 +395,9 @@ def i2c_decode_analog(scl: list[float], sda: list[float], rate_hz: float, vdd: f
       "t_low", "t_high": SCL low and high periods inside the frames (s), the high
                  periods that contain a START/STOP excluded;
       "t_low_at": for each t_low, (bit 0..8 its SCL rise begins, byte index in
-                 the frame): bit 0 of a byte after the address is a byte boundary,
-                 where a target may stretch SCL (UM10204 3.1.9);
+                 the frame, frame index in "frames" or -1): bit 0 of a byte after
+                 the address is a byte boundary, where a target may stretch SCL
+                 (UM10204 3.1.9);
       "t_r_scl", "t_f_scl", "t_r_sda", "t_f_sda": 30-70 % edge times (s);
       "t_su_dat": [(s, bit index in its frame 0..8, value, driver)]: SDA settled
                  (its 70 % for a rise, its 30 % for a fall) to the 30 % of the next
@@ -487,7 +488,8 @@ def i2c_decode_analog(scl: list[float], sda: list[float], rate_hz: float, vdd: f
             if in_xfer:
                 if last_scl_fall is not None:
                     out["t_low"].append(e["t_lo"] - last_scl_fall["t_lo"])
-                    out["t_low_at"].append((len(bits) % 9, len(frame["bytes"]) if frame is not None else 0))
+                    out["t_low_at"].append((len(bits) % 9, len(frame["bytes"]) if frame is not None else 0,
+                                            len(out["frames"]) - 1 if frame is not None else -1))
                 if last_sda_change is not None:
                     settled = last_sda_change["t_hi"] if last_sda_change["rise"] else last_sda_change["t_lo"]
                     b = len(bits) % 9

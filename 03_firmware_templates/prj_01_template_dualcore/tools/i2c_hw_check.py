@@ -726,7 +726,7 @@ class F334(LineReader):
 
 ST = {0: "OK", 1: "ERR_PARAM", 2: "ERR_UNSUPPORTED", 3: "ERR_RANGE", 4: "ERR_BUSY", 5: "ERR_VERIFY",
       6: "ERR_TIMEOUT", 7: "ERR_NACK", 8: "ERR_ARLO", 9: "ERR_BUS", 10: "PENDING", 11: "ERR_HAL"}
-ST_OK, ST_PARAM, ST_RANGE, ST_TIMEOUT, ST_NACK, ST_BUS, ST_PENDING = 0, 1, 3, 6, 7, 9, 10
+ST_OK, ST_PARAM, ST_RANGE, ST_TIMEOUT, ST_NACK, ST_ARLO, ST_BUS, ST_PENDING = 0, 1, 3, 6, 7, 8, 9, 10
 TARGET, NO_TARGET = 0x42, 0x43
 
 # Plan "Reglas de cálculo": tables 405/407 (ns) and the kernel minimum of ES0445 2.19.1, per mode.
@@ -1180,14 +1180,25 @@ def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: flo
     # address (bit 0 of byte j >= 1: a byte it has not written yet). Only the lower
     # bound applies to them, the upper one to every other low period, the master's
     # own counter (05_i2c F1, m25).
-    at = dec.get("t_low_at") or [(1, 0)] * len(tlow)
-    def stretchable(b: int, j: int) -> bool:
-        # bit 0 of a byte after the address, or the acknowledge of the address
-        # (the target's ADDR stretch)
-        return (b == 0 and j >= 1) or (b == 8 and j == 0)
+    at = [(a + (-1,))[:3] for a in (dec.get("t_low_at") or [(1, 0)] * len(tlow))]
+    frames = dec.get("frames") or []
 
-    tlow_at = [(v, b, j) for v, (b, j) in zip(tlow, at)]
-    tlow_byte = [v for v, b, j in tlow_at if stretchable(b, j)]
+    def stretchable(b: int, j: int, fi: int) -> bool:
+        # Only where a target that acknowledged its address may hold SCL (audit F1
+        # part 2, O16): before that acknowledge (its ADDR flag), and at bit 0 of a
+        # byte that follows (not the master's own low before a STOP or an Sr, not
+        # the frame of a refused address).
+        if not 0 <= fi < len(frames):
+            return False
+        fb = frames[fi]["bytes"]
+        if b == 8 and j == 0:
+            return True                                # the address's ACK bit itself
+        acked = bool(fb) and fb[0][1] == 0
+        return acked and b == 0 and 1 <= j < len(fb)
+
+    tlow_at = [(v, b, j) for v, (b, j, fi) in zip(tlow, at) if True]
+    keep = [stretchable(b, j, fi) for (b, j, fi) in at]
+    tlow_byte = [v for v, k in zip(tlow, keep) if k]
     # tSU;DAT of the bits the H755 drives is judged; the target's own (its TIMINGR,
     # tools/i2c_target_f334) is recorded: the driver is not what sets it.
     tsud = [d for d, _, _, who in dec["t_su_dat"] if who == "m"]
@@ -1213,8 +1224,8 @@ def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: flo
     tol = 2 * (2 / rate + 2 * tk)
     lo_l, hi_l = scll * tk - tol, (scll + sync) * tk + tol
     lo_h, hi_h = sclh * tk - tol, (sclh + sync) * tk + tol
-    out_l = [(v, b, j) for v, b, j in tlow_at if v < lo_l or (v > hi_l and not stretchable(b, j))]
-    long_s = [(v, b, j) for v, b, j in tlow_at if v > hi_l and stretchable(b, j)]
+    out_l = [(v, b, j) for (v, b, j), k in zip(tlow_at, keep) if v < lo_l or (v > hi_l and not k)]
+    long_s = [(v, b, j) for (v, b, j), k in zip(tlow_at, keep) if v > hi_l and k]
     out_h = [v for v in thigh if not lo_h <= v <= hi_h]
     if out_l:
         bad.append(f"{len(out_l)} of {len(tlow)} tLOW outside {lo_l / ns:.0f}..{hi_l / ns:.0f} ns: "
@@ -1312,6 +1323,55 @@ def expected_scopes(state: str) -> Counter:
     c[("T9", 0, 0)] += 1
     c[("T9B", 0, 400000)] += 1
     return c
+
+
+def s19_x_problem(state: str, x: dict) -> Optional[str]:
+    """S19 in the host (audit F1, m27): no transfer above 400 kHz with taps."""
+    if state == "taps" and x["f"] > 400000:
+        return f"S19: a transfer at {x['f']} Hz with taps: {x['text'].strip()}"
+    return None
+
+
+def t0b_s19_selftest(log: Callable[[str], None]) -> bool:
+    """The three S19 aborts of the host (m27) on inputs typed here, through the
+    code the session runs (audit F1 part 2, m35): an X line at 1 MHz, a SCOPE point
+    at 1 MHz and FMP 1, each with taps, end the session; the same at 400 kHz, or
+    without taps, do not."""
+    import types
+    ok = True
+    x_tpl = ("[i2c] X T4 cm7 f={f} op=W mode=poll a=42 n=1 p=1 st=0 crc=00000000 mis=0 bad=-1 cyc=1 dtx=1 drx=0 irq=0 "
+             "irqa=0 cr1=00000001 sen=0 isr=00000001 aux=0 t=1")
+    for state, f, want in (("taps", 1000000, True), ("taps", 400000, False), ("notaps", 1000000, False)):
+        got = s19_x_problem(state, parse_x(x_tpl.format(f=f))) is not None
+        good = got == want
+        ok = ok and good
+        log(f"[host] T0B(a) S19 X line at {f} Hz ({state}): {'aborts' if got else 'goes on'} -> "
+            f"{'as expected' if good else 'WRONG'}")
+    tag = "SCOPE T5 k=0 f={f} kernel=100000000 timingr=00000000 model=0 rate=25000000 trig=sda af=1 dnf=0"
+    for state, f, want in (("taps", 1000000, True), ("taps", 400000, False)):
+        fake = types.SimpleNamespace(state=state, scopes_seen=Counter(), scope_arm=lambda spec: None)
+        try:
+            Session.at_action(fake, tag.format(f=f))
+            got = False
+        except BenchAbort:
+            got = True
+        good = got == want
+        ok = ok and good
+        log(f"[host] T0B(a) S19 SCOPE point at {f} Hz ({state}): {'aborts' if got else 'goes on'} -> "
+            f"{'as expected' if good else 'WRONG'}")
+    for state, want in (("taps", True), ("notaps", False)):
+        sent: list = []
+        fake = types.SimpleNamespace(state=state, f334=types.SimpleNamespace(command=lambda *a, **k: sent.append(a)))
+        try:
+            Session.f334_cmd(fake, ["FMP", "1"])
+            got = False
+        except BenchAbort:
+            got = True
+        good = got == want and (bool(sent) != want)
+        ok = ok and good
+        log(f"[host] T0B(a) S19 FMP 1 ({state}): {'aborts, nothing sent' if got else 'sent'} -> "
+            f"{'as expected' if good else 'WRONG'}")
+    return ok
 
 
 def manifest_problems(want: Counter, got: Counter) -> list[str]:
@@ -1632,6 +1692,8 @@ class Session:
         self.x_seen: Counter = Counter()
         self.scopes_seen: Counter = Counter()
         self.bus_tr = self.bus_tf = 0
+        self.hold_log: list[dict] = []
+        self.t9b_scope: Optional[tuple[int, int]] = None
 
     def group(self, key: str, ok: bool, detail: str) -> None:
         g = self.groups.setdefault(key, {"n": 0, "bad": []})
@@ -1677,8 +1739,9 @@ class Session:
         self.rpt_mark = len(self.f334.lines)
         it = iter(rpts)
         for x in xs:
-            if self.state == "taps" and x["f"] > 400000:
-                raise BenchAbort(f"S19: a transfer at {x['f']} Hz with taps: {x['text'].strip()}")   # m27
+            why = s19_x_problem(self.state, x)                                  # m27
+            if why:
+                raise BenchAbort(why)
             self.x_seen[(x["test"], x["core"], x["f"], x["op"], x["mode"], x["a"], x["n"])] += 1
             if x["t"] == 1 and self.armed:
                 x["armed"] = self.armed
@@ -1828,6 +1891,13 @@ class Session:
         before = sum(1 for t in rises if rel is not None and t < rel)
         stop_ok = len(sda_fall) >= 1 and len(sda_rise) >= 2 and rel is not None and sda_fall[-1] > rel
         ok = d0 == 0 and before == 5 and (len(falls) == 5 or not exact) and stop_ok
+        if not exact:
+            # T9(b): the refused Write's SCL rises come first, then (after the pins
+            # change mode, > 1 ms later) RecoverBus's pulses: split at the first gap
+            # above 500 us (m34). One group only: all of them RecoverBus's.
+            rs = [t for t in rises if rel is None or t < rel]
+            cut = next((i + 1 for i in range(len(rs) - 1) if rs[i + 1] - rs[i] > 500e-6), 0)
+            self.t9b_scope = (cut, len(rs) - cut)
         self.log(f"[host] {name}: SDA low at the start {d0 == 0}, SCL pulses {len(falls)} falls / {len(rises)} rises, "
                  f"SDA released after {before} rises, then SDA falls {len(sda_fall)} rises {len(sda_rise)} (the STOP)")
         self.group(f"F1 {'T9' if exact else 'T9(b)'} scope: recovery", ok,
@@ -1934,6 +2004,7 @@ class Session:
                  f"(blank {blank}), cause {cause}, scl={m.group(8)} sda={m.group(9)} after, pins S15 {why15}")
         self.group("F1 target holds (S21)", ok, f"HOLD {h['line']} {h['ms']} EDGES {h['edges']}: {want}; got cause "
                    f"{cause} after {us} us with {edges} edges, lines after {m.group(8)}{m.group(9)}")
+        self.hold_log.append({"line": h["line"], "ms": h["ms"], "want": h["edges"], "edges": edges, "cause": cause})
 
     def clkref_arm(self, box: dict) -> None:
         nmax = self.ad2.digital_in_buffer_max()
@@ -1974,6 +2045,37 @@ class Session:
             if post:
                 post()
         self.flush_groups()
+
+    def t9b_counts(self) -> None:
+        """T9(b) (audit F1 part 2, m34): the pulses RecoverBus gave plus the SCL
+        rising edges of the refused Write must be the target's EDGES count (5), with
+        at least one pulse when SDA was still low after the Write. The Write's edges
+        are measured on the scope with taps; without taps they are 5 - pulses, and an
+        ERR_ARLO needs at least one (arbitration is lost on an SCL high)."""
+        line = next((t for t in reversed(self.con.since(0)) if "T9(b) the target holds SDA" in t), "")
+        m = re.search(r"Write (\d+) in \d+ cycles .*?PB8/PB9 after it (\d+) .*?RecoverBus (\d+), pulses (\d+)", line)
+        hold = next((h for h in reversed(self.hold_log) if h["want"] == 5), None)
+        if not m or hold is None:
+            self.check("F1 T9(b) pulses + the Write's SCL edges = the target's EDGES (m34)", False,
+                       f"T9(b) line {'found' if m else 'missing'}, EDGES hold {'found' if hold else 'missing'}")
+            return
+        sw, lv0, pulses = int(m.group(1)), int(m.group(2)), int(m.group(4))
+        sda_low = (lv0 & 2) == 0
+        ok = hold["cause"] == "EDGES" and hold["edges"] == 5 and (lv0 & 1) == 1 and (pulses >= 1) == sda_low
+        if self.state == "taps":
+            if self.t9b_scope is None:
+                ok, w_txt = False, "no T9(b) capture"
+            else:
+                w, rec = self.t9b_scope
+                ok = ok and w + pulses == hold["edges"] and rec == pulses
+                w_txt = f"the scope: {w} rises of the Write, then {rec} of RecoverBus"
+        else:
+            w = hold["edges"] - pulses
+            ok = ok and 0 <= w <= 9 and (sw != ST_ARLO or w >= 1)
+            w_txt = f"without taps: the Write's edges = {hold['edges']} - {pulses} = {w} (ERR_ARLO needs >= 1)"
+        self.check("F1 T9(b) pulses + the Write's SCL edges = the target's EDGES (m34)", ok,
+                   f"Write status {sw}, PB8/PB9 after it {lv0} (SDA {'low' if sda_low else 'high'}), RecoverBus "
+                   f"pulses {pulses}; target: cause {hold['cause']}, edges {hold['edges']}; {w_txt}")
 
     # -- what is judged once the firmware has finished ------------------------------------
     def f1_t3(self) -> None:
@@ -2027,6 +2129,7 @@ class Session:
         self.f1_step("F1_CM4")
         self.f1_step("F1_CM7")
         self.f1_step("F1_RECOVER")
+        self.t9b_counts()
         self.step("DONE")
         self.f1_t3()
         self.f1_t12()
@@ -2190,7 +2293,8 @@ def session_body(args, stamp, head: str, res: dict) -> None:
                    "S21 hold": t0b_s21_selftest(stamp), "S18 probes": t0b_s18_selftest(stamp),
                    "T0d identity": t0b_t0d_selftest(stamp), "checklist arguments": t0b_checklist_selftest(stamp),
                    "T3 calculation rules": t0b_calc_selftest(stamp), "X/RPT pairing": t0b_pairing_selftest(stamp),
-                   "I2C decoder": t0b_decoder_selftest(stamp), "m26 lists": t0b_manifest_selftest(stamp)})
+                   "I2C decoder": t0b_decoder_selftest(stamp), "m26 lists": t0b_manifest_selftest(stamp),
+                   "S19 aborts": t0b_s19_selftest(stamp)})
     for name, ok in guards.items():
         stamp(f"[host] T0B(a) {name} guard on its mock: {'PASS' if ok else 'FAIL'}")
 

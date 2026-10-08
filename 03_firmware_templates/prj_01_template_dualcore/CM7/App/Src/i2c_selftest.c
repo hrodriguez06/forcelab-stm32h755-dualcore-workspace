@@ -1160,6 +1160,8 @@ static void t0b_cm7_live_s16(void)
     uint32_t afrh = 0U;
     if (safe)
     {
+        GpioBm_Section_t gs;                         /* the cross-core GPIO lock, as bench_safe() (O20) */
+        const bool locked = (GPIO_BM_SectionEnter(&gs) == GPIO_BM_OK);
         const uint32_t pm = __get_PRIMASK();
         __disable_irq();
         GPIOB->AFR[1] = (GPIOB->AFR[1] & ~sda_a) | (IST_AF_I2C1 << ((IST_PIN_SDA - 8U) * 4U));
@@ -1174,6 +1176,10 @@ static void t0b_cm7_live_s16(void)
         GPIOB->AFR[1] &= ~sda_a;
         __DSB();
         __set_PRIMASK(pm);
+        if (locked)
+        {
+            GPIO_BM_SectionExit(&gs);
+        }
         control = bench_claim(GPIOB, 1UL << IST_PIN_SCL, GPIO_BM_MODE_AF, IST_AF_I2C4, GPIO_BM_OTYPE_OD,
                               GPIO_BM_PULL_NONE);
     }
@@ -3122,7 +3128,7 @@ static void t9(void)
 }
 
 /* T9(b), plan R3-6 (audit F1, M2): the target holds SDA BEFORE Init. ISR.BUSY is set
-   only by a START seen with PE = 1 (50:2897-2899), so Init returns OK with the bus
+   only by a START seen with PE = 1 (50:2897-2900), so Init returns OK with the bus
    held, and the transfer then ends, bounded by its max_cycles, with the code the
    silicon gives: recorded, and judged to be ERR_ARLO, ERR_BUS or ERR_TIMEOUT. Then
    the recovery of T9 (RecoverBus gives the pulses the target still needs of its 5
@@ -3188,11 +3194,18 @@ static void t9b(void)
             "the reset image 0x%02lX", (unsigned long)d_diff);
     const bool in_set = (sw == I2C_BM_ERR_ARLO) || (sw == I2C_BM_ERR_BUS) || (sw == I2C_BM_ERR_TIMEOUT);
     const bool bounded = cw <= (lim + ms_cyc(1U));
+    /* After the refused Write (audit F1 part 2, m34): SCL released (high); SDA still
+       held by the target if the Write gave it fewer than its 5 edges, and then
+       RecoverBus must give at least one pulse; SDA already free means no pulse at
+       all. The host judges pulses + the Write's SCL edges = the target's EDGES. */
+    const bool sda_low0 = (lv0 & 2U) == 0U;
+    const bool pulses_ok = (pulses <= 5U) && (sda_low0 ? (pulses >= 1U) : (pulses == 0U));
     verdict(low && (si == I2C_BM_OK) && ((isr & I2C_ISR_BUSY) == 0U) && (chk == (uint32_t)I2C_BM_OK) && in_set &&
-            bounded && (sr == I2C_BM_OK) && (pulses <= 5U) && (lv == 3U) && (r[IST_XR_STATUS] == (uint32_t)I2C_BM_OK),
+            bounded && ((lv0 & 1U) != 0U) && (sr == I2C_BM_OK) && pulses_ok && (lv == 3U) &&
+            (r[IST_XR_STATUS] == (uint32_t)I2C_BM_OK),
             "T9(b) the target holds SDA from before Init: Init %u (OK), I2C4 ISR 0x%08lX (BUSY 0: no START seen), "
             "CheckTransfer %lu (OK); Write %u in %lu cycles (one of ERR_ARLO %u, ERR_BUS %u, ERR_TIMEOUT %u; budget "
-            "%lu + 1 ms), PB8/PB9 after it %lu; RecoverBus %u, pulses %lu (<= 5: the rest of the target's 5 edges), "
+            "%lu + 1 ms), PB8/PB9 after it %lu (SCL high; SDA low: pulses 1..5, SDA high: 0); RecoverBus %u, pulses %lu, "
             "PB8/PB9 after %lu (3); AF6 and Init again, Write %lu (OK)", (unsigned)si, (unsigned long)isr,
             (unsigned long)chk, (unsigned)sw, (unsigned long)cw, (unsigned)I2C_BM_ERR_ARLO, (unsigned)I2C_BM_ERR_BUS,
             (unsigned)I2C_BM_ERR_TIMEOUT, (unsigned long)lim, (unsigned long)lv0, (unsigned)sr,
