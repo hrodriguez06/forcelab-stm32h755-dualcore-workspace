@@ -4,7 +4,9 @@ Implementador: Claude (Claude Code), para Hector Rodriguez · Rama: driver/i2c �
 
 ## Resumen
 
-**F1 (corrección 2) está entregada para auditoría** (§F1, corrección 2): responde a la auditoría de F1, parte 2 (m33, m34, m35, O16–O20). Sesiones de entrega con las imágenes de `fefacf4`: taps `docs/i2c_f1_bench_taps_fefacf4.txt` 96/96 y notaps `docs/i2c_f1_bench_notaps_fefacf4.txt` 74/74, `FW VERDICT=PASS` y `HOST VERDICT=PASS` en las dos.
+**F1 (corrección 3) está entregada para auditoría** (§F1, corrección 3): responde a la auditoría de F1, parte 3 (B1, O22). Sesiones de entrega con las imágenes de `26c2b4f`: taps `docs/i2c_f1_bench_taps_26c2b4f.txt` 96/96 y notaps `docs/i2c_f1_bench_notaps_26c2b4f.txt` 74/74, `FW VERDICT=PASS` y `HOST VERDICT=PASS` en las dos.
+
+**F1, corrección 2** (§F1, corrección 2): responde a la auditoría de F1, parte 2 (m33, m34, m35, O16–O20). Sesiones de entrega con las imágenes de `fefacf4`: taps `docs/i2c_f1_bench_taps_fefacf4.txt` 96/96 y notaps `docs/i2c_f1_bench_notaps_fefacf4.txt` 74/74, `FW VERDICT=PASS` y `HOST VERDICT=PASS` en las dos.
 
 **F1, corrección (plan revisión 3)** (§F1, corrección): responde a la auditoría de F1, parte 1 (M2, M3, m17–m32, O6–O15). Las sesiones de entrega, con las imágenes de `9c07b93`: taps `docs/i2c_f1_bench_taps_9c07b93.txt` 95/95 y notaps `docs/i2c_f1_bench_notaps_9c07b93.txt` 73/73, `FW VERDICT=PASS` y `HOST VERDICT=PASS` en las dos. Lo que sigue de este resumen es la entrega anterior de F1.
 
@@ -29,7 +31,7 @@ F2 no ha empezado: espera a que `AUDIT.md` diga que F1 pasa.
 | Fase | Estado | Último commit | Captura |
 | --- | --- | --- | --- |
 | F0 | pasa (`AUDIT.md`, `85f9d29`) | `bdaf752` (código); evidencia en `f7323f2` (desarrollo) y `6322f49` | `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f0_bench_taps_f7323f2_5.txt`, `.../i2c_f0_bench_notaps_f7323f2_2.txt` |
-| F1 | corrección verificada (`AUDIT.md`, `be202f4`); corrección 2 entregada para auditoría | `fefacf4` (código e imágenes; evidencia de build en `e66f8ba`). Antes: `9c07b93`, `d326575` | `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f1_bench_taps_9c07b93.txt`, `.../i2c_f1_bench_notaps_9c07b93.txt`; corrección 2: `.../i2c_f1_bench_taps_fefacf4.txt`, `.../i2c_f1_bench_notaps_fefacf4.txt` |
+| F1 | corrección 2 auditada en placa con B1 (`AUDIT.md`, `d88f579`); corrección 3 entregada para auditoría | `26c2b4f` (código e imágenes; evidencia de build en `5648533`). Antes: `fefacf4`, `9c07b93`, `d326575` | `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f1_bench_taps_9c07b93.txt`, `.../i2c_f1_bench_notaps_9c07b93.txt`; corrección 2: `.../i2c_f1_bench_taps_fefacf4.txt`, `.../i2c_f1_bench_notaps_fefacf4.txt`; corrección 3: `.../i2c_f1_bench_taps_26c2b4f.txt`, `.../i2c_f1_bench_notaps_26c2b4f.txt` |
 | F2 | sin empezar | — | — |
 | F3 | sin empezar | — | — |
 
@@ -705,6 +707,61 @@ El resto de filas da lo mismo que en la corrección (§F1 corrección, 5.3): T1�
 - **m33:** el camino nuevo (CYCCNT parado al entrar en `WaitEnd`) no se puede provocar en el banco; está comprobado en el desensamblado (§5.2).
 - **m34 sin tomas:** los flancos del `Write` se deducen de la cuenta de la F334, no se miden.
 - Lo demás de §F1 corrección 5.8 y §F1 5.8 sigue vigente.
+
+## F1, corrección 3
+
+Responde a la auditoría de F1, parte 3 (`AUDIT.md`, `d88f579`): B1 y O22. Actualiza la "F1, corrección 2" en T10(b); lo demás sigue como allí.
+
+### 5.1 Commits
+
+Rango: `d88f579..` el commit que añade esta sección.
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `26c2b4f` | test(prj_01): time T10(b) from the H755's own START (B1, O22) | B1, O22 |
+| `5648533` | docs(i2c): add the F1 correction-3 delivery captures at 26c2b4f | — |
+| `6360dd5` | docs(i2c): add the F1 correction-3 build evidence at 5648533 | — |
+| (este) | docs(i2c): add the F1 correction-3 section of the implementation report | — |
+
+El driver no cambia: `i2c_bm.c`/`.h` son los de `6fa2439`.
+
+### 5.2 Build y tamaños
+
+En `5648533` (código de `26c2b4f`), árbol limpio: `build_all -Clean` 8/8 (`docs/i2c_f1_build_all_5648533.txt`); `selftest-i2c` desde un directorio vacío, 0 avisos; `selftest-i2c`, `debug` y `release` con `-Werror`, 0 avisos; F334 `-Clean` y `-Clean -Werror`, `Warnings : 0`; `.map`: `prj_01` igual a `2481396`, `i2c_bm.c.obj` 5174 B (CM7) y 5156 B (CM4) con `.data = .bss = 0` (`docs/i2c_f1_*_5648533.txt`).
+
+### 5.3 Pruebas
+
+Capturas de entrega, imágenes de `26c2b4f` (Rev e id `5f42d988b8223ddc` en host, CM7 y CM4; F334 id `0ef47b9ceead50de`, el del host; `tree clean`; checklist confirmado por Hector el 2026-10-08: el banco estaba en taps; después "listo" al quitar J2/J3):
+
+- **taps:** `docs/i2c_f1_bench_taps_26c2b4f.txt`: 96/96 (29 `RECORD`: 20 de f\_SCL en bruto, 5 de tHIGH a 400 kHz por debajo de 600 ns dentro de la tolerancia, 592–600 ns, 2 de T10(b), T0d y "No Digital Out"), `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`;
+- **notaps:** `docs/i2c_f1_bench_notaps_26c2b4f.txt`: 74/74, `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`.
+
+| ID | Tier | Núcleo | Estado del banco | Resultado | Valor medido | Control negativo: valor | Oráculo | Oráculo F334/AD2 | Captura |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **T10(b)** (B1, O22) | BM | CM4, CM7 | taps y notaps | PASS | SCL retenido 50 ms por la F334, `timeout_scl_low` 489 (TIMEOUTA 10 014 µs nominales). **El firmware** mide la bajada de SCL él mismo mientras espera el intercambio del `AT HOLD` y calcula n = ceil((START − bajada) / TIMEOUTA): CM4 empieza al acabar el intercambio (5926 µs taps, 6353 µs notaps: **n = 1**) y termina a 10 019 µs; CM7 empieza a propósito a 1,5 × TIMEOUTA (15 022 µs: **n = 2**) y termina a 20 031 µs; juzgado en [n × TIMEOUTA − 1 tic, n × TIMEOUTA + 1 ms] y `ERR_BUS`. **El host** (taps): n = ceil(SDAf / TIMEOUTA) desde la bajada de SCL, con SDAf el START del `Write` en el osciloscopio: CM4 SDAf 5,873 ms, n = 1, SDA libre a 9,911 ms (n × TIMEOUTA en tiempo del AD2: 9,908 ms); CM7 SDAf 14,869 ms, n = 2 (el pedido en la línea SCOPE, `nwant=2`), SDA libre a 19,821 ms (19,817 ms) y **el primer vencimiento no terminó nada** (SDA alta y sin flancos hasta el START); tolerancia ± 5 % de TIMEOUTA; n en una línea `RECORD` | Sin `timeout_scl_low`: `ERR_TIMEOUT` a los 30 ms. En T0B(a): un START a 15 ms soltado a 1 × TIMEOUTA, un START a 3 ms cuando se pedía n = 2 y una liberación 1 ms tarde, rechazados | CYCCNT desde la bajada de SCL | AD2 (taps) | las dos |
+
+El resto de filas da lo mismo que en la corrección 2.
+
+**Hecho de silicio (O22, para el README):** con SCL retenida abajo, TIMEOUT (`TIDLE = 0`) vuelve a dispararse cada TIMEOUTA mientras dure. Un vencimiento sin transferencia en curso no hace nada visible en el bus. Una transferencia que empieza después termina en el primer vencimiento posterior a su START, no TIMEOUTA después de él. RM0399 no lo dice (50:2275-2289). Prueba: `i2c_f1_bench_taps_26c2b4f.txt`, T10(b) de CM7 (n = 2), y la ejecución del auditor `i2c_f1_audit_bench_taps_cd8a0f4.txt` (START a 11,2 ms, liberación a 19,8 ms).
+
+### 5.5 Desviaciones del plan (cambios)
+
+| Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- |
+| T10(b): "`ERR_BUS` por `TIMEOUT` … SDA libre al vencer `TIMEOUTA`" (R3-5) | SDA libre en el primer múltiplo de TIMEOUTA después del START del maestro (n), contado desde la bajada de SCL; CM7 empieza a propósito tras el primer vencimiento (n = 2) | B1 y O22: TIMEOUT se repite cada TIMEOUTA con SCL abajo, y el momento del START depende de la latencia del intercambio por USB | Lo pide la auditoría (B1, O22) |
+
+### 5.6 Respuesta a la auditoría de F1, parte 3
+
+| ID | Respuesta |
+| --- | --- |
+| B1 | Corregido en `26c2b4f`, pendiente de verificación. El host juzga la liberación de SDA en n × TIMEOUTA desde la bajada de SCL, con n = ceil(SDAf / TIMEOUTA) y SDAf el START de la H755 en el osciloscopio, con la tolerancia de antes (5 %), y registra n. Además, el firmware ya no depende de la latencia: mide él mismo la bajada de SCL durante el intercambio (lo comprueba: "timed 1") y juzga el fin en n × TIMEOUTA desde ella, con n calculado de su propio START. Mock en T0B(a) con tres rechazos |
+| O22 | En `26c2b4f`: CM7 empieza su `Write` a propósito 1,5 × TIMEOUTA después de la bajada de SCL (`nwant=2` en la línea SCOPE). El host exige n = 2 y que el primer vencimiento no haya terminado nada, y lo registra. Hecho de silicio para el README (§5.3). La memoria del proyecto ya lo recoge |
+
+### 5.8 Problemas abiertos y no ejercitado (cambios)
+
+- T10(b) de CM4 sigue dependiendo de la latencia para su n: ahora no importa, porque se juzga con el n que resulte. Ha sido n = 1 en todas las sesiones mías.
+- El caso de un START justo en un múltiplo de TIMEOUTA (a unos µs) no está cubierto: n podría ser ambiguo. CM7 está a 1,5 × para evitarlo; en CM4 no ha ocurrido.
+- Lo demás de las secciones anteriores sigue vigente.
 
 ## Decisiones abiertas usadas
 
