@@ -1156,7 +1156,7 @@ def t0b_decoder_selftest(log: Callable[[str], None]) -> bool:
 
 
 def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: float, rate: float,
-                       af: bool = True, dnf: int = 0) -> tuple[list[str], str]:
+                       af: bool = True, dnf: int = 0) -> tuple[list[str], str, list[str]]:
     """T5's times of one capture: every measured time at least the mode's minimum
     (tables 405/407); EVERY tLOW and tHIGH between its counter (SCLL, SCLH) and the
     counter plus the synchronisation of the model of 50:977-989, with the filters
@@ -1206,9 +1206,18 @@ def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: flo
     pairs = [("tLOW", tlow, tl_min), ("tHIGH", thigh, th_min), ("tSU;DAT", tsud, tsu_min),
              ("tHD;STA", dec["t_hd_sta"], thdsta_min), ("tSU;STA", dec["t_su_sta"], tsusta_min),
              ("tSU;STO", dec["t_su_sto"], tsusto_min), ("tBUF", dec["t_buf"], tbuf_min)]
+    # The mode's minimums with the measurement's own tolerance, 2 samples (decided by
+    # the owner on 2026-10-08, audit F1 part 2 session 3d92f3e: tHIGH 599/600 ns at
+    # 400 kHz against 600 with samples of 40 ns). A value below the minimum but within
+    # the tolerance is not a failure; it is returned in notes, which the session records.
+    notes: list[str] = []
+    tol_min = 2 / rate
     for name, vals, lo in pairs:
-        if vals and min(vals) < lo * ns:
-            bad.append(f"{name} min {min(vals) / ns:.0f} ns < {lo}")
+        if vals and min(vals) < lo * ns - tol_min:
+            bad.append(f"{name} min {min(vals) / ns:.0f} ns < {lo} - 2 samples ({tol_min / ns:.0f} ns)")
+        elif vals and min(vals) < lo * ns:
+            notes.append(f"{name} min {min(vals) / ns:.0f} ns: {lo - min(vals) / ns:.0f} ns below the {lo} ns minimum, "
+                         f"within 2 samples ({tol_min / ns:.0f} ns)")
     trs = dec["t_r_scl"] + dec["t_r_sda"]
     tfs = dec["t_f_scl"] + dec["t_f_sda"]
     tr_m, tf_m = med(trs), med(tfs)
@@ -1254,7 +1263,27 @@ def t5_timing_problems(dec: dict, f: int, k: int, t: int, model: int, ratio: flo
            f"{min(dec['t_su_sto'], default=0) / ns:.0f}, tBUF {min(dec['t_buf'], default=0) / ns:.0f} ns; t_r "
            f"{tr_m / ns:.0f} t_f {tf_m / ns:.0f} ns (median, 30-70 %); f_SCL {dec['f_scl']:.0f} Hz, normalised "
            f"{f_norm:.0f} (asked {f}, model {model})")
-    return bad, txt
+    return bad, txt, notes
+
+
+def t0b_t5min_selftest(log: Callable[[str], None]) -> bool:
+    """T5's minimums with 2 samples of tolerance (owner, 2026-10-08), on a capture
+    typed here at 400 kHz and 25 MS/s (40 ns): a tHIGH of 599 ns is a note, not a
+    failure; one of 519 ns (more than 80 ns below 600) fails."""
+    ok = True
+    st, t, _, model = calc_timing(100000000, 400000, 300, 10, True, 0)
+    for th, want_bad, want_note in ((599e-9, False, True), (519e-9, True, False), (620e-9, False, False)):
+        dec = {"t_low": [1.58e-6] * 3, "t_low_at": [(1, 0, 0), (2, 0, 0), (3, 0, 0)], "frames": [],
+               "t_high": [620e-9, th], "t_su_dat": [], "t_hd_sta": [], "t_su_sta": [], "t_su_sto": [], "t_buf": [],
+               "t_r_scl": [250e-9], "t_r_sda": [], "t_f_scl": [20e-9], "t_f_sda": [], "f_scl": 398000.0}
+        bad, _, notes = t5_timing_problems(dec, 400000, 100000000, t, model, 1.0, 25e6)
+        got_bad = any(x.startswith("tHIGH min") for x in bad)
+        got_note = any(x.startswith("tHIGH min") for x in notes)
+        good = got_bad == want_bad and got_note == want_note
+        ok = ok and good
+        log(f"[host] T0B(a) T5 minimum tHIGH {th * 1e9:.0f} ns at 25 MS/s: {'fails' if got_bad else 'passes'}"
+            f"{' with a note' if got_note else ''} -> {'as expected' if good else 'WRONG'}")
+    return ok
 
 
 # ---- What the selftest must do in a session (audit F1, m26) ------------------------------
@@ -1803,7 +1832,9 @@ class Session:
             key = ("CM4" if xs and xs[0]["core"] == "cm4" else "CM7", spec["f"])
             k, t, model = self.timing.get(key, (spec["kernel"], spec["timingr"], spec["model"]))
             af, dnf = bool(spec.get("af", 1)), int(spec.get("dnf", 0))
-            probs, txt = t5_timing_problems(dec, spec["f"], k, t, model, self.clk_ratio, rate, af, dnf)
+            probs, txt, notes = t5_timing_problems(dec, spec["f"], k, t, model, self.clk_ratio, rate, af, dnf)
+            for n_ in notes:
+                self.record(f"T5 {key[0]} k={spec['k']} f={spec['f']}: {n_}")
             if not self.clk_measured:
                 probs.append("no CLKREF: the times are not normalised (O13)")
             # The TIMINGR of the capture recomputed by the host (O13).
@@ -2294,7 +2325,7 @@ def session_body(args, stamp, head: str, res: dict) -> None:
                    "T0d identity": t0b_t0d_selftest(stamp), "checklist arguments": t0b_checklist_selftest(stamp),
                    "T3 calculation rules": t0b_calc_selftest(stamp), "X/RPT pairing": t0b_pairing_selftest(stamp),
                    "I2C decoder": t0b_decoder_selftest(stamp), "m26 lists": t0b_manifest_selftest(stamp),
-                   "S19 aborts": t0b_s19_selftest(stamp)})
+                   "S19 aborts": t0b_s19_selftest(stamp), "T5 minimums": t0b_t5min_selftest(stamp)})
     for name, ok in guards.items():
         stamp(f"[host] T0B(a) {name} guard on its mock: {'PASS' if ok else 'FAIL'}")
 
