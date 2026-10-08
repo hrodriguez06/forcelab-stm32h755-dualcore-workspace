@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host side of the 05_i2c selftest on prj_01 (preset selftest-i2c), phases F0 and F1.
+"""Host side of the 05_i2c selftest on prj_01 (preset selftest-i2c), phases F0, F1 and F2.
 
 Runs one complete bench session against CM7/App/Src/i2c_selftest.c, the
 Analog Discovery 2 and the NUCLEO-F334R8 target (tools/i2c_target_f334), and
@@ -2312,7 +2312,7 @@ def main() -> int:
     ap.add_argument("--bench-state", required=True, choices=("taps", "notaps"),
                     help="J2/J3 in place (taps) or removed (notaps); checked against the scope (S19)")
     ap.add_argument("--out", type=pathlib.Path,
-                    help="capture file (default: docs/i2c_f1_bench_<state>_<rev>.txt, i2c_dev_... with --allow-dirty)")
+                    help="capture file (default: docs/i2c_f2_bench_<state>_<rev>.txt, i2c_dev_... with --allow-dirty)")
     ap.add_argument("--allow-dirty", action="store_true", help="accept a -dirty Rev (development runs)")
     ap.add_argument("--no-reset", action="store_true", help="do not reset the H755; wait for the banner")
     ap.add_argument("--preset", default="selftest-i2c", help="configure preset of the H755 image (build id)")
@@ -2359,7 +2359,7 @@ def main() -> int:
         out = args.out
         if out is None:
             rev = res["revs"].get("cm7", head)
-            prefix = f"i2c_dev_f1_bench_{args.bench_state}" if args.allow_dirty else f"i2c_f1_bench_{args.bench_state}"
+            prefix = f"i2c_dev_f2_bench_{args.bench_state}" if args.allow_dirty else f"i2c_f2_bench_{args.bench_state}"
             out = PROJECT / "docs" / f"{prefix}_{rev}.txt"
             n = 2
             while out.exists():
@@ -2402,7 +2402,7 @@ def session_body(args, stamp, head: str, res: dict) -> None:
           f"no_reset={args.no_reset} checklist_confirmed={args.checklist_confirmed} "
           f"checklist_date={args.checklist_date}")
     stamp(f"[host] i2c_hw_check.py, host checkout {head}, protocol v{BENCH_VERSION}, F334 protocol "
-          f"v{F334_PROTOCOL}, phase F1")
+          f"v{F334_PROTOCOL}, phase F2 (with the F0 and F1 steps)")
     procs_ok = checklist(stamp, args.checklist_confirmed, args.checklist_date, args.bench_state)
     tree_record(stamp)
     h755_id = host_build_id(args.preset)

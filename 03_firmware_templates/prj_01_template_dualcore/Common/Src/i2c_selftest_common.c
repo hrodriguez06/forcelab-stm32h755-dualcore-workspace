@@ -542,6 +542,8 @@ void ist_t2_ll(I2C_TypeDef *i2c, IstT2LlResult_t *r)
     r->control = 0U;
     IstT2Result_t first;                               /* where the first parity difference is */
     first.first_bad = 0xFFFFFFFFUL;
+    first.got = 0U;
+    first.exp = 0U;
     for (uint32_t a = 0U; a < T2_N(k_t2_timingr); a++)
     {
         for (uint32_t f = 0U; f < 2U; f++)
