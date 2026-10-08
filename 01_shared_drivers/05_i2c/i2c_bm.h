@@ -202,6 +202,22 @@ I2cBm_Status_t I2C_BM_Deinit(I2C_TypeDef *i2c);
     pending, an interrupt or DMA enable set. ERR_BUS: ISR.BUSY = 1 (rule 5; a bus held
     since before Init does not set it, R3-6). */
 I2cBm_Status_t I2C_BM_CheckTransfer(const I2C_TypeDef *i2c, uint32_t addr7, uint32_t ntx, uint32_t nrx);
+/** The whole check of each call below, nothing written: its own arguments (a NULL
+    buffer, max_cycles 0, a count of 0 where it is refused, n < 2 for DmaStartWrite),
+    then I2C_BM_CheckTransfer. The functions of this file run exactly these, and
+    i2c_ll validates with them (05_i2c F2: one copy of the rules; additions to the
+    API frozen at F1, C2). Same codes as the call they check. */
+I2cBm_Status_t I2C_BM_CheckWrite(const I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *tx, uint32_t n,
+                                 uint32_t max_cycles);
+I2cBm_Status_t I2C_BM_CheckRead(const I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *rx, uint32_t n,
+                                uint32_t max_cycles);
+I2cBm_Status_t I2C_BM_CheckWriteRead(const I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *tx, uint32_t ntx,
+                                     const uint8_t *rx, uint32_t nrx, uint32_t max_cycles);
+I2cBm_Status_t I2C_BM_CheckDmaStartWrite(const I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *buf, uint32_t n);
+I2cBm_Status_t I2C_BM_CheckDmaStartRead(const I2C_TypeDef *i2c, uint32_t addr7, uint32_t n);
+/** WaitEnd's arguments only (instance, n 1..65 535, max_cycles >= 1): it runs while
+    a DMA transfer owns the instance, so no state check. */
+I2cBm_Status_t I2C_BM_CheckWaitEnd(const I2C_TypeDef *i2c, uint32_t n, uint32_t max_cycles);
 /** n = 0 is the address probe: START, address, STOP (ERR_NACK when nobody answers).
     tx may be NULL only with n = 0. max_cycles >= 1 bounds the whole call.
     Returns (Write, Read and WriteRead alike):
@@ -250,6 +266,9 @@ typedef struct
     running transfer is abandoned with I2C_BM_Deinit; there is no timeout of its own:
     the caller bounds its wait for x->status. */
 I2cBm_Status_t I2C_BM_StartIt(I2C_TypeDef *i2c, I2cBm_Xfer_t *x);
+/** StartIt's check, nothing written (05_i2c F2 addition, C2): x not NULL, tx and rx
+    not NULL where their count is not 0, then I2C_BM_CheckTransfer. */
+I2cBm_Status_t I2C_BM_CheckStartIt(const I2C_TypeDef *i2c, const I2cBm_Xfer_t *x);
 /** From both the event and the error vector of the instance, which must have the
     same priority (one must not interrupt the other inside this call): serves TXIS,
     RXNE, TCR, TC, STOPF, NACKF and the errors; true when x->status is final, and then

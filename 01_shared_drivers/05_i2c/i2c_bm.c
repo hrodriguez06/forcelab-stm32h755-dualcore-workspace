@@ -556,6 +556,78 @@ I2cBm_Status_t I2C_BM_CheckTransfer(const I2C_TypeDef *i2c, uint32_t addr7, uint
     return chk_transfer(i2c, addr7, ntx, nrx);
 }
 
+/* The checks of each call, in its C6 order (the arguments are ERR_PARAM before any
+   state is read); the calls run them and i2c_ll validates with them (05_i2c F2). */
+I2cBm_Status_t I2C_BM_CheckWrite(const I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *tx, uint32_t n,
+                                 uint32_t max_cycles)
+{
+    if (((tx == NULL) && (n != 0U)) || (entry(i2c) == NULL) || (max_cycles == 0U))
+    {
+        return I2C_BM_ERR_PARAM;
+    }
+    return chk_transfer(i2c, addr7, n, 0U);
+}
+
+I2cBm_Status_t I2C_BM_CheckRead(const I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *rx, uint32_t n,
+                                uint32_t max_cycles)
+{
+    if ((rx == NULL) || (entry(i2c) == NULL) || (n == 0U) || (max_cycles == 0U))
+    {
+        return I2C_BM_ERR_PARAM;
+    }
+    return chk_transfer(i2c, addr7, 0U, n);
+}
+
+I2cBm_Status_t I2C_BM_CheckWriteRead(const I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *tx, uint32_t ntx,
+                                     const uint8_t *rx, uint32_t nrx, uint32_t max_cycles)
+{
+    if ((tx == NULL) || (rx == NULL) || (entry(i2c) == NULL) || (ntx == 0U) || (nrx == 0U) || (max_cycles == 0U))
+    {
+        return I2C_BM_ERR_PARAM;
+    }
+    return chk_transfer(i2c, addr7, ntx, nrx);
+}
+
+I2cBm_Status_t I2C_BM_CheckStartIt(const I2C_TypeDef *i2c, const I2cBm_Xfer_t *x)
+{
+    if (x == NULL)
+    {
+        return I2C_BM_ERR_PARAM;
+    }
+    if (((x->tx == NULL) && (x->ntx != 0U)) || ((x->rx == NULL) && (x->nrx != 0U)))
+    {
+        return I2C_BM_ERR_PARAM;
+    }
+    return chk_transfer(i2c, x->addr7, x->ntx, x->nrx);
+}
+
+I2cBm_Status_t I2C_BM_CheckDmaStartWrite(const I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *buf, uint32_t n)
+{
+    if ((buf == NULL) || (entry(i2c) == NULL) || (n < 2U))
+    {
+        return I2C_BM_ERR_PARAM;                    /* the stream carries buf[1..n-1]: at least one */
+    }
+    return chk_transfer(i2c, addr7, n, 0U);
+}
+
+I2cBm_Status_t I2C_BM_CheckDmaStartRead(const I2C_TypeDef *i2c, uint32_t addr7, uint32_t n)
+{
+    if ((entry(i2c) == NULL) || (n == 0U))
+    {
+        return I2C_BM_ERR_PARAM;
+    }
+    return chk_transfer(i2c, addr7, 0U, n);
+}
+
+I2cBm_Status_t I2C_BM_CheckWaitEnd(const I2C_TypeDef *i2c, uint32_t n, uint32_t max_cycles)
+{
+    if ((entry(i2c) == NULL) || (n == 0U) || (n > N_MAX) || (max_cycles == 0U))
+    {
+        return I2C_BM_ERR_PARAM;
+    }
+    return I2C_BM_OK;
+}
+
 /* CR2 for one chunk of `left` bytes still to go in this direction: NBYTES, and
    RELOAD while more than 255 remain; on the last chunk AUTOEND as asked (1: STOP
    after it; 0: TC, the repeated start of WriteRead) (50:517-559, table 406). */
@@ -766,19 +838,7 @@ static I2cBm_Status_t xfer_poll(I2C_TypeDef *i2c, uint32_t addr7, const uint8_t 
 
 I2cBm_Status_t I2C_BM_Write(I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *tx, uint32_t n, uint32_t max_cycles)
 {
-    if ((tx == NULL) && (n != 0U))
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    if (entry(i2c) == NULL)
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    if (max_cycles == 0U)
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    const I2cBm_Status_t st = chk_transfer(i2c, addr7, n, 0U);
+    const I2cBm_Status_t st = I2C_BM_CheckWrite(i2c, addr7, tx, n, max_cycles);
     if (st != I2C_BM_OK)
     {
         return st;
@@ -788,19 +848,7 @@ I2cBm_Status_t I2C_BM_Write(I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *tx,
 
 I2cBm_Status_t I2C_BM_Read(I2C_TypeDef *i2c, uint32_t addr7, uint8_t *rx, uint32_t n, uint32_t max_cycles)
 {
-    if (rx == NULL)
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    if (entry(i2c) == NULL)
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    if ((n == 0U) || (max_cycles == 0U))
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    const I2cBm_Status_t st = chk_transfer(i2c, addr7, 0U, n);
+    const I2cBm_Status_t st = I2C_BM_CheckRead(i2c, addr7, rx, n, max_cycles);
     if (st != I2C_BM_OK)
     {
         return st;
@@ -811,19 +859,7 @@ I2cBm_Status_t I2C_BM_Read(I2C_TypeDef *i2c, uint32_t addr7, uint8_t *rx, uint32
 I2cBm_Status_t I2C_BM_WriteRead(I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *tx, uint32_t ntx,
                                 uint8_t *rx, uint32_t nrx, uint32_t max_cycles)
 {
-    if ((tx == NULL) || (rx == NULL))
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    if (entry(i2c) == NULL)
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    if ((ntx == 0U) || (nrx == 0U) || (max_cycles == 0U))
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    const I2cBm_Status_t st = chk_transfer(i2c, addr7, ntx, nrx);
+    const I2cBm_Status_t st = I2C_BM_CheckWriteRead(i2c, addr7, tx, ntx, rx, nrx, max_cycles);
     if (st != I2C_BM_OK)
     {
         return st;
@@ -835,15 +871,7 @@ I2cBm_Status_t I2C_BM_WriteRead(I2C_TypeDef *i2c, uint32_t addr7, const uint8_t 
 
 I2cBm_Status_t I2C_BM_StartIt(I2C_TypeDef *i2c, I2cBm_Xfer_t *x)
 {
-    if (x == NULL)
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    if (((x->tx == NULL) && (x->ntx != 0U)) || ((x->rx == NULL) && (x->nrx != 0U)))
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    const I2cBm_Status_t st = chk_transfer(i2c, x->addr7, x->ntx, x->nrx);
+    const I2cBm_Status_t st = I2C_BM_CheckStartIt(i2c, x);
     if (st != I2C_BM_OK)
     {
         return st;
@@ -989,19 +1017,7 @@ bool I2C_BM_XferIrq(I2C_TypeDef *i2c, I2cBm_Xfer_t *x)
 
 I2cBm_Status_t I2C_BM_DmaStartWrite(I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *buf, uint32_t n)
 {
-    if (buf == NULL)
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    if (entry(i2c) == NULL)
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    if (n < 2U)
-    {
-        return I2C_BM_ERR_PARAM;                    /* the stream carries buf[1..n-1]: at least one */
-    }
-    const I2cBm_Status_t st = chk_transfer(i2c, addr7, n, 0U);
+    const I2cBm_Status_t st = I2C_BM_CheckDmaStartWrite(i2c, addr7, buf, n);
     if (st != I2C_BM_OK)
     {
         return st;
@@ -1022,15 +1038,7 @@ I2cBm_Status_t I2C_BM_DmaStartWrite(I2C_TypeDef *i2c, uint32_t addr7, const uint
 
 I2cBm_Status_t I2C_BM_DmaStartRead(I2C_TypeDef *i2c, uint32_t addr7, uint32_t n)
 {
-    if (entry(i2c) == NULL)
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    if (n == 0U)
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    const I2cBm_Status_t st = chk_transfer(i2c, addr7, 0U, n);
+    const I2cBm_Status_t st = I2C_BM_CheckDmaStartRead(i2c, addr7, n);
     if (st != I2C_BM_OK)
     {
         return st;
@@ -1048,11 +1056,7 @@ I2cBm_Status_t I2C_BM_DmaStartRead(I2C_TypeDef *i2c, uint32_t addr7, uint32_t n)
 
 I2cBm_Status_t I2C_BM_WaitEnd(I2C_TypeDef *i2c, uint32_t n, uint32_t max_cycles)
 {
-    if (entry(i2c) == NULL)
-    {
-        return I2C_BM_ERR_PARAM;
-    }
-    if ((n == 0U) || (n > N_MAX) || (max_cycles == 0U))
+    if (I2C_BM_CheckWaitEnd(i2c, n, max_cycles) != I2C_BM_OK)
     {
         return I2C_BM_ERR_PARAM;
     }
