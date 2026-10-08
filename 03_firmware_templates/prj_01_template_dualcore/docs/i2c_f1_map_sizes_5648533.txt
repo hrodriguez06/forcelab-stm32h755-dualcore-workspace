@@ -1,0 +1,42 @@
+05_i2c F1: linked .map sizes of prj_01 ("Discarded input sections" excluded: parsing starts at
+"Linker script and memory map"). 2481396: the rows of docs/tim_f0_map_sizes_2481396.txt (the reference of the
+plan, A16); 5648533: build/<preset> of tools/build_all.ps1 -Clean (docs/i2c_f1_build_all_5648533.txt), tree clean.
+Commit: 5648533 docs(i2c): add the F1 correction-3 delivery captures at 26c2b4f.
+Allocated output sections only (address != 0). text = .isr_vector+.text+.rodata+.ARM, data = .data+.init_array+
+.fini_array, bss = .bss+._user_heap_stack+.shared_ram (the grouping arm-none-eabi-size and build_all.ps1 report).
+
+image        commit   .isr_vector       .text     .rodata        .ARM .init_array .fini_array       .data        .bss ._user_heap .shared_ram    text  data    bss
+debug CM7    2481396          664       27900         732           8           4           4         124       30868       24576         224   29304   132  55668
+debug CM7    5648533          664       27900         732           8           4           4         124       30868       24576         224   29304   132  55668
+             delta    0 in every section of the reference
+                      not in the reference file (not compared): .axi_ram 0, .d3_ram 0, .dma_buf 0, .eth_ram 0, .igot.plt 0, .iplt 0, .preinit_array 0, .rel.dyn 0, .v4_bx 0, .vfp11_veneer 0
+debug CM4    2481396          664        2736          56           0           4           4          16          44       12292         224    3456    24  12560
+debug CM4    5648533          664        2736          56           0           4           4          16          44       12292         224    3456    24  12560
+             delta    0 in every section of the reference
+                      not in the reference file (not compared): .d3_ram 0, .igot.plt 0, .iplt 0, .preinit_array 0, .rel.dyn 0, .v4_bx 0, .vfp11_veneer 0
+release CM7  2481396          664       26952         732           8           4           4         124       30872       24576         224   28356   132  55672
+release CM7  5648533          664       26952         732           8           4           4         124       30872       24576         224   28356   132  55672
+             delta    0 in every section of the reference
+                      not in the reference file (not compared): .axi_ram 0, .d3_ram 0, .dma_buf 0, .eth_ram 0, .igot.plt 0, .iplt 0, .preinit_array 0, .rel.dyn 0, .v4_bx 0, .vfp11_veneer 0
+release CM4  2481396          664        2392          56           0           4           4          16          44       12292         224    3112    24  12560
+release CM4  5648533          664        2392          56           0           4           4          16          44       12292         224    3112    24  12560
+             delta    0 in every section of the reference
+                      not in the reference file (not compared): .d3_ram 0, .igot.plt 0, .iplt 0, .preinit_array 0, .rel.dyn 0, .v4_bx 0, .vfp11_veneer 0
+
+selftest-i2c (5648533, build/selftest-i2c from an empty dir, docs/i2c_f1_selftest_build_5648533.txt).
+text = .text+.rodata input sections of each object:
+  CM7 image: text 81236 data 140 bss 56700
+  CM7 dma_bm.c.obj                     text=   352 data=   0 bss=    0
+  CM7 dma_hal.c.obj                    text=   872 data=   0 bss=   96
+  CM7 i2c_bm.c.obj                     text=  5174 data=   0 bss=    0
+  CM7 i2c_selftest.c.obj               text= 36440 data=   8 bss=  917
+  CM7 i2c_selftest_common.c.obj        text=  4201 data=   0 bss=    0
+  CM7 i2c_bm.c.obj .data = .bss = 0: yes
+  CM4 image: text 22284 data 28 bss 78576
+  CM4 dma_bm.c.obj                     text=  1974 data=   0 bss=    0
+  CM4 i2c_bm.c.obj                     text=  5156 data=   0 bss=    0
+  CM4 i2c_selftest.c.obj               text=  5583 data=   4 bss=65951
+  CM4 i2c_selftest_common.c.obj        text=  4169 data=   0 bss=    0
+  CM4 i2c_bm.c.obj .data = .bss = 0: yes
+
+prj_01 production equal to 2481396 in every section of the reference: yes
