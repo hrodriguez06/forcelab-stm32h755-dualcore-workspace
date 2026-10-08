@@ -263,3 +263,31 @@ Checklist confirmado por el responsable el 2026-10-08 (banco en notaps; después
 ### Estado
 
 **F1 no pasa** por B1. Lo demás está cerrado: M2, M3, m17–m35 y las observaciones aplicables. Cuando B1 esté corregido y haya una nueva sesión de entrega en taps, repetiré mi sesión taps (la notaps ya pasó sobre `cd8a0f4`; si la corrección toca el firmware o el driver, repetiré las dos).
+
+## F1, parte 4: corrección de B1 y ejecución del auditor en la placa (`a6de15b`)
+
+Entrega: `d88f579..a6de15b` (código en `26c2b4f`, solo el selftest de CM7 y el host; capturas de entrega en `5648533`; evidencia de build en `6360dd5`; informe en `a6de15b`). `i2c_bm.[ch]` y el firmware de la F334, sin cambios.
+
+### Revisión
+
+| Hallazgo | Verificación |
+| --- | --- |
+| B1 | CM7 cronometra la bajada de SCL durante el propio intercambio del `AT HOLD` (`scl_watch_*`, sondeado en el bucle del handshake) y juzga el fin en `n × TIMEOUTA` contado desde ella, con `n` el primer múltiplo posterior a su propio START. El host juzga en el osciloscopio la liberación de SDA en `n × TIMEOUTA` con `n = ceil(SDAf / TIMEOUTA)` (± 5 %), y con `n ≥ 2` exige que no haya ningún flanco de SDA entre la bajada de SCL y el START (el primer vencimiento no terminó nada). Mock con cinco casos en T0B(a). El criterio ya no depende de la latencia del intercambio. **Cerrado** |
+| O22 | Demostrado en una captura de entrega a propósito: CM7 empieza su `Write` a 1,5 × TIMEOUTA (`nwant = 2`). `taps_26c2b4f`: CM4 `n = 1` (START a 5,873 ms, liberación a 9,911 ms), CM7 `n = 2` (START a 14,869 ms, liberación a 19,821 ms, sin flancos antes del START). **Cerrada**; va al README como hecho de silicio con esta captura |
+
+Builds (mi ejecución, `a6de15b`): `build_all -Clean` 8/8, `prj_01` igual a `2481396`; `selftest-i2c` con `-Werror` 0 avisos (CM7 81236/140/130460, CM4 22284/28/78576); F334 con `-Werror` 0 avisos (11340/20/3392). Capturas de entrega `i2c_f1_bench_taps_26c2b4f.txt` 96/96 y `..._notaps_26c2b4f.txt` 74/74.
+
+### Mi ejecución
+
+Checklist del responsable vigente (2026-10-08): banco en taps (J2/J3 puestos), después J2/J3 quitados para notaps. Imágenes de `a6de15b` en las dos placas (`tools/flash.py --sn`; H755 0x450 y F334 0x438, "Download verified successfully"). Capturas sin editar:
+
+- `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f1_audit_bench_taps_a6de15b.txt`: **96/96, `HOST VERDICT=PASS`**, `FW VERDICT=PASS`. T10(b): CM4 `n = 1` (START 5,651 ms, liberación 9,892 ms), CM7 `n = 2` (START 14,829 ms, liberación 19,770 ms, el primer vencimiento sin efecto). Un tHIGH mínimo de 599 ns a 400 kHz, registrado dentro de la tolerancia de 2 muestras (en la entrega, cinco de 592–600 ns).
+- `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f1_audit_bench_notaps_a6de15b.txt`: **74/74, `HOST VERDICT=PASS`**, `FW VERDICT=PASS`. T10(b) CM7: START a 15 022 µs, `n = 2`, fin a 20 030 µs.
+
+En las dos, las líneas de resultado (`-> PASS/FAIL`, veredictos, recuentos), ordenadas y con los números normalizados, son idénticas a las de la entrega.
+
+**Observación O23.** `nwant = 2` en CM7 falla si el intercambio del `AT HOLD` tardara más de 2 × TIMEOUTA (19,8 ms): el `Write` empezaría tarde y daría `n = 3`. El máximo visto es 11,2 ms (`i2c_f1_audit_bench_taps_cd8a0f4.txt`). Si llegara a pasar, la salida es juzgar `n ≥ 2` en CM7.
+
+### Estado
+
+**F1 pasa.** Están cerrados M2, M3, m17–m35, B1 y las observaciones aplicables; O6, O7, O9, O11, O12, O15 (lo diferido), O22 y O23, y el margen de tHIGH a 400 kHz en esta placa (~3 %) y el bus +0,8 a +1,1 % por encima de lo pedido (R3-7), van al README. **La API de `i2c_bm` queda congelada en `a6de15b`**: el contrato es `01_shared_drivers/05_i2c/i2c_bm.h` de ese commit (plan revisión 3, C2). El implementador puede empezar F2 (`i2c_ll`). El banco quedó en notaps (J2/J3 quitados).
