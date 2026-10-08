@@ -176,3 +176,56 @@ Revisé el código con cuatro lecturas independientes (driver; F334; selftest de
 ### Estado
 
 La parte 1 no tiene bloqueantes, pero **F1 no puede pasar todavía**: M2 y M3 necesitan las decisiones D10 y D11 y su corrección antes de congelar la API de `i2c_bm`; m17–m32 se contestan en la "Respuesta a la auditoría de F1". Mi ejecución en la placa (parte 2, taps y notaps) queda para después de las correcciones.
+
+## F1, parte 2: verificación de la corrección (`d570281`)
+
+Entrega: `063c299..d570281` (código en `daf1bbe`, `9b6db50`, `a5e1135`, `5e44044`, `3d0ad6d`, `9c07b93`; imágenes de entrega en `9c07b93`; evidencia de build en `89847dc`; informe en `d570281`, sección "F1, corrección (revisión 3)").
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| A23 alcance | Solo `i2c_bm.[ch]`, el informe, `prj_01`, `tools/i2c_target_f334/` y adiciones en `tools/ad2.py`. `AUDIT.md`, el plan y las instrucciones, sin tocar |
+| `build_all -Clean` en `d570281` (mi ejecución) | 8/8; `prj_01` igual a `2481396` en las cuatro imágenes |
+| `selftest-i2c` con `-Werror` (mi ejecución) | 0 avisos; CM7 80644/140/130452, CM4 22284/28/78576; `i2c_bm.c.obj` con `.data = .bss = 0` en los dos núcleos |
+| F334 `build.ps1 -Clean -Werror` (mi ejecución) | 0 avisos; 11340/20/3392, como el informe |
+| Capturas de entrega | `i2c_f1_bench_taps_9c07b93.txt` 95/95 (22 `RECORD`: 20 de f\_SCL en bruto, T0d y "No Digital Out") y `i2c_f1_bench_notaps_9c07b93.txt` 73/73; `tree clean`; T9(b): `Init` OK con `BUSY = 0`, `Write` → `ERR_ARLO` en 4052 ciclos, `RecoverBus` 4 pulsos, escritura correcta después. Las fallidas (`taps_5e44044`, `taps_3d0ad6d`) y la de desarrollo, commiteadas sin editar y explicadas en §5.8 |
+
+Revisé el diff con dos lecturas independientes (driver y F334; selftest y host, con las funciones puras del host ejecutadas sobre datos sintéticos) y comprobé yo mismo en el código el hallazgo nuevo del driver.
+
+### Verificación de los hallazgos de F1
+
+| Hallazgo | Verificación |
+| --- | --- |
+| M2 / R3-6 | El encabezado lo dice en general (`i2c_bm.h:52-63`) y en `Init`, `CheckTransfer` y los códigos de las transferencias. T9(b): la retención empieza antes del `Init` (`CM7 :3149-3155`), `BUSY = 0` se juzga y el código se juzga en {`ERR_ARLO`, `ERR_BUS`, `ERR_TIMEOUT`}. **Cerrado** (m34 sobre los pulsos) |
+| M3 / R3-7 | Una línea `RECORD` con f\_SCL en bruto por captura de T5 (`i2c_hw_check.py:1755`); §5.3 da las dos cifras, +0,8 a +1,1 % sobre lo pedido. El informe corrige con razón la cifra de R3-7 (+1,3 % es el reloj, no el bus). **Cerrado** |
+| m17 | `s_rx_open` en `rx_take` con SBC, borrado en `TCR`, `ADDR` y al empezar; los dos órdenes de `RXNE`/`TCR` deciden bien el NACK y no hay carrera nueva (con SBC la F334 retiene SCL hasta reescribir `NBYTES`). **Cerrado** |
+| m18 | En T0B_CM7 (dueño CM7) el rechazo sale de `ist_s16_pins_ok()` sobre `MODER`/`AFR` vivos, y el mismo reclamo se acepta con PB9 de vuelta en entrada. La inyección es segura (I2C1 con reloj y `PE = 0`, open-drain sin pull, PRIMASK, restauración comprobada). **Cerrado** |
+| m19, m20, m22, m23, m26 | `HSION` solo si estaba a 0 y restauraciones separadas con read-back; Fm+ limpiado en `bench_safe()` y juzgado en los tres pasos del bus; el control de T2 exige `control == cases`; el de T3 pasa por `t3_judge` real (`bad == ok_n`); listas esperadas construidas de constantes del plan y comprobación final de pendientes. **Cerrados** |
+| m21 | Salida por CYCCNT parado en CLKREF, en el fin de la BDMA y en CM4. Queda el bucle interno de `HAL_DMA_Abort` con el tick (riesgo despreciable: `EN` baja enseguida). **Cerrado** |
+| m24 | `deinit_judged()` en cada prueba; quedan sin juzgar los `Deinit` de medida o desmontaje (T13, B1, DONE de CM4), que no son pruebas. **Cerrado** |
+| m25 | Cada tLOW contra la cota inferior y cada tHIGH y cada tLOW no exento contra las dos; la exención es por posición (ACK de la dirección, bit 0 de cada byte de datos, el bajo antes de STOP/Sr): en una trama 1+1 quedan 32 de 38 periodos juzgados enteros, así que un error sistemático de SCLL no se esconde. Las velocidades de muestreo, listadas en §5.5. **Cerrado** (O16) |
+| m27 | Tres puntos de aborto en el host (X, SCOPE > 400 kHz, `FMP 1`). **Cerrado en la lógica**; sin mock (m35) |
+| m28–m32, O8–O10, R3-1/2/3/5/8/9 | N con techo en el encabezado y en el código; `TIMEOUTR` escrito tres veces con `PE = 0` (50:2861) y el read-back intacto; todos los códigos de retorno documentados (cada `return` comprobado); read-back de `TXDMAEN`/`RXDMAEN` antes de `START` con la precarga de 2.19.6 intacta; "misma prioridad EV/ER"; macros `ERRF` como API; abandono solo con `Deinit`; citas corregidas y comprobadas en el RM. **Cerrados** |
+| O13, O14, O15 | `s15=ok` con límite de palabra; sin CLKREF, T5 y T10(b) fallan; `TIMINGR` de T5 recalculado en el host; F334 con comprobar-y-actuar enmascarado y comentarios corregidos; T1 con 62 y 8 casos exactos. **Cerradas** (lo diferido, para el README) |
+
+### Hallazgos nuevos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| m33 | Menor (driver) | `WaitEnd` con CYCCNT parado al entrar devuelve `ERR_TIMEOUT` **sin** reset por software (`i2c_bm.c:1059-1061`), contra su encabezado ("a stopped CYCCNT … the instance is software-reset", `i2c_bm.h:271-274`). Ahí `DmaStart*` ya lanzó el START: la transferencia DMA sigue viva, y `DmaEnd` limpia `CR2` y los bits DMA sin `PE = 0`, así que el maestro puede quedarse con el bus. (En `Write`/`Read` no hay nada en marcha y no importa) | `soft_reset` en ese camino, como dice el encabezado |
+| m34 | Menor (evidencia) | T9(b) juzga solo `pulses ≤ 5` (`CM7 :3192`), que acepta de 0 a 5; el "4" del informe no se juzga ni se deriva, y el nivel de SDA tras el `Write` (`lv0`) se imprime sin juzgar. Un `RecoverBus` que diera pulsos de más pasaría T9(b) (lo atraparía solo T9) | Juzgar `pulses ≥ 1` si SDA seguía abajo tras el `Write`, y pulsos + flancos del `Write` = 5 contra la cuenta de la F334; o redactar el informe como "≤ 5" |
+| m35 | Menor (evidencia) | Los abortos de m27 no tienen mock (§5.8 lo reconoce) | Un caso por punto en T0B(a) |
+
+**Observaciones:**
+
+- **O16.** La exención de m25 es más amplia de lo necesario: incluye el bajo propio del maestro antes de STOP/Sr y el ACK de una dirección rechazada (NACK), donde ningún target estira. Basta con las posiciones con target y ACK.
+- **O17.** `RecoverBus` como "la comprobación antes del primer `Init`" (`i2c_bm.h:302`): devuelve OK con SDA alto sin leer SCL, así que una SCL retenida sola no se ve. El encabezado debe decir que SCL se lee con `scl_read`.
+- **O18.** "Se borra con `PE = 0`" está en 50:2900, no en 50:2897-2899 (encabezado y R3-6).
+- **O19.** El límite efectivo de T9(b) es 2 ms + 1 ms (`CM7 :3190`), no los 2 ms de §5.5.
+- **O20.** La inyección de m18 hace el RMW de GPIOB sin `GPIO_BM_SectionEnter` (a diferencia de `bench_safe()`); una escritura simultánea de CM4 podría cruzarse, sin efecto eléctrico.
+- **O21.** `hold_start` de la F334 usa `__disable_irq`/`__enable_irq` en vez de guardar PRIMASK; correcto porque solo se llama desde el bucle principal.
+
+### Estado
+
+Todos los hallazgos mayores de F1 (M2, M3) y los menores m17–m32 están cerrados. Quedan tres menores nuevos: m33 (un camino del driver que deja una transferencia DMA viva) y dos de evidencia (m34, m35). **F1 pasa cuando:** (1) m33 esté corregido (cambia el código del driver, no la firma), con m34 y m35 y las observaciones baratas (O17, O18, O19) en la misma entrega; (2) yo haya hecho mi ejecución en la placa, taps y notaps, sobre ese código. Al pasar, la API de `i2c_bm` queda congelada.
