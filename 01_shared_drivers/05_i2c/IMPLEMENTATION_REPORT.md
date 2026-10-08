@@ -4,7 +4,9 @@ Implementador: Claude (Claude Code), para Hector Rodriguez · Rama: driver/i2c �
 
 ## Resumen
 
-**F1 (corrección, plan revisión 3) está entregada para auditoría** (§F1, corrección): responde a la auditoría de F1, parte 1 (M2, M3, m17–m32, O6–O15). Las sesiones de entrega, con las imágenes de `9c07b93`: taps `docs/i2c_f1_bench_taps_9c07b93.txt` 95/95 y notaps `docs/i2c_f1_bench_notaps_9c07b93.txt` 73/73, `FW VERDICT=PASS` y `HOST VERDICT=PASS` en las dos. Lo que sigue de este resumen es la entrega anterior de F1.
+**F1 (corrección 2) está entregada para auditoría** (§F1, corrección 2): responde a la auditoría de F1, parte 2 (m33, m34, m35, O16–O20). Sesiones de entrega con las imágenes de `fefacf4`: taps `docs/i2c_f1_bench_taps_fefacf4.txt` 96/96 y notaps `docs/i2c_f1_bench_notaps_fefacf4.txt` 74/74, `FW VERDICT=PASS` y `HOST VERDICT=PASS` en las dos.
+
+**F1, corrección (plan revisión 3)** (§F1, corrección): responde a la auditoría de F1, parte 1 (M2, M3, m17–m32, O6–O15). Las sesiones de entrega, con las imágenes de `9c07b93`: taps `docs/i2c_f1_bench_taps_9c07b93.txt` 95/95 y notaps `docs/i2c_f1_bench_notaps_9c07b93.txt` 73/73, `FW VERDICT=PASS` y `HOST VERDICT=PASS` en las dos. Lo que sigue de este resumen es la entrega anterior de F1.
 
 **F1 (`i2c_bm`), primera entrega** (§F1). F0 pasó la auditoría (`AUDIT.md`, `85f9d29`); su respuesta está en §F1 5.6.
 
@@ -27,7 +29,7 @@ F2 no ha empezado: espera a que `AUDIT.md` diga que F1 pasa.
 | Fase | Estado | Último commit | Captura |
 | --- | --- | --- | --- |
 | F0 | pasa (`AUDIT.md`, `85f9d29`) | `bdaf752` (código); evidencia en `f7323f2` (desarrollo) y `6322f49` | `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f0_bench_taps_f7323f2_5.txt`, `.../i2c_f0_bench_notaps_f7323f2_2.txt` |
-| F1 | auditada, no pasa (`AUDIT.md`, `16964d1`); corrección entregada para auditoría | `9c07b93` (código e imágenes; evidencia de build en `89847dc`). Primera entrega: `d326575` | `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f1_bench_taps_9c07b93.txt`, `.../i2c_f1_bench_notaps_9c07b93.txt` |
+| F1 | corrección verificada (`AUDIT.md`, `be202f4`); corrección 2 entregada para auditoría | `fefacf4` (código e imágenes; evidencia de build en `e66f8ba`). Antes: `9c07b93`, `d326575` | `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f1_bench_taps_9c07b93.txt`, `.../i2c_f1_bench_notaps_9c07b93.txt`; corrección 2: `.../i2c_f1_bench_taps_fefacf4.txt`, `.../i2c_f1_bench_notaps_fefacf4.txt` |
 | F2 | sin empezar | — | — |
 | F3 | sin empezar | — | — |
 
@@ -633,6 +635,76 @@ Las aprobadas el 2026-10-07 son ahora la revisión 3 (R3-1 a R3-5) y no son desv
 - m29: un `Init` sin `Deinit` previo con `TIMOUTEN = 1` no está en ninguna prueba; el `Init` de T10(b) tras uno con timeout pasa por `Deinit`.
 - La ruta de `bench_safe()` que limpia Fm+ (m20) solo corre al arrancar y en los abortos, y ninguna sesión abortó con el bit puesto.
 - El aborto por S19 del host (m27) no se disparó (es su caso bueno); su lógica no tiene mock.
+
+## F1, corrección 2
+
+Responde a la auditoría de F1, parte 2 (`AUDIT.md`, `be202f4`): m33, m34, m35 y las observaciones O16–O20. Esta sección actualiza a la "F1, corrección (revisión 3)" en lo que cambia; lo demás sigue como allí.
+
+### 5.1 Commits
+
+Rango: `be202f4..` el commit que añade esta sección.
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `6fa2439` | fix(i2c): software-reset in WaitEnd when CYCCNT is not running (m33, O17, O18) | m33, O17, O18 |
+| `3d92f3e` | test(prj_01): answer the F1 audit, part 2 (m34, m35, O16, O18, O20) | m34, m35, O16, O18, O20 |
+| `a03ee3f` | docs(i2c): add the F1 correction-2 sessions at 3d92f3e | — (notaps PASS; taps FAIL, §5.8) |
+| `fefacf4` | test(prj_01): T5 judges the mode's minimums with 2 samples of tolerance | decisión del responsable (§5.5) |
+| `e66f8ba` | docs(i2c): add the F1 correction-2 delivery captures at fefacf4 | — |
+| `90aef10` | docs(i2c): add the F1 correction-2 build evidence at e66f8ba | — |
+| (este) | docs(i2c): add the F1 correction-2 section of the implementation report | — |
+
+### 5.2 Build y tamaños
+
+En `e66f8ba` (el código de `fefacf4`), árbol limpio: `build_all -Clean` 8/8 (`docs/i2c_f1_build_all_e66f8ba.txt`); `selftest-i2c` desde un directorio vacío con 0 avisos (`..._selftest_build_e66f8ba.txt`); `selftest-i2c`, `debug` y `release` con `-Werror`, 0 avisos (`..._werror_e66f8ba.txt`); F334 `-Clean` y `-Clean -Werror`, `Warnings : 0` (`..._f334_build_e66f8ba.txt`); `.map` (`..._map_sizes_e66f8ba.txt`): `prj_01` igual a `2481396` en cada sección de la referencia, `i2c_bm.c.obj` 5174 B (CM7) y 5156 B (CM4) con `.data = .bss = 0`; `git diff cc8aa2c -- 02_firmware_projects` vacío.
+
+`i2c_bm.c.obj` mide lo mismo que en `89847dc` aunque m33 añade una llamada: el compilador comparte la secuencia "reset y devolver" con los otros caminos de `WaitEnd`. En el desensamblado de `I2C_BM_WaitEnd` (`selftest-i2c`, CM7), la comprobación de `cyccnt_running()` salta a `mov r0, r6; bl soft_reset; movs r0, #6`.
+
+### 5.3 Pruebas
+
+Capturas de entrega, imágenes de `fefacf4`:
+
+- **taps:** `docs/i2c_f1_bench_taps_fefacf4.txt`: 96/96 comprobaciones del host (22 `RECORD`), `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`;
+- **notaps:** `docs/i2c_f1_bench_notaps_fefacf4.txt`: 74/74 (2 `RECORD`), `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`.
+
+Rev `fefacf4` e id `470e954916ca1651` en host, CM7 y CM4; F334 Rev `fefacf4`, id `5e0c7c9096a308bc` (el del host); `tree clean`; checklist confirmado por Hector (notaps al empezar, "notaps (J2/J3 quitados)"; taps y notaps de nuevo con "listo" tras cada cambio de J2/J3). Una comprobación más que en la corrección en cada estado: la de m34. T0B(a) tiene dos mocks nuevos (m35 y los mínimos de T5).
+
+| ID | Tier | Núcleo | Estado del banco | Resultado | Valor medido | Control negativo: valor | Oráculo | Oráculo F334/AD2 | Captura |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **T9(b)** (M2, R3-6, m34) | BM | CM7 + host | taps y notaps | PASS | La F334 retiene SDA **antes** del `Init`: `Init` OK, `ISR 0x00000001` (BUSY 0), `CheckTransfer` OK; `Write` → **`ERR_ARLO`** en 4050 (taps) y 1847 (notaps) ciclos, dentro de su presupuesto (2 ms, juzgado ≤ 2 ms + 1 ms); **tras el `Write`, PB8/PB9 = 1: SCL alto, SDA bajo (juzgado)**; por eso `RecoverBus` debe dar de 1 a 5 pulsos (con SDA alto, ninguno): **4**, PB8/PB9 = 3 después; AF6, `Init` y una escritura correcta. **Host:** pulsos + flancos de subida de SCL del `Write` = la cuenta `EDGES` de la F334 (5, `cause=EDGES`): con tomas, 1 subida del `Write` y 4 de `RecoverBus` contadas en la captura de T9(b) (separadas por el primer hueco de más de 500 µs), y las 4 iguales a `pulses`; sin tomas, los flancos del `Write` son 5 − 4 = 1, que debe ser ≥ 1 tras `ERR_ARLO` (el arbitraje se pierde con SCL alto). Osciloscopio (taps): 5 subidas antes de soltar SDA y el STOP | T9: la retención después del `Init` da `ERR_BUS` | `ISR`, `IDR`, `pulses` | `HOLD_END` (`edges=5`); AD2 (taps) | las dos |
+| T5 | BM | CM4, CM7 | taps | PASS | 20 capturas exactas; f\_SCL en bruto 100,9–101,1 kHz y 403,1–404,1 kHz (+0,8 a +1,1 %), normalizada a ± 5 % del modelo. Cada tiempo contra el mínimo del modo − 2 muestras (§5.5): tHIGH a 400 kHz mínima 600–614 ns (Fm: 600), ninguna por debajo del mínimo en esta captura (0 `RECORD` de déficit). Exención de m25 solo donde el target estira (O16) | Intercambio de canales: distinto en las 20; en T0B(a), 599 ns pasa con nota y 519 ns falla | `t5_timing_problems()` | AD2 | taps |
+| S19 del host (m27, m35) | — | host | taps y notaps | PASS | En T0B(a), por el código de la sesión: una línea X a 1 MHz (`s19_x_problem()`, el de `settle`), un punto SCOPE a 1 MHz (`Session.at_action`) y `FMP 1` (`Session.f334_cmd`, que no envía nada) con tomas abortan; lo mismo a 400 kHz o sin tomas, no | — (los casos que siguen son el control) | casos a mano | — | las dos |
+
+El resto de filas da lo mismo que en la corrección (§F1 corrección, 5.3): T1–T4, T6–T8, T10, T12–T15, m18, m20, m22–m24, m26 (taps: 178 líneas X y 30 capturas; notaps: 154 líneas X).
+
+### 5.5 Desviaciones del plan (cambios)
+
+| Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- |
+| T5: tiempos "≥ mínimos del modo" | Cada tiempo ≥ el mínimo − 2 muestras (80 ns a 25 MS/s, 160 ns a 12,5 MS/s); un valor bajo el mínimo pero dentro de la tolerancia es una línea `RECORD` con el déficit, no un fallo | `taps_3d92f3e`: tHIGH mínima de 600 y 599 ns a 400 kHz frente a 600 ns. SCLH da 630 ns nominales, 622 ns con el reloj de la placa (+1,35 %); las medianas, 615–620 ns; la muestra es de 40 ns. Es la tolerancia de medida que el plan ya da a las ventanas | **Hector, 2026-10-08** ("Mínimos con tolerancia") |
+| T9(b): presupuesto del `Write` | 2 ms de `max_cycles`; juzgado ≤ 2 ms + 1 ms (corrige la frase de §F1 corrección 5.5, O19) | La captura de T9(b) dura 8 ms y dispara en el `Write` | No consultado |
+| T5: exención de m25 | Solo antes del ACK de la dirección y en el bit 0 de un byte que sigue a una dirección reconocida (O16) | Ningún target estira el bajo del maestro antes de STOP/Sr ni tras una dirección rechazada | No consultado; más estricto |
+
+### 5.6 Respuesta a la auditoría de F1, parte 2
+
+| ID | Respuesta |
+| --- | --- |
+| m33 | Corregido en `6fa2439`, pendiente de verificación: `WaitEnd` con CYCCNT parado al entrar hace el reset por software antes de `ERR_TIMEOUT`. Revisados los demás caminos de error de DMA e IT: `DmaStart*` y `StartIt` rechazan antes de `START` (m31); cada fin de `XferIrq` cierra la transferencia (`it_finish` o `timeout_end`); `ARLO` deja al periférico como esclavo con las líneas sueltas; tras `NACK`, `wait_stop` o el reset. Queda un caso por contrato: `WaitEnd` con `ERR_PARAM` no escribe nada (C6) aunque `DmaStart*` ya haya lanzado la transferencia; el encabezado dice ahora que se termina con `Deinit`. Firmas sin cambios |
+| m34 | Corregido en `3d92f3e`, pendiente de verificación: el firmware juzga los niveles tras el `Write` (SCL alto; SDA bajo exige de 1 a 5 pulsos, SDA alto ninguno) y el host, pulsos + flancos del `Write` = `EDGES` de la F334 (con tomas, los flancos contados en la captura; sin tomas, deducidos y ≥ 1 tras `ERR_ARLO`). §5.3 dice qué se juzga |
+| m35 | Corregido en `3d92f3e`, pendiente de verificación: `t0b_s19_selftest()`, un caso por aborto y sus controles, por el mismo código que la sesión (§5.3) |
+| O16 | Corregido en `3d92f3e`: el decodificador da la trama de cada periodo bajo (`t_low_at`, tercer campo) y la exención se limita a las posiciones donde un target que reconoció su dirección puede estirar |
+| O17 | Corregido en `6fa2439`: el encabezado dice que antes del primer `Init` SCL se lee con `scl_read`, porque `RecoverBus` devuelve OK con SDA alto sin leerla |
+| O18 | Corregido en `6fa2439` (encabezado) y `3d92f3e` (selftest): 50:2897-2900. La cita de R3-6 en el plan (50:2897-2899) es del plan, que no toco |
+| O19 | Corregido en este informe (§5.5): el límite es 2 ms + 1 ms; el código no cambia |
+| O20 | Corregido en `3d92f3e`: la inyección de m18 se escribe dentro de `GPIO_BM_SectionEnter`/`Exit`, como `bench_safe()` |
+| O21 | Sin cambio (lo pide la auditoría) |
+
+### 5.8 Problemas abiertos y no ejercitado (cambios)
+
+- **`taps_3d92f3e`** (94/96, FW PASS): dos capturas de T5 a 400 kHz con tHIGH mínima de 600 y 599 ns frente a 600; resuelto con la tolerancia de medida que decidió el responsable (§5.5). La sesión notaps de ese commit pasó (74/74). En la entrega (`fefacf4`), la mínima fue 600 ns: el margen de tHIGH a 400 kHz en esta placa es de unos 15–20 ns (2,5–3,5 %), sin contar el ruido de medida. Va al README junto al dato de f\_SCL de M3: un producto con este reloj debe pedir con margen.
+- **m33:** el camino nuevo (CYCCNT parado al entrar en `WaitEnd`) no se puede provocar en el banco; está comprobado en el desensamblado (§5.2).
+- **m34 sin tomas:** los flancos del `Write` se deducen de la cuenta de la F334, no se miden.
+- Lo demás de §F1 corrección 5.8 y §F1 5.8 sigue vigente.
 
 ## Decisiones abiertas usadas
 
