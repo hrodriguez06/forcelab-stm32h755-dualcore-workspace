@@ -229,3 +229,37 @@ Revisé el diff con dos lecturas independientes (driver y F334; selftest y host,
 ### Estado
 
 Todos los hallazgos mayores de F1 (M2, M3) y los menores m17–m32 están cerrados. Quedan tres menores nuevos: m33 (un camino del driver que deja una transferencia DMA viva) y dos de evidencia (m34, m35). **F1 pasa cuando:** (1) m33 esté corregido (cambia el código del driver, no la firma), con m34 y m35 y las observaciones baratas (O17, O18, O19) en la misma entrega; (2) yo haya hecho mi ejecución en la placa, taps y notaps, sobre ese código. Al pasar, la API de `i2c_bm` queda congelada.
+
+## F1, parte 3: corrección 2 y ejecución del auditor en la placa (`cd8a0f4`)
+
+Entrega: `be202f4..cd8a0f4` (código en `6fa2439`, `3d92f3e`, `fefacf4`; capturas de entrega en `e66f8ba`, imágenes de `fefacf4`; evidencia de build en `90aef10`; informe en `cd8a0f4`).
+
+### Revisión
+
+| Hallazgo | Verificación |
+| --- | --- |
+| m33 | `WaitEnd` hace `soft_reset` con CYCCNT parado al entrar (`i2c_bm.c:1061`); el encabezado dice además que un `ERR_PARAM` no escribe nada y que una transferencia empezada se termina con `Deinit`. **Cerrado** |
+| m34 | El firmware juzga los pulsos según el nivel de SDA tras el `Write` (SDA bajo: 1..5; alto: 0) y que SCL quedó alta; el host juzga pulsos + flancos de SCL del `Write` = `EDGES` de la F334 (con tomas, medidos en el osciloscopio: 1 + 4). **Cerrado** |
+| m35 | Mocks en T0B(a) de los tres abortos S19 del host (X, SCOPE, `FMP 1`), por el código de la sesión. **Cerrado** |
+| O16–O20 | Exención de T5 solo donde un target que reconoció su dirección puede estirar; encabezado de `RecoverBus` y del chequeo previo al `Init` con `scl_read`; cita 50:2897-2900; T9(b) acotado a 2 ms + 1 ms; `GPIO_BM_SectionEnter` en la inyección de m18. **Cerradas** |
+| `fefacf4` (T5) | Los mínimos del modo se juzgan con 2 muestras de tolerancia (80 ns a 25 MS/s); un valor por debajo del mínimo pero dentro de ella es un `RECORD`. **Confirmado por el responsable el 2026-10-08.** La causa: tHIGH mínima de 599–600 ns a 400 kHz frente a 600 ns (SCLH 630 ns nominales, 622 ns con el reloj de la placa): el margen de tHIGH a 400 kHz en esta placa es de un 3 % |
+
+Builds (mi ejecución, `cd8a0f4`): `build_all -Clean` 8/8, `prj_01` igual a `2481396`; `selftest-i2c` con `-Werror` 0 avisos (CM7 80712/140/130452, CM4 22284/28/78576); F334 con `-Werror` 0 avisos (11340/20/3392). Capturas de entrega `i2c_f1_bench_taps_fefacf4.txt` 96/96 y `..._notaps_fefacf4.txt` 74/74; las de `3d92f3e` (taps 94/96, notaps 74/74), commiteadas y explicadas.
+
+### Mi ejecución
+
+Checklist confirmado por el responsable el 2026-10-08 (banco en notaps; después J2/J3 puestos para taps). Imágenes de `cd8a0f4` en las dos placas (`tools/flash.py --sn`, "Download verified successfully" en la H755, 0x450, y en la F334, 0x438). Capturas sin editar:
+
+- `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f1_audit_bench_notaps_cd8a0f4.txt`: **74/74, `HOST VERDICT=PASS`**, `FW VERDICT=PASS`. Las líneas de resultado, iguales a las de `notaps_fefacf4` (solo cambia el orden de dos líneas de log). T9(b): `ERR_ARLO` en 1819 ciclos, `RecoverBus` 4 pulsos, `EDGES` 5 en la F334.
+- `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f1_audit_bench_taps_cd8a0f4.txt`: **95/96, `HOST VERDICT=FAIL`**, `FW VERDICT=PASS`. Falla "F1 T10(b) scope: SCL held, TIMEOUT, bus free after" en CM7 (I2C4); el de CM4 pasa.
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| B1 | Bloqueante (una prueba no se reproduce en mi ejecución) | **T10(b) del host depende de cuándo empieza el `Write`.** El host exige que SDA se suelte a TIMEOUTA contado desde la bajada de SCL de la F334. Eso solo vale si el `Write` de la H755 empieza antes de que venza el primer TIMEOUTA. En mi captura (CM7) la F334 bajó SCL en 0 ms, el `Write` empezó (SDA baja) a **11,234 ms**, después del primer vencimiento (9,901 ms), y SDA se soltó a **19,793 ms ≈ 2 × TIMEOUTA**. En la entrega el `Write` empezó a 4,5–5,1 ms y SDA se soltó a 9,885 ms. El driver hizo lo correcto: el propio firmware lo juzga (8666 µs desde que vio SCL baja, ≤ 11 014) y pasa. Lo que cambia es la latencia del intercambio del `AT HOLD` por USB: la entrega pasó por el orden de llegada, no por diseño (como B1 de `06_spi`) | Que el criterio no dependa de esa latencia: o el firmware garantiza que el `Write` empieza antes de que venza el primer TIMEOUTA (y el host lo comprueba con el flanco de SDA), o el host juzga la liberación en el primer múltiplo de TIMEOUTA posterior al START de la H755 (`n = ceil(SDAf / TIMEOUTA)`, registrado) con su tolerancia. Nueva ejecución de entrega en taps, y repetiré la mía |
+| O22 | Hecho de silicio | **Con SCL retenida abajo, TIMEOUT vuelve a dispararse cada TIMEOUTA.** El primer vencimiento (9,9 ms, sin transferencia en curso) no terminó nada; el siguiente, a 2 × TIMEOUTA, terminó el `Write`. RM0399 no lo dice (50:2275-2289). Va al README con su prueba en una captura de entrega (lección E2): la corrección de B1 debe dejarlo visible (por ejemplo, registrando `n`) | README |
+
+### Estado
+
+**F1 no pasa** por B1. Lo demás está cerrado: M2, M3, m17–m35 y las observaciones aplicables. Cuando B1 esté corregido y haya una nueva sesión de entrega en taps, repetiré mi sesión taps (la notaps ya pasó sobre `cd8a0f4`; si la corrección toca el firmware o el driver, repetiré las dos).
