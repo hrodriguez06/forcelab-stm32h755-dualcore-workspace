@@ -106,6 +106,11 @@ add_library(stm32h7_driver_i2c_bm INTERFACE)
 target_include_directories(stm32h7_driver_i2c_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/05_i2c)
 target_sources(stm32h7_driver_i2c_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/05_i2c/i2c_bm.c)
 
+add_library(stm32h7_driver_i2c_ll INTERFACE)
+target_include_directories(stm32h7_driver_i2c_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/05_i2c)
+target_sources(stm32h7_driver_i2c_ll INTERFACE ${CMAKE_CURRENT_LIST_DIR}/05_i2c/i2c_ll.c)
+target_link_libraries(stm32h7_driver_i2c_ll INTERFACE stm32h7_driver_i2c_bm)
+
 # 06_spi: SPI1-SPI6. No unsuffixed target (rule C4) and the umbrella below does not
 # link the tiers: a project picks one. stm32h7_driver_spi_bm holds the single
 # capability table and validation; the LL and HAL tiers will link it (06_spi plan,
