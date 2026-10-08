@@ -102,7 +102,7 @@ from monitor import SerialPort                         # noqa: E402
 from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E402
                            t0b_guard_selftest, tree_record)
 
-BENCH_VERSION = 2          # I2C_BENCH_VERSION of Common/Inc/i2c_selftest.h
+BENCH_VERSION = 3          # I2C_BENCH_VERSION of Common/Inc/i2c_selftest.h
 F334_PROTOCOL = 3          # TARGET_PROTOCOL of tools/i2c_target_f334/src/bench.h
 F334_SYSCLK = 64000000     # the kernel its TIMINGR was computed for (audit F0, m7)
 
@@ -124,7 +124,7 @@ SCOPE_SCL, SCOPE_SDA = 0, 1    # scope 1+ on PF14 (SCL through J2), 2+ on PF15 (
 # S7: the host's own copy of the firmware's step table (name, bus-pin owner), in order.
 STEPS = [("T0A", "NONE"), ("T0C", "NONE"), ("T0B", "CM4"), ("T0B_CM7", "CM7"),
          ("T0B_TIMEOUT", "NONE"), ("F1_NOPIN", "NONE"), ("F1_CM4", "CM4"), ("F1_CM7", "CM7"),
-         ("F1_RECOVER", "CM7"), ("DONE", "NONE")]
+         ("F1_RECOVER", "CM7"), ("F2_NOPIN", "NONE"), ("F2_CM4", "CM4"), ("F2_CM7", "CM7"), ("DONE", "NONE")]
 
 # ---- Levels (S17, S19), plan revision 2, R2-1 (D9) -----------------------------------------
 # With taps, SCL/SDA is the divider of the 1 kOhm pull-up with PF14's 22 kOhm to
@@ -949,12 +949,18 @@ def crc32(b: bytes) -> int:
     return zlib.crc32(b) & 0xFFFFFFFF
 
 
+def tier_base(test: str) -> str:
+    """The test of an X line or a SCOPE point without the i2c_ll suffix (phase F2)."""
+    return test[:-3] if test.endswith("-LL") else test
+
+
 def x_expect(x: dict) -> dict:
     """What the host itself expects of a transfer the selftest made (independent of
     the firmware's own verdicts): its status, the data, and the target's report.
     x["armed"] is what the host armed in the target for this transfer (NACK k,
     CORRUPT k), from its own AT handling."""
-    test, op, n, p = x["test"], x["op"], x["n"], x["p"]
+    # Phase F2: "<test>-LL" is the same transfer through i2c_ll, expected the same.
+    test, op, n, p = tier_base(x["test"]), x["op"], x["n"], x["p"]
     armed = x.get("armed") or {}
     e: dict = {"st": ST_OK, "rpt": None}
     if op == "W":
@@ -1030,7 +1036,7 @@ def x_problems(x: dict, rpt: Optional[dict]) -> list[str]:
     if x["mode"] == "dma" and x["aux"] != 0:
         bad.append(f"DMA steps 0x{x['aux']:X}")
     want = e["rpt"]
-    if (x["t"] == 1) != (want is not None) and not x["test"].startswith("T10B"):
+    if (x["t"] == 1) != (want is not None) and not tier_base(x["test"]).startswith("T10B"):
         bad.append(f"t={x['t']} but the host expects {'a' if want else 'no'} report")
     if want is not None:
         if rpt is None:
@@ -1376,6 +1382,27 @@ def expected_transfers(state: str) -> Counter:
         c[("T10BC", core, fm, "W", "poll", TARGET, 2)] += 1
     c[("T9", "cm7", fm, "W", "poll", TARGET, 2)] += 1
     c[("T9B", "cm7", fm, "W", "poll", TARGET, 2)] += 1
+    # Phase F2 (steps F2_CM4, F2_CM7): T4, T5, T6, T7 through i2c_ll, the same lists.
+    for core in ("cm4", "cm7"):
+        for f in t4_speeds:
+            c[("T4-LL", core, f, "P", "poll", TARGET, 0)] += 1
+            c[("T4-LL", core, f, "P", "poll", NO_TARGET, 0)] += 1
+            for op in ("R", "W", "WR"):
+                for n in T4_SIZES:
+                    c[("T4-LL", core, f, op, "poll", TARGET, n)] += 1
+            c[("T4C-LL", core, f, "R", "poll", TARGET, 16)] += 1
+            if taps:
+                for op, a, n in (("P", TARGET, 0), ("P", NO_TARGET, 0), ("R", TARGET, 2), ("W", TARGET, 1),
+                                 ("W", TARGET, 2), ("WR", TARGET, 1)):
+                    c[("T5-LL", core, f, op, "poll", a, n)] += 1
+        for op in ("R", "W", "WR"):
+            for n in T6_SIZES:
+                c[("T6-LL", core, fm, op, "it", TARGET, n)] += 1
+        c[("T6C-LL", core, fm, "W", "itc", TARGET, 2)] += 1
+        for op in ("R", "W"):
+            for n in T7_SIZES:
+                c[("T7-LL", core, fm, op, "dma", TARGET, n)] += 1
+        c[("T7C-LL", core, fm, "R", "dmac", TARGET, 64)] += 1
     return c
 
 
@@ -1394,6 +1421,10 @@ def expected_scopes(state: str) -> Counter:
         c[("T10B", 0, 400000)] += 1
     c[("T9", 0, 0)] += 1
     c[("T9B", 0, 400000)] += 1
+    for _core in ("cm4", "cm7"):                       # phase F2: T5 through i2c_ll
+        for f in (100000, 400000):
+            for k in range(5):
+                c[("T5-LL", k, f)] += 1
     return c
 
 
@@ -1848,6 +1879,7 @@ class Session:
     def scope_finish(self, spec: dict, xs: list[dict]) -> None:
         cap = self.ad2.scope_read(spec["samples"], 2.0)
         test = spec["test"]
+        base = tier_base(test)                     # "T5-LL" is judged as T5 (phase F2)
         name = f"F1 {test} scope k={spec['k']} f={spec['f']}"
         if cap is None:
             self.group(f"F1 {test} scope", False, f"{name}: the scope did not trigger")
@@ -1871,7 +1903,7 @@ class Session:
         self.group(f"F1 {test} scope: decode", got == want and swapped != want,
                    f"{name}: decoded '{frames_text(got)}', expected '{frames_text(want)}', swapped "
                    f"{'differs' if swapped != want else 'SAME'}")
-        if test == "T5":
+        if base == "T5":
             key = ("CM4" if xs and xs[0]["core"] == "cm4" else "CM7", spec["f"])
             k, t, model = self.timing.get(key, (spec["kernel"], spec["timingr"], spec["model"]))
             af, dnf = bool(spec.get("af", 1)), int(spec.get("dnf", 0))
@@ -2217,6 +2249,10 @@ class Session:
         self.f1_step("F1_CM7")
         self.f1_step("F1_RECOVER")
         self.t9b_counts()
+        # Phase F2 (i2c_ll): the same AT protocol, X lines named "<test>-LL".
+        self.f1_step("F2_NOPIN")
+        self.f1_step("F2_CM4")
+        self.f1_step("F2_CM7")
         self.step("DONE")
         self.f1_t3()
         self.f1_t12()
