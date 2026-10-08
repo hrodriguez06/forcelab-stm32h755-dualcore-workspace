@@ -1058,6 +1058,7 @@ I2cBm_Status_t I2C_BM_WaitEnd(I2C_TypeDef *i2c, uint32_t n, uint32_t max_cycles)
     }
     if (!cyccnt_running())
     {
+        soft_reset(i2c);                            /* DmaStart* already set START: end it (audit F1, m33) */
         return I2C_BM_ERR_TIMEOUT;
     }
     /* The first chunk is the one DmaStart* programmed (min(n, 255)); the rest is

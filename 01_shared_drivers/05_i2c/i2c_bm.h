@@ -51,16 +51,17 @@
   *
   *          A bus held before Init is not seen (revision 3, R3-6): ISR.BUSY is
   *          set only when the peripheral detects a START with PE = 1, and cleared
-  *          by a STOP or PE = 0 (RM0399 50:2897-2899). A target that holds SDA low
+  *          by a STOP or PE = 0 (RM0399 50:2897-2900). A target that holds SDA low
   *          since before Init (a reset in the middle of a read, the case
   *          RecoverBus exists for) leaves BUSY = 0: Init and CheckTransfer return
   *          OK, and the next transfer ends with ERR_ARLO, ERR_BUS or ERR_TIMEOUT,
   *          not with the ERR_BUS of "bus busy". So before the first Init after a
-  *          reset the caller reads SCL and SDA with the functions of its
-  *          I2cBm_Recovery_t, with the pins in GPIO open-drain (or calls
-  *          I2C_BM_RecoverBus, which reads SDA first and drives nothing if it is
-  *          high). On a bus with one master, ERR_ARLO is the sign of a hung bus:
-  *          recover it, then Init again.
+  *          reset the caller reads both lines with the functions of its
+  *          I2cBm_Recovery_t, with the pins in GPIO open-drain: sda_read and
+  *          scl_read. I2C_BM_RecoverBus reads SDA first and, if it is high,
+  *          returns OK at once without reading SCL: a SCL held low alone is seen
+  *          only by scl_read. On a bus with one master, ERR_ARLO is the sign of a
+  *          hung bus: recover it, then Init again.
   *
   *          Timeouts in master mode (R3-5): a TIMEOUT (SCL low longer than
   *          TIMEOUTA) ends the transfer with ERR_BUS and a software reset of the
@@ -268,10 +269,12 @@ I2cBm_Status_t I2C_BM_DmaStartRead(I2C_TypeDef *i2c, uint32_t addr7, uint32_t n)
 /** The end of a DMA transfer of n bytes (the n of DmaStartWrite/DmaStartRead): every
     TCR is served with the next chunk of NBYTES (a local count, no RAM state), then
     STOPF (OK), NACKF (ERR_NACK, after the STOP), ARLO (ERR_ARLO), TIMEOUT (ERR_BUS,
-    software reset). ERR_PARAM: instance, n 0 or > 65 535, max_cycles 0. On expiry of
-    max_cycles, a stopped CYCCNT or no STOP after a NACK, the instance is
-    software-reset and ERR_TIMEOUT. In every case the caller then stops its streams
-    and calls I2C_BM_DmaEnd. (n: plan revision 3, R3-2.) */
+    software reset). ERR_PARAM: instance, n 0 or > 65 535, max_cycles 0; a refusal
+    writes nothing (C6), so a transfer DmaStart* began is still running: end it with
+    I2C_BM_Deinit. On expiry of max_cycles, a CYCCNT stopped (also when it is not
+    running at the call) or no STOP after a NACK, the instance is software-reset and
+    ERR_TIMEOUT. After any return but ERR_PARAM the caller stops its streams and
+    calls I2C_BM_DmaEnd. (n: plan revision 3, R3-2.) */
 I2cBm_Status_t I2C_BM_WaitEnd(I2C_TypeDef *i2c, uint32_t n, uint32_t max_cycles);
 /** After the caller stopped its streams: TXDMAEN = RXDMAEN = 0, CR2 = 0, TXDR flushed,
     every flag cleared; read back. ERR_PARAM: not an instance; ERR_VERIFY: a DMA enable
@@ -299,7 +302,8 @@ typedef struct
     released). *pulses = pulses given. ERR_PARAM: NULL, half_period_cycles or
     max_cycles 0. The end is a STOP after SCL high (SDA low, then high); UM10204 calls
     a START + STOP with nothing between an illegal format, which most devices accept.
-    It is also the check before the first Init (R3-6): with SDA high it drives nothing. */
+    Before the first Init (R3-6) it frees an SDA held low; with SDA high it drives and
+    reads nothing more (SCL is not read then: the caller reads it with scl_read). */
 I2cBm_Status_t I2C_BM_RecoverBus(const I2cBm_Recovery_t *r, uint32_t max_cycles, uint32_t *pulses);
 
 /* ---- Errors (part of the API, plan revision 3, R3-8) ----------------------------- */
