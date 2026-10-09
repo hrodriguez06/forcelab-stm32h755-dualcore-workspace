@@ -862,7 +862,7 @@ Las filas de F0 y F1 pasan otra vez en las dos sesiones, con los mismos criterio
 | T6 | LL | CM4 y CM7 | taps (400 kHz) y notaps (1 MHz) | PASS | `Write`, `Read`, `WriteRead` de 1, 2, 256 y 1000 bytes por `I2C_LL_StartIt` + `I2C_LL_XferIrq` desde los dos vectores: 0 con otro estado o dato; IE en `CR1` al terminar `0x00`; 0 IRQ en los 10 ms siguientes | IE a 0 a mano tras `I2C_LL_StartIt`: sigue `PENDING`, la espera acaba por su presupuesto (`ERR_TIMEOUT`), 0 IRQ (`T6C-LL`) | datos del host + CRC | `RPT` (la F334 corta la transferencia abandonada) | las dos |
 | T7(a) | LL | CM4 (I2C1, DMA2 con `dma_bm`) | taps (400 kHz) y notaps (1 MHz) | PASS | Lectura y escritura de 2, 255, 256 y 4096 bytes por `I2C_LL_DmaStart*` + `I2C_LL_WaitEnd` + `I2C_LL_DmaEnd`: 0 con otro estado o dato | `RXDMAEN` a 0 a mano, lectura de 64: `I2C_LL_WaitEnd` `ERR_TIMEOUT`, los 64 bytes conservan el centinela (`T7C-LL`) | ídem | `RPT` | las dos |
 | T7(b) | LL | CM7 (I2C4, BDMA con `dma_hal`, `.d3_ram`) | ídem | PASS | Igual que T7(a) | Igual | ídem | `RPT` | las dos |
-| T14 | LL | CM4 (I2C1), CM7 (I2C4) | taps y notaps | PASS | `I2C_BM_Deinit` tras cada prueba con `i2c_ll`: tras T4/T5 en cada velocidad, tras el control de T6 y al final de T1-BUSY/T6/T7: 8 juicios por sesión, 0 registros distintos de la imagen de reset en todos. En T2, tras cada `I2C_LL_Init`: 0 de 480 fuera del reset. Bus en reposo: S17 tras cada paso | El de F1 en la misma sesión (I2C3 inicializado y sin `Deinit`: distinto, `0x11`), que no depende del tier | tabla de reset del RM a mano (`ist_reset_diff()`) | — | las dos |
+| T14 | LL | CM4 (I2C1), CM7 (I2C4) | taps y notaps | PASS | `I2C_BM_Deinit` tras cada prueba con `i2c_ll`: tras T4/T5 en cada velocidad, tras el control de T6 y al final de T1-BUSY/T6/T7: 8 juicios por sesión, 0 registros distintos de la imagen de reset en todos. En T2, tras cada `I2C_LL_Init`: 0 de 480 fuera del reset. Bus en reposo: S17 tras cada paso | El de F1 en la misma sesión (I2C3 inicializado y sin `Deinit`: distinto, `0x11`), que no depende del tier | tabla de reset del RM a mano. **Corregido (auditoría de F2, m38):** en `48ec427` los juicios de T14 tras cada prueba usaban una copia local de esa tabla en `inst_deinit`, no `ist_reset_diff()` como decía aquí (las dos tablas eran iguales); desde `4d6b092`, `inst_deinit` usa `ist_reset_diff_img()`, la tabla de `Common` | — | las dos |
 | Fm+ con LL | BM (`SetFastModePlus`) | CM4 y CM7 | notaps (el juicio final, en las dos) | PASS | Notaps: bit de I2C1 e I2C4 puesto alrededor del tráfico LL a 1 MHz y quitado después (`SYSCFG_PMCR 0x03000001` / `0x03000008` → `0x03000000`), `FMP 1` en la F334. Al final de `F2_CM4` y `F2_CM7`, en las dos sesiones: `I2C1FMP\|I2C4FMP` 0x0 | — | `SYSCFG_PMCR` leído | — | las dos |
 | F334 al final | — | host | taps y notaps | PASS | `scl=1 sda=1`, S15 ok, `uart_ovr 0`. `ev` 24 (taps) y 16 (notaps): sondeos y los cortes de los controles de T6 y T7 de BM y LL; `nk 4`; ningún `BERR`, `ARLO` ni `OVR` | — | — | `STATUS` | las dos |
 | Veredicto | — | CM7 + host | taps y notaps | PASS | `bench completed without abort`; CM4 `timeout 0, aborts 0`; pila de `Status_Task` 694 (taps) y 706 (notaps) palabras libres de 1024; host 130/130 y 98/98 | — | — | — | las dos |
@@ -903,7 +903,7 @@ B1 no es una prueba de F2 en el plan (fila F2 de Fases: T1, T2, T4, T5, T6, T7 y
 | Contrato: "constantes … donde aplican (`LL_I2C_ANALOGFILTER_*`, `LL_I2C_ADDRSLAVE_7BIT`, …)" | `LL_I2C_ADDRSLAVE_7BIT` se usa dentro (`LL_I2C_HandleTransfer` y el `CR2` de `StartIt`), no como parámetro: las transferencias toman `addr7`, como en BM | El contrato es solo de 7 bits; un parámetro de modo que solo admite un valor no sería un reflejo de BM | No consultado |
 | "Escritura con inlines LL y `LL_I2C_WriteReg`" | `CR1` en `Init`, `OAR1`, `OAR2`, `CR2 = 0` e `ICR` con `LL_I2C_WriteReg`. `ICR` siempre con una sola `LL_I2C_WriteReg`, nunca con `LL_I2C_ClearFlag_*`. El `CR2` de `StartIt` con `LL_I2C_WriteReg` y después `LL_I2C_GenerateStartCondition` | Ninguna inline escribe `CR1`, `OAR1`/`OAR2` o `CR2` enteros. Las `LL_I2C_ClearFlag_*` (salvo `_TXE`) son `SET_BIT` sobre `ICR`, un RMW de un registro de solo escritura. `LL_I2C_HandleTransfer` con `LL_I2C_GENERATE_NOSTARTSTOP` deja `RD_WRN` fuera de su máscara (línea 2144): conservaría el sentido de la transferencia anterior | No consultado |
 | Ídem, `TIMEOUTR` | `LL_I2C_WriteReg(TIMEOUTR, 0)`, `LL_I2C_SetSMBusTimeoutA(TIMEOUTA \| LL_I2C_SMBUS_TIMEOUTA_MODE_SCL_LOW)` y `LL_I2C_EnableSMBusTimeout(LL_I2C_SMBUS_TIMEOUTA)` (bajo PRIMASK), las tres escrituras de BM | TIMEOUTA solo se escribe con `TIMOUTEN = 0` (50:2861). `LL_I2C_SetSMBusTimeoutA` es un `WRITE_REG` del registro entero (1140); `LL_I2C_SetSMBusTimeoutAMode` también (1170) y borraría TIMEOUTA, y `LL_I2C_ConfigSMBusTimeout` es un `MODIFY_REG` | No consultado |
-| T14 en F2: "`Deinit` tras cada prueba … Instancia sin `Deinit`: detectada" | El control es el de F1 (I2C3 sin `Deinit`, en `F1_NOPIN`, la misma sesión), no uno con LL | El control mide `ist_reset_diff()`, que no depende del tier; el `Deinit` es de BM en los dos | No consultado |
+| T14 en F2: "`Deinit` tras cada prueba … Instancia sin `Deinit`: detectada" | El control es el de F1 (I2C3 sin `Deinit`, en `F1_NOPIN`, la misma sesión), no uno con LL | El control mide `ist_reset_diff()`, que no depende del tier; el `Deinit` es de BM en los dos. (En `48ec427` los juicios de T14 no usaban esa función sino una copia de su tabla: m38, corregido en `4d6b092`) | No consultado |
 | T8–T10, T12, T13, T15 y B1 | Siguen con `i2c_bm`, en sus pasos de F1 | La fila F2 de Fases pide T1, T2, T4, T5, T6, T7 y T14 con LL | — |
 
 ### 5.6 Respuesta a la auditoría
@@ -978,6 +978,86 @@ Sin usar a propósito:
 - **`LL_I2C_EnableAnalogFilter`/`_DisableAnalogFilter`/`_SetDigitalFilter`** (515 / 527 / 492) y los setters de campo de `CR2` (`LL_I2C_SetSlaveAddr` 2079, `_SetTransferSize` 1950, `_EnableReloadMode` 1914, `_EnableAutoEndMode` 1879, `_SetMasterAddressingMode` 790): escribirían `CR1` o `CR2` por partes, con estados intermedios y un RMW por campo.
 - **Los `LL_I2C_EnableIT_*`/`_DisableIT_*`** (desde 1287): `ie_set()` cambia todos los IE en un solo RMW de `CR1` bajo PRIMASK.
 - **`LL_I2C_Init`** (2251): solo existe con `USE_FULL_LL_DRIVER` (C8).
+
+## Respuesta a la auditoría de F2, parte 1 (`12d2ce7`; plan revisión 4, `ceed2fc`)
+
+Responde a B2, B3 y m36–m39. Esta sección sustituye a la de F2 en las pruebas de F0/F1 que cambian (T0C, T1 con `BUSY`, T9, T9(b), T10(b)) y en lo abierto; lo demás de F2 sigue como allí. `i2c_ll.c` y las funciones de `i2c_bm` no cambian.
+
+### 5.1 Commits
+
+Rango: `12d2ce7..` el commit que añade esta sección, en `driver/i2c`.
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `4d6b092` | test(prj_01): order every F334 hold after its handshake; T9 by the release (bench v4) | B2, B3, m38, m39 |
+| `0471570` | docs(i2c): complete the i2c_ll header and DmaStartWrite's codes (m36, m37) | m36, m37 |
+| `3304bb9` | docs(i2c): add the F2 correction delivery captures at 0471570 | — |
+| `60ac356` | docs(i2c): add the F2 correction build evidence at 3304bb9 | — |
+| (este) | docs(i2c): answer the F2 audit, part 1, in the implementation report | m38 (el informe) |
+
+- **Las imágenes de las dos capturas** son de `0471570`, compiladas desde un `--fresh` con el árbol limpio y flasheadas con `tools/flash.py --sn` (H755 `0016000C4142501220353451`, F334 `066BFF393731435243254117`; "Download verified successfully" en las dos).
+- **Las dos sesiones corrieron en el mismo HEAD:** la captura de taps quedó sin commitear (`-uno`: no cuenta como cambio) mientras corría la de notaps. Las dos se commitearon juntas en `3304bb9`, que solo añade esos dos archivos.
+- **La evidencia de build es de `3304bb9`**, cuyo código es el de `0471570`.
+- **Banco v4:** cambia el protocolo de los puntos `AT HOLD` (la retención después del handshake) y del `SCOPE` (`trig=sdar`). `I2C_BENCH_VERSION` y el `BENCH_VERSION` del host pasan a 4, así que una imagen de v3 aborta en S7.
+
+### 5.2 Build y tamaños
+
+Todo en `3304bb9`, árbol limpio:
+
+- `build_all -Clean` 8/8 (`docs/i2c_f2_build_all_3304bb9.txt`).
+- `selftest-i2c` desde un directorio vacío: configure 0, build 0, 0 líneas `warning:` o `error:` (`docs/i2c_f2_selftest_build_3304bb9.txt`).
+- `selftest-i2c`, `debug` y `release` con `CMAKE_C_FLAGS=-Werror` en directorios de scratch: 0 avisos en las tres (`docs/i2c_f2_werror_3304bb9.txt`).
+- F334 `-Clean` y `-Clean -Werror`: `Warnings : 0`, `exit=0`; 11340/20/3392 (`docs/i2c_f2_f334_build_3304bb9.txt`).
+- `.map` (`docs/i2c_f2_map_sizes_3304bb9.txt`): `prj_01` igual a `2481396` en cada sección de la referencia; `i2c_bm.c.obj` 5316 (CM7) y 5312 (CM4), `i2c_ll.c.obj` 2674 y 2650, todos con `.data = .bss = 0` (los mismos tamaños que en `ef2395f`). La imagen `selftest-i2c` mide 87128/140/56692 (CM7) y 26660/28/78576 (CM4).
+- `git diff cc8aa2c -- 02_firmware_projects`: vacío.
+
+### 5.3 Pruebas
+
+Capturas de entrega, imágenes de `0471570`, Rev e id `0b1e773f8e5b83f9` en host, CM7 y CM4; F334 Rev `0471570`, id `469d9f476aa7c806` (el del host), protocolo v3; `tree clean`; sin depurador ni WaveForms:
+
+- **taps:** `docs/i2c_f2_bench_taps_0471570.txt`: 130/130 (49 `RECORD`), `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`. Banco en taps con el checklist confirmado (encargo de la corrección).
+- **notaps:** `docs/i2c_f2_bench_notaps_0471570.txt`: 98/98 (2 `RECORD`), `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`. "All set, J2 and J3 are removed", la respuesta del responsable a mi petición de quitarlos.
+
+No hubo sesiones fallidas: no hay más capturas que commitear. Los fallos del auditor (B2, B3) no se reprodujeron en mis sesiones de F2, ni antes ni después de la corrección. La corrección quita la dependencia por construcción; las cifras de abajo muestran dónde estaba la latencia.
+
+| ID | Tier | Núcleo | Estado del banco | Resultado | Valor medido | Control negativo: valor | Oráculo | Oráculo F334/AD2 | Captura |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T0C (B2) | — | CM7 | taps y notaps | PASS | CM7 vigila antes de que el host ordene la retención y cierra 50 ms después de que la línea retenida suba. Las retenciones empezaron 63,4/61,8 ms (taps, SDA/SCL) y 67,8/64,0 ms (notaps) después de abrir la vigilancia: es la latencia del host, ahora solo registrada (`first_us`). Retención vista por CM7: 50 748/50 743 µs (taps), 50 769/50 738 µs (notaps); la otra línea, 0 bajadas; con taps, PF14/PF15 igual que PB8/PB9 | — (los límites 45–55 ms y "la otra línea nunca baja", como en F0) | CYCCNT | `HOLD_END` 50 003/50 001 µs; osciloscopio 50,08 ms (taps) | las dos |
+| T9 (B3) | BM | CM7 | taps | PASS | Disparo en la liberación de SDA (`trig=sdar`, 3/4 del buffer antes, 2 MS/s): 5 pulsos de SCL, SDA libre tras el 5.º, STOP visto; primer flanco de SCL 3,023 ms y liberación 3,073 ms dentro de la captura | En T0B(a): sin STOP, SDA que sube y baja antes de la liberación, y 4 pulsos en T9: los tres rechazados | `scope_t9()` | AD2; `HOLD_END cause=EDGES` | taps |
+| T9(b) (B3) | BM | CM7 | taps y notaps | PASS | Firmware: del inicio del `Write` al fin de `RecoverBus` 1083 µs (taps) y 1077 µs (notaps), CYCCNT, impreso después de la recuperación. Osciloscopio (taps): 1 subida del `Write` y 4 de `RecoverBus` (1 + 4 = los 5 de la F334), STOP visto; primer flanco de SCL 5,097 ms y liberación 6,145 ms dentro de la captura (1 MS/s, 6,14 ms antes del disparo), así que quedan ≥ 0,5 ms a cada lado | En T0B(a): T9(b) sin STOP rechazado | `scope_t9()`, `t9b_counts()` | AD2; `HOLD_END` | las dos |
+| T9, control | BM | CM7 | taps y notaps | PASS | Sin `RecoverBus`, cronometrado desde la bajada que CM7 espera: SDA abajo 101 ms en las dos (antes 95–96 ms: le faltaba lo que tardaba el handshake) | — | CYCCNT | `HOLD_END` | las dos |
+| T10(b) | BM | CM4, CM7 | taps y notaps | PASS | CM7 espera la bajada de SCL (≤ 2 s) y cronometra desde ella. CM4 empieza al verla: START 0,010 ms después de la bajada (osciloscopio, taps; firmware: 0 µs), **n = 1, ahora pedido** (`nwant=1`); fin a 10 019 µs. CM7 empieza a 1,5 × TIMEOUTA (15 022 µs): n = 2; SDA libre a 19,774 ms (n × TIMEOUTA 19,786 ms) | Sin `timeout_scl_low`: `ERR_TIMEOUT` 30 ms después de la bajada, en las dos | CYCCNT | AD2 (taps); `HOLD_END` | las dos |
+| T1 con `BUSY = 1` | BM y LL | CM4, CM7 | taps y notaps | PASS | La retención empieza después del handshake; CM7 espera la bajada (≤ 2 s) y solo entonces llama o manda a CPU2: 8 rechazos `ERR_BUS` en cada núcleo y tier | — | `ISR` | `HOLD_END` | las dos |
+| Resto de F0, F1 y F2 | BM y LL | — | taps y notaps | PASS | Como en la sección F2; pila de `Status_Task` 696 (taps) y 716 (notaps) palabras libres | — | — | — | las dos |
+
+### 5.5 Desviaciones del plan (cambios)
+
+| Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- |
+| T10(b): CM4 empieza cuando acaba el intercambio del `AT HOLD` (n el que dé la latencia) | CM4 empieza en cuanto CM7 ve la bajada de SCL: n = 1, pedido y juzgado (`nwant=1`) | Con la retención ordenada después del handshake, CPU1 ya está esperando la bajada; el n de CM4 deja de depender del USB (B2, "cualquier otra ventana fija") | Lo pide la auditoría (B2) |
+| Banco: `AT HOLD`, la retención antes del handshake | Después del handshake, en todos los puntos `AT HOLD` (banco v4) | B2 | Lo pide la auditoría (B2) |
+
+### 5.6 Respuesta a la auditoría de F2, parte 1
+
+| ID | Respuesta |
+| --- | --- |
+| B2 | Corregido en `4d6b092`, pendiente de verificación. **T0C:** `watch_bus()` se abre al bajar `MCU_ACK`, antes de que el host ordene la retención, espera la bajada de la línea retenida hasta 2 s (`HOLD_WAIT_MS`) y se cierra 50 ms después de que suba (`T0C_TAIL_MS`), o 500 ms después de la bajada si no sube (`T0C_LOW_MAX_MS`, S21). Ya no hay ventana fija de 600 ms. **Las demás ventanas abiertas en un handshake**, revisadas con el mismo criterio: en todos los `AT HOLD` el host ordenaba la retención antes de soltar a CM7, y la retención (50–300 ms) corría mientras el host terminaba el handshake. Ahora el host la ordena después (`at_action()`: acción posterior) y CM7 espera la bajada hasta 2 s y cronometra desde ella: T1 con `BUSY` (BM y LL), T9 y su control, T9(b), T10(b) y su control. La vigilancia de SCL durante el handshake de T10(b) (B1 de F1) ya no hace falta y se quitó. **Sin cambio**, porque no dependen de la latencia: las capturas de T5, T10(a) y T10(b), que disparan en el propio bus; CLKREF, que dispara en el pulso de `MCU_ACK`; los armados de la F334 (`NACK`, `CORRUPT`, `STRETCH`), que esperan a la transferencia sin plazo; y las esperas de 600 ms de los controles de T6/T7/T10(b), que cuentan desde una acción de CM7, no desde un handshake |
+| B3 | Corregido en `4d6b092`, pendiente de verificación. La captura de la F334 del auditor (`HOLD_END … us=6678 edge1_us=5632`) muestra que el primer flanco de SCL llegó 5,6 ms después del inicio de la retención: la ventana de 8 ms contaba desde antes del `Write` y se gastaba en la latencia del host. Ahora T9 y T9(b) disparan en la liberación de SDA por la F334 (`trig=sdar`, `scope_arm_rise`, 3/4 del buffer antes), que ocurre dentro de `RecoverBus`. El `Write` rechazado y los pulsos van antes del disparo, y el STOP después. El firmware mide su propio tramo (inicio del `Write` a fin de `RecoverBus`, sin impresiones entre medias) y lo imprime después; el host exige que quepa antes del disparo con 0,5 ms de margen y que el primer flanco de SCL no esté a menos de 0,5 ms del inicio de la captura. Como la retención puede empezar ahora dentro de la captura, "SDA bajo al empezar" pasa a "SDA bajo desde antes del primer flanco de SCL hasta la liberación, sin flancos de SDA entre medias". Mock en T0B(a) (`t0b_t9_selftest`) con dos casos buenos y tres rechazos |
+| m36 | Corregido en `0471570`, pendiente de verificación: `i2c_ll.h` dice que las `LL_I2C_ClearFlag_*` de `ICR` son `SET_BIT` y que `LL_I2C_ClearFlag_TXE`, un `WRITE_REG` de `ISR`, sí se usa |
+| m37 | Corregido en `0471570`, pendiente de verificación. `i2c_ll.h` lista todas las escrituras con `LL_I2C_WriteReg`: `TIMEOUTR = 0`, el `CR2` de `StartIt` y de cada recarga, y los RMW de `ie_set()` y `reload()`. Dice que `XferIrq` y `DmaEnd` validan con `I2C_BM_IsValidInstance`. En `i2c_bm.h`, solo un comentario: el `ERR_PARAM` de `DmaStartWrite` con `buf` NULL o `n` < 2. `git diff 12d2ce7 0471570 -- 01_shared_drivers/05_i2c/i2c_bm.h` da 3 líneas de comentario quitadas y 4 añadidas, ninguna firma |
+| m38 | Corregido en `4d6b092`, pendiente de verificación: `inst_deinit` juzga con `ist_reset_diff_img()`, nueva en `Common` (`ist_reset_diff()` la llama sobre los registros vivos), así que solo queda una tabla de reset. Corregidas en este commit las dos frases del informe de F2 (§5.3, T14; §5.5) que decían que T14 ya usaba `ist_reset_diff()` |
+| m39 | Corregido en `4d6b092`, pendiente de verificación: la comprobación de tiempos y los `RECORD` de T5 llevan el nombre de la prueba. Taps: `F1 T5-LL CM4 100000 Hz scope: times` y sus `RECORD T5-LL …` (p. ej. `RECORD T5-LL CM7 k=1 f=400000: tHIGH min 599 ns`). Antes las cuatro de T5-LL salían con el nombre de las de T5 (dos comprobaciones con el mismo nombre); ahora cada una lleva el suyo y el total sigue en 130 |
+| O24, O25 | Sin cambio; al README (el motor de transferencias de `i2c_ll` es una segunda copia del de BM; `LL_I2C_HandleTransfer` conserva `CR2.NACK` y `PECBYTE`) |
+| O26–O29 | Sin cambio |
+| O30 | Resuelto por R4-1 (plan revisión 4): B1 en ciclos solo en F1 |
+
+### 5.8 Problemas abiertos y no ejercitado (cambios)
+
+- **Cerrado por m39:** el abierto de F2 sobre los nombres de T5-LL en el host.
+- **O23 ya no aplica:** el n de T10(b) no depende del intercambio del `AT HOLD` en ningún núcleo (CM4 n = 1, CM7 n = 2, los dos pedidos). Tampoco el caso de un START justo en un múltiplo de TIMEOUTA en CM4 (§F1 corrección 3): ahora empieza a unos µs de la bajada.
+- **Lo que se registra y no se juzga:** la latencia del host hasta cada retención de T0C (`first_us`, 62–68 ms en estas sesiones), solo con el límite de 2 s.
+- **T9 y T9(b) sin taps:** sin osciloscopio, como antes; T9(b) en notaps se juzga con `5 − pulsos`, y el tramo del firmware solo se registra (1077 µs).
+- Lo demás de las secciones F1 y F2 sigue vigente.
 
 ## Decisiones abiertas usadas
 
