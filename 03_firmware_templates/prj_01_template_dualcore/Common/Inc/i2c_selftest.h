@@ -42,9 +42,11 @@ void I2C_Selftest_CM4_Run(void);          /* CPU2, after Shared_GpioLockInstall(
  * bus-pin owners. Bump it when any of those change. From v1 on, a step that
  * needs the host to read a state holds it until a HOST_REQ pulse
  * (sync_ack_low(), 06_spi lesson B1).                                         */
-#define I2C_BENCH_VERSION    3U    /* v1: T0A, T0C, T0B, T0B_CM7, T0B_TIMEOUT (plan phase F0);
+#define I2C_BENCH_VERSION    4U    /* v1: T0A, T0C, T0B, T0B_CM7, T0B_TIMEOUT (plan phase F0);
                                       v2: + F1_NOPIN, F1_CM4, F1_CM7, F1_RECOVER (phase F1);
-                                      v3: + F2_NOPIN, F2_CM4, F2_CM7 (phase F2, i2c_ll)     */
+                                      v3: + F2_NOPIN, F2_CM4, F2_CM7 (phase F2, i2c_ll);
+                                      v4: every F334 hold ordered after the handshake of its
+                                      AT HOLD point; SCOPE trig=sdar (audit F2 part 1, B2, B3) */
 
 typedef enum
 {
@@ -274,8 +276,11 @@ uint32_t ist_check_target(const uint8_t *buf, uint32_t n, uint32_t p0, uint32_t 
 /* ---- T1, T2, T14 on any instance, from either core (phase F1) ------------------- */
 #define IST_NREG             7U    /* CR1, CR2, OAR1, OAR2, TIMINGR, TIMEOUTR, ISR          */
 void     ist_regs(const I2C_TypeDef *i2c, uint32_t r[IST_NREG]);
-/* Bit k set: register k differs from the reset image of RM0399 50.7 (T14). */
+/* Bit k set: register k differs from the reset image of RM0399 50.7 (T14): of the
+   instance's live registers, or of an image read by ist_regs() (CPU2's, through the
+   shared area). */
 uint32_t ist_reset_diff(const I2C_TypeDef *i2c);
+uint32_t ist_reset_diff_img(const uint32_t r[IST_NREG]);
 
 typedef struct
 {

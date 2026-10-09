@@ -69,10 +69,17 @@
 #define CM4_READY_MS        5000U
 #define STALL_READS         1000U         /* CYCCNT read equal this often in a row: stopped */
 
-/* T0c: the window CPU1 watches the bus in while the host has the F334 hold a
-   line for T0C_HOLD_MS (the host sends the command after MCU_ACK drops). */
-#define T0C_WINDOW_MS       600U
+/* Every hold of the F334 (T0c and the AT HOLD points) starts after the handshake
+   that lets this core go on (audit F2 part 1, B2): the host orders it only then, so
+   this core is already watching when the line falls. It waits for the fall up to
+   HOLD_WAIT_MS and times the hold from that fall, whatever the host's latency. */
+#define HOLD_WAIT_MS        2000U
+/* T0c: the F334 holds a line for T0C_HOLD_MS. The watch ends T0C_TAIL_MS after the
+   held line rises (the other line must stay high and the held one must not fall
+   again), or T0C_LOW_MAX_MS after the fall if it never rises (S21: 500 ms at most). */
 #define T0C_HOLD_MS         50U
+#define T0C_TAIL_MS         50U
+#define T0C_LOW_MAX_MS      500U
 #define T0C_HOLD_MIN_US     45000U
 #define T0C_HOLD_MAX_US     55000U
 
@@ -453,46 +460,13 @@ static void ack(bool high)
     __DSB();
 }
 
-/* The SCL fall of an SCL hold, timed by CPU1 while it waits for the handshake of
-   the AT HOLD point (audit F1 part 3, B1): the target pulls SCL during the host's
-   part of the exchange, whose length depends on USB. Armed by scl_watch_arm(),
-   polled by the handshake's own polling, read once by scl_watch_take(). */
-static bool     s_scl_watch;
-static bool     s_scl_fell;
-static uint32_t s_scl_fall_cyc;
-
-static void scl_watch_poll(void)
-{
-    if (s_scl_watch && !s_scl_fell && (((GPIOB->IDR >> IST_PIN_SCL) & 1UL) == 0UL))
-    {
-        s_scl_fall_cyc = DWT->CYCCNT;
-        s_scl_fell = true;
-    }
-}
-
-static void scl_watch_arm(void)
-{
-    s_scl_fell = false;
-    s_scl_watch = true;
-}
-
-static bool scl_watch_take(uint32_t *cyc)
-{
-    scl_watch_poll();
-    s_scl_watch = false;
-    *cyc = s_scl_fall_cyc;
-    return s_scl_fell;
-}
-
 static bool req_high(void)
 {
-    scl_watch_poll();
     return ((GPIOE->IDR >> PE_REQ) & 1UL) != 0UL;
 }
 
 static bool req_low(void)
 {
-    scl_watch_poll();
     return ((GPIOE->IDR >> PE_REQ) & 1UL) == 0UL;
 }
 
@@ -876,15 +850,21 @@ typedef struct
     bool     low_at_end;
 } Watch_t;
 
-/* Watches PB8, PB9, PF14 and PF15 for `ms` milliseconds of CYCCNT, recording
-   each fall and rise; false if CYCCNT stopped. Inputs only: nothing moves. */
-static bool watch_bus(Watch_t w[W_N], uint32_t ms)
+/* Watches PB8, PB9, PF14 and PF15, recording each fall and rise, around one hold
+   of line `held` (B2): open before the hold starts, it waits up to HOLD_WAIT_MS for
+   the held line to fall, and closes T0C_TAIL_MS after it rises again, or
+   T0C_LOW_MAX_MS after the fall if it does not. False if CYCCNT stopped. Inputs
+   only: nothing moves. */
+static bool watch_bus(Watch_t w[W_N], uint32_t held)
 {
     uint32_t level = bus_idr();
     uint32_t fall_at[W_N] = { 0U, 0U, 0U, 0U };
     const uint32_t t0 = DWT->CYCCNT;
     uint32_t last = t0;
     uint32_t same = 0U;
+    uint32_t held_fall = 0U;
+    uint32_t held_rise = 0U;
+    bool held_up = false;             /* the held line rose after its first fall */
     for (uint32_t k = 0U; k < W_N; k++)
     {
         w[k].lows = 0U;
@@ -922,17 +902,34 @@ static bool watch_bus(Watch_t w[W_N], uint32_t ms)
                 if (w[k].lows == 0U)
                 {
                     w[k].first_cyc = now - t0;
+                    if (k == held)
+                    {
+                        held_fall = now;
+                    }
                 }
                 w[k].lows++;
                 fall_at[k] = now;
+                if (k == held)
+                {
+                    held_up = false;
+                }
             }
             else
             {
                 w[k].low_cyc += now - fall_at[k];
+                if ((k == held) && (w[k].lows != 0U))
+                {
+                    held_up = true;
+                    held_rise = now;
+                }
             }
         }
         level = v;
-        if ((now - t0) >= (ms * CYC_PER_MS))
+        const bool no_fall = (w[held].lows == 0U) && ((now - t0) >= (HOLD_WAIT_MS * CYC_PER_MS));
+        const bool tail_done = held_up && ((now - held_rise) >= (T0C_TAIL_MS * CYC_PER_MS));
+        const bool too_long = (w[held].lows != 0U) && !held_up &&
+                              ((now - held_fall) >= (T0C_LOW_MAX_MS * CYC_PER_MS));
+        if (no_fall || tail_done || too_long)
         {
             for (uint32_t k = 0U; k < W_N; k++)
             {
@@ -953,9 +950,10 @@ static uint32_t cyc_to_us(uint32_t cyc)
 }
 
 /* One hold: MCU_ACK rises (ready), the host raises HOST_REQ after arming the
-   scope; MCU_ACK drops and this core watches the bus for T0C_WINDOW_MS while
-   the host has the F334 hold `line` low for T0C_HOLD_MS. The window then
-   closes and the result is printed; the host reads it in the next handshake. */
+   scope; MCU_ACK drops and this core starts watching the bus; only then does the
+   host have the F334 hold `line` low for T0C_HOLD_MS (B2). The watch closes once
+   the hold is over (watch_bus()) and the result is printed; the host reads it
+   after the F334's HOLD_END. */
 static void t0c_hold(const char *line, uint32_t held, uint32_t other)
 {
     Watch_t w[W_N];
@@ -967,7 +965,7 @@ static void t0c_hold(const char *line, uint32_t held, uint32_t other)
         return;
     }
     ack(false);
-    const bool ok = watch_bus(w, T0C_WINDOW_MS);
+    const bool ok = watch_bus(w, held);
     if (!ok)
     {
         bench_abort("CYCCNT stopped");
@@ -1830,7 +1828,7 @@ static I2cBm_Status_t inst_init(bool m4, uint32_t timingr, uint32_t tmo, uint32_
     return st;
 }
 
-/* Deinit, then T14: the reset image of RM0399 50.7 typed in Common (ist_reset_diff()). */
+/* Deinit, then T14: the reset image of RM0399 50.7 typed in Common (ist_reset_diff_img()). */
 static bool inst_deinit(bool m4, uint32_t *diff)
 {
     I2cBm_Status_t st;
@@ -1853,21 +1851,13 @@ static bool inst_deinit(bool m4, uint32_t *diff)
         st = I2C_BM_Deinit(I2C4);
         ist_regs(I2C4, img);
     }
-    static const uint32_t rst[IST_NREG] = { 0U, 0U, 0U, 0U, 0U, 0U, 0x00000001UL };
-    uint32_t d = 0U;
-    for (uint32_t k = 0U; k < IST_NREG; k++)
-    {
-        if (img[k] != rst[k])
-        {
-            d |= 1UL << k;
-        }
-    }
+    const uint32_t d = ist_reset_diff_img(img);         /* the one typed table of Common (audit F2, m38) */
     *diff = d;
     return (st == I2C_BM_OK) && (d == 0U);
 }
 
 /* T14 after every test (audit F1, m24): the Deinit that ends it, judged against the
-   reset image of the RM typed above. */
+   reset image of the RM typed in Common (ist_reset_diff_img()). */
 static void deinit_judged(bool m4, const char *what)
 {
     uint32_t diff = 0U;
@@ -2787,32 +2777,25 @@ static void t10(bool m4)
     }
     /* With SCL held low the TIMEOUT fires again every TIMEOUTA (silicon fact, audit F1
        part 3, O22): the Write ends at the first multiple of TIMEOUTA, counted from the
-       SCL fall, after its own START, n = ceil((start - fall) / TIMEOUTA). CPU1 times the
-       fall itself, during the handshake (B1); CPU2's Write starts as soon as the
-       handshake ends (n is what the latency gives, usually 1); CPU1's starts on
-       purpose 1.5 x TIMEOUTA after the fall, so that its first expiry ends nothing
-       and the second ends the Write (n = 2). */
-    const uint32_t nwant = m4 ? 0U : 2U;
+       SCL fall, after its own START, n = ceil((start - fall) / TIMEOUTA). The host
+       orders the hold after the handshake (B2) and CPU1 times the fall itself, waiting
+       for it (B1): CPU2's Write starts as soon as CPU1 has seen it (n = 1); CPU1's
+       starts on purpose 1.5 x TIMEOUTA after it, so that its first expiry ends nothing
+       and the second ends the Write (n = 2). Neither depends on the host's latency. */
+    const uint32_t nwant = m4 ? 1U : 2U;                  /* the n each START is placed for (B2) */
     if (s_taps && !host_at("SCOPE T10B k=0 f=%lu kernel=%lu timingr=0 model=0 rate=100000 trig=scl tmo=%lu nwant=%lu",
                            (unsigned long)f, (unsigned long)k, (unsigned long)tmo, (unsigned long)nwant))
     {
         return;
     }
     const uint32_t tmo_cyc = (uint32_t)(((uint64_t)tmo * 2048U * s_cpu_hz) / k);   /* TIMEOUTA in CPU1 cycles */
-    scl_watch_arm();
     if (!host_at("HOLD SCL 50"))
     {
         return;
     }
-    const bool low_b = wait_pin(IST_PIN_SCL, 0U, 20U);
-    const uint32_t seen_b = DWT->CYCCNT;
-    uint32_t fall_b = seen_b;
-    const bool timed_b = scl_watch_take(&fall_b);
-    if (!timed_b)
-    {
-        fall_b = seen_b;                                  /* not seen during the handshake: a later bound */
-    }
-    if (!m4)
+    const bool low_b = wait_pin(IST_PIN_SCL, 0U, HOLD_WAIT_MS);
+    const uint32_t fall_b = DWT->CYCCNT;
+    if (low_b && !m4)
     {
         const uint32_t until = (tmo_cyc / 2U) * 3U;       /* 1.5 x TIMEOUTA after the fall */
         uint32_t last = DWT->CYCCNT;
@@ -2851,7 +2834,7 @@ static void t10(bool m4)
     {
         return;
     }
-    const bool low_c = wait_pin(IST_PIN_SCL, 0U, 20U);
+    const bool low_c = wait_pin(IST_PIN_SCL, 0U, HOLD_WAIT_MS);   /* the 30 ms are counted from the fall (B2) */
     const uint32_t seen_c = DWT->CYCCNT;
     if (!xfer(m4, IST_XF(IST_OP_WRITE, IST_MODE_POLL, T_ADDR), 2U, 0x00002010UL, ms_cyc(30U) / (m4 ? 2U : 1U), r))
     {
@@ -2876,17 +2859,16 @@ static void t10(bool m4)
     const uint32_t us_tmo = tmo_cyc / cpu_us;
     const uint32_t us_tick = (uint32_t)((2048ULL * 1000000U) / k);             /* a first tick cut short */
     const uint32_t n_b = ((start_b - fall_b) / tmo_cyc) + 1U;                   /* first multiple after START */
-    const bool n_ok = (nwant == 0U) || (n_b == nwant);
     const uint32_t lo = (n_b * us_tmo) - us_tick;
     const uint32_t hi = (n_b * us_tmo) + 1000U;
-    verdict(low_b && timed_b && (st_b == (uint32_t)I2C_BM_ERR_BUS) && n_ok && (us_end >= lo) && (us_end <= hi),
+    verdict(low_b && (st_b == (uint32_t)I2C_BM_ERR_BUS) && (n_b == nwant) && (us_end >= lo) && (us_end <= hi),
             "T10(b) %s SCL held 50 ms by the target, timeout_scl_low %lu (TIMEOUTA %lu us at %lu Hz): from the SCL "
-            "fall (timed %u during the AT HOLD), Write started at %lu us, so n = %lu (%s); it ended %lu us after the "
-            "fall with %lu (ERR_BUS %u, by TIMEOUT, then the software reset), n x TIMEOUTA %lu..%lu",
-            m4 ? "CM4" : "CM7", (unsigned long)tmo, (unsigned long)us_tmo, (unsigned long)k, (unsigned)timed_b,
-            (unsigned long)us_start, (unsigned long)n_b, m4 ? "as the handshake gave it" : "2 wanted: started after "
-            "1.5 x TIMEOUTA, the first expiry ends nothing", (unsigned long)us_end, (unsigned long)st_b,
-            (unsigned)I2C_BM_ERR_BUS, (unsigned long)lo, (unsigned long)hi);
+            "fall (seen %u, waited for after the handshake), Write started at %lu us, so n = %lu (%lu wanted: %s); it "
+            "ended %lu us after the fall with %lu (ERR_BUS %u, by TIMEOUT, then the software reset), n x TIMEOUTA "
+            "%lu..%lu", m4 ? "CM4" : "CM7", (unsigned long)tmo, (unsigned long)us_tmo, (unsigned long)k,
+            (unsigned)low_b, (unsigned long)us_start, (unsigned long)n_b, (unsigned long)nwant,
+            m4 ? "started at once" : "started after 1.5 x TIMEOUTA, the first expiry ends nothing",
+            (unsigned long)us_end, (unsigned long)st_b, (unsigned)I2C_BM_ERR_BUS, (unsigned long)lo, (unsigned long)hi);
     const uint32_t ms_c = cy_c / (s_cpu_hz / 1000U);
     verdict(low_c && (st_c == (uint32_t)I2C_BM_ERR_TIMEOUT) && (ms_c >= 29U) && (ms_c <= 33U),
             "T10(b) %s control without timeout_scl_low: Write %lu (ERR_TIMEOUT %u) %lu ms after SCL went low "
@@ -2904,7 +2886,7 @@ static void t1_busy(bool m4)
     {
         return;
     }
-    const bool low = wait_pin(IST_PIN_SDA, 0U, 20U);
+    const bool low = wait_pin(IST_PIN_SDA, 0U, HOLD_WAIT_MS);     /* the hold starts after the handshake (B2) */
     IstT1Result_t t;
     uint32_t cases;
     uint32_t bad;
@@ -3140,8 +3122,10 @@ static void t9(void)
         return;
     }
     /* The scope first: arming it takes longer than the 300 ms hold. It triggers on the
-       first SCL fall, the first recovery pulse (the refused Write drives nothing). */
-    if (s_taps && !host_at("SCOPE T9 k=0 f=0 kernel=0 timingr=0 model=0 rate=2000000 trig=scl"))
+       target's release of SDA (its 5th SCL edge, inside RecoverBus), with 3/4 of the
+       buffer before it: the capture is placed by the recovery itself, not by when the
+       host orders the hold (audit F2 part 1, B3). */
+    if (s_taps && !host_at("SCOPE T9 k=0 f=0 kernel=0 timingr=0 model=0 rate=2000000 trig=sdar"))
     {
         return;
     }
@@ -3149,7 +3133,7 @@ static void t9(void)
     {
         return;
     }
-    const bool low = wait_pin(IST_PIN_SDA, 0U, 20U);
+    const bool low = wait_pin(IST_PIN_SDA, 0U, HOLD_WAIT_MS);       /* the hold starts after the handshake (B2) */
     (void)delay_ms(1U);
     const uint32_t isr = I2C4->ISR;
     const uint32_t t0 = DWT->CYCCNT;
@@ -3198,7 +3182,7 @@ static void t9(void)
     {
         return;
     }
-    const bool low_c = wait_pin(IST_PIN_SDA, 0U, 20U);
+    const bool low_c = wait_pin(IST_PIN_SDA, 0U, HOLD_WAIT_MS);     /* timed from the fall (B2) */
     const uint32_t t1 = DWT->CYCCNT;
     const bool high_c = wait_pin(IST_PIN_SDA, 1U, 300U);
     const uint32_t ms = (DWT->CYCCNT - t1) / (s_cpu_hz / 1000U);
@@ -3233,7 +3217,11 @@ static void t9b(void)
     {
         return;
     }
-    if (s_taps && !host_at("SCOPE T9B k=0 f=%lu kernel=0 timingr=0 model=0 rate=1000000 trig=scl",
+    /* The scope triggers on the target's release of SDA (its 5th SCL edge), with 3/4
+       of the 8.2 ms buffer (6.1 ms) before it: the refused Write and RecoverBus both
+       come before the release, and the span from the Write's start to the end of
+       RecoverBus is this core's own code, measured below and printed after it (B3). */
+    if (s_taps && !host_at("SCOPE T9B k=0 f=%lu kernel=0 timingr=0 model=0 rate=1000000 trig=sdar",
                            (unsigned long)s_f_main))
     {
         return;
@@ -3242,7 +3230,7 @@ static void t9b(void)
     {
         return;
     }
-    const bool low = wait_pin(IST_PIN_SDA, 0U, 20U);
+    const bool low = wait_pin(IST_PIN_SDA, 0U, HOLD_WAIT_MS);       /* the hold starts after the handshake (B2) */
     (void)delay_ms(1U);
     const I2cBm_Status_t si = inst_init(false, o.timingr, 0U, img);   /* the hold is already there */
     const uint32_t isr = I2C4->ISR;
@@ -3261,6 +3249,7 @@ static void t9b(void)
     const I2cBm_Recovery_t rec = { rec_scl_w, rec_sda_w, rec_scl_r, rec_sda_r, NULL, 5U * CYC_PER_US };
     uint32_t pulses = 0xFFU;
     const I2cBm_Status_t sr = I2C_BM_RecoverBus(&rec, ms_cyc(10U), &pulses);
+    const uint32_t span = DWT->CYCCNT - t0;              /* the Write's start to RecoverBus's end */
     const uint32_t lv = bus_idr() & 3U;
     if (s_taps && !host_at("SCOPE end"))
     {
@@ -3286,6 +3275,8 @@ static void t9b(void)
        all. The host judges pulses + the Write's SCL edges = the target's EDGES. */
     const bool sda_low0 = (lv0 & 2U) == 0U;
     const bool pulses_ok = (pulses <= 5U) && (sda_low0 ? (pulses >= 1U) : (pulses == 0U));
+    LOG("T9(b) span: from the Write's start to the end of RecoverBus %lu us (CYCCNT)",
+        (unsigned long)(span / (s_cpu_hz / 1000000U)));
     verdict(low && (si == I2C_BM_OK) && ((isr & I2C_ISR_BUSY) == 0U) && (chk == (uint32_t)I2C_BM_OK) && in_set &&
             bounded && ((lv0 & 1U) != 0U) && (sr == I2C_BM_OK) && pulses_ok && (lv == 3U) &&
             (r[IST_XR_STATUS] == (uint32_t)I2C_BM_OK),

@@ -102,7 +102,7 @@ from monitor import SerialPort                         # noqa: E402
 from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E402
                            t0b_guard_selftest, tree_record)
 
-BENCH_VERSION = 3          # I2C_BENCH_VERSION of Common/Inc/i2c_selftest.h
+BENCH_VERSION = 4          # I2C_BENCH_VERSION of Common/Inc/i2c_selftest.h
 F334_PROTOCOL = 3          # TARGET_PROTOCOL of tools/i2c_target_f334/src/bench.h
 F334_SYSCLK = 64000000     # the kernel its TIMINGR was computed for (audit F0, m7)
 
@@ -140,6 +140,8 @@ V_HIGH = 0.7 * VDD
 
 # ---- T0c --------------------------------------------------------------------------------
 T0C_HOLD_MS = 50
+SCOPE_PRE_RISE = 0.75          # trig=sdar (T9, T9(b)): the part of the buffer before the release (B3)
+T9B_MARGIN_S = 0.5e-3          # T9(b): room left before the Write and after RecoverBus in that part
 F334_HOLD_US = (49000, 51000)  # the F334's own measure (TIM2 on its HSI, +-1 %)
 SCOPE_HOLD_MS = (47.5, 52.5)   # +-5 %: the F334's HSI and the scope's clock
 SCOPE_RATE, SCOPE_N = 50e3, 8192   # 164 ms per capture, 10 % before the trigger
@@ -1335,6 +1337,56 @@ def t0b_t10b_selftest(log: Callable[[str], None]) -> bool:
     return ok
 
 
+def t0b_t9_selftest(log: Callable[[str], None]) -> bool:
+    """T9/T9(b)'s scope judgement with the capture triggered by the release (bench
+    v4, audit F2 part 1, B3) on captures typed here, 1 MS/s: the hold begins inside
+    the capture (SDA falls at 0.5 ms), then the refused Write's SCL rise (T9(b)), then
+    RecoverBus's pulses 10 us apart, the release after the 5th rise and the STOP.
+    Judged good: T9 with 5 pulses; T9(b) with 1 + 4 (split 1/4). Refused: no STOP;
+    SDA falling again between the first SCL edge and the release; 4 pulses in T9."""
+    import types
+    rate, n_s = 1e6, 8192
+
+    def wave(edges: list, start: int) -> list:
+        out, lvl, k = [], start, 0
+        edges = sorted(edges)
+        for i in range(n_s):
+            while k < len(edges) and i / rate >= edges[k][0]:
+                lvl = edges[k][1]
+                k += 1
+            out.append(3.3 if lvl else 0.0)
+        return out
+
+    def pulses(t0: float, n: int) -> list:
+        return [e for i in range(n) for e in ((t0 + i * 10e-6, 0), (t0 + i * 10e-6 + 5e-6, 1))]
+
+    def case(exact: bool, write_rises: int, rec: int, stop: bool, extra_sda: bool) -> tuple[bool, object]:
+        scl_e = pulses(0.002, write_rises) + pulses(0.0031, rec)
+        last = 0.0031 + (rec - 1) * 10e-6 + 5e-6
+        sda_e = [(0.0005, 0), (last + 2e-6, 1)]
+        if extra_sda:
+            sda_e += [(0.0025, 1), (0.0026, 0)]
+        if stop:
+            sda_e += [(last + 8e-6, 0), (last + 13e-6, 1)]
+        groups: list = []
+        fake = types.SimpleNamespace(log=lambda t: None, group=lambda key, g, d: groups.append(g), t9b_scope=None)
+        Session.scope_t9(fake, "T9 mock", wave(scl_e, 1), wave(sda_e, 1), rate, exact=exact)
+        return bool(groups) and groups[0], fake.t9b_scope
+
+    ok = True
+    for args, want, why in (((True, 0, 5, True, False), True, "T9: 5 pulses, release, STOP"),
+                            ((False, 1, 4, True, False), True, "T9(b): 1 rise of the Write, 4 pulses, STOP"),
+                            ((False, 1, 4, False, False), False, "T9(b) without the STOP"),
+                            ((False, 1, 4, True, True), False, "SDA high and low again before the release"),
+                            ((True, 0, 4, True, False), False, "T9 with 4 pulses")):
+        got, split = case(*args)
+        good = got == want and (not (want and not args[0]) or (split is not None and split[:2] == (1, 4)))
+        ok = ok and good
+        log(f"[host] T0B(a) T9 scope judgement [{why}]: {'accepted' if got else 'refused'}"
+            f"{f', split {split[:2]}' if split else ''} -> {'as expected' if good else 'WRONG'}")
+    return ok
+
+
 # ---- What the selftest must do in a session (audit F1, m26) ------------------------------
 
 T4_SIZES = (1, 2, 255, 256, 1000, 65535)
@@ -1796,7 +1848,7 @@ class Session:
         self.scopes_seen: Counter = Counter()
         self.bus_tr = self.bus_tf = 0
         self.hold_log: list[dict] = []
-        self.t9b_scope: Optional[tuple[int, int]] = None
+        self.t9b_scope: Optional[tuple[int, int, float, float]] = None
 
     def group(self, key: str, ok: bool, detail: str) -> None:
         g = self.groups.setdefault(key, {"n": 0, "bad": []})
@@ -1871,8 +1923,15 @@ class Session:
     # -- scope ----------------------------------------------------------------------
     def scope_arm(self, spec: dict) -> None:
         n = self.ad2.scope_buffer_max()
-        ch = SCOPE_SDA if spec["trig"] == "sda" else SCOPE_SCL
-        rate, n = self.ad2.scope_arm_fall(float(spec["rate"]), n, ch, 1.5, 0.01, 10.0)
+        if spec["trig"] == "sdar":
+            # T9, T9(b) (audit F2 part 1, B3): the trigger is the target's release of SDA,
+            # inside RecoverBus; SCOPE_PRE_RISE of the buffer before it holds the
+            # refused Write and the pulses, whenever the hold began.
+            rate, n = self.ad2.scope_arm_rise(float(spec["rate"]), n, SCOPE_SDA, 1.5, SCOPE_PRE_RISE, 10.0)
+            spec["pre_s"] = SCOPE_PRE_RISE * n / rate
+        else:
+            ch = SCOPE_SDA if spec["trig"] == "sda" else SCOPE_SCL
+            rate, n = self.ad2.scope_arm_fall(float(spec["rate"]), n, ch, 1.5, 0.01, 10.0)
         spec["rate_actual"], spec["samples"] = rate, n
         self.scope_pending = spec
 
@@ -1909,7 +1968,7 @@ class Session:
             af, dnf = bool(spec.get("af", 1)), int(spec.get("dnf", 0))
             probs, txt, notes = t5_timing_problems(dec, spec["f"], k, t, model, self.clk_ratio, rate, af, dnf)
             for n_ in notes:
-                self.record(f"T5 {key[0]} k={spec['k']} f={spec['f']}: {n_}")
+                self.record(f"{test} {key[0]} k={spec['k']} f={spec['f']}: {n_}")
             if not self.clk_measured:
                 probs.append("no CLKREF: the times are not normalised (O13)")
             # The TIMINGR of the capture recomputed by the host (O13).
@@ -1918,10 +1977,10 @@ class Session:
                 probs.append(f"TIMINGR 0x{t:08X} model {model}, host calc_timing 0x{hst[1]:08X} model {hst[3]} "
                              f"(t_r {self.bus_tr}, t_f {self.bus_tf})")
             self.log(f"[host] {name} times: {txt}")
-            self.group(f"F1 T5 {key[0]} {spec['f']} Hz scope: times", not probs, f"{name}: {'; '.join(probs)}")
+            self.group(f"F1 {test} {key[0]} {spec['f']} Hz scope: times", not probs, f"{name}: {'; '.join(probs)}")
             raw = dec["f_scl"]
             # R3-7 (audit F1, M3): the frequency on the bus as the AD2 measures it, a record.
-            self.record(f"T5 {key[0]} k={spec['k']} f_SCL raw {raw:.0f} Hz with {spec['f']} Hz asked "
+            self.record(f"{test} {key[0]} k={spec['k']} f_SCL raw {raw:.0f} Hz with {spec['f']} Hz asked "
                         f"({(raw / spec['f'] - 1) * 100:+.2f} %), normalised {raw * self.clk_ratio:.0f} Hz "
                         f"(CLKREF ratio {self.clk_ratio:.5f})")
         if test == "T10":
@@ -1997,30 +2056,45 @@ class Session:
     def scope_t9(self, name: str, scl: list[float], sda: list[float], rate: float, exact: bool = True) -> None:
         """T9: SDA held until the 5th SCL rising edge, then the STOP. exact: the 5
         edges are all RecoverBus's pulses; T9(b) (exact False): some may be the
-        refused transfer's, the target still counts 5 before it lets go."""
+        refused transfer's, the target still counts 5 before it lets go. Bench v4
+        (audit F2 part 1, B3): the capture is triggered by the release itself
+        (trig=sdar) with most of the buffer before it, so the hold may begin
+        inside the capture: SDA is judged low from before the first SCL edge
+        until the release, with no SDA edge in between."""
         s0, se = ad2mod.i2c_edges_analog(scl, rate, V_LOW, V_HIGH)
         d0, de = ad2mod.i2c_edges_analog(sda, rate, V_LOW, V_HIGH)
         falls = [e["t"] for e in se if not e["rise"]]
         rises = [e["t"] for e in se if e["rise"]]
         sda_rise = [e["t"] for e in de if e["rise"]]
         sda_fall = [e["t"] for e in de if not e["rise"]]
-        # SDA released after the 5th SCL rise and before a 6th; then the STOP (SDA low
-        # and high again while SCL stays high).
         rel = sda_rise[0] if sda_rise else None
+        first_scl = min((e["t"] for e in se), default=None)
+        # SDA low before the first SCL edge (from the start, or a fall before it: the
+        # hold beginning inside the capture), and no SDA fall between it and the release.
+        low_ok = rel is not None and first_scl is not None and first_scl < rel and \
+            (d0 == 0 or any(t < first_scl for t in sda_fall)) and \
+            not any(first_scl <= t < rel for t in sda_fall)
         before = sum(1 for t in rises if rel is not None and t < rel)
-        stop_ok = len(sda_fall) >= 1 and len(sda_rise) >= 2 and rel is not None and sda_fall[-1] > rel
-        ok = d0 == 0 and before == 5 and (len(falls) == 5 or not exact) and stop_ok
+        # The STOP after the release: SDA low again, then high (SCL stays high).
+        stop_f = [t for t in sda_fall if rel is not None and t > rel]
+        stop_ok = bool(stop_f) and any(t > stop_f[0] for t in sda_rise)
+        ok = low_ok and before == 5 and (len(falls) == 5 or not exact) and stop_ok
         if not exact:
             # T9(b): the refused Write's SCL rises come first, then (after the pins
             # change mode, > 1 ms later) RecoverBus's pulses: split at the first gap
             # above 500 us (m34). One group only: all of them RecoverBus's.
             rs = [t for t in rises if rel is None or t < rel]
             cut = next((i + 1 for i in range(len(rs) - 1) if rs[i + 1] - rs[i] > 500e-6), 0)
-            self.t9b_scope = (cut, len(rs) - cut)
-        self.log(f"[host] {name}: SDA low at the start {d0 == 0}, SCL pulses {len(falls)} falls / {len(rises)} rises, "
-                 f"SDA released after {before} rises, then SDA falls {len(sda_fall)} rises {len(sda_rise)} (the STOP)")
+            self.t9b_scope = (cut, len(rs) - cut, first_scl if first_scl is not None else -1.0,
+                              rel if rel is not None else -1.0)
+        pos = (f"first SCL edge {first_scl * 1e3:.3f} ms, release {rel * 1e3:.3f} ms into the capture"
+               if (first_scl is not None and rel is not None) else "no SCL edge or no release")
+        self.log(f"[host] {name}: SDA low from before the first SCL edge to the release {low_ok}, SCL pulses "
+                 f"{len(falls)} falls / {len(rises)} rises, SDA released after {before} rises, then the STOP "
+                 f"{stop_ok} (SDA falls {len(stop_f)} after the release); {pos}")
         self.group(f"F1 {'T9' if exact else 'T9(b)'} scope: recovery", ok,
-                   f"{name}: {len(falls)} SCL pulses, SDA released after {before}, STOP seen {stop_ok}")
+                   f"{name}: {len(falls)} SCL pulses, SDA low before them {low_ok}, released after {before}, "
+                   f"STOP seen {stop_ok}; {pos}")
 
     # -- the AT points ----------------------------------------------------------------
     def at_action(self, tag: str) -> tuple[Optional[Callable[[], None]], Optional[Callable[[], None]]]:
@@ -2031,12 +2105,16 @@ class Session:
             return (lambda: self.f334_cmd(cmd)), None
         m = re.match(r"HOLD (SDA|SCL) (\d+)(?: EDGES (\d+))?$", tag)
         if m:
+            # Bench v4 (audit F2 part 1, B2): the hold is ordered AFTER the handshake.
+            # The firmware goes on as soon as the handshake ends and waits for the
+            # line to fall (up to 2 s), so the whole hold is in front of it whatever
+            # this host's latency (the S17 check, the console, USB).
             line, ms, edges = m.group(1), int(m.group(2)), int(m.group(3) or 0)
-            return (lambda: self.hold_start(line, ms, edges)), None
+            return None, (lambda: self.hold_start(line, ms, edges))
         if tag == "HOLD_END":
             return self.hold_end, None
         m = re.match(r"SCOPE (\S+) k=(\d+) f=(\d+) kernel=(\d+) timingr=([0-9A-F]+) model=(\d+) rate=(\d+) "
-                     r"trig=(sda|scl)(?: tmo=(\d+))?(?: nwant=(\d+))?(?: af=(\d) dnf=(\d+))?$", tag)
+                     r"trig=(sdar|sda|scl)(?: tmo=(\d+))?(?: nwant=(\d+))?(?: af=(\d) dnf=(\d+))?$", tag)
         if m:
             spec = {"test": m.group(1), "k": int(m.group(2)), "f": int(m.group(3)), "kernel": int(m.group(4)),
                     "timingr": int(m.group(5), 16), "model": int(m.group(6)), "rate": int(m.group(7)),
@@ -2185,9 +2263,19 @@ class Session:
             if self.t9b_scope is None:
                 ok, w_txt = False, "no T9(b) capture"
             else:
-                w, rec = self.t9b_scope
-                ok = ok and w + pulses == hold["edges"] and rec == pulses
-                w_txt = f"the scope: {w} rises of the Write, then {rec} of RecoverBus"
+                w, rec, first_scl, rel = self.t9b_scope
+                # B3: the firmware's own span (the Write's start to RecoverBus's end, CYCCNT,
+                # printed after the recovery) must fit in the capture before the release
+                # with T9B_MARGIN_S to spare, and the first SCL edge must not be at its start.
+                sp = next((t for t in reversed(self.con.since(0)) if "T9(b) span:" in t), "")
+                ms_ = re.search(r"RecoverBus (\d+) us", sp)
+                span_s = int(ms_.group(1)) * 1e-6 if ms_ else None
+                fits = span_s is not None and rel > 0 and span_s + T9B_MARGIN_S <= rel and first_scl >= T9B_MARGIN_S
+                ok = ok and w + pulses == hold["edges"] and rec == pulses and fits
+                w_txt = (f"the scope: {w} rises of the Write, then {rec} of RecoverBus; span "
+                         f"{'%.3f ms' % (span_s * 1e3) if span_s is not None else 'missing'} from the Write's start, "
+                         f"release {rel * 1e3:.3f} ms and first SCL edge {first_scl * 1e3:.3f} ms into the capture "
+                         f"(margin {T9B_MARGIN_S * 1e3:.1f} ms each: {fits})")
         else:
             w = hold["edges"] - pulses
             ok = ok and 0 <= w <= 9 and (sw != ST_ARLO or w >= 1)
@@ -2418,7 +2506,7 @@ def session_body(args, stamp, head: str, res: dict) -> None:
                    "T3 calculation rules": t0b_calc_selftest(stamp), "X/RPT pairing": t0b_pairing_selftest(stamp),
                    "I2C decoder": t0b_decoder_selftest(stamp), "m26 lists": t0b_manifest_selftest(stamp),
                    "S19 aborts": t0b_s19_selftest(stamp), "T5 minimums": t0b_t5min_selftest(stamp),
-                   "T10(b) n x TIMEOUTA": t0b_t10b_selftest(stamp)})
+                   "T10(b) n x TIMEOUTA": t0b_t10b_selftest(stamp), "T9 release trigger": t0b_t9_selftest(stamp)})
     for name, ok in guards.items():
         stamp(f"[host] T0B(a) {name} guard on its mock: {'PASS' if ok else 'FAIL'}")
 

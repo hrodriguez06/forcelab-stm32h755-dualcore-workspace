@@ -239,6 +239,11 @@ uint32_t ist_reset_diff(const I2C_TypeDef *i2c)
 {
     uint32_t r[IST_NREG];
     ist_regs(i2c, r);
+    return ist_reset_diff_img(r);
+}
+
+uint32_t ist_reset_diff_img(const uint32_t r[IST_NREG])
+{
     uint32_t diff = 0U;
     for (uint32_t k = 0U; k < IST_NREG; k++)
     {
