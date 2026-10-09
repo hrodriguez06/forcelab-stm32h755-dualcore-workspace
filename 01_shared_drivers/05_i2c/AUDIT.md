@@ -291,3 +291,53 @@ En las dos, las líneas de resultado (`-> PASS/FAIL`, veredictos, recuentos), or
 ### Estado
 
 **F1 pasa.** Están cerrados M2, M3, m17–m35, B1 y las observaciones aplicables; O6, O7, O9, O11, O12, O15 (lo diferido), O22 y O23, y el margen de tHIGH a 400 kHz en esta placa (~3 %) y el bus +0,8 a +1,1 % por encima de lo pedido (R3-7), van al README. **La API de `i2c_bm` queda congelada en `a6de15b`**: el contrato es `01_shared_drivers/05_i2c/i2c_bm.h` de ese commit (plan revisión 3, C2). El implementador puede empezar F2 (`i2c_ll`). El banco quedó en notaps (J2/J3 quitados).
+
+## F2, parte 1: revisión, build y ejecución del auditor (`9aa7a37`)
+
+Entrega: `4fee0f9..9aa7a37` (código en `52fa55c`, `56246ed`, `9667dcb`, `acca289`, `48ec427`; capturas de entrega en `f913626` y `ef2395f`, imágenes de `48ec427`; evidencia de build en `2aa948f`; informe en `9aa7a37`).
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| A23 alcance | Solo `05_i2c/` (`i2c_ll.[ch]` nuevos, adiciones a `i2c_bm.[ch]`, informe), `01_shared_drivers/CMakeLists.txt` y `prj_01`. `AUDIT.md`, el plan y las instrucciones, sin tocar |
+| API congelada de `i2c_bm` | `git diff a6de15b..HEAD -- i2c_bm.h`: 0 líneas quitadas, 19 añadidas (siete `I2C_BM_Check*`). En `i2c_bm.c`, las llamadas validan ahora con esas funciones: mismas condiciones, mismos códigos, el camino de m33 intacto. Las adiciones las aprobó el responsable el 2026-10-08 (confirmado; R4-2) |
+| `build_all -Clean` en `9aa7a37` (mi ejecución) | 8/8; `prj_01` igual a `2481396` |
+| `selftest-i2c` con `-Werror` (mi ejecución) | 0 avisos; CM7 87072/140/130460, CM4 26652/28/78576 (`arm-none-eabi-size`), como el informe |
+| F334 con `-Werror` (mi ejecución) | 0 avisos; 11340/20/3392 |
+| Capturas de entrega | `i2c_f2_bench_taps_48ec427.txt` 130/130 y `..._notaps_48ec427.txt` 98/98; la de desarrollo con el prefijo de F1 (`i2c_f1_bench_notaps_acca289.txt`), commiteada sin editar y explicada |
+
+Revisé el código con dos lecturas independientes (`i2c_ll` y las adiciones a BM; selftest y host) y comprobé yo mismo m38.
+
+### Revisión
+
+- **`i2c_ll`:** ninguna diferencia funcional con `i2c_bm`, función por función (`Init` con las escrituras de `TIMEOUTR` con `TIMOUTEN = 0`, transferencias con 2.19.6 y 2.19.2, TIMEOUT con reset y sin STOP, `StartIt`/`XferIrq` con el estado en el `I2cBm_Xfer_t` del llamador, `DmaStart*` con read-back antes de `START`, `WaitEnd` con `n` y el reset de m33). Cada inline LL hace lo que dice la tabla del informe (líneas comprobadas en `stm32h7xx_ll_i2c.h`), incluidas las razones para no usar `LL_I2C_ClearFlag_*` sobre `ICR` ni `LL_I2C_HandleTransfer` con `NOSTARTSTOP`. C6 (valida con `I2C_BM_Check*`, una sola copia de las reglas), C7, C10, C12, C13 y C14 se cumplen. La constante analógica desconocida da `ERR_PARAM` (vía DNF 16, documentado).
+- **Selftest y host:** T2 compara la imagen LL bit a bit con la de BM y con los campos del RM escritos a mano, 120 configuraciones por instancia; su control (BM con DNF + 1) puede fallar. La configuración LL de la prueba sale de `to_ll()`, independiente de la traducción de `i2c_ll.c`. T1 exige 63 casos exactos (los 62 de F1 y el filtro desconocido). T4–T7 pasan por `ist_*(ll)` con `I2C_LL_*`, el host los juzga con el oráculo de F1 y sus listas esperadas incluyen cada prueba `-LL`. S15/S16, 1 MHz solo en notaps y Fm+ restaurado.
+
+### Mi ejecución
+
+Banco en taps (J2/J3 puestos), checklist vigente del responsable (2026-10-08). Imágenes de `9aa7a37` en las dos placas (`tools/flash.py --sn`; H755 0x450, F334 0x438, "Download verified successfully"). Captura sin editar: `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f2_audit_bench_taps_9aa7a37.txt`: **128/130, `FW VERDICT=FAIL failures=1`, `HOST VERDICT=FAIL`**. No hice la sesión notaps: la corrección tocará el firmware y habrá que repetir las dos.
+
+Las dos comprobaciones que fallan son de F0 y F1, no de LL:
+
+| Comprobación | Lo que dice la captura |
+| --- | --- |
+| T0C, retención de SCL, vista de CM7 | CM7 abre su ventana de 600 ms al terminar el handshake y la cierra sin ver nada (`PB8 lows=0`, impreso a +10,768 s). El host tardó unos 700 ms en su comprobación S17 tras la retención de SDA (osciloscopio y `LVL`) y la F334 confirmó `OK HOLD line=SCL` a +10,878 s, después de cerrarse la ventana. El osciloscopio y la F334 sí vieron la retención de 50 ms |
+| T9(b), osciloscopio | 5 pulsos de SCL y SDA soltada tras el 5.º, pero "SDA falls 0 rises 1": el STOP final de `RecoverBus` no está en la captura (8 ms a 1 MS/s desde la bajada de SCL del `Write`). El firmware pasa (`ERR_ARLO`, 4 pulsos, escritura correcta después). Es el mismo fallo de `taps_5e44044` en F1 (la recuperación fuera de la ventana), que se corrigió moviendo una impresión; el selftest de F2 añadió código y el margen se acabó otra vez |
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| B2 | Bloqueante (no se reproduce en mi ejecución) | **La ventana de T0C de CM7 depende de la latencia del host.** CM7 vigila 600 ms desde el handshake; si el host tarda más en ordenar la retención (aquí, su comprobación S17 de unos 700 ms), la retención llega con la ventana cerrada. Las entregas pasaron porque el host fue más rápido | Que la ventana de CM7 esté abierta antes de que empiece la retención y no se cierre hasta que termine, sea cual sea la latencia del host: por ejemplo, el host da la orden a la F334 y solo después libera a CM7 con su propio punto, y CM7 espera la bajada con un límite amplio (≥ 2 s) y juzga desde ella |
+| B3 | Bloqueante (no se reproduce en mi ejecución) | **La captura de T9(b) depende de la latencia del firmware entre el `Write` rechazado y el final de `RecoverBus`.** La ventana de 8 ms no llegó al STOP | Una captura que no dependa de esa latencia: disparo en el primer pulso de `RecoverBus` (o en la propia retención) con una ventana que cubra la recuperación entera con margen medido, o dos capturas; y que el firmware imprima después de la recuperación, no en medio |
+| m36 | Menor (doc) | `i2c_ll.h:23-24` dice que todas las `LL_I2C_ClearFlag_*` son `SET_BIT`; `_TXE` es `WRITE_REG(ISR, TXE)` (cabecera LL 1786-1789). El informe ya lo dice | Corregir el encabezado |
+| m37 | Menor (doc) | `i2c_ll.h:20-23, 87, 92`: la lista de escrituras con `LL_I2C_WriteReg` está incompleta (`TIMEOUTR = 0`, el `CR2` de `StartIt`, los RMW de `CR1` en `ie_set` y de `CR2` en `reload`); `XferIrq` y `DmaEnd` validan con `I2C_BM_IsValidInstance`, no con los `Check*` que cita. El encabezado congelado de `I2C_BM_DmaStartWrite` no lista el `ERR_PARAM` de `buf` NULL o `n < 2` (sí lo hace `CheckDmaStartWrite`) | Completar los dos encabezados (el de BM, solo como comentario) |
+| m38 | Menor (evidencia) | T14 tras cada prueba compara con una tabla local (`inst_deinit`, `CM7 i2c_selftest.c:1856`), no con `ist_reset_diff()` como dicen su comentario (`:1833`) y el informe (§5.3 de F2, T14; §5.5); el control de F1 ejercita la otra. Hoy las dos tablas son iguales | Que `inst_deinit` use `ist_reset_diff()`; corregir el informe |
+| m39 | Menor (legibilidad) | El host nombra varias líneas de T5-LL sin el sufijo (`i2c_hw_check.py:1912, 1921, 1924`): dos comprobaciones "F1 T5 CM4 100000 Hz scope: times" y 40 `RECORD` de f\_SCL indistinguibles por nombre. Nada se cuenta dos veces ni se atribuye mal | Usar el nombre de la prueba (`T5-LL`) en esas tres cadenas |
+
+**Observaciones:** O24, el motor de transferencias de `i2c_ll.c` (`xfer_poll`, `XferIrq`, `WaitEnd`) es una segunda copia del de `i2c_bm.c`: una corrección futura de BM hay que replicarla a mano (al README). O25, `LL_I2C_HandleTransfer` es un `MODIFY_REG` que conserva `CR2.NACK` y `PECBYTE`; hoy `CR2` es 0 al entrar en cada camino y ningún driver los pone. O26, `i2c_ll` depende de que `LL_I2C_SetSMBusTimeoutA` sea un `WRITE_REG` del registro entero (cabecera fijada por su SHA-256 en el informe). O27, con el timeout apagado `I2C_LL_Init` escribe `TIMEOUTR` dos veces, no tres; la imagen final es la misma. O28, ningún núcleo devuelve qué tier ejecutó; la elección LL/BM es correcta por lectura y T0d atrapa una imagen vieja. O29, el control de T6 con LL borra los IE fuera de PRIMASK (solo podría dar un FAIL falso). O30, B1 con LL no se midió; resuelto por R4-1 (revisión 4 del plan).
+
+### Estado
+
+**F2 no pasa** por B2 y B3, dos carreras del diseño de las pruebas de F0/F1 que la entrega de F2 no muestra. El código de `i2c_ll` no tiene hallazgos funcionales. Con la corrección (B2, B3, m36–m39) y nuevas sesiones de entrega, repetiré mis dos sesiones (taps y notaps). El banco quedó en taps.
