@@ -341,3 +341,36 @@ Las dos comprobaciones que fallan son de F0 y F1, no de LL:
 ### Estado
 
 **F2 no pasa** por B2 y B3, dos carreras del diseño de las pruebas de F0/F1 que la entrega de F2 no muestra. El código de `i2c_ll` no tiene hallazgos funcionales. Con la corrección (B2, B3, m36–m39) y nuevas sesiones de entrega, repetiré mis dos sesiones (taps y notaps). El banco quedó en taps.
+
+## F2, parte 2: corrección y ejecución del auditor en la placa (`c483bb9`)
+
+Entrega: `12d2ce7..c483bb9` (código en `4d6b092` y `0471570`; capturas de entrega en `3304bb9`, imágenes de `0471570`; evidencia de build en `60ac356`; informe en `c483bb9`, "Respuesta a la auditoría de F2, parte 1").
+
+### Revisión
+
+| Hallazgo | Verificación |
+| --- | --- |
+| B2 | Toda retención de la F334 (T0C y cada punto `AT HOLD`: T1 con `BUSY`, T9 y su control, T9(b), T10(b) y su control) la ordena el host después del handshake, y CM7 la espera hasta `HOLD_WAIT_MS` = 2 s y mide desde la bajada. `watch_bus()` se cierra 50 ms después de que la línea retenida vuelve a subir (o 500 ms tras la bajada si no sube, S21), no a los 600 ms del handshake. T10(b): CM4 exige ahora `n = 1` y CM7 `n = 2`, los dos desde la bajada que ve CM7; se retira el cronometraje durante el handshake (y con él el riesgo de O23). **Cerrado** |
+| B3 | Las capturas de T9 y T9(b) disparan en la liberación de SDA por la F334 (`trig=sdar`), con 3/4 del buffer antes: el `Write` rechazado y `RecoverBus` caen antes del disparo y el STOP después. CM7 mide su propio intervalo (del `Write` al final de `RecoverBus`) y lo imprime después de la recuperación; el host comprueba que cabe antes de la liberación con 0,5 ms de margen y juzga SDA abajo desde antes del primer flanco de SCL hasta la liberación. Mock en T0B(a). **Cerrado** |
+| m36, m37 | El encabezado de `i2c_ll.h` lista todas las escrituras con `LL_I2C_WriteReg` y los RMW de `ie_set()` y `reload()`, dice que `LL_I2C_ClearFlag_TXE` es un `WRITE_REG` de `ISR`, y nombra la validación real de `XferIrq` y `DmaEnd`. El encabezado congelado de `I2C_BM_DmaStartWrite` documenta su `ERR_PARAM` (solo comentario; ninguna firma cambia). **Cerrados** |
+| m38 | `inst_deinit()` compara con `ist_reset_diff_img()`, la tabla de `Common` que ejercita el control de F1. **Cerrado** |
+| m39 | Las líneas de T5-LL llevan su nombre (`F1 T5-LL CM4 100000 Hz scope: times`). **Cerrado** |
+
+Builds (mi ejecución, `c483bb9`): `build_all -Clean` 8/8, `prj_01` igual a `2481396`; `selftest-i2c` con `-Werror` 0 avisos (CM7 87128/140/130452, CM4 26660/28/78576); F334 con `-Werror` 0 avisos (11340/20/3392). Capturas de entrega `i2c_f2_bench_taps_0471570.txt` 130/130 y `..._notaps_0471570.txt` 98/98.
+
+### Mi ejecución
+
+Imágenes de `c483bb9` en las dos placas (`tools/flash.py --sn`; H755 0x450, F334 0x438, "Download verified successfully"). Capturas sin editar, en `03_firmware_templates/prj_01_template_dualcore/docs/`:
+
+| Captura | Estado declarado | Resultado |
+| --- | --- | --- |
+| `i2c_f2_audit_bench_taps_c483bb9.txt` | taps | **ABORT S19** antes de mover el bus: 1+ 0,015 V, 2+ 3,240 V, PF14 = 0, la firma de notaps. J2/J3 no estaban puestos (lo confirmó el responsable) |
+| `i2c_f2_audit_bench_notaps_c483bb9.txt` | notaps | **ABORT S19** antes de mover el bus: 1+ 3,159 V, razón 0,956, PF14 = 1, la firma de taps. El responsable había puesto J2/J3 entretanto; lo leí mal |
+| `i2c_f2_audit_bench_taps_c483bb9_2.txt` | taps | **130/130, `HOST VERDICT=PASS`**, `FW VERDICT=PASS`. T0C: CM7 ve la retención de SCL (50 743 µs). T9(b): 5 pulsos, liberación tras el 5.º y STOP en la captura; intervalo de 1083 µs |
+| `i2c_f2_audit_bench_notaps_c483bb9_2.txt` | notaps | **98/98, `HOST VERDICT=PASS`**, `FW VERDICT=PASS`. T0C: 50 736 µs |
+
+En las dos sesiones válidas, las líneas de resultado, ordenadas y con los números normalizados, son idénticas a las de la entrega. Los dos abortos muestran que S19 funciona: en los dos el host detuvo la sesión en la primera comprobación de niveles y nadie condujo el bus.
+
+### Estado
+
+**F2 pasa.** Cerrados B2, B3 y m36–m39; las observaciones O24–O30 quedan como están (O24 y O25 al README; O30 resuelta por R4-1). **La API de `i2c_ll` queda congelada en `c483bb9`**: el contrato es `01_shared_drivers/05_i2c/i2c_ll.h` de ese commit, junto con el de `i2c_bm` (revisión 4, R4-2). El implementador puede empezar F3 (`i2c_hal`). El banco quedó en notaps (J2/J3 quitados).

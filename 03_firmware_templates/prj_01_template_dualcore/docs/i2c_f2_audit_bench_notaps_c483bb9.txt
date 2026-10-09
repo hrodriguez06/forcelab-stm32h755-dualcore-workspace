@@ -1,0 +1,203 @@
+[+   0.069s] [host] argv: --bench-state notaps --checklist-confirmed 'Hector Rodriguez' --checklist-date 2026-10-08 --out docs/i2c_f2_audit_bench_notaps_c483bb9.txt
+[+   0.070s] [host] options: bench_state=notaps allow_dirty=False preset=selftest-i2c no_reset=False checklist_confirmed=Hector Rodriguez checklist_date=2026-10-08
+[+   0.070s] [host] i2c_hw_check.py, host checkout c483bb9, protocol v4, F334 protocol v3, phase F2 (with the F0 and F1 steps)
+[+   0.070s] [host] checklist [x] GND first: W3 H755 CN8-11 <-> F334 CN5-7; no supply rail between the boards (S20): confirmed by Hector Rodriguez on 2026-10-08 (--checklist-confirmed)
+[+   0.070s] [host] checklist [x] I2C bus: SCL node H755 PB8 (CN7-2) <-> F334 PB8 (CN5-10) W1; SDA node H755 PB9 (CN7-4) <-> F334 PB9 (CN5-9) W2; 1.0 kOhm from each node to H755 3V3 (CN8-7); no series resistors: confirmed by Hector Rodriguez on 2026-10-08 (--checklist-confirmed)
+[+   0.070s] [host] checklist [x] bench state 'notaps': J2 and J3 removed: PF14/PF15 not on the bus: confirmed by Hector Rodriguez on 2026-10-08 (--checklist-confirmed)
+[+   0.070s] [host] checklist [x] F334 checks: D15/D14 = PB8/PB9 on CN5-10/CN5-9, GND on CN5-7, BOOT0 its own pin, no pull-up or solder bridge on PB8/PB9; H755 SB39/SB62 open: confirmed by Hector Rodriguez on 2026-10-08 (--checklist-confirmed)
+[+   0.070s] [host] checklist [x] AD2 lines per 00_gpio README section 8 (DIO0..14), the AD2 on USB while the Nucleo is powered: confirmed by Hector Rodriguez on 2026-10-08 (--checklist-confirmed)
+[+   0.070s] [host] checklist [x] both Nucleo boards on USB of this PC, the F334 powered before the session (S20): confirmed by Hector Rodriguez on 2026-10-08 (--checklist-confirmed)
+[+   0.070s] [host] checklist (not an operator item) images: the F334 with tools/i2c_target_f334 and the H755 with selftest-i2c, each through tools/flash.py --sn with this script stopped; checked by T0d below (Rev, id)
+[+   0.741s] [host] checklist [x] WaveForms GUI closed, no debugger attached (tasklist: none of WaveForms.exe, ST-LINK_gdbserver.exe, openocd.exe, STM32CubeProgrammer.exe)
+[+   1.115s] [host] tree clean
+[+   1.938s] [host] build id of this checkout: build/selftest-i2c eaa674b593398459; tools/i2c_target_f334/build/f334 bf754894a4a29e30
+[+   1.938s] [ad2] T0B(a) ad2_set_oe(0x0200, bus=NONE): refused before the DLL
+[+   1.938s] [ad2] T0B(a) ad2_set_oe(0x0800, bus=NONE): refused before the DLL
+[+   1.938s] [ad2] T0B(a) ad2_set_oe(0x2000, bus=NONE): refused before the DLL
+[+   1.938s] [ad2] T0B(a) ad2_set_oe(0x4000, bus=NONE): refused before the DLL
+[+   1.938s] [ad2] T0B(a) ad2_set_oe(0x8000, bus=NONE): refused before the DLL
+[+   1.938s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=NONE): refused before the DLL
+[+   1.938s] [ad2] T0B(a) ad2_set_oe(0x00FF, bus=MCU): refused before the DLL
+[+   1.938s] [ad2] T0B(a) ad2_set_oe(0x10FF, bus=MCU): refused before the DLL
+[+   1.938s] [ad2] T0B(a) control ad2_set_oe(0x1000, bus=NONE): passed to the DLL
+[+   1.938s] [ad2] T0B(a) control ad2_set_oe(0x10FF, bus=AD2): passed to the DLL
+[+   1.938s] [host] T0B(a) i2c_set_oe(0x0100) [DIO8 (S3 would allow it)]: refused, S2, nothing passed to ad2_set_oe
+[+   1.938s] [host] T0B(a) i2c_set_oe(0x0400) [DIO10 (S3 would allow it)]: refused, S2, nothing passed to ad2_set_oe
+[+   1.938s] [host] T0B(a) i2c_set_oe(0x00FF) [the AD2 bus]: refused, S2, nothing passed to ad2_set_oe
+[+   1.938s] [host] T0B(a) i2c_set_oe(0x0200) [DIO9]: refused, S2, nothing passed to ad2_set_oe
+[+   1.939s] [host] T0B(a) i2c_set_oe(0x4000) [DIO14 (PA8)]: refused, S2, nothing passed to ad2_set_oe
+[+   1.939s] [host] T0B(a) i2c_set_oe(0x8000) [DIO15]: refused, S2, nothing passed to ad2_set_oe
+[+   1.939s] [host] T0B(a) i2c_set_oe(0x1100) [HOST_REQ with DIO8]: refused, S2, nothing passed to ad2_set_oe
+[+   1.939s] [host] T0B(a) control i2c_set_oe(0x0000): passed to ad2_set_oe
+[+   1.939s] [host] T0B(a) control i2c_set_oe(0x1000): passed to ad2_set_oe
+[+   1.939s] [host] T0B(a) S15 check of an F334 pin report [both AF4 open-drain]: accepted (ok) -> as expected
+[+   1.939s] [host] T0B(a) S15 check of an F334 pin report [both input]: accepted (ok) -> as expected
+[+   1.939s] [host] T0B(a) S15 check of an F334 pin report [PB8 AF push-pull]: refused (PB8 MODER=2 OTYPER=0 AFR=4) -> as expected
+[+   1.939s] [host] T0B(a) S15 check of an F334 pin report [PB9 pull-up]: refused (PB9 pull 1) -> as expected
+[+   1.939s] [host] T0B(a) S15 check of an F334 pin report [PB8 GPIO output]: refused (PB8 MODER=1 OTYPER=1 AFR=4) -> as expected
+[+   1.939s] [host] T0B(a) S15 check of an F334 pin report [PB9 AF1]: refused (PB9 MODER=2 OTYPER=1 AFR=1) -> as expected
+[+   1.939s] [host] T0B(a) S15 check of an F334 pin report [firmware says violated]: refused (no s15=ok) -> as expected
+[+   1.939s] [host] T0B(a) S15 check of an F334 pin report [PB9 missing]: refused (PB9 missing) -> as expected
+[+   1.939s] [host] T0B(a) S15 check of an F334 pin report [PB8 twice, a bad copy first (m14)]: refused (PB8 reported 2 times) -> as expected
+[+   1.939s] [host] T0B(a) S15 check of an F334 pin report [PB9 only inside another word (m14)]: refused (PB9 missing) -> as expected
+[+   1.939s] [host] T0B(a) S15 check of an F334 pin report [s15=okx is not s15=ok (O13)]: refused (no s15=ok) -> as expected
+[+   1.939s] [host] T0B(a) S15 check of an F334 pin report [xs15=ok is not s15=ok (O13)]: refused (no s15=ok) -> as expected
+[+   1.939s] [host] T0B(a) S17 levels taps 1+ 3.157 V 2+ 3.301 V [the F0 delivery levels]: accepted -> as expected
+[+   1.939s] [host] T0B(a) S17 levels taps 1+ 3.102 V 2+ 3.245 V [the auditor's session (both 1.7 % lower, same ratio)]: accepted -> as expected
+[+   1.939s] [host] T0B(a) S17 levels taps 1+ 3.000 V 2+ 3.300 V [ratio 0.909: a 2.2 kOhm pull-up]: refused: scope 1+ (SCL) / 2+ (SDA) = 3.000 / 3.300 V = 0.9091, outside 0.941..0.971 (1 kOhm pull-up against PF14's 22 kOhm) -> as expected
+[+   1.940s] [host] T0B(a) S17 levels taps 1+ 2.800 V 2+ 2.950 V [SDA below 3.0 V]: refused: scope 2+ (SDA node through J3) reads 2.950 V < 3.0 V -> as expected
+[+   1.940s] [host] T0B(a) S17 levels taps 1+ 0.036 V 2+ 3.300 V [J2 missing (S19)]: refused: scope 1+ (SCL) / 2+ (SDA) = 0.036 / 3.300 V = 0.0109, outside 0.941..0.971 (1 kOhm pull-up against PF14's 22 kOhm); scope 1+ (SCL node through J2) reads 0.036 V <= 0.10 V: J2 not in place, or the probe not on PF14 -> as expected
+[+   1.940s] [host] T0B(a) S17 levels notaps 1+ 0.057 V 2+ 3.235 V [the F0 notaps levels]: accepted -> as expected
+[+   1.940s] [host] T0B(a) S17 levels notaps 1+ 3.303 V 2+ 3.300 V [probe on the bus side (S19)]: refused: scope 1+ (PF14 alone, J2 removed) reads 3.303 V >= 0.10 V: J2 in place, or the probe on the bus side -> as expected
+[+   1.940s] [host] T0B(a) S17 levels notaps 1+ 0.057 V 2+ 2.900 V [PF15 below 3.0 V]: refused: scope 2+ (PF15 alone, J3 removed) reads 2.900 V < 3.0 V -> as expected
+[+   1.940s] [host] T0B(a) S21 hold guard HOLD SDA 0 EDGES 0: refused (0 ms outside 1..500 (S21)) -> as expected
+[+   1.940s] [host] T0B(a) S21 hold guard HOLD SDA 501 EDGES 0: refused (501 ms outside 1..500 (S21)) -> as expected
+[+   1.940s] [host] T0B(a) S21 hold guard HOLD SCL 50 EDGES 5: refused (EDGES only with SDA) -> as expected
+[+   1.940s] [host] T0B(a) S21 hold guard HOLD SDA 1000 EDGES 5: refused (1000 ms outside 1..500 (S21)) -> as expected
+[+   1.940s] [host] T0B(a) S21 hold guard HOLD XX 50 EDGES 0: refused (line 'XX') -> as expected
+[+   1.940s] [host] T0B(a) S21 hold guard HOLD SDA 50 EDGES 0: sent -> as expected
+[+   1.940s] [host] T0B(a) S21 hold guard HOLD SCL 500 EDGES 0: sent -> as expected
+[+   1.940s] [host] T0B(a) S21 hold guard HOLD SDA 500 EDGES 5: sent -> as expected
+[+   1.940s] [host] T0B(a) S18 probe check [the two expected probes]: accepted (the two expected ST-LINKs, nothing else) -> as expected
+[+   1.940s] [host] T0B(a) S18 probe check [a third]: refused (3 ST-LINKs (['0016000C4142501220353451', '066BFF393731435243254117', '0670FF000000000000000000']), expected exactly 2) -> as expected
+[+   1.940s] [host] T0B(a) S18 probe check [the F334's missing]: refused (1 ST-LINKs (['0016000C4142501220353451']), expected exactly 2) -> as expected
+[+   1.940s] [host] T0B(a) S18 probe check [another F334 SN]: refused (probes {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254118': 'NUCLEO-F334R8'}, expected {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254117': 'NUCLEO-F334R8'}) -> as expected
+[+   1.940s] [host] T0B(a) S18 probe check [boards swapped]: refused (probes {'0016000C4142501220353451': 'NUCLEO-F334R8', '066BFF393731435243254117': 'NUCLEO-H755ZI-Q'}, expected {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254117': 'NUCLEO-F334R8'}) -> as expected
+[+   1.941s] [host] T0B(a) S18 parser on a CubeProgrammer listing: [{'sn': '0016000C4142501220353451', 'fw': 'V3J17M11', 'board': 'NUCLEO-H755ZI-Q'}, {'sn': '066BFF393731435243254117', 'fw': 'V2J38M27', 'board': 'NUCLEO-F334R8'}] -> as expected
+[+   1.941s] [host] T0B(a) T0d identity check [all match]: accepted -> as expected
+[+   1.941s] [host] T0B(a) T0d identity check [F334 Rev from another commit]: aborts: f334 Rev 7654321 is not this checkout (1234567) -> as expected
+[+   1.941s] [host] T0B(a) T0d identity check [CM4 dirty]: aborts: cm4 Rev 1234567-dirty is dirty -> as expected
+[+   1.941s] [host] T0B(a) T0d identity check [CM7 id differs]: aborts: cm7 id cccc != cm4 id aaaa; cm7 id cccc != host id aaaa -> as expected
+[+   1.941s] [host] T0B(a) T0d identity check [F334 id differs]: aborts: f334 id cccc != host id bbbb -> as expected
+[+   1.941s] [host] T0B(a) T0d identity check [F334 SN differs]: aborts: probes {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254110': 'NUCLEO-F334R8'}, expected {'0016000C4142501220353451': 'NUCLEO-H755ZI-Q', '066BFF393731435243254117': 'NUCLEO-F334R8'} -> as expected
+[+   1.941s] [host] T0B(a) T0d identity check [one port for both]: aborts: ports H755 COM4 F334 COM4 -> as expected
+[+   1.941s] [host] T0B(a) checklist arguments [name and date]: accepted -> as expected
+[+   1.941s] [host] T0B(a) checklist arguments [neither (not evidence)]: accepted -> as expected
+[+   1.941s] [host] T0B(a) checklist arguments [a name without a date]: refused: --checklist-confirmed needs --checklist-date YYYY-MM-DD (the day of the confirmation) -> as expected
+[+   1.941s] [host] T0B(a) checklist arguments [a date alone]: refused: --checklist-date given without --checklist-confirmed NAME -> as expected
+[+   1.941s] [host] T0B(a) checklist arguments [not ISO]: refused: --checklist-date '07/10/2026' is not YYYY-MM-DD -> as expected
+[+   1.941s] [host] T0B(a) checklist arguments [no such day]: refused: --checklist-date '2026-02-30' is not a calendar date -> as expected
+[+   1.941s] [host] T0B(a) checklist arguments [an empty name]: refused: --checklist-date given without --checklist-confirmed NAME -> as expected
+[+   1.941s] [host] T0B(a) T3 calc: 100 MHz, 100 kHz, t_r 250, t_f 20, filter: status 0 TIMINGR 0x30C06D81 model 99700 (99700, RM check clean) -> as expected
+[+   1.942s] [host] T0B(a) T3 control through t3_judge: 4 vectors, 0 differ as printed; with the expected TIMINGR altered (SCLL + 1) 3 of 3 OK vectors differ -> as expected
+[+   1.942s] [host] T0B(a) T3 control: 100 MHz, 100 kHz, t_r 1000, t_f 300: TIMINGR 0x70F3313A (SDADEL 3) passes True; with SDADEL 0 (below 50:319) the RM check refuses: SDADEL below its minimum (50:319) -> as expected
+[+   1.942s] [host] T0B(a) T3 calc refusal k=3999999 f=100000: status 3 (3) -> as expected
+[+   1.942s] [host] T0B(a) T3 calc refusal k=100000000 f=0: status 1 (1) -> as expected
+[+   1.942s] [host] T0B(a) T3 calc refusal k=100000000 f=1000001: status 1 (1) -> as expected
+[+   1.942s] [host] T0B(a) X/RPT pairing [a good read]: accepted -> as expected
+[+   1.942s] [host] T0B(a) X/RPT pairing [the target sent 5]: refused: RPT tx=5 (4) -> as expected
+[+   1.942s] [host] T0B(a) X/RPT pairing [another CRC at the target]: refused: RPT crc_tx=00000000 (5B73EF64) -> as expected
+[+   1.942s] [host] T0B(a) X/RPT pairing [status NACK]: refused: status ERR_NACK (OK) -> as expected
+[+   1.942s] [host] T0B(a) X/RPT pairing [no report]: refused: no RPT from the target -> as expected
+[+   1.953s] [host] T0B(a) decoder on a synthetic capture (20 MS/s, 100 kHz): 'S 84A 07A | Sr 85A A2N P'; tSU;DAT drivers mmmmmsmmmmmsssssssm (want mmmmmsmmmmmsssssssm); swapped 'S  P | S  P | S  P | S  P | S  P | S  P ' -> as expected
+[+   1.958s] [host] T0B(a) decoder on a synthetic capture (50 MS/s, 400 kHz): 'S 84A 07A | Sr 85A A2N P'; tSU;DAT drivers mmmmmsmmmmmsssssssm (want mmmmmsmmmmmsssssssm); swapped 'S  P | S  P | S  P | S  P | S  P | S  P ' -> as expected
+[+   1.958s] [host] T0B(a) m26 list (taps) [the full list]: complete -> as expected
+[+   1.958s] [host] T0B(a) m26 list (taps) [T4 CM4 400 kHz without the write of 65535]: 1 missing, first ('T4', 'cm4', 400000, 'W', 'poll', 66, 65535) -> as expected
+[+   1.959s] [host] T0B(a) m26 list (taps) [an extra write of 7]: 1 not on the list, first ('T4', 'cm7', 400000, 'W', 'poll', 66, 7) -> as expected
+[+   1.959s] [host] T0B(a) m26 list (taps) [the full capture list]: complete -> as expected
+[+   1.959s] [host] T0B(a) m26 list (taps) [a T5 capture left out]: 1 missing, first ('T5', 3, 100000) -> as expected
+[+   1.959s] [host] T0B(a) m26 list (notaps) [the full list]: complete -> as expected
+[+   1.959s] [host] T0B(a) m26 list (notaps) [T4 CM4 400 kHz without the write of 65535]: 1 missing, first ('T4', 'cm4', 400000, 'W', 'poll', 66, 65535) -> as expected
+[+   1.959s] [host] T0B(a) m26 list (notaps) [an extra write of 7]: 1 not on the list, first ('T4', 'cm7', 400000, 'W', 'poll', 66, 7) -> as expected
+[+   1.959s] [host] T0B(a) S19 X line at 1000000 Hz (taps): aborts -> as expected
+[+   1.959s] [host] T0B(a) S19 X line at 400000 Hz (taps): goes on -> as expected
+[+   1.959s] [host] T0B(a) S19 X line at 1000000 Hz (notaps): goes on -> as expected
+[+   1.960s] [host] T0B(a) S19 SCOPE point at 1000000 Hz (taps): aborts -> as expected
+[+   1.960s] [host] T0B(a) S19 SCOPE point at 400000 Hz (taps): goes on -> as expected
+[+   1.960s] [host] T0B(a) S19 FMP 1 (taps): aborts, nothing sent -> as expected
+[+   1.960s] [host] T0B(a) S19 FMP 1 (notaps): sent -> as expected
+[+   1.960s] [host] T0B(a) T5 minimum tHIGH 599 ns at 25 MS/s: passes with a note -> as expected
+[+   1.960s] [host] T0B(a) T5 minimum tHIGH 519 ns at 25 MS/s: fails -> as expected
+[+   1.960s] [host] T0B(a) T5 minimum tHIGH 620 ns at 25 MS/s: passes -> as expected
+[+   1.965s] [host] T0B(a) T10(b) judgement [START at 3 ms, released at 1 x TIMEOUTA]: accepted -> as expected
+[+   1.969s] [host] T0B(a) T10(b) judgement [START at 15 ms, released at 2 x (2 wanted)]: accepted -> as expected
+[+   1.973s] [host] T0B(a) T10(b) judgement [START at 15 ms, released at 1 x]: refused -> as expected
+[+   1.976s] [host] T0B(a) T10(b) judgement [START at 3 ms when 2 was wanted]: refused -> as expected
+[+   1.983s] [host] T0B(a) T10(b) judgement [released 1 ms late]: refused -> as expected
+[+   1.987s] [host] T0B(a) T9 scope judgement [T9: 5 pulses, release, STOP]: accepted -> as expected
+[+   1.991s] [host] T0B(a) T9 scope judgement [T9(b): 1 rise of the Write, 4 pulses, STOP]: accepted, split (1, 4) -> as expected
+[+   2.003s] [host] T0B(a) T9 scope judgement [T9(b) without the STOP]: refused, split (1, 4) -> as expected
+[+   2.010s] [host] T0B(a) T9 scope judgement [SDA high and low again before the release]: refused, split (0, 1) -> as expected
+[+   2.016s] [host] T0B(a) T9 scope judgement [T9 with 4 pulses]: refused -> as expected
+[+   2.016s] [host] T0B(a) S3 (00_gpio) guard on its mock: PASS
+[+   2.016s] [host] T0B(a) HOST_REQ only guard on its mock: PASS
+[+   2.016s] [host] T0B(a) S15 F334 report guard on its mock: PASS
+[+   2.016s] [host] T0B(a) S17 levels guard on its mock: PASS
+[+   2.016s] [host] T0B(a) S21 hold guard on its mock: PASS
+[+   2.016s] [host] T0B(a) S18 probes guard on its mock: PASS
+[+   2.016s] [host] T0B(a) T0d identity guard on its mock: PASS
+[+   2.016s] [host] T0B(a) checklist arguments guard on its mock: PASS
+[+   2.016s] [host] T0B(a) T3 calculation rules guard on its mock: PASS
+[+   2.016s] [host] T0B(a) X/RPT pairing guard on its mock: PASS
+[+   2.016s] [host] T0B(a) I2C decoder guard on its mock: PASS
+[+   2.016s] [host] T0B(a) m26 lists guard on its mock: PASS
+[+   2.016s] [host] T0B(a) S19 aborts guard on its mock: PASS
+[+   2.016s] [host] T0B(a) T5 minimums guard on its mock: PASS
+[+   2.016s] [host] T0B(a) T10(b) n x TIMEOUTA guard on its mock: PASS
+[+   2.016s] [host] T0B(a) T9 release trigger guard on its mock: PASS
+[+   2.249s] [host] S18 probe: ST-LINK SN 0016000C4142501220353451 FW V3J17M11 board NUCLEO-H755ZI-Q
+[+   2.249s] [host] S18 probe: ST-LINK SN 066BFF393731435243254117 FW V2J38M27 board NUCLEO-F334R8
+[+   2.249s] [host] S18 the two expected ST-LINKs, nothing else
+[+   2.253s] [host] S18 ports by ST-LINK SN: H755 0016000C4142501220353451 -> COM4, F334 066BFF393731435243254117 -> COM7
+[+   3.023s] [f334] I2C_TARGET v3 Rev c483bb9 id bf754894a4a29e30
+[+   3.031s] [f334] I2C_TARGET pins PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   3.043s] [f334] I2C_TARGET addr=0x42 sysclk=64000000 timingr=0x20F10000 idcode=0x10016438 uid=20383337435043060007001E reset_csr=0x00000000 hold_max_ms=500
+[+   3.045s] [f334] I2C_TARGET ready
+[+   3.247s] [host] F334 banner: protocol v3 Rev c483bb9 id bf754894a4a29e30 addr 0x42 sysclk 64000000 IDCODE 0x10016438 UID 20383337435043060007001E ready; pins: S15 ok
+[+   3.268s] [f334] OK CLR
+[+   3.273s] [f334] OK INIT reg[i]=i^0xA5 ptr=0
+[+   3.280s] [f334] OK DISARM nack=-1 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+   3.286s] [f334] OK FMP 0 timingr=0x20F10000 cfgr1=0x7C000000
+[+   3.405s] [f334] STATUS xfers=0 rx=0 tx=0 nk=0 ev=0 idle_cuts=0 dropped=0 uart_ovr=0 ptr=0 active=0 hold=0 aborted=0 nack=-1 corrupt=-1 stretch_addr_us=0 stretch_byte_us=0
+[+   3.851s] [ad2] opened in S2: OE=0x0000 DIO=0x0000 Digital Out enable=0x0000 Zet=0xFFFF
+[+   3.901s] [ad2] first acquisition after opening, DISCARDED (bench lesson): 1+ 3.156 V, 2+ 3.301 V
+[+   3.901s] [host] reset the H755 through SWD (-c port=SWD mode=HOTPLUG sn=0016000C4142501220353451 -rst), AD2 in S2, the F334 idle; a system reset, not a power cycle
+[+   4.057s]  
+[+   4.062s] === STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[+   4.066s] [sys] build rev=c483bb9 id=eaa674b593398459
+[+   4.070s] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[+   4.073s] [sys] silicon revision id=0x2003
+[+   4.077s] [ipc] shared block at 0x38008000, magic=0x48375353
+[+   4.081s] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[+   4.083s] [i2c] CM7 Rev c483bb9
+[+   4.086s] [i2c] CM7 Build id eaa674b593398459
+[+   4.088s] [i2c] CM4 Rev c483bb9
+[+   4.091s] [i2c] CM4 Build id eaa674b593398459
+[+   4.093s] [i2c] I2C_BENCH v4 idle
+[+   4.093s] [host] T0d identity: host HEAD c483bb9; CM7 Rev c483bb9 id eaa674b593398459; CM4 Rev c483bb9 id eaa674b593398459; host id eaa674b593398459; F334 Rev c483bb9 id bf754894a4a29e30 (host id bf754894a4a29e30); probes H755 0016000C4142501220353451 on COM4, F334 066BFF393731435243254117 on COM7
+[+   4.094s] [host] T0d identity: all match
+[+   4.094s] [host] recorded: T0d identity (S18, A21): Rev and build id of CM7, CM4 and the F334 match this checkout and the host's ids; exactly the two expected ST-LINKs; ports chosen by their SN
+[+   4.100s] [i2c] silicon REV_ID=0x2003, test block at 0x3800D000, CM4 table v4, steps 13
+[+   4.105s] [i2c] STEP T0A owner=NONE v=4 pb8=1 pb9=1 pf14=1 pf15=1
+[+   4.115s] [host] step T0A: S2, Digital Out enable 0x0000 Zet 0xFFFF, OE 0x1000
+[+   4.182s] [f334] LVL scl=1 sda=1 busy=0 pe=1 fmp=0 PB8 MODER=2 OTYPER=1 PUPDR=0 AFR=4 PB9 MODER=2 OTYPER=1 PUPDR=0 AFR=4 s15=ok
+[+   4.234s] [host] S17 before T0A: scope SCL(1+) 3.159 V SDA(2+) 3.306 V ratio 0.9557 (notaps: 1+ < 0.10 V, 2+ >= 3.0 V); F334 scl=1 sda=1 busy=0 S15 ok; CM7 pb8=1 pb9=1 pf14=1 (want 0) pf15=1; failing: scope 1+ (PF14 alone, J2 removed) reads 3.159 V >= 0.10 V: J2 in place, or the probe on the bus side; CM7 reads PF14 1 (0) -> FAIL
+[+   4.249s] [ad2] ABORT: S19: declared 'notaps': scope 1+ (PF14 alone, J2 removed) reads 3.159 V >= 0.10 V: J2 in place, or the probe on the bus side; AD2 back in S2 (OE=0x0000)
+[+  13.977s] [i2c] ABORT step=T0A reason=host timeout
+[+  13.981s] [i2c] bench completed without abort -> FAIL
+[+  13.988s] [i2c] CM4 finished: timeout 0, aborts 0; CYCCNT stall exits CM4 0, CM7 0 -> PASS
+[+  13.993s] [i2c] Status_Task stack high-water mark 854 words
+[+  13.996s] [i2c] FW VERDICT=FAIL failures=2
+[+  14.001s] [sys] cpu2 build rev=c483bb9 id=eaa674b593398459
+[+  14.003s] [ipc] m7=5 m4=1  (CPU2 alive)
+[+  14.331s] [ad2] closing in S2: OE=0x0000 Digital Out enable=0x0000 Zet=0xFFFF
+[+  14.444s] [host] T0B(a) S3 (00_gpio): PASS
+[+  14.444s] [host] T0B(a) HOST_REQ only: PASS
+[+  14.444s] [host] T0B(a) S15 F334 report: PASS
+[+  14.444s] [host] T0B(a) S17 levels: PASS
+[+  14.444s] [host] T0B(a) S21 hold: PASS
+[+  14.444s] [host] T0B(a) S18 probes: PASS
+[+  14.444s] [host] T0B(a) T0d identity: PASS
+[+  14.445s] [host] T0B(a) checklist arguments: PASS
+[+  14.445s] [host] T0B(a) T3 calculation rules: PASS
+[+  14.445s] [host] T0B(a) X/RPT pairing: PASS
+[+  14.445s] [host] T0B(a) I2C decoder: PASS
+[+  14.445s] [host] T0B(a) m26 lists: PASS
+[+  14.445s] [host] T0B(a) S19 aborts: PASS
+[+  14.445s] [host] T0B(a) T5 minimums: PASS
+[+  14.445s] [host] T0B(a) T10(b) n x TIMEOUTA: PASS
+[+  14.445s] [host] T0B(a) T9 release trigger: PASS
+[+  14.445s] [host] CHECK S17 before T0A: FAIL
+[+  14.445s] [host] RECORD T0d identity (S18, A21): Rev and build id of CM7, CM4 and the F334 match this checkout and the host's ids; exactly the two expected ST-LINKs; ports chosen by their SN
+[+  14.445s] [host] 0/1 host checks passed (1 records not counted), FW VERDICT=FAIL, stack free None, abort=S19: declared 'notaps': scope 1+ (PF14 alone, J2 removed) reads 3.159 V >= 0.10 V: J2 in place, or the probe on the bus side
+[+  14.445s] HOST VERDICT=FAIL
