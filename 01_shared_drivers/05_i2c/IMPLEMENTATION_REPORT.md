@@ -763,6 +763,222 @@ El resto de filas da lo mismo que en la corrección 2.
 - El caso de un START justo en un múltiplo de TIMEOUTA (a unos µs) no está cubierto: n podría ser ambiguo. CM7 está a 1,5 × para evitarlo; en CM4 no ha ocurrido.
 - Lo demás de las secciones anteriores sigue vigente.
 
+## F2
+
+Plan: revisión 3. Contrato de `i2c_bm`: `i2c_bm.h` de `a6de15b` (F1 pasa, `AUDIT.md` "F1, parte 4", `4fee0f9`).
+
+| Fase | Estado | Último commit | Capturas |
+| --- | --- | --- | --- |
+| F2 | entregada para auditoría (el commit que añade esta sección) | `48ec427` (código); capturas en `f913626` y `ef2395f`; evidencia en `2aa948f` | `docs/i2c_f2_bench_taps_48ec427.txt`, `docs/i2c_f2_bench_notaps_48ec427.txt` |
+| F3 | sin empezar | — | — |
+
+Qué hay en F2:
+
+- **`i2c_ll`:** `01_shared_drivers/05_i2c/i2c_ll.{h,c}` y el target `stm32h7_driver_i2c_ll`, que enlaza `stm32h7_driver_i2c_bm`.
+- **Siete funciones añadidas a `i2c_bm.h`** (C2, solo añade): `I2C_BM_CheckWrite`, `_CheckRead`, `_CheckWriteRead`, `_CheckDmaStartWrite`, `_CheckDmaStartRead`, `_CheckWaitEnd` y `_CheckStartIt`. Las consulté antes de escribirlas (§5.5).
+- **Selftest:** tres pasos nuevos, `F2_NOPIN`, `F2_CM4` y `F2_CM7` (banco v3), después de los de F1. Corren T1, T2, T4, T5 (taps), T6, T7(a)(b), T1 con `BUSY = 1` y T14 por `i2c_ll`. Las pruebas de F1 siguen en sus pasos con `i2c_bm`; no quité ninguna.
+- **Host:** los mismos oráculos de F1 para las transferencias `<prueba>-LL`, y el prefijo de captura `i2c_f2_bench_`.
+
+### 5.1 Commits
+
+Rango de la entrega: `4fee0f9..` el commit que añade esta sección, en `driver/i2c`.
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `52fa55c` | feat(i2c): add the per-call checks of i2c_bm for i2c_ll (C2 additions) | — (§5.5) |
+| `56246ed` | feat(i2c): add i2c_ll, the LL tier of 05_i2c, and its target | — |
+| `9667dcb` | test(prj_01): add the F2 steps of the 05_i2c selftest (i2c_ll, bench v3) | — |
+| `acca289` | test(prj_01): add the F2 steps to i2c_hw_check.py (bench v3) | — |
+| `48ec427` | test(prj_01): name the F2 captures i2c_f2_bench_*; T2-LL's first values | sesión de desarrollo en `acca289` (§5.8) |
+| `f913626` | test(prj_01): F2 delivery capture, notaps, at 48ec427 | — |
+| `ef2395f` | test(prj_01): F2 delivery capture, taps, at 48ec427 | — |
+| `2aa948f` | docs(i2c): add the F2 build evidence at ef2395f | — |
+| (este) | docs(i2c): add the F2 section of the implementation report | — |
+
+Notas sobre el orden:
+
+- **Las imágenes de las dos capturas** se compilaron y flashearon en `48ec427`, con el árbol limpio.
+- **La captura de taps se tomó desde un checkout separado de `48ec427`** (`git checkout --detach`). Al commitear antes la de notaps (`f913626`), HEAD ya no era el Rev de las imágenes, y T0d exige que lo sea. `f913626` y `ef2395f` solo añaden las dos capturas: `git diff --stat 48ec427 ef2395f` da esos dos archivos de `docs/` y nada más.
+- **La evidencia de build y de `.map` es de `ef2395f`**, cuyo código es el de `48ec427`.
+
+### 5.2 Build y tamaños
+
+Todo en `ef2395f`, con el árbol limpio:
+
+- **`build_all -Clean`:** 8/8 (`docs/i2c_f2_build_all_ef2395f.txt`).
+- **`selftest-i2c` desde un directorio vacío:** configure 0, build 0 y 0 líneas `warning:` o `error:` (`docs/i2c_f2_selftest_build_ef2395f.txt`).
+- **`-Werror`:** `selftest-i2c`, `debug` y `release` con `CMAKE_C_FLAGS=-Werror` en directorios de scratch: configure 0, build 0 y 0 avisos en las tres; el `CMakeCache.txt` de cada una dice `-Werror` (`docs/i2c_f2_werror_ef2395f.txt`).
+- **Firmware de la F334:** `build.ps1 -Clean` y `build.ps1 -Clean -Werror` dan `Warnings : 0` y `exit=0` (`docs/i2c_f2_f334_build_ef2395f.txt`).
+- **`git diff cc8aa2c -- 02_firmware_projects`:** vacío.
+
+Tamaños del `.map` enlazado (`docs/i2c_f2_map_sizes_ef2395f.txt`, mismo método y agrupación que F1):
+
+| Imagen | .text | .data | .bss | Δ frente a 2481396 | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| prj_01 debug CM7 | 29304 | 132 | 55668 | 0 en cada sección de la referencia | `build/debug/cm7_firmware.map` |
+| prj_01 debug CM4 | 3456 | 24 | 12560 | ídem | `build/debug/cm4_firmware.map` |
+| prj_01 release CM7 | 28356 | 132 | 55672 | ídem | `build/release/cm7_firmware.map` |
+| prj_01 release CM4 | 3112 | 24 | 12560 | ídem | `build/release/cm4_firmware.map` |
+| F334 `i2c_target_f334.elf` | 11340 | 20 | 3392 | — (FLASH 11 360 B de 64 KB, RAM 3408 B de 12 KB) | `arm-none-eabi-size` |
+
+Las secciones que el `.map` tiene y la referencia no miden 0 en las cuatro imágenes; el archivo las lista.
+
+| Objeto | Núcleo | .text (+.rodata) | .data | .bss | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| `i2c_bm.c.obj` | CM7 | 5316 | 0 | 0 | `build/selftest-i2c/cm7_firmware.map` |
+| `i2c_ll.c.obj` | CM7 | 2674 | 0 | 0 | ídem |
+| `i2c_bm.c.obj` | CM4 | 5312 | 0 | 0 | `build/selftest-i2c/cm4_firmware.map` |
+| `i2c_ll.c.obj` | CM4 | 2650 | 0 | 0 | ídem |
+| `i2c_hal.c.obj` | — | no existe en F2 | — | — | — |
+| `i2c_selftest.c.obj` (selftest) | CM7 | 38366 | 8 | 919 | `build/selftest-i2c/cm7_firmware.map` |
+| `i2c_selftest_common.c.obj` (selftest) | CM7 | 5313 | 0 | 0 | ídem |
+| `dma_hal.c.obj` (BDMA de T7(b)) | CM7 | 872 | 0 | 96 | ídem |
+| `dma_bm.c.obj` | CM7 | 352 | 0 | 0 | ídem |
+| `i2c_selftest.c.obj` (selftest) | CM4 | 6025 | 4 | 65952 | `build/selftest-i2c/cm4_firmware.map` (65 536 son `s_buf`) |
+| `i2c_selftest_common.c.obj` (selftest) | CM4 | 5289 | 0 | 0 | ídem |
+| `dma_bm.c.obj` | CM4 | 1974 | 0 | 0 | ídem |
+
+- `i2c_bm.c.obj` creció de 5174/5156 (F1, corrección 3) a 5316/5312 (CM7/CM4) por las siete funciones `Check*`.
+- La imagen `selftest-i2c` mide 87072/140/56700 en CM7 y 26652/28/78576 en CM4 (agrupación de la tabla de arriba).
+
+### 5.3 Pruebas
+
+Las cifras salen de las dos capturas de entrega:
+
+- **taps:** `docs/i2c_f2_bench_taps_48ec427.txt`: 130/130 comprobaciones del host (45 `RECORD` no contados: T0d, "No Digital Out", 2 de T10(b), 40 de f\_SCL en bruto y 1 de tHIGH dentro de la tolerancia), `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`, sin aborto;
+- **notaps:** `docs/i2c_f2_bench_notaps_48ec427.txt`: 98/98 (2 `RECORD`), `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`, sin aborto.
+
+Las dos tienen Rev `48ec427` e id `f5f24d8616e8feb4` en el host, CM7 y CM4, y la F334 con Rev `48ec427`, id `08d9792f8d2607f4` (el que calcula el host) y protocolo v3. Las dos dicen `tree clean`, sin depurador ni WaveForms (línea 11), y llevan el checklist confirmado por Hector el 2026-10-08. Notaps: el banco estaba en notaps con el checklist confirmado al empezar F2 (encargo). Taps: "J2 and J3 are plugged", la respuesta a mi petición de poner J2/J3.
+
+Las filas de F0 y F1 pasan otra vez en las dos sesiones, con los mismos criterios. Aquí van las de F2. Velocidades como en F1: taps 100 y 400 kHz en T4/T5 y 400 kHz en T6/T7; notaps 400 kHz y 1 MHz en T4 y 1 MHz en T6/T7.
+
+| ID | Tier | Núcleo | Estado del banco | Resultado | Valor medido | Control negativo: valor | Oráculo | Oráculo F334/AD2 | Captura |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T1 | LL | CM7 (I2C2) y CM4 (I2C1) | taps y notaps | PASS | 63 casos por núcleo, 0 con otro estado: los 62 de F1 por `i2c_ll` (los mismos casos de `Common`, con la configuración traducida a constantes LL por `to_ll()`) y uno propio de LL, `analog_filter = 0x1234` → `ERR_PARAM`. Foto de la instancia, `RCC_C1/C2` `APB1LENR`/`APB4ENR`, `D2CCIP2R`, `D3CCIPR` y `SYSCFG_PMCR` sin cambios en los 2 grupos (`0x3`) | Un `I2C_LL_Init` válido cambia la foto (1) | casos escritos a mano (`ist_t1`) | — | las dos |
+| T1 con `BUSY = 1` | LL | CM4 (I2C1) y CM7 (I2C4) | taps y notaps | PASS | La F334 retiene SDA (`ISR 0x00008001`): 8 transferencias por `i2c_ll` rechazadas con `ERR_BUS`; registros y RCC sin cambios | — (el propio caso) | `ISR` leído | `HOLD_END` | las dos |
+| T2 | LL | CM7 (I2C2, I2C3, I2C4), CM4 (I2C1) | taps y notaps | PASS | 120 configuraciones por instancia (`TIMINGR` × filtro × DNF × timeout). Por caso: `I2C_BM_Init`, imagen, `Deinit`; `I2C_BM_Init` con `DNF + 1`, imagen, `Deinit`; `I2C_LL_Init`, imagen, `Deinit`. Imagen LL (`CR1`, `TIMINGR`, `TIMEOUTR`, `OAR1`, `OAR2`, `CR2`): 0 distintas de los campos del RM escritos a mano y 0 distintas de la de `i2c_bm`, bit a bit; 0 estados de `Init` distintos de los de BM; 0 `Deinit` fuera de la imagen de reset | La misma comparación de paridad contra la imagen de BM con `DNF + 1`: distinta en los 120 casos de cada instancia (todos deben serlo) | imagen de `i2c_bm` de la misma configuración y campos del RM a mano | — | las dos |
+| T4 | LL | CM4 (I2C1) y CM7 (I2C4) | taps (100, 400 kHz) y notaps (400 kHz, 1 MHz) | PASS | Por velocidad y núcleo, por `i2c_ll`: 6 `Read`, 6 `WriteRead`, 2 sondeos y 6 `Write` de 1, 2, 255, 256, 1000 y 65 535 bytes: 0 con otro estado o un byte distinto. Host: 20 transferencias `T4-LL` por grupo emparejadas con su `RPT`, 0 con problema. `TIMINGR`: taps `0x30D06C81` y `0x20D0142E`; notaps `0x00D0479C` y `0x00801A33` | F334 con `CORRUPT 5`, lectura de 16 (`T4C-LL`): 1 byte distinto, en el índice 5, en cada velocidad y núcleo | datos regenerados por el host; CRC-32 | `RPT` de la F334 | las dos |
+| T5 | LL | CM4 y CM7 | taps | PASS | 5 transferencias por velocidad y núcleo, decodificadas exactas (`S 85A A5A A4N P`, `S 84A 07A \| Sr 85A A2N P`, `S 84A P \| S 84A 00A P`, `S 84A 14A 5AA P`, `S 86N P`), 0 glitches. 100 kHz: tLOW mín. 5298–5306 ns, tHIGH 4262–4312 ns, tSU;DAT de la H755 ≥ 4809 ns, tHD;STA ≥ 4378 ns, tSU;STO ≥ 4379 ns, t\_r 248–251 ns, f\_SCL normalizada 99 656–99 770 Hz (modelo 99 700). 400 kHz: tLOW mín. 1573–1578 ns, tHIGH 598–634 ns, tSU;DAT de la H755 ≥ 1066 ns, tHD;STA ≥ 718 ns, tSU;STO ≥ 692 ns, t\_r 250–254 ns, f\_SCL normalizada 397 983–398 860 Hz (modelo 398 406). tHIGH de 598 ns (CM7 k=3, 400 kHz) dentro de la tolerancia de 2 muestras (`RECORD`, §5.8). El mínimo de tHIGH de BM en la misma sesión: §5.8 | Cada captura decodificada con SCL y SDA intercambiados: distinta en las 20; con umbral 0,5 V: igual en las 20 | `expected_frames()`, `t5_timing_problems()` | AD2 (12,5 MS/s a 100 kHz, 25 MS/s a 400 kHz) | taps |
+| T6 | LL | CM4 y CM7 | taps (400 kHz) y notaps (1 MHz) | PASS | `Write`, `Read`, `WriteRead` de 1, 2, 256 y 1000 bytes por `I2C_LL_StartIt` + `I2C_LL_XferIrq` desde los dos vectores: 0 con otro estado o dato; IE en `CR1` al terminar `0x00`; 0 IRQ en los 10 ms siguientes | IE a 0 a mano tras `I2C_LL_StartIt`: sigue `PENDING`, la espera acaba por su presupuesto (`ERR_TIMEOUT`), 0 IRQ (`T6C-LL`) | datos del host + CRC | `RPT` (la F334 corta la transferencia abandonada) | las dos |
+| T7(a) | LL | CM4 (I2C1, DMA2 con `dma_bm`) | taps (400 kHz) y notaps (1 MHz) | PASS | Lectura y escritura de 2, 255, 256 y 4096 bytes por `I2C_LL_DmaStart*` + `I2C_LL_WaitEnd` + `I2C_LL_DmaEnd`: 0 con otro estado o dato | `RXDMAEN` a 0 a mano, lectura de 64: `I2C_LL_WaitEnd` `ERR_TIMEOUT`, los 64 bytes conservan el centinela (`T7C-LL`) | ídem | `RPT` | las dos |
+| T7(b) | LL | CM7 (I2C4, BDMA con `dma_hal`, `.d3_ram`) | ídem | PASS | Igual que T7(a) | Igual | ídem | `RPT` | las dos |
+| T14 | LL | CM4 (I2C1), CM7 (I2C4) | taps y notaps | PASS | `I2C_BM_Deinit` tras cada prueba con `i2c_ll`: tras T4/T5 en cada velocidad, tras el control de T6 y al final de T1-BUSY/T6/T7: 8 juicios por sesión, 0 registros distintos de la imagen de reset en todos. En T2, tras cada `I2C_LL_Init`: 0 de 480 fuera del reset. Bus en reposo: S17 tras cada paso | El de F1 en la misma sesión (I2C3 inicializado y sin `Deinit`: distinto, `0x11`), que no depende del tier | tabla de reset del RM a mano (`ist_reset_diff()`) | — | las dos |
+| Fm+ con LL | BM (`SetFastModePlus`) | CM4 y CM7 | notaps (el juicio final, en las dos) | PASS | Notaps: bit de I2C1 e I2C4 puesto alrededor del tráfico LL a 1 MHz y quitado después (`SYSCFG_PMCR 0x03000001` / `0x03000008` → `0x03000000`), `FMP 1` en la F334. Al final de `F2_CM4` y `F2_CM7`, en las dos sesiones: `I2C1FMP\|I2C4FMP` 0x0 | — | `SYSCFG_PMCR` leído | — | las dos |
+| F334 al final | — | host | taps y notaps | PASS | `scl=1 sda=1`, S15 ok, `uart_ovr 0`. `ev` 24 (taps) y 16 (notaps): sondeos y los cortes de los controles de T6 y T7 de BM y LL; `nk 4`; ningún `BERR`, `ARLO` ni `OVR` | — | — | `STATUS` | las dos |
+| Veredicto | — | CM7 + host | taps y notaps | PASS | `bench completed without abort`; CM4 `timeout 0, aborts 0`; pila de `Status_Task` 694 (taps) y 706 (notaps) palabras libres de 1024; host 130/130 y 98/98 | — | — | — | las dos |
+
+**El oráculo de las pruebas LL.** La configuración LL sale de `to_ll()` (`Common/Src/i2c_selftest_common.c`), que escribe a mano `LL_I2C_ANALOGFILTER_ENABLE`/`_DISABLE` (línea 285). No usa la traducción de `i2c_ll.c`, que es justo lo que prueban T1 y T2. Las transferencias LL van por los mismos `ist_write/read/…(ll, …)` de `Common/Inc/i2c_selftest.h`, con `ll = true`. El host las ve como `X <prueba>-LL` y las juzga con el oráculo de la prueba de F1 (`tier_base()`).
+
+**O23 (latencia del `AT HOLD` en T10(b)).** El `Write` de CM4 empezó a 6117 µs (taps) y 6189 µs (notaps) después de la bajada de SCL; el osciloscopio da el START a 6,053 ms (taps). CM7 empezó a propósito a 15 022 µs (n = 2) en las dos, y la liberación fue a 19,791 ms (n × TIMEOUTA 19,778 ms). Lejos de 2 × TIMEOUTA (19,8 ms): no cambié el juicio de CM7.
+
+### 5.4 Medidas (B1)
+
+B1 no es una prueba de F2 en el plan (fila F2 de Fases: T1, T2, T4, T5, T6, T7 y T14) y no lo medí con `i2c_ll`. Las líneas B1 de las capturas son de `i2c_bm`, en sus pasos de F1:
+
+| Medida | CM4 (200 MHz) | CM7 (400 MHz) | Fuente |
+| --- | --- | --- | --- |
+| `I2C_BM_Init` | 330 (taps) / 330 (notaps) ciclos | 674 / 618 | las dos capturas |
+| `I2C_BM_Write` de 1 byte | 11 276 (400 kHz) / 5797 (1 MHz) | 22 518 (400 kHz) / 11 344 (1 MHz) | ídem |
+| `I2C_BM_XferIrq` por llamada (escritura IT de 16) | 147–267 (las dos) | 125–332 (las dos) | ídem |
+| `i2c_ll.c.obj` | 2650 / 0 / 0 | 2674 / 0 / 0 | §5.2 |
+| `Status_Task` | — | 694 y 706 palabras libres | las dos capturas |
+
+### 5.5 Desviaciones del plan
+
+**Las firmas de `i2c_ll`** (`i2c_ll.h`), con su razón. Todas son reflejo de `i2c_bm`: mismos parámetros, mismos códigos (`I2cBm_Status_t`) y mismo significado documentado.
+
+| Firma | Reflejo de | Razón |
+| --- | --- | --- |
+| `I2cLl_Config_t { I2C_TypeDef *i2c; uint32_t timing; uint32_t analog_filter; uint32_t digital_filter; uint32_t timeout_scl_low; }` | `I2cBm_Config_t { i2c, timingr, analog_filter (bool), dnf, timeout_scl_low }` | `analog_filter` toma `LL_I2C_ANALOGFILTER_ENABLE`/`_DISABLE`, la constante LL que el plan nombra. `timing` es el `Timing` de `LL_I2C_SetTiming`. `digital_filter` es el número 0..15 de `LL_I2C_SetDigitalFilter`, que no tiene constantes. `timeout_scl_low` es el de BM: LL no tiene constante para el número, y TIDLE queda fijo en `LL_I2C_SMBUS_TIMEOUTA_MODE_SCL_LOW`, como en BM |
+| `I2cBm_Status_t I2C_LL_CheckConfig(const I2cLl_Config_t *cfg)` | `I2C_BM_CheckConfig` | Traduce y llama a `I2C_BM_CheckConfig`. Una constante analógica desconocida pasa a DNF 16, que BM rechaza con `ERR_PARAM` en su comprobación de campos (el orden de C6 es el de BM) |
+| `I2cBm_Status_t I2C_LL_Init(const I2cLl_Config_t *cfg)` | `I2C_BM_Init` | Valida con `I2C_LL_CheckConfig` |
+| `I2C_LL_Write(i2c, addr7, tx, n, max_cycles)`, `_Read(i2c, addr7, rx, n, max_cycles)`, `_WriteRead(i2c, addr7, tx, ntx, rx, nrx, max_cycles)` | `I2C_BM_Write/Read/WriteRead` | Validan con `I2C_BM_CheckWrite/Read/WriteRead` |
+| `I2cBm_Status_t I2C_LL_StartIt(I2C_TypeDef *i2c, I2cBm_Xfer_t *x)` y `bool I2C_LL_XferIrq(I2C_TypeDef *i2c, I2cBm_Xfer_t *x)` | `I2C_BM_StartIt`, `I2C_BM_XferIrq` | El estado de la interrupción es el `I2cBm_Xfer_t` del llamador, que no lleva constantes LL (C7). `StartIt` valida con `I2C_BM_CheckStartIt` |
+| `I2C_LL_DmaStartWrite(i2c, addr7, buf, n)`, `_DmaStartRead(i2c, addr7, n)`, `_WaitEnd(i2c, n, max_cycles)`, `_DmaEnd(i2c)` | `I2C_BM_DmaStart*`, `_WaitEnd`, `_DmaEnd` | `WaitEnd` lleva `n` como el de BM (desviación aprobada en F1). Validan con `I2C_BM_CheckDmaStartWrite/Read` y `I2C_BM_CheckWaitEnd`; `DmaEnd` con `I2C_BM_IsValidInstance` |
+| (sin envoltorio LL) reloj, `Deinit`, `TakeErrors`, `GetIRQn`, `GetDmaRequest`, `GetCaps`, `GetKernelSource`, `CalcTiming`, `SetFastModePlus`, `RecoverBus`, `CheckTransfer` y los `Check*` | — | El plan dice que las de su lista "se usan de `i2c_bm`". Añadí a esa lista `GetCaps`, `GetKernelSource` y las comprobaciones, porque tampoco toman constantes LL. Lo dice `i2c_ll.h` |
+
+| Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- |
+| Contrato de `i2c_ll`: "validadas con `I2C_BM_Check*`"; la API de `i2c_bm` congelada en `a6de15b` (C2: solo añade) | Siete funciones añadidas a `i2c_bm.h` (`52fa55c`): `I2C_BM_CheckWrite`, `_CheckRead`, `_CheckWriteRead`, `_CheckDmaStartWrite`, `_CheckDmaStartRead`, `_CheckWaitEnd` y `_CheckStartIt`. Son las comprobaciones que ya hacían esas llamadas de BM, que ahora las llaman (mismos códigos, mismo orden). `git diff a6de15b 48ec427 -- 01_shared_drivers/05_i2c/i2c_bm.h` no tiene ninguna línea quitada | `I2C_BM_CheckTransfer` no cubre los argumentos propios de cada llamada (buffer `NULL`, `max_cycles` 0, `n` < 2 en `DmaStartWrite`…). Sin estas, esas reglas tendrían una segunda copia en `i2c_ll` | Hector, 2026-10-08, antes de escribirlas: "Añadir Check* a i2c_bm (Recommended)" |
+| Contrato: "constantes … donde aplican (`LL_I2C_ANALOGFILTER_*`, `LL_I2C_ADDRSLAVE_7BIT`, …)" | `LL_I2C_ADDRSLAVE_7BIT` se usa dentro (`LL_I2C_HandleTransfer` y el `CR2` de `StartIt`), no como parámetro: las transferencias toman `addr7`, como en BM | El contrato es solo de 7 bits; un parámetro de modo que solo admite un valor no sería un reflejo de BM | No consultado |
+| "Escritura con inlines LL y `LL_I2C_WriteReg`" | `CR1` en `Init`, `OAR1`, `OAR2`, `CR2 = 0` e `ICR` con `LL_I2C_WriteReg`. `ICR` siempre con una sola `LL_I2C_WriteReg`, nunca con `LL_I2C_ClearFlag_*`. El `CR2` de `StartIt` con `LL_I2C_WriteReg` y después `LL_I2C_GenerateStartCondition` | Ninguna inline escribe `CR1`, `OAR1`/`OAR2` o `CR2` enteros. Las `LL_I2C_ClearFlag_*` (salvo `_TXE`) son `SET_BIT` sobre `ICR`, un RMW de un registro de solo escritura. `LL_I2C_HandleTransfer` con `LL_I2C_GENERATE_NOSTARTSTOP` deja `RD_WRN` fuera de su máscara (línea 2144): conservaría el sentido de la transferencia anterior | No consultado |
+| Ídem, `TIMEOUTR` | `LL_I2C_WriteReg(TIMEOUTR, 0)`, `LL_I2C_SetSMBusTimeoutA(TIMEOUTA \| LL_I2C_SMBUS_TIMEOUTA_MODE_SCL_LOW)` y `LL_I2C_EnableSMBusTimeout(LL_I2C_SMBUS_TIMEOUTA)` (bajo PRIMASK), las tres escrituras de BM | TIMEOUTA solo se escribe con `TIMOUTEN = 0` (50:2861). `LL_I2C_SetSMBusTimeoutA` es un `WRITE_REG` del registro entero (1140); `LL_I2C_SetSMBusTimeoutAMode` también (1170) y borraría TIMEOUTA, y `LL_I2C_ConfigSMBusTimeout` es un `MODIFY_REG` | No consultado |
+| T14 en F2: "`Deinit` tras cada prueba … Instancia sin `Deinit`: detectada" | El control es el de F1 (I2C3 sin `Deinit`, en `F1_NOPIN`, la misma sesión), no uno con LL | El control mide `ist_reset_diff()`, que no depende del tier; el `Deinit` es de BM en los dos | No consultado |
+| T8–T10, T12, T13, T15 y B1 | Siguen con `i2c_bm`, en sus pasos de F1 | La fila F2 de Fases pide T1, T2, T4, T5, T6, T7 y T14 con LL | — |
+
+### 5.6 Respuesta a la auditoría
+
+La de F1 está en sus secciones (F1 pasa, `4fee0f9`). De F2 todavía no hay auditoría.
+
+### 5.7 Erratas del plan encontradas
+
+Ninguna en F2.
+
+### 5.8 Problemas abiertos y no ejercitado
+
+**Lo que pasó en desarrollo:**
+
+1. **La primera sesión de F2** (notaps, `acca289`, árbol limpio: 98/98, `FW VERDICT=PASS`, `HOST VERDICT=PASS`) salió con el nombre `docs/i2c_f1_bench_notaps_acca289.txt`, porque el host aún escribía el prefijo de F1. Además, la línea de T2-LL imprimía sin inicializar los valores LL/BM "del primer caso distinto" cuando no había ninguno (p. ej. `LL 0x08007843 BM 0x0801163C` con 0 distintas). El veredicto no los usa. Corregido en `48ec427`, que commitea esa captura sin editar como desarrollo.
+
+**Abierto:**
+
+- **Los nombres del host en F2 conservan los de F1.** Las comprobaciones de las transferencias LL se llaman `F1 T4-LL …`, `F1 T5-LL scope …`. Las líneas `RECORD` de T5-LL dicen `T5 CM7 k=…`, sin `-LL`: los 20 f\_SCL en bruto de T5-LL y el tHIGH de 598 ns (`taps`, línea 2379) son de T5-LL. Se distinguen por su paso y su orden en la captura (justo después de su `AT SCOPE T5-LL`), no por el nombre. No lo corregí: cambiar el host habría pedido otro par de sesiones.
+- **tHIGH a 400 kHz:** el mínimo de T5-LL fue 598 ns (CM7 k=3), dentro de la tolerancia de 2 muestras aprobada en F1; el de T5 con BM en la misma sesión, 604 ns. El `TIMINGR` es el mismo (`0x20D0142E`). Es el margen de ~3 % de esta placa (README, R3-7).
+- **La pila de `Status_Task`** baja de 710/712 (F1) a 694/706 palabras libres de 1024.
+- Lo abierto de F1 sigue vigente.
+
+**No ejercitado en F2** (el README del cierre debe copiarlo entero):
+
+- **`ERR_VERIFY` de `i2c_ll`:** el read-back de `Init` y el `PE = 0` que no baja no fallan nunca en el banco; sin prueba.
+- **`I2C_LL_Init` con `PE = 1` y la misma configuración en vigor** (un reset por software, `i2c_bm.h`): no se probó con LL. Con `PE = 1` y otro `TIMINGR`, DNF, filtro o timeout, T1 lo rechaza con `ERR_BUSY` también por LL (grupo 2 de `ist_t1`, después de un `I2C_LL_Init` válido).
+- **TIMEOUT, NACK por dato, stretching, `RecoverBus` y la errata 2.19.6 con `i2c_ll`:** T8, T9, T10 y T12 solo con `i2c_bm`. El camino de TIMEOUT de `I2C_LL_XferIrq` y de las esperas LL no se ejecutó; el NACK de dirección sí (sondeo de 0x43 en T4).
+- **`BERR` y `ARLO` en `I2C_LL_XferIrq`:** como en F1, sin forma de provocarlos.
+- **I2C2 e I2C3 con LL:** solo T1 (I2C2) y T2; sin transferencias.
+- **T5 con LL a 1 MHz:** sin osciloscopio a 1 MHz (D3), como en F1.
+- **B1 con LL:** no medido (§5.4).
+- **`CYCCNT` parado durante una espera LL:** la salida existe en `clk_expired()`; la prueba no para `CYCCNT`.
+- **Lo que sigue de F1:** T11 y multimaestro; esclavo, 10 bits, SMBus/PEC; silicio distinto de rev V.
+
+### Constantes y funciones de `stm32h7xx_ll_i2c.h` que usa `i2c_ll`
+
+Cabecera del Cube con el que compila `prj_01` (`CUBE_DIR` → `02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7`, `STM32H7xx_HAL_Driver` en `e3c518e`; SHA-256 `30c531ae…75d3d`, 2279 líneas). Es idéntica, byte a byte, a la copia de `00_docs_stm32h7`. Las líneas son las del `#define` o de la cabecera de la función. Uso: líneas de `i2c_ll.c` en código, sin comentarios.
+
+| Constante o función | Línea | Qué hace en la cabecera | Uso en `i2c_ll.c` |
+| --- | --- | --- | --- |
+| `LL_I2C_CR1_TXIE` … `LL_I2C_CR1_ERRIE` (TX, RX, ADDR, NACK, STOP, TC, ERR) | 166–172 | bits de `CR1` | `IE_ALL` (25-26); los IE de `StartIt` (463, 471, 477) y del `NACKF` (539) |
+| `LL_I2C_ANALOGFILTER_ENABLE` / `_DISABLE` | 192 / 193 | `0` / `I2C_CR1_ANFOFF` | `analog_known()`, `to_bm()` (55, 62) |
+| `LL_I2C_ADDRSLAVE_7BIT` | 244 | `0` | `start()` (229) y el `CR2` de `StartIt` (469, 475, 481) |
+| `LL_I2C_REQUEST_READ` | 254 | `I2C_CR2_RD_WRN` | sentido de la transferencia en `XferIrq` (514) |
+| `LL_I2C_MODE_RELOAD` / `_AUTOEND` / `_SOFTEND` | 262 / 263 / 265 | `RELOAD` / `AUTOEND` / `0` | `chunk_mode()` (218, 220); el sondeo de `StartIt` (481) |
+| `LL_I2C_GENERATE_START_READ` / `_START_WRITE` | 288 / 290 | `0x80000000 \| START \| RD_WRN` / `0x80000000 \| START` | `start()` (230) |
+| `LL_I2C_SMBUS_TIMEOUTA_MODE_SCL_LOW` | 330 | `0` (TIDLE = 0) | `Init` (133) |
+| `LL_I2C_SMBUS_TIMEOUTA` | 341 | `I2C_TIMEOUTR_TIMOUTEN` | `Init` (134, 151) |
+| `LL_I2C_WriteReg` / `LL_I2C_ReadReg` | 371 / 379 | `WRITE_REG` / `READ_REG` | `CR1`, `TIMEOUTR = 0`, `OAR1`, `OAR2`, `CR2`, `ICR`; read-back y la foto de `ISR` de cada pasada (21 y 11 usos) |
+| `LL_I2C_Enable` / `_Disable` / `_IsEnabled` | 429 / 443 / 454 | `SET_BIT`/`CLEAR_BIT`/`READ_BIT` de `CR1.PE` | `pe_on()` (107), `pe_off()` (88, 93), bajo PRIMASK |
+| `LL_I2C_EnableDMAReq_TX` / `_DisableDMAReq_TX` / `_IsEnabledDMAReq_TX` | 549 / 560 / 571 | `TXDMAEN` | `DmaStartWrite` (609, 611, 614), `DmaEnd` (709, 713) |
+| `LL_I2C_EnableDMAReq_RX` / `_DisableDMAReq_RX` / `_IsEnabledDMAReq_RX` | 582 / 593 / 604 | `RXDMAEN` | `DmaStartRead` (632, 634, 637), `DmaEnd` (710, 713) |
+| `LL_I2C_SetTiming` | 922 | `WRITE_REG(TIMINGR)` | `Init` (141) |
+| `LL_I2C_SetSMBusTimeoutA` | 1140 | `WRITE_REG(TIMEOUTR)` | `Init` (147) |
+| `LL_I2C_EnableSMBusTimeout` | 1231 | `SET_BIT(TIMEOUTR)` | `Init` (151), bajo PRIMASK |
+| `LL_I2C_IsEnabledIT_NACK` | 1408 | `READ_BIT(CR1.NACKIE)` | `XferIrq`: `NACKF` aún sin servir (532) |
+| `LL_I2C_IsActiveFlag_RXNE` / `_NACK` / `_STOP` / `_BUSY` | 1578 / 1604 / 1617 / 1741 | `READ_BIT(ISR)` | 393, 582 / 586 / 282 / 168 |
+| `LL_I2C_ClearFlag_TXE` | 1786 | `WRITE_REG(ISR, TXE)` (no es un RMW: `ISR` no es de solo escritura) | vaciar `TXDR` (268, 305, 462, 540, 606, 616) |
+| `LL_I2C_GenerateStartCondition` / `_GenerateStopCondition` | 1990 / 2001 | `SET_BIT(CR2.START)` / `SET_BIT(CR2.STOP)` | `StartIt` (489) / `stop()` (257), bajo PRIMASK |
+| `LL_I2C_GetTransferRequest` | 2066 | `READ_BIT(CR2.RD_WRN)` | `XferIrq` (514) |
+| `LL_I2C_HandleTransfer` | 2133 | `MODIFY_REG(CR2, …)` | `start()` (229), bajo PRIMASK |
+| `LL_I2C_ReceiveData8` / `LL_I2C_TransmitData8` | 2225 / 2237 | `RXDR` / `TXDR` | 354, 544 / 318, 364, 467, 554, 607 |
+
+En el selftest se usan además `LL_I2C_ANALOGFILTER_ENABLE`/`_DISABLE` en `to_ll()` (`Common/Src/i2c_selftest_common.c:285`).
+
+Sin usar a propósito:
+
+- **`LL_I2C_ClearFlag_ADDR`, `_NACK`, `_STOP`, `_BERR`, `_ARLO`, `_OVR`** (1752–1819) y las demás de `ICR`: `SET_BIT` sobre `ICR`, de solo escritura (§5.5).
+- **`LL_I2C_HandleTransfer` con `LL_I2C_GENERATE_NOSTARTSTOP`** (284): no actualiza `RD_WRN` (§5.5).
+- **`LL_I2C_SetSMBusTimeoutAMode`** (1170, `WRITE_REG` de `TIMEOUTR` entero) y **`LL_I2C_ConfigSMBusTimeout`** (1123, `MODIFY_REG` con `TIMEOUTB`).
+- **`LL_I2C_EnableAnalogFilter`/`_DisableAnalogFilter`/`_SetDigitalFilter`** (515 / 527 / 492) y los setters de campo de `CR2` (`LL_I2C_SetSlaveAddr` 2079, `_SetTransferSize` 1950, `_EnableReloadMode` 1914, `_EnableAutoEndMode` 1879, `_SetMasterAddressingMode` 790): escribirían `CR1` o `CR2` por partes, con estados intermedios y un RMW por campo.
+- **Los `LL_I2C_EnableIT_*`/`_DisableIT_*`** (desde 1287): `ie_set()` cambia todos los IE en un solo RMW de `CR1` bajo PRIMASK.
+- **`LL_I2C_Init`** (2251): solo existe con `USE_FULL_LL_DRIVER` (C8).
+
 ## Decisiones abiertas usadas
 
 | # | Opción usada | Consultada |
