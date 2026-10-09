@@ -1,6 +1,6 @@
 # Plan del driver I2C 05\_i2c
 
-Oct 7, 2026 · @Hector · revisión 3 (sustituye a la revisión 2, `4abd264`)
+Oct 8, 2026 · @Hector · revisión 4 (sustituye a la revisión 3, `063c299`)
 
 Este plan cubre el paso 5 de `DRIVER_ROADMAP.md`: el driver I2C `05_i2c` en sus tres tiers, `i2c_bm`, `i2c_ll` e `i2c_hal`, en modo maestro. Tiene una fase F0 de preparación del banco (con el target externo), tres fases de implementación (F1 BM, F2 LL, F3 HAL) y una de cierre.
 
@@ -9,6 +9,15 @@ Cada fase pasa una auditoría independiente antes de empezar la siguiente, con l
 Base: `cc8aa2c` de `main` (cierre de `06_spi` y corrección N3 de `02_dma`), árbol limpio, rama `driver/i2c`.
 
 **Decisiones del responsable ya tomadas (2026-10-05/06):** banco de opción A (bus en la Nucleo, sin dispositivo comercial) con una **NUCLEO-F334R8 como target I2C independiente**, con su propio firmware de banco; se acepta ese firmware como desviación del encargo (D2) y la descarga del CMSIS de STM32F3 (`STMicroelectronics/cmsis_device_f3`, v2.3.9).
+
+## Cambios respecto a la revisión 3
+
+Sale de la auditoría de F2 (`AUDIT.md`, "F2, parte 1"); el responsable del catálogo lo aprobó el 2026-10-08.
+
+| # | Cambio | Por qué |
+| --- | --- | --- |
+| R4-1 | **B1:** los ciclos (`Init`, `Write` de 1 byte, `XferIrq`) se miden solo en F1, con `i2c_bm`; en F2 y F3 B1 se reduce a los tamaños del `.map` (`.data = .bss = 0` del objeto del tier) | La fila de B1 decía "F1, F2, F3" y las filas F2 y F3 de "Fases" no la incluían. Los tiers LL y HAL envuelven el mismo motor; B1 es solo registro |
+| R4-2 | **Adiciones a `i2c_bm.h` tras la congelación de F1:** `I2C_BM_CheckWrite`, `_CheckRead`, `_CheckWriteRead`, `_CheckDmaStartWrite`, `_CheckDmaStartRead`, `_CheckWaitEnd` y `_CheckStartIt` (`52fa55c`), parte del contrato de `i2c_bm` desde F2 | Aprobadas por el responsable el 2026-10-08 (C2: solo añade). Son la única copia de las reglas con que valida `i2c_ll` |
 
 ## Cambios respecto a la revisión 2
 
@@ -428,7 +437,7 @@ Cada prueba tiene un control negativo (R1) y un oráculo que no es el driver. **
 | T13 | F1 | Bancos de RCC: CM4 `DisableClock(I2C2)` mientras CM7 lo tiene habilitado | Registros de RCC y de I2C2 leídos por CM7 | CM7 deshabilita: se para | Como `06_spi` T13 |
 | T14 | F1, F2, F3 | `Deinit` tras cada prueba: imagen de reset y bus en reposo (S17) | Tabla de reset del RM a mano | Instancia sin `Deinit`: detectada | Imagen exacta |
 | T15 | F1 | Hechos de silicio sin pines (lección E2): I2C2 sin pines en AF → `Write` termina en `ERR_TIMEOUT` o `ERR_BUS` acotado, registros tras el aborto e imagen de `Deinit`; control: I2C4 con sus pines en AF termina bien | Registros, `CYCCNT` | El control | Estado exacto y acotado |
-| B1 | F1, F2, F3 | `.text/.data/.bss` (`.map`); ciclos de `Init`, `Write` de 1 byte, `XferIrq` | `.map`, DWT | — | Solo registro; `.data = .bss = 0` |
+| B1 | F1 (ciclos y `.map`); F2, F3 (solo `.map`, R4-1) | `.text/.data/.bss` (`.map`); ciclos de `Init`, `Write` de 1 byte, `XferIrq` | `.map`, DWT | — | Solo registro; `.data = .bss = 0` |
 
 ### No ejercitado por diseño (va al README)
 
