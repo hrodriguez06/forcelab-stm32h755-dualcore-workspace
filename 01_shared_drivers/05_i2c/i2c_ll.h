@@ -18,14 +18,19 @@
   *              an out-of-range i2c_bm value (DNF 16), so it is refused with
   *              I2C_BM_ERR_PARAM where the C6 order puts a field error;
   *            - the registers are written with the LL inlines, and with
-  *              LL_I2C_WriteReg where no inline writes the whole register (CR1 at
-  *              Init, OAR1, OAR2, CR2 = 0, ICR); in the order of the i2c_bm rules
-  *              3-9. ICR is always one LL_I2C_WriteReg: the LL_I2C_ClearFlag_*
-  *              inlines are SET_BIT, a read-modify-write of a write-only register.
-  *              Every read-modify-write (the LL SET_BIT/CLEAR_BIT/MODIFY_REG
-  *              inlines of CR1 and CR2, LL_I2C_HandleTransfer included) runs with
-  *              PRIMASK saved and restored (C10); every configuration write is
-  *              read back (C12);
+  *              LL_I2C_WriteReg where no inline writes the whole register: CR1 at
+  *              Init, TIMEOUTR = 0 before TIMEOUTA, OAR1, OAR2, CR2 = 0, the CR2 of
+  *              StartIt (address, NBYTES, end mode, START still 0) and of each
+  *              reload, and ICR; in the order of the i2c_bm rules 3-9. The interrupt
+  *              enables of CR1 change in one LL_I2C_ReadReg/LL_I2C_WriteReg
+  *              read-modify-write (ie_set()), as do NBYTES/RELOAD/AUTOEND at a reload
+  *              (reload()). ICR is always one LL_I2C_WriteReg: the LL_I2C_ClearFlag_*
+  *              inlines of ICR are SET_BIT, a read-modify-write of a write-only
+  *              register (LL_I2C_ClearFlag_TXE, a WRITE_REG of ISR, is used).
+  *              Every read-modify-write (those two, and the LL SET_BIT/CLEAR_BIT/
+  *              MODIFY_REG inlines of CR1 and CR2, LL_I2C_HandleTransfer included)
+  *              runs with PRIMASK saved and restored (C10); every configuration
+  *              write is read back (C12);
   *            - for the same configuration the register image is the one i2c_bm
   *              leaves, bit for bit (T2);
   *            - the transfers behave as i2c_bm's, with the same codes
@@ -84,12 +89,14 @@ I2cBm_Status_t I2C_LL_Read(I2C_TypeDef *i2c, uint32_t addr7, uint8_t *rx, uint32
 I2cBm_Status_t I2C_LL_WriteRead(I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *tx, uint32_t ntx,
                                 uint8_t *rx, uint32_t nrx, uint32_t max_cycles);
 
-/* ---- Interrupt transfers (as i2c_bm; validated by I2C_BM_CheckStartIt) ---------- */
+/* ---- Interrupt transfers (as i2c_bm; StartIt validated by I2C_BM_CheckStartIt,
+        XferIrq by I2C_BM_IsValidInstance and x not NULL) ---------------------------- */
 I2cBm_Status_t I2C_LL_StartIt(I2C_TypeDef *i2c, I2cBm_Xfer_t *x);
 bool           I2C_LL_XferIrq(I2C_TypeDef *i2c, I2cBm_Xfer_t *x);   /* both vectors, same priority;
                                                                        true when x->status is final */
 
-/* ---- DMA (as i2c_bm; validated by I2C_BM_CheckDmaStart* / _CheckWaitEnd) -------- */
+/* ---- DMA (as i2c_bm; DmaStart* validated by I2C_BM_CheckDmaStartWrite/Read, WaitEnd
+        by I2C_BM_CheckWaitEnd, DmaEnd by I2C_BM_IsValidInstance) -------------------- */
 I2cBm_Status_t I2C_LL_DmaStartWrite(I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *buf, uint32_t n);
 I2cBm_Status_t I2C_LL_DmaStartRead(I2C_TypeDef *i2c, uint32_t addr7, uint32_t n);
 I2cBm_Status_t I2C_LL_WaitEnd(I2C_TypeDef *i2c, uint32_t n, uint32_t max_cycles);

@@ -278,9 +278,10 @@ bool           I2C_BM_XferIrq(I2C_TypeDef *i2c, I2cBm_Xfer_t *x);
 /* ---- DMA (the caller owns streams and channels, 02_dma) ------------------------- */
 /** n 2..65 535: buf[0] goes to TXDR before START (2.19.6); the caller's TX stream,
     enabled before this call, sends buf[1..n-1] (n - 1 items). TXDMAEN is set and read
-    back before START (50:2300-2337). Returns OK (started), the codes of CheckTransfer,
-    or ERR_VERIFY: TXDMAEN did not read back; then TXDMAEN is 0 again, TXDR flushed
-    and no START was written. */
+    back before START (50:2300-2337). Returns OK (started); ERR_PARAM for buf NULL or
+    n < 2 (then the codes of CheckTransfer: I2C_BM_CheckDmaStartWrite is the whole
+    check); or ERR_VERIFY: TXDMAEN did not read back; then TXDMAEN is 0 again, TXDR
+    flushed and no START was written. */
 I2cBm_Status_t I2C_BM_DmaStartWrite(I2C_TypeDef *i2c, uint32_t addr7, const uint8_t *buf, uint32_t n);
 /** n 1..65 535; the caller's RX stream (n items) is enabled first, then RXDMAEN (read
     back) and START here. Returns as DmaStartWrite. */
