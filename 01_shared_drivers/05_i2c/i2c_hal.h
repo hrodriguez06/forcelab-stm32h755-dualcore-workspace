@@ -10,12 +10,17 @@
   *          i2c_hal.c compiles to nothing (C8).
   *
   *          Contract (05_i2c plan, revision 4, "Contrato de API: i2c_hal"):
-  *            - every call is validated by i2c_bm before the HAL is called (C6):
-  *              h == NULL, an instance that is not an I2C, or h->Instance !=
-  *              cfg->i2c is ERR_PARAM; then I2C_BM_CheckConfig or the
-  *              I2C_BM_Check* of the transfer (one copy of the rules); then what
-  *              this tier cannot do (ERR_UNSUPPORTED); then the handle's state
-  *              (a transfer needs READY, else ERR_BUSY);
+  *            - every call is validated before the HAL is called (C6, in this
+  *              order): h == NULL, an instance that is not an I2C, or h->Instance
+  *              != cfg->i2c is ERR_PARAM; then what this tier cannot do
+  *              (ERR_UNSUPPORTED); then timeout_ms (1 .. HAL_MAX_DELAY - 1, else
+  *              ERR_PARAM) and i2c_bm's I2C_BM_CheckConfig or I2C_BM_Check* of the
+  *              transfer (one copy of the rules: ERR_PARAM, and ERR_BUSY or ERR_BUS
+  *              from the instance's state); then the handle's state (a transfer
+  *              needs READY, else ERR_BUSY);
+  *            - timeout_ms = HAL_MAX_DELAY is refused (ERR_PARAM, audit F3 part 1,
+  *              M4): the HAL never times out with it (l. 6980, 7020), and with
+  *              TIMEOUTR off a held SCL would hang the call for ever;
   *            - what the HAL call writes is read back (C12): a HAL error is
   *              ERR_TIMEOUT, ERR_ARLO, ERR_NACK or ERR_BUSY when the HAL status
   *              or h->ErrorCode says so, else ERR_HAL; HAL_OK with a read-back
@@ -46,8 +51,21 @@
   *              owner's decision, 2026-10-09); a held SCL ends a HAL transfer only
   *              by timeout_ms (no TIMEOUT, plan R3-5 does not apply);
   *            - a HAL timeout leaves the peripheral as it is: no STOP, no software
-  *              reset (I2C_WaitOnFlagUntilTimeout l. 6984-6992). ERR_TIMEOUT: call
-  *              I2C_HAL_Deinit (i2c_bm resets the instance itself);
+  *              reset, no CR2 reset (I2C_WaitOnFlagUntilTimeout l. 6984-6992). On an
+  *              error instead (I2C_IsErrorOccurred l. 7164-7284): after a NACK the HAL
+  *              writes STOP itself if the bus is still busy (l. 7191-7196) and waits
+  *              up to I2C_TIMEOUT_STOPF (25 ms, l. 347, 7205) more for it, so a call
+  *              can last timeout_ms + 25 ms; and every error exit flushes TXDR and
+  *              does I2C_RESET_CR2 (l. 7267-7273). After any ERR_TIMEOUT or ERR_HAL,
+  *              call I2C_HAL_Deinit (i2c_bm resets the instance itself);
+  *            - a DMA transfer given up (I2C_HAL_Wait ERR_TIMEOUT, or any ERR_HAL):
+  *              the HAL does not stop the caller's streams. The caller aborts them
+  *              (HAL_DMA_Abort) and then calls I2C_HAL_Deinit: a late transfer
+  *              complete would otherwise run I2C_DMAMasterTransmitCplt /
+  *              ReceiveCplt on the instance (l. 6744, 6750, 6778: a CR1
+  *              read-modify-write and interrupt enables), and a stream still busy
+  *              makes the next I2C_HAL_StartDma fail in HAL_DMA_Start_IT (l.
+  *              2077-2089) after it has preloaded TXDR (l. 2012);
   *            - ES0445 2.19.6: the first byte goes to TXDR before START in
   *              HAL_I2C_Master_Transmit (l. 1162), _IT (l. 1737), _DMA (l. 2012)
   *              and HAL_I2C_Mem_Read_IT (l. 2922); not in the blocking
@@ -67,6 +85,13 @@
   *              RM0399 50:2621-2623). The filters are a CR1 read-modify-write with PE dropped
   *              and raised in it, not under PRIMASK, without reading PE = 0 back
   *              (stm32h7xx_hal_i2c_ex.c l. 110-118, 156-170);
+  *            - C10: the transfer paths too change CR1 and CR2 by read-modify-write
+  *              without PRIMASK: I2C_TransferConfig (MODIFY_REG of CR2, l. 7321),
+  *              I2C_Enable_IRQ / I2C_Disable_IRQ (l. 7415, 7480), CR1 |= TXDMAEN /
+  *              RXDMAEN (l. 2075, 2222), CR2 |= STOP (l. 7196), I2C_RESET_CR2
+  *              (stm32h7xx_hal_i2c.h l. 781-784). An interrupt that writes the same
+  *              instance in between would be lost: only the HAL's own handlers may
+  *              touch it while a transfer runs;
   *            - the interrupt enables are written after START (l. 1745 -> 1765,
   *              2937 -> 2950), and TXDMAEN / RXDMAEN after START (l. 2059 -> 2075,
   *              2207 -> 2222); i2c_bm writes them before (plan rules 7, 8);
@@ -101,33 +126,51 @@ extern "C" {
     filled from cfg (7-bit, own address 0, no dual address, no general call, clock
     stretching on), HAL_I2C_Init, the two filter calls; read-back of CR1, TIMINGR,
     TIMEOUTR (0), OAR1 (OA1EN), OAR2 (0), CR2 (AUTOEND); ERR_BUS if ISR.BUSY is then 1,
-    as I2C_BM_Init. */
+    as I2C_BM_Init.
+    Returns OK; ERR_PARAM (h or cfg NULL, not an instance, h->Instance != cfg->i2c, or
+    a field I2C_BM_CheckConfig refuses); ERR_UNSUPPORTED (timeout_scl_low != 0);
+    ERR_BUSY (PE = 1 with another TIMINGR, filter or timeout in force, or a transfer
+    running: I2C_BM_CheckConfig); ERR_VERIFY (the read-back, or I2C_BM_Deinit's);
+    ERR_HAL (a HAL call failed); ERR_BUS. */
 I2cBm_Status_t I2C_HAL_Init(I2C_HandleTypeDef *h, const I2cBm_Config_t *cfg);
 /** HAL_I2C_Master_Transmit; n 0..65 535 (0 = the address probe, tx may be NULL);
-    timeout_ms >= 1. Read-back: no interrupt or DMA enable, CR2 transfer fields
-    cleared, STOPF cleared, h->State READY. */
+    timeout_ms 1 .. HAL_MAX_DELAY - 1. Read-back: no interrupt or DMA enable, CR2
+    transfer fields cleared, STOPF cleared, h->State READY.
+    Returns OK; ERR_PARAM; ERR_BUSY (PE = 0, a transfer running, or the handle not
+    READY); ERR_BUS (BUSY = 1); ERR_NACK; ERR_ARLO; ERR_TIMEOUT; ERR_HAL; ERR_VERIFY.
+    I2C_HAL_Read and I2C_HAL_WriteRead return the same codes. */
 I2cBm_Status_t I2C_HAL_Write(I2C_HandleTypeDef *h, uint32_t addr7, const uint8_t *tx, uint32_t n,
                              uint32_t timeout_ms);
-/** HAL_I2C_Master_Receive; n 1..65 535; timeout_ms >= 1. Read-back as I2C_HAL_Write. */
+/** HAL_I2C_Master_Receive; n 1..65 535; timeout_ms as I2C_HAL_Write. Read-back as I2C_HAL_Write. */
 I2cBm_Status_t I2C_HAL_Read(I2C_HandleTypeDef *h, uint32_t addr7, uint8_t *rx, uint32_t n, uint32_t timeout_ms);
 /** HAL_I2C_Mem_Read with tx as a register address of ntx = 1 or 2 bytes (tx[0] first);
-    ntx > 2 ERR_UNSUPPORTED; nrx 1..65 535. Read-back as I2C_HAL_Write. */
+    ntx > 2 ERR_UNSUPPORTED (checked right after h); nrx 1..65 535; timeout_ms as
+    I2C_HAL_Write. Read-back as I2C_HAL_Write. */
 I2cBm_Status_t I2C_HAL_WriteRead(I2C_HandleTypeDef *h, uint32_t addr7, const uint8_t *tx, uint32_t ntx,
                                  uint8_t *rx, uint32_t nrx, uint32_t timeout_ms);
 /** HAL_I2C_Master_Transmit_IT (nrx = 0; ntx = 0 is the probe), HAL_I2C_Master_Receive_IT
     (ntx = 0) or HAL_I2C_Mem_Read_IT (both; ntx 1 or 2). Validated by
     I2C_BM_CheckStartIt. No read-back here: the transfer may already be over;
-    I2C_HAL_Wait reads back the close. */
+    I2C_HAL_Wait reads back the close.
+    Returns OK (started); ERR_PARAM; ERR_UNSUPPORTED (ntx > 2 with nrx != 0, checked
+    right after h; the limit of I2C_HAL_WriteRead extended to its IT form); ERR_BUSY;
+    ERR_BUS; ERR_HAL (the HAL refused the start). */
 I2cBm_Status_t I2C_HAL_StartIt(I2C_HandleTypeDef *h, uint32_t addr7, const uint8_t *tx, uint32_t ntx,
                                uint8_t *rx, uint32_t nrx);
 /** HAL_I2C_Master_Transmit_DMA (tx, n 2..65 535, I2C_BM_CheckDmaStartWrite) or
     HAL_I2C_Master_Receive_DMA (rx, n 1..65 535, I2C_BM_CheckDmaStartRead): exactly
     one of tx and rx, with h->hdmatx or h->hdmarx linked by the caller (else
-    ERR_PARAM). No read-back here, as I2C_HAL_StartIt. */
+    ERR_PARAM). No read-back here, as I2C_HAL_StartIt. Returns as I2C_HAL_StartIt
+    (no ERR_UNSUPPORTED); ERR_HAL also when HAL_DMA_Start_IT fails (see the DMA item
+    of the limitations above). */
 I2cBm_Status_t I2C_HAL_StartDma(I2C_HandleTypeDef *h, uint32_t addr7, const uint8_t *tx, uint8_t *rx, uint32_t n);
-/** Polls h->State until READY, at most timeout_ms (>= 1) of HAL_GetTick; then
-    h->ErrorCode, and the read-back of the close (no interrupt or DMA enable, CR2
-    transfer fields cleared). ERR_TIMEOUT leaves the transfer as it is.
+/** Polls h->State until READY, at most timeout_ms (1 .. HAL_MAX_DELAY - 1, else
+    ERR_PARAM) of HAL_GetTick; then h->ErrorCode, and the read-back of the close (no
+    interrupt or DMA enable, CR2 transfer fields cleared). ERR_TIMEOUT leaves the
+    transfer as it is (a DMA one: see the limitations above). A handle in RESET (never
+    initialised, or after I2C_HAL_Deinit) never becomes READY: ERR_TIMEOUT after
+    timeout_ms. Returns OK, ERR_PARAM, ERR_TIMEOUT, ERR_NACK, ERR_ARLO, ERR_HAL or
+    ERR_VERIFY.
     Precondition: the HAL tick and the I2C (and DMA) interrupts must be able to run,
     so call it from thread mode with PRIMASK clear, or from an ISR of lower priority
     than all of them. Otherwise h->State never changes and the tick stops: after
