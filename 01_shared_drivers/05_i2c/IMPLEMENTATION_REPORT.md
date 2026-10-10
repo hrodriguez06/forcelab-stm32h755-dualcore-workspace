@@ -1363,6 +1363,48 @@ No hubo sesiones fallidas.
 - **El `ERR_PARAM` de `HAL_MAX_DELAY`** solo se ejercita por rechazo (T1). No se probó una llamada con `timeout_ms` grande frente a un SCL retenido; T10 es solo BM.
 - **Lo abierto y lo no ejercitado de la sección F3 sigue vigente.**
 
+## Cierre (`4e303f3`)
+
+El README del driver y la línea del catálogo. Ningún código de los tres tiers, del selftest, del host ni de la F334 cambia; no hubo sesión en placa. Sin tocar: `DRIVER_ROADMAP.md`, `02_dma/README.md`, `00_gpio/README.md`, `AUDIT.md`, el plan y las instrucciones.
+
+### Commits
+
+| Commit | Asunto |
+| --- | --- |
+| `5a69267` | docs(i2c): add the driver README and its catalog line |
+| (este) | docs(i2c): record the close in the implementation report |
+
+### Qué hice
+
+- **`01_shared_drivers/05_i2c/README.md`**, en inglés, 600 líneas (`wc -l`), con las secciones del modelo `06_spi/README.md`: 1 Tiers, 2 API summary, 3 Configuration guide, 4 Project contract, 5 Rules, 6 Silicon facts and errata, 7 Examples, 8 Test bench, 9 Validation, 10 Known limitations, 11 Consumers, 12 Changing this driver, 13 History.
+- **Lo que pide el encargo, y dónde está:**
+  - el contrato de los tres tiers: §1 (la matriz de qué toman LL y HAL de `i2c_bm`), §2.1 (los códigos), §2.2 (las siete `I2C_BM_Check*` de R4-2), §2.3, §2.4;
+  - el bus retenido antes de `Init` (R3-6, `scl_read`/`sda_read`, `RecoverBus` sin leer SCL con SDA alto, `ERR_ARLO` como síntoma): §3.3 y el ejemplo A; el START + STOP final (O6): §3.3;
+  - abandonar una transferencia IT solo con `Deinit` (O9), la DMA de la HAL abandonada (abortar los streams y luego `I2C_HAL_Deinit`), EV/ER a la misma prioridad: §3.2, §10.1 y los ejemplos B y C;
+  - CalcTiming con R3-1 (`ceil` en los dos sitios): §3, paso 2; la guía de pines open drain: §3.1;
+  - los hechos de silicio, cada uno con su captura de entrega: §6.3 (O22 con n = 2, R3-5, R3-6/T9(b), el `CR2.NACK` con `PE = 0`);
+  - esta placa (R3-7 con +0,88..+1,11 % y +0,81..+1,13 %, pedir con margen, el ~3 % de tHIGH, la tolerancia de 2 muestras de T5): §6.4;
+  - las limitaciones de la HAL con sus líneas (sin `TIMEOUTR` y el `TIMEOUTCF`, 2.19.6 en `Mem_Read` bloqueante, IC1, C10, `HAL_MAX_DELAY`, O31–O34): §10.1;
+  - las notas de mantenimiento O24, O25 y O7: §10.2 y §4; también O26, O11, O12 y O15;
+  - el banco (la F334 y `tools/i2c_target_f334/`, J2/J3, taps/notaps, S15–S21, los otros bancos con la F334 desenchufada) y cómo reproducir las sesiones: §8, §9.3;
+  - las lecciones: cada resultado atribuido a la función que lo dio (§9.2, "each result is the named function's"); los umbrales del RM citados con su línea (§3, §5, §6); el oráculo de cada prueba (columna "What (reference)" de §9.2); los controles no reproducidos en cada sesión (T12 "not reproduced", las marcas de tHIGH, debajo de §9.2); qué núcleos construyen cada tier (§1, "Cores");
+  - todos los "No ejercitado" de F0–F3 del informe, enteros: §9.5; los documentos de proceso con su forma de recuperación: §13.
+- **Los valores** salen de las capturas finales `i2c_f3_bench_{taps,notaps}_3bc69fe.txt` (T10(b), T9/T9(b), T2-HAL, CLKREF, T5, m4 y el tick), de `docs/i2c_f3_map_sizes_e053f7a.txt` (tamaños) y de las secciones F1–F3 de este informe (B1). Las medianas de tHIGH a 400 kHz (611–622 ns) las comprobé en la captura de taps.
+- **La línea del catálogo** (`01_shared_drivers/README.md`), al estilo de la de `06_spi`: maestro I2C1–I2C4, direcciones de 7 bits, hasta 1 MHz, polling, interrupción y DMA/BDMA, `CalcTiming`, timeout de SCL bajo, recuperación del bus, la precarga de 2.19.6, los tres tiers; sin esclavo, 10 bits ni SMBus/PEC.
+
+### Cómo comprobé los ejemplos
+
+- **Extracción:** un script de scratch (no está en el repositorio) toma los tres bloques ` ```c ` de §7 del README tal como están en `5a69267` y escribe cada uno en su `.c`.
+- **Flags:** las de `build/selftest-i2c/compile_commands.json` de `prj_01`: las de `i2c_bm.c` de CM4 para el ejemplo A (`-DCORE_CM4 -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard`), las de `i2c_hal.c` de CM7 para B y C (`I2C_DRIVER_SELFTEST=1`, con lo que `HAL_I2C_MODULE_ENABLED` está definido); sin `-o`/`-MF`/`-c` del original; los `-I` del Cube y de CMSIS como `-isystem`. Encima: `-Wall -Wextra -Wpedantic -Wconversion -Werror -c` (`-std=gnu11 -Og`, los del proyecto).
+- **Compilador:** `arm-none-eabi-gcc` 14.3.1 (GNU Tools for STM32 14.3.rel1) de STM32CubeIDE 2.2.0, por `tools/env.ps1`.
+- **Resultado:** los tres, exit 0 y 0 líneas de salida. Compilados a objeto, sin enlazar; los símbolos indefinidos (`arm-none-eabi-nm -u`) son solo de los tiers, de `gpio_bm`, de `dma_hal`, de la HAL y `SystemCoreClock`, todos definidos en `prj_01`.
+- **El `TIMINGR` fijo de B y C (`0x20D0142E`)** es el de `calc_timing()` del host para 100 MHz, 400 kHz, t\_r 300 ns, t\_f 10 ns, filtro analógico, DNF 0 (modo Fm, 398 406 Hz de modelo); T3 compara esa función con `I2C_BM_CalcTiming` (403 vectores, 0 distintos).
+- **Pines del banco:** PB8/PB9 (AF4 para I2C1, AF6 para I2C4), destino 0x42 (la F334), kernels a 100 MHz como en `prj_01`; lo dice la cabecera de §7.
+
+### No ejercitado
+
+- **Los ejemplos no se ejecutaron en placa:** solo compilan. Las mismas secuencias (recuperación e `Init`, IT de LL, DMA de la HAL por BDMA) las ejercita el selftest con su propio código.
+
 ## Decisiones abiertas usadas
 
 | # | Opción usada | Consultada |
