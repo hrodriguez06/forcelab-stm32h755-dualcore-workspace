@@ -26,7 +26,7 @@ because it needs both cores already running.
 ├── 02_dma/                     # DMA1, DMA2, BDMA (D3), reachability, cache helpers (dma_bm, dma_ll, dma_hal)
 ├── 03_tim/                     # TIM1-8, TIM12-17: time base, PWM, input capture, master/slave, IRQ and DMA requests (tim_bm, tim_ll, tim_hal). LPTIM and HRTIM not covered
 ├── 04_uart/                    # USART1 - USART8, LPUART1 - console / log, first thing you want talking
-├── 05_i2c/                     # I2C1 - I2C4 sensor interfaces
+├── 05_i2c/                     # I2C1-I2C4 master, 7-bit addresses, up to 1 MHz: polling, interrupt and DMA/BDMA transfers, CalcTiming, SCL-low timeout, bus recovery, ES0445 2.19.6 preload (i2c_bm, i2c_ll, i2c_hal). Slave, 10-bit, SMBus/PEC not covered
 ├── 06_spi/                     # SPI1-SPI6 master: polling, interrupt and DMA/BDMA transfers, SS by software or hardware, ES0445 2.22 workarounds in BM/LL (spi_bm, spi_ll, spi_hal). Slave, CRC, TI and I2S not covered
 ├── 07_adc/                     # ADC1, ADC2, ADC3 (ADC sampling, analog watchdogs)
 ├── 08_eth/                     # Ethernet MAC + LAN8742 PHY - its own ETH DMA, descriptors in SRAM3; does not link 02_dma
