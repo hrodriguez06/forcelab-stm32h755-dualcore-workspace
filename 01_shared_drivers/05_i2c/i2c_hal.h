@@ -62,8 +62,9 @@
   *              l. 353; l. 1147-1218, 1289-1338, 2706-2756; by DMA, in its
   *              completions l. 6747-6779, 6827-6859), as i2c_bm does;
   *            - the image of HAL_I2C_Init differs from i2c_bm's by design (T2):
-  *              OAR1 = OA1EN | OwnAddress1 (0) (l. 600), CR2 |= AUTOEND | NACK
-  *              (l. 619). The filters are a CR1 read-modify-write with PE dropped
+  *              OAR1 = OA1EN | OwnAddress1 (0) (l. 600), CR2.AUTOEND = 1 (l. 619 sets
+  *              AUTOEND | NACK, but with PE = 0, and NACK is held cleared while PE = 0,
+  *              RM0399 50:2621-2623). The filters are a CR1 read-modify-write with PE dropped
   *              and raised in it, not under PRIMASK, without reading PE = 0 back
   *              (stm32h7xx_hal_i2c_ex.c l. 110-118, 156-170);
   *            - the interrupt enables are written after START (l. 1745 -> 1765,
@@ -99,8 +100,8 @@ extern "C" {
     Validated by I2C_BM_CheckConfig; then I2C_BM_Deinit, the handle to RESET, h->Init
     filled from cfg (7-bit, own address 0, no dual address, no general call, clock
     stretching on), HAL_I2C_Init, the two filter calls; read-back of CR1, TIMINGR,
-    TIMEOUTR (0), OAR1 (OA1EN), OAR2 (0), CR2 (AUTOEND | NACK); ERR_BUS if ISR.BUSY
-    is then 1, as I2C_BM_Init. */
+    TIMEOUTR (0), OAR1 (OA1EN), OAR2 (0), CR2 (AUTOEND); ERR_BUS if ISR.BUSY is then 1,
+    as I2C_BM_Init. */
 I2cBm_Status_t I2C_HAL_Init(I2C_HandleTypeDef *h, const I2cBm_Config_t *cfg);
 /** HAL_I2C_Master_Transmit; n 0..65 535 (0 = the address probe, tx may be NULL);
     timeout_ms >= 1. Read-back: no interrupt or DMA enable, CR2 transfer fields

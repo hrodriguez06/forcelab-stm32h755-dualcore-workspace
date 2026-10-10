@@ -32,7 +32,9 @@ _Static_assert((I2C_ANALOGFILTER_ENABLE == 0U) && (I2C_ANALOGFILTER_DISABLE == I
 #define CR1_IE_ALL      (I2C_CR1_TXIE | I2C_CR1_RXIE | I2C_CR1_ADDRIE | I2C_CR1_NACKIE | I2C_CR1_STOPIE | \
                          I2C_CR1_TCIE | I2C_CR1_ERRIE)
 #define CR1_DMA_ALL     (I2C_CR1_TXDMAEN | I2C_CR1_RXDMAEN)
-#define CR2_HAL_INIT    (I2C_CR2_AUTOEND | I2C_CR2_NACK)    /* HAL_I2C_Init l. 619 */
+/* HAL_I2C_Init l. 619 writes AUTOEND | NACK with PE = 0 (l. 587 .. 634); NACK is held
+   cleared by hardware while PE = 0 (RM0399 50:2621-2623), so only AUTOEND stays. */
+#define CR2_HAL_INIT    I2C_CR2_AUTOEND
 /* I2C_RESET_CR2 (stm32h7xx_hal_i2c.h l. 781-784) clears these at every close; START
    and STOP clear themselves (50:2620-2674). AUTOEND and NACK stay as they were. */
 #define CR2_XFER        (I2C_CR2_SADD | I2C_CR2_HEAD10R | I2C_CR2_NBYTES | I2C_CR2_RELOAD | I2C_CR2_RD_WRN | \
@@ -140,7 +142,7 @@ I2cBm_Status_t I2C_HAL_Init(I2C_HandleTypeDef *h, const I2cBm_Config_t *cfg)
         return from_hal(hs, h);
     }
     /* Read-back of what HAL_I2C_Init (l. 591-634) and the two filter calls wrote. OAR1
-       and CR2 are the HAL's own by design (l. 600, 619); TIMEOUTR stays at reset. */
+       and CR2 are the HAL's own by design (l. 600, 619: AUTOEND); TIMEOUTR stays at reset. */
     const uint32_t cr1 = (cfg->analog_filter ? 0U : I2C_CR1_ANFOFF) | (cfg->dnf << I2C_CR1_DNF_Pos) | I2C_CR1_PE;
     if ((i2c->CR1 != cr1) || (i2c->TIMINGR != cfg->timingr) || (i2c->TIMEOUTR != 0U) ||
         (i2c->OAR1 != I2C_OAR1_OA1EN) || (i2c->OAR2 != 0U) || (i2c->CR2 != CR2_HAL_INIT) ||
