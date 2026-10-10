@@ -36,7 +36,9 @@ _Static_assert((I2C_ANALOGFILTER_ENABLE == 0U) && (I2C_ANALOGFILTER_DISABLE == I
    cleared by hardware while PE = 0 (RM0399 50:2621-2623), so only AUTOEND stays. */
 #define CR2_HAL_INIT    I2C_CR2_AUTOEND
 /* I2C_RESET_CR2 (stm32h7xx_hal_i2c.h l. 781-784) clears these at every close; START
-   and STOP clear themselves (50:2620-2674). AUTOEND and NACK stay as they were. */
+   and STOP clear themselves (50:2620-2674). AUTOEND is not one of them: each
+   I2C_TransferConfig rewrites it (its mask, l. 7321-7324, has AUTOEND) and the close
+   leaves it as the last one did; the read-back does not look at it. */
 #define CR2_XFER        (I2C_CR2_SADD | I2C_CR2_HEAD10R | I2C_CR2_NBYTES | I2C_CR2_RELOAD | I2C_CR2_RD_WRN | \
                          I2C_CR2_START | I2C_CR2_STOP)
 #define REG_ADDR_MAX    2U      /* HAL_I2C_Mem_Read: I2C_MEMADD_SIZE_8BIT or _16BIT */
@@ -172,11 +174,21 @@ I2cBm_Status_t I2C_HAL_Deinit(I2C_HandleTypeDef *h)
 
 /* ---- Blocking transfers -------------------------------------------------------------- */
 
-/* The order of every transfer (C6): the handle, timeout_ms, i2c_bm's check of the
-   call, this tier's own limit, then the handle's state. */
+/* The order of every transfer (C6): the handle and its instance; what this tier cannot
+   do (ERR_UNSUPPORTED, capability); timeout_ms and i2c_bm's check of the call (range,
+   and the instance's state); then the handle's state. */
 static I2cBm_Status_t chk_state(const I2C_HandleTypeDef *h)
 {
     return (h->State == HAL_I2C_STATE_READY) ? I2C_BM_OK : I2C_BM_ERR_BUSY;
+}
+
+/* timeout_ms 1 .. HAL_MAX_DELAY - 1 (audit F3 part 1, M4): with HAL_MAX_DELAY the HAL's
+   waits never time out (I2C_WaitOnFlagUntilTimeout l. 6980, I2C_WaitOnTXISFlagUntilTimeout
+   l. 7020), and without TIMEOUTR (refused in I2C_HAL_Init) a held SCL would hang the
+   call for ever. I2C_HAL_Wait takes the same range: its own wait has no other bound. */
+static bool timeout_ok(uint32_t timeout_ms)
+{
+    return (timeout_ms != 0U) && (timeout_ms != HAL_MAX_DELAY);
 }
 
 static I2cBm_Status_t blocking_end(HAL_StatusTypeDef hs, const I2C_HandleTypeDef *h)
@@ -193,7 +205,7 @@ I2cBm_Status_t I2C_HAL_Write(I2C_HandleTypeDef *h, uint32_t addr7, const uint8_t
                              uint32_t timeout_ms)
 {
     I2cBm_Status_t st = chk_handle(h);
-    if ((st == I2C_BM_OK) && (timeout_ms == 0U))
+    if ((st == I2C_BM_OK) && !timeout_ok(timeout_ms))
     {
         st = I2C_BM_ERR_PARAM;
     }
@@ -212,7 +224,7 @@ I2cBm_Status_t I2C_HAL_Write(I2C_HandleTypeDef *h, uint32_t addr7, const uint8_t
 I2cBm_Status_t I2C_HAL_Read(I2C_HandleTypeDef *h, uint32_t addr7, uint8_t *rx, uint32_t n, uint32_t timeout_ms)
 {
     I2cBm_Status_t st = chk_handle(h);
-    if ((st == I2C_BM_OK) && (timeout_ms == 0U))
+    if ((st == I2C_BM_OK) && !timeout_ok(timeout_ms))
     {
         st = I2C_BM_ERR_PARAM;
     }
@@ -237,15 +249,15 @@ I2cBm_Status_t I2C_HAL_WriteRead(I2C_HandleTypeDef *h, uint32_t addr7, const uin
                                  uint8_t *rx, uint32_t nrx, uint32_t timeout_ms)
 {
     I2cBm_Status_t st = chk_handle(h);
-    if ((st == I2C_BM_OK) && (timeout_ms == 0U))
+    if ((st == I2C_BM_OK) && (ntx > REG_ADDR_MAX))
+    {
+        st = I2C_BM_ERR_UNSUPPORTED;                    /* owner, 2026-10-09; C6: capability first (m40) */
+    }
+    if ((st == I2C_BM_OK) && !timeout_ok(timeout_ms))
     {
         st = I2C_BM_ERR_PARAM;
     }
     st = (st == I2C_BM_OK) ? I2C_BM_CheckWriteRead(h->Instance, addr7, tx, ntx, rx, nrx, timeout_ms) : st;
-    if ((st == I2C_BM_OK) && (ntx > REG_ADDR_MAX))
-    {
-        st = I2C_BM_ERR_UNSUPPORTED;                    /* owner, 2026-10-09 */
-    }
     st = (st == I2C_BM_OK) ? chk_state(h) : st;
     if (st != I2C_BM_OK)
     {
@@ -265,14 +277,14 @@ I2cBm_Status_t I2C_HAL_StartIt(I2C_HandleTypeDef *h, uint32_t addr7, const uint8
                                uint8_t *rx, uint32_t nrx)
 {
     I2cBm_Status_t st = chk_handle(h);
+    if ((st == I2C_BM_OK) && (ntx > REG_ADDR_MAX) && (nrx != 0U))
+    {
+        st = I2C_BM_ERR_UNSUPPORTED;                    /* a write-read: as I2C_HAL_WriteRead (m40) */
+    }
     if (st == I2C_BM_OK)
     {
         const I2cBm_Xfer_t x = { addr7, tx, ntx, rx, nrx, 0U, 0U, I2C_BM_PENDING };
         st = I2C_BM_CheckStartIt(h->Instance, &x);
-    }
-    if ((st == I2C_BM_OK) && (ntx > REG_ADDR_MAX) && (nrx != 0U))
-    {
-        st = I2C_BM_ERR_UNSUPPORTED;
     }
     st = (st == I2C_BM_OK) ? chk_state(h) : st;
     if (st != I2C_BM_OK)
@@ -324,7 +336,7 @@ I2cBm_Status_t I2C_HAL_StartDma(I2C_HandleTypeDef *h, uint32_t addr7, const uint
 
 I2cBm_Status_t I2C_HAL_Wait(I2C_HandleTypeDef *h, uint32_t timeout_ms)
 {
-    if ((chk_handle(h) != I2C_BM_OK) || (timeout_ms == 0U))
+    if ((chk_handle(h) != I2C_BM_OK) || !timeout_ok(timeout_ms))
     {
         return I2C_BM_ERR_PARAM;
     }
