@@ -42,6 +42,9 @@ const IstStep_t k_ist_steps[] = {
                                                     T7(a), T14                              */
     { "F2_CM7",        IST_OWN_CM7,  1U, 0U },   /* I2C4 with i2c_ll: T1 (BUSY), T4, T5, T6,
                                                     T7(b), T14                              */
+    { "F3_NOPIN",      IST_OWN_NONE, 0U, 0U },   /* T1, T2 with i2c_hal (CPU1): no bus pin */
+    { "F3_CM7",        IST_OWN_CM7,  1U, 0U },   /* I2C4 with i2c_hal: T1 (BUSY), T4, T5, T6,
+                                                    T7(b), T14                              */
     { "DONE",          IST_OWN_NONE, 0U, 0U },
 };
 
@@ -282,6 +285,18 @@ static bool snap_eq(const uint32_t *a, const uint32_t *b)
     return true;
 }
 
+_Static_assert(T1_SNAP == IST_T1_PHOTO, "T1's photo size");
+
+void ist_t1_photo(const I2C_TypeDef *i2c, uint32_t s[IST_T1_PHOTO])
+{
+    t1_snap(i2c, s);
+}
+
+bool ist_t1_photo_eq(const uint32_t a[IST_T1_PHOTO], const uint32_t b[IST_T1_PHOTO])
+{
+    return snap_eq(a, b);
+}
+
 /* ---- Phase F2: Init and CheckConfig through either tier -------------------------- */
 static void to_ll(const I2cBm_Config_t *c, I2cLl_Config_t *l)
 {
@@ -334,6 +349,11 @@ static void t1_case(IstT1Result_t *r, I2cBm_Status_t got, I2cBm_Status_t exp)
         r->bad++;
     }
     r->cases++;
+}
+
+void ist_t1_case(IstT1Result_t *r, I2cBm_Status_t got, I2cBm_Status_t exp)
+{
+    t1_case(r, got, exp);
 }
 
 static void rec_w(void *ctx, bool high)
@@ -531,6 +551,36 @@ static bool t2_differs(const uint32_t g[IST_NREG], const uint32_t e[IST_NREG], u
         }
     }
     return differs;
+}
+
+/* One case of the matrix, in the order of the loops below (phase F3). */
+bool ist_t2_case(I2C_TypeDef *i2c, uint32_t idx, I2cBm_Config_t *c, uint32_t e[IST_NREG])
+{
+    const uint32_t nm = T2_N(k_t2_tmo);
+    const uint32_t nd = T2_N(k_t2_dnf);
+    if (idx >= (T2_N(k_t2_timingr) * 2U * nd * nm))
+    {
+        return false;
+    }
+    const uint32_t m = idx % nm;
+    const uint32_t d = (idx / nm) % nd;
+    const uint32_t f = (idx / (nm * nd)) % 2U;
+    const uint32_t a = idx / (nm * nd * 2U);
+    c->i2c = i2c;
+    c->timingr = k_t2_timingr[a];
+    c->analog_filter = (f == 0U);
+    c->dnf = k_t2_dnf[d];
+    c->timeout_scl_low = k_t2_tmo[m];
+    t2_expect(c->timingr, c->analog_filter, c->dnf, c->timeout_scl_low, e);
+    e[6] = 0U;
+    return true;
+}
+
+_Static_assert(IST_T2_CASES == (T2_N(k_t2_timingr) * 2U * T2_N(k_t2_dnf) * T2_N(k_t2_tmo)), "T2's matrix");
+
+bool ist_t2_differs(const uint32_t g[IST_NREG], const uint32_t e[IST_NREG])
+{
+    return t2_differs(g, e, 0U, NULL);
 }
 
 /* T2 with i2c_ll: parity with i2c_bm over the same matrix (phase F2). */

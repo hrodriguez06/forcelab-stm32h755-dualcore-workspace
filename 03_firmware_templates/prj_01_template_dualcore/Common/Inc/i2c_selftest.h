@@ -42,11 +42,12 @@ void I2C_Selftest_CM4_Run(void);          /* CPU2, after Shared_GpioLockInstall(
  * bus-pin owners. Bump it when any of those change. From v1 on, a step that
  * needs the host to read a state holds it until a HOST_REQ pulse
  * (sync_ack_low(), 06_spi lesson B1).                                         */
-#define I2C_BENCH_VERSION    4U    /* v1: T0A, T0C, T0B, T0B_CM7, T0B_TIMEOUT (plan phase F0);
+#define I2C_BENCH_VERSION    5U    /* v1: T0A, T0C, T0B, T0B_CM7, T0B_TIMEOUT (plan phase F0);
                                       v2: + F1_NOPIN, F1_CM4, F1_CM7, F1_RECOVER (phase F1);
                                       v3: + F2_NOPIN, F2_CM4, F2_CM7 (phase F2, i2c_ll);
                                       v4: every F334 hold ordered after the handshake of its
-                                      AT HOLD point; SCOPE trig=sdar (audit F2 part 1, B2, B3) */
+                                      AT HOLD point; SCOPE trig=sdar (audit F2 part 1, B2, B3);
+                                      v5: + F3_NOPIN, F3_CM7 (phase F3, i2c_hal, CPU1)       */
 
 typedef enum
 {
@@ -188,6 +189,8 @@ typedef enum
 #define IST_XF_ADDR(x)      (((x) >> 16) & 0x7FU)
 #define IST_XF_TIER_LL      (1UL << 24)   /* phase F2: the transfer through i2c_ll            */
 #define IST_XF_IS_LL(x)     ((((x) >> 24) & 1U) != 0U)
+#define IST_XF_TIER_HAL     (1UL << 25)   /* phase F3: through i2c_hal (CPU1's I2C4 only)     */
+#define IST_XF_IS_HAL(x)    ((((x) >> 25) & 1U) != 0U)
 
 /* ---- Phase F2: one call through i2c_bm or i2c_ll (ll), the same arguments ---------- */
 static inline I2cBm_Status_t ist_write(bool ll, I2C_TypeDef *i, uint32_t a, const uint8_t *tx, uint32_t n,
@@ -299,6 +302,13 @@ typedef struct
 void     ist_t1(I2C_TypeDef *i2c, uint32_t timingr, bool ll, IstT1Result_t *r);
 /* T1 with ISR.BUSY = 1: every transfer ERR_BUS, nothing written. */
 void     ist_t1_busy(I2C_TypeDef *i2c, bool ll, IstT1Result_t *r);
+/* The pieces of T1 for a tier that only CPU1 builds (phase F3, i2c_hal): the photo
+   (the instance's image, both RCC banks' I2C enables, the kernel fields, SYSCFG_PMCR)
+   and one case, its status against the one written by hand. */
+#define IST_T1_PHOTO         (IST_NREG + 7U)
+void     ist_t1_photo(const I2C_TypeDef *i2c, uint32_t s[IST_T1_PHOTO]);
+bool     ist_t1_photo_eq(const uint32_t a[IST_T1_PHOTO], const uint32_t b[IST_T1_PHOTO]);
+void     ist_t1_case(IstT1Result_t *r, I2cBm_Status_t got, I2cBm_Status_t exp);
 
 typedef struct
 {
@@ -312,6 +322,12 @@ typedef struct
                                   (DNF + 1 mod 16) through the same comparison: all of them */
 } IstT2Result_t;
 void     ist_t2(I2C_TypeDef *i2c, IstT2Result_t *r);
+/* T2's matrix, one case at a time (phase F3): false past the last; c the configuration
+   on `i2c`, e the image of RM0399 typed by hand for it (CR1, CR2, OAR1, OAR2, TIMINGR,
+   TIMEOUTR). ist_t2_differs compares those six registers. */
+#define IST_T2_CASES         120U
+bool     ist_t2_case(I2C_TypeDef *i2c, uint32_t idx, I2cBm_Config_t *c, uint32_t e[IST_NREG]);
+bool     ist_t2_differs(const uint32_t g[IST_NREG], const uint32_t e[IST_NREG]);
 
 /* T2 with i2c_ll (phase F2): over the same matrix, the LL image against the RM fields
    typed by hand and against the image i2c_bm leaves for the same configuration, bit

@@ -14,8 +14,11 @@
   *          F1_CM7 (CPU1's I2C4: the same with T7(b) by BDMA) and F1_RECOVER
   *          (T9, and T9(b): the bus held before Init, plan R3-6); then the F2
   *          steps with i2c_ll: F2_NOPIN (T1, T2 parity with i2c_bm), F2_CM4 and
-  *          F2_CM7 (T1 with BUSY, T4, T5, T6, T7, T14); and prints the global
-  *          verdict, CPU2's results included. Plan
+  *          F2_CM7 (T1 with BUSY, T4, T5, T6, T7, T14); then the F3 steps with
+  *          i2c_hal, CPU1 only: F3_NOPIN (T1, T2 against i2c_bm and the raw
+  *          HAL_I2C_Init, I2C_HAL_Wait with the tick stopped) and F3_CM7 (T1 with
+  *          BUSY, T4, T5, T6, T7(b), T14); and prints the global verdict, CPU2's
+  *          results included. Plan
   *          and meaning of every test: 01_shared_drivers/05_i2c/IMPLEMENTATION_PLAN.md.
   *
   *          Electrical safety (no series resistors anywhere on the bench):
@@ -41,7 +44,9 @@
   *            S17 the bus levels are printed with every STEP announcement and
   *                read by the host before each step (scope, F334, this IDR).
   *          Every wait is bounded and ends if CYCCNT stops (lesson m1); no
-  *          wait depends on HAL_GetTick().
+  *          wait of the test depends on HAL_GetTick(). The HAL tier's own waits
+  *          run on it (TIM6 keeps running with the scheduler suspended); the TICK
+  *          lines show it advance (F3).
   ******************************************************************************
   */
 
@@ -49,6 +54,7 @@
 #include "fw_build_id.h"
 #include "gpio_bm.h"
 #include "i2c_bm.h"
+#include "i2c_hal.h"
 #include "dma_hal.h"
 #include "app_log.h"
 #include "stm32h7xx_hal.h"
@@ -100,6 +106,7 @@ static uint32_t  s_fail;                  /* firmware-side verdicts that failed 
 static uint32_t  s_stalls;                /* waits that ended because CYCCNT stopped */
 static char      s_line[400];             /* verdict()/log_long() text; one task, no reentrancy */
 static bool      s_ll;                    /* phase F2: Init and the transfers through i2c_ll    */
+static bool      s_hal;                   /* phase F3: CPU1's Init and transfers through i2c_hal */
 
 /* ---- Bounded waits (C13, lesson m1) ---------------------------------------------------- */
 
@@ -195,12 +202,10 @@ static void verdict(bool ok, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    /* In the F2 steps every verdict says it is i2c_ll's. */
-    const size_t pre = s_ll ? 3U : 0U;
-    if (s_ll)
-    {
-        (void)memcpy(s_line, "LL ", 3U);
-    }
+    /* In the F2 steps every verdict says it is i2c_ll's; in F3, i2c_hal's. */
+    const char *tier = s_ll ? "LL " : (s_hal ? "HAL " : "");
+    const size_t pre = strlen(tier);
+    (void)memcpy(s_line, tier, pre);
     (void)vsnprintf(&s_line[pre], sizeof(s_line) - pre, fmt, ap);
     va_end(ap);
     if (!ok)
@@ -1487,15 +1492,34 @@ static bool cm4_send4(IstCmd_t cmd, uint32_t a0, uint32_t a1, uint32_t a2, uint3
 /* ---- I2C4 on CPU1: pins, IRQ, BDMA ------------------------------------------------------- */
 static I2cBm_Xfer_t      s_it;
 static volatile bool     s_it_ll;           /* the running IT transfer is i2c_ll's (F2) */
+static volatile bool     s_it_hal;          /* ... i2c_hal's: the HAL's handlers serve it (F3) */
 static volatile bool     s_it_active;
 static volatile uint32_t s_it_irqs;
 static uint32_t          s_irq_min = 0xFFFFFFFFUL;
 static uint32_t          s_irq_max;
+static I2C_HandleTypeDef s_hi2c4;           /* F3: the caller's handle of i2c_hal on I2C4 */
 
-static void it_serve(void)
+static void it_serve(bool er)
 {
     s_it_irqs++;
-    if (s_it_active)
+    if (s_it_active && s_it_hal)
+    {
+        /* F3: the project's handlers call the HAL's (i2c_hal.h, C14); the transfer is
+           over when the HAL puts the handle back to READY. */
+        if (er)
+        {
+            HAL_I2C_ER_IRQHandler(&s_hi2c4);
+        }
+        else
+        {
+            HAL_I2C_EV_IRQHandler(&s_hi2c4);
+        }
+        if (s_hi2c4.State == HAL_I2C_STATE_READY)
+        {
+            s_it_active = false;
+        }
+    }
+    else if (s_it_active)
     {
         const uint32_t t0 = DWT->CYCCNT;
         const bool done = ist_xferirq(s_it_ll, I2C4, &s_it);
@@ -1517,12 +1541,12 @@ static void it_serve(void)
 /* The project's vectors for the test (plan C14), CPU1's NVIC, priority 6. */
 void I2C4_EV_IRQHandler(void)
 {
-    it_serve();
+    it_serve(false);
 }
 
 void I2C4_ER_IRQHandler(void)
 {
-    it_serve();
+    it_serve(true);
 }
 
 static void nvic_i2c4(bool on)
@@ -1550,7 +1574,20 @@ static void nvic_i2c4(bool on)
 static DMA_HandleTypeDef s_hbd_rx;
 static DMA_HandleTypeDef s_hbd_tx;
 
-static bool bd_init(DMA_HandleTypeDef *h, BDMA_Channel_TypeDef *ch, bool tx)
+/* F3: the HAL's DMA path needs the channels' interrupts (HAL_DMA_IRQHandler calls the
+   I2C HAL's completion). i2c_bm and i2c_ll poll the I2C instead: their channels keep
+   the NVIC untouched (irq_priority -1), so these vectors never run for them. */
+void BDMA_Channel0_IRQHandler(void)
+{
+    HAL_DMA_IRQHandler(&s_hbd_rx);
+}
+
+void BDMA_Channel1_IRQHandler(void)
+{
+    HAL_DMA_IRQHandler(&s_hbd_tx);
+}
+
+static bool bd_init(DMA_HandleTypeDef *h, BDMA_Channel_TypeDef *ch, bool tx, int32_t prio)
 {
     uint32_t req = 0U;
     (void)I2C_BM_GetDmaRequest(I2C4, tx, &req);
@@ -1559,7 +1596,7 @@ static bool bd_init(DMA_HandleTypeDef *h, BDMA_Channel_TypeDef *ch, bool tx)
         .periph_inc = DMA_PINC_DISABLE, .mem_inc = DMA_MINC_ENABLE, .periph_align = DMA_PDATAALIGN_BYTE,
         .mem_align = DMA_MDATAALIGN_BYTE, .mode = DMA_NORMAL, .priority = DMA_PRIORITY_HIGH,
         .fifo_mode = DMA_FIFOMODE_DISABLE, .fifo_threshold = DMA_FIFO_THRESHOLD_FULL,
-        .mem_burst = DMA_MBURST_SINGLE, .periph_burst = DMA_PBURST_SINGLE, .enable_clock = true, .irq_priority = -1 };
+        .mem_burst = DMA_MBURST_SINGLE, .periph_burst = DMA_PBURST_SINGLE, .enable_clock = true, .irq_priority = prio };
     return DMA_HAL_Init(h, &c) == HAL_OK;
 }
 
@@ -1578,6 +1615,13 @@ static uint32_t sentinel_left(const uint8_t *b, uint32_t n)
 
 /* One transfer on I2C4 (initialised), the twin of CPU2's cmd_xfer(): polling and IT on
    s_big (AXI SRAM, CPU only), DMA on s_bd_tx/s_bd_rx (SRAM4, BDMA, non-cacheable). */
+/* F3: a cycle budget of the test as timeout_ms of the HAL tier (at least 2 ms: the tick
+   is 1 ms, and a wait of 1 ms can end at once). */
+static uint32_t hal_ms(uint32_t max_cycles)
+{
+    return (max_cycles / (s_cpu_hz / 1000U)) + 2U;
+}
+
 /* The last byte of a BDMA read has left RXDR: the channel's count is 0. */
 static bool bd_rx_empty(void)
 {
@@ -1594,6 +1638,8 @@ static void cm7_xfer(uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cycles,
     const uint32_t mode = IST_XF_MODE(xf);
     const uint32_t addr = IST_XF_ADDR(xf);
     const bool ll = IST_XF_IS_LL(xf);
+    const bool hal = IST_XF_IS_HAL(xf);
+    const uint32_t tmo_ms = hal_ms(max_cycles);
     const bool dma = (mode == IST_MODE_DMA) || (mode == IST_MODE_DMA_CTRL);
     uint8_t *buf = dma ? ((op == IST_OP_WRITE) ? s_bd_tx : s_bd_rx) : s_big;
     if ((n > (dma ? BD_N : F1_BIG)) || (max_cycles == 0U))
@@ -1619,7 +1665,31 @@ static void cm7_xfer(uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cycles,
     uint32_t done_rx = 0U;
     uint32_t aux = 0U;
     uint32_t t0 = DWT->CYCCNT;
-    if (mode == IST_MODE_POLL)
+    if ((mode == IST_MODE_POLL) && hal)
+    {
+        /* F3: the HAL's blocking calls, bounded by timeout_ms of HAL_GetTick. */
+        if (op == IST_OP_WRITE)
+        {
+            st = I2C_HAL_Write(&s_hi2c4, addr, buf, n, tmo_ms);
+        }
+        else if (op == IST_OP_READ)
+        {
+            st = I2C_HAL_Read(&s_hi2c4, addr, buf, n, tmo_ms);
+        }
+        else if (op == IST_OP_WRITEREAD)
+        {
+            st = I2C_HAL_WriteRead(&s_hi2c4, addr, &s_ptrb, 1U, buf, n, tmo_ms);
+        }
+        else
+        {
+            st = I2C_HAL_Write(&s_hi2c4, addr, NULL, 0U, tmo_ms);
+        }
+        r[IST_XR_CYCLES] = DWT->CYCCNT - t0;
+        const bool ok = st == I2C_BM_OK;
+        done_tx = ok ? ((op == IST_OP_WRITE) ? n : ((op == IST_OP_WRITEREAD) ? 1U : 0U)) : 0U;
+        done_rx = (ok && rd) ? n : 0U;
+    }
+    else if (mode == IST_MODE_POLL)
     {
         if (op == IST_OP_WRITE)
         {
@@ -1651,9 +1721,10 @@ static void cm7_xfer(uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cycles,
         nvic_i2c4(true);
         s_it_irqs = 0U;
         s_it_ll = ll;
+        s_it_hal = hal;
         s_it_active = true;
         t0 = DWT->CYCCNT;
-        st = ist_startit(ll, I2C4, &s_it);
+        st = hal ? I2C_HAL_StartIt(&s_hi2c4, addr, s_it.tx, s_it.ntx, s_it.rx, s_it.nrx) : ist_startit(ll, I2C4, &s_it);
         if (mode == IST_MODE_IT_CTRL)
         {
             /* T6's control: every enable cleared by hand before the first event. */
@@ -1683,20 +1754,76 @@ static void cm7_xfer(uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cycles,
         s_it_active = false;
         if (st == I2C_BM_OK)
         {
-            st = timed_out ? I2C_BM_ERR_TIMEOUT : s_it.status;
+            /* F3: the HAL's verdict and the read-back of its close (I2C_HAL_Wait on a
+               handle already READY returns at once). */
+            st = timed_out ? I2C_BM_ERR_TIMEOUT : (hal ? I2C_HAL_Wait(&s_hi2c4, 1U) : s_it.status);
         }
         r[IST_XR_CYCLES] = DWT->CYCCNT - t0;
         r[IST_XR_IRQS] = s_it_irqs;
-        done_tx = s_it.done_tx;
-        done_rx = s_it.done_rx;
+        done_tx = hal ? ((st == I2C_BM_OK) ? s_it.ntx : 0U) : s_it.done_tx;
+        done_rx = hal ? ((st == I2C_BM_OK) ? s_it.nrx : 0U) : s_it.done_rx;
         const uint32_t before = s_it_irqs;
         (void)delay_ms(10U);                                 /* T6: 10 ms with no I2C4 IRQ */
         r[IST_XR_IRQS_AFTER] = s_it_irqs - before;
         nvic_i2c4(false);
         if (timed_out)
         {
-            aux = (uint32_t)s_it.status;                     /* still PENDING: no progress */
+            /* still PENDING (the HAL: its handle still busy): no progress */
+            aux = hal ? ((s_hi2c4.State != HAL_I2C_STATE_READY) ? (uint32_t)I2C_BM_PENDING : 0U) :
+                        (uint32_t)s_it.status;
         }
+    }
+    else if (hal)
+    {
+        /* F3: the HAL's DMA path. The caller links its BDMA handles (02_dma, interrupts
+           on); the I2C interrupts serve the HAL's NACK, TCR and STOP. */
+        nvic_i2c4(true);
+        s_it_irqs = 0U;
+        s_it_hal = true;
+        s_it_active = true;
+        bool sok;
+        I2cBm_Status_t s1;
+        if (op == IST_OP_WRITE)
+        {
+            sok = bd_init(&s_hbd_tx, BDMA_Channel1, true, (int32_t)IRQ_PRIO);
+            __HAL_LINKDMA(&s_hi2c4, hdmatx, s_hbd_tx);
+            t0 = DWT->CYCCNT;
+            s1 = sok ? I2C_HAL_StartDma(&s_hi2c4, addr, buf, NULL, n) : I2C_BM_ERR_HAL;
+        }
+        else
+        {
+            sok = bd_init(&s_hbd_rx, BDMA_Channel0, false, (int32_t)IRQ_PRIO);
+            __HAL_LINKDMA(&s_hi2c4, hdmarx, s_hbd_rx);
+            t0 = DWT->CYCCNT;
+            s1 = sok ? I2C_HAL_StartDma(&s_hi2c4, addr, NULL, buf, n) : I2C_BM_ERR_HAL;
+            if ((s1 == I2C_BM_OK) && (mode == IST_MODE_DMA_CTRL))
+            {
+                const uint32_t pm = __get_PRIMASK();         /* T7's control: RXDMAEN cleared by hand */
+                __disable_irq();
+                I2C4->CR1 &= ~I2C_CR1_RXDMAEN;
+                __set_PRIMASK(pm);
+            }
+        }
+        st = (s1 == I2C_BM_OK) ? I2C_HAL_Wait(&s_hi2c4, tmo_ms) : s1;
+        r[IST_XR_CYCLES] = DWT->CYCCNT - t0;
+        s_it_active = false;
+        nvic_i2c4(false);
+        r[IST_XR_IRQS] = s_it_irqs;
+        if (op == IST_OP_WRITE)
+        {
+            (void)HAL_DMA_Abort(&s_hbd_tx);
+            (void)DMA_HAL_DeInit(&s_hbd_tx);                 /* its NVIC line off again */
+            s_hi2c4.hdmatx = NULL;
+            done_tx = (st == I2C_BM_OK) ? n : 0U;
+        }
+        else
+        {
+            done_rx = n - __HAL_DMA_GET_COUNTER(&s_hbd_rx);
+            (void)HAL_DMA_Abort(&s_hbd_rx);
+            (void)DMA_HAL_DeInit(&s_hbd_rx);
+            s_hi2c4.hdmarx = NULL;
+        }
+        aux = sok ? 0U : 1U;
     }
     else
     {
@@ -1705,7 +1832,7 @@ static void cm7_xfer(uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cycles,
         bool sok;
         if (op == IST_OP_WRITE)
         {
-            sok = bd_init(&s_hbd_tx, BDMA_Channel1, true) &&
+            sok = bd_init(&s_hbd_tx, BDMA_Channel1, true, -1) &&
                   (HAL_DMA_Start(&s_hbd_tx, (uint32_t)&buf[1], (uint32_t)&I2C4->TXDR, n - 1U) == HAL_OK);
             t0 = DWT->CYCCNT;
             const I2cBm_Status_t s1 = ist_dmaw(ll, I2C4, addr, buf, n);
@@ -1717,7 +1844,7 @@ static void cm7_xfer(uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cycles,
         }
         else
         {
-            sok = bd_init(&s_hbd_rx, BDMA_Channel0, false) &&
+            sok = bd_init(&s_hbd_rx, BDMA_Channel0, false, -1) &&
                   (HAL_DMA_Start(&s_hbd_rx, (uint32_t)&I2C4->RXDR, (uint32_t)buf, n) == HAL_OK);
             t0 = DWT->CYCCNT;
             const I2cBm_Status_t s1 = ist_dmar(ll, I2C4, addr, n);
@@ -1762,6 +1889,10 @@ static bool xfer(bool m4, uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cy
     {
         xf |= IST_XF_TIER_LL;                             /* F2: through i2c_ll, on either core */
     }
+    if (s_hal && !m4)
+    {
+        xf |= IST_XF_TIER_HAL;                            /* F3: through i2c_hal, CPU1 only */
+    }
     if (!m4)
     {
         cm7_xfer(xf, n, arg, max_cycles, r);
@@ -1776,6 +1907,12 @@ static bool xfer(bool m4, uint32_t xf, uint32_t n, uint32_t arg, uint32_t max_cy
         r[k] = IST_AREA->m4_res[k];
     }
     return true;
+}
+
+/* The name suffix of the tier of the current step: "-LL" (F2), "-HAL" (F3). */
+static const char *tier_sfx(void)
+{
+    return s_ll ? "-LL" : (s_hal ? "-HAL" : "");
 }
 
 /* The X line of one transfer: what the host pairs with the target's RPT (t=1). For a
@@ -1795,7 +1932,7 @@ static void xline(const char *test, bool m4, uint32_t f, uint32_t xf, uint32_t n
         }
     }
     log_long("X %s%s %s f=%lu op=%s mode=%s a=%02lX n=%lu p=%lu st=%lu crc=%08lX mis=%lu bad=%ld cyc=%lu dtx=%lu drx=%lu "
-             "irq=%lu irqa=%lu cr1=%08lX sen=%lu isr=%08lX aux=%lu t=%u%s%s", test, s_ll ? "-LL" : "",
+             "irq=%lu irqa=%lu cr1=%08lX sen=%lu isr=%08lX aux=%lu t=%u%s%s", test, tier_sfx(),
              m4 ? "cm4" : "cm7", (unsigned long)f,
              op_name(op), mode_name(IST_XF_MODE(xf)), (unsigned long)IST_XF_ADDR(xf), (unsigned long)n,
              (unsigned long)arg, (unsigned long)r[IST_XR_STATUS], (unsigned long)r[IST_XR_CRC],
@@ -1823,7 +1960,16 @@ static I2cBm_Status_t inst_init(bool m4, uint32_t timingr, uint32_t tmo, uint32_
     }
     const I2cBm_Config_t c = { I2C4, timingr, BENCH_ANALOG_FILTER != 0U, BENCH_DNF, tmo };
     (void)I2C_BM_EnableClock(I2C4);
-    const I2cBm_Status_t st = ist_init(s_ll, &c);
+    I2cBm_Status_t st;
+    if (s_hal)
+    {
+        s_hi2c4.Instance = I2C4;                          /* F3: the caller's handle */
+        st = I2C_HAL_Init(&s_hi2c4, &c);
+    }
+    else
+    {
+        st = ist_init(s_ll, &c);
+    }
     ist_regs(I2C4, img);
     return st;
 }
@@ -1848,7 +1994,8 @@ static bool inst_deinit(bool m4, uint32_t *diff)
     }
     else
     {
-        st = I2C_BM_Deinit(I2C4);
+        s_hi2c4.Instance = I2C4;
+        st = s_hal ? I2C_HAL_Deinit(&s_hi2c4) : I2C_BM_Deinit(I2C4);   /* F3: also the handle to RESET */
         ist_regs(I2C4, img);
     }
     const uint32_t d = ist_reset_diff_img(img);         /* the one typed table of Common (audit F2, m38) */
@@ -2349,7 +2496,7 @@ static void t5_speed(bool m4, uint32_t f, uint32_t timingr, uint32_t k, uint32_t
     for (uint32_t i = 0U; i < 5U; i++)
     {
         if (!host_at("SCOPE T5%s k=%lu f=%lu kernel=%lu timingr=%08lX model=%lu rate=%lu trig=sda af=%u dnf=%u",
-                     s_ll ? "-LL" : "", (unsigned long)i, (unsigned long)f, (unsigned long)k, (unsigned long)timingr,
+                     tier_sfx(), (unsigned long)i, (unsigned long)f, (unsigned long)k, (unsigned long)timingr,
                      (unsigned long)model, (unsigned long)((f <= 100000U) ? 12500000U : 25000000U),
                      (unsigned)BENCH_ANALOG_FILTER, (unsigned)BENCH_DNF))
         {
@@ -2878,6 +3025,37 @@ static void t10(bool m4)
     (void)main_init(m4, 0U, &tr);
 }
 
+/* F3: T1 with BUSY = 1 through i2c_hal on I2C4 (initialised, its handle READY): the
+   transfers of ist_t1_busy() with the HAL tier's calls, each refused by i2c_bm's check
+   (ERR_BUS) before the HAL. The DMA handles are linked only so that the refusal is
+   i2c_bm's; no stream is started. */
+static void hal_t1_busy(IstT1Result_t *r)
+{
+    uint32_t a[IST_T1_PHOTO];
+    uint32_t b[IST_T1_PHOTO];
+    uint8_t buf[4] = { 0U, 1U, 2U, 3U };
+    I2C_HandleTypeDef *h = &s_hi2c4;
+    r->cases = 0U;
+    r->bad = 0U;
+    r->groups_same = 0U;
+    r->isr = I2C4->ISR;
+    h->hdmatx = &s_hbd_tx;
+    h->hdmarx = &s_hbd_rx;
+    ist_t1_photo(I2C4, a);
+    ist_t1_case(r, I2C_BM_CheckTransfer(I2C4, T_ADDR, 1U, 0U), I2C_BM_ERR_BUS);
+    ist_t1_case(r, I2C_HAL_Write(h, T_ADDR, buf, 1U, 100U), I2C_BM_ERR_BUS);
+    ist_t1_case(r, I2C_HAL_Write(h, T_ADDR, NULL, 0U, 100U), I2C_BM_ERR_BUS);
+    ist_t1_case(r, I2C_HAL_Read(h, T_ADDR, buf, 2U, 100U), I2C_BM_ERR_BUS);
+    ist_t1_case(r, I2C_HAL_WriteRead(h, T_ADDR, buf, 1U, buf, 2U, 100U), I2C_BM_ERR_BUS);
+    ist_t1_case(r, I2C_HAL_StartIt(h, T_ADDR, buf, 2U, NULL, 0U), I2C_BM_ERR_BUS);
+    ist_t1_case(r, I2C_HAL_StartDma(h, T_ADDR, buf, NULL, 2U), I2C_BM_ERR_BUS);
+    ist_t1_case(r, I2C_HAL_StartDma(h, T_ADDR, NULL, buf, 2U), I2C_BM_ERR_BUS);
+    ist_t1_photo(I2C4, b);
+    h->hdmatx = NULL;
+    h->hdmarx = NULL;
+    r->groups_same = (ist_t1_photo_eq(a, b) && (h->State == HAL_I2C_STATE_READY)) ? 1U : 0U;
+}
+
 /* T1 with BUSY = 1: the target holds SDA low (a START on the bus); every transfer is
    refused with ERR_BUS and nothing is written. */
 static void t1_busy(bool m4)
@@ -2905,7 +3083,14 @@ static void t1_busy(bool m4)
     }
     else
     {
-        ist_t1_busy(I2C4, s_ll, &t);
+        if (s_hal)
+        {
+            hal_t1_busy(&t);
+        }
+        else
+        {
+            ist_t1_busy(I2C4, s_ll, &t);
+        }
         t1_print("CM7 BUSY", &t);
         cases = t.cases;
         bad = t.bad;
@@ -3528,6 +3713,372 @@ static void step_f2_cm7(void)
     step_end();
 }
 
+/* ---- Phase F3: i2c_hal (CPU1 only) ------------------------------------------------------ */
+
+static I2C_HandleTypeDef s_hh;              /* F3_NOPIN: the handle of I2C2 / I2C3 / I2C4 */
+
+/* HAL_GetTick() through the session: the host checks the TICK lines rise (plan F3). */
+static void tick_line(const char *where)
+{
+    LOG("TICK %s %lu", where, (unsigned long)HAL_GetTick());
+}
+
+static void hal_handle(I2C_HandleTypeDef *h, I2C_TypeDef *i2c)
+{
+    (void)memset(h, 0, sizeof(*h));
+    h->Instance = i2c;
+}
+
+/* T1 with i2c_hal on I2C2 (no pins): its own refusals, each status written by hand,
+   with the photo of ist_t1_photo() unchanged in both groups. CalcTiming, the clock,
+   GetCaps, RecoverBus... are i2c_bm's in every tier (F1, T1). The control: a valid
+   I2C_HAL_Init changes the photo. */
+#define IST_T1_HAL_CASES    41U
+
+static void f3_t1(void)
+{
+    static IstT1Result_t t;
+    uint32_t a[IST_T1_PHOTO];
+    uint32_t b[IST_T1_PHOTO];
+    uint8_t buf[4] = { 0U, 1U, 2U, 3U };
+    I2cBm_TimingOut_t o = { 0U, 0U, 0U };
+    (void)bench_timing(s_k123, 100000U, &o);
+    (void)I2C_BM_EnableClock(I2C2);
+    I2C_HandleTypeDef *h = &s_hh;
+    hal_handle(h, I2C2);
+    const I2cBm_Config_t c = { I2C2, o.timingr, true, 0U, 0U };
+    I2cBm_Config_t k;
+    t.cases = 0U;
+    t.bad = 0U;
+    t.groups_same = 0U;
+
+    /* 1. The instance at reset. */
+    (void)I2C_BM_Deinit(I2C2);
+    ist_t1_photo(I2C2, a);
+    ist_t1_case(&t, I2C_HAL_Init(NULL, &c), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_Init(h, NULL), I2C_BM_ERR_PARAM);
+    h->Instance = (I2C_TypeDef *)USART3;                    ist_t1_case(&t, I2C_HAL_Init(h, &c), I2C_BM_ERR_PARAM);
+    h->Instance = I2C3;                                     ist_t1_case(&t, I2C_HAL_Init(h, &c), I2C_BM_ERR_PARAM);
+    h->Instance = I2C2;
+    k = c; k.dnf = 16U;                                     ist_t1_case(&t, I2C_HAL_Init(h, &k), I2C_BM_ERR_PARAM);
+    k = c; k.timingr = o.timingr | 0x01000000UL;            ist_t1_case(&t, I2C_HAL_Init(h, &k), I2C_BM_ERR_PARAM);
+    k = c; k.timeout_scl_low = 10U;                         ist_t1_case(&t, I2C_HAL_Init(h, &k), I2C_BM_ERR_UNSUPPORTED);
+    k = c; k.timeout_scl_low = 4097U;                       ist_t1_case(&t, I2C_HAL_Init(h, &k), I2C_BM_ERR_UNSUPPORTED);
+    ist_t1_case(&t, I2C_HAL_Write(NULL, T_ADDR, buf, 1U, 10U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_Write(h, T_ADDR, buf, 1U, 0U), I2C_BM_ERR_PARAM);          /* timeout_ms 0 */
+    ist_t1_case(&t, I2C_HAL_Write(h, T_ADDR, buf, 1U, 10U), I2C_BM_ERR_BUSY);          /* PE = 0 */
+    ist_t1_case(&t, I2C_HAL_Read(h, T_ADDR, buf, 1U, 10U), I2C_BM_ERR_BUSY);
+    ist_t1_case(&t, I2C_HAL_WriteRead(h, T_ADDR, buf, 1U, buf, 1U, 10U), I2C_BM_ERR_BUSY);
+    ist_t1_case(&t, I2C_HAL_Read(NULL, T_ADDR, buf, 1U, 10U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_WriteRead(NULL, T_ADDR, buf, 1U, buf, 1U, 10U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_StartIt(NULL, T_ADDR, buf, 1U, NULL, 0U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_StartIt(h, T_ADDR, buf, 1U, NULL, 0U), I2C_BM_ERR_BUSY);
+    ist_t1_case(&t, I2C_HAL_StartDma(h, T_ADDR, buf, NULL, 2U), I2C_BM_ERR_PARAM);      /* no hdmatx */
+    ist_t1_case(&t, I2C_HAL_StartDma(h, T_ADDR, NULL, buf, 2U), I2C_BM_ERR_PARAM);      /* no hdmarx */
+    ist_t1_case(&t, I2C_HAL_Wait(NULL, 10U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_Wait(h, 0U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_Deinit(NULL), I2C_BM_ERR_PARAM);
+    h->Instance = (I2C_TypeDef *)USART3;                    ist_t1_case(&t, I2C_HAL_Deinit(h), I2C_BM_ERR_PARAM);
+    h->Instance = I2C2;
+    ist_t1_photo(I2C2, b);
+    t.groups_same |= ist_t1_photo_eq(a, b) ? 1U : 0U;
+
+    /* 2. Initialised (PE = 1, handle READY): what the hardware would ignore, the transfers'
+       own fields, this tier's limits, and a handle that is not READY. */
+    const I2cBm_Status_t i2 = I2C_HAL_Init(h, &c);
+    ist_t1_photo(I2C2, a);
+    k = c; k.timingr = o.timingr ^ 0x00000001UL;            ist_t1_case(&t, I2C_HAL_Init(h, &k), I2C_BM_ERR_BUSY);
+    k = c; k.dnf = 1U;                                      ist_t1_case(&t, I2C_HAL_Init(h, &k), I2C_BM_ERR_BUSY);
+    ist_t1_case(&t, I2C_HAL_Write(h, 0x07U, buf, 1U, 10U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_Write(h, 0x78U, buf, 1U, 10U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_Write(h, T_ADDR, buf, 65536UL, 10U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_Write(h, T_ADDR, NULL, 1U, 10U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_Read(h, T_ADDR, buf, 0U, 10U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_WriteRead(h, T_ADDR, buf, 0U, buf, 1U, 10U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_WriteRead(h, T_ADDR, buf, 1U, buf, 0U, 10U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_WriteRead(h, T_ADDR, buf, 3U, buf, 1U, 10U), I2C_BM_ERR_UNSUPPORTED);
+    ist_t1_case(&t, I2C_HAL_StartIt(h, T_ADDR, NULL, 1U, NULL, 0U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_StartIt(h, T_ADDR, buf, 3U, buf, 1U), I2C_BM_ERR_UNSUPPORTED);
+    h->hdmatx = &s_hbd_tx;                                  /* linked, never started: refused first */
+    h->hdmarx = &s_hbd_rx;
+    ist_t1_case(&t, I2C_HAL_StartDma(h, T_ADDR, NULL, NULL, 2U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_StartDma(h, T_ADDR, buf, buf, 2U), I2C_BM_ERR_PARAM);
+    ist_t1_case(&t, I2C_HAL_StartDma(h, T_ADDR, buf, NULL, 1U), I2C_BM_ERR_PARAM);      /* n < 2 */
+    ist_t1_case(&t, I2C_HAL_StartDma(h, T_ADDR, NULL, buf, 0U), I2C_BM_ERR_PARAM);
+    h->hdmatx = NULL;
+    h->hdmarx = NULL;
+    h->State = HAL_I2C_STATE_BUSY_TX;                       /* a transfer running, as the HAL marks it */
+    ist_t1_case(&t, I2C_HAL_Write(h, T_ADDR, buf, 1U, 10U), I2C_BM_ERR_BUSY);
+    ist_t1_case(&t, I2C_HAL_StartIt(h, T_ADDR, buf, 1U, NULL, 0U), I2C_BM_ERR_BUSY);
+    h->State = HAL_I2C_STATE_READY;
+    ist_t1_photo(I2C2, b);
+    t.groups_same |= ist_t1_photo_eq(a, b) ? 2U : 0U;
+    (void)I2C_HAL_Deinit(h);
+
+    /* The control: a valid Init changes the photo. */
+    ist_t1_photo(I2C2, a);
+    const I2cBm_Status_t ic = I2C_HAL_Init(h, &c);
+    ist_t1_photo(I2C2, b);
+    t.control_changed = (!ist_t1_photo_eq(a, b) && ((ic == I2C_BM_OK) || (ic == I2C_BM_ERR_BUS)) &&
+                         ((i2 == I2C_BM_OK) || (i2 == I2C_BM_ERR_BUS))) ? 1U : 0U;
+    t.init_status = (uint32_t)ic;
+    (void)I2C_HAL_Deinit(h);
+    (void)I2C_BM_DisableClock(I2C2);
+    t1_print("CM7 I2C2 HAL", &t);
+    verdict((t.bad == 0U) && (t.cases == IST_T1_HAL_CASES) && (t.groups_same == 3U) && (t.control_changed == 1U),
+            "T1 CM7 refusals of i2c_hal on I2C2: %lu cases (%u), %lu with another status; instance, RCC_C1/C2 "
+            "APB1LENR/APB4ENR, D2CCIP2R, D3CCIPR, SYSCFG_PMCR unchanged in the 2 groups: 0x%lX (0x3); control (a "
+            "valid I2C_HAL_Init) changes them %lu (Init %lu)", (unsigned long)t.cases, (unsigned)IST_T1_HAL_CASES,
+            (unsigned long)t.bad, (unsigned long)t.groups_same, (unsigned long)t.control_changed,
+            (unsigned long)t.init_status);
+}
+
+/* The raw HAL, as the test's own reference (plan T2, F3): HAL_I2C_Init and the two filter
+   calls with the Init fields written here by hand, not taken from i2c_hal.c. */
+static HAL_StatusTypeDef hal_raw_init(I2C_HandleTypeDef *h, I2C_TypeDef *i2c, uint32_t timingr, bool analog,
+                                      uint32_t dnf)
+{
+    hal_handle(h, i2c);                                     /* State RESET */
+    h->Init.Timing           = timingr;
+    h->Init.OwnAddress1      = 0U;
+    h->Init.AddressingMode   = I2C_ADDRESSINGMODE_7BIT;
+    h->Init.DualAddressMode  = I2C_DUALADDRESS_DISABLE;
+    h->Init.OwnAddress2      = 0U;
+    h->Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+    h->Init.GeneralCallMode  = I2C_GENERALCALL_DISABLE;
+    h->Init.NoStretchMode    = I2C_NOSTRETCH_DISABLE;
+    HAL_StatusTypeDef hs = HAL_I2C_Init(h);
+    if (hs == HAL_OK)
+    {
+        hs = HAL_I2CEx_ConfigAnalogFilter(h, analog ? I2C_ANALOGFILTER_ENABLE : I2C_ANALOGFILTER_DISABLE);
+    }
+    if (hs == HAL_OK)
+    {
+        hs = HAL_I2CEx_ConfigDigitalFilter(h, dnf);
+    }
+    return hs;
+}
+
+/* The differences by design between the HAL's image and i2c_bm's (i2c_hal.h, T2):
+   OAR1.OA1EN (HAL_I2C_Init l. 600) and CR2.AUTOEND | NACK (l. 619), typed here. */
+#define T2H_OAR1_HAL    I2C_OAR1_OA1EN
+#define T2H_CR2_HAL     (I2C_CR2_AUTOEND | I2C_CR2_NACK)
+#define T2H_DESIGN_REGS ((1UL << 1) | (1UL << 2))          /* CR2, OAR1 in ist_regs() order */
+
+typedef struct
+{
+    uint32_t cases;
+    uint32_t hal_cases;        /* timeout 0: initialised by the HAL                     */
+    uint32_t refused;          /* timeout != 0: ERR_UNSUPPORTED with the reset image     */
+    uint32_t bad_raw;          /* HAL images that differ from the raw HAL_I2C_Init's     */
+    uint32_t bad_bm;           /* ... from i2c_bm's with the two design differences      */
+    uint32_t bad_rm;           /* ... from the RM fields with the two design differences */
+    uint32_t regs_vs_bm;       /* OR of the registers where HAL and BM differ            */
+    uint32_t bad_status;
+    uint32_t bad_deinit;
+    uint32_t control;          /* told apart from the raw HAL image with DNF + 1: all    */
+} T2HalResult_t;
+
+static void f3_t2_one(I2C_TypeDef *i2c, T2HalResult_t *r)
+{
+    (void)memset(r, 0, sizeof(*r));
+    I2cBm_Config_t c;
+    uint32_t e[IST_NREG];
+    for (uint32_t idx = 0U; ist_t2_case(i2c, idx, &c, e); idx++)
+    {
+        uint32_t g_bm[IST_NREG];
+        uint32_t g_h[IST_NREG];
+        uint32_t g_raw[IST_NREG];
+        uint32_t g_raw2[IST_NREG];
+        I2C_HandleTypeDef h2;
+        const I2cBm_Status_t s_bm = I2C_BM_Init(&c);
+        ist_regs(i2c, g_bm);
+        bool d_ok = (I2C_BM_Deinit(i2c) == I2C_BM_OK) && (ist_reset_diff(i2c) == 0U);
+        hal_handle(&s_hh, i2c);
+        const I2cBm_Status_t s_h = I2C_HAL_Init(&s_hh, &c);
+        ist_regs(i2c, g_h);
+        d_ok = d_ok && (I2C_HAL_Deinit(&s_hh) == I2C_BM_OK) && (ist_reset_diff(i2c) == 0U);
+        if (c.timeout_scl_low != 0U)
+        {
+            /* Refused before any write: the image is still the reset one. */
+            if ((s_h == I2C_BM_ERR_UNSUPPORTED) && (ist_reset_diff_img(g_h) == 0U))
+            {
+                r->refused++;
+            }
+            else
+            {
+                r->bad_status++;
+            }
+        }
+        else
+        {
+            r->hal_cases++;
+            const HAL_StatusTypeDef h1 = hal_raw_init(&h2, i2c, c.timingr, c.analog_filter, c.dnf);
+            ist_regs(i2c, g_raw);
+            d_ok = d_ok && (I2C_BM_Deinit(i2c) == I2C_BM_OK) && (ist_reset_diff(i2c) == 0U);
+            const HAL_StatusTypeDef h2s = hal_raw_init(&h2, i2c, c.timingr, c.analog_filter, (c.dnf + 1U) & 15U);
+            ist_regs(i2c, g_raw2);
+            d_ok = d_ok && (I2C_BM_Deinit(i2c) == I2C_BM_OK) && (ist_reset_diff(i2c) == 0U);
+            if ((h1 != HAL_OK) || (h2s != HAL_OK) || (s_h != s_bm) || ((s_bm != I2C_BM_OK) && (s_bm != I2C_BM_ERR_BUS)))
+            {
+                r->bad_status++;
+            }
+            r->bad_raw += ist_t2_differs(g_h, g_raw) ? 1U : 0U;
+            for (uint32_t k = 0U; k < 6U; k++)
+            {
+                r->regs_vs_bm |= (g_h[k] != g_bm[k]) ? (1UL << k) : 0U;
+            }
+            uint32_t adj[IST_NREG];
+            for (uint32_t k = 0U; k < IST_NREG; k++)
+            {
+                adj[k] = g_bm[k];
+            }
+            adj[1] |= T2H_CR2_HAL;
+            adj[2] |= T2H_OAR1_HAL;
+            r->bad_bm += ist_t2_differs(g_h, adj) ? 1U : 0U;
+            e[1] |= T2H_CR2_HAL;
+            e[2] |= T2H_OAR1_HAL;
+            r->bad_rm += ist_t2_differs(g_h, e) ? 1U : 0U;
+            r->control += ist_t2_differs(g_h, g_raw2) ? 1U : 0U;
+        }
+        r->bad_deinit += d_ok ? 0U : 1U;
+        r->cases++;
+    }
+}
+
+static void f3_t2(void)
+{
+    static const struct { I2C_TypeDef *i2c; const char *name; } inst[3] = {
+        { I2C2, "CM7 I2C2" }, { I2C3, "CM7 I2C3" }, { I2C4, "CM7 I2C4" } };
+    for (uint32_t i = 0U; i < 3U; i++)
+    {
+        T2HalResult_t t;
+        (void)I2C_BM_EnableClock(inst[i].i2c);
+        f3_t2_one(inst[i].i2c, &t);
+        verdict((t.cases == IST_T2_CASES) && (t.hal_cases == 30U) && (t.refused == 90U) && (t.bad_raw == 0U) &&
+                (t.bad_bm == 0U) && (t.bad_rm == 0U) && (t.regs_vs_bm == T2H_DESIGN_REGS) && (t.bad_status == 0U) &&
+                (t.bad_deinit == 0U) && (t.control == t.hal_cases),
+                "T2 %s images over TIMINGR x filter x DNF x timeout: %lu cases; timeout != 0 refused (ERR_UNSUPPORTED, "
+                "reset image) in %lu (90); of the %lu initialised: against the raw HAL_I2C_Init + filter calls %lu "
+                "differ; against i2c_bm's with OAR1.OA1EN and CR2.AUTOEND|NACK (the HAL's by design, l. 600, 619) %lu "
+                "differ, and the registers that differ from BM's at all are 0x%02lX (0x06: CR2, OAR1); against the RM "
+                "fields with the same two %lu differ; %lu statuses not OK/ERR_BUS or not BM's, %lu Deinit not at "
+                "reset; control (the raw HAL image with DNF + 1, the same comparison) told apart in %lu (all)",
+                inst[i].name, (unsigned long)t.cases, (unsigned long)t.refused, (unsigned long)t.hal_cases,
+                (unsigned long)t.bad_raw, (unsigned long)t.bad_bm, (unsigned long)t.regs_vs_bm,
+                (unsigned long)t.bad_rm, (unsigned long)t.bad_status, (unsigned long)t.bad_deinit,
+                (unsigned long)t.control);
+        if (inst[i].i2c != I2C4)
+        {
+            (void)I2C_BM_DisableClock(inst[i].i2c);
+        }
+    }
+}
+
+/* C13 in i2c_hal (lesson m4): I2C_HAL_Wait on a handle marked busy by hand (no register
+   written) with PRIMASK set, so the tick cannot advance: it must end by its count of
+   polls with the same HAL_GetTick(), not hang. Control: the same wait with the tick
+   running ends by its 10 ms. I2C2, no pins. */
+static void f3_wait_stall(void)
+{
+    I2cBm_TimingOut_t o = { 0U, 0U, 0U };
+    (void)bench_timing(s_k123, 100000U, &o);
+    (void)I2C_BM_EnableClock(I2C2);
+    hal_handle(&s_hh, I2C2);
+    const I2cBm_Config_t c = { I2C2, o.timingr, true, 0U, 0U };
+    const I2cBm_Status_t si = I2C_HAL_Init(&s_hh, &c);
+    s_hh.State = HAL_I2C_STATE_BUSY_TX;
+    const uint32_t pm = __get_PRIMASK();
+    __disable_irq();
+    const uint32_t k0 = HAL_GetTick();
+    uint32_t c0 = DWT->CYCCNT;
+    const I2cBm_Status_t s1 = I2C_HAL_Wait(&s_hh, 10U);
+    const uint32_t cy1 = DWT->CYCCNT - c0;
+    const uint32_t k1 = HAL_GetTick();
+    __set_PRIMASK(pm);
+    c0 = DWT->CYCCNT;
+    const I2cBm_Status_t s2 = I2C_HAL_Wait(&s_hh, 10U);
+    const uint32_t cy2 = DWT->CYCCNT - c0;
+    s_hh.State = HAL_I2C_STATE_READY;
+    const I2cBm_Status_t sd = I2C_HAL_Deinit(&s_hh);
+    (void)I2C_BM_DisableClock(I2C2);
+    const uint32_t two_ticks = 2U * ms_cyc(1U);
+    verdict((si == I2C_BM_OK) && (s1 == I2C_BM_ERR_TIMEOUT) && (k1 == k0) && (cy1 >= two_ticks) &&
+            (cy1 <= ms_cyc(500U)) && (s2 == I2C_BM_ERR_TIMEOUT) && (cy2 >= ms_cyc(9U)) && (cy2 <= ms_cyc(12U)) &&
+            (sd == I2C_BM_OK),
+            "I2C_HAL_Wait(10 ms) on a busy handle with PRIMASK set (the tick stopped): %u (ERR_TIMEOUT %u) after %lu "
+            "cycles (>= 2 tick periods, %lu), HAL_GetTick() %lu -> %lu (unchanged); control with the tick running: %u "
+            "after %lu cycles (9..12 ms)", (unsigned)s1, (unsigned)I2C_BM_ERR_TIMEOUT, (unsigned long)cy1,
+            (unsigned long)two_ticks, (unsigned long)k0, (unsigned long)k1, (unsigned)s2, (unsigned long)cy2);
+}
+
+static void step_f3_nopin(void)
+{
+    if (!step_begin("F3_NOPIN"))
+    {
+        return;
+    }
+    s_hal = true;
+    LOG("F3: from here CPU1's configuration and transfers go through i2c_hal (verdicts prefixed HAL)");
+    tick_line("F3_NOPIN start");
+    f3_t1();
+    tick_line("after T1");
+    f3_t2();
+    tick_line("after T2");
+    f3_wait_stall();
+    tick_line("F3_NOPIN end");
+    s_hal = false;
+    if (!host_at("F3_NOPIN end"))
+    {
+        return;
+    }
+    step_end();
+}
+
+/* The bus tests of F3 on CPU1's I2C4 through i2c_hal: T4 (T5 with taps), T1 with BUSY,
+   T6, T7(b) and the Deinit of each (T14). */
+static void step_f3_cm7(void)
+{
+    if (!step_begin("F3_CM7"))
+    {
+        return;
+    }
+    if (!delay_ms(2U) || !cm7_pins_af())
+    {
+        bench_abort("CM7 pins");
+        return;
+    }
+    uint32_t tr = 0U;
+    s_hal = true;
+    tick_line("F3_CM7 start");
+    t4_t5(false);
+    tick_line("after T4/T5");
+    const bool fm = s_f_main > 400000U;
+    const bool fm_on = !s_bench_abort && fm && fmp(false, true);
+    if (!s_bench_abort && (!fm || fm_on) && main_init(false, 0U, &tr))
+    {
+        t1_busy(false);
+        t6(false);
+        tick_line("after T6");
+        t7(false);
+        tick_line("after T7(b)");
+        deinit_judged(false, "the F3_CM7 tests at the main speed");
+    }
+    if (fm_on)
+    {
+        (void)fmp(false, false);
+    }
+    s_hal = false;
+    fmp_judge("F3_CM7");
+    (void)cm7_pins_input();
+    tick_line("F3_CM7 end");
+    if (!host_at("F3_CM7 end"))
+    {
+        return;
+    }
+    step_end();
+}
+
 /* ==========================================================================================
  * Entry points
  * ========================================================================================== */
@@ -3597,8 +4148,11 @@ void I2C_Selftest_CM7_Run(void)
     step_f2_nopin();
     step_f2_cm4();
     step_f2_cm7();
+    step_f3_nopin();
+    step_f3_cm7();
     if (step_begin("DONE"))
     {
+        tick_line("DONE");
         step_end();
     }
     bench_safe();
