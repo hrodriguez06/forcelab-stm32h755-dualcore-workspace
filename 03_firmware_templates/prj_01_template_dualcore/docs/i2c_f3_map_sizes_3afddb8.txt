@@ -1,0 +1,51 @@
+05_i2c F3: linked .map sizes of prj_01 ("Discarded input sections" excluded: parsing starts at
+"Linker script and memory map"). 2481396: the rows of docs/tim_f0_map_sizes_2481396.txt (the reference of the
+plan, A16); 3afddb8: build/<preset> of tools/build_all.ps1 -Clean (docs/i2c_f3_build_all_3afddb8.txt), tree clean.
+Commit: 3afddb8 docs(i2c): add the F3 delivery captures at 357c60d.
+Allocated output sections only (address != 0). text = .isr_vector+.text+.rodata+.ARM, data = .data+.init_array+
+.fini_array, bss = .bss+._user_heap_stack+.shared_ram (the grouping arm-none-eabi-size and build_all.ps1 report).
+
+image        commit   .isr_vector       .text     .rodata        .ARM .init_array .fini_array       .data        .bss ._user_heap .shared_ram    text  data    bss
+debug CM7    2481396          664       27900         732           8           4           4         124       30868       24576         224   29304   132  55668
+debug CM7    3afddb8          664       27900         732           8           4           4         124       30868       24576         224   29304   132  55668
+             delta    0 in every section of the reference
+                      not in the reference file (not compared): .axi_ram 0, .d3_ram 0, .dma_buf 0, .eth_ram 0, .igot.plt 0, .iplt 0, .preinit_array 0, .rel.dyn 0, .v4_bx 0, .vfp11_veneer 0
+debug CM4    2481396          664        2736          56           0           4           4          16          44       12292         224    3456    24  12560
+debug CM4    3afddb8          664        2736          56           0           4           4          16          44       12292         224    3456    24  12560
+             delta    0 in every section of the reference
+                      not in the reference file (not compared): .d3_ram 0, .igot.plt 0, .iplt 0, .preinit_array 0, .rel.dyn 0, .v4_bx 0, .vfp11_veneer 0
+release CM7  2481396          664       26952         732           8           4           4         124       30872       24576         224   28356   132  55672
+release CM7  3afddb8          664       26952         732           8           4           4         124       30872       24576         224   28356   132  55672
+             delta    0 in every section of the reference
+                      not in the reference file (not compared): .axi_ram 0, .d3_ram 0, .dma_buf 0, .eth_ram 0, .igot.plt 0, .iplt 0, .preinit_array 0, .rel.dyn 0, .v4_bx 0, .vfp11_veneer 0
+release CM4  2481396          664        2392          56           0           4           4          16          44       12292         224    3112    24  12560
+release CM4  3afddb8          664        2392          56           0           4           4          16          44       12292         224    3112    24  12560
+             delta    0 in every section of the reference
+                      not in the reference file (not compared): .d3_ram 0, .igot.plt 0, .iplt 0, .preinit_array 0, .rel.dyn 0, .v4_bx 0, .vfp11_veneer 0
+
+selftest-i2c (3afddb8, build/selftest-i2c from an empty dir, docs/i2c_f3_selftest_build_3afddb8.txt).
+text = .text+.rodata input sections of each object:
+  CM7 image: text 106596 data 140 bss 57044
+  CM7 dma_bm.c.obj                     text=   352 data=   0 bss=    0
+  CM7 dma_hal.c.obj                    text=   872 data=   0 bss=   96
+  CM7 i2c_bm.c.obj                     text=  5316 data=   0 bss=    0
+  CM7 i2c_hal.c.obj                    text=  1376 data=   0 bss=    0
+  CM7 i2c_ll.c.obj                     text=  2674 data=   0 bss=    0
+  CM7 i2c_selftest.c.obj               text= 44273 data=   8 bss= 1267
+  CM7 i2c_selftest_common.c.obj        text=  5507 data=   0 bss=    0
+  CM7 stm32h7xx_hal_i2c.c.obj          text=  8808 data=   0 bss=    0
+  CM7 stm32h7xx_hal_i2c_ex.c.obj       text=   176 data=   0 bss=    0
+  CM7 i2c_bm.c.obj .data = .bss = 0: yes
+  CM7 i2c_ll.c.obj .data = .bss = 0: yes
+  CM7 i2c_hal.c.obj .data = .bss = 0: yes
+  CM4 image: text 26696 data 28 bss 78576
+  CM4 dma_bm.c.obj                     text=  1974 data=   0 bss=    0
+  CM4 i2c_bm.c.obj                     text=  5312 data=   0 bss=    0
+  CM4 i2c_ll.c.obj                     text=  2650 data=   0 bss=    0
+  CM4 i2c_selftest.c.obj               text=  6025 data=   4 bss=65952
+  CM4 i2c_selftest_common.c.obj        text=  5331 data=   0 bss=    0
+  CM4 i2c_bm.c.obj .data = .bss = 0: yes
+  CM4 i2c_ll.c.obj .data = .bss = 0: yes
+
+i2c_bm.c.obj and i2c_ll.c.obj (CM7, CM4) and i2c_hal.c.obj (CM7) with .data = .bss = 0: yes
+prj_01 production equal to 2481396 in every section of the reference: yes
