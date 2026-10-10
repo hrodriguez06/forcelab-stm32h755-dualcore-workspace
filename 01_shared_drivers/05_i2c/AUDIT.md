@@ -374,3 +374,51 @@ En las dos sesiones válidas, las líneas de resultado, ordenadas y con los núm
 ### Estado
 
 **F2 pasa.** Cerrados B2, B3 y m36–m39; las observaciones O24–O30 quedan como están (O24 y O25 al README; O30 resuelta por R4-1). **La API de `i2c_ll` queda congelada en `c483bb9`**: el contrato es `01_shared_drivers/05_i2c/i2c_ll.h` de ese commit, junto con el de `i2c_bm` (revisión 4, R4-2). El implementador puede empezar F3 (`i2c_hal`). El banco quedó en notaps (J2/J3 quitados).
+
+## F3, parte 1: revisión, build y ejecución del auditor (`689f36a`)
+
+Entrega: `d1c6f30..689f36a` (código en `108892c`, `dd2f805`, `b0c5802`, `a15c442`, `1abff02`, `357c60d`; capturas de entrega en `3afddb8`, imágenes de `357c60d`; evidencia de build en `810de9b`; informe en `689f36a`).
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| A23 alcance | Solo `05_i2c/` (`i2c_hal.[ch]` nuevos, informe), `01_shared_drivers/CMakeLists.txt` y `prj_01`. `i2c_bm` e `i2c_ll` (congeladas), `AUDIT.md`, el plan y las instrucciones, sin tocar. `HAL_I2C_MODULE_ENABLED`, `USE_HAL_I2C_REGISTER_CALLBACKS 0U` y el include, solo bajo `I2C_DRIVER_SELFTEST` en `CM7/Core/Inc/stm32h7xx_hal_conf.h` (decisión 7) |
+| `build_all -Clean` en `689f36a` (mi ejecución) | 8/8; `prj_01` igual a `2481396` |
+| `selftest-i2c` con `-Werror` (mi ejecución) | 0 avisos; CM7 106596/140/130804, CM4 26696/28/78576 (`arm-none-eabi-size`), como el informe |
+| F334 con `-Werror` (mi ejecución) | 0 avisos; 11340/20/3392 |
+| Capturas de entrega | `i2c_f3_bench_taps_357c60d.txt` 149/149 y `..._notaps_357c60d.txt` 112/112; la primera notaps (`a15c442`, `ERR_VERIFY` de `Init` por el `NACK` que el hardware mantiene a 0 con `PE = 0`, 50:2621-2623), commiteada sin editar y explicada |
+| Decisiones del responsable que cita el informe | `timeout_scl_low ≠ 0` → `ERR_UNSUPPORTED`, y `WriteRead` con `ntx > 2` → `ERR_UNSUPPORTED` (2026-10-09): **confirmadas por el responsable** |
+
+Revisé el código con dos lecturas independientes (`i2c_hal` contra el plan y el código de la HAL; selftest y host) y comprobé yo mismo M4 en `i2c_hal.c` y en `stm32h7xx_hal_i2c.c`.
+
+### Revisión
+
+- **`i2c_hal`:** `Init` en el orden del plan (validación, `I2C_BM_Deinit`, handle a RESET, `HAL_I2C_Init`, los dos filtros después, porque la HAL reescribe `CR1` en l. 631) con read-back exacto y `ERR_BUS` con `BUSY`; `Deinit` sin `HAL_I2C_DeInit` y con `XferISR = NULL`; sin MSP propio (`prj_01` no define `HAL_I2C_MspInit`: corre el débil, l. 580/696) ni callbacks; sin estado propio (C7). La traducción de códigos (`from_hal`) es correcta. Más de 20 filas de la tabla de líneas de la HAL comprobadas contra `stm32h7xx_hal_i2c.c` V1.11.6; solo falla la de `AUTOEND` (m44). 2.19.6: la HAL precarga el primer byte en `Transmit`, `Transmit_IT`, `Transmit_DMA` y `Mem_Read_IT`, no en el `Mem_Read` bloqueante, y está documentado, como IC1. Los dos `ERR_UNSUPPORTED` están justificados; el de `TIMEOUTR`, más de lo que dice el informe: con `ERRIE`, un `TIMEOUT` reentraría para siempre en `HAL_I2C_ER_IRQHandler`, que nunca borra `TIMEOUTCF` (l. 4664-4708).
+- **Selftest y host:** producción intacta (los manejadores de I2C4 EV/ER y de los canales 0/1 de la BDMA viven en el selftest, con la misma prioridad). T2 compara contra el `HAL_I2C_Init` crudo con sus propios campos, contra BM con las dos diferencias por diseño escritas en la prueba (`OAR1.OA1EN`, `CR2.AUTOEND`) y exige exactamente esos dos registros; su control puede fallar. T1 con 41 casos escritos a mano (contados) y su control. La prueba del tick parado (lección m4) para de verdad el tick (TIM6 con prioridad 0, PRIMASK) y su control puede fallar. T4–T7(b) por `I2C_HAL_*`, con las listas `-HAL` completas en el host. Las retenciones, ordenadas tras el handshake (B2).
+
+### Mi ejecución
+
+Banco en taps (J2/J3 puestos), checklist del responsable confirmado el 2026-10-10. Imágenes de `689f36a` (`tools/flash.py --sn`; H755 0x450, F334 0x438, "Download verified successfully"). Captura sin editar: `03_firmware_templates/prj_01_template_dualcore/docs/i2c_f3_audit_bench_taps_689f36a.txt`: **149/149, `HOST VERDICT=PASS`**, `FW VERDICT=PASS`; líneas de resultado, ordenadas y normalizadas, idénticas a las de la entrega. La sesión notaps queda para después de la corrección de M4, que cambia el código.
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| M4 | Mayor (C13) | **`timeout_ms = HAL_MAX_DELAY` quita la única cota de las llamadas bloqueantes.** `i2c_hal` solo rechaza 0 (`i2c_hal.c:196, 215, 240`). La HAL no comprueba el timeout con `HAL_MAX_DELAY` (`stm32h7xx_hal_i2c.c:6980, 7020`), y este tier rechaza `TIMEOUTR` (decisión del 2026-10-09): un target que retenga SCL durante `I2C_HAL_Write(…, 0xFFFFFFFF)` deja la llamada colgada para siempre. Contradice `i2c_hal.h:46-47` ("a held SCL ends a HAL transfer only by timeout_ms") | Rechazar `timeout_ms = HAL_MAX_DELAY` con `ERR_PARAM` en todas las llamadas con `timeout_ms` (también `I2C_HAL_Wait` si aplica), documentado y con su caso en T1 |
+| m40 | Menor (C6) | En `WriteRead` y `StartIt`, el límite del tier (`ntx > 2`, `:245-248, 273-276`) se comprueba después de `I2C_BM_Check*`, que ya devuelve `ERR_BUSY` (`PE = 0`) o `ERR_BUS`: `ntx = 3` da esos códigos y no `ERR_UNSUPPORTED`. C6 es "capacidad, rango, estado" | Comprobar `ntx > 2` antes del `Check*` de BM (con los argumentos ya válidos de NULL/instancia) |
+| m41 | Menor (doc) | `i2c_hal.h:48-50`: "un timeout de la HAL no manda STOP" no vale para el NACK, donde `I2C_IsErrorOccurred` escribe `STOP` (l. 7196) y espera además `I2C_TIMEOUT_STOPF` 25 ms (l. 7205): una llamada puede durar `timeout_ms` + 25 ms; la salida por error hace `I2C_RESET_CR2` y vacía `TXDR` (l. 7267-7273) | Encabezado |
+| m42 | Menor (doc) | Una transferencia DMA abandonada (`I2C_HAL_Wait` → `ERR_TIMEOUT`, luego `I2C_HAL_Deinit`) no para los streams del llamador: un TC tardío llama a `I2C_DMAMasterTransmitCplt`, que hace RMW de `CR1` y activa interrupciones en la instancia ya desinicializada (l. 6744, 6750/6778), y el siguiente `Init` da `ERR_BUSY`; con el hdma aún ocupado, el siguiente `StartDma` falla en `HAL_DMA_Start_IT` (l. 2077-2089) con un byte precargado en `TXDR` (l. 2012) | Documentar: abortar los streams y llamar a `I2C_HAL_Deinit` después de todo `ERR_HAL` o `ERR_TIMEOUT` |
+| m43 | Menor (doc, C10) | La limitación de C10 solo se lista para los filtros (`i2c_hal.h:67-69`); los caminos de transferencia de la HAL también hacen RMW de `CR1`/`CR2` sin PRIMASK (`I2C_TransferConfig` l. 7321, `I2C_Enable_IRQ`, `CR1 \|= TXDMAEN/RXDMAEN` 2075/2222, `CR2 \|= STOP` 7196, `I2C_RESET_CR2`) | Encabezado y README |
+| m44 | Menor (doc) | `i2c_hal.c:39` y la fila 7305-7325 del informe dicen que `AUTOEND` y `NACK` quedan como estaban; `I2C_TransferConfig` incluye `AUTOEND` en su máscara (l. 7322). Sin efecto (`closed()` enmascara `AUTOEND`) | Corregir comentario e informe |
+| m45 | Menor (doc) | Códigos sin listar: `Init` (`ERR_PARAM`, el `ERR_BUSY` de `CheckConfig` con `PE = 1` y otra configuración, `ERR_VERIFY`), `StartIt` (`ERR_UNSUPPORTED`), `Wait` con un handle en RESET (acaba en `ERR_TIMEOUT` tras `timeout_ms`) | Encabezado |
+| m46 | Menor (carrera del host) | `f3_tick()` lee las líneas `TICK` justo después de `step("DONE")` sin esperar `TICK DONE` (`i2c_hw_check.py:2320-2334, 2396-2399`; `CM7 :4154`): en `notaps_357c60d` llegó 8 ms antes de la comprobación. Con más latencia daría 9 líneas y un FAIL falso (la lección de las ventanas) | `con.expect(r"\[i2c\] TICK DONE")` antes de juzgar |
+| m47 | Menor | La cota inferior del control de la prueba del tick parado (9 ms, `CM7 :4006`) solo pasa porque el HSE de la placa va un +1,3 %: `I2C_HAL_Wait(10)` puede acabar tras poco más de 9 periodos del tick | Cota inferior de unos 8,5 ms |
+| m48 | Menor (evidencia) | T14 no se juzga tras cada prueba de F3: `f3_t1` ignora los dos resultados de `I2C_HAL_Deinit` (`:3816, 3825`) y `f3_wait_stall` juzga el estado pero no la imagen de reset (`:4002`); T1-BUSY y T7(b) comparten el juicio de fin de paso. §5.3 dice "tras cada prueba" | Juzgarlos, o corregir §5.3 |
+| m49 | Menor (evidencia) | La foto de T1-HAL no incluye el estado del handle (`:3784, 3815`); `hal_t1_busy` sí (`:3056`) | Añadir `h->State` a la foto |
+
+**Observaciones:** O31, el límite `ntx > 2` también se aplica a `StartIt`; la decisión del responsable cubría `WriteRead`, y la extensión es razonable pero implícita (el plan admitía la API `_Seq_`). O32, `i2c_hal` no comprueba el alineamiento del handle DMA, como sí hace `spi_hal` (`dma_fits`). O33, `I2C_ITError` pone `READY` antes de que termine el aborto asíncrono de la DMA (l. 6587 frente a 6627): `Wait` puede volver con `HAL_DMA_Abort_IT` en curso. O34, la salida de `I2C_HAL_Wait` con el tick parado cuenta lecturas, no ciclos (unos 38 ms medidos); aceptable por C13. O35, si esa salida regresara, la prueba del tick parado colgaría con PRIMASK puesto sin llegar a `bench_safe` (eléctricamente seguro: sin pines; el host aborta a los 120 s). O36, en el tier HAL, `dtx`/`drx` se derivan del estado y no se miden (salvo la lectura DMA); el host no los juzga en F3. O37, el host no tiene lista de los veredictos esperados del firmware (patrón anterior a F3).
+
+### Estado
+
+**F3 no pasa todavía** por M4, que cambia el código de `i2c_hal`. Lo demás son menores de documentación y de evidencia (m40–m49). Con la corrección y nuevas sesiones de entrega, repetiré mis dos sesiones (taps y notaps). El banco quedó en taps.
