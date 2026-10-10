@@ -422,3 +422,32 @@ Banco en taps (J2/J3 puestos), checklist del responsable confirmado el 2026-10-1
 ### Estado
 
 **F3 no pasa todavía** por M4, que cambia el código de `i2c_hal`. Lo demás son menores de documentación y de evidencia (m40–m49). Con la corrección y nuevas sesiones de entrega, repetiré mis dos sesiones (taps y notaps). El banco quedó en taps.
+
+## F3, parte 2: corrección y ejecución del auditor en la placa (`01e462f`)
+
+Entrega: `b920c7a..01e462f` (código en `b0281f2`, `814d4ca`, `7d33d56`, `3bc69fe`; capturas de entrega en `e053f7a`, imágenes de `3bc69fe`; evidencia de build en `1b78db4`; informe en `01e462f`, "Respuesta a la auditoría de F3, parte 1"). `i2c_bm` e `i2c_ll`, sin cambios.
+
+### Revisión
+
+| Hallazgo | Verificación |
+| --- | --- |
+| M4 | `timeout_ok()` acepta `timeout_ms` de 1 a `HAL_MAX_DELAY − 1` en `Write`, `Read`, `WriteRead` e `I2C_HAL_Wait`, antes de llamar a la HAL; documentado. T1-HAL añade los casos (`HAL_MAX_DELAY` en las cuatro llamadas, también con el handle iniciado) y exige 48 casos exactos. **Cerrado** |
+| m40 | `ntx > 2` (con `nrx ≠ 0` en `StartIt`) → `ERR_UNSUPPORTED` justo después de validar el handle y antes del `Check*` de BM (C6: capacidad, rango, estado); casos en T1-HAL. **Cerrado** |
+| m41–m45 | `i2c_hal.h` completo: el STOP y los 25 ms de `I2C_TIMEOUT_STOPF` del NACK, `I2C_RESET_CR2` y el vaciado de `TXDR` en la salida por error, el abandono de una transferencia DMA (abortar los streams y `I2C_HAL_Deinit` tras `ERR_HAL` o `ERR_TIMEOUT`), los RMW sin PRIMASK de la HAL (C10), los códigos de retorno que faltaban. El comentario de `AUTOEND` (`i2c_hal.c:39`) y la fila del informe, corregidos. **Cerrados** |
+| m46 | El host espera la línea `TICK DONE` (hasta 10 s) antes de juzgar las `TICK`. **Cerrado** |
+| m47, m48, m49 | Cota inferior del control del tick parado ajustada; la imagen de reset juzgada tras cada `I2C_HAL_Deinit` de F3 (`h->State == RESET` y `ist_reset_diff()`); `h->State` en la foto de T1-HAL. **Cerrados** |
+
+Builds (mi ejecución, `01e462f`): `build_all -Clean` 8/8, `prj_01` igual a `2481396`; `selftest-i2c` con `-Werror` 0 avisos (CM7 107064/140/130804, CM4 26696/28/78576); F334 con `-Werror` 0 avisos (11340/20/3392). Capturas de entrega `i2c_f3_bench_taps_3bc69fe.txt` 149/149 y `..._notaps_3bc69fe.txt` 112/112.
+
+### Mi ejecución
+
+Checklist del responsable vigente (2026-10-10): banco en notaps; después, J2/J3 puestos para taps. Imágenes de `01e462f` en las dos placas (`tools/flash.py --sn`; H755 0x450, F334 0x438, "Download verified successfully"). Capturas sin editar, en `03_firmware_templates/prj_01_template_dualcore/docs/`:
+
+- `i2c_f3_audit_bench_notaps_01e462f.txt`: **112/112, `HOST VERDICT=PASS`**, `FW VERDICT=PASS`;
+- `i2c_f3_audit_bench_taps_01e462f.txt`: **149/149, `HOST VERDICT=PASS`**, `FW VERDICT=PASS`.
+
+En las dos, las líneas de resultado, ordenadas y con los números normalizados, son idénticas a las de la entrega.
+
+### Estado
+
+**F3 pasa.** Cerrados M4 y m40–m49; las observaciones O31–O37 quedan para el README (O31–O34) o como están. **La API de `i2c_hal` queda congelada en `01e462f`**: el contrato es `01_shared_drivers/05_i2c/i2c_hal.h` de ese commit. Los tres tiers han pasado. **El implementador puede empezar el cierre**: `05_i2c/README.md` y la línea del catálogo (instrucciones §6.1), con todo lo que esta auditoría manda al README (F1: O6, O7, O9, O11, O12, O15 diferido, O22 con su captura, O23, el margen de tHIGH a 400 kHz y el bus +0,8 a +1,1 % por encima de lo pedido en esta placa; F2: O24, O25; F3: O31–O34) y todo lo no ejercitado de los informes de F0 a F3. El banco quedó en taps (J2/J3 puestos).
