@@ -102,7 +102,7 @@ from monitor import SerialPort                         # noqa: E402
 from gpio_hw_check import (cube_programmer, git_rev, host_build_id,  # noqa: E402
                            t0b_guard_selftest, tree_record)
 
-BENCH_VERSION = 4          # I2C_BENCH_VERSION of Common/Inc/i2c_selftest.h
+BENCH_VERSION = 5          # I2C_BENCH_VERSION of Common/Inc/i2c_selftest.h
 F334_PROTOCOL = 3          # TARGET_PROTOCOL of tools/i2c_target_f334/src/bench.h
 F334_SYSCLK = 64000000     # the kernel its TIMINGR was computed for (audit F0, m7)
 
@@ -124,7 +124,8 @@ SCOPE_SCL, SCOPE_SDA = 0, 1    # scope 1+ on PF14 (SCL through J2), 2+ on PF15 (
 # S7: the host's own copy of the firmware's step table (name, bus-pin owner), in order.
 STEPS = [("T0A", "NONE"), ("T0C", "NONE"), ("T0B", "CM4"), ("T0B_CM7", "CM7"),
          ("T0B_TIMEOUT", "NONE"), ("F1_NOPIN", "NONE"), ("F1_CM4", "CM4"), ("F1_CM7", "CM7"),
-         ("F1_RECOVER", "CM7"), ("F2_NOPIN", "NONE"), ("F2_CM4", "CM4"), ("F2_CM7", "CM7"), ("DONE", "NONE")]
+         ("F1_RECOVER", "CM7"), ("F2_NOPIN", "NONE"), ("F2_CM4", "CM4"), ("F2_CM7", "CM7"),
+         ("F3_NOPIN", "NONE"), ("F3_CM7", "CM7"), ("DONE", "NONE")]
 
 # ---- Levels (S17, S19), plan revision 2, R2-1 (D9) -----------------------------------------
 # With taps, SCL/SDA is the divider of the 1 kOhm pull-up with PF14's 22 kOhm to
@@ -140,6 +141,9 @@ V_HIGH = 0.7 * VDD
 
 # ---- T0c --------------------------------------------------------------------------------
 T0C_HOLD_MS = 50
+# ---- F3: the points where CPU1 prints HAL_GetTick() (CM7 i2c_selftest.c, tick_line()) ----
+F3_TICK_POINTS = ("F3_NOPIN start", "after T1", "after T2", "F3_NOPIN end", "F3_CM7 start", "after T4/T5",
+                  "after T6", "after T7(b)", "F3_CM7 end", "DONE")
 SCOPE_PRE_RISE = 0.75          # trig=sdar (T9, T9(b)): the part of the buffer before the release (B3)
 T9B_MARGIN_S = 0.5e-3          # T9(b): room left before the Write and after RecoverBus in that part
 F334_HOLD_US = (49000, 51000)  # the F334's own measure (TIM2 on its HSI, +-1 %)
@@ -952,8 +956,12 @@ def crc32(b: bytes) -> int:
 
 
 def tier_base(test: str) -> str:
-    """The test of an X line or a SCOPE point without the i2c_ll suffix (phase F2)."""
-    return test[:-3] if test.endswith("-LL") else test
+    """The test of an X line or a SCOPE point without its tier suffix: "-LL" (phase F2,
+    i2c_ll) or "-HAL" (phase F3, i2c_hal). The tiers are judged by the same oracle."""
+    for sfx in ("-LL", "-HAL"):
+        if test.endswith(sfx):
+            return test[:-len(sfx)]
+    return test
 
 
 def x_expect(x: dict) -> dict:
@@ -1455,6 +1463,27 @@ def expected_transfers(state: str) -> Counter:
             for n in T7_SIZES:
                 c[("T7-LL", core, fm, op, "dma", TARGET, n)] += 1
         c[("T7C-LL", core, fm, "R", "dmac", TARGET, 64)] += 1
+    # Phase F3 (step F3_CM7): T4, T5, T6, T7(b) through i2c_hal, CPU1 only, the same lists.
+    core = "cm7"
+    for f in t4_speeds:
+        c[("T4-HAL", core, f, "P", "poll", TARGET, 0)] += 1
+        c[("T4-HAL", core, f, "P", "poll", NO_TARGET, 0)] += 1
+        for op in ("R", "W", "WR"):
+            for n in T4_SIZES:
+                c[("T4-HAL", core, f, op, "poll", TARGET, n)] += 1
+        c[("T4C-HAL", core, f, "R", "poll", TARGET, 16)] += 1
+        if taps:
+            for op, a, n in (("P", TARGET, 0), ("P", NO_TARGET, 0), ("R", TARGET, 2), ("W", TARGET, 1),
+                             ("W", TARGET, 2), ("WR", TARGET, 1)):
+                c[("T5-HAL", core, f, op, "poll", a, n)] += 1
+    for op in ("R", "W", "WR"):
+        for n in T6_SIZES:
+            c[("T6-HAL", core, fm, op, "it", TARGET, n)] += 1
+    c[("T6C-HAL", core, fm, "W", "itc", TARGET, 2)] += 1
+    for op in ("R", "W"):
+        for n in T7_SIZES:
+            c[("T7-HAL", core, fm, op, "dma", TARGET, n)] += 1
+    c[("T7C-HAL", core, fm, "R", "dmac", TARGET, 64)] += 1
     return c
 
 
@@ -1477,6 +1506,9 @@ def expected_scopes(state: str) -> Counter:
         for f in (100000, 400000):
             for k in range(5):
                 c[("T5-LL", k, f)] += 1
+    for f in (100000, 400000):                         # phase F3: T5 through i2c_hal, CPU1
+        for k in range(5):
+            c[("T5-HAL", k, f)] += 1
     return c
 
 
@@ -2285,6 +2317,23 @@ class Session:
                    f"pulses {pulses}; target: cause {hold['cause']}, edges {hold['edges']}; {w_txt}")
 
     # -- what is judged once the firmware has finished ------------------------------------
+    def f3_tick(self) -> None:
+        """Phase F3 (plan, F3 row: "el tick sigue"): HAL_GetTick() advances through the
+        HAL steps. CPU1 prints it at fixed points (TICK lines, F3_TICK_POINTS); each must
+        be there once, in order, each strictly above the one before, the last after DONE."""
+        ticks = []
+        for text in self.con.since(0):
+            m = re.search(r"\[i2c\] TICK (.+) (\d+)\s*$", text)
+            if m:
+                ticks.append((m.group(1), int(m.group(2))))
+        names = [t[0] for t in ticks]
+        vals = [t[1] for t in ticks]
+        rising = all(b > a for a, b in zip(vals, vals[1:]))
+        ok = names == list(F3_TICK_POINTS) and rising
+        self.check("F3 HAL_GetTick() advances through the i2c_hal steps", ok,
+                   f"{len(ticks)} TICK lines ({len(F3_TICK_POINTS)} expected, in order: {names == list(F3_TICK_POINTS)}), "
+                   f"strictly rising {rising}: {', '.join(f'{n} {v}' for n, v in ticks)}")
+
     def f1_t3(self) -> None:
         r = t3_judge(self.t3_lines)
         self.check("F1 T3 CalcTiming against the host's own rules", r["n"] >= 300 and r["bad"] == 0,
@@ -2341,9 +2390,13 @@ class Session:
         self.f1_step("F2_NOPIN")
         self.f1_step("F2_CM4")
         self.f1_step("F2_CM7")
+        # Phase F3 (i2c_hal, CPU1 only): the same AT protocol, X lines named "<test>-HAL".
+        self.f1_step("F3_NOPIN")
+        self.f1_step("F3_CM7")
         self.step("DONE")
         self.f1_t3()
         self.f1_t12()
+        self.f3_tick()
         # m26: everything the selftest had to do, and nothing left half done.
         probs = manifest_problems(expected_transfers(self.state), self.x_seen)
         self.check("F1 transfers against the host's list (m26)", not probs,
@@ -2400,7 +2453,7 @@ def main() -> int:
     ap.add_argument("--bench-state", required=True, choices=("taps", "notaps"),
                     help="J2/J3 in place (taps) or removed (notaps); checked against the scope (S19)")
     ap.add_argument("--out", type=pathlib.Path,
-                    help="capture file (default: docs/i2c_f2_bench_<state>_<rev>.txt, i2c_dev_... with --allow-dirty)")
+                    help="capture file (default: docs/i2c_f3_bench_<state>_<rev>.txt, i2c_dev_... with --allow-dirty)")
     ap.add_argument("--allow-dirty", action="store_true", help="accept a -dirty Rev (development runs)")
     ap.add_argument("--no-reset", action="store_true", help="do not reset the H755; wait for the banner")
     ap.add_argument("--preset", default="selftest-i2c", help="configure preset of the H755 image (build id)")
@@ -2447,7 +2500,7 @@ def main() -> int:
         out = args.out
         if out is None:
             rev = res["revs"].get("cm7", head)
-            prefix = f"i2c_dev_f2_bench_{args.bench_state}" if args.allow_dirty else f"i2c_f2_bench_{args.bench_state}"
+            prefix = f"i2c_dev_f3_bench_{args.bench_state}" if args.allow_dirty else f"i2c_f3_bench_{args.bench_state}"
             out = PROJECT / "docs" / f"{prefix}_{rev}.txt"
             n = 2
             while out.exists():
@@ -2490,7 +2543,7 @@ def session_body(args, stamp, head: str, res: dict) -> None:
           f"no_reset={args.no_reset} checklist_confirmed={args.checklist_confirmed} "
           f"checklist_date={args.checklist_date}")
     stamp(f"[host] i2c_hw_check.py, host checkout {head}, protocol v{BENCH_VERSION}, F334 protocol "
-          f"v{F334_PROTOCOL}, phase F2 (with the F0 and F1 steps)")
+          f"v{F334_PROTOCOL}, phase F3 (with the F0, F1 and F2 steps)")
     procs_ok = checklist(stamp, args.checklist_confirmed, args.checklist_date, args.bench_state)
     tree_record(stamp)
     h755_id = host_build_id(args.preset)
