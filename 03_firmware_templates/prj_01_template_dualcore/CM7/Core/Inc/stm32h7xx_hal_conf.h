@@ -33,6 +33,9 @@ extern "C" {
 #if defined(SPI_DRIVER_SELFTEST)
 #define HAL_SPI_MODULE_ENABLED   /* 06_spi selftest only (plan decision 7): spi_hal and its tests */
 #endif
+#if defined(I2C_DRIVER_SELFTEST)
+#define HAL_I2C_MODULE_ENABLED   /* 05_i2c selftest only (plan decision 7): i2c_hal and its tests */
+#endif
 
 /* ---- Oscillators ------------------------------------------------------- *
  * The NUCLEO-H755ZI-Q has no MCU crystal: HSE is the 8 MHz ST-LINK MCO fed in
@@ -75,6 +78,9 @@ extern "C" {
 #define USE_HAL_TIM_REGISTER_CALLBACKS  0U
 #if defined(SPI_DRIVER_SELFTEST)
 #define USE_HAL_SPI_REGISTER_CALLBACKS  0U   /* 06_spi selftest only: no callbacks (C14) */
+#endif
+#if defined(I2C_DRIVER_SELFTEST)
+#define USE_HAL_I2C_REGISTER_CALLBACKS  0U   /* 05_i2c selftest only: no callbacks (C14, plan rule 11) */
 #endif
 
 /* HAL_GetTick() runs on TIM6, not SysTick: FreeRTOS owns SysTick. The HAL
@@ -146,6 +152,9 @@ void assert_failed(uint8_t *file, uint32_t line);
 #endif
 #if defined(SPI_DRIVER_SELFTEST) && defined(HAL_SPI_MODULE_ENABLED)
 #include "stm32h7xx_hal_spi.h"
+#endif
+#if defined(I2C_DRIVER_SELFTEST) && defined(HAL_I2C_MODULE_ENABLED)
+#include "stm32h7xx_hal_i2c.h"
 #endif
 
 #ifdef __cplusplus
