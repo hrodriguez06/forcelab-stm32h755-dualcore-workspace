@@ -2320,7 +2320,15 @@ class Session:
     def f3_tick(self) -> None:
         """Phase F3 (plan, F3 row: "el tick sigue"): HAL_GetTick() advances through the
         HAL steps. CPU1 prints it at fixed points (TICK lines, F3_TICK_POINTS); each must
-        be there once, in order, each strictly above the one before, the last after DONE."""
+        be there once, in order, each strictly above the one before, the last after DONE.
+        CPU1 prints "TICK DONE" after the DONE step's handshake, so the host waits for it
+        (up to 10 s) before it judges (audit F3 part 1, m46: no window that depends on
+        when the line arrives)."""
+        end = time.monotonic() + 10.0
+        while not any(re.search(r"\[i2c\] TICK DONE \d+", t) for t in self.con.since(0)):
+            if time.monotonic() > end:
+                break                                   # judged below: the list is short
+            time.sleep(0.05)
         ticks = []
         for text in self.con.since(0):
             m = re.search(r"\[i2c\] TICK (.+) (\d+)\s*$", text)
