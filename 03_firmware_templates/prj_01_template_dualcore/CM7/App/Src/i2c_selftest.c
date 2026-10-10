@@ -3859,10 +3859,11 @@ static HAL_StatusTypeDef hal_raw_init(I2C_HandleTypeDef *h, I2C_TypeDef *i2c, ui
     return hs;
 }
 
-/* The differences by design between the HAL's image and i2c_bm's (i2c_hal.h, T2):
-   OAR1.OA1EN (HAL_I2C_Init l. 600) and CR2.AUTOEND | NACK (l. 619), typed here. */
+/* The differences by design between the HAL's image and i2c_bm's (i2c_hal.h, T2),
+   typed here: OAR1.OA1EN (HAL_I2C_Init l. 600) and CR2.AUTOEND (l. 619; its NACK is
+   written with PE = 0, which holds it cleared, RM0399 50:2621-2623). */
 #define T2H_OAR1_HAL    I2C_OAR1_OA1EN
-#define T2H_CR2_HAL     (I2C_CR2_AUTOEND | I2C_CR2_NACK)
+#define T2H_CR2_HAL     I2C_CR2_AUTOEND
 #define T2H_DESIGN_REGS ((1UL << 1) | (1UL << 2))          /* CR2, OAR1 in ist_regs() order */
 
 typedef struct
@@ -3958,12 +3959,10 @@ static void f3_t2(void)
         verdict((t.cases == IST_T2_CASES) && (t.hal_cases == 30U) && (t.refused == 90U) && (t.bad_raw == 0U) &&
                 (t.bad_bm == 0U) && (t.bad_rm == 0U) && (t.regs_vs_bm == T2H_DESIGN_REGS) && (t.bad_status == 0U) &&
                 (t.bad_deinit == 0U) && (t.control == t.hal_cases),
-                "T2 %s images over TIMINGR x filter x DNF x timeout: %lu cases; timeout != 0 refused (ERR_UNSUPPORTED, "
-                "reset image) in %lu (90); of the %lu initialised: against the raw HAL_I2C_Init + filter calls %lu "
-                "differ; against i2c_bm's with OAR1.OA1EN and CR2.AUTOEND|NACK (the HAL's by design, l. 600, 619) %lu "
-                "differ, and the registers that differ from BM's at all are 0x%02lX (0x06: CR2, OAR1); against the RM "
-                "fields with the same two %lu differ; %lu statuses not OK/ERR_BUS or not BM's, %lu Deinit not at "
-                "reset; control (the raw HAL image with DNF + 1, the same comparison) told apart in %lu (all)",
+                "T2 %s: %lu cases; timeout != 0 refused with the reset image %lu (90); of %lu initialised, "
+                "against the raw HAL_I2C_Init %lu differ; against BM's + OAR1.OA1EN, CR2.AUTOEND (by design) %lu, "
+                "registers that differ from BM's 0x%02lX (0x06: CR2, OAR1); against the RM fields + the same %lu; "
+                "statuses %lu, Deinit %lu; control (raw HAL with DNF + 1) told apart in %lu (all)",
                 inst[i].name, (unsigned long)t.cases, (unsigned long)t.refused, (unsigned long)t.hal_cases,
                 (unsigned long)t.bad_raw, (unsigned long)t.bad_bm, (unsigned long)t.regs_vs_bm,
                 (unsigned long)t.bad_rm, (unsigned long)t.bad_status, (unsigned long)t.bad_deinit,
