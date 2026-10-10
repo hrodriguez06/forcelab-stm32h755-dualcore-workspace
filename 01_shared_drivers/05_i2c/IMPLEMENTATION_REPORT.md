@@ -1059,6 +1059,221 @@ No hubo sesiones fallidas: no hay más capturas que commitear. Los fallos del au
 - **T9 y T9(b) sin taps:** sin osciloscopio, como antes; T9(b) en notaps se juzga con `5 − pulsos`, y el tramo del firmware solo se registra (1077 µs).
 - Lo demás de las secciones F1 y F2 sigue vigente.
 
+## F3
+
+Plan: revisión 4 (`ceed2fc`). Contratos congelados: `i2c_bm.h` de `a6de15b` con las adiciones de R4-2, e `i2c_ll.h` de `c483bb9` (F2 pasa, `AUDIT.md` "F2, parte 2", `d1c6f30`).
+
+| Fase | Estado | Último commit | Capturas |
+| --- | --- | --- | --- |
+| F3 | entregada para auditoría (el commit que añade esta sección) | `357c60d` (código); capturas en `3afddb8`; evidencia en `810de9b` | `docs/i2c_f3_bench_taps_357c60d.txt`, `docs/i2c_f3_bench_notaps_357c60d.txt` |
+
+Qué hay en F3:
+
+- **`i2c_hal`:** `01_shared_drivers/05_i2c/i2c_hal.{h,c}` y el target `stm32h7_driver_i2c_hal`, que enlaza `stm32h7_driver_i2c_bm`. Sin `HAL_I2C_MODULE_ENABLED`, `i2c_hal.c` compila a nada.
+- **`prj_01`:** `HAL_I2C_MODULE_ENABLED`, `USE_HAL_I2C_REGISTER_CALLBACKS 0U` y el include de la HAL de I2C en `CM7/Core/Inc/stm32h7xx_hal_conf.h`, los tres solo bajo `I2C_DRIVER_SELFTEST` (decisión 7). CM7 enlaza `_i2c_hal` con la opción. CM4 no compila el tier HAL.
+- **Selftest (banco v5):** dos pasos nuevos de CPU1, `F3_NOPIN` y `F3_CM7`, después de los de F2:
+  - `F3_NOPIN`: T1, T2 contra BM y contra el `HAL_I2C_Init` crudo, y `I2C_HAL_Wait` con el tick parado (lección m4);
+  - `F3_CM7`: T4, T5 (taps), T1 con `BUSY = 1`, T6, T7(b) y T14 tras cada prueba, por `i2c_hal`;
+  - líneas `TICK` con `HAL_GetTick()` en diez puntos.
+  - Lo de F0, F1 y F2 sigue en sus pasos, sin quitar nada.
+- **Host:** los mismos oráculos para las transferencias `<prueba>-HAL`; las listas esperadas con las de CPU1 por HAL; la comprobación del tick; capturas `i2c_f3_bench_*`.
+- **Dos decisiones del responsable** (2026-10-09, antes de escribir la API): `timeout_scl_low ≠ 0` y un `WriteRead` con más de 2 bytes de escritura dan `ERR_UNSUPPORTED` (§5.5).
+
+### 5.1 Commits
+
+Rango de la entrega: `d1c6f30..` el commit que añade esta sección, en `driver/i2c`.
+
+| Commit | Asunto | Hallazgo |
+| --- | --- | --- |
+| `108892c` | feat(i2c): add i2c_hal, the HAL tier of 05_i2c, and its target | — |
+| `dd2f805` | build(prj_01): enable the HAL I2C module and link i2c_hal with the 05_i2c selftest | — |
+| `b0c5802` | test(prj_01): add the F3 steps of the 05_i2c selftest (i2c_hal on CPU1, bench v5) | — |
+| `a15c442` | test(prj_01): add the F3 steps to i2c_hw_check.py (bench v5) | — |
+| `67c3435` | docs(i2c): add the first F3 notaps session at a15c442, failed | sesión fallida (§5.8) |
+| `1abff02` | fix(i2c): read back CR2 after HAL_I2C_Init as AUTOEND alone | la de `a15c442` (§5.8) |
+| `357c60d` | test(prj_01): T2 with i2c_hal: CR2.AUTOEND alone by design; a shorter verdict | ídem |
+| `3afddb8` | docs(i2c): add the F3 delivery captures at 357c60d | — |
+| `810de9b` | docs(i2c): add the F3 build evidence at 3afddb8 | — |
+| (este) | docs(i2c): add the F3 section of the implementation report | — |
+
+- **Las imágenes de las dos capturas de entrega** son de `357c60d`, de un `--fresh` con el árbol limpio, flasheadas con `tools/flash.py --sn` (H755 `0016000C4142501220353451`, F334 `066BFF393731435243254117`; "Download verified successfully" en las dos).
+- **Las dos sesiones corrieron con HEAD en `357c60d`:** la de notaps quedó sin commitear (`-uno`) hasta que terminó la de taps; `3afddb8` añade las dos y nada más.
+- **La evidencia de build es de `3afddb8`**, cuyo código es el de `357c60d`.
+
+### 5.2 Build y tamaños
+
+Todo en `3afddb8`, con el árbol limpio:
+
+- **`build_all -Clean`:** 8/8 (`docs/i2c_f3_build_all_3afddb8.txt`).
+- **`selftest-i2c` desde un directorio vacío:** configure 0, build 0 y 0 líneas `warning:` o `error:` (`docs/i2c_f3_selftest_build_3afddb8.txt`).
+- **`-Werror`:** `selftest-i2c`, `debug` y `release` con `CMAKE_C_FLAGS=-Werror` en directorios de scratch: configure 0, build 0 y 0 avisos en las tres; el `CMakeCache.txt` de cada una dice `-Werror` (`docs/i2c_f3_werror_3afddb8.txt`).
+- **Firmware de la F334:** `build.ps1 -Clean` y `build.ps1 -Clean -Werror` dan `Warnings : 0` y `exit=0` (`docs/i2c_f3_f334_build_3afddb8.txt`).
+- **`git diff cc8aa2c -- 02_firmware_projects`:** vacío.
+- `i2c_bm.c`, `i2c_ll.c` e `i2c_hal.c`, recompilados desde `compile_commands.json` con `-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wcast-align -Wundef` (CMSIS y HAL como `-isystem`), en CM7 (y los dos primeros en CM4): 0 avisos. No está en una captura: lo cito porque así se comprobó, no como evidencia.
+
+Tamaños del `.map` enlazado (`docs/i2c_f3_map_sizes_3afddb8.txt`, mismo método y agrupación que F1 y F2):
+
+| Imagen | .text | .data | .bss | Δ frente a 2481396 | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| prj_01 debug CM7 | 29304 | 132 | 55668 | 0 en cada sección de la referencia | `build/debug/cm7_firmware.map` |
+| prj_01 debug CM4 | 3456 | 24 | 12560 | ídem | `build/debug/cm4_firmware.map` |
+| prj_01 release CM7 | 28356 | 132 | 55672 | ídem | `build/release/cm7_firmware.map` |
+| prj_01 release CM4 | 3112 | 24 | 12560 | ídem | `build/release/cm4_firmware.map` |
+| F334 `i2c_target_f334.elf` | 11340 | 20 | 3392 | — (FLASH 11 360 B de 64 KB, RAM 3408 B de 12 KB) | `arm-none-eabi-size` |
+
+| Objeto | Núcleo | .text (+.rodata) | .data | .bss | Fuente (.map) |
+| --- | --- | --- | --- | --- | --- |
+| `i2c_bm.c.obj` | CM7 | 5316 | 0 | 0 | `build/selftest-i2c/cm7_firmware.map` |
+| `i2c_ll.c.obj` | CM7 | 2674 | 0 | 0 | ídem |
+| `i2c_hal.c.obj` | CM7 | 1376 | 0 | 0 | ídem |
+| `stm32h7xx_hal_i2c.c.obj` (HAL) | CM7 | 8808 | 0 | 0 | ídem |
+| `stm32h7xx_hal_i2c_ex.c.obj` (HAL) | CM7 | 176 | 0 | 0 | ídem |
+| `i2c_bm.c.obj` | CM4 | 5312 | 0 | 0 | `build/selftest-i2c/cm4_firmware.map` |
+| `i2c_ll.c.obj` | CM4 | 2650 | 0 | 0 | ídem |
+| `i2c_hal.c.obj` | CM4 | no existe: CM4 no enlaza `_i2c_hal` | — | — | — |
+| `i2c_selftest.c.obj` (selftest) | CM7 | 44273 | 8 | 1267 | `build/selftest-i2c/cm7_firmware.map` |
+| `i2c_selftest_common.c.obj` (selftest) | CM7 | 5507 | 0 | 0 | ídem |
+| `i2c_selftest.c.obj` (selftest) | CM4 | 6025 | 4 | 65952 | `build/selftest-i2c/cm4_firmware.map` |
+| `i2c_selftest_common.c.obj` (selftest) | CM4 | 5331 | 0 | 0 | ídem |
+
+- `i2c_bm.c.obj` e `i2c_ll.c.obj` no cambian desde F2 (5316/5312 y 2674/2650).
+- La imagen `selftest-i2c` mide 106596/140/57044 en CM7 y 26696/28/78576 en CM4. El `.bss` de la imagen de CM7 crece 352 B (los `I2C_HandleTypeDef` de las pruebas).
+- B1 en F3 es solo el `.map` (R4-1): `i2c_hal.c.obj` con `.data = .bss = 0`.
+
+### 5.3 Pruebas
+
+Las cifras salen de las dos capturas de entrega:
+
+- **taps:** `docs/i2c_f3_bench_taps_357c60d.txt`: 149/149 comprobaciones del host (59 `RECORD` no contados: T0d, "No Digital Out", 2 de T10(b), 50 de f\_SCL en bruto y 5 de tHIGH dentro de la tolerancia, ninguno de T5-HAL), `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`, sin aborto;
+- **notaps:** `docs/i2c_f3_bench_notaps_357c60d.txt`: 112/112 (2 `RECORD`), `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`, sin aborto.
+
+Las dos tienen Rev `357c60d` e id `a2e98b827bb4f129` en el host, CM7 y CM4, y la F334 con Rev `357c60d`, id `47f25c0802d8872e` (el que calcula el host) y protocolo v3. Las dos dicen `tree clean`, sin depurador ni WaveForms, y llevan el checklist confirmado por Hector el 2026-10-09:
+
+- notaps: el banco estaba en notaps con el checklist confirmado (encargo de F3);
+- taps: "J2 and J3 are plugged", la respuesta a mi petición de poner J2/J3.
+
+Las filas de F0, F1 y F2 pasan otra vez en las dos sesiones, con los mismos criterios. Aquí van las de F3. Velocidades como antes:
+
+- **taps:** 100 y 400 kHz en T4/T5, 400 kHz en T6/T7;
+- **notaps:** 400 kHz y 1 MHz en T4, 1 MHz en T6/T7.
+
+| ID | Tier | Núcleo | Estado del banco | Resultado | Valor medido | Control negativo: valor | Oráculo | Oráculo F334/AD2 | Captura |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T1 | HAL | CM7 (I2C2) | taps y notaps | PASS | 41 casos de `i2c_hal`, cada estado escrito a mano, 0 con otro estado. Grupo 1 (en reset): `h` o `cfg` NULL, instancia que no es I2C, `h->Instance ≠ cfg->i2c`, DNF 16, reservados de `TIMINGR`, `timeout_scl_low` 10 y 4097 (`ERR_UNSUPPORTED`), `timeout_ms` 0, transferencias y `StartIt` con `PE = 0` (`ERR_BUSY`), `StartDma` sin `hdmatx`/`hdmarx`, `Wait` y `Deinit` con parámetros inválidos. Grupo 2 (iniciado): `Init` con `PE = 1` y otro `TIMINGR` o DNF (`ERR_BUSY`), direcciones 0x07/0x78, `n` 65 536 y 0, `tx` NULL, `WriteRead` con `ntx` 0, `nrx` 0 y `ntx` 3 (`ERR_UNSUPPORTED`), `StartIt` con `ntx` 3, `StartDma` sin dirección, con las dos, con `n` 1 y 0, y un handle no `READY` (`ERR_BUSY`). Foto (instancia, `RCC_C1/C2` `APB1LENR`/`APB4ENR`, `D2CCIP2R`, `D3CCIPR`, `SYSCFG_PMCR`) sin cambios en los 2 grupos (`0x3`) | Un `I2C_HAL_Init` válido cambia la foto (1) | casos escritos a mano (`f3_t1`) | — | las dos |
+| T2 | HAL | CM7 (I2C2, I2C3, I2C4) | taps y notaps | PASS | 120 configuraciones por instancia. Con `timeout ≠ 0` (90): `ERR_UNSUPPORTED` y la imagen de reset. Con `timeout = 0` (30): la imagen de `I2C_HAL_Init` igual a la del `HAL_I2C_Init` crudo con las dos llamadas de filtros (campos de `Init` escritos en la prueba), 0 distintas; igual a la de `i2c_bm` más las dos diferencias por diseño (`OAR1.OA1EN`, `CR2.AUTOEND`), 0 distintas, y los únicos registros que difieren de BM son `CR2` y `OAR1` (`0x06`); igual a los campos del RM con las mismas dos, 0 distintas; 0 estados distintos de los de BM; 0 `Deinit` fuera del reset | La misma comparación contra la imagen cruda con DNF + 1: distinta en los 30 casos de cada instancia | `HAL_I2C_Init` crudo, imagen de `i2c_bm`, campos del RM a mano | — | las dos |
+| `I2C_HAL_Wait` con el tick parado (m4) | HAL | CM7 (I2C2) | taps y notaps | PASS | Handle marcado ocupado a mano, PRIMASK puesto: `ERR_TIMEOUT` tras 15 200 248 (taps) y 15 200 267 (notaps) ciclos, `HAL_GetTick()` sin cambiar (183 778 → 183 778) | Con el tick andando: `ERR_TIMEOUT` tras 3 825 669 y 3 663 001 ciclos (9,6 y 9,2 ms; ventana 9..12 ms) | CYCCNT, `HAL_GetTick()` | — | las dos |
+| T4 | HAL | CM7 (I2C4) | taps (100, 400 kHz) y notaps (400 kHz, 1 MHz) | PASS | Por velocidad: 6 `Read`, 6 `WriteRead` (`HAL_I2C_Mem_Read`, 1 byte de dirección), 2 sondeos y 6 `Write` de 1, 2, 255, 256, 1000 y 65 535 bytes: 0 con otro estado o un byte distinto. Host: 20 transferencias `T4-HAL` por velocidad emparejadas con su `RPT`, 0 con problema (sondeo de 0x43: `ERR_NACK`). `TIMINGR`: taps `0x30D06C81` y `0x20D0142E`; notaps `0x00D0479C` y `0x00801A33` | F334 con `CORRUPT 5`, lectura de 16 (`T4C-HAL`): 1 byte distinto, en el índice 5, en cada velocidad | datos regenerados por el host; CRC-32 | `RPT` de la F334 | las dos |
+| T5 | HAL | CM7 | taps | PASS | 5 transferencias por velocidad, decodificadas exactas (`S 85A A5A A4N P`, `S 84A 07A \| Sr 85A A2N P`, `S 84A P \| S 84A 00A P`, `S 84A 14A 5AA P`, `S 86N P`), 0 glitches en las 10. 100 kHz: tLOW mín. 5301–5307 ns, tHIGH 4258–4312 ns, tSU;DAT de la H755 ≥ 4813 ns, tHD;STA ≥ 4378 ns, tSU;STO ≥ 4385 ns, t\_r 250–252 ns, f\_SCL normalizada 99 658–99 740 Hz (modelo 99 700). 400 kHz: tLOW mín. 1574–1580 ns, tHIGH 603–632 ns, tSU;DAT de la H755 ≥ 1068 ns, tHD;STA ≥ 718 ns, tSU;STO ≥ 704 ns, t\_r 253–254 ns, f\_SCL normalizada 398 224–399 075 Hz (modelo 398 406). Ningún tiempo de T5-HAL por debajo de su mínimo (sin `RECORD` de tolerancia) | Cada captura decodificada con SCL y SDA intercambiados: distinta en las 10; con umbral 0,5 V: igual en las 10 | `expected_frames()`, `t5_timing_problems()` | AD2 (12,5 MS/s a 100 kHz, 25 MS/s a 400 kHz) | taps |
+| T1 con `BUSY = 1` | HAL | CM7 (I2C4) | taps y notaps | PASS | La F334 retiene SDA (`ISR 0x00008001`): las 8 transferencias de `ist_t1_busy()` por `i2c_hal` (`Write`, sondeo, `Read`, `WriteRead`, `StartIt`, `StartDma` de escritura y de lectura, y `CheckTransfer`) rechazadas con `ERR_BUS` por la comprobación de BM, antes de la HAL; registros, RCC y el handle (`READY`) sin cambios | — (el propio caso) | `ISR` leído | `HOLD_END` | las dos |
+| T6 | HAL | CM7 | taps (400 kHz) y notaps (1 MHz) | PASS | `Write`, `Read`, `WriteRead` de 1, 2, 256 y 1000 bytes por `I2C_HAL_StartIt` (`HAL_I2C_Master_Transmit_IT`, `_Receive_IT`, `_Mem_Read_IT`), servidas por `HAL_I2C_EV_IRQHandler`/`_ER_IRQHandler` desde los vectores de I2C4; fin por `h->State` y `I2C_HAL_Wait`: 0 con otro estado o dato; IE en `CR1` al terminar `0x00`; 0 IRQ en los 10 ms siguientes | IE a 0 a mano tras `I2C_HAL_StartIt`: el handle sigue ocupado, la espera acaba por su presupuesto (`ERR_TIMEOUT`), 0 IRQ (`T6C-HAL`) | datos del host + CRC | `RPT` (la F334 corta la transferencia abandonada) | las dos |
+| T7(b) | HAL | CM7 (I2C4, BDMA con `dma_hal`, `.d3_ram`) | taps (400 kHz) y notaps (1 MHz) | PASS | Lectura y escritura de 2, 255, 256 y 4096 bytes por `I2C_HAL_StartDma` (`HAL_I2C_Master_Transmit_DMA`/`_Receive_DMA`, canales 0/1 con sus interrupciones y `HAL_DMA_IRQHandler`) + `I2C_HAL_Wait`: 0 con otro estado o dato | `RXDMAEN` a 0 a mano, lectura de 64: `I2C_HAL_Wait` `ERR_TIMEOUT`, los 64 bytes conservan el centinela (`T7C-HAL`) | ídem | `RPT` | las dos |
+| T14 | HAL | CM7 (I2C4) | taps y notaps | PASS | `I2C_HAL_Deinit` (que llama a `I2C_BM_Deinit` y pone el handle en RESET) tras cada prueba: tras T4/T5 en cada velocidad, tras el control de T6 y al final de T1-BUSY/T6/T7: 4 juicios por sesión, 0 registros distintos de la imagen de reset (`ist_reset_diff_img()`). En T2, tras cada `I2C_HAL_Init`: 0 de 360 fuera del reset | El de F1 en la misma sesión (I2C3 sin `Deinit`: distinto, `0x11`) | tabla de reset del RM a mano | — | las dos |
+| El tick | HAL | CM7 | taps y notaps | PASS | Las 10 líneas `TICK`, en su orden y estrictamente crecientes: taps de 183 638 (inicio de `F3_NOPIN`) a 217 073 (`DONE`); notaps de 106 878 a 122 745 | — | `HAL_GetTick()` frente a la lista del host | — | las dos |
+| Fm+ con HAL | BM (`SetFastModePlus`) | CM7 | notaps (el juicio final, en las dos) | PASS | Notaps: el bit de I2C4 puesto alrededor del tráfico HAL a 1 MHz y quitado después, `FMP 1` en la F334. Al final de `F3_CM7`, en las dos: `I2C1FMP\|I2C4FMP` 0x0 | — | `SYSCFG_PMCR` leído | — | las dos |
+| Veredicto | — | CM7 + host | taps y notaps | PASS | `bench completed without abort`; CM4 `timeout 0, aborts 0`; pila de `Status_Task` 692 (taps) y 708 (notaps) palabras libres de 1024; host 149/149 y 112/112 | — | — | — | las dos |
+
+**El oráculo de las pruebas HAL.** La referencia de T2 es el `HAL_I2C_Init` crudo con los campos de `Init` escritos en la prueba (`hal_raw_init()`), no los de `i2c_hal.c`. Las dos diferencias por diseño frente a BM también están escritas en la prueba (`T2H_OAR1_HAL`, `T2H_CR2_HAL`). Las transferencias HAL las juzga el host con el oráculo de F1 (`tier_base()` quita `-HAL`).
+
+### 5.4 Medidas (B1)
+
+R4-1: en F3, B1 es solo el `.map`. `i2c_hal.c.obj` mide 1376 B de `.text` con `.data = .bss = 0` (§5.2). Las líneas B1 de las capturas son de `i2c_bm`, en sus pasos de F1.
+
+### 5.5 Desviaciones del plan
+
+**Las firmas de `i2c_hal`** (`i2c_hal.h`), con su razón:
+
+| Firma | Por qué así |
+| --- | --- |
+| `I2cBm_Status_t I2C_HAL_Init(I2C_HandleTypeDef *h, const I2cBm_Config_t *cfg)` | Como `SPI_HAL_Init` de `06_spi`: el handle es del llamador y la configuración es la de BM, que se valida con `I2C_BM_CheckConfig`. `h->Instance` debe ser `cfg->i2c` |
+| `I2C_HAL_Write(h, addr7, tx, n, timeout_ms)`, `_Read(h, addr7, rx, n, timeout_ms)`, `_WriteRead(h, addr7, tx, ntx, rx, nrx, timeout_ms)` | Los mismos parámetros que BM, con `timeout_ms` en lugar de `max_cycles`: las esperas de la HAL van en ms de `HAL_GetTick` (plan, "Contrato") |
+| `I2C_HAL_StartIt(h, addr7, tx, ntx, rx, nrx)` | Los campos de `I2cBm_Xfer_t` sin la estructura: el estado de la interrupción lo lleva el handle de la HAL. Se valida con `I2C_BM_CheckStartIt` sobre un `I2cBm_Xfer_t` local |
+| `I2C_HAL_StartDma(h, addr7, tx, rx, n)` | Una sola entrada para las dos direcciones, como `SPI_HAL_StartTransferDma`: exactamente uno de `tx` y `rx`, validado con `I2C_BM_CheckDmaStartWrite` o `_CheckDmaStartRead` |
+| `I2C_HAL_Wait(h, timeout_ms)` | Como `SPI_HAL_Wait`: espera `h->State == READY`, con salida si el tick se para (m4), y lee de vuelta el cierre |
+| `I2C_HAL_Deinit(h)` | `I2C_BM_Deinit` y el handle a RESET; nunca `HAL_I2C_DeInit` (MSP) |
+| (sin envoltorio HAL) reloj, `TakeErrors`, `GetIRQn`, `GetDmaRequest`, `GetCaps`, `GetKernelSource`, `CalcTiming`, `SetFastModePlus`, `RecoverBus` y los `Check*` | Son de `i2c_bm` en los tres tiers (plan "Contrato", y como en F2) |
+
+| Qué dice el plan | Qué hice | Por qué | ¿Consultado con quién y cuándo? |
+| --- | --- | --- | --- |
+| Contrato de `i2c_hal`: el `I2cBm_Config_t` entero, `timeout_scl_low` incluido | `timeout_scl_low ≠ 0` → `ERR_UNSUPPORTED`, antes de escribir nada (C6: capacidad antes que rango, así que 4097 también da `ERR_UNSUPPORTED`) | La HAL no escribe nunca `TIMEOUTR` (`HAL_I2C_Init`, l. 535-642) y no mira el flag `TIMEOUT` (l. 7164-7284, 4664-4708). Programarlo el envoltorio sería arreglar la HAL | Hector, 2026-10-09, antes de escribir la API: "Refuse: ERR_UNSUPPORTED (Recommended)" |
+| `I2C_HAL_WriteRead` con `HAL_I2C_Mem_Read` o la secuencia `_Seq_` | `HAL_I2C_Mem_Read` / `_Mem_Read_IT` con 1 o 2 bytes de dirección; `ntx > 2` → `ERR_UNSUPPORTED`. Sin `WriteRead` por DMA | El único camino bloqueante con repeated start de la HAL es `Mem_Read` (`MemAddSize` de 8 o 16 bits); la secuencia `_Seq_` es solo IT/DMA | Hector, 2026-10-09: "ERR_UNSUPPORTED for ntx > 2 (Recommended)" |
+| Orden de validación | El handle y la instancia; `timeout_ms`; el `Check*` de BM; el límite propio del tier (`ERR_UNSUPPORTED`); el estado del handle (`ERR_BUSY`). En `Init`, el `ERR_UNSUPPORTED` de `timeout_scl_low` va antes de `I2C_BM_CheckConfig` | C6 pide capacidad antes que rango y estado; en las transferencias, el límite del tier solo tiene sentido con argumentos ya válidos | No consultado |
+| Read-back tras `HAL_I2C_Init` | `CR1` (filtros, `PE`), `TIMINGR`, `TIMEOUTR = 0`, `OAR1 = OA1EN`, `OAR2 = 0`, `CR2 = AUTOEND`, handle `READY`; después `ERR_BUS` si `BUSY = 1`, como `I2C_BM_Init` | Es la imagen que deja la HAL. `ERR_BUS` es el código de BM para lo mismo | No consultado |
+| Read-back de `StartIt` y `StartDma` | Ninguno al arrancar: `I2C_HAL_Wait` lee de vuelta el cierre (sin IE ni DMA en `CR1`, `CR2` sin campos de transferencia, `STOPF` borrado, `READY`) | La transferencia puede haber terminado ya al volver de la HAL (la interrupción corre entre medias), y no queda ningún campo de la transferencia que leer: la HAL limpia `CR2` al cerrar (`I2C_RESET_CR2`) | No consultado |
+| Códigos de la HAL | `HAL_BUSY` → `ERR_BUSY`; `HAL_I2C_ERROR_TIMEOUT` → `ERR_TIMEOUT` (primero: un NACK sin STOP es `ERR_TIMEOUT`, como en BM); `ARLO` → `ERR_ARLO`; `AF` → `ERR_NACK`; el resto (`BERR`, `OVR`, `DMA`, `SIZE`, `INVALID_PARAM`) → `ERR_HAL` | `I2cBm_Status_t` en los tres tiers (decisión 1); `ERR_HAL` es "solo `i2c_hal`" en el contrato de BM | No consultado |
+| T1 con HAL | Los rechazos propios de `i2c_hal` (41), no los 62 de BM | `CalcTiming`, el reloj, `GetCaps`, `RecoverBus`… son de `i2c_bm` en todos los tiers y ya los cubre T1 de F1 en la misma sesión | No consultado |
+| T7 en F3: "(b)" | Solo T7(b), BDMA desde CM7 | La fila F3 de Fases dice "T7(b)"; CM4 no compila el tier HAL | — |
+
+### 5.6 Respuesta a la auditoría
+
+La de F2 está en sus secciones (F2 pasa, `d1c6f30`). De F3 todavía no hay auditoría.
+
+### 5.7 Erratas del plan encontradas
+
+Ninguna. El dato nuevo es de la HAL, no del plan: `HAL_I2C_Init` escribe `CR2.NACK` con `PE = 0` (l. 619 entre l. 587 y l. 634), y RM0399 dice que el hardware lo mantiene a 0 con `PE = 0` (50:2621-2623). La diferencia por diseño de `CR2` es solo `AUTOEND` (§5.8, punto 1).
+
+### 5.8 Problemas abiertos y no ejercitado
+
+**Lo que pasó en desarrollo:**
+
+1. **La primera sesión de F3** (`docs/i2c_f3_bench_notaps_a15c442.txt`, notaps, árbol limpio) falló: `FW VERDICT=FAIL failures=8` y aborto en `F3_CM7`.
+   - Causa: `I2C_HAL_Init` devolvía `ERR_VERIFY` porque leía `CR2` esperando `AUTOEND | NACK`. El `NACK` que escribe la HAL no se queda (§5.7).
+   - Fallaron el control de T1 (su `Init` daba 5), T2 en las tres instancias y la prueba m4 (su `Init`). Los 30 casos de cada T2 eran iguales al `HAL_I2C_Init` crudo (0 distintos) y distintos de BM más `AUTOEND | NACK`.
+   - Corregido en `1abff02` (el read-back) y `357c60d` (la diferencia de la prueba, y una línea de veredicto de T2 que pasaba de 400 caracteres y perdía su final).
+   - Es la única sesión fallida. Se commiteó sin editar (`67c3435`).
+
+**Abierto:**
+
+- **El texto del control de T7(b) con HAL** dice "WaitEnd" (la frase de F1) aunque la espera es `I2C_HAL_Wait`. El nombre de la línea lleva `HAL`.
+- **`Status_Task`:** 692/708 palabras libres de 1024 (F2: 694/706).
+- Lo abierto de F1 y F2 sigue vigente.
+
+**No ejercitado en F3** (el README del cierre debe copiarlo entero):
+
+- **IC1, `BERR` en `i2c_hal`:** no se puede provocar en el banco; el camino de la HAL (`ERR_HAL`, sin STOP) es solo de lectura del código.
+- **El timeout de una llamada bloqueante de la HAL** (`ERR_TIMEOUT`, la instancia sin STOP ni reset): no se dio. Los `ERR_TIMEOUT` ejercitados son de `I2C_HAL_Wait` (T6C, T7C, m4).
+- **NACK de datos, stretching, bus retenido, `RecoverBus` y 2.19.6 con `i2c_hal`:** T8, T9, T10 y T12 solo con BM (la fila F3 no los pide). El NACK de dirección sí (sondeo de 0x43 en T4).
+- **`ARLO`:** como en F1, un solo maestro.
+- **`WriteRead` con 2 bytes de dirección** (`I2C_MEMADD_SIZE_16BIT`): no ejercitado; solo `ntx = 1` en el bus y `ntx = 3` rechazado (T1).
+- **`StartIt` de sondeo** (`ntx = nrx = 0`, `HAL_I2C_Master_Transmit_IT` de 0 bytes): no ejercitado.
+- **`I2C_HAL_Init` con `ERR_BUS`** (un START visto tras `PE = 1`): no ejercitado.
+- **El `ERR_VERIFY` de `i2c_hal`** solo lo vio la sesión fallida de `a15c442` (§5.8, punto 1); en las de entrega no salta nunca.
+- **La falta de precarga en `HAL_I2C_Mem_Read`** (2.19.6): en `prj_01` APB/kernel = 1, fuera de la ventana 1,5–3; no se provocó (T12 es solo BM).
+- **I2C1–I2C3 con HAL:** solo T1 (I2C2) y T2 (I2C2, I2C3); ninguna transferencia. CM4 no compila el tier.
+- **T5 con HAL a 1 MHz:** sin osciloscopio a 1 MHz (D3).
+- **Las llamadas bloqueantes de la HAL con el tick parado** no tienen salida (limitación documentada); no se ejecutó.
+- **Lo que sigue de F1 y F2:** T11 y multimaestro; esclavo, 10 bits, SMBus/PEC; silicio distinto de rev V.
+
+### Líneas de `stm32h7xx_hal_i2c.c` en las que se apoya `i2c_hal`
+
+HAL del Cube con el que compila `prj_01` (`CUBE_DIR` → `02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7`, `STM32H7xx_HAL_Driver` en `e3c518e`, HAL V1.11.6), idéntico a la copia de `00_docs_stm32h7`. `stm32h7xx_hal_i2c.c` tiene 7522 líneas; `_ex.c`, 372.
+
+| Líneas | Qué hace | En qué se apoya `i2c_hal` |
+| --- | --- | --- |
+| 342, 344, 353, 362 | `TIMING_CLEAR_MASK` (bits 27:24), `I2C_TIMEOUT_BUSY` 25 ms, `MAX_NBYTE_SIZE` 255, `I2C_STATE_NONE` | `TIMINGR` igual que BM; la espera de `BUSY` nunca se alcanza (BM rechaza antes); tramos de 255; el `PreviousState` de `I2C_HAL_Deinit` |
+| 535-642 | `HAL_I2C_Init`: MSP con `State = RESET` (580), `PE = 0` (587), `TIMINGR` (591), `OAR1 = OA1EN \| OwnAddress1` (595-601), `CR2 \|= AUTOEND \| NACK` con `PE = 0` (619), `OAR2` (623-627), `CR1 = GeneralCall \| NoStretch` (631), `PE = 1` (634), `READY` (637). No escribe `TIMEOUTR` | El orden de `I2C_HAL_Init` tras `I2C_BM_Deinit`; las dos diferencias de imagen (`OAR1`, `CR2.AUTOEND`); el rechazo de `timeout_scl_low` |
+| `_ex.c` 96-131, 140-183 | `HAL_I2CEx_ConfigAnalogFilter` / `_ConfigDigitalFilter`: `PE = 0`, RMW de `CR1` (113-116, 159-168), `PE = 1`, sin PRIMASK ni lectura de `PE` | Los filtros de `cfg`; limitación de C10 documentada |
+| 1119-1247 | `HAL_I2C_Master_Transmit`: espera de `BUSY` (1133), `TXDR` precargado antes del START (1162), recarga por 255 (1199-1218), `STOPF` (1224), `I2C_RESET_CR2` (1233) | `I2C_HAL_Write` (y el sondeo de 0 bytes, 1175-1181) |
+| 1260-1367 | `HAL_I2C_Master_Receive`: START de lectura (1289-1300), recarga (1319-1338) | `I2C_HAL_Read` |
+| 1695-1773 | `HAL_I2C_Master_Transmit_IT`: `HAL_BUSY` con `BUSY = 1` (1702), precarga (1737), START (1745), IE después (1765) | `I2C_HAL_StartIt` de escritura; IE tras el START documentado |
+| 1785-1844 | `HAL_I2C_Master_Receive_IT`: START (1823), IE (1836) | `I2C_HAL_StartIt` de lectura |
+| 1970-2121 | `HAL_I2C_Master_Transmit_DMA`: precarga (2012), `HAL_DMA_Start_IT` de `n - 1` (2037), START (2059), IE de error (2072), `TXDMAEN` tras el START (2075) | `I2C_HAL_StartDma` de escritura |
+| 2133-2268 | `HAL_I2C_Master_Receive_DMA`: `HAL_DMA_Start_IT` (2185), START (2207), `RXDMAEN` tras el START (2222) | `I2C_HAL_StartDma` de lectura |
+| 2660-2784 | `HAL_I2C_Mem_Read`: `Size = 0` rechazado (2670), fase de dirección (2697), START de lectura y recarga (2706-2756) | `I2C_HAL_WriteRead` (`ntx` 1 o 2) |
+| 2885-2958 | `HAL_I2C_Mem_Read_IT`: dirección precargada (2922), START con SOFTEND (2937), IE (2950) | `I2C_HAL_StartIt` de escritura + lectura |
+| 4645-4656, 4664-4708 | `HAL_I2C_EV_IRQHandler` (sin `XferISR` no hace nada, 4652); `HAL_I2C_ER_IRQHandler`: `BERR` (4671-4678) → `I2C_ITError` (4704-4706); no mira `TIMEOUT` | Los vectores del proyecto (C14); IC1; `XferISR = NULL` en `I2C_HAL_Deinit` |
+| 5097-5240 | `I2C_Mem_ISR_IT`: tras `TC`, el repeated start de la lectura (5183-5213) | `WriteRead` por interrupción (T6) |
+| 5867-5908 | `I2C_RequestMemoryRead`: START con SOFTEND (5871), dirección en `TXDR` tras `TXIS` (5874-5883, sin precarga), `TC` (5902) | `I2C_HAL_WriteRead`; 2.19.6 documentado |
+| 6138-6273 | `I2C_ITMasterCplt`: IE fuera (6150, 6155), `I2C_RESET_CR2` (6164), `XferISR = NULL` (6167), `READY` | El read-back de `I2C_HAL_Wait` (`closed()`) |
+| 6548-6672 | `I2C_ITError`: IE fuera, `TXDR` vaciado, `READY`, sin STOP | IC1 en IT/DMA |
+| 6738-6781, 6818-6861 | `I2C_DMAMasterTransmitCplt` / `ReceiveCplt`: `TXDMAEN`/`RXDMAEN` a 0 (6744, 6824), la siguiente tanda con `TCR` (6769-6778, 6849-6858) | DMA de más de 255 bytes (T7: 256 y 4096); el read-back sin DMA |
+| 6968-6998, 7008-7039, 7049-7077, 7087-7154 | Esperas con `HAL_GetTick()`; al vencer: `HAL_I2C_ERROR_TIMEOUT`, `READY`, sin STOP ni reset (6984-6992) | `ERR_TIMEOUT` de las llamadas bloqueantes; limitación documentada |
+| 7164-7284 | `I2C_IsErrorOccurred`: `AF` con su STOP (7173-7228), `BERR` aborta (7235-7243), `ARLO` (7257-7265), limpieza (7267-7281); no mira `TIMEOUT` | La traducción de códigos (`from_hal`); IC1 |
+| 7305-7325 | `I2C_TransferConfig`: `MODIFY_REG` de `CR2` | Que `AUTOEND`/`NACK` no tocados sigan en `CR2` |
+| 7334-7416, 7425-7481 | `I2C_Enable_IRQ` / `I2C_Disable_IRQ` | `CR1` sin IE al cerrar (T6: `0x00`) |
+| `stm32h7xx_hal_i2c.h` 781-784 | `I2C_RESET_CR2`: `SADD`, `HEAD10R`, `NBYTES`, `RELOAD`, `RD_WRN` | La máscara `CR2_XFER` del read-back |
+
+El selftest usa además `HAL_I2C_Init` y las dos funciones de filtros directamente, como referencia cruda de T2 (`hal_raw_init()`).
+
 ## Decisiones abiertas usadas
 
 | # | Opción usada | Consultada |
@@ -1069,7 +1284,7 @@ No hubo sesiones fallidas: no hay más capturas que commitear. Los fallos del au
 | 4 | CM4 I2C1; CM7 I2C2, I2C3, I2C4 (`bench_claim`/`bench_safe` de cada núcleo; F1: I2C1 desde CM4 e I2C4 desde CM7 en el bus) | Por defecto |
 | 5 | Recuperación con funciones del llamador (`I2cBm_Recovery_t`; T9) | Por defecto |
 | 6 | "No reproducido" para los controles de erratas (T12: no reproducido) | Por defecto |
-| 7 | HAL I2C en CM7 solo con la opción (sin uso en F0) | Por defecto |
+| 7 | HAL I2C en CM7 solo con la opción (F3: `HAL_I2C_MODULE_ENABLED` y `USE_HAL_I2C_REGISTER_CALLBACKS 0U` solo con `I2C_DRIVER_SELFTEST`, `dd2f805`) | Por defecto |
 | 8 | Firmware de la F334 en `tools/i2c_target_f334/`, con el subconjunto del CMSIS de F3 y su licencia Apache-2.0 | Por defecto |
 | 9 | Documentos de proceso borrados al cierre (sin uso en F0) | Por defecto |
 
