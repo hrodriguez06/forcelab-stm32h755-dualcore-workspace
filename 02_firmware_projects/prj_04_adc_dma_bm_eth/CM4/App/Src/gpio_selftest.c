@@ -748,7 +748,7 @@ static void b1_measure(bool with_hook, volatile uint32_t *mn, volatile uint32_t 
         if (dt < lo) { lo = dt; }
         if (dt > hi) { hi = dt; }
     }
-    Shared_GpioLockInstall();
+    GPIO_BM_SetSharedLock(NULL);
     *mn = lo;
     *mx = hi;
 }
@@ -787,6 +787,7 @@ static void job_b1(void)
 
 static void cm4_fail(const char *why)
 {
+    Shared_GpioLockInstall();
     Line_Begin();
     Line_Str(why);
     Line_End();
@@ -846,6 +847,7 @@ void GPIO_SelfTest_CM4_Run(void)
 
     /* (d) both, gpio_bm without hook */
     if (!wait_cmd(GPIO_ST_CMD_T15_D)) { cm4_fail("TIMEOUT waiting for T15 (d)"); return; }
+    GPIO_BM_SetSharedLock(NULL);
     sh->in_loop_cm4 = 1U;
     t15_drv_loop(2U, T15_DRV_ITERS);
     sh->in_loop_cm4 = 0U;
@@ -861,7 +863,7 @@ void GPIO_SelfTest_CM4_Run(void)
     sh->in_loop_cm4 = 1U;
     t15_drv_loop(3U, T15_DRV_ITERS);
     sh->in_loop_cm4 = 0U;
-    Shared_GpioLockInstall();
+    GPIO_BM_SetSharedLock(NULL);
     s_hook_count_calls = false;
     sh->t15_cm4_hook_fail = s_hook_fail;
     sh->b1_cm4_hold_max = s_hook_hold_max;
@@ -928,6 +930,7 @@ void GPIO_SelfTest_CM4_Run(void)
     Line_Str("CM4 VERDICT=");
     Line_Str(cm4_ok ? "PASS" : "FAIL");
     Line_End();
+    Shared_GpioLockInstall();
 }
 
 void GPIO_SelfTest_CM4_Poll(void)

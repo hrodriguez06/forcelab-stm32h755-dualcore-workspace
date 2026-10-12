@@ -722,6 +722,7 @@ static bool test_t15_race(void)
     xcore_ok = xcore_ok && cm4_wait_ack(GPIO_ST_CMD_T15_C);
 
     /* (d) both, gpio_bm without hook: PRIMASK does not protect across cores. */
+    GPIO_BM_SetSharedLock(NULL);
     GPIO_TEST_SHARED->in_loop_cm7 = 1U;
     cm4_post(GPIO_ST_CMD_T15_D);
     t15_drv_loop(T15_DRV_ITERS, &GPIO_TEST_SHARED->in_loop_cm4, &d);
@@ -739,7 +740,7 @@ static bool test_t15_race(void)
     cm4_post(GPIO_ST_CMD_T15_E);
     t15_drv_loop(T15_DRV_ITERS, &GPIO_TEST_SHARED->in_loop_cm4, &e);
     GPIO_TEST_SHARED->in_loop_cm7 = 0U;
-    Shared_GpioLockInstall();
+    GPIO_BM_SetSharedLock(NULL);
     s_hook_count_calls = false;
     xcore_ok = xcore_ok && cm4_wait_ack(GPIO_ST_CMD_T15_E);
     s_b1_hold_max_e    = s_hook_hold_max;
@@ -760,6 +761,7 @@ static bool test_t15_race(void)
     isr_phase_reset();
     (void)tim17_start();
     s_main_in_loop = 1U;
+    GPIO_BM_SetSharedLock(NULL);
     t15_drv_loop(T15_DRV_ITERS, NULL, &g);                    /* (g): gpio_bm, no hook */
     s_main_in_loop = 0U;
     tim17_stop();
@@ -1291,7 +1293,7 @@ static void b1_measure(bool with_hook, uint32_t *mn, uint32_t *mx)
         if (dt < *mn) { *mn = dt; }
         if (dt > *mx) { *mx = dt; }
     }
-    Shared_GpioLockInstall();
+    GPIO_BM_SetSharedLock(NULL);
 }
 
 /* Cycles -> hundredths of a microsecond, for printing without floats. */
@@ -2460,9 +2462,11 @@ void GPIO_SelfTest_CM7_Run(void)
     }
 
     bench_safe();
+    Shared_GpioLockInstall();
     return;
 
 test_failed:
     bench_safe();
+    Shared_GpioLockInstall();
     APP_LOG("[m7_gpio_test] VERDICT: GPIO SELF-TESTS FAILED");
 }
