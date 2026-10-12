@@ -1,0 +1,138 @@
+================================================================================
+STM32H755 GPIO F1b Verification Checks (T2, T3, T4, T6a)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --test t6a --sn 0016000C4142501220353451
+[host] timestamp: 2026-10-12 12:16:37
+[host] git rev: 0f2f7b1 (tree dirty)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_07db657 (rev 07db657, dirty)
+================================================================================
+
+--- Running T6a (20 repeated SWD warm resets, wait=10.0s) ---
+  [Reset 1/20] Asserting SWD reset...
+  [Reset 1/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 1/20] T3 result: PASS (10/10)
+  [Reset 2/20] Asserting SWD reset...
+  [Reset 2/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 2/20] T3 result: PASS (10/10)
+  [Reset 3/20] Asserting SWD reset...
+  [Reset 3/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 3/20] T3 result: PASS (10/10)
+  [Reset 4/20] Asserting SWD reset...
+  [Reset 4/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 4/20] T3 result: PASS (10/10)
+  [Reset 5/20] Asserting SWD reset...
+  [Reset 5/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 5/20] T3 result: PASS (10/10)
+  [Reset 6/20] Asserting SWD reset...
+  [Reset 6/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 6/20] T3 result: PASS (10/10)
+  [Reset 7/20] Asserting SWD reset...
+  [Reset 7/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 7/20] T3 result: PASS (10/10)
+  [Reset 8/20] Asserting SWD reset...
+  [Reset 8/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 8/20] T3 result: PASS (10/10)
+  [Reset 9/20] Asserting SWD reset...
+  [Reset 9/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 9/20] T3 result: PASS (10/10)
+  [Reset 10/20] Asserting SWD reset...
+  [Reset 10/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 10/20] T3 result: PASS (10/10)
+  [Reset 11/20] Asserting SWD reset...
+  [Reset 11/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 11/20] T3 result: PASS (10/10)
+  [Reset 12/20] Asserting SWD reset...
+  [Reset 12/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 12/20] T3 result: PASS (10/10)
+  [Reset 13/20] Asserting SWD reset...
+  [Reset 13/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 13/20] T3 result: PASS (10/10)
+  [Reset 14/20] Asserting SWD reset...
+  [Reset 14/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 14/20] T3 result: PASS (10/10)
+  [Reset 15/20] Asserting SWD reset...
+  [Reset 15/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 15/20] T3 result: PASS (10/10)
+  [Reset 16/20] Asserting SWD reset...
+  [Reset 16/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 16/20] T3 result: PASS (10/10)
+  [Reset 17/20] Asserting SWD reset...
+  [Reset 17/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 17/20] T3 result: PASS (10/10)
+  [Reset 18/20] Asserting SWD reset...
+  [Reset 18/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 18/20] T3 result: PASS (10/10)
+  [Reset 19/20] Asserting SWD reset...
+  [Reset 19/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 19/20] T3 result: PASS (10/10)
+  [Reset 20/20] Asserting SWD reset...
+  [Reset 20/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [Reset 20/20] T3 result: PASS (10/10)
+
+--- Results for T6A ---
+  [PASS] T6a_reset_1_t3: Reset 1/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_2_t3: Reset 2/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_3_t3: Reset 3/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_4_t3: Reset 4/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_5_t3: Reset 5/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_6_t3: Reset 6/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_7_t3: Reset 7/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_8_t3: Reset 8/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_9_t3: Reset 9/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_10_t3: Reset 10/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_11_t3: Reset 11/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_12_t3: Reset 12/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_13_t3: Reset 13/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_14_t3: Reset 14/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_15_t3: Reset 15/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_16_t3: Reset 16/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_17_t3: Reset 17/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_18_t3: Reset 18/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_19_t3: Reset 19/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_20_t3: Reset 20/20 T3 validation
+         Detail: 10/10 cases passed
+Verdict T6A: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================

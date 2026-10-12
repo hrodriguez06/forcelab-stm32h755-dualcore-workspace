@@ -1,0 +1,28 @@
+================================================================================
+STM32H755 GPIO F1b Verification Checks (T2, T3, T4, T6a)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --test t4 --sn 0016000C4142501220353451
+[host] timestamp: 2026-10-12 12:10:26
+[host] git rev: 0f2f7b1 (tree dirty)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_07db657 (rev 07db657, dirty)
+================================================================================
+
+--- Running T4 (cycle retention margin check) ---
+
+--- Results for T4 ---
+  [PASS] T4_m7_hold_non_zero: CM7 peak hold cycles > 0 (took hook at least once)
+         Detail: m7_hold=1226 cycles (3.06 us @ 400 MHz)
+  [PASS] T4_m4_hold_non_zero: CM4 peak hold cycles > 0 (took hook at least once)
+         Detail: m4_hold=356 cycles (1.78 us @ 200 MHz)
+  [PASS] T4_m7_margin_10x: CM7 limit margin >= 10x (24000 / m7_hold >= 10.0)
+         Detail: 24000 / 1226 = 19.58x (gate >= 10.0x)
+  [PASS] T4_m4_margin_10x: CM4 limit margin >= 10x (12000 / m4_hold >= 10.0)
+         Detail: 12000 / 356 = 33.71x (gate >= 10.0x)
+  [PASS] T4_control_reduced_limit_fails: Negative control: 10x smaller limit yields margin < 10x (fails)
+         Detail: 2400 / 1226 = 1.96x (<10), 1200 / 356 = 3.37x (<10)
+Verdict T4: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================

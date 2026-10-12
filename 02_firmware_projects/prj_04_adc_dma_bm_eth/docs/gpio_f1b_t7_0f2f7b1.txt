@@ -1,0 +1,51 @@
+================================================================================
+T7 Console Verification of prj_01 with Refactored UART Driver (Decision 1A)
+================================================================================
+Date:       2026-10-12 12:26:35
+Commit:     0f2f7b1
+Project:    prj_01_template_dualcore (debug)
+ST-LINK SN: 0016000C4142501220353451
+================================================================================
+
+>>> Starting monitor.py on Virtual COM Port...
+>>> Resetting target via SWD to capture boot banner...
+--- Console Output (monitor.py) ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+[   0.620] [ipc] m7=80 m4=308  (CPU2 alive)
+[   1.004]  
+[   1.009] === STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[   1.013] [sys] build rev=0f2f7b1-dirty id=51a310ffdf382d9c
+[   1.017] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[   1.020] [sys] silicon revision id=0x2003
+[   1.024] [ipc] shared block at 0x38008000, magic=0x48375353
+[   1.028] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[   1.033] [sys] cpu2 build rev=0f2f7b1-dirty id=51a310ffdf382d9c
+[   1.036] [ipc] m7=1 m4=1  (CPU2 alive)
+[   3.007] [ipc] m7=4 m4=16  (CPU2 alive)
+[   4.984] [ipc] m7=8 m4=31  (CPU2 alive)
+[   6.959] [ipc] m7=12 m4=47  (CPU2 alive)
+[   8.935] [ipc] m7=16 m4=62  (CPU2 alive)
+[  10.911] [ipc] m7=20 m4=78  (CPU2 alive)
+[  12.887] [ipc] m7=24 m4=93  (CPU2 alive)
+[  14.863] [ipc] m7=28 m4=108  (CPU2 alive)
+
+--- SWD Register Read (GPIOD: PD8/PD9 Console Pins) ---
+GPIOD Registers:
+  MODER:   0xFFFAFFFF
+  OTYPER:  0x00000000
+  OSPEEDR: 0x00000000
+  PUPDR:   0x00050000
+  AFRH:    0x00000077
+
+Decoded Pin Configurations:
+  PD8 (USART3 TX): mode=2 (want 2), otype=0 (want 0), speed=0 (want 0), pull=1 (want 1), af=7 (want 7)
+  PD9 (USART3 RX): mode=2 (want 2), otype=0 (want 0), speed=0 (want 0), pull=1 (want 1), af=7 (want 7)
+
+================================================================================
+T7 Verification Verdict:
+  Banner text and commit rev (0f2f7b1): PASS
+  PD8 (USART3 TX AF7 PP low pullup): PASS
+  PD9 (USART3 RX AF7 PP low pullup): PASS
+OVERALL T7: PASS
+================================================================================

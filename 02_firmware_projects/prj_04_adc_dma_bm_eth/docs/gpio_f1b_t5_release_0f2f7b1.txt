@@ -1,0 +1,87 @@
+================================================================================
+T5 Production Regression Test (RELEASE)
+================================================================================
+Date:       2026-10-12 12:23:44
+Commit:     0f2f7b1
+Preset:     release
+Target IP:  192.168.1.150
+ST-LINK SN: 0016000C4142501220353451
+================================================================================
+
+>>> Starting monitor.py on Virtual COM Port...
+>>> Resetting target via SWD to capture boot banner and runtime logs...
+>>> Waiting 5 seconds for network link initialization...
+
+--- Running net_check.py ---
+Board    : 192.168.1.150
+UDP echo : port 7
+
+  OK    ICMP  4/4 replies
+  OK    UDP     1 B  rtt= 1.23 ms
+  OK    UDP    25 B  rtt= 1.72 ms
+  OK    UDP   512 B  rtt= 1.37 ms
+  OK    UDP  1024 B  rtt= 1.51 ms
+  OK    UDP  1472 B  rtt= 1.83 ms
+  OK    burst  100/100 returned  (0.1 s)
+
+PASS  3/3 checks
+Now confirm the board agrees: rx_nobuf, tx_nobuf and dma_err
+should all still read 0 in  py tools/monitor.py --timeout 15
+
+--- Running query_adc.py --json ---
+[*] Querying ADC telemetry from 192.168.1.150:5001 (Mode: JSON)...
+[0001] CH5:   65 mV (raw:  1287, avg:  1304, min:  1138, max:  1583) | Rate: 500000 Hz | Seq: 9172 | Samples: 4696064 | TC: 4586 | OVR: 0 | M4 HB: 94
+[0002] CH5:   66 mV (raw:  1396, avg:  1311, min:  1135, max:  1688) | Rate: 500000 Hz | Seq: 9273 | Samples: 4747776 | TC: 4636 | OVR: 0 | M4 HB: 95 | Measured Rate: 506320.0 Hz
+[0003] CH5:   64 mV (raw:  1151, avg:  1288, min:  1142, max:  1452) | Rate: 500000 Hz | Seq: 9374 | Samples: 4799488 | TC: 4687 | OVR: 0 | M4 HB: 96 | Measured Rate: 505768.6 Hz
+[0004] CH5:   66 mV (raw:  1299, avg:  1328, min:  1171, max:  1590) | Rate: 500000 Hz | Seq: 9475 | Samples: 4851200 | TC: 4737 | OVR: 0 | M4 HB: 97 | Measured Rate: 507412.1 Hz
+[0005] CH5:   66 mV (raw:  1367, avg:  1323, min:  1147, max:  1616) | Rate: 500000 Hz | Seq: 9575 | Samples: 4902400 | TC: 4787 | OVR: 0 | M4 HB: 98 | Measured Rate: 502562.2 Hz
+
+--- Console Output (monitor.py) ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+[   0.165] [ipc] m7=32 m4=160  (CPU2 alive)
+[   1.017]  
+[   1.024] === STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 0f2f7b1-dirty ===
+[   1.028] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[   1.031] [sys] silicon revision id=0x2003
+[   1.036] [ipc] shared block at 0x38008000, magic=0x48375353
+[   1.039] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[   1.042] [net] starting TCP/IP stack
+[   1.049] [net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[   1.052] [net] mac=02:00:00:00:00:01 phy_addr=0
+[   1.058] [phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[   1.060] [phy] partner advertised:
+[   1.063] [net] udp echo listening on port 7
+[   1.066] [adc_srv] listening on UDP port 5001
+[   1.069] [ipc] m7=1 m4=0  (CPU2 starting)
+[   2.646] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[   2.653] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[   2.656] [net] link up: 100 Mbps full duplex
+[   3.046] [ipc] m7=4 m4=20  (CPU2 alive)
+[   5.022] [ipc] m7=8 m4=40  (CPU2 alive)
+[   6.024] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[   6.998] [ipc] m7=12 m4=60  (CPU2 alive)
+[   8.974] [ipc] m7=16 m4=80  (CPU2 alive)
+[  10.949] [ipc] m7=20 m4=100  (CPU2 alive)
+[  10.972] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=115 tx=116 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  12.925] [ipc] m7=24 m4=120  (CPU2 alive)
+[  14.900] [ipc] m7=28 m4=140  (CPU2 alive)
+[  15.920] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=115 tx=116 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  16.876] [ipc] m7=32 m4=160  (CPU2 alive)
+[  18.852] [ipc] m7=36 m4=180  (CPU2 alive)
+[  20.828] [ipc] m7=40 m4=200  (CPU2 alive)
+[  20.869] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=115 tx=116 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  22.804] [ipc] m7=44 m4=220  (CPU2 alive)
+[  24.779] [ipc] m7=48 m4=240  (CPU2 alive)
+[  25.816] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=115 tx=116 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[  26.754] [ipc] m7=52 m4=260  (CPU2 alive)
+[  28.730] [ipc] m7=56 m4=280  (CPU2 alive)
+
+================================================================================
+T5 Verification Verdict:
+  Banner Rev 0f2f7b1: PASS
+  Network 3/3 checks: PASS
+  ADC Telemetry streaming without overrun: PASS
+  Target buffer/DMA error counters zero: PASS
+OVERALL T5 RELEASE: PASS
+================================================================================

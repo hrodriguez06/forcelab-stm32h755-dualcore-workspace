@@ -1,0 +1,76 @@
+================================================================================
+STM32H755 GPIO F1b Verification Checks (T3 Negative Control on 07db657)
+================================================================================
+Target Image: prj_04_adc_dma_bm_eth debug (baseline commit 07db657)
+ST-LINK SN:   0016000C4142501220353451
+Date:         2026-10-12 12:22:32
+================================================================================
+
+Part 1: Standard T3 verification executed against 07db657 image (Expected: FAIL)
+--------------------------------------------------------------------------------
+$ py tools/gpio_f1b_checks.py --test t3 --sn 0016000C4142501220353451
+
+================================================================================
+STM32H755 GPIO F1b Verification Checks (T2, T3, T4, T6a)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --test t3 --sn 0016000C4142501220353451
+[host] timestamp: 2026-10-12 12:21:08
+[host] git rev: 0f2f7b1 (tree dirty)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_07db657 (rev 07db657, dirty)
+================================================================================
+
+--- Running T3 (live SWD inspection, control_mode=False) ---
+
+--- Results for T3 ---
+  [FAIL] T3_cm7_s_shared_lock: CM7 s_shared_lock matches g_shared_gpio_lock address
+         Detail: Read 0x0, expected 0x8015ebc
+  [FAIL] T3_cm4_s_shared_lock: CM4 s_shared_lock matches g_shared_gpio_lock address
+         Detail: Read 0x0, expected 0x8102638
+  [PASS] T3_hsem_rlr5_free: HSEM_RLR5 reads 0 (semaphore is free)
+         Detail: RLR5=0x0
+  [PASS] T3_lock_fail_counts_zero: m7_gpio_lock_fail_count and m4_gpio_lock_fail_count are 0
+         Detail: m7_fails=0, m4_fails=0
+  [PASS] T3_pin_PB1_analog: PB1 is Analog (mode=3) without pull (pull=0)
+         Detail: mode=3 (want 3), pull=0 (want 0)
+  [PASS] T3_pin_PB13_rmii_txd1: PB13 is AF11 (mode=2, otype=0, speed=3, pull=0, af=11)
+         Detail: mode=2, otype=0, speed=3, pull=0, af=11
+  [PASS] T3_pin_PB15_control_reset: Control pin PB15 is at reset value (analog, no pull)
+         Detail: mode=3 (want 3), pull=0 (want 0)
+  [PASS] T3_pin_PD8_usart3_tx: PD8 is AF7 (mode=2, otype=0, speed=0, pull=1, af=7)
+         Detail: mode=2, otype=0, speed=0, pull=1, af=7
+  [PASS] T3_pin_PD9_usart3_rx: PD9 is AF7 (mode=2, otype=0, speed=0, pull=1, af=7)
+         Detail: mode=2, otype=0, speed=0, pull=1, af=7
+  [PASS] T3_pin_PD0_control_reset: Control pin PD0 is at reset value (analog, no pull)
+         Detail: mode=3 (want 3), pull=0 (want 0)
+Verdict T3: FAIL
+
+================================================================================
+OVERALL SUMMARY: VERIFICATION FAILED
+================================================================================
+
+
+Part 2: Dedicated negative control mode verifying NULL hook pointers
+--------------------------------------------------------------------------------
+$ py tools/gpio_f1b_checks.py --test t3 --control --sn 0016000C4142501220353451
+
+================================================================================
+STM32H755 GPIO F1b Verification Checks (T2, T3, T4, T6a)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --test t3 --control --sn 0016000C4142501220353451
+[host] timestamp: 2026-10-12 12:22:32
+[host] git rev: 0f2f7b1 (tree dirty)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_07db657 (rev 07db657, dirty)
+================================================================================
+
+--- Running T3 (live SWD inspection, control_mode=True) ---
+
+--- Results for T3 ---
+  [PASS] T3_control_hook_null: Control 07db657: s_shared_lock is NULL on both cores (T3 fails on control)
+         Detail: CM7 s_shared_lock=0x0 (want 0), CM4 s_shared_lock=0x0 (want 0)
+Verdict T3: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================
