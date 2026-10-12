@@ -101,6 +101,11 @@ typedef struct
   *         reports a link. Requires board_def.h defining all 18 BOARD_ETH_<SIG>_PORT
   *         and _PIN macros for the RMII signals (Rule 1). Pins are configured
   *         using GPIO_HAL_Init.
+  *         If GPIO_HAL_Init fails for any pin, ETH_Driver_Init returns
+  *         ETH_DRIVER_ERROR. Because HAL_ETH_Init() has already run, the MAC
+  *         peripheral was initialized and ETH_IRQHandler was enabled in the NVIC.
+  *         The caller should call HAL_ETH_DeInit(ETH_Driver_GetHandle()) or
+  *         reset the peripheral before retrying.
   */
 eth_driver_status_t ETH_Driver_Init(const uint8_t *mac_addr, uint32_t phy_address);
 
