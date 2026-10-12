@@ -1,0 +1,41 @@
+================================================================================
+STM32H755 GPIO F1b Verification Checks (T2, T3, T4, T6a)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --test t2
+[host] timestamp: 2026-10-12 12:40:58
+[host] git rev: 63a746c (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_07db657 (rev 07db657, dirty)
+================================================================================
+
+--- Running T2a (absence of unprotected HAL_GPIO_Init/DeInit) ---
+
+--- Results for T2A ---
+  [PASS] T2a_uart_obj_symbols: uart_hal.c.obj imports GPIO_HAL_Init/DeinitPin and NOT HAL_GPIO_Init/DeInit
+         Detail: GPIO_HAL_Init=True, GPIO_HAL_DeinitPin=True, HAL_GPIO_Init=False, HAL_GPIO_DeInit=False
+  [PASS] T2a_cm4_debug_elf: prj_04 CM4 debug ELF does not link HAL_GPIO_Init or HAL_GPIO_DeInit
+         Detail: HAL_GPIO_Init=False, HAL_GPIO_DeInit=False
+  [PASS] T2a_cm4_release_elf: prj_04 CM4 release ELF does not link HAL_GPIO_Init or HAL_GPIO_DeInit
+         Detail: HAL_GPIO_Init=False, HAL_GPIO_DeInit=False
+  [PASS] T2a_deinit_absent_prj_04_debug_cm7: prj_04_debug_cm7 does not link HAL_GPIO_DeInit
+         Detail: HAL_GPIO_DeInit present=False
+  [PASS] T2a_deinit_absent_prj_04_release_cm7: prj_04_release_cm7 does not link HAL_GPIO_DeInit
+         Detail: HAL_GPIO_DeInit present=False
+  [PASS] T2a_deinit_absent_prj_01_debug_cm7: prj_01_debug_cm7 does not link HAL_GPIO_DeInit
+         Detail: HAL_GPIO_DeInit present=False
+  [PASS] T2a_control_07db657_uart_obj: Control 07db657: uart_hal.c.obj imports HAL_GPIO_Init and HAL_GPIO_DeInit
+         Detail: HAL_GPIO_Init=True, HAL_GPIO_DeInit=True
+Verdict T2A: PASS
+
+--- Running T2b (preprocessor -E scan across all compilation units) ---
+
+--- Results for T2B ---
+  [PASS] T2b_current_zero_raw_writes: Current tree has zero raw GPIO writes across presets outside exceptions
+         Detail: Illegal writes count=0
+  [PASS] T2b_control_07db657_detects_writers: Control 07db657 detects raw writes in adc_acquisition.c, main.c, and dma_selftest.c
+         Detail: Found in control: adc_acquisition=True, main=True, dma_selftest=True (total=14)
+Verdict T2B: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================

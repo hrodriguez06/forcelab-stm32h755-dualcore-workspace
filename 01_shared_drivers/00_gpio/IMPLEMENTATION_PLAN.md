@@ -1,6 +1,6 @@
 # Plan de `00_gpio` F1b: el lock entre núcleos en `prj_04` (G1, G13)
 
-Oct 12, 2026 · @Hector · revisión 2
+Oct 12, 2026 · @Hector · revisión 3
 
 Este plan cierra en `prj_04_adc_dma_bm_eth` el fallo real G1 de `00_gpio/README.md` §12.2 y la parte de G13 que le toca (§13.1): dos núcleos que escriben sin protección los registros de configuración del mismo puerto. En `prj_04`, CM7 configura PB13 (TXD1 de Ethernet) en `net_task` después de liberar a CPU2, y CM4 configura PB1 (entrada del ADC) a mano en `GPIO_Analog_Init()`. Las dos escrituras son read-modify-write de `GPIOB_MODER`. Si se intercalan, PB13 puede volver a analógico: el enlace sigue arriba y la transmisión muere sin que nada lo detecte.
 
@@ -11,6 +11,13 @@ Una fase de implementación (F1) y un cierre. La fase pasa una auditoría indepe
 Base: `07db657` de `main` (corrección de la alimentación, X1), árbol limpio, rama `driver/gpio-f1b`.
 
 **Decisiones del responsable (2026-10-12):** las seis decisiones abiertas, aprobadas con su opción por defecto (1 A: `04_uart` cambia; 2: 60 µs; 3: se mide la retención; 4: se restaura el hook; 5: `prj_03` fuera, en F1c; 6: los documentos de proceso se borran al cierre).
+
+**Revisión 3 (2026-10-12), tras la auditoría de F1 (`AUDIT.md`): tres erratas del plan.**
+- **T2a:** `gpio_hal.c` llama a `HAL_GPIO_Init` dentro de la sección, así que toda CM7 que enlace `gpio_hal` lo define. El criterio pasa a ser qué objetos lo referencian.
+- **T3:** leía `HSEM_RLR5`, y leer `RLR` *toma* el semáforo. Pasa a `HSEM_R5`.
+- **H5:** no tenía en cuenta que T15 (d) y (g) de `selftest-gpio` necesitan estar sin hook.
+
+Además, cada captura de placa prueba qué imagen había (B6).
 
 **Revisión 2 (2026-10-12): la placa, en remoto.** El responsable no tiene acceso físico al banco durante F1: nadie puede apagar la placa, pulsar RESET, reconectar un USB ni cambiar un cable. Cambia T6 (el arranque en frío pasa a T6b, pendiente hasta que el responsable esté en el banco) y se añade G-S7. El último estado verificado del banco es el de las 09:45 del 2026-10-12: cable Ethernet conectado y red funcionando (T6 del auditor con `prj_eth_lwip_node`, PASS).
 
@@ -72,6 +79,10 @@ Base: `07db657` de `main` (corrección de la alimentación, X1), árbol limpio, 
    Los `GPIO_BM_EnablePortClock` previos sobran. `stm32h7_driver_uart` enlaza `stm32h7_driver_gpio_hal`. El README de `04_uart` dice el cambio en el cierre.
 5. **H4.** Las escrituras a mano de los selftests de CM4 pasan a `gpio_bm`. La sonda del puente pasa a `GPIO_BM_ConfigOutput` con nivel inicial bajo y a `GPIO_BM_ConfigInput` con pull-up y luego pull-down. La AF de PD5/PD6 pasa a `GPIO_BM_ConfigAlternateEx` o `GPIO_BM_ConfigAlternate`. Los niveles y retardos de la prueba no cambian.
 6. **H5 (decisión 4).** Donde `selftest-gpio` deja `NULL`, se llama `Shared_GpioLockInstall()`.
+
+   **Revisión 3:** con el hook instalado desde el arranque (H1), las fases que miden el caso sin hook tienen que quitarlo ellas mismas. Son T15 (d) en los dos núcleos (`CM7/App/Src/gpio_selftest.c` "(d) both, gpio_bm without hook", `CM4/App/Src/gpio_selftest.c` "(d)") y T15 (g) en CM7 ("gpio_bm, no hook"). Cada una pone `GPIO_BM_SetSharedLock(NULL)` justo antes, y el selftest reinstala el hook de producción al terminar.
+
+   Se revisan las demás fases por la misma razón: ninguna puede depender del estado del hook que deja otra. La lógica y los umbrales no cambian. `selftest-gpio` no se ejecuta en esta fase (G-S1): queda en "no ejercitado".
 7. **Sin firmas nuevas.** Ni `gpio_bm.h`/`gpio_ll.h`/`gpio_hal.h` ni `uart_hal.h` cambian salvo comentarios.
 
 ## Archivos
@@ -101,16 +112,23 @@ Base: `07db657` de `main` (corrección de la alimentación, X1), árbol limpio, 
 | ID | Qué | Oráculo | Control negativo | Criterio |
 | --- | --- | --- | --- | --- |
 | T1 | Builds: `build_all -Clean` 8/8; los siete presets de `prj_04`; `prj_04` debug y release, y `prj_01`/`prj_02`/`prj_03` debug, con `-Werror` | Exit y avisos | — | Todo compila, 0 avisos; `.text` de `uart_hal.c.obj` y de `adc_acquisition.c.obj` antes y después, registrado |
-| T2a | Ningún `HAL_GPIO_Init`/`HAL_GPIO_DeInit` enlazado en producción: `nm` de las ELF CM7 y CM4 de `prj_04` debug y release, y CM7 de `prj_01`/`prj_02`/`prj_03` debug | Los símbolos no están definidos en la ELF | Las mismas ELF compiladas en `07db657`: `HAL_GPIO_Init` está en todas las CM7 (la MSP de la consola) | Ausentes en todas; el control los encuentra |
+| T2a | Nadie fuera de `gpio_hal` llama a la HAL de GPIO en producción. Se miran las ELF CM7 y CM4 de `prj_04` debug y release y las CM7 de `prj_01`/`prj_02`/`prj_03` debug: los objetos enlazados en cada una (del `.map` o de `link.txt`) y `nm -u` de cada objeto | `HAL_GPIO_Init` solo lo referencia `gpio_hal.c.obj`; `HAL_GPIO_DeInit` no está definido en ninguna ELF; una ELF u objeto que falta es FAIL | Las mismas cinco CM7 y las dos CM4 compiladas en `07db657`, con el mismo criterio: `uart_hal.c.obj` referencia `HAL_GPIO_Init` en cada CM7 y el criterio **falla** en todas | Se cumple en las siete; el control falla en las cinco CM7 |
 | T2b | Ninguna escritura a mano de `MODER`, `OTYPER`, `OSPEEDR`, `PUPDR` o `AFR` fuera del driver. Cada unidad de `compile_commands.json` de `prj_04` en los presets debug, release, `selftest` (DMA), `selftest-adc`, `selftest-uart` y `selftest-hsem` se preprocesa (`-E`) y se busca la escritura. Lista de excepciones cerrada y explícita: `gpio_bm.c`, `gpio_ll.c`, `stm32h7xx_hal_gpio.c`, `led_bm.c` (antes de liberar a CPU2; G14) y `gpio_selftest.c` (el instrumento de F1a) | Las escrituras que quedan, por archivo y línea | `07db657`: encuentra `adc_acquisition.c` (debug), y `main.c` de CM4 y `dma_selftest.c` en sus presets | Cero fuera de las excepciones; el control encuentra las tres |
-| T3 | Con la imagen debug corriendo, por SWD y sin parar:<br>• `s_shared_lock` de `gpio_bm.c` en cada núcleo (direcciones de `nm` de su ELF);<br>• `HSEM_RLR5`;<br>• `m7_/m4_gpio_lock_fail_count`;<br>• la configuración de PB1, PB13, PD8 y PD9 | Cada `s_shared_lock` es la dirección de `g_shared_gpio_lock` de su ELF; `RLR5 = 0` (libre); contadores a 0; los pines frente a una tabla escrita a mano (PB1 analógico sin pull; PB13 AF11, PP, muy alta, sin pull; PD8/PD9 AF7, PP, baja, pull-up) | La imagen de `07db657` flasheada y leída por la misma herramienta: los dos `s_shared_lock` valen 0 y T3 **falla**. Más un pin no usado de cada puerto, en su valor de reset | Todo exacto; el control falla |
+| T3 | Con la imagen debug corriendo, por SWD y sin parar:<br>• `s_shared_lock` de `gpio_bm.c` en cada núcleo (direcciones de `nm` de su ELF);<br>• `HSEM_R5` (`HSEM_BASE` + 0x14 = `0x58026414`, base de `stm32h755xx.h`; **nunca `RLR`: leerlo toma el semáforo**);<br>• `m7_/m4_gpio_lock_fail_count`;<br>• la configuración de PB1, PB13, PD8 y PD9 | Cada `s_shared_lock` es la dirección de `g_shared_gpio_lock` de su ELF; `HSEM_R5 = 0` (libre); contadores a 0; los pines frente a una tabla escrita a mano (PB1 analógico sin pull; PB13 AF11, PP, muy alta, sin pull; PD8/PD9 AF7, PP, baja, pull-up) | La imagen de `07db657` flasheada y leída por la misma herramienta: los dos `s_shared_lock` valen 0 y T3 **falla**. Más un pin no usado de cada puerto, en su valor de reset | Todo exacto; el control falla |
 | T4 | Margen del límite (decisión 3): `m7_/m4_gpio_lock_hold_cycles_max` por SWD tras el arranque | Cada máximo es distinto de 0 (los dos núcleos tomaron el hook al menos una vez) y `límite en ciclos / máximo ≥ 10` | El mismo cálculo con un límite diez veces menor tiene que fallar | Los dos núcleos ≥ 10× |
 | T5 | Regresión de producción, debug y release: `monitor.py --sn`, `net_check.py` y `query_adc.py --json` a la vez | Banner con `Rev` = el commit; ICMP 4/4, UDP de 1 a 1472 B idénticos, ráfaga 100/100; `rx_nobuf`, `tx_nobuf`, `dma_err` y `acl_drop` a 0; `sample_count` crece entre dos consultas; `dma_error_count`, `half_overrun_count` y `adc_overrun_count` a 0 | — | Todo como se espera, en las dos imágenes |
 | T6a | Arranques repetidos: 20 resets por SWD (`-rst`) con la imagen debug y, tras cada uno, a los 10 s, T3 completa | T3 en cada arranque | — | 20/20 T3 PASS |
 | T6b | Un arranque en frío (el responsable apaga y enciende la placa) con T3 y T5. **Pendiente mientras el responsable esté en remoto (G-S7):** no bloquea la entrega de F1; sí el cierre. Lo ejecuta quien esté con el responsable en el banco (implementador o auditor) | T3 y T5 | — | T3 y T5 PASS tras el arranque en frío |
 | T7 | La consola de `prj_01` con `uart_hal` cambiado (decisión 1, A): `prj_01` debug flasheado, banner y build id leídos por `monitor.py --sn`; PD8/PD9 leídos por SWD | Banner con el build id del commit; PD8/PD9 como en T3 | — | Banner correcto; pines exactos |
 
-**Capturas:** una ejecución sin editar por prueba (T2–T7) y por herramienta, con el hash del árbol limpio, en `prj_04/docs/gpio_f1b_<prueba>_<hash>.txt`. T7 va en el mismo directorio. Las de placa, con la imagen del mismo commit.
+**Capturas:** una ejecución sin editar por prueba (T2–T7) y por herramienta, con el hash del árbol limpio, en `prj_04/docs/gpio_f1b_<prueba>_<hash>.txt`. T7 va en el mismo directorio.
+
+**Revisión 3:**
+- **Identidad de la imagen.** Cada sesión de placa empieza flasheando la ELF compilada en ese commit, con el árbol limpio, y su "Download verified successfully" va en la captura. Las capturas siguientes de la misma sesión lo citan y no hay recompilación ni otro flasheo en medio.
+- **Lo que se lee y se usa.** Toda dirección que se lee se imprime junto a su origen (`nm` de qué ELF).
+- **Árbol sucio.** Si el árbol está sucio, la captura imprime `git status --porcelain` y no cuenta.
+- **El arnés.** El de T5 y T7 se commitea (en `gpio_f1b_checks.py` o junto a él) y nunca resetea con `monitor.py`, `net_check.py` o `query_adc.py` corriendo.
+- **Fallos silenciosos.** Un fallo de una herramienta (preprocesado, `nm`, SWD), un archivo que falta o un preset que falta es FAIL, nunca "sin hallazgos".
 
 ## Banco
 

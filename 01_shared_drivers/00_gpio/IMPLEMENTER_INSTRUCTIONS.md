@@ -2,7 +2,7 @@
 
 Oct 12, 2026 · @Hector
 
-Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta: instalar el lock de GPIO entre núcleos en `prj_04_adc_dma_bm_eth` y pasar por el driver a todos los escritores de configuración de GPIO que quedan fuera (H1–H5). Ninguna firma cambia. Otra persona audita la fase y repite tus pruebas en la placa.
+Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 3) de esta carpeta: instalar el lock de GPIO entre núcleos en `prj_04_adc_dma_bm_eth` y pasar por el driver a todos los escritores de configuración de GPIO que quedan fuera (H1–H5). Ninguna firma cambia. Otra persona audita la fase y repite tus pruebas en la placa.
 
 Si algo de aquí choca con el plan, manda el plan, salvo lo que este documento **prohíbe**, que sigue prohibido.
 
