@@ -561,7 +561,7 @@ From the "not exercised" lists of the report, F0 to the close, with what later p
   scope. B1 with LL: not measured (R4-1).
 - **Recorded, not judged:** the host's latency to each T0C hold (`first_us`, 62–68 ms in the F2 correction's runs), only
   with the 2 s limit. **T9 and T9(b) without taps:** no scope; T9(b) in notaps is judged as `5 − pulses`,
-  and the firmware's stretch only recorded (1077 µs). **T9(b)** only gave `ERR_ARLO`; `ERR_BUS`/`ERR_TIMEOUT`
+  and the firmware's span only recorded (1077 µs). **T9(b)** only gave `ERR_ARLO`; `ERR_BUS`/`ERR_TIMEOUT`
   accepted, never seen.
 
 **`i2c_hal` (F3)**

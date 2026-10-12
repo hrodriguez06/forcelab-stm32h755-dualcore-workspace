@@ -516,3 +516,10 @@ Ejemplos de §7 recompilados por mí desde `ba7ea45` con `-Wall -Wextra -Wpedant
 ### Estado
 
 Todos los hallazgos de la parte 1 están cerrados. **El cierre pasa cuando el responsable decida m63** (y con m64 corregido).
+
+## Cierre, parte 3: decisión del responsable y pasos de cierre
+
+- **m63:** el responsable acepta el README de 680 líneas (2026-10-11): el crecimiento es lo que pidió esta auditoría (§9.1 y §9.5 completos). **Cerrado.**
+- **m64:** "the firmware's stretch" → "the firmware's span" en §9.5, corregido por el auditor en el commit de cierre con la aprobación del responsable de los pasos de cierre. **Cerrado.**
+
+**El cierre pasa.** `05_i2c` queda hecho y auditado en sus tres tiers. Pasos del responsable, en el mismo commit: `DRIVER_ROADMAP.md` (fila de `05_i2c` y la de `02_dma` con I2C4 por BDMA), `02_dma/README.md` §9 (I2C4 por BDMA) y `00_gpio/README.md` §8 (el bus I2C en el banco: quitar J2/J3 y desconectar la F334 para su banco). IC2 (el README de `06_spi` aún describe N3 como abierto) queda a decisión del responsable, fuera de este cierre. Después: borrado de los documentos de proceso y merge.

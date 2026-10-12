@@ -448,6 +448,14 @@ Since `06_spi` the bench also has the jumper J1, a wire between CN7-14 (PB5)
 and CN7-12 (PA6), with PA5 and PB4 used unwired. It touches no AD2 line and no
 pin of this driver's tests (`06_spi/README.md` §8).
 
+Since `05_i2c` the bench also has an I2C bus: PB8 (CN7-2) and PB9 (CN7-4) wired
+to a NUCLEO-F334R8 target, with 1.0 kOhm pull-ups to 3V3 (CN8-7) and a ground
+wire to it, and two removable jumpers, J2 (SCL node to PF14, CN9-19) and J3 (SDA
+node to PF15, CN9-21) (`05_i2c/README.md` §8). **To run this driver's bench,
+remove J2 and J3 and unplug the F334's USB:** with J2/J3 in, PF14 and PF15 sit
+on the bus and T5/T6/T9 fail, and with two ST-LINKs connected this bench's tools
+may pick the F334's. PB8 and PB9 are not used by this driver's tests.
+
 **Electrical safety.** There are no series resistors, so nothing limits the
 current in a contention (DS12923 table 11: 20 mA per pin, +0 mA injection on FT
 pins). A contention or an injection can damage a pin with no immediate symptom.

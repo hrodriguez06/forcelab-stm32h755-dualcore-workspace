@@ -445,9 +445,12 @@ Then restore the production image with `--preset release`, and check T12 with
   the stream first, so `HAL_BUSY` cannot occur on that path.
 - TRBUFF on HASH_IN (request 78). No HASH test exists.
 - Silicon below `REV_ID 0x2000` (Rev Y), where TRBUFF is not applied.
-- BDMA with LPUART1, I2C4 or ADC3. Since `06_spi`, the BDMA has run with a real
+- BDMA with LPUART1 or ADC3. Since `06_spi`, the BDMA has run with a real
   D3 peripheral: SPI6 through `dma_hal` (channels 0/1, requests 11/12, buffers
-  in `.d3_ram`, up to 8192 frames; `06_spi/README.md` §9, T7(b)).
+  in `.d3_ram`, up to 8192 frames; `06_spi/README.md` §9, T7(b)). Since `05_i2c`,
+  also I2C4 through `dma_hal` (channels 0/1, DMAMUX2 requests 13/14, buffers in
+  `.d3_ram`, 2 to 4096 bytes, from CPU1 with the BM, LL and HAL tiers of I2C;
+  `05_i2c/README.md` §9, T7(b)).
 
 **Defect N3 (found by `06_spi`), fixed in `57b1bf7`.** Before that commit, in
 direct mode `DMA_HAL_Init` compared `periph_align` (`DMA_PDATAALIGN_*`, bits
