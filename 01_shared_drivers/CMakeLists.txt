@@ -85,7 +85,7 @@ target_link_libraries(stm32h7_driver_tim_hal INTERFACE stm32h7_driver_tim_bm)
 add_library(stm32h7_driver_uart INTERFACE)
 target_include_directories(stm32h7_driver_uart INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart)
 target_sources(stm32h7_driver_uart INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart/uart_hal.c)
-target_link_libraries(stm32h7_driver_uart INTERFACE stm32h7_driver_gpio)
+target_link_libraries(stm32h7_driver_uart INTERFACE stm32h7_driver_gpio_hal)
 
 add_library(stm32h7_driver_uart_bm INTERFACE)
 target_include_directories(stm32h7_driver_uart_bm INTERFACE ${CMAKE_CURRENT_LIST_DIR}/04_uart)

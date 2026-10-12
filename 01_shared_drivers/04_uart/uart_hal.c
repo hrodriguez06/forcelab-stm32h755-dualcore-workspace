@@ -6,7 +6,7 @@
   */
 
 #include "uart_hal.h"
-#include "gpio_bm.h"
+#include "gpio_hal.h"
 
 #if defined(HAL_UART_MODULE_ENABLED)
 
@@ -76,6 +76,8 @@ static void UART_HAL_DisableInstanceClock(USART_TypeDef *instance)
 #endif
 }
 
+static HAL_StatusTypeDef s_msp_gpio_status = HAL_OK;
+
 /**
   * @brief  Default MSP pinout and clock configuration for on-board ST-LINK VCP.
   *         Hardware instances and pins are read from board_def.h.
@@ -89,18 +91,24 @@ __weak void UART_HAL_MspInit_User(UART_HandleTypeDef *huart)
     {
         UART_HAL_EnableInstanceClock(BOARD_CONSOLE_UART_INSTANCE);
 
-        GPIO_BM_EnablePortClock(BOARD_CONSOLE_TX_PORT);
         gpio.Pin       = BOARD_CONSOLE_TX_PIN;
         gpio.Mode      = GPIO_MODE_AF_PP;
         gpio.Pull      = GPIO_PULLUP;
         gpio.Speed     = GPIO_SPEED_FREQ_LOW;
         gpio.Alternate = BOARD_CONSOLE_TX_AF;
-        HAL_GPIO_Init(BOARD_CONSOLE_TX_PORT, &gpio);
+        HAL_StatusTypeDef st_tx = GPIO_HAL_Init(BOARD_CONSOLE_TX_PORT, &gpio);
+        if ((st_tx != HAL_OK) && (s_msp_gpio_status == HAL_OK))
+        {
+            s_msp_gpio_status = st_tx;
+        }
 
-        GPIO_BM_EnablePortClock(BOARD_CONSOLE_RX_PORT);
         gpio.Pin       = BOARD_CONSOLE_RX_PIN;
         gpio.Alternate = BOARD_CONSOLE_RX_AF;
-        HAL_GPIO_Init(BOARD_CONSOLE_RX_PORT, &gpio);
+        HAL_StatusTypeDef st_rx = GPIO_HAL_Init(BOARD_CONSOLE_RX_PORT, &gpio);
+        if ((st_rx != HAL_OK) && (s_msp_gpio_status == HAL_OK))
+        {
+            s_msp_gpio_status = st_rx;
+        }
     }
 }
 
@@ -109,8 +117,8 @@ __weak void UART_HAL_MspDeInit_User(UART_HandleTypeDef *huart)
     if (huart->Instance == BOARD_CONSOLE_UART_INSTANCE)
     {
         UART_HAL_DisableInstanceClock(BOARD_CONSOLE_UART_INSTANCE);
-        HAL_GPIO_DeInit(BOARD_CONSOLE_TX_PORT, BOARD_CONSOLE_TX_PIN);
-        HAL_GPIO_DeInit(BOARD_CONSOLE_RX_PORT, BOARD_CONSOLE_RX_PIN);
+        (void)GPIO_HAL_DeinitPin(BOARD_CONSOLE_TX_PORT, GPIO_BM_PIN_INDEX(BOARD_CONSOLE_TX_PIN));
+        (void)GPIO_HAL_DeinitPin(BOARD_CONSOLE_RX_PORT, GPIO_BM_PIN_INDEX(BOARD_CONSOLE_RX_PIN));
     }
 }
 
@@ -197,7 +205,20 @@ HAL_StatusTypeDef UART_HAL_InitEx(UART_HandleTypeDef *huart, const uart_hal_conf
     huart->Init.ClockPrescaler         = UART_PRESCALER_DIV1;
     huart->AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
 
-    return HAL_UART_Init(huart);
+    s_msp_gpio_status = HAL_OK;
+
+    HAL_StatusTypeDef status = HAL_UART_Init(huart);
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    if (s_msp_gpio_status != HAL_OK)
+    {
+        return s_msp_gpio_status;
+    }
+
+    return HAL_OK;
 }
 
 void UART_HAL_Write(UART_HandleTypeDef *huart, const uint8_t *data, uint16_t length)
