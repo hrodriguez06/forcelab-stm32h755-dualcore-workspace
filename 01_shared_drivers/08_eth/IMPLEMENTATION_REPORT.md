@@ -16,8 +16,8 @@ Las pruebas T1–T6 pasan al 100%:
 
 | Fase | Estado | Último commit | Evidencia / Capturas |
 | --- | --- | --- | --- |
-| F1 | Entregada para auditoría | `709b869` (código y herramientas) | `docs/eth_f1_t1_build_all_709b869.txt`<br>`docs/eth_f1_t1_werror_709b869.txt`<br>`docs/eth_f1_t2_t4_checks_709b869.txt`<br>`docs/eth_f1_t5_swd_gpio_709b869.txt`<br>`docs/eth_f1_t6_netcheck_709b869.txt` |
-| Cierre | Sin empezar (espera a que `AUDIT.md` apruebe F1) | — | — |
+| F1 | Pasa (`AUDIT.md`, `55fe04a`) | `bb70e56` | `docs/eth_f1_t1_build_all_709b869.txt`<br>`docs/eth_f1_t1_werror_709b869.txt`<br>`docs/eth_f1_t2_t4_checks_709b869.txt`<br>`docs/eth_f1_t5_swd_gpio_709b869.txt`<br>`docs/eth_f1_t6_netcheck_709b869.txt`<br>`docs/eth_f1_audit_t5_swd_gpio_bb70e56.txt`<br>`docs/eth_f1_audit_t6_netcheck_bb70e56.txt` |
+| Cierre | Entregado para auditoría | Este commit | `docs/eth_f1_t2_t4_checks_f6a7cc7.txt` |
 
 ---
 
@@ -176,3 +176,41 @@ Ninguna errata identificada en `IMPLEMENTATION_PLAN.md` (revisión 1). Las espec
    - Checksum acelerado por hardware (`ETH_USE_HARDWARE_CHECKSUM = 1`).
    - Hook de MSP personalizada (`ETH_HAL_CUSTOM_MSP` / `ETH_HAL_MspInit_User` sobreescrita).
 2. **Alcance de la protección entre núcleos de E8:** El reemplazo de `HAL_GPIO_Init` por `GPIO_HAL_Init` elimina por completo el acceso sin sección crítica en `08_eth` hacia los registros de configuración de los puertos GPIO compartidos (G13). No obstante, tal como especifica el plan (§4, punto 4), la protección real multihilo/multinúcleo requiere que ambos núcleos tengan instalado el lock compartido (`GPIO_BM_SetSharedLock`) y que el otro núcleo también realice sus accesos a través de `gpio_bm`. La instalación de dicho lock a nivel de proyecto está fuera del alcance de este driver compartido.
+
+---
+
+## Cierre
+
+Cierre formal de las limitaciones E1, E2, E5 y E8 tras la aprobación de la auditoría de F1 (`AUDIT.md`, `55fe04a`).
+Documentación actualizada: `01_shared_drivers/08_eth/README.md` (§1, §3, §8, §9, §10, §11, §12) y `eth_hal.h` (comentario de semántica de fallo). Sin cambios en código C ejecutable ni firmas; sin modificaciones en `02_firmware_projects` ni `03_firmware_templates`. Sin sesión en placa.
+
+### Commits del cierre
+
+| Commit | Asunto | Contenido |
+| --- | --- | --- |
+| `a8ef75e` | `docs(eth): document failure semantics of ETH_Driver_Init (m3)` | Comentario en `eth_hal.h` describiendo qué ocurre si un pin falla y cómo recuperarlo (`HAL_ETH_DeInit`) |
+| `f6a7cc7` | `feat(tools): print exact compiler #error line in eth_build_checks.py (m1)` | Función `_extract_error_line` en `tools/eth_build_checks.py` para imprimir la línea de diagnóstico del compilador |
+| `987967a` | `docs(eth): record updated T2-T4 build checks capture with error lines (m1)` | Captura no editada de `eth_build_checks.py` en `docs/eth_f1_t2_t4_checks_f6a7cc7.txt` |
+| (este) | `docs(eth): update README and record close in implementation report` | Actualización de README.md y sección Cierre del informe |
+
+### Respuesta a los hallazgos de la auditoría (m1–m3)
+
+| ID | Hallazgo | Respuesta / Acción |
+| --- | --- | --- |
+| **m1** | La captura de T2/T3 (`eth_f1_t2_t4_checks_709b869.txt`) imprimía la última línea de contexto de GCC en lugar de la línea del `#error`. | **Corregido en `f6a7cc7` y capturado en `987967a`.** Se añadió la función auxiliar `_extract_error_line()` en `tools/eth_build_checks.py` que localiza específicamente la línea con `error: #error` o `fatal error:`. Se ejecutó la herramienta en el árbol limpio de `f6a7cc7` y se commiteó la salida cruda no editada en `docs/eth_f1_t2_t4_checks_f6a7cc7.txt`. La captura anterior (`docs/eth_f1_t2_t4_checks_709b869.txt`) se conserva intacta sin editar. |
+| **m2** | La captura de T6 de la entrega combinaba la salida de dos herramientas y agregaba un resumen manual al final ("Oracle Criteria ... Verdict: PASS"), y T5 no listaba los pines de control hasta el final. No constituía una salida estrictamente sin editar. | **Respondido como norma de procedimiento.** En adelante, las capturas de herramientas y comandos registran exclusivamente la salida estándar y de error tal cual la emite la herramienta ejecutada (`stdout`/`stderr`), sin encabezados manuales concatenados ni juicios de veredicto añadidos al cuerpo del archivo. Todos los juicios, tablas de cotejo, análisis de oráculos y conclusiones se documentan exclusivamente dentro del informe de implementación (`IMPLEMENTATION_REPORT.md`). La nueva captura `docs/eth_f1_t2_t4_checks_f6a7cc7.txt` se generó aplicando esta regla estricta. |
+| **m3** | Si la inicialización de algún pin falla en MSP, `ETH_Driver_Init()` retorna `ETH_DRIVER_ERROR` después de que `HAL_ETH_Init()` ya inicializó el periférico MAC y habilitó `ETH_IRQn` en NVIC. Ni el encabezado ni el README documentaban esta semántica ni la acción requerida (`HAL_ETH_DeInit`). | **Corregido en `a8ef75e` y documentado en README.md (§3.3).** Se añadió la aclaración explícita en el comentario de contrato de `ETH_Driver_Init()` en `01_shared_drivers/08_eth/eth_hal.h` y en la nueva subsección §3.3 de `01_shared_drivers/08_eth/README.md`. Se especifica que ante un fallo de inicialización de pin, el llamador debe invocar `HAL_ETH_DeInit(ETH_Driver_GetHandle())` o aplicar un reset al periférico MAC antes de intentar re-inicializar. |
+
+### Cambios realizados en el README (`01_shared_drivers/08_eth/README.md`)
+
+1. **§1 (Tier and files):** Actualizada la tabla de targets CMake: `stm32h7_driver_eth` enlaza `stm32h7_driver_gpio_hal`.
+2. **§3 (Project contract):**
+   - `board_def.h`: obligatorio con las 18 macros `BOARD_ETH_<SIG>_PORT` y `BOARD_ETH_<SIG>_PIN`; `#error` explícito si falta alguna; sin pines por defecto.
+   - `stm32h7xx_hal_conf.h`: `USE_HAL_ETH_REGISTER_CALLBACKS 0U` comprobado mediante `#error`.
+   - Lock compartido de GPIO: añadido a la tabla de contrato como requisito de inicialización del proyecto si CM4 también accede a los puertos compartidos.
+   - §3.1: descripción de pines RMII configurados con `GPIO_HAL_Init()` y enlace a `gpio_hal`.
+   - §3.3: semántica de fallo de pin y recuperación con `HAL_ETH_DeInit` (m3).
+3. **§8 (Dual-core rules):** Detalle de `GPIO_HAL_Init()` confinando las escrituras a secciones críticas de `gpio_bm` (G13), e incorporación de la observación O2 de `AUDIT.md` (el lock compartido debe ser instalado por el proyecto en ambos núcleos para proteger realmente contra carreras entre núcleos).
+4. **§9 (Validation):** Se añadió el registro §9.2 con la ejecución de hardware de F1 (`bb70e56`) tanto del implementador como del auditor (`eth_f1_audit_t5_swd_gpio_bb70e56.txt` y `eth_f1_audit_t6_netcheck_bb70e56.txt`).
+5. **§10 (Known limitations):** E1, E2, E5 y E8 pasan a ser limitaciones resueltas en el driver (§10.1); lo pendiente de E8 queda formalmente consignado como contrato de proyecto (§3 y §8).
+6. **§11 (Changing this driver) y §12 (History):** Actualizada la guía de cambios para incluir la ejecución de `tools/eth_build_checks.py`, y la tabla histórica con los commits de la fase F1 y cierre.
