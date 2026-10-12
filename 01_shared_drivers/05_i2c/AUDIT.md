@@ -491,3 +491,28 @@ Entrega: `4e303f3..45b5740` (`5a69267` el README y la línea del catálogo; `45b
 ### Estado
 
 **El cierre no pasa todavía:** tres afirmaciones del README no coinciden con su fuente (M5–M7) y faltan partes de §9.1 y §9.5 (m54, m55). El resto son precisiones. Ninguna corrección toca código ni pide sesión en placa. Con la corrección, verificaré el README de nuevo y, si pasa, quedarán los pasos del responsable: `DRIVER_ROADMAP.md`, `02_dma/README.md` (I2C4 por BDMA), `00_gpio/README.md` §8 (el bus I2C en el banco), los documentos de proceso y el merge.
+
+## Cierre, parte 2: verificación de la corrección del README (`fb9fbc6`)
+
+Entrega: `9489df1..fb9fbc6` (`ba7ea45` el README y dos comentarios de encabezado; `fb9fbc6` la respuesta en el informe). Ningún código cambia: los dos cambios de `i2c_bm.h` e `i2c_hal.h` son comentarios (el informe lo comprobó preprocesando las nueve unidades con los encabezados viejos y nuevos: salida idéntica).
+
+| Hallazgo | Verificación |
+| --- | --- |
+| M5 | §6.3 da las cifras de T10(b) del osciloscopio para los dos núcleos (CPU2: START 0,010 ms, liberación 9,885 ms; CPU1: START 14,832 ms, liberación 19,775 ms) y nombra el 15 022 µs como el `CYCCNT` de CPU1 en µs nominales. **Cerrado** |
+| M6 | t\_r 250–254 ns, las 50 medianas de T5 de la captura final, con 248–256 ns como rango de todas las capturas de taps de F1–F3. **Cerrado** |
+| M7 | §3.2, §10.1 y el comentario de `i2c_hal.h`: con `ERR_TIMEOUT` la HAL no para nada; con un error, `I2C_ITError` borra los bits DMA y llama a `HAL_DMA_Abort_IT` (l. 6612-6627, 6642-6657), con el handle ya `READY` (l. 6587); en la BDMA el aborto termina enseguida (`stm32h7xx_hal_dma.c`, rama BDMA de `HAL_DMA_Abort_IT`: `READY` y el callback en la misma llamada). El ejemplo C aborta solo un stream `BUSY`. **Cerrado** |
+| m50–m62 | Estimaciones nombradas como tales; pases como en §13; IC1 e IC3 definidos; B2 y B3 en §9.1; §9.1 con todas las ejecuciones que pasaron y sus recuentos; §9.5 completo por fase; O23; "more than 1000"; la excepción de `RecoverBus` sin `CYCCNT`; el STOP condicionado y `I2C_RESET_CR2`; los bits de `SYSCFG_PMCR`; §9.3 desde el directorio de la F334 y el sufijo `_<n>`; el hash `5a69267`. **Cerrados** |
+| Observación `i2c_bm.h:106` | Comentario corregido. **Cerrada** |
+
+Ejemplos de §7 recompilados por mí desde `ba7ea45` con `-Wall -Wextra -Wpedantic -Wconversion -Werror`: los tres, exit 0, 0 líneas.
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| m63 | Menor (regla) | El README tiene **680 líneas**; las instrucciones (§6.1) y el encargo del cierre piden ≤ 600, y el informe no lo menciona. La mayor parte del crecimiento es lo que pidió la auditoría (§9.1 y §9.5 completos, lección M6) | Decisión del responsable: aceptar 680 líneas o recortar |
+| m64 | Menor (redacción) | §9.5 (F2): "the firmware's stretch only recorded (1077 µs)": es el intervalo (*span*) del `Write` al final de `RecoverBus`, no un *stretch* | Una palabra |
+
+### Estado
+
+Todos los hallazgos de la parte 1 están cerrados. **El cierre pasa cuando el responsable decida m63** (y con m64 corregido).
