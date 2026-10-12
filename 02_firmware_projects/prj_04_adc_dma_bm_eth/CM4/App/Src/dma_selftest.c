@@ -831,10 +831,8 @@ static bool Test_T3(void)
     __HAL_RCC_USART2_CLK_ENABLE();
 
     /* GPIO AF7 configuration */
-    GPIOD->MODER &= ~(GPIO_MODER_MODE5_Msk | GPIO_MODER_MODE6_Msk);
-    GPIOD->MODER |= ((2UL << GPIO_MODER_MODE5_Pos) | (2UL << GPIO_MODER_MODE6_Pos));
-    GPIOD->AFR[0] &= ~(GPIO_AFRL_AFSEL5_Msk | GPIO_AFRL_AFSEL6_Msk);
-    GPIOD->AFR[0] |= ((7UL << GPIO_AFRL_AFSEL5_Pos) | (7UL << GPIO_AFRL_AFSEL6_Pos));
+    (void)GPIO_BM_ConfigAlternateEx(GPIOD, 5, 7, GPIO_BM_OTYPE_PP, GPIO_BM_PULL_NONE, GPIO_BM_SPEED_LOW);
+    (void)GPIO_BM_ConfigAlternateEx(GPIOD, 6, 7, GPIO_BM_OTYPE_PP, GPIO_BM_PULL_NONE, GPIO_BM_SPEED_LOW);
 
     /* USART2 @ 115200 (kernel clock 100 MHz APB1) */
     USART2->CR1 = 0U;

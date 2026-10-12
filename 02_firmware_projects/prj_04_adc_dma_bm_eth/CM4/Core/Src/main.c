@@ -236,15 +236,13 @@ static void CM4_Test_Uart_Drivers(void)
 
     /* 1. Probing for physical PD5->PD6 jumper wire */
     /* Configure PD5 as Output PP Low, PD6 as Input Pull-Up */
-    GPIOD->MODER = (GPIOD->MODER & ~(3UL << (5 * 2))) | (1UL << (5 * 2));
-    GPIOD->ODR &= ~(1UL << 5);
-    GPIOD->MODER &= ~(3UL << (6 * 2));
-    GPIOD->PUPDR = (GPIOD->PUPDR & ~(3UL << (6 * 2))) | (1UL << (6 * 2)); /* Pull-up */
+    (void)GPIO_BM_ConfigOutput(GPIOD, 5, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 0);
+    (void)GPIO_BM_ConfigInput(GPIOD, 6, GPIO_BM_PULL_UP);
     for (volatile int d = 0; d < 2000; d++) {}
     bool low_ok = ((GPIOD->IDR & (1UL << 6)) == 0);
 
-    GPIOD->ODR |= (1UL << 5);
-    GPIOD->PUPDR = (GPIOD->PUPDR & ~(3UL << (6 * 2))) | (2UL << (6 * 2)); /* Pull-down */
+    GPIO_BM_Write(GPIOD, 5, 1);
+    (void)GPIO_BM_ConfigInput(GPIOD, 6, GPIO_BM_PULL_DOWN);
     for (volatile int d = 0; d < 2000; d++) {}
     bool high_ok = ((GPIOD->IDR & (1UL << 6)) != 0);
 
