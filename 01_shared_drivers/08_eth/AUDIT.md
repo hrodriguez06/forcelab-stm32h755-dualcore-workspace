@@ -47,3 +47,25 @@ Entrega: `92e2c77..bb70e56` (código en `d4feb24`, herramienta en `709b869`, cap
 ### Estado
 
 **F1 pasa.** Sin hallazgos bloqueantes ni mayores; m1–m3 se contestan en el cierre. El implementador puede empezar el cierre: `08_eth/README.md` (§3, §8, §9 con el registro nuevo, §10 sin E1, E2, E5 y E8 como limitaciones del driver, §12) y la respuesta a m1–m3. El registro de `prj_02/README.md` §6 lo hace el responsable en el cierre (decisión 1, aceptada el 2026-10-11). La H755 quedó con la imagen de `prj_02`.
+
+## Cierre, parte 1 (`0a10e25`)
+
+Entrega: `55fe04a..0a10e25` (`a8ef75e` m3 en `eth_hal.h`; `f6a7cc7` y `987967a` m1; `0a10e25` el README y la sección "Cierre" del informe). Solo cambian `08_eth/README.md`, un comentario de `eth_hal.h`, `tools/eth_build_checks.py`, una captura nueva y el informe.
+
+| Hallazgo | Verificación |
+| --- | --- |
+| m1 | La herramienta imprime la línea del `#error` (`_extract_error_line`); la captura nueva `eth_f1_t2_t4_checks_f6a7cc7.txt` muestra, para cada variante, `eth_hal.c:<línea>: error: #error "BOARD_ETH_…"` de la macro que falta. **Cerrado** |
+| m2 | Respondido en el informe (la salida de cada herramienta tal cual en adelante). **Cerrado** |
+| m3 | `eth_hal.h` y README §3.3: el MAC queda iniciado y `ETH_IRQn` habilitada; llamar a `HAL_ETH_DeInit` o resetear antes de reintentar. **Cerrado** (con m4) |
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| M1 | Mayor (E8 incompleto; afirmación falsa) | **`ETH_HAL_MspDeInit_User` sigue escribiendo GPIO fuera de la sección de `gpio_bm`:** desconfigura los nueve pines con `HAL_GPIO_DeInit` (`eth_hal.c:323`). Además, `HAL_GPIO_DeInit` borra las máscaras EXTI del núcleo que llama y el `RTSR1`/`FTSR1`/`EXTICR` compartidos de cualquier línea enrutada a ese puerto, incluidas todas las de GPIOA mientras `EXTICR` está en su valor de reset (`00_gpio/gpio_hal.h`, `GPIO_HAL_DeinitPin`). El README nuevo dice que "all pin configuration writes are executed inside `gpio_bm` critical sections" (§3.1), "all GPIO register modifications" (§8) y "routing all register accesses through `gpio_bm`" (§10.1, E8). **Lo omití en la auditoría de F1:** revisé la MSP de inicialización y no la de desinicialización. El camino de `HAL_ETH_DeInit` no lo ejecuta ningún proyecto | Cada pin con `GPIO_HAL_DeinitPin(port, índice)` (el índice desde la máscara del pin); T4 ampliada: `nm -u` sin `HAL_GPIO_DeInit` y con `GPIO_HAL_DeinitPin`, y el control de `7154af6` con `HAL_GPIO_DeInit`; el README, verdadero; el camino de desinicialización, en "no ejercitado" |
+| m4 | Menor (doc) | `eth_hal.h` dice "ETH_IRQHandler was enabled in the NVIC"; lo habilitado es `ETH_IRQn` (el README lo dice bien) | Corregir el comentario |
+| m5 | Menor (redacción) | La historia del README (§12) tiene una fila "Close documentation and audit sign-off \| This branch": la conformidad de la auditoría no la escribe el implementador, y "This branch" no es un commit | "Close documentation" con sus hashes |
+
+### Estado
+
+**El cierre no pasa** por M1, que cambia `eth_hal.c`. Con la corrección repetiré los builds, `eth_build_checks.py` y, como el código cambia, T6 en la placa (el camino nuevo no corre en `prj_02`, pero la imagen sí cambia).
