@@ -345,6 +345,16 @@ static address `192.168.1.150`. Validates limitations E1, E2, E5, and E8.
 | SWD pin registers (T5) | Live SWD read (`mode=HOTPLUG`, no halt) of GPIOA, GPIOB, GPIOC, GPIOG. All 9 RMII pins in AF11, Push-Pull, Very High Speed, No Pull. Unused pins in same ports remain at reset values. Implementer capture: `docs/eth_f1_t5_swd_gpio_709b869.txt`. Auditor independent run: `docs/eth_f1_audit_t5_swd_gpio_bb70e56.txt` (PASS) |
 | Data path (T6) | Concurrent `net_check.py` and `monitor.py`: ICMP 4/4 (0% loss); UDP sweep (1, 25, 512, 1024, 1472 B) all byte-identical; burst 100/100 without loss; firmware counters `rx_nobuf=0`, `tx_nobuf=0`, `dma_err=0` throughout. Implementer capture: `docs/eth_f1_t6_netcheck_709b869.txt`. Auditor independent run: `docs/eth_f1_audit_t6_netcheck_bb70e56.txt` (PASS) |
 
+Final image of the close, `2165309` (`GPIO_HAL_DeinitPin` in the MSP de-init): auditor's T6
+`docs/eth_close_audit_t6_netcheck_2165309_3.txt`, PASS (ICMP 4/4, UDP sweep byte-identical,
+burst 100/100, 100 Mbps full duplex, `rx`/`tx` 10/1 -> 122/112, `rx_nobuf`, `tx_nobuf` and
+`dma_err` at 0). The two earlier captures at the same hash (`..._2165309.txt`,
+`..._2165309_2.txt`) fail because `prj_02` did not boot after a power-on reset: it never
+writes the write-once supply configuration (`HAL_PWREx_ConfigSupply`) and waits forever for
+`VOSRDY` in `SystemClock_Config()`, before this driver runs. The passing run follows `prj_01`,
+which writes it, with no power cycle in between. A project defect, not a driver one
+(`prj_02` README section 6).
+
 ### 9.3 Later images
 
 - `prj_04` boot capture (`prj_04 docs/boot_capture.txt`): PHY registers as above,
@@ -464,3 +474,12 @@ E7), not on this driver.
 | `prj_eth_lwip_node` private copies recorded as a decision | `6c58348` |
 | Limitations E1, E2, E5, E8 closed: `board_def.h` mandatory, callbacks checked, atomic stats, `GPIO_HAL_Init` | `d4feb24`, `709b869`, `bb70e56` |
 | Close documentation and correction (M1, m1, m3, m4, m5): failure semantics, compiler error lines, `GPIO_HAL_DeinitPin`, expanded T4 | `a8ef75e`, `f6a7cc7`, `987967a`, `0a10e25`, `fe572f3`, `e47c780` |
+| Close audit passes at `2165309`, with the auditor's T6 on the final image | `9fb3443` |
+
+Process documents (`IMPLEMENTATION_PLAN.md` revision 1, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md`,
+`AUDIT.md`) were removed after the close; each is at the parent of the commit that removes it:
+
+```bash
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/08_eth/IMPLEMENTATION_PLAN.md)^:01_shared_drivers/08_eth/IMPLEMENTATION_PLAN.md
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/08_eth/AUDIT.md)^:01_shared_drivers/08_eth/AUDIT.md   # and the other two
+```

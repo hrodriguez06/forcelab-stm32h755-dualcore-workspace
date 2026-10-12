@@ -99,6 +99,34 @@ host on the same 192.168.1.0/24 segment.
 Re-run it with the commands in section 5; every number below comes from that
 run and should be refreshed whenever this section is.
 
+### Data-path re-run, 2026-10-12 (`08_eth` close)
+
+Firmware at `2165309`, the close of `08_eth` (mandatory `board_def.h` macros,
+atomic counters, RMII pins through `gpio_hal`), same board and host. Only the
+data path was re-run; the build, boot and IPC records below are still those of
+`68ec30a`.
+
+| Check | Result |
+| :--- | :--- |
+| Link | 100 Mbps full duplex |
+| ICMP | 4/4 |
+| UDP echo, port 7 | 1, 25, 512, 1024 and 1472 B byte-identical, RTT 1.26-2.22 ms |
+| UDP burst | 100/100 |
+| Firmware counters | `rx`/`tx` 10/1 -> 122/112; `rx_nobuf`, `tx_nobuf`, `dma_err` 0 throughout |
+
+Capture: `01_shared_drivers/08_eth/docs/eth_close_audit_t6_netcheck_2165309_3.txt`
+(`net_check.py` and `monitor.py` at the same time).
+
+**Open defect: no boot after a power-on reset.** This image never writes the
+supply configuration (`HAL_PWREx_ConfigSupply(PWR_DIRECT_SMPS_SUPPLY)`), which
+the H755 accepts once per power-on reset. After a power-up, CPU1 waits forever
+for `VOSRDY` in `SystemClock_Config()` (`CM7/Core/Src/main.c`): no console, no
+link, `PWR_CR3` still at its reset value `0x46`. The image only runs when another
+one that writes it (`prj_01`, `prj_04`) has run since the last power-up; a warm
+reset or a reflash keeps it. The 2026-10-12 run was made that way: `prj_01`
+flashed first, then this image, with no power cycle. `prj_03` and
+`prj_eth_lwip_node` have the same gap. Not fixed yet.
+
 ### Build
 
 Clean configure and build of both cores: **0 warnings, 0 errors**.
