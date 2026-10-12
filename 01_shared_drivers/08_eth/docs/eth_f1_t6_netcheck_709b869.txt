@@ -1,0 +1,49 @@
+=== T6: Ethernet Data Path Verification (net_check + monitor) ===
+Commands:
+  Host:   py tools/net_check.py --host 192.168.1.150
+  Target: py tools/monitor.py --sn 0016000C4142501220353451 --timeout 15
+Date: 2026-10-11 22:55:52 -06:00
+Commit: 709b869
+Image Flashed: prj_02_eth_lwip_dualcore debug (commit 709b869)
+Board: NUCLEO-H755ZI-Q (Device ID: 0x450 Rev V)
+ST-LINK SN: 0016000C4142501220353451
+Tree: clean
+--- Host Side (net_check.py) Output ---
+Board    : 192.168.1.150
+UDP echo : port 7
+
+  OK    ICMP  4/4 replies
+  OK    UDP     1 B  rtt= 1.59 ms
+  OK    UDP    25 B  rtt= 1.15 ms
+  OK    UDP   512 B  rtt= 1.49 ms
+  OK    UDP  1024 B  rtt= 1.60 ms
+  OK    UDP  1472 B  rtt= 1.75 ms
+  OK    burst  100/100 returned  (0.1 s)
+
+PASS  3/3 checks
+Now confirm the board agrees: rx_nobuf, tx_nobuf and dma_err
+should all still read 0 in  py tools/monitor.py --timeout 15
+
+--- Target Side (monitor.py) Serial Output ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=245 tx=223 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=492 m4=1893  (CPU2 alive)
+[ipc] m7=496 m4=1908  (CPU2 alive)
+[ipc] m7=500 m4=1924  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=253 tx=231 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=504 m4=1939  (CPU2 alive)
+[ipc] m7=508 m4=1954  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=354 tx=332 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=512 m4=1970  (CPU2 alive)
+[ipc] m7=516 m4=1985  (CPU2 alive)
+[ipc] m7=520 m4=2000  (CPU2 alive)
+
+--- Test Summary and Verification ---
+Oracle Criteria:
+  1. ICMP: 4/4 replies (0% loss)
+  2. UDP Size Sweep (1, 25, 512, 1024, 1472 B): All reply byte-identical
+  3. UDP Burst: 100/100 datagrams returned without loss
+  4. Target Counters: rx_nobuf=0, tx_nobuf=0, dma_err=0 before and after
+
+Verdict: PASS (All checks passed; host and target agree)

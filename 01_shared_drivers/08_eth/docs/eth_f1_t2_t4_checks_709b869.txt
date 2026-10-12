@@ -1,0 +1,48 @@
+=== T2-T4: Ethernet Build Checks ===
+Command: py tools/eth_build_checks.py
+Date: 2026-10-11 22:49:55 -06:00
+Commit: 709b869
+Tree: clean
+=== ETH Build Checks (T2, T3, T4) ===
+Compiler: C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.exe
+Scratch dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\build\scratch_eth_checks
+
+--- Running T2 (E1: 19 board_def.h variants + 2 controls) ---
+  [PASS] T2_var_missing_board_def: Variant 0: without board_def.h (compilation terminated.)
+  [PASS] T2_var_BOARD_ETH_REF_CLK_PORT: Missing BOARD_ETH_REF_CLK_PORT (      |       BOARD_ETH_REF_CLK_PIN)
+  [PASS] T2_var_BOARD_ETH_REF_CLK_PIN: Missing BOARD_ETH_REF_CLK_PIN (      |                   ^~~)
+  [PASS] T2_var_BOARD_ETH_MDIO_PORT: Missing BOARD_ETH_MDIO_PORT (      |       BOARD_ETH_MDC_PORT)
+  [PASS] T2_var_BOARD_ETH_MDIO_PIN: Missing BOARD_ETH_MDIO_PIN (      |                   ^~~)
+  [PASS] T2_var_BOARD_ETH_CRS_DV_PORT: Missing BOARD_ETH_CRS_DV_PORT (      |       BOARD_ETH_CRS_DV_PIN)
+  [PASS] T2_var_BOARD_ETH_CRS_DV_PIN: Missing BOARD_ETH_CRS_DV_PIN (      |                   ^~~)
+  [PASS] T2_var_BOARD_ETH_MDC_PORT: Missing BOARD_ETH_MDC_PORT (      |       BOARD_ETH_MDIO_PORT)
+  [PASS] T2_var_BOARD_ETH_MDC_PIN: Missing BOARD_ETH_MDC_PIN (      |                   ^~~)
+  [PASS] T2_var_BOARD_ETH_RXD0_PORT: Missing BOARD_ETH_RXD0_PORT (      |       BOARD_ETH_RXD1_PORT)
+  [PASS] T2_var_BOARD_ETH_RXD0_PIN: Missing BOARD_ETH_RXD0_PIN (      |                   ^~~)
+  [PASS] T2_var_BOARD_ETH_RXD1_PORT: Missing BOARD_ETH_RXD1_PORT (      |       BOARD_ETH_RXD0_PORT)
+  [PASS] T2_var_BOARD_ETH_RXD1_PIN: Missing BOARD_ETH_RXD1_PIN (      |                   ^~~)
+  [PASS] T2_var_BOARD_ETH_TX_EN_PORT: Missing BOARD_ETH_TX_EN_PORT (      |       BOARD_ETH_TX_EN_PIN)
+  [PASS] T2_var_BOARD_ETH_TX_EN_PIN: Missing BOARD_ETH_TX_EN_PIN (      |                   ^~~)
+  [PASS] T2_var_BOARD_ETH_TXD0_PORT: Missing BOARD_ETH_TXD0_PORT (      |       BOARD_ETH_RXD0_PORT)
+  [PASS] T2_var_BOARD_ETH_TXD0_PIN: Missing BOARD_ETH_TXD0_PIN (      |                   ^~~)
+  [PASS] T2_var_BOARD_ETH_TXD1_PORT: Missing BOARD_ETH_TXD1_PORT (      |       BOARD_ETH_RXD1_PORT)
+  [PASS] T2_var_BOARD_ETH_TXD1_PIN: Missing BOARD_ETH_TXD1_PIN (      |                   ^~~)
+  [PASS] T2_ctrl_full_board_def: Control 1: full board_def.h compiles with 0 errors (exit=0)
+  [PASS] T2_ctrl_prj01_no_eth: Control 2: without HAL_ETH_MODULE_ENABLED compiles with 0 errors (exit=0)
+T2 Verdict: PASS
+
+--- Running T3 (E2: USE_HAL_ETH_REGISTER_CALLBACKS != 0 + 2 controls) ---
+  [PASS] T3_callbacks_1U: USE_HAL_ETH_REGISTER_CALLBACKS 1U fails with #error (      |  ^~~~~)
+  [PASS] T3_ctrl_callbacks_0U: Control 1: USE_HAL_ETH_REGISTER_CALLBACKS 0U compiles with 0 errors (exit=0)
+  [PASS] T3_ctrl_callbacks_undef: Control 2: USE_HAL_ETH_REGISTER_CALLBACKS undefined compiles with 0 errors (exit=0)
+T3 Verdict: PASS
+
+--- Running T4 (E5, E8: object disassembly and symbols vs 7154af6) ---
+  [PASS] T4_curr_symbols: Current object imports GPIO_HAL_Init and NOT HAL_GPIO_Init (GPIO_HAL_Init=True, HAL_GPIO_Init=False)
+  [PASS] T4_control_baseline_symbols: Control: 7154af6 object imports HAL_GPIO_Init and NOT GPIO_HAL_Init (HAL_GPIO_Init=True, GPIO_HAL_Init=False)
+  [PASS] T4_curr_atomic_stats: Current object has exactly 5 atomic ldrex/strex loops (ldrex=5, strex=5)
+  [PASS] T4_control_baseline_atomic: Control: 7154af6 object has 0 ldrex/strex (non-atomic ldr/add/str) (ldrex=0, strex=0)
+T4 Verdict: PASS
+
+=== OVERALL BUILD CHECKS VERDICT: PASS ===
+

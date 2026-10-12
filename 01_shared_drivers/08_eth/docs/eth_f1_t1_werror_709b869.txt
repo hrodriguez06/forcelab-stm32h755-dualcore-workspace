@@ -1,0 +1,19 @@
+=== T1: -Werror Builds Verification ===
+Date: 2026-10-11 22:47:00 -06:00
+Commit: 709b869
+Tree: clean
+>>> Building prj_02_eth_lwip_dualcore [debug] with -Werror in build/scratch_werror_prj_02_eth_lwip_dualcore_debug ...
+Build PASSED: exit 0, warnings=0
+>>> Building prj_02_eth_lwip_dualcore [release] with -Werror in build/scratch_werror_prj_02_eth_lwip_dualcore_release ...
+Build PASSED: exit 0, warnings=0
+>>> Building prj_03_adc_dma_eth [debug] with -Werror in build/scratch_werror_prj_03_adc_dma_eth_debug ...
+Build PASSED: exit 0, warnings=0
+>>> Building prj_03_adc_dma_eth [release] with -Werror in build/scratch_werror_prj_03_adc_dma_eth_release ...
+Build PASSED: exit 0, warnings=0
+>>> Building prj_04_adc_dma_bm_eth [debug] with -Werror in build/scratch_werror_prj_04_adc_dma_bm_eth_debug ...
+Build PASSED: exit 0, warnings=0
+>>> Building prj_04_adc_dma_bm_eth [release] with -Werror in build/scratch_werror_prj_04_adc_dma_bm_eth_release ...
+Build PASSED: exit 0, warnings=0
+
+All 6 builds PASSED with -Werror and 0 warnings.
+

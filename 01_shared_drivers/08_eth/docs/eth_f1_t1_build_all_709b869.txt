@@ -1,0 +1,31 @@
+=== T1: Multi-Project CI Matrix Build ===
+Command: .\tools\build_all.ps1 -Clean
+Date: 2026-10-11 22:42:54 -06:00
+Commit: 709b869
+Tree: clean
+
+Project                    Preset    Core   Status        Text (B)   Data (B)    Bss (B)  Total (B)     Time
+-------                    ------    ----   ------        --------   --------    -------  ---------     ----
+prj_01_template_dualcore   debug     CM7    PASS             29304        132      55668      85104    26.4s
+prj_01_template_dualcore   debug     CM4    PASS              3456         24      12560      16040    26.4s
+prj_01_template_dualcore   release   CM7    PASS             28356        132      55672      84160    17.7s
+prj_01_template_dualcore   release   CM4    PASS              3112         24      12560      15696    17.7s
+prj_02_eth_lwip_dualcore   debug     CM7    PASS             87136        152     120088     207376    30.8s
+prj_02_eth_lwip_dualcore   debug     CM4    PASS              2580         24      12488      15092    30.8s
+prj_02_eth_lwip_dualcore   release   CM7    PASS             83072        152     120096     203320    23.5s
+prj_02_eth_lwip_dualcore   release   CM4    PASS              2332         24      12488      14844    23.5s
+prj_03_adc_dma_eth         debug     CM7    PASS             88552        152     121216     209920    32.2s
+prj_03_adc_dma_eth         debug     CM4    PASS             20944         24      16184      37152    32.2s
+prj_03_adc_dma_eth         release   CM7    PASS             84424        152     121216     205792    24.7s
+prj_03_adc_dma_eth         release   CM4    PASS             18556         24      16184      34764    24.7s
+prj_04_adc_dma_bm_eth      debug     CM7    PASS             90336        156     121228     211720    32.1s
+prj_04_adc_dma_bm_eth      debug     CM4    PASS              9688         28      15888      25604    32.1s
+prj_04_adc_dma_bm_eth      release   CM7    PASS             86336        156     121232     207724    23.7s
+prj_04_adc_dma_bm_eth      release   CM4    PASS              9032         28      15888      24948    23.7s
+
+=================================================================
+ STM32H755 Multi-Project CI Matrix Build
+ Projects: 4 | Presets: debug, release
+=================================================================
+All 8 builds PASSED successfully.
+
