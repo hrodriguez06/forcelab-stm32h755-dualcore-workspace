@@ -351,15 +351,28 @@ def run_t4(tools: dict[str, str], base_dir: str, base_tokens: list[str], scratch
 
     has_gpio_hal_init = "GPIO_HAL_Init" in curr_symbols
     has_hal_gpio_init = "HAL_GPIO_Init" in curr_symbols
-    e8_curr_ok = has_gpio_hal_init and not has_hal_gpio_init
+    e8_curr_init_ok = has_gpio_hal_init and not has_hal_gpio_init
 
     results["cases"].append({
-        "id": "T4_curr_symbols",
+        "id": "T4_curr_symbols_init",
         "description": "Current object imports GPIO_HAL_Init and NOT HAL_GPIO_Init",
-        "passed": e8_curr_ok,
+        "passed": e8_curr_init_ok,
         "detail": f"GPIO_HAL_Init={has_gpio_hal_init}, HAL_GPIO_Init={has_hal_gpio_init}"
     })
-    if not e8_curr_ok:
+    if not e8_curr_init_ok:
+        results["pass"] = False
+
+    has_gpio_hal_deinit = "GPIO_HAL_DeinitPin" in curr_symbols
+    has_hal_gpio_deinit = "HAL_GPIO_DeInit" in curr_symbols
+    e8_curr_deinit_ok = has_gpio_hal_deinit and not has_hal_gpio_deinit
+
+    results["cases"].append({
+        "id": "T4_curr_symbols_deinit",
+        "description": "Current object imports GPIO_HAL_DeinitPin and NOT HAL_GPIO_DeInit",
+        "passed": e8_curr_deinit_ok,
+        "detail": f"GPIO_HAL_DeinitPin={has_gpio_hal_deinit}, HAL_GPIO_DeInit={has_hal_gpio_deinit}"
+    })
+    if not e8_curr_deinit_ok:
         results["pass"] = False
 
     # 2. Undefined symbols check on baseline object:
@@ -368,15 +381,28 @@ def run_t4(tools: dict[str, str], base_dir: str, base_tokens: list[str], scratch
 
     base_has_hal_gpio = "HAL_GPIO_Init" in base_symbols
     base_has_gpio_hal = "GPIO_HAL_Init" in base_symbols
-    e8_base_ok = base_has_hal_gpio and not base_has_gpio_hal
+    e8_base_init_ok = base_has_hal_gpio and not base_has_gpio_hal
 
     results["cases"].append({
-        "id": "T4_control_baseline_symbols",
+        "id": "T4_control_baseline_symbols_init",
         "description": "Control: 7154af6 object imports HAL_GPIO_Init and NOT GPIO_HAL_Init",
-        "passed": e8_base_ok,
+        "passed": e8_base_init_ok,
         "detail": f"HAL_GPIO_Init={base_has_hal_gpio}, GPIO_HAL_Init={base_has_gpio_hal}"
     })
-    if not e8_base_ok:
+    if not e8_base_init_ok:
+        results["pass"] = False
+
+    base_has_hal_gpio_deinit = "HAL_GPIO_DeInit" in base_symbols
+    base_has_gpio_hal_deinit = "GPIO_HAL_DeinitPin" in base_symbols
+    e8_base_deinit_ok = base_has_hal_gpio_deinit and not base_has_gpio_hal_deinit
+
+    results["cases"].append({
+        "id": "T4_control_baseline_symbols_deinit",
+        "description": "Control: 7154af6 object imports HAL_GPIO_DeInit and NOT GPIO_HAL_DeinitPin",
+        "passed": e8_base_deinit_ok,
+        "detail": f"HAL_GPIO_DeInit={base_has_hal_gpio_deinit}, GPIO_HAL_DeinitPin={base_has_gpio_hal_deinit}"
+    })
+    if not e8_base_deinit_ok:
         results["pass"] = False
 
     # 3. Disassembly: atomic ldrex/strex in current object
