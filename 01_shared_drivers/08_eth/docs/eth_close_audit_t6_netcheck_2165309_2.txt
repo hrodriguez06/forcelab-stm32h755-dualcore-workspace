@@ -1,0 +1,24 @@
+=== Auditor T6, close (08_eth), second run after the owner reseated the Ethernet cable and pressed RESET: prj_02 at 2165309 ===
+Date: 2026-10-12T09:02:37-06:00
+Host:   py tools/net_check.py --host 192.168.1.150   (exit 1)
+Target: py tools/monitor.py --sn 0016000C4142501220353451 --timeout 30 (started 6 s before net_check)
+--- net_check.py ---
+Board    : 192.168.1.150
+UDP echo : port 7
+
+  FAIL  ICMP  0/4 replies
+        the board is not answering: check the link LED, the
+        address, and that the host is on the same segment
+  FAIL  UDP     1 B  no reply, or bytes differ
+  FAIL  UDP    25 B  no reply, or bytes differ
+  FAIL  UDP   512 B  no reply, or bytes differ
+  FAIL  UDP  1024 B  no reply, or bytes differ
+  FAIL  UDP  1472 B  no reply, or bytes differ
+  FAIL  burst  0/100 returned  (200.8 s)
+        buffer recycling: check rx_nobuf / tx_nobuf on the board
+
+FAIL  0/3 checks
+--- monitor.py ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+(nothing received yet - press the black RESET button on the board, or check the LED codes in README.md section 8)

@@ -1,0 +1,43 @@
+=== Auditor T6, close (08_eth), third run: prj_01 flashed first to write PWR_CR3 (SMPS direct; read back 0x00010044), then prj_02 at 2165309 flashed by SWD without a power cycle ===
+Date: 2026-10-12T09:06:26-06:00
+Host:   py tools/net_check.py --host 192.168.1.150   (exit 0)
+Target: py tools/monitor.py --sn 0016000C4142501220353451 --timeout 30 (started 6 s before net_check)
+--- net_check.py ---
+Board    : 192.168.1.150 (prj_02_eth_lwip_dualcore)
+UDP echo : port 7
+
+  OK    ICMP  4/4 replies
+  OK    UDP     1 B  rtt= 1.80 ms
+  OK    UDP    25 B  rtt= 1.26 ms
+  OK    UDP   512 B  rtt= 1.50 ms
+  OK    UDP  1024 B  rtt= 1.93 ms
+  OK    UDP  1472 B  rtt= 2.22 ms
+  OK    burst  100/100 returned  (0.1 s)
+
+PASS  3/3 checks
+Now confirm the board agrees: rx_nobuf, tx_nobuf and dma_err
+should all still read 0 in  py tools/monitor.py --timeout 15
+--- monitor.py ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+[ipc] m7=272 m4=1047  (CPU2 alive)
+[ipc] m7=276 m4=1062  (CPU2 alive)
+[ipc] m7=280 m4=1078  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=10 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=284 m4=1093  (CPU2 alive)
+[ipc] m7=288 m4=1108  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=19 tx=10 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=292 m4=1124  (CPU2 alive)
+[ipc] m7=296 m4=1139  (CPU2 alive)
+[ipc] m7=300 m4=1154  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=121 tx=112 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=304 m4=1170  (CPU2 alive)
+[ipc] m7=308 m4=1185  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=122 tx=112 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=312 m4=1201  (CPU2 alive)
+[ipc] m7=316 m4=1216  (CPU2 alive)
+[ipc] m7=320 m4=1231  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=122 tx=112 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=324 m4=1247  (CPU2 alive)
+[ipc] m7=328 m4=1262  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=122 tx=112 rx_nobuf=0 tx_nobuf=0 dma_err=0

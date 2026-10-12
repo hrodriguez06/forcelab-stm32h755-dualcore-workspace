@@ -69,3 +69,42 @@ Entrega: `55fe04a..0a10e25` (`a8ef75e` m3 en `eth_hal.h`; `f6a7cc7` y `987967a` 
 ### Estado
 
 **El cierre no pasa** por M1, que cambia `eth_hal.c`. Con la corrección repetiré los builds, `eth_build_checks.py` y, como el código cambia, T6 en la placa (el camino nuevo no corre en `prj_02`, pero la imagen sí cambia).
+
+## Cierre, parte 2 (`2165309`)
+
+Entrega: `2dacc58..2165309` (`fe572f3` M1 y m4 en `eth_hal.c`/`eth_hal.h`; `e47c780` T4 ampliada; `2165309` README, capturas de build y respuesta en el informe).
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| Alcance | Solo `eth_hal.[ch]`, `tools/eth_build_checks.py`, `08_eth/README.md`, `08_eth/docs/` y el informe |
+| `build_all -Clean` en `2165309` (mi ejecución) | 8/8; `prj_01` igual a `2481396` |
+| `prj_02`, `prj_03`, `prj_04` debug con `CMAKE_C_FLAGS=-Werror` (mi ejecución) | Exit 0 y 0 avisos en los tres |
+| `py tools/eth_build_checks.py` (mi ejecución) | T2, T3 y T4 PASS; T4 ve `GPIO_HAL_DeinitPin` y no `HAL_GPIO_DeInit` en el objeto, y lo contrario en el control de `7154af6` |
+
+| Hallazgo | Verificación |
+| --- | --- |
+| M1 | `ETH_HAL_MspDeInit_User` desconfigura cada pin con `GPIO_HAL_DeinitPin(port, GPIO_BM_PIN_INDEX(pin))`; ya no queda ninguna escritura de GPIO fuera de `gpio_bm` en `eth_hal.c`. README §3.1, §8 y §10.1, verdaderos; §9.5 dice que el camino de `HAL_ETH_DeInit` no lo ejecuta ningún proyecto. **Cerrado** |
+| m4 | `eth_hal.h` dice `ETH_IRQn`. **Cerrado** |
+| m5 | §12 dice "Close documentation" con sus hashes; sin conformidad de auditoría. **Cerrado** |
+
+### T6 en la placa: dos fallos del proyecto, no del driver
+
+`prj_02` debug compilado en `2165309` y flasheado con `tools/flash.py --preset debug --sn 0016000C4142501220353451` ("Download verified successfully"). Capturas sin editar, las tres commiteadas:
+
+- `08_eth/docs/eth_close_audit_t6_netcheck_2165309.txt` y `…_2165309_2.txt` (la segunda, después de que el responsable reconectara el cable y pulsara RESET): ICMP 0/4, ningún UDP, ráfaga 0/100, y `monitor.py` sin una sola línea. **FAIL.**
+- Diagnóstico por SWD, solo lectura (`mode=HOTPLUG`), con la placa en ese estado: PC del CM7 `0x080008DE`, el bucle de `PWR_FLAG_VOSRDY` de `SystemClock_Config` (`prj_02/CM7/Core/Src/main.c:169-170`); `PWR_CR3 = 0x00000046` (valor de reset: nunca se escribió), `PWR_CSR1 = 0x00004000` (sin `ACTVOSRDY`), `RCC_RSR = 0x00FE0000` (flags de POR), `RCC_CR = 0x0000C025` (sin HSE ni PLL), `USART3_CR1 = 0`, `ETH_MACCR = 0`.
+- **Causa:** `prj_02` no llama a `HAL_PWREx_ConfigSupply(PWR_DIRECT_SMPS_SUPPLY)`. La configuración de alimentación de `PWR_CR3` se escribe una sola vez por POR; tras un POR (la placa estuvo apagada desde la sesión de F1) la imagen de `prj_02` se queda en la espera de `VOSRDY` para siempre. En F1 funcionó porque `prj_01`, que sí la escribe (`main.c:208`), había corrido antes en la placa desde el último POR, y un reset caliente la conserva. No depende de `eth_hal.c`: el bloqueo ocurre antes de `ETH_Driver_Init`, y el código de `SystemClock_Config` es el mismo en `7154af6`.
+- **Rodeo, sin apagar la placa:** flasheé `prj_01` debug (escribe SMPS directo; `PWR_CR3 = 0x00010044` leído después, `SDEXTRDY` y sin `LDOEN`) y a continuación `prj_02` en `2165309`; leí `RCC_CR = 0x0307C1A5` (HSE y PLL1 listos) y `USART3_CR1 = 0x0000000D`.
+- `08_eth/docs/eth_close_audit_t6_netcheck_2165309_3.txt`: `net_check.py` con `monitor.py --sn` corriendo desde 6 s antes. ICMP 4/4; UDP de 1, 25, 512, 1024 y 1472 B idénticos; ráfaga 100/100; enlace 100 Mbps full duplex; `rx_nobuf`, `tx_nobuf` y `dma_err` a 0 antes y después (rx 10 → 122, tx 1 → 112); los dos núcleos vivos (`[ipc]`). **PASS.**
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| X1 | Fuera de alcance (proyectos) | **`prj_02`, `prj_03` y `prj_eth_lwip_node` no escriben la configuración de alimentación** (`HAL_PWREx_ConfigSupply`); solo `prj_04` (`main.c:297`) y `prj_01` (`main.c:208`) lo hacen. Tras un POR, esas imágenes no arrancan en la MB1363 (SMPS) salvo que antes haya corrido otra que la escriba. Sus T6 pasan solo con ese rodeo | No bloquea el cierre de `08_eth` (el driver no interviene). Se arregla aparte en `02_firmware_projects`, con la aprobación del responsable; el registro de `prj_02/README.md` §6 lo menciona |
+
+### Estado
+
+**El cierre pasa.** M1, m4 y m5 cerrados; ningún hallazgo del driver abierto. El responsable puede hacer los pasos de cierre (decisiones 1 y 5): registro en `prj_02/README.md` §6, fila de `08_eth` en `DRIVER_ROADMAP.md`, borrado de los documentos de proceso, merge de `driver/eth` en `main` y borrado de la rama. La H755 quedó con la imagen de `prj_02` en `2165309` y `PWR_CR3` escrito hasta el próximo POR.
