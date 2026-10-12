@@ -129,6 +129,21 @@ def clean_tokens(tokens: list[str]) -> list[str]:
     return cleaned
 
 
+def _extract_error_line(stderr: str) -> str:
+    """Extract the specific #error or fatal error line from compiler output."""
+    if not stderr:
+        return ""
+    for line in stderr.splitlines():
+        line_strip = line.strip()
+        if "error: #error" in line_strip or "fatal error:" in line_strip:
+            return line_strip
+    for line in stderr.splitlines():
+        line_strip = line.strip()
+        if "#error" in line_strip or "error:" in line_strip:
+            return line_strip
+    return stderr.strip().splitlines()[-1]
+
+
 def run_t2(tools: dict[str, str], base_dir: str, base_tokens: list[str], scratch_dir: Path) -> dict:
     """T2 (E1): 19 failing variants + controls."""
     results = {"pass": True, "cases": []}
@@ -148,7 +163,7 @@ def run_t2(tools: dict[str, str], base_dir: str, base_tokens: list[str], scratch
         "description": "Variant 0: without board_def.h",
         "expected_fail": True,
         "passed": v0_ok,
-        "detail": proc.stderr.strip().splitlines()[-1] if proc.stderr else ""
+        "detail": _extract_error_line(proc.stderr)
     })
     if not v0_ok:
         results["pass"] = False
@@ -174,7 +189,7 @@ def run_t2(tools: dict[str, str], base_dir: str, base_tokens: list[str], scratch
             "description": f"Missing {macro}",
             "expected_fail": True,
             "passed": var_ok,
-            "detail": proc.stderr.strip().splitlines()[-1] if proc.stderr else ""
+            "detail": _extract_error_line(proc.stderr)
         })
         if not var_ok:
             results["pass"] = False
@@ -240,7 +255,7 @@ def run_t3(tools: dict[str, str], base_dir: str, base_tokens: list[str], scratch
         "description": "USE_HAL_ETH_REGISTER_CALLBACKS 1U fails with #error",
         "expected_fail": True,
         "passed": c1_ok,
-        "detail": proc.stderr.strip().splitlines()[-1] if proc.stderr else ""
+        "detail": _extract_error_line(proc.stderr)
     })
     if not c1_ok:
         results["pass"] = False
