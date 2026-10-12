@@ -52,6 +52,7 @@ extern "C" {
 #define HSEM_ID_SHARED_STATE    1U   /* guards SharedMemory_t.state          */
 #define HSEM_ID_M7_TO_M4_MBOX   2U   /* guards m7_to_m4                      */
 #define HSEM_ID_M4_TO_M7_MBOX   3U   /* guards m4_to_m7                      */
+#define HSEM_ID_ADC_DATA        4U   /* guards adc telemetry data            */
 #define BOARD_GPIO_HSEM_ID      5U   /* 00_gpio cross-core lock: 1-step, taken only inside the gpio_bm section */
 #define SHARED_GPIO_LOCK_US     60U  /* >= 10x the longest hold measured */
 #define SHARED_GPIO_LOCK_CYCLES_CM7  (SHARED_GPIO_LOCK_US * 400U)   /* 24 000 */
