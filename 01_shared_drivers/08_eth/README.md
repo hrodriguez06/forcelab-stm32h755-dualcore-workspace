@@ -352,8 +352,8 @@ burst 100/100, 100 Mbps full duplex, `rx`/`tx` 10/1 -> 122/112, `rx_nobuf`, `tx_
 `..._2165309_2.txt`) fail because `prj_02` did not boot after a power-on reset: it never
 writes the write-once supply configuration (`HAL_PWREx_ConfigSupply`) and waits forever for
 `VOSRDY` in `SystemClock_Config()`, before this driver runs. The passing run follows `prj_01`,
-which writes it, with no power cycle in between. A project defect, not a driver one
-(`prj_02` README section 6).
+which writes it, with no power cycle in between. A project defect, not a driver one,
+fixed in `5dd43a2` (`prj_02` README section 6).
 
 ### 9.3 Later images
 

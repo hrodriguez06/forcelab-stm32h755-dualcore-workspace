@@ -103,3 +103,7 @@ py tools/adc_dashboard.py --host 192.168.1.150 --bind 127.0.0.1:8080
 Open `http://127.0.0.1:8080` in your web browser for live chart visualization and telemetry metrics.
 
 For detailed bring-up and calibration procedures, refer to [docs/ADC_BRINGUP.md](docs/ADC_BRINGUP.md).
+
+### Cold boot
+
+Since `5dd43a2`, `SystemClock_Config()` writes the supply configuration (`HAL_PWREx_ConfigSupply(PWR_DIRECT_SMPS_SUPPLY)`) before raising VOS. Earlier images waited forever for `VOSRDY` after a power-on reset (no console, no link), because `PWR_CR3` is write-once per power-on reset; they only ran when another image had written it since the last power-up. Checked after a real power cycle with nothing else run since (2026-10-12): `RCC_RSR = 0x00FE0000` (power-on), `PWR_CR3 = 0x00010044`, and `net_check.py` with `monitor.py` at the same time pass (ICMP 4/4, UDP 1-1472 B byte-identical, burst 100/100, `rx_nobuf`/`tx_nobuf`/`dma_err` 0, both cores alive). Captures: `docs/x1_cold_boot_swd_5dd43a2.txt`, `docs/x1_cold_boot_t6_netcheck_5dd43a2.txt`.

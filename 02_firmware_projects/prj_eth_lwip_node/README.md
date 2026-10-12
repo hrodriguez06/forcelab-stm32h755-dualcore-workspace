@@ -275,8 +275,9 @@ Run on a NUCLEO-H755ZI-Q (Device ID `0x450`, Rev V) connected to a router, host 
 | UDP echo, port 7 | payload returned byte-identical |
 | Under load | `rx_nobuf=0 tx_nobuf=0 dma_err=0`, Rx CRC errors `0` |
 
-Two bugs that only hardware could have found, both fixed:
+Three bugs that only hardware could have found, all fixed:
 
+- **The supply configuration has to be written before VOS.** Up to `2165309`, `SystemClock_Config()` never called `HAL_PWREx_ConfigSupply(PWR_DIRECT_SMPS_SUPPLY)`. `PWR_CR3` is write-once per power-on reset, so after a power-up CPU1 waited forever for `VOSRDY` (no console, no link), and the image only ran when another one had written it since the last power-up. Fixed in `5dd43a2`; checked after a real power cycle with nothing else run since (2026-10-12): `RCC_RSR = 0x00FE0000`, `PWR_CR3 = 0x00010044`, and `net_check.py` with `monitor.py` at the same time pass (ICMP 4/4, UDP 1-1472 B byte-identical, burst 100/100, `rx_nobuf`/`tx_nobuf`/`dma_err` 0). Captures: `docs/x1_cold_boot_swd_5dd43a2.txt`, `docs/x1_cold_boot_t6_netcheck_5dd43a2.txt`.
 - **The MPU region map must cover FLASH, DTCM, ITCM and the peripheral block.** The golden `mpu_config.c` in the docs hub programs region 0 as a 4 GB no-access/execute-never guard (ES0445 2.1.2) but carves out only the DMA SRAMs. Enabling that MPU raises `IACCVIOL` on the next instruction fetch plus `MSTKERR` on the exception push, which escalates straight to HardFault lockup before `SystemClock_Config()` ever runs. This project's copy defines the full nine-region map.
 - **`ETH_MACFilterConfigTypeDef.BroadcastFilter` is inverted.** It drives `ETH_MACPFR` bit 5, `DBF` = *Disable Broadcast Packets*, so `ENABLE` blocks broadcast and silently makes the board unreachable. It must be `DISABLE`.
 
