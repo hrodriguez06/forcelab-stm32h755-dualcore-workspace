@@ -440,24 +440,32 @@ def run_t2b(tools: dict[str, str], control_dir: Path | None) -> dict:
 # T3: Live SWD verification of lock hook, HSEM 5, fail counts & pin registers
 # ==============================================================================
 
-def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False) -> dict:
+def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False, control_dir: Path | None = None) -> dict:
     results = {"pass": True, "cases": []}
     print(f"--- Running T3 (live SWD inspection, control_mode={control_mode}) ---")
 
     # Resolve ELF symbol addresses
-    cm7_elf = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM7" / "cm7_firmware.elf"
-    cm4_elf = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM4" / "cm4_firmware.elf"
+    if control_mode and control_dir and control_dir.is_dir():
+        cm7_elf = control_dir / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM7" / "cm7_firmware.elf"
+        cm4_elf = control_dir / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM4" / "cm4_firmware.elf"
+    else:
+        cm7_elf = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM7" / "cm7_firmware.elf"
+        cm4_elf = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM4" / "cm4_firmware.elf"
 
     cm7_syms = parse_nm_symbols(tools["nm"], cm7_elf)
     cm4_syms = parse_nm_symbols(tools["nm"], cm4_elf)
 
     cm7_lock_ptr_addr = cm7_syms.get("s_shared_lock")
-    cm7_hook_addr = cm7_syms.get("g_shared_gpio_lock")
     cm4_lock_ptr_addr = cm4_syms.get("s_shared_lock")
-    cm4_hook_addr = cm4_syms.get("g_shared_gpio_lock")
 
-    if not all([cm7_lock_ptr_addr, cm7_hook_addr, cm4_lock_ptr_addr, cm4_hook_addr]):
-        raise RuntimeError(f"Could not resolve symbols: CM7 lock={cm7_lock_ptr_addr}, hook={cm7_hook_addr}; CM4 lock={cm4_lock_ptr_addr}, hook={cm4_hook_addr}")
+    if not (cm7_lock_ptr_addr and cm4_lock_ptr_addr):
+        raise RuntimeError(f"Could not resolve s_shared_lock symbols: CM7 lock={cm7_lock_ptr_addr}, CM4 lock={cm4_lock_ptr_addr}")
+
+    if not control_mode:
+        cm7_hook_addr = cm7_syms.get("g_shared_gpio_lock")
+        cm4_hook_addr = cm4_syms.get("g_shared_gpio_lock")
+        if not (cm7_hook_addr and cm4_hook_addr):
+            raise RuntimeError(f"Could not resolve hook symbols: CM7 hook={cm7_hook_addr}, CM4 hook={cm4_hook_addr}")
 
     # 1. Read s_shared_lock on CM7 (DTCM)
     val_m7 = read_swd_mem32(tools["programmer"], sn, cm7_lock_ptr_addr, 1)[0]
@@ -781,7 +789,7 @@ def main() -> int:
         elif t == "t2b":
             res = run_t2b(tools, ctrl_dir)
         elif t == "t3":
-            res = run_t3(tools, args.sn, control_mode=args.control)
+            res = run_t3(tools, args.sn, control_mode=args.control, control_dir=ctrl_dir)
         elif t == "t4":
             res = run_t4(tools, args.sn)
         elif t == "t6a":
