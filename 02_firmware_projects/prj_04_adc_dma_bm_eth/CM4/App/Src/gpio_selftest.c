@@ -748,7 +748,7 @@ static void b1_measure(bool with_hook, volatile uint32_t *mn, volatile uint32_t 
         if (dt < lo) { lo = dt; }
         if (dt > hi) { hi = dt; }
     }
-    GPIO_BM_SetSharedLock(NULL);
+    Shared_GpioLockInstall();
     *mn = lo;
     *mx = hi;
 }
@@ -861,7 +861,7 @@ void GPIO_SelfTest_CM4_Run(void)
     sh->in_loop_cm4 = 1U;
     t15_drv_loop(3U, T15_DRV_ITERS);
     sh->in_loop_cm4 = 0U;
-    GPIO_BM_SetSharedLock(NULL);
+    Shared_GpioLockInstall();
     s_hook_count_calls = false;
     sh->t15_cm4_hook_fail = s_hook_fail;
     sh->b1_cm4_hold_max = s_hook_hold_max;

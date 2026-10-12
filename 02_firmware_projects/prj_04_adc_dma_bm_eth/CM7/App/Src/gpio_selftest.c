@@ -739,7 +739,7 @@ static bool test_t15_race(void)
     cm4_post(GPIO_ST_CMD_T15_E);
     t15_drv_loop(T15_DRV_ITERS, &GPIO_TEST_SHARED->in_loop_cm4, &e);
     GPIO_TEST_SHARED->in_loop_cm7 = 0U;
-    GPIO_BM_SetSharedLock(NULL);
+    Shared_GpioLockInstall();
     s_hook_count_calls = false;
     xcore_ok = xcore_ok && cm4_wait_ack(GPIO_ST_CMD_T15_E);
     s_b1_hold_max_e    = s_hook_hold_max;
@@ -1291,7 +1291,7 @@ static void b1_measure(bool with_hook, uint32_t *mn, uint32_t *mx)
         if (dt < *mn) { *mn = dt; }
         if (dt > *mx) { *mx = dt; }
     }
-    GPIO_BM_SetSharedLock(NULL);
+    Shared_GpioLockInstall();
 }
 
 /* Cycles -> hundredths of a microsecond, for printing without floats. */
