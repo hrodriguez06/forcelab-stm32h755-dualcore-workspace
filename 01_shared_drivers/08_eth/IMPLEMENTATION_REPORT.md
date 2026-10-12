@@ -214,3 +214,50 @@ Documentación actualizada: `01_shared_drivers/08_eth/README.md` (§1, §3, §8,
 4. **§9 (Validation):** Se añadió el registro §9.2 con la ejecución de hardware de F1 (`bb70e56`) tanto del implementador como del auditor (`eth_f1_audit_t5_swd_gpio_bb70e56.txt` y `eth_f1_audit_t6_netcheck_bb70e56.txt`).
 5. **§10 (Known limitations):** E1, E2, E5 y E8 pasan a ser limitaciones resueltas en el driver (§10.1); lo pendiente de E8 queda formalmente consignado como contrato de proyecto (§3 y §8).
 6. **§11 (Changing this driver) y §12 (History):** Actualizada la guía de cambios para incluir la ejecución de `tools/eth_build_checks.py`, y la tabla histórica con los commits de la fase F1 y cierre.
+
+---
+
+## Respuesta a la auditoría del cierre, parte 1
+
+Respuesta a los hallazgos notificados en `AUDIT.md` ("Cierre, parte 1", commit `2dacc58`):
+- **M1 (Mayor):** `ETH_HAL_MspDeInit_User` desconfiguraba los pines RMII mediante `HAL_GPIO_DeInit` (`eth_hal.c:323`), fuera de la sección crítica de `gpio_bm` y alterando máscaras EXTI y registros compartidos `EXTICR`/`RTSR1`/`FTSR1`.
+- **m4 (Menor):** Comentario de `eth_hal.h:106` mencionaba `ETH_IRQHandler was enabled in the NVIC` en lugar de `ETH_IRQn`.
+- **m5 (Menor):** Tabla histórica de `08_eth/README.md` §12 incluía la frase "audit sign-off" y "This branch" en lugar de los hashes concretos de la fase de cierre.
+- **T4 ampliada:** Inspección de símbolos mediante `nm -u` en el objeto actual y en el control de `7154af6` para `GPIO_HAL_DeinitPin` y `HAL_GPIO_DeInit`.
+- **README verdadero:** Afirmaciones precisas en §3.1, §8 y §10.1; el camino de desinicialización `HAL_ETH_DeInit()` / `ETH_HAL_MspDeInit_User()` trasladado a §9.5 ("Not exercised on hardware").
+- **Builds limpios:** Ejecución de `build_all.ps1 -Clean` (8/8) y compilaciones con `-Werror` (0 avisos) de `prj_02`, `prj_03` y `prj_04`.
+
+### Acciones realizadas y verificación
+
+| ID | Hallazgo | Acción / Implementación | Verificación |
+| --- | --- | --- | --- |
+| **M1** | `ETH_HAL_MspDeInit_User` llamaba a `HAL_GPIO_DeInit` fuera de `gpio_bm` | **Corregido en `fe572f3`.** En `eth_hal.c:320-326`, cada pin RMII de la tabla `s_rmii_pins` se desconfigura con `GPIO_HAL_DeinitPin(port, pin_idx)` de `00_gpio`, convirtiendo la máscara de pin a índice con `GPIO_BM_PIN_INDEX(s_rmii_pins[i].pin)`. No se alteró ninguna firma pública. El acceso se ejecuta íntegramente dentro de secciones críticas de `gpio_bm` y no toca registros EXTI. | Verificado en T4 ampliada (`nm -u` del objeto no importa `HAL_GPIO_DeInit` e importa `GPIO_HAL_DeinitPin`). |
+| **m4** | `eth_hal.h` decía "ETH_IRQHandler" en NVIC | **Corregido en `fe572f3`.** El comentario en `eth_hal.h:106` se corrigió a `ETH_IRQn was enabled in the NVIC`. | Verificado en revisión de diff. |
+| **m5** | Fila del cierre con "audit sign-off" y "This branch" | **Corregido en `README.md` §12.** Se eliminó "audit sign-off" y "This branch", registrando los hashes reales de los commits de cierre (`a8ef75e`, `f6a7cc7`, `987967a`, `0a10e25`, `fe572f3`, `e47c780`). | Verificado en `README.md` §12. |
+| **T4** | Ampliar T4 con símbolos de desinicialización | **Corregido en `e47c780`.** En `tools/eth_build_checks.py`, `run_t4` ahora comprueba: 1) objeto actual importa `GPIO_HAL_DeinitPin` y NO `HAL_GPIO_DeInit`; 2) control baseline de `7154af6` importa `HAL_GPIO_DeInit` y NO `GPIO_HAL_DeinitPin`. | Ejecución completa: 6/6 comprobaciones PASS en T4. Captura cruda sin editar en `docs/eth_f1_t2_t4_checks_e47c780.txt`. |
+| **Doc** | README veraz y desinicialización en no ejercitado | **Actualizado en `README.md`.** §3.1 describe `GPIO_HAL_Init()` y `GPIO_HAL_DeinitPin()`; §8 detalla que tanto inicialización como desinicialización quedan confinadas a secciones `gpio_bm`; §9.5 incluye `HAL_ETH_DeInit()` / `ETH_HAL_MspDeInit_User()` como camino no ejercitado en hardware (ningún proyecto lo llama); §10.1 documenta la resolución completa de E8 (`GPIO_HAL_Init` y `GPIO_HAL_DeinitPin`). | Verificado en `README.md`. |
+
+### Verificación de compilación (T1)
+
+1. **`build_all.ps1 -Clean` (8/8 PASS):**
+   - Captura: `08_eth/docs/eth_close_build_all_e47c780.txt`.
+   - Salida: 8 de 8 configuraciones compilaron limpiamente.
+   - Tamaños binarios de `prj_01_template_dualcore` (debug CM7 text: 29304, data: 132, bss: 55668; release CM7 text: 28356, data: 132, bss: 55672) idénticos byte a byte al baseline de `2481396`.
+2. **Compilaciones con `-Werror` (6/6 PASS, 0 avisos):**
+   - Captura: `08_eth/docs/eth_close_werror_e47c780.txt`.
+   - Proyectos `prj_02_eth_lwip_dualcore`, `prj_03_adc_dma_eth` y `prj_04_adc_dma_bm_eth` en configuraciones `debug` y `release`.
+   - Exit code: 0 en todos los casos; advertencias de compilador: 0.
+3. **Tamaños de `eth_hal.c.obj`:**
+   - `prj_02_eth_lwip_dualcore`: debug CM7 `text 1948, data 18624, bss 367`; release CM7 `text 1860, data 18624, bss 367`.
+   - `prj_03_adc_dma_eth`: debug CM7 `text 1948, data 18624, bss 367`; release CM7 `text 1860, data 18624, bss 367`.
+   - `prj_04_adc_dma_bm_eth`: debug CM7 `text 1948, data 18624, bss 367`; release CM7 `text 1860, data 18624, bss 367`.
+   - Estabilidad absoluta entre proyectos que comparten el driver.
+
+### Commits de la corrección del cierre
+
+| Commit | Asunto | Contenido |
+| --- | --- | --- |
+| `fe572f3` | `fix(eth): deinit RMII pins via GPIO_HAL_DeinitPin in MSP (M1, m4)` | Desinicialización de pines RMII en `ETH_HAL_MspDeInit_User` usando `GPIO_HAL_DeinitPin` y `GPIO_BM_PIN_INDEX`; corrección a `ETH_IRQn` en comentario de `eth_hal.h` |
+| `e47c780` | `feat(tools): check GPIO_HAL_DeinitPin and absence of HAL_GPIO_DeInit in T4 (M1)` | Ampliación de T4 en `tools/eth_build_checks.py` para verificar símbolos de desinicialización en objeto actual y control |
+| (este) | `docs(eth): update README, record build captures and answer close audit part 1 in report` | Actualización de README (§3.1, §8, §9.5, §10.1, §12), capturas de T1/T4 y sección de informe |
+

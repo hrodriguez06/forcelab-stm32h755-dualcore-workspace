@@ -114,9 +114,12 @@ not create any of it.
 | `RXD0` | PC4 | | | |
 
 Every pin is configured on its own port from `BOARD_ETH_*` using `GPIO_HAL_Init()`
-(AF push-pull, no pull, very high speed, AF11). `stm32h7_driver_eth` links
-`stm32h7_driver_gpio_hal`. Port clocks are enabled by `GPIO_HAL_Init()`, and all
-pin configuration writes are executed inside `gpio_bm` critical sections.
+(AF push-pull, no pull, very high speed, AF11) and de-configured using
+`GPIO_HAL_DeinitPin()` (analog, push-pull, no pull, low speed, AF0).
+`stm32h7_driver_eth` links `stm32h7_driver_gpio_hal`. Port clocks are enabled by
+`GPIO_HAL_Init()`, and all pin configuration and de-initialization register writes
+are executed inside `gpio_bm` critical sections without calling `HAL_GPIO_Init()` or
+`HAL_GPIO_DeInit()` (which would alter shared EXTI registers).
 
 ### 3.2 Overriding the MSP
 
@@ -296,8 +299,10 @@ nothing to do with 2.25.8.
   ports A, B, C and G. The RMII pins share ports A and B with pins other code
   configures — LEDs on PB0/PB14 from CPU1, and in `prj_03`/`prj_04` the ADC input
   on PB1 or PA3 from CPU2. All nine RMII pins are configured using `GPIO_HAL_Init()`
-  of `00_gpio` in place of `HAL_GPIO_Init()`, ensuring that all GPIO register
-  modifications are performed inside `gpio_bm` critical sections (G13).
+  and de-configured using `GPIO_HAL_DeinitPin()` of `00_gpio` in place of `HAL_GPIO_Init()`
+  and `HAL_GPIO_DeInit()`, ensuring that all GPIO register modifications (both initialization
+  and de-initialization) are performed inside `gpio_bm` critical sections without
+  writing shared EXTI registers (G13).
 - **Cross-core protection requirement (O2).** E8 only protects across cores if
   the consuming project installs the shared spinlock (`GPIO_BM_SetSharedLock()`)
   on both cores, and the Cortex-M4 also routes its pin configurations through
@@ -385,6 +390,9 @@ Say so rather than assume it:
 - **`ETH_USE_HARDWARE_CHECKSUM = 1`**: never built into a tested image.
 - **`ETH_HAL_CUSTOM_MSP`** and a strong `ETH_HAL_MspInit_User()`: no consumer
   uses either.
+- **`HAL_ETH_DeInit()` / `ETH_HAL_MspDeInit_User()`**: the de-initialization path
+  (restoring RMII pins to analog via `GPIO_HAL_DeinitPin()` and disabling peripheral
+  clocks and interrupts) is not called by any project in the workspace.
 
 `prj_eth_lwip_node` has the most thorough Ethernet verification in the workspace
 (RMII pin read-back, 60 × 1400 B under load, Rx CRC counters), but it ran on that
@@ -407,7 +415,7 @@ E7), not on this driver.
 - **E1 (Fallback pin defaults):** Closed in `d4feb24`. `board_def.h` is unconditionally included inside `HAL_ETH_MODULE_ENABLED`. Every missing `BOARD_ETH_<SIG>_PORT` and `_PIN` macro triggers an explicit compile-time `#error` referencing Rule 1 (`01_shared_drivers/README.md`). Fallback pin defaults have been completely removed.
 - **E2 (`USE_HAL_ETH_REGISTER_CALLBACKS == 0` assumed):** Closed in `d4feb24`. Enforced at compile time with `#error` if `USE_HAL_ETH_REGISTER_CALLBACKS` is defined and non-zero.
 - **E5 (`g_stats` non-atomic):** Closed in `d4feb24`. All five counters are incremented atomically using `__atomic_fetch_add(&g_stats.<field>, 1U, __ATOMIC_RELAXED)` (generating `ldrex`/`strex` loops on Cortex-M7), eliminating races between task and ISR.
-- **E8 (Cross-core GPIO race):** Closed as a driver limitation in `d4feb24`. The driver replaces `HAL_GPIO_Init()` with `GPIO_HAL_Init()` of `00_gpio` for all nine RMII pins, routing all register accesses through `gpio_bm` critical sections (G13). Full cross-core race protection requires the consuming project to install `GPIO_BM_SetSharedLock()` on both cores, which is part of the project contract ([section 3](#3-project-contract) and [section 8](#8-dual-core-rules)), not a driver limitation.
+- **E8 (Cross-core GPIO race):** Closed as a driver limitation in `d4feb24` and completed in `fe572f3`. The driver replaces `HAL_GPIO_Init()` with `GPIO_HAL_Init()` for pin configuration and `HAL_GPIO_DeInit()` with `GPIO_HAL_DeinitPin()` for pin de-initialization in `ETH_HAL_MspDeInit_User()`, routing all GPIO register modifications through `gpio_bm` critical sections (G13) without altering shared EXTI registers. Full cross-core race protection requires the consuming project to install `GPIO_BM_SetSharedLock()` on both cores, which is part of the project contract ([section 3](#3-project-contract) and [section 8](#8-dual-core-rules)), not a driver limitation.
 
 ---
 
@@ -454,5 +462,5 @@ E7), not on this driver.
 | Port clock through `00_gpio` (`GPIO_BM_EnablePortClock`) | `784febb` |
 | Hardware verification in `prj_02`, and `tools/net_check.py` | `5ccf6f0`, `0e7c334`, `5c910a5` |
 | `prj_eth_lwip_node` private copies recorded as a decision | `6c58348` |
-| Limitations E1, E2, E5, E8 closed: `board_def.h` mandatory, callbacks checked, atomic stats, `GPIO_HAL_Init` | `d4feb24`, `709b869`, `bb70e56`, `55fe04a`, `a8ef75e`, `f6a7cc7`, `987967a` |
-| Close documentation and audit sign-off | This branch |
+| Limitations E1, E2, E5, E8 closed: `board_def.h` mandatory, callbacks checked, atomic stats, `GPIO_HAL_Init` | `d4feb24`, `709b869`, `bb70e56` |
+| Close documentation and correction (M1, m1, m3, m4, m5): failure semantics, compiler error lines, `GPIO_HAL_DeinitPin`, expanded T4 | `a8ef75e`, `f6a7cc7`, `987967a`, `0a10e25`, `fe572f3`, `e47c780` |
