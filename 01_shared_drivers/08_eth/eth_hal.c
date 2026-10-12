@@ -320,7 +320,8 @@ __weak void ETH_HAL_MspDeInit_User(ETH_HandleTypeDef *heth)
     {
         if (s_rmii_pins[i].port != NULL)
         {
-            HAL_GPIO_DeInit(s_rmii_pins[i].port, s_rmii_pins[i].pin);
+            uint32_t pin_idx = GPIO_BM_PIN_INDEX(s_rmii_pins[i].pin);
+            (void)GPIO_HAL_DeinitPin(s_rmii_pins[i].port, pin_idx);
         }
     }
 }

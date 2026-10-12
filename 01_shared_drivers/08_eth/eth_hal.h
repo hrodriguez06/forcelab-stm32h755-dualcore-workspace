@@ -103,7 +103,7 @@ typedef struct
   *         using GPIO_HAL_Init.
   *         If GPIO_HAL_Init fails for any pin, ETH_Driver_Init returns
   *         ETH_DRIVER_ERROR. Because HAL_ETH_Init() has already run, the MAC
-  *         peripheral was initialized and ETH_IRQHandler was enabled in the NVIC.
+  *         peripheral was initialized and ETH_IRQn was enabled in the NVIC.
   *         The caller should call HAL_ETH_DeInit(ETH_Driver_GetHandle()) or
   *         reset the peripheral before retrying.
   */
