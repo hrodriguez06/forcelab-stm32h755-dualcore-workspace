@@ -651,13 +651,39 @@ def run_t2b(tools: dict[str, str], control_dir: Path | None) -> dict:
     return results
 
 
+def flash_image(sn: str, project_dir: Path, preset: str = "debug") -> bool:
+    flash_script = project_dir / "tools" / "flash.py"
+    if not flash_script.is_file():
+        flash_script = REPO_ROOT / "tools" / "flash.py"
+    cmd = [sys.executable, str(flash_script), f"--preset={preset}", f"--sn={sn}", "--yes"]
+    print(f"--- Flashing {preset} from {project_dir.name} ({' '.join(cmd)}) ---")
+    proc = subprocess.run(cmd, cwd=str(project_dir), capture_output=True, text=True)
+    print(proc.stdout)
+    if proc.stderr:
+        print(proc.stderr, file=sys.stderr)
+    return (proc.returncode == 0) and ("Download verified successfully" in proc.stdout)
+
+
 # ==============================================================================
 # T3: Live SWD verification of lock hook, HSEM 5, fail counts & pin registers
 # ==============================================================================
 
-def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False, control_dir: Path | None = None) -> dict:
+def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False, control_dir: Path | None = None, do_flash: bool = False) -> dict:
     results = {"pass": True, "cases": []}
     print(f"--- Running T3 (live SWD inspection, control_mode={control_mode}) ---")
+
+    if do_flash:
+        pdir = (control_dir / "02_firmware_projects" / "prj_04_adc_dma_bm_eth") if (control_mode and control_dir) else (REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth")
+        f_ok = flash_image(sn, pdir, preset="debug")
+        results["cases"].append({
+            "id": "T3_flash_verified",
+            "desc": f"Flashed verified debug image from {pdir.name}",
+            "pass": f_ok,
+            "detail": "Download verified successfully" if f_ok else "Flash verification failed",
+        })
+        if not f_ok:
+            results["pass"] = False
+            return results
 
     if control_mode and control_dir and control_dir.is_dir():
         cm7_elf = control_dir / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM7" / "cm7_firmware.elf"
@@ -873,9 +899,24 @@ def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False, control_d
 # T4: Cycle retention margin check (Decision 3: hold max >= 10x)
 # ==============================================================================
 
-def run_t4(tools: dict[str, str], sn: str) -> dict:
+def run_t4(tools: dict[str, str], sn: str, do_flash: bool = False) -> dict:
     results = {"pass": True, "cases": []}
     print("--- Running T4 (cycle retention margin check) ---")
+
+    if do_flash:
+        pdir = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth"
+        f_ok = flash_image(sn, pdir, preset="debug")
+        results["cases"].append({
+            "id": "T4_flash_verified",
+            "desc": f"Flashed verified debug image from {pdir.name}",
+            "pass": f_ok,
+            "detail": "Download verified successfully" if f_ok else "Flash verification failed",
+        })
+        if not f_ok:
+            results["pass"] = False
+            return results
+        # Give firmware a moment to run and exercise GPIO so hold max is populated
+        time.sleep(3.0)
 
     cm7_elf = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM7" / "cm7_firmware.elf"
     hdr_path = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "Common" / "Inc" / "shared_memory.h"
@@ -1058,9 +1099,23 @@ def run_t5(tools: dict[str, str], sn: str, preset: str = "debug") -> dict:
 # T6a: Repeated warm resets over SWD (20 resets, 10s wait, full T3)
 # ==============================================================================
 
-def run_t6a(tools: dict[str, str], sn: str, count: int = 20, wait_s: float = 10.0) -> dict:
+def run_t6a(tools: dict[str, str], sn: str, count: int = 20, wait_s: float = 10.0, do_flash: bool = False) -> dict:
     results = {"pass": True, "cases": []}
     print(f"--- Running T6a ({count} repeated SWD warm resets, wait={wait_s}s) ---")
+
+    if do_flash:
+        pdir = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth"
+        f_ok = flash_image(sn, pdir, preset="debug")
+        results["cases"].append({
+            "id": "T6a_flash_verified",
+            "desc": f"Flashed verified debug image from {pdir.name}",
+            "pass": f_ok,
+            "detail": "Download verified successfully" if f_ok else "Flash verification failed",
+        })
+        if not f_ok:
+            results["pass"] = False
+            return results
+        time.sleep(wait_s)
 
     for i in range(1, count + 1):
         print(f"  [Reset {i}/{count}] Asserting SWD reset...")
@@ -1212,6 +1267,8 @@ def main() -> int:
     parser.add_argument("--preset", choices=["debug", "release"], default="debug",
                         help="Preset for T5 (default: debug)")
     parser.add_argument("--sn", default=DEFAULT_SN, help=f"ST-LINK serial number (default: {DEFAULT_SN})")
+    parser.add_argument("--flash", action="store_true",
+                        help="Flash the matching image before running hardware tests (T3, T4, T6a)")
     parser.add_argument("--control", action="store_true", help="Run negative control mode for the selected test")
     parser.add_argument("--control-dir", type=Path, default=REPO_ROOT.parent / "stm32h755_control_07db657",
                         help="Path to 07db657 control worktree (for T2 and T3 negative controls)")
@@ -1264,13 +1321,13 @@ def main() -> int:
         elif t == "t2b":
             res = run_t2b(tools, ctrl_dir)
         elif t == "t3":
-            res = run_t3(tools, args.sn, control_mode=args.control, control_dir=ctrl_dir)
+            res = run_t3(tools, args.sn, control_mode=args.control, control_dir=ctrl_dir, do_flash=args.flash)
         elif t == "t4":
-            res = run_t4(tools, args.sn)
+            res = run_t4(tools, args.sn, do_flash=args.flash)
         elif t == "t5":
             res = run_t5(tools, args.sn, preset=args.preset)
         elif t == "t6a":
-            res = run_t6a(tools, args.sn, count=args.reset_count, wait_s=args.reset_wait)
+            res = run_t6a(tools, args.sn, count=args.reset_count, wait_s=args.reset_wait, do_flash=args.flash)
         elif t == "t7":
             res = run_t7(tools, args.sn)
 
