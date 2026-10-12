@@ -39,25 +39,20 @@ volatile uint32_t g_adc_lock_hold_cycles_max = 0U;
 volatile uint32_t g_adc_lock_hold_cycles_min = 0xFFFFFFFFUL;
 volatile uint32_t g_adc_lock_hold_cycles_last = 0U;
 
-static void GPIO_Analog_Init(void)
+static bool GPIO_Analog_Init(void)
 {
-    /* Enable GPIO port clock via bare-metal helper */
-    GPIO_BM_EnablePortClock(BOARD_ADC_PORT);
+    const GpioBm_PinConfig_t cfg = {
+        .port          = BOARD_ADC_PORT,
+        .pin_idx       = GPIO_BM_PIN_INDEX(BOARD_ADC_PIN),
+        .mode          = GPIO_BM_MODE_ANALOG,
+        .otype         = GPIO_BM_OTYPE_PP,
+        .speed         = GPIO_BM_SPEED_LOW,
+        .pull          = GPIO_BM_PULL_NONE,
+        .af            = 0U,
+        .initial_level = 0U,
+    };
 
-    /* Determine pin number 0..15 from pin bitmask */
-    uint32_t pin_num = 0U;
-    uint32_t pin_mask = (uint32_t)BOARD_ADC_PIN;
-    while ((pin_mask > 1U) && (pin_num < 15U))
-    {
-        pin_mask >>= 1U;
-        pin_num++;
-    }
-
-    /* Set MODER[1:0] = 0b11 (Analog Mode) */
-    BOARD_ADC_PORT->MODER |= (3UL << (pin_num * 2U));
-
-    /* Set PUPDR[1:0] = 0b00 (No pull-up, no pull-down) */
-    BOARD_ADC_PORT->PUPDR &= ~(3UL << (pin_num * 2U));
+    return (GPIO_BM_ConfigPin(&cfg) == GPIO_BM_OK);
 }
 
 static bool TIM3_Trigger_Init(void)
@@ -89,7 +84,10 @@ bool ADC_Acquisition_Init(void)
     AdcBm_Config_t adc_cfg = {0};
 
     /* 1. Initialize Analog Input GPIO pin in bare-metal */
-    GPIO_Analog_Init();
+    if (!GPIO_Analog_Init())
+    {
+        return false;
+    }
 
     /* 2. Configure TIM3 timebase for 500 kHz TRGO trigger */
     if (!TIM3_Trigger_Init())
