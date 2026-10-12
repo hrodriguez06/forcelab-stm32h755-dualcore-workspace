@@ -451,3 +451,43 @@ En las dos, las líneas de resultado, ordenadas y con los números normalizados,
 ### Estado
 
 **F3 pasa.** Cerrados M4 y m40–m49; las observaciones O31–O37 quedan para el README (O31–O34) o como están. **La API de `i2c_hal` queda congelada en `01e462f`**: el contrato es `01_shared_drivers/05_i2c/i2c_hal.h` de ese commit. Los tres tiers han pasado. **El implementador puede empezar el cierre**: `05_i2c/README.md` y la línea del catálogo (instrucciones §6.1), con todo lo que esta auditoría manda al README (F1: O6, O7, O9, O11, O12, O15 diferido, O22 con su captura, O23, el margen de tHIGH a 400 kHz y el bus +0,8 a +1,1 % por encima de lo pedido en esta placa; F2: O24, O25; F3: O31–O34) y todo lo no ejercitado de los informes de F0 a F3. El banco quedó en taps (J2/J3 puestos).
+
+## Cierre, parte 1: auditoría del README (`45b5740`)
+
+Entrega: `4e303f3..45b5740` (`5a69267` el README y la línea del catálogo; `45b5740` la sección "Cierre" del informe). Solo cambian `05_i2c/README.md` (600 líneas), `01_shared_drivers/README.md` (una línea) y el informe; ningún código.
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| Alcance | Los tres archivos de arriba; ni `DRIVER_ROADMAP.md`, ni `02_dma`/`00_gpio`, ni `AUDIT.md`, el plan o las instrucciones |
+| Ejemplos de §7 (mi ejecución) | Extraídos del README de `45b5740` y compilados con las flags del `compile_commands.json` de `selftest-i2c` (A con las de `i2c_bm.c` de CM4; B y C con las de `i2c_hal.c` de CM7) más `-Wall -Wextra -Wpedantic -Wconversion -Werror`, CMSIS y Cube como `-isystem`: los tres, exit 0 y 0 líneas de salida |
+| Afirmaciones técnicas (§1–§6.2, §9.3, §10, §12) | Revisadas contra los encabezados y el código de los tres tiers, el plan, RM0399, ES0445 y la HAL V1.11.6: todas las líneas citadas dicen lo que el README afirma; ningún error de fondo. Imprecisiones abajo |
+| Evidencia (§0, §1, §3, §6.3, §6.4, §8, §9, §13) | Cada número contra las capturas finales (`i2c_f3_bench_{taps,notaps}_3bc69fe.txt`), `i2c_f3_map_sizes_e053f7a.txt`, `AUDIT.md`, el informe y `git log`. Correctos, entre otros: 149/149 y 112/112; los tamaños; CLKREF +1,27 %; f\_SCL en bruto +0,88..+1,11 % y +0,81..+1,13 % (los 100 registros); tHIGH 611–622 ns y 596 ns; los 5 registros de tolerancia; T9/T9(b); T2-HAL 90/30; las cifras de §9.2 y de B1 (§9.4); las fechas y los hashes de §13. Todo lo que `AUDIT.md` manda al README está, salvo O23 |
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| M5 | Mayor (afirmación falsa) | §6.3 (l. 238) mezcla dos fuentes en T10(b) de CPU1: "CPU1 starts on purpose at 15.022 ms, SDA let go at 19.775 ms". 15 022 µs es el `CYCCNT` del firmware (`taps_3bc69fe` l. 1700); en el osciloscopio, la fuente del 19,775 ms, el START es a **14,832 ms** (`SDAf`, l. 1689) | Dar las dos cifras de la misma fuente (14,832 / 19,775 ms del osciloscopio) o nombrar cada fuente |
+| M6 | Mayor (afirmación falsa) | t\_r "248–256 ns" (l. 132, 396) no es el de la captura final que el README cita: allí las 50 medianas de T5 van de **250 a 254 ns**; 248–256 es el rango de todas las fases | 250–254 ns de `3bc69fe`, o decir que el rango cubre F1–F3 |
+| M7 | Mayor (contradicción) | "The HAL stops neither" (§3.2, l. 157-158) y "the HAL stops no stream" (§10.1, l. 534) solo valen para el `ERR_TIMEOUT` de `I2C_HAL_Wait`. Con un error por interrupción durante la DMA, `I2C_ITError` borra `TXDMAEN`/`RXDMAEN` y llama a `HAL_DMA_Abort_IT` (`stm32h7xx_hal_i2c.c:6612-6627, 6642-6657`); el propio README lo dice en l. 537-538 (O33). Lo mismo en el comentario de `i2c_hal.h:61-62` | "Con `ERR_TIMEOUT` la HAL no para nada; con un error inicia un aborto asíncrono que puede seguir en curso"; en el README y en el comentario del encabezado (sin tocar firmas) |
+| m50 | Menor | "~250 pF" y "t\_r about 50 ns" sin tomas (l. 396-397) son estimaciones del plan; sin tomas no hay osciloscopio | Decir que son estimaciones |
+| m51 | Menor | El encabezado (l. 14-16) da como "pasa en" los commits de las ejecuciones del auditor (`85f9d29`, `a6de15b`, `c483bb9`, `01e462f`); `AUDIT.md` y el propio §13 registran los pases en `ee96c37`, `4fee0f9`, `d1c6f30` y `4e303f3` | Redactarlo como §13 |
+| m52 | Menor | IC1 e IC3 (§6.2, §6.4, §10.1) solo se definen en el plan, que se borrará | Definirlos en el README |
+| m53 | Menor | §9.1: `audit_taps_9aa7a37` se describe como "windows opened at a handshake" (B2); también fue B3 (la captura de T9(b) dependía de la latencia del firmware) | Añadir B3 |
+| m54 | Menor | §9.1 incompleto: faltan las ejecuciones del auditor que pasaron `i2c_f1_audit_bench_notaps_cd8a0f4.txt` (74/74) e `i2c_f3_audit_bench_taps_689f36a.txt` (149/149); las entregas sustituidas que pasaron (F0 `taps_f7323f2`; F1 `e27c673`, `9c07b93`, `fefacf4`, `notaps_5e44044`, `notaps_3d92f3e`; F2 `48ec427`; F3 `357c60d`) no están en ninguna lista; faltan los recuentos de las entregas de F0 (28/28, 26/26) y F2 (130/130, 98/98) | Completar la tabla o una línea con las sustituidas |
+| m55 | Menor | §9.5 incompleto frente a los "No ejercitado" del informe: el límite de 500 ms de S21 solo por mock y a mano (F0); `TIDLE = 1` y `TIMEOUTB` fuera del contrato, T10(b) sin tomas acotado solo por arriba, la línea B1 cortada a 160 caracteres (F1); la latencia del host hasta cada retención de T0C (`first_us`) registrada sin juzgar y T9(b) sin tomas juzgado como "5 − pulsos" (F2); I2C1 sin transferencias por HAL, ninguna llamada con un `timeout_ms` grande contra SCL retenida, la línea del control de T7(b)-HAL que dice "WaitEnd" (F3); los ejemplos de §7 compilan pero no se ejecutaron en placa (cierre) | Copiar lo que falta (lección M6) |
+| m56 | Menor | O23 no aparece; `AUDIT.md` lo manda al README. Desde B2 de F2 ya no aplica (CM4 `n = 1` y CM7 `n = 2` pedidos, cronometrados desde la bajada que ve CM7) | Una línea que lo diga |
+| m57 | Menor | §5 (l. 202): "exit when CYCCNT reads the same value 1000 times"; el código sale con más de 1000 lecturas iguales (`i2c_bm.c:506, 528-530`; `i2c_bm.h:40` lo dice así) | "more than 1000" |
+| m58 | Menor | §3.3 (l. 175): "SDA high: RecoverBus returns OK at once": si `CYCCNT` no corre, antes da `ERR_TIMEOUT` (`i2c_bm.c:1179-1186`) | Añadir la excepción |
+| m59 | Menor | §10.1 (l. 530-531): el STOP tras un NACK solo si el bus sigue ocupado y no hay STOP pedido (l. 7191-7193); `I2C_RESET_CR2` borra solo los campos de transferencia (`stm32h7xx_hal_i2c.h:781-784`), no `CR2` entero (`AUTOEND` queda) | Precisar |
+| m60 | Menor | §4 (l. 186): los bits compartidos de `SYSCFG_PMCR` también incluyen `BOOSTVDDSEL` y `PB6..9FMP` (13:33-137) | "y los demás bits" o la lista completa |
+| m61 | Menor | §9.3: el flasheo de la F334 desde el directorio de `prj_01` funciona (`flash.py:81-84, 459`), pero `tools/i2c_target_f334/README.md:46-51` lo hace desde el de la F334; el nombre de salida del host gana `_<n>` si el archivo existe (`i2c_hw_check.py:2511-2515`) | Unificar o decir por qué; mencionar el sufijo |
+| m62 | Menor | §13: el commit del cierre es `5a69267`; el README dice "the commit that adds this README" | Poner el hash en la corrección |
+
+**Observación:** el comentario de `I2C_BM_ERR_UNSUPPORTED` en `i2c_bm.h:106` ("not available on this instance") quedó viejo: solo lo devuelve `i2c_hal`. Corregir el comentario no cambia la API congelada.
+
+### Estado
+
+**El cierre no pasa todavía:** tres afirmaciones del README no coinciden con su fuente (M5–M7) y faltan partes de §9.1 y §9.5 (m54, m55). El resto son precisiones. Ninguna corrección toca código ni pide sesión en placa. Con la corrección, verificaré el README de nuevo y, si pasa, quedarán los pasos del responsable: `DRIVER_ROADMAP.md`, `02_dma/README.md` (I2C4 por BDMA), `00_gpio/README.md` §8 (el bus I2C en el banco), los documentos de proceso y el merge.
