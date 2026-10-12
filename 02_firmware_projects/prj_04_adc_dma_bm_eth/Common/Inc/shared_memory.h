@@ -52,8 +52,10 @@ extern "C" {
 #define HSEM_ID_SHARED_STATE    1U   /* guards SharedMemory_t.state          */
 #define HSEM_ID_M7_TO_M4_MBOX   2U   /* guards m7_to_m4                      */
 #define HSEM_ID_M4_TO_M7_MBOX   3U   /* guards m4_to_m7                      */
-#define HSEM_ID_ADC_DATA        4U   /* guards adc telemetry data            */
-#define BOARD_GPIO_HSEM_ID      5U   /* reserved for 00_gpio shared pin lock */
+#define BOARD_GPIO_HSEM_ID      5U   /* 00_gpio cross-core lock: 1-step, taken only inside the gpio_bm section */
+#define SHARED_GPIO_LOCK_US     60U  /* >= 10x the longest hold measured */
+#define SHARED_GPIO_LOCK_CYCLES_CM7  (SHARED_GPIO_LOCK_US * 400U)   /* 24 000 */
+#define SHARED_GPIO_LOCK_CYCLES_CM4  (SHARED_GPIO_LOCK_US * 200U)   /* 12 000 */
 #define SHARED_RAM_BASE         0x38008000UL /* SRAM4 base address (D3 domain) */
 #define SHARED_RAM_SIZE         0x00008000UL /* 32 KB (RM0399 §2.3.2) */
 #define SHARED_RAM_END          (SHARED_RAM_BASE + SHARED_RAM_SIZE)
@@ -112,7 +114,13 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t cpu2_wake_count;             /* WFE wakeups during boot handshake (B2) */
     volatile uint32_t m7_adc_lock_hold_cycles_max; /* Peak HSEM 4 hold time (DWT cycles @ 400 MHz) (R-B1) */
     volatile uint32_t m4_adc_lock_hold_cycles_max; /* Peak HSEM 4 hold time (DWT cycles @ 200 MHz) (R-B1) */
-    uint8_t           _pad2[4];                    /* Pad struct to 32-byte multiple */
+
+    /* 00_gpio cross-core lock fail counters (H1) and peak hold cycles (H1, decision 3) */
+    volatile uint32_t m7_gpio_lock_fail_count;
+    volatile uint32_t m4_gpio_lock_fail_count;
+    volatile uint32_t m7_gpio_lock_hold_cycles_max;
+    volatile uint32_t m4_gpio_lock_hold_cycles_max;
+    uint8_t           _pad2[20];                   /* Pad struct to 32-byte multiple (1312 B total) */
 
 } SharedMemory_t;
 
@@ -167,6 +175,20 @@ bool Shared_TryLock(uint32_t id, uint32_t retries);
   * @return true if semaphore was successfully taken, false on timeout.
   */
 bool Shared_TryLockCycles(uint32_t id, uint32_t max_cycles);
+
+#include "gpio_bm.h"
+
+/* ---- 00_gpio cross-core lock hook ----------------------------------------
+   The GPIO configuration registers (MODER, OTYPER, OSPEEDR, PUPDR, AFR) have
+   one copy for both cores. gpio_bm, gpio_ll and gpio_hal run every write in a
+   section that masks this core's interrupts and then calls this hook, which
+   takes BOARD_GPIO_HSEM_ID with a bounded wait (HSEM_BM_TakeTimeout).
+
+   Install it on each core after HSEM_BM_Init() and HSEM_BM_TimebaseStart(),
+   before the first GPIO configuration that can overlap with the other core:
+   on CPU1 before it releases CPU2, on CPU2 right after it wakes.           */
+extern const GpioBm_SharedLock_t g_shared_gpio_lock;
+void Shared_GpioLockInstall(void);
 
 #ifdef __cplusplus
 }

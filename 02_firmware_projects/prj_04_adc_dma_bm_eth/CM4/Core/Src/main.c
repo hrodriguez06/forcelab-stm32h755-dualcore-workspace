@@ -88,6 +88,9 @@ int main(void)
     HSEM_BM_Init();
     HSEM_BM_TimebaseStart();
 
+    /* Before this core's first pin configuration: CPU1 may be configuring pins of the same port */
+    Shared_GpioLockInstall();
+
     /* Deliberately not calling Shared_Init(): the block belongs to CPU1 and is
        already initialised by the time this core is released. Zeroing it here
        would wipe whatever CPU1 has published. */

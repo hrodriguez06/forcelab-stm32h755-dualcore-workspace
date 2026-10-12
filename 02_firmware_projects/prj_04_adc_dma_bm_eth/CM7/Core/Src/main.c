@@ -209,6 +209,9 @@ int main(void)
     /* Initialise shared RAM and publish SHARED_MAGIC before CPU2 can read it. */
     Shared_Init();
 
+    /* From the release on, both cores can configure pins: install the cross-core GPIO lock hook */
+    Shared_GpioLockInstall();
+
 #if defined(GPIO_DRIVER_SELFTEST) && GPIO_DRIVER_SELFTEST
     /* B1: Initialize GPIO selftest SRAM4 block on every cold boot before releasing CPU2 */
     memset(GPIO_TEST_SHARED, 0, sizeof(GpioSelfTestShared_t));
