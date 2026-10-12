@@ -10,6 +10,8 @@ Una fase de implementación (F1) y un cierre. La fase pasa una auditoría indepe
 
 Base: `07db657` de `main` (corrección de la alimentación, X1), árbol limpio, rama `driver/gpio-f1b`.
 
+**Decisiones del responsable (2026-10-12):** las seis decisiones abiertas, aprobadas con su opción por defecto (1 A: `04_uart` cambia; 2: 60 µs; 3: se mide la retención; 4: se restaura el hook; 5: `prj_03` fuera, en F1c; 6: los documentos de proceso se borran al cierre).
+
 ## Encargo
 
 | ID | Hoy | Qué cambia |
