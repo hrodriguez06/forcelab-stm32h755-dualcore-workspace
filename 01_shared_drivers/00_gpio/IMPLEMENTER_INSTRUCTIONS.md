@@ -2,7 +2,7 @@
 
 Oct 12, 2026 · @Hector
 
-Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 1) de esta carpeta: instalar el lock de GPIO entre núcleos en `prj_04_adc_dma_bm_eth` y pasar por el driver a todos los escritores de configuración de GPIO que quedan fuera (H1–H5). Ninguna firma cambia. Otra persona audita la fase y repite tus pruebas en la placa.
+Vas a implementar [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta: instalar el lock de GPIO entre núcleos en `prj_04_adc_dma_bm_eth` y pasar por el driver a todos los escritores de configuración de GPIO que quedan fuera (H1–H5). Ninguna firma cambia. Otra persona audita la fase y repite tus pruebas en la placa.
 
 Si algo de aquí choca con el plan, manda el plan, salvo lo que este documento **prohíbe**, que sigue prohibido.
 
@@ -97,14 +97,15 @@ Opción por defecto de cada una (plan, decisiones 1–6). Si crees que otra es m
   - la lista de excepciones de T2b es la del plan, escrita en la herramienta y en su salida;
   - el control de T2 y T3 es una compilación de `07db657` en un worktree o directorio aparte, nunca en tu árbol.
 - T5 es `monitor.py`, `net_check.py` y `query_adc.py --json` al mismo tiempo, y solo cuenta si los tres extremos coinciden.
-- T6: los 20 resets por SWD los hace la herramienta, con los lectores de consola y red parados (G-S5). El arranque en frío lo hace el responsable: pídeselo.
+- T6a: los 20 resets por SWD los hace la herramienta, con los lectores de consola y red parados (G-S5). T6b (arranque en frío) queda pendiente mientras el responsable esté en remoto: no la pidas, apúntala en tu informe §5.8.
 
 ### 3.6 Seguridad en la placa
 
 - **G-S1 antes del primer flasheo de `prj_04`:** lista cada pin que configuran sus dos núcleos en debug y release y comprueba que ninguno es una línea del banco: AD2 en PE2–PE15 y PA8; J1 en PA5, PA6, PB4, PB5; bus I2C en PB8, PB9; tomas en PF14, PF15. Pon la lista en el informe. Si alguno coincide, para y pregunta.
 - **G-S3:** el AD2 en estado seguro: no corras ningún script del AD2.
 - **G-S5:** flashear o resetear solo con `monitor.py`, `net_check.py` y `query_adc.py` parados.
-- La primera vez, pide al responsable que confirme el cable Ethernet, la red y el estado del banco. Esa confirmación vale para toda la fase mientras el banco no cambie.
+- **El responsable está en remoto (G-S7):** nadie puede apagar la placa, pulsar RESET, reconectar un USB ni cambiar un cable. No pidas confirmaciones físicas. Antes de la primera sesión, comprueba la red con `net_check.py` sobre la imagen que haya en la placa (`prj_eth_lwip_node` en `07db657`, en `192.168.1.150`); si no contesta, para y avisa.
+- **Nada que solo se recupere a mano:** no toques la configuración de alimentación ni `SystemClock_Config`, ni los option bytes (`flash.py --ob`), ni el firmware del ST-LINK, y no borres la flash entera. Para resetear, `STM32_Programmer_CLI … -rst` o `-hardRst` (NRST del ST-LINK); para conectar a una placa que no responde, `mode=UR`. Si ni así responde por SWD, para y avisa: no insistas.
 
 ---
 
@@ -137,6 +138,7 @@ Secciones:
 - una corrección parece pedir una firma nueva o un cambio en las fuentes de `00_gpio`;
 - `s_shared_lock` de un núcleo no se puede leer por SWD;
 - T4 da menos de 10× con 60 µs;
+- la placa no responde por SWD ni bajo reset, o la red deja de contestar;
 - encuentras otro escritor de configuración de GPIO que el plan no lista;
 - quieres una opción distinta de la de por defecto.
 

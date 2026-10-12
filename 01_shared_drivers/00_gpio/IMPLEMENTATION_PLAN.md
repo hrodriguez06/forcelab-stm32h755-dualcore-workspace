@@ -1,6 +1,6 @@
 # Plan de `00_gpio` F1b: el lock entre núcleos en `prj_04` (G1, G13)
 
-Oct 12, 2026 · @Hector · revisión 1
+Oct 12, 2026 · @Hector · revisión 2
 
 Este plan cierra en `prj_04_adc_dma_bm_eth` el fallo real G1 de `00_gpio/README.md` §12.2 y la parte de G13 que le toca (§13.1): dos núcleos que escriben sin protección los registros de configuración del mismo puerto. En `prj_04`, CM7 configura PB13 (TXD1 de Ethernet) en `net_task` después de liberar a CPU2, y CM4 configura PB1 (entrada del ADC) a mano en `GPIO_Analog_Init()`. Las dos escrituras son read-modify-write de `GPIOB_MODER`. Si se intercalan, PB13 puede volver a analógico: el enlace sigue arriba y la transmisión muere sin que nada lo detecte.
 
@@ -11,6 +11,8 @@ Una fase de implementación (F1) y un cierre. La fase pasa una auditoría indepe
 Base: `07db657` de `main` (corrección de la alimentación, X1), árbol limpio, rama `driver/gpio-f1b`.
 
 **Decisiones del responsable (2026-10-12):** las seis decisiones abiertas, aprobadas con su opción por defecto (1 A: `04_uart` cambia; 2: 60 µs; 3: se mide la retención; 4: se restaura el hook; 5: `prj_03` fuera, en F1c; 6: los documentos de proceso se borran al cierre).
+
+**Revisión 2 (2026-10-12): la placa, en remoto.** El responsable no tiene acceso físico al banco durante F1: nadie puede apagar la placa, pulsar RESET, reconectar un USB ni cambiar un cable. Cambia T6 (el arranque en frío pasa a T6b, pendiente hasta que el responsable esté en el banco) y se añade G-S7. El último estado verificado del banco es el de las 09:45 del 2026-10-12: cable Ethernet conectado y red funcionando (T6 del auditor con `prj_eth_lwip_node`, PASS).
 
 ## Encargo
 
@@ -104,7 +106,8 @@ Base: `07db657` de `main` (corrección de la alimentación, X1), árbol limpio, 
 | T3 | Con la imagen debug corriendo, por SWD y sin parar:<br>• `s_shared_lock` de `gpio_bm.c` en cada núcleo (direcciones de `nm` de su ELF);<br>• `HSEM_RLR5`;<br>• `m7_/m4_gpio_lock_fail_count`;<br>• la configuración de PB1, PB13, PD8 y PD9 | Cada `s_shared_lock` es la dirección de `g_shared_gpio_lock` de su ELF; `RLR5 = 0` (libre); contadores a 0; los pines frente a una tabla escrita a mano (PB1 analógico sin pull; PB13 AF11, PP, muy alta, sin pull; PD8/PD9 AF7, PP, baja, pull-up) | La imagen de `07db657` flasheada y leída por la misma herramienta: los dos `s_shared_lock` valen 0 y T3 **falla**. Más un pin no usado de cada puerto, en su valor de reset | Todo exacto; el control falla |
 | T4 | Margen del límite (decisión 3): `m7_/m4_gpio_lock_hold_cycles_max` por SWD tras el arranque | Cada máximo es distinto de 0 (los dos núcleos tomaron el hook al menos una vez) y `límite en ciclos / máximo ≥ 10` | El mismo cálculo con un límite diez veces menor tiene que fallar | Los dos núcleos ≥ 10× |
 | T5 | Regresión de producción, debug y release: `monitor.py --sn`, `net_check.py` y `query_adc.py --json` a la vez | Banner con `Rev` = el commit; ICMP 4/4, UDP de 1 a 1472 B idénticos, ráfaga 100/100; `rx_nobuf`, `tx_nobuf`, `dma_err` y `acl_drop` a 0; `sample_count` crece entre dos consultas; `dma_error_count`, `half_overrun_count` y `adc_overrun_count` a 0 | — | Todo como se espera, en las dos imágenes |
-| T6 | Arranques repetidos: 20 resets por SWD (`-rst`) con la imagen debug y, tras cada uno, a los 10 s, T3 completa; más un arranque en frío (el responsable apaga y enciende) con T3 y T5 | T3 en cada arranque | — | 21/21 T3 PASS; T5 tras el arranque en frío |
+| T6a | Arranques repetidos: 20 resets por SWD (`-rst`) con la imagen debug y, tras cada uno, a los 10 s, T3 completa | T3 en cada arranque | — | 20/20 T3 PASS |
+| T6b | Un arranque en frío (el responsable apaga y enciende la placa) con T3 y T5. **Pendiente mientras el responsable esté en remoto (G-S7):** no bloquea la entrega de F1; sí el cierre. Lo ejecuta quien esté con el responsable en el banco (implementador o auditor) | T3 y T5 | — | T3 y T5 PASS tras el arranque en frío |
 | T7 | La consola de `prj_01` con `uart_hal` cambiado (decisión 1, A): `prj_01` debug flasheado, banner y build id leídos por `monitor.py --sn`; PD8/PD9 leídos por SWD | Banner con el build id del commit; PD8/PD9 como en T3 | — | Banner correcto; pines exactos |
 
 **Capturas:** una ejecución sin editar por prueba (T2–T7) y por herramienta, con el hash del árbol limpio, en `prj_04/docs/gpio_f1b_<prueba>_<hash>.txt`. T7 va en el mismo directorio. Las de placa, con la imagen del mismo commit.
@@ -121,13 +124,14 @@ El de siempre, sin cambiar un cable. Incluye las tomas J2/J3 y la F334 de `05_i2
 | G-S4 | **La red la configura el responsable** |
 | G-S5 | Flashear o resetear solo con `monitor.py`, `net_check.py` y `query_adc.py` parados |
 | G-S6 | Todas las imágenes que se flashean son del repo, así que no hace falta copia previa de la flash; el informe dice qué imagen quedó en la placa al terminar |
+| G-S7 | **Placa en remoto: nada que solo se recupere a mano.** Sin acceso físico, la única recuperación es el NRST del ST-LINK (`mode=UR`, `-hardRst`). Por eso: no se cambia la configuración de alimentación (`HAL_PWREx_ConfigSupply` y `SystemClock_Config` quedan como en `07db657`: una configuración equivocada bloquea la placa hasta recuperarla con BOOT0), ni los option bytes (`flash.py --ob`, BCM4/BCM7, direcciones de arranque, RDP), ni el firmware del ST-LINK, y no se borra la flash entera. Si la placa deja de responder por SWD incluso bajo reset, o la red deja de contestar, se para y se avisa: no se insiste. La confirmación física del banco no se puede pedir; la sustituyen G-S1 (ningún pin de `prj_04` toca una línea del banco, esté como esté) y una comprobación de red antes de la primera sesión (`net_check.py` con la imagen que haya) |
 
 ## Fases
 
 | Fase | Entregable | Gate |
 | --- | --- | --- |
-| **F1** | H1–H5; `tools/gpio_f1b_checks.py`; T1–T7 con sus capturas; el informe | Auditoría con revisión, builds y la ejecución propia del auditor (T3–T6) |
-| **Cierre** | Implementador: `00_gpio/README.md` (§11 consumidores, también la fila de `08_eth`, que ya usa `GPIO_HAL_Init`; §12.2 G1 y G13; §13.1; §15), `04_uart/README.md` (la MSP), `prj_04/README.md` (el hook y la validación). Responsable: `DRIVER_ROADMAP.md`, borrado de los documentos de proceso, merge | Auditoría de cierre |
+| **F1** | H1–H5; `tools/gpio_f1b_checks.py`; T1–T5, T6a y T7 con sus capturas; el informe | Auditoría con revisión, builds y la ejecución propia del auditor (T3–T5, T6a) |
+| **Cierre** | Implementador: `00_gpio/README.md` (§11 consumidores, también la fila de `08_eth`, que ya usa `GPIO_HAL_Init`; §12.2 G1 y G13; §13.1; §15), `04_uart/README.md` (la MSP), `prj_04/README.md` (el hook y la validación). Responsable: `DRIVER_ROADMAP.md`, borrado de los documentos de proceso, merge | T6b hecha con el responsable en el banco; auditoría de cierre |
 
 ## Riesgos
 
