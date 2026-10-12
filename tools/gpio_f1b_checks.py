@@ -34,6 +34,7 @@ Standard library only.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import os
 import re
@@ -300,10 +301,77 @@ RAW_WRITE_RE = re.compile(
 )
 
 
+def _check_unit_writes(entry: dict, preset: str, gcc_cmd: str, project_dir: Path) -> list[dict]:
+    src_file = Path(entry.get("file", ""))
+    if not src_file.is_file():
+        return []
+
+    base_name = src_file.name
+    if base_name in ALLOWED_EXCEPTIONS:
+        return []
+
+    # Build preprocessor command
+    raw_cmd = entry.get("command", "")
+    if raw_cmd:
+        tokens = raw_cmd.split()
+    else:
+        tokens = list(entry.get("arguments", []))
+
+    if not tokens:
+        return []
+
+    # Replace "-c <src> -o <obj>" with "-E"
+    pp_tokens = []
+    skip_next = False
+    for t in tokens[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if t in ("-c", "-o"):
+            skip_next = True
+            continue
+        if r'\"' in t:
+            t = t.replace(r'\"', '"')
+        pp_tokens.append(t)
+
+    cmd = [gcc_cmd, "-E", "-Wno-error"] + pp_tokens + [str(src_file)]
+    proc = subprocess.run(cmd, cwd=entry.get("directory", str(project_dir)),
+                          capture_output=True, text=True)
+    if proc.returncode != 0:
+        return []
+
+    # Parse preprocessed output tracking current file
+    unit_findings = []
+    cur_file = str(src_file)
+    cur_line = 1
+    for line in proc.stdout.splitlines():
+        lm = re.match(r'^#\s+(\d+)\s+"([^"]+)"', line)
+        if lm:
+            cur_line = int(lm.group(1))
+            cur_file = lm.group(2)
+            continue
+
+        cur_base = Path(cur_file).name
+        if cur_base in ALLOWED_EXCEPTIONS:
+            cur_line += 1
+            continue
+
+        if RAW_WRITE_RE.search(line):
+            unit_findings.append({
+                "preset": preset,
+                "file": cur_file,
+                "line": cur_line,
+                "unit": src_file.name,
+                "code": line.strip()[:80],
+            })
+        cur_line += 1
+
+    return unit_findings
+
+
 def run_t2b_on_tree(tools: dict[str, str], project_dir: Path, is_control: bool = False) -> tuple[bool, list[dict]]:
     findings = []
-    scratch_dir = project_dir / "build" / "_t2b_scratch"
-    scratch_dir.mkdir(parents=True, exist_ok=True)
+    tasks = []
 
     for preset in PRJ04_PRESETS:
         comp_json = project_dir / "build" / preset / "compile_commands.json"
@@ -316,68 +384,19 @@ def run_t2b_on_tree(tools: dict[str, str], project_dir: Path, is_control: bool =
             continue
 
         for entry in entries:
-            src_file = Path(entry.get("file", ""))
-            if not src_file.is_file():
-                continue
+            tasks.append((entry, preset))
 
-            base_name = src_file.name
-            if base_name in ALLOWED_EXCEPTIONS:
-                continue
+    workers = os.cpu_count() or 4
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [
+            executor.submit(_check_unit_writes, entry, preset, tools["gcc"], project_dir)
+            for entry, preset in tasks
+        ]
+        for f in concurrent.futures.as_completed(futures):
+            res = f.result()
+            if res:
+                findings.extend(res)
 
-            # Build preprocessor command
-            raw_cmd = entry.get("command", "")
-            if raw_cmd:
-                tokens = raw_cmd.split()
-            else:
-                tokens = list(entry.get("arguments", []))
-
-            if not tokens:
-                continue
-
-            # Replace "-c <src> -o <obj>" with "-E"
-            pp_tokens = []
-            skip_next = False
-            for t in tokens[1:]:
-                if skip_next:
-                    skip_next = False
-                    continue
-                if t in ("-c", "-o"):
-                    skip_next = True
-                    continue
-                pp_tokens.append(t)
-
-            cmd = [tools["gcc"], "-E"] + pp_tokens + [str(src_file)]
-            proc = subprocess.run(cmd, cwd=entry.get("directory", str(project_dir)),
-                                  capture_output=True, text=True)
-            if proc.returncode != 0:
-                continue
-
-            # Parse preprocessed output tracking current file
-            cur_file = str(src_file)
-            cur_line = 1
-            for line in proc.stdout.splitlines():
-                lm = re.match(r'^#\s+(\d+)\s+"([^"]+)"', line)
-                if lm:
-                    cur_line = int(lm.group(1))
-                    cur_file = lm.group(2)
-                    continue
-
-                cur_base = Path(cur_file).name
-                if cur_base in ALLOWED_EXCEPTIONS:
-                    cur_line += 1
-                    continue
-
-                if RAW_WRITE_RE.search(line):
-                    findings.append({
-                        "preset": preset,
-                        "file": cur_file,
-                        "line": cur_line,
-                        "unit": src_file.name,
-                        "code": line.strip()[:80],
-                    })
-                cur_line += 1
-
-    shutil.rmtree(scratch_dir, ignore_errors=True)
     return (len(findings) == 0 if not is_control else len(findings) > 0), findings
 
 
