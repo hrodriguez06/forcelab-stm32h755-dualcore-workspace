@@ -103,7 +103,7 @@ typedef enum
 {
     I2C_BM_OK = 0,
     I2C_BM_ERR_PARAM,        /*!< refused before any peripheral access (C6)                     */
-    I2C_BM_ERR_UNSUPPORTED,  /*!< not available on this instance                                */
+    I2C_BM_ERR_UNSUPPORTED,  /*!< not supported by the tier: only i2c_hal returns it (i2c_hal.h) */
     I2C_BM_ERR_RANGE,        /*!< no TIMINGR meets the mode with this kernel clock (2.19.1)     */
     I2C_BM_ERR_BUSY,         /*!< the hardware would ignore the write in this state (C12)       */
     I2C_BM_ERR_VERIFY,       /*!< read-back differs (C12)                                        */

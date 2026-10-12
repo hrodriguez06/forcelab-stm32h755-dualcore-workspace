@@ -12,8 +12,9 @@ general call, wakeup from Stop and `NOSTRETCH = 1` are not in the API.
 Status: validated on a NUCLEO-H755ZI-Q (Rev V, `REV_ID = 0x2003`), 2026-10-06 to 2026-10-10, in
 `prj_01_template_dualcore` only, against a NUCLEO-F334R8 bench target (`tools/i2c_target_f334/`), with an
 Analog Discovery 2 scope on two removable jumpers (J2/J3). Each phase passed an independent audit with the
-auditor's own runs in both bench states: F0 (bench) at `85f9d29`, F1 (`i2c_bm`) at `a6de15b`, F2 (`i2c_ll`)
-at `c483bb9`, F3 (`i2c_hal`) at `01e462f`. The final code (`3bc69fe`) runs the tests of all four phases:
+auditor's own runs in both bench states: F0 (bench) passed at `ee96c37` (auditor's runs at `85f9d29`), F1
+(`i2c_bm`) at `4fee0f9` (runs and frozen API at `a6de15b`), F2 (`i2c_ll`) at `d1c6f30` (at `c483bb9`), F3
+(`i2c_hal`) at `4e303f3` (at `01e462f`). The final code (`3bc69fe`) runs the tests of all four phases:
 **taps 149/149, notaps 112/112, `FW VERDICT=PASS`** ([§9](#9-validation)).
 
 ---
@@ -129,7 +130,8 @@ read nothing back (the transfer may be over), `Wait` reads back the close. `I2C_
    ceil((ceil(kernel_hz / scl_hz) − sync) / (PRESC + 1))`, **rounded up in both places** (R3-1): `scl_hz_model`
    is never above `scl_hz`. `ERR_RANGE` if t\_r/t\_f exceed the mode (Sm 1000/300 ns, Fm 300/300, Fm+ 120/120,
    50:379-383) or the kernel is below 4/10/20 MHz (ES0445 2.19.1, checked only here, R3-3). The bench passes
-   t\_r 300 ns with taps (the scope measures 248–256 ns, 30–70 %), 40 ns without.
+   t\_r 300 ns with taps and 40 ns without. With taps the scope measures t\_r (30–70 %) at 250–254 ns, the
+   50 T5 medians of `i2c_f3_bench_taps_3bc69fe.txt` (248–256 ns over every taps capture of F1–F3).
 3. **Init**, then the pins in their AF (§3.1). With `PE = 1` and the same configuration `Init` is a
    software reset; with another `TIMINGR`, filter or timeout, `ERR_BUSY`.
 4. **Transfer:** `Write`/`Read`/`WriteRead`, `StartIt`, or the DMA sequence (§3.2).
@@ -154,8 +156,11 @@ read nothing back (the transfer may be over), `Wait` reads back the close. `I2C_
   stream first, then `DmaStartWrite` (n ≥ 2: `buf[0]` in `TXDR` before START, ES0445 2.19.6; the stream sends
   `buf[1..n-1]`) or `DmaStartRead`, `WaitEnd(i2c, n, …)` (each `TCR` gets the next 255), stop it, `DmaEnd`.
 - **DMA (HAL):** link `h->hdmatx`/`hdmarx` (`DMA_HAL_Init` of `02_dma`, with its IRQ), `StartDma`, `Wait`.
-  **A DMA transfer given up** (`ERR_TIMEOUT`, any `ERR_HAL`): abort the stream (`HAL_DMA_Abort`), then
-  `I2C_HAL_Deinit`; the HAL stops neither (§10.1).
+  **A DMA transfer given up:** with `ERR_TIMEOUT` the HAL stops nothing; with an error (`ERR_NACK`,
+  `ERR_ARLO`, `ERR_HAL`) it clears `TXDMAEN`/`RXDMAEN` and starts an asynchronous abort of the stream
+  (`HAL_DMA_Abort_IT`), which may still be running when `Wait` returns (§10.1). So: abort a stream still
+  busy (`HAL_DMA_Abort`), wait until no stream of the transfer is in `HAL_DMA_STATE_ABORT` (a DMA1/DMA2
+  stream's abort ends in its IRQ; the BDMA's at once), then `I2C_HAL_Deinit`.
 - **BDMA (I2C4):** buffers in `.d3_ram` (SRAM4, `0x38000000` in both `prj_01` linker scripts), one core only.
 - **Timeouts:** `timeout_scl_low` turns on `TIMEOUTA`: a transfer that meets SCL held low ends with `ERR_BUS`
   and an immediate software reset (`PE = 0`) that lets go of both lines, **no STOP** (§6.3). Every other wait
@@ -173,7 +178,7 @@ lines with `scl_read` and `sda_read`:
   STOP** (O6): UM10204 calls it illegal with nothing between; most devices accept it, the F334 did (T9).
   `ERR_BUS` if SCL does not rise when released (also a target that stretches SCL after letting it go).
 - **SDA high:** `RecoverBus` returns OK at once **without reading SCL** (O17): a SCL held alone is seen only
-  by `scl_read`.
+  by `scl_read`. (Before it reads SDA, `RecoverBus` returns `ERR_TIMEOUT` if `CYCCNT` does not run.)
 - With one master on the bus, `ERR_ARLO` means a hung bus: recover, then `Init` again.
 
 ---
@@ -183,8 +188,10 @@ lines with `scl_read` and `sda_read`:
 - **One owner core per instance,** no cross-core lock. `prj_01` selftest: CPU2 owns I2C1, CPU1 I2C2–4.
 - **RCC banks (RM0399 9.5.10):** per core; an I2C runs while either core enables it (T13). `RCC_APBxRSTR`
   is never written; `RCC_D2CCIP2R`/`RCC_D3CCIPR` (kernel multiplexers) are only read.
-- **`SYSCFG_PMCR`** is shared (`EPIS` of `08_eth`, `BOOSTE`, `PxSO`): one bit RMW with PRIMASK, read back.
-  **PRIMASK does not protect against the other core** (O7): the project serialises the two cores' writes.
+- **`SYSCFG_PMCR`** is shared with every other bit of the register (RM0399 13:33-137: `PA0SO`, `PA1SO`, `PC2SO`,
+  `PC3SO`, `EPIS` of `08_eth`, `BOOSTVDDSEL`, `BOOSTE`, `PB6FMP`..`PB9FMP`): the driver writes only its
+  instance's `I2CxFMP`, one bit RMW with PRIMASK, read back. **PRIMASK does not protect against the other
+  core** (O7): the project serialises the two cores' writes to the register.
 - **No callback, no MSP, no vector in the driver.** `HAL_I2C_Init` calls the project's `HAL_I2C_MspInit`
   while the handle is RESET (in `prj_01`, the HAL's empty weak one). **CPU1's HAL tick is TIM6**
   (`TICK_INT_PRIORITY 0`): the HAL's waits and `I2C_HAL_Wait` need it running.
@@ -199,7 +206,7 @@ lines with `scl_read` and `sda_read`:
 - **C12:** every configuration register read back; refused with `ERR_BUSY`: `TIMINGR`, `ANFOFF`, `DNF`,
   `NOSTRETCH` with `PE = 1` (50:2505-2529, 50:2808), `CR2` with `START = 1` (50:2620-2674). `TIMEOUTA`
   written only with `TIMOUTEN = 0` (50:2861); `PE = 0` read back three times (≥ 3 APB cycles, 50:441-445).
-- **C13:** every wait bounded, with an exit when `CYCCNT` reads the same value 1000 times or does not run
+- **C13:** every wait bounded, with an exit when `CYCCNT` reads the same value more than 1000 times or does not run
   (`WaitEnd` then software-resets); `I2C_HAL_Wait` by `timeout_ms` and by polls with the tick stopped.
 - **ES0445:** the first byte of every write in `TXDR` before START, DMA too (2.19.6); `BERR` in master mode
   cleared, the transfer goes on (2.19.2); `NACK` leaves the STOP the hardware sends (50:1192-1194).
@@ -230,16 +237,22 @@ with `GetCaps`, `GetDmaRequest`, `GetIRQn` and RCC read directly. `09:` RCC, `13
 | 2.19.4 | Documentation (`START`, `ADDRCF`) | - | - |
 | 2.19.6 | Second byte lost with APB/kernel 1.5–3 | First byte preloaded (polling, IT, DMA). T12: kernel on HSI 64 MHz (ratio 1.56), 2000 writes, 0 stalls. Control without preload: **not reproduced** (decision 6) | Preloaded except in the blocking `Mem_Read` (§10.1); `prj_01` runs ratio 1 |
 
+**IC1** (the plan's name, kept here): the HAL aborts a master transfer on `BERR`, which 2.19.2 calls spurious
+and says the transfer goes on (`I2C_IsErrorOccurred` l. 7164-7284, `HAL_I2C_ER_IRQHandler` l. 4664-4706).
+
 ### 6.3 Silicon facts (Rev V), each with the delivery capture that shows it
 
 - **`TIMEOUT` fires again every `TIMEOUTA` while SCL is held low** (O22; RM0399 50:2275-2289 does not say so):
   an expiry with no transfer does nothing on the bus; a later transfer ends at the first expiry after its own
-  START. `i2c_f3_bench_taps_3bc69fe.txt`, T10(b) (`TIMEOUTA` 10 014 µs): CPU2 starts 10 µs after the SCL
-  fall, SDA let go at 9.885 ms, n = 1; CPU1 starts on purpose at 15.022 ms, SDA let go at 19.775 ms (2 ×
-  `TIMEOUTA` 19.778 ms), n = 2. Time it from the START.
+  START. `i2c_f3_bench_taps_3bc69fe.txt`, T10(b) (`TIMEOUTA` 10 014 µs), every time from the SCL fall on
+  the scope: CPU2's `Write` starts (SDA falls) at 0.010 ms and SDA is let go at 9.885 ms (1 × `TIMEOUTA`
+  9.889 ms), n = 1; CPU1's starts on purpose at 14.832 ms and SDA is let go at 19.775 ms (2 × `TIMEOUTA`
+  19.778 ms), n = 2, SDA untouched until its START. (CPU1's own `CYCCNT` puts its start at 15 022 µs from
+  the fall it saw, in nominal µs of a clock that runs 1.27 % fast, §6.4.) Time a `TIMEOUT` from the START. O23 (a late `AT HOLD` handshake would make CPU1's
+  n = 3) no longer applies: since B2 of F2 both cores' starts are timed from the fall CPU1 sees.
 - **A master `TIMEOUT` ends with no STOP** (R3-5): RM0399 50:2286-2287 says the master sends one; Rev V went
-  on holding both lines, so `i2c_bm` software-resets (`ERR_BUS`). Same capture: SDA rises with SCL still low
-  (`SDAr` 9.885 ms, `SCLr` 50.094 ms), no STOP.
+  on holding both lines, so `i2c_bm` software-resets (`ERR_BUS`). Same capture, CPU2's run: SDA rises with
+  SCL still low (`SDAr` 9.885 ms, `SCLr` 50.094 ms), no STOP.
 - **`BUSY` is set only by a START seen with `PE = 1`** (R3-6, 50:2897-2900). Same capture, T9(b): SDA held
   before `Init` → `Init` OK, `ISR 0x00000001`, `Write` `ERR_ARLO`, `RecoverBus` 4 pulses (the `Write` gave the
   first edge), then OK. T9 (held after `Init`): `ISR 0x00008001` (`BUSY`), `ERR_BUS`.
@@ -252,7 +265,8 @@ with `GetCaps`, `GetDmaRequest`, `GetIRQn` and RCC read directly. `09:` RCC, `13
 
 - **The clock runs fast:** CLKREF (`MCU_ACK` held 40 000 000 `CYCCNT` cycles, timed by the AD2) gives +1.27 %
   in `i2c_f3_bench_taps_3bc69fe.txt` (ST-LINK MCO as HSE, `03_tim` N1): the I2C kernels run ~101.3 MHz, above
-  VOS1's 100 MHz (IC3; open, outside the driver). **So the bus runs above what was asked** (R3-7): raw f\_SCL
+  VOS1's 100 MHz: **IC3**, the plan's name for this issue (also N1 of `03_tim` and SP4 of `06_spi`), open and
+  outside the driver. **So the bus runs above what was asked** (R3-7): raw f\_SCL
   +0.88 to +1.11 % at 100 kHz, +0.81 to +1.13 % at 400 kHz (same capture). T5 judges it normalised with
   CLKREF (the driver's arithmetic) and records the raw one. **A product with this clock must ask with margin.**
 - **tHIGH at 400 kHz has about 3 % margin** over Fm's 600 ns: medians 611–622 ns, single periods down to
@@ -368,9 +382,13 @@ bool read_i2c4_bdma(void)                   /* thread mode: I2C_HAL_Wait needs t
     HAL_NVIC_EnableIRQ(I2C4_EV_IRQn);            HAL_NVIC_EnableIRQ(I2C4_ER_IRQn);
     I2cBm_Status_t st = I2C_HAL_StartDma(&h_i2c4, 0x42U, NULL, s_rx, 64U);
     st = (st == I2C_BM_OK) ? I2C_HAL_Wait(&h_i2c4, 10U) : st;
-    if (st != I2C_BM_OK)
+    if (st != I2C_BM_OK)                    /* §3.2, §10.1 */
     {
-        (void)HAL_DMA_Abort(&h_rx);         /* the HAL does not stop the stream (§10.1) */
+        if (h_rx.State == HAL_DMA_STATE_BUSY)
+        {
+            (void)HAL_DMA_Abort(&h_rx);     /* ERR_TIMEOUT: the HAL stopped nothing */
+        }
+        /* after an error the HAL aborted it itself: at once on the BDMA (a DMA1/2 stream: wait for READY) */
         (void)I2C_HAL_Deinit(&h_i2c4);
     }
     return st == I2C_BM_OK;
@@ -393,8 +411,10 @@ The bench of `00_gpio/README.md` §8 and J1 of `06_spi`, not one wire changed, *
 ```
 
 - **H755:** I2C1 (CPU2) on PB8/PB9 AF4, I2C4 (CPU1) on AF6, never both. PF14/PF15 are taps only.
-- **Bench states:** **taps** (J2/J3 in): 100 and 400 kHz, the scope measures (t\_r 248–256 ns with ~250 pF);
-  **notaps** (J2/J3 out): 400 kHz and 1 MHz (t\_r about 50 ns), no scope. 1 MHz only in notaps (D3).
+- **Bench states:** **taps** (J2/J3 in): 100 and 400 kHz, the scope measures (t\_r 250–254 ns, the T5
+  medians of the final capture; the ~250 pF on each line is the plan's estimate, not measured); **notaps**
+  (J2/J3 out): 400 kHz and 1 MHz, no scope (t\_r about 50 ns is the plan's estimate: nothing measures it
+  there). 1 MHz only in notaps (D3).
 - **The F334 target** (`tools/i2c_target_f334/`, protocol and build in its README; bare-metal, CMSIS F3
   v2.3.9): 0x42, 256 registers (`reg[i] = i ^ 0xA5`), auto-increment; armed from its COM port (`INIT`, `NACK`,
   `CORRUPT`, `STRETCH`, `HOLD SDA|SCL`, `FMP`, `STATUS`, `LEVELS`, `DUMP`); an `RPT` (START/Sr/STOP, bytes,
@@ -428,18 +448,21 @@ With the option off, production keeps the sections of `2481396`.
 ### 9.1 Captures
 
 In `prj_01_template_dualcore/docs/`, one unedited run each; clean ones carry one Rev and build id on all four.
+Counts are the host's checks (`n/n host checks passed`), each run with `FW VERDICT=PASS` unless said.
 
-| Phase | Auditor's runs | Delivered runs |
+| Phase | Auditor's runs that passed | Delivered runs that passed (the last one first) |
 | :--- | :--- | :--- |
-| F0 bench | `i2c_f0_audit_bench_{taps,notaps}_85f9d29.txt`: 28/28, 26/26 | `i2c_f0_bench_taps_f7323f2_5.txt`, `..._notaps_f7323f2_2.txt` |
-| F1 `i2c_bm` | `i2c_f1_audit_bench_{taps,notaps}_a6de15b.txt`: 96/96, 74/74 | `i2c_f1_bench_{taps,notaps}_26c2b4f.txt`: 96/96, 74/74 |
-| F2 `i2c_ll` | `i2c_f2_audit_bench_{taps,notaps}_c483bb9_2.txt`: 130/130, 98/98 | `i2c_f2_bench_{taps,notaps}_0471570.txt` |
-| F3 `i2c_hal` | `i2c_f3_audit_bench_{taps,notaps}_01e462f.txt`: 149/149, 112/112 | **`i2c_f3_bench_{taps,notaps}_3bc69fe.txt`: 149/149, 112/112** (final code) |
+| F0 bench | `i2c_f0_audit_bench_{taps,notaps}_85f9d29.txt`: 28/28, 26/26 | `i2c_f0_bench_taps_f7323f2_5.txt` 28/28, `..._notaps_f7323f2_2.txt` 26/26; replaced: `taps_f7323f2` 28/28 |
+| F1 `i2c_bm` | `i2c_f1_audit_bench_{taps,notaps}_a6de15b.txt`: 96/96, 74/74; `i2c_f1_audit_bench_notaps_cd8a0f4.txt`: 74/74 | `i2c_f1_bench_{taps,notaps}_26c2b4f.txt`: 96/96, 74/74; replaced: `{taps,notaps}_e27c673` 90/90, 69/69, `_9c07b93` 95/95, 73/73, `_fefacf4` 96/96, 74/74, `notaps_5e44044` 73/73, `notaps_3d92f3e` 74/74 |
+| F2 `i2c_ll` | `i2c_f2_audit_bench_{taps,notaps}_c483bb9_2.txt`: 130/130, 98/98 | `i2c_f2_bench_{taps,notaps}_0471570.txt`: 130/130, 98/98; replaced: `{taps,notaps}_48ec427` 130/130, 98/98; `i2c_f1_bench_notaps_acca289.txt` (98/98) is F2's first run under F1's name |
+| F3 `i2c_hal` | `i2c_f3_audit_bench_{taps,notaps}_01e462f.txt`: 149/149, 112/112; `i2c_f3_audit_bench_taps_689f36a.txt`: 149/149 | **`i2c_f3_bench_{taps,notaps}_3bc69fe.txt`: 149/149, 112/112** (final code); replaced: `{taps,notaps}_357c60d` 149/149, 112/112 |
 
-Failed or aborted runs kept: F0 `notaps_f7323f2`, `taps_f7323f2_2/_3/_4` (S19/S17 aborts: J2/J3, probes); F1
-`taps_5e44044`, `_3d0ad6d`, `_3d92f3e`, `audit_taps_cd8a0f4` (T5 stretching exemptions, T9(b) window, tHIGH
-tolerance, T10(b) timed from the SCL fall); F2 `audit_taps_9aa7a37` (windows opened at a handshake), `audit_*_c483bb9`
-(S19 aborts); F3 `notaps_a15c442` (`CR2.NACK`, §6.3). `i2c_dev_*`: development; `i2c_f1_bench_notaps_acca289.txt` is F2's.
+Failed or aborted runs kept: F0 `notaps_f7323f2`, `taps_f7323f2_2/_3/_4` (S19/S17 aborts, 1/2: J2/J3, probes);
+F1 `taps_5e44044` 90/95, `_3d0ad6d` 91/95, `_3d92f3e` 94/96, `audit_taps_cd8a0f4` 95/96 (T5 stretching
+exemptions, T9(b) window, tHIGH tolerance, T10(b) timed from the SCL fall); F2 `audit_taps_9aa7a37` 128/130,
+`FW FAIL` (B2: windows opened at a handshake; B3: the T9(b) capture depended on the firmware's latency),
+`audit_{taps,notaps}_c483bb9` (S19 aborts, 0/1); F3 `notaps_a15c442` (92/92 host checks, `FW FAIL`, the
+firmware aborted: `CR2.NACK`, §6.3). `i2c_dev_*`: development runs.
 
 ### 9.2 Tests
 
@@ -472,13 +495,16 @@ the T5 tHIGH records within 2 samples of 600 ns come and go between captures (§
 cmake --preset selftest-i2c; cmake --build --preset selftest-i2c
 ..\..\tools\i2c_target_f334\build.ps1 -Clean                          # the F334 image
 py tools/flash.py --preset selftest-i2c --core both --sn <H755 SN>    # host stopped
-py ..\..\tools\flash.py --sn <F334 SN> --elf ..\..\tools\i2c_target_f334\build\f334\i2c_target_f334.elf
+pushd ..\..\tools\i2c_target_f334; py ..\flash.py --sn <F334 SN> --elf build\f334\i2c_target_f334.elf; popd
 py tools/i2c_hw_check.py --bench-state taps --checklist-confirmed <name> --checklist-date YYYY-MM-DD
 py tools/i2c_hw_check.py --bench-state notaps ...                     # after J2/J3 are removed
 ```
 
-The host refuses another checkout's Rev/build id, a third ST-LINK, WaveForms or a debugger, and aborts on
-S17/S19 before driving the bus. It writes `docs/i2c_f3_bench_<state>_<rev>.txt`.
+The F334 is flashed from its own directory, as its README says: `flash.py` takes the first directory upward
+with a `CMakePresets.json` as the project and resolves a relative `--elf` from there (`flash.py:81-84, 459`).
+From `prj_01` with `--elf ..\..\tools\i2c_target_f334\build\f334\i2c_target_f334.elf` it programs the same. The host refuses another checkout's Rev/build id, a third ST-LINK, WaveForms or a debugger, and
+aborts on S17/S19 before driving the bus. It writes `docs/i2c_f3_bench_<state>_<rev>.txt`, or `..._<rev>_<n>.txt`
+(n = 2, 3, …) if that file exists; with `--allow-dirty` the name starts `i2c_dev_`.
 
 ### 9.4 Measurements (B1)
 
@@ -488,29 +514,75 @@ DWT cycles of one `i2c_bm` call, CM4 (200 MHz) / CM7 (400 MHz) (R4-1: cycles in 
 
 ### 9.5 Not exercised
 
-- **`ARLO`, multi-master** (T11): one master; `TakeErrors` never saw `ARLO`. **2.19.2 (`BERR`)** cannot be
-  provoked: no `BERR` in any capture, in any tier. 2.19.3/5/7, slave, 10 bits, SMBus/PEC: out of scope.
+From the "not exercised" lists of the report, F0 to the close, with what later phases ran taken out.
+
+**Bench (F0)**
+
+- **F334 holds:** only the release by time was used until T9 (`EDGES n` from F1 on). The **500 ms limit
+  of S21** was tried only on the host's guard (mock) and by hand, with a development `HOLD SDA 600` that the
+  F334 refused (`ERR HOLD ms must be 1..500 (S21)`, no capture). Its IWDG and the fault handlers that release
+  the pins were never provoked; nor its S15 abort path (`I2C_TARGET ABORT S15`), whose host report was
+  tried on mocks only.
+- **Tools:** `--read-ob` and `--ob` never run for real with `--sn` (`--dry-run` only; the `--tool openocd`
+  refusal in `--dry-run`); a ST-LINK without VCP, or with another VCP; the host's S19 aborts of m27 by mock
+  only. The other benches (`gpio`, `tim`, `spi`) still reset without `sn=` and pick the port by
+  `autodetect()`: they run with the F334's USB unplugged (S18). The "GPIO" state (J2/J3 out, F334
+  unplugged) and those benches were not run in this work; nor a cold start (sessions begin with a reset by SWD).
+
+**`i2c_bm` (F1)**
+
+- **`ARLO`, multi-master** (T11): one master (S16); `TakeErrors` never saw `ARLO`. **2.19.2 (`BERR`)** cannot
+  be provoked: no `BERR` in any capture, in any tier. 2.19.3/5/7: out of scope. **Slave, 10 bits,
+  SMBus/PEC, `TIDLE = 1`, `TIMEOUTB`:** outside the contract.
 - **I2C2 and I2C3 have no pins:** image (T2), refusals (T1), RCC banks (T13), T15; no transfer. I2C1 by DMA
-  only from CPU2 (DMA2, not DMA1); I2C4 by BDMA only from CPU1; the HAL tier only on CPU1.
+  only from CPU2 (DMA2, not DMA1); I2C4 by BDMA only from CPU1.
 - **1 MHz timings not measured** (no scope without taps, D3): data and duration only; nor the electrical
-  effect of the Fm+ bits. **`RecoverBus` with SCL held:** only SDA (T9); its `ERR_BUS` branch by reading
-  only. **T9(b)** only gave `ERR_ARLO`; `ERR_BUS`/`ERR_TIMEOUT` accepted, never seen.
-- **Paths never taken:** `ERR_VERIFY` of `DmaStart*` and of LL; `WaitEnd` with `CYCCNT` stopped on entry
-  (checked in the disassembly); `CYCCNT` stopped inside any wait; an `Init` over `TIMOUTEN = 1` without
-  `Deinit`; `I2C_LL_Init` over the same running configuration; the Fm+ clean-up of `bench_safe()`; the
-  host's S19 aborts of m27 by mock only.
-- **LL and HAL:** T8–T10, T12, T13, T15 only through BM (TIMEOUT, NACK on data, stretching, recovery, 2.19.6
-  not run through them); T5 at 1 MHz; `BERR`/`ARLO` in their IRQ paths.
-- **HAL:** IC1 by reading only; a blocking HAL timeout never happened (the `ERR_TIMEOUT`s seen are
-  `I2C_HAL_Wait`'s); `WriteRead` with 2 address bytes; the `StartIt` probe; `I2C_HAL_Init` with `ERR_BUS`;
-  `ERR_VERIFY` only in the failed `a15c442` run; `HAL_MAX_DELAY` by refusal only; the blocking calls with
-  the tick stopped (no exit, by design).
-- **Partly:** `GetKernelSource` only with `prj_01`'s PCLK; DMA chunking only at 256 and 4096 bytes; T9(b)
-  and T10(b) without taps judged by the firmware and the F334 only.
-- **Bench (F0):** the F334's IWDG and fault handlers that release the pins and its S15 abort path; `--read-ob`
-  and `--ob` with `--sn`; a ST-LINK without VCP; the "GPIO" state (J2/J3 out, F334 unplugged); cold start
-  (sessions begin with a reset by SWD). **Silicon other than Rev V**, clock trees other than `prj_01`'s
-  (except `CalcTiming`, T3).
+  effect of the Fm+ bits (I2C2's set without a bus; I2C1's and I2C4's around the 1 MHz traffic).
+- **`RecoverBus` with SCL held:** only SDA (T9); its `ERR_BUS` branch by reading only.
+- **T10(b) without taps:** no scope, so the `TIMEOUT` time is bounded only from above (≤ 11 ms from when
+  CPU1 sees SCL low) and weakly from below.
+- **The B1 line** of the firmware is cut at 160 characters by `App_Log`: it loses the fixed text "(IT write
+  of 16)", no figure.
+- **Partly:** `GetKernelSource` only with `prj_01`'s PCLK (not with T12's HSI); DMA chunking only at 256
+  and 4096 bytes (`n < 2` and `n > 65 535` refused, T1); T12's control (2.19.6 without preload): not
+  reproduced (decision 6).
+- **Paths never taken:** `WaitEnd` with `CYCCNT` stopped on entry (checked in the disassembly); `CYCCNT`
+  stopped inside any wait (BM or LL: `clk_expired()` has the exit, no test stops `CYCCNT`); an `Init` over
+  `TIMOUTEN = 1` without `Deinit`; `ERR_VERIFY` of `DmaStart*`; the Fm+ clean-up of `bench_safe()`.
+
+**`i2c_ll` (F2)**
+
+- **`ERR_VERIFY` of `i2c_ll`** (the `Init` read-back, a `PE = 0` that does not fall): never fails on the
+  bench, no test. **`I2C_LL_Init` over the same running configuration** (a software reset): not tried
+  with LL; with another `TIMINGR`, DNF, filter or timeout, T1 refuses it with `ERR_BUSY` through LL too.
+- **TIMEOUT, NACK on data, stretching, `RecoverBus`, 2.19.6:** T8, T9, T10, T12 only through BM; the
+  `TIMEOUT` path of `I2C_LL_XferIrq` and of the LL waits never ran (the address NACK did: 0x43 in T4).
+  `BERR`/`ARLO` in `I2C_LL_XferIrq`: as in F1. I2C2/I2C3 with LL: T1, T2 only. T5 with LL at 1 MHz: no
+  scope. B1 with LL: not measured (R4-1).
+- **Recorded, not judged:** the host's latency to each T0C hold (`first_us`, 62–68 ms in the F2 correction's runs), only
+  with the 2 s limit. **T9 and T9(b) without taps:** no scope; T9(b) in notaps is judged as `5 − pulses`,
+  and the firmware's stretch only recorded (1077 µs). **T9(b)** only gave `ERR_ARLO`; `ERR_BUS`/`ERR_TIMEOUT`
+  accepted, never seen.
+
+**`i2c_hal` (F3)**
+
+- **IC1** (`BERR` in `i2c_hal`): cannot be provoked; the HAL's path (`ERR_HAL`, no STOP) by reading only.
+- **A blocking HAL call's timeout** (`ERR_TIMEOUT`, the instance with no STOP or reset) never happened: the
+  `ERR_TIMEOUT`s seen are `I2C_HAL_Wait`'s (T6C, T7C, m4). No call with a large `timeout_ms` against a held
+  SCL (T10 is BM only); `HAL_MAX_DELAY` by refusal only (T1).
+- **NACK on data, stretching, held bus, `RecoverBus`, 2.19.6 through `i2c_hal`:** T8, T9, T10, T12 BM only
+  (the address NACK did run: 0x43 in T4). The missing preload of the blocking `HAL_I2C_Mem_Read`: `prj_01`
+  runs APB/kernel = 1, outside the 1.5–3 window; not provoked.
+- **Not run:** `WriteRead` with 2 address bytes (`I2C_MEMADD_SIZE_16BIT`; only `ntx = 1` on the bus, `ntx =
+  3` refused); the `StartIt` probe (`ntx = nrx = 0`); `I2C_HAL_Init` with `ERR_BUS`; the blocking calls with
+  the tick stopped (no exit, by design). `ERR_VERIFY` of `i2c_hal` only in the failed `a15c442` run.
+- **I2C1–I2C3 with the HAL:** T1 (I2C2) and T2 (I2C2, I2C3) only, **no transfer on I2C1 by HAL**; CM4
+  does not build the tier. T5 with HAL at 1 MHz: no scope. `ARLO`: one master.
+- **Its line text:** the T7(b)-HAL control line says "WaitEnd" (F1's phrase) though the wait is
+  `I2C_HAL_Wait`; the line's name carries `HAL`.
+
+**Close.** The examples of §7 compile (the report's "Cierre") but were **not run on the board**. Throughout:
+**silicon other than Rev V**; clock trees other than `prj_01`'s (except `CalcTiming`, T3).
 
 ---
 
@@ -527,15 +599,23 @@ DWT cycles of one `i2c_bm` call, CM4 (200 MHz) / CM7 (400 MHz) (R4-1: cycles in 
   l. 4671-4678, 4704-4706, then `I2C_ITError` l. 6548, without a STOP): `ERR_HAL`; call `I2C_HAL_Deinit`.
 - **2.19.6:** preloaded in `Master_Transmit` (l. 1162), `_IT` (l. 1737), `_DMA` (l. 2012) and `Mem_Read_IT`
   (l. 2922), **not in the blocking `HAL_I2C_Mem_Read`** (address on `TXIS` after START, l. 5871-5883).
-- **Errors and timeouts:** after a NACK the HAL writes STOP (l. 7191-7196) and waits up to `I2C_TIMEOUT_STOPF`
-  (25 ms, l. 347, 7205) more: a call can last `timeout_ms + 25 ms`; every error exit flushes `TXDR` and resets
-  `CR2` (l. 7267-7273); a wait that times out leaves the instance as it is, no STOP, no reset (l. 6984-6992).
-  After any `ERR_TIMEOUT` or `ERR_HAL`, call `I2C_HAL_Deinit`.
-- **A DMA transfer given up:** the HAL stops no stream; abort them, then `I2C_HAL_Deinit`. A late transfer
-  complete runs `I2C_DMAMasterTransmitCplt`/`ReceiveCplt` on the instance (l. 6744, 6750, 6778); a stream
-  still busy makes the next `StartDma` fail in `HAL_DMA_Start_IT` (l. 2077-2089) after it preloaded `TXDR`
-  (l. 2012). `I2C_ITError` sets `READY` before its asynchronous DMA abort ends (l. 6587 against 6627):
-  `Wait` may return with `HAL_DMA_Abort_IT` running (O33).
+- **Errors and timeouts (blocking calls):** after a NACK the HAL writes STOP itself only if the bus is
+  still busy and no STOP is already asked for (l. 7191-7196), then waits up to `I2C_TIMEOUT_STOPF` (25 ms,
+  l. 347, 7205) more: a call can last `timeout_ms + 25 ms`. Every error exit flushes `TXDR` and runs
+  `I2C_RESET_CR2` (l. 7267-7273), which clears only the transfer fields `SADD`, `HEAD10R`, `NBYTES`,
+  `RELOAD`, `RD_WRN` (`stm32h7xx_hal_i2c.h` l. 781-784; `AUTOEND` stays). A wait that times out leaves the
+  instance as it is, no STOP, no reset (l. 6984-6992). After any `ERR_TIMEOUT` or `ERR_HAL`, call
+  `I2C_HAL_Deinit`.
+- **A DMA transfer given up:** **with `ERR_TIMEOUT` the HAL stops nothing; with an error it starts an
+  asynchronous abort that may still be running.** On a timeout of `I2C_HAL_Wait` the streams go on: abort
+  them (`HAL_DMA_Abort`). On an error during the transfer (`NACKF` through `I2C_ITMasterCplt` l. 6197,
+  `ARLO`/`BERR`/`OVR` through `HAL_I2C_ER_IRQHandler` l. 4706) `I2C_ITError` clears `TXDMAEN` or `RXDMAEN`
+  and, if that direction's stream is not `READY`, calls `HAL_DMA_Abort_IT` on it (l. 6612-6627 TX,
+  6642-6657 RX). It sets the handle `READY` before (l. 6587), so `Wait` may return with that abort running
+  (O33): on DMA1/DMA2 it ends in the stream's IRQ, on the BDMA at once. Wait until no stream is in
+  `HAL_DMA_STATE_ABORT`, then call `I2C_HAL_Deinit`. Otherwise a late transfer complete runs
+  `I2C_DMAMasterTransmitCplt`/`ReceiveCplt` on the instance (l. 6744, 6750, 6778), and a stream still busy
+  makes the next `StartDma` fail in `HAL_DMA_Start_IT` (l. 2077-2089) after it preloaded `TXDR` (l. 2012).
 - **C10:** RMWs of `CR1`/`CR2` without PRIMASK: the filter calls (`_ex.c` l. 110-118, 156-170, `PE` dropped
   and raised, not read back), `I2C_TransferConfig` (l. 7321), `I2C_Enable_IRQ`/`_Disable_IRQ` (l. 7415,
   7480), `TXDMAEN`/`RXDMAEN` (l. 2075, 2222), `STOP` (l. 7196), `I2C_RESET_CR2`. Only the HAL's handlers may
@@ -589,7 +669,7 @@ DWT cycles of one `i2c_bm` call, CM4 (200 MHz) / CM7 (400 MHz) (R4-1: cycles in 
 | F1: `i2c_bm`, decoder, tests T1–T15, B1; plan revision 3 (R3-1..R3-9, D10, D11) | `063c299`; F1 passes at `4fee0f9` (API `a6de15b`) |
 | F2: plan revision 4 (R4-1, R4-2); `I2C_BM_Check*`, `i2c_ll`, tests; B2/B3 (windows) | `ceed2fc`; F2 passes at `d1c6f30` (API `c483bb9`) |
 | F3: `i2c_hal`, the HAL module under the option, tests; M4 | F3 passes at `4e303f3` (API `01e462f`) |
-| Close: this README and the catalog line | the commit that adds this README |
+| Close: this README and the catalog line; its correction (M5–M7, m50–m62) | `5a69267`; corrected after the close audit, part 1 (`9489df1`) |
 
 Process documents (`IMPLEMENTATION_PLAN.md` revision 4, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md`,
 `AUDIT.md`): here until the catalog owner removes them; then each is at the parent of the commit that removes it:

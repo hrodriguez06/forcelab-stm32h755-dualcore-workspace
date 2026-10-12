@@ -58,9 +58,13 @@
   *              can last timeout_ms + 25 ms; and every error exit flushes TXDR and
   *              does I2C_RESET_CR2 (l. 7267-7273). After any ERR_TIMEOUT or ERR_HAL,
   *              call I2C_HAL_Deinit (i2c_bm resets the instance itself);
-  *            - a DMA transfer given up (I2C_HAL_Wait ERR_TIMEOUT, or any ERR_HAL):
-  *              the HAL does not stop the caller's streams. The caller aborts them
-  *              (HAL_DMA_Abort) and then calls I2C_HAL_Deinit: a late transfer
+  *            - a DMA transfer given up: with ERR_TIMEOUT (I2C_HAL_Wait) the HAL
+  *              stops nothing; with an error (NACK, ARLO, BERR, OVR, DMA) I2C_ITError
+  *              clears TXDMAEN/RXDMAEN and starts an asynchronous abort of that
+  *              direction's stream (HAL_DMA_Abort_IT, l. 6612-6627, 6642-6657),
+  *              which may still be running when the handle is READY (l. 6587). The
+  *              caller aborts any stream still busy (HAL_DMA_Abort), waits until
+  *              none is in HAL_DMA_STATE_ABORT, then calls I2C_HAL_Deinit: a late transfer
   *              complete would otherwise run I2C_DMAMasterTransmitCplt /
   *              ReceiveCplt on the instance (l. 6744, 6750, 6778: a CR1
   *              read-modify-write and interrupt enables), and a stream still busy
