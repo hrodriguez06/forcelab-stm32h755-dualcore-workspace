@@ -1405,6 +1405,45 @@ El README del driver y la línea del catálogo. Ningún código de los tres tier
 
 - **Los ejemplos no se ejecutaron en placa:** solo compilan. Las mismas secuencias (recuperación e `Init`, IT de LL, DMA de la HAL por BDMA) las ejercita el selftest con su propio código.
 
+## Respuesta a la auditoría del cierre, parte 1 (`9489df1`)
+
+Responde a M5–M7, m50–m62 y la observación sobre `I2C_BM_ERR_UNSUPPORTED`. Solo cambian el README (680 líneas, `wc -l`) y dos comentarios de encabezado; ningún código, ninguna prueba, ninguna sesión en placa. Sin tocar: `AUDIT.md`, el plan, las instrucciones, `DRIVER_ROADMAP.md` y los README de otros drivers.
+
+### Commits
+
+| Commit | Asunto |
+| --- | --- |
+| `ba7ea45` | docs(i2c): correct the README after the close audit, part 1 |
+| (este) | docs(i2c): answer the close audit, part 1, in the implementation report |
+
+### Comprobaciones
+
+- **Los encabezados cambian solo en comentarios:** cada unidad de `05_i2c` y del selftest de `selftest-i2c` (CM7: `i2c_bm.c`, `i2c_ll.c`, `i2c_hal.c`, `i2c_selftest.c`, `i2c_selftest_common.c`; CM4: las mismas sin `i2c_hal.c`), preprocesada (`-E -P`, las flags del `compile_commands.json`) con los encabezados de `9489df1` y con los nuevos: salida idéntica en las nueve. Ninguna firma cambia.
+- **Los ejemplos de §7** (C cambia su salida por error), extraídos del README de `ba7ea45` y compilados como en "Cierre" (A con las flags de `i2c_bm.c` de CM4, B y C con las de `i2c_hal.c` de CM7, más `-Wall -Wextra -Wpedantic -Wconversion -Werror`): los tres, exit 0 y 0 líneas.
+- **Las cifras nuevas**, contra las capturas: t\_r, las 50 medianas de T5 en `i2c_f3_bench_taps_3bc69fe.txt` (250: 5, 251: 18, 252: 11, 253: 7, 254: 9) y los extremos de cada captura de taps de F1–F3 (248–256); T10(b), l. 1133 y 1689 de la misma captura; los recuentos de §9.1, la línea `n/n host checks passed` y `FW VERDICT` de cada captura de `docs/`.
+
+### Respuesta, fila por hallazgo
+
+| ID | Respuesta |
+| --- | --- |
+| M5 | Corregido en `ba7ea45`, pendiente de verificación. §6.3 da las dos cifras de CPU1 del osciloscopio (START, `SDAf`, 14,832 ms; liberación, `SDAr`, 19,775 ms; 2 × TIMEOUTA 19,778 ms; l. 1689) y las de CPU2 también del osciloscopio (0,010 / 9,885 ms; l. 1133). El 15 022 µs queda nombrado como el `CYCCNT` de CPU1 desde la bajada que vio, en µs nominales de un reloj 1,27 % rápido (15,022 / 1,0127 ≈ 14,83 ms). El hecho de R3-5 dice que sus cifras son de la ejecución de CPU2 |
+| M6 | Corregido en `ba7ea45`, pendiente de verificación: §3 (paso 2) y §8 dan 250–254 ns, las 50 medianas de T5 de la captura final, y 248–256 ns como el rango de todas las capturas de taps de F1–F3 |
+| M7 | Corregido en `ba7ea45`, pendiente de verificación. §3.2 y §10.1: con `ERR_TIMEOUT` la HAL no para nada; con un error (`NACKF` por `I2C_ITMasterCplt` l. 6197; `ARLO`/`BERR`/`OVR` por `HAL_I2C_ER_IRQHandler` l. 4706) `I2C_ITError` borra `TXDMAEN`/`RXDMAEN` y llama a `HAL_DMA_Abort_IT` sobre el stream de esa dirección si no está `READY` (l. 6612-6627, 6642-6657), con el handle ya `READY` (l. 6587). Qué hacer: abortar el stream que siga ocupado, esperar a que ninguno esté en `HAL_DMA_STATE_ABORT` (en DMA1/DMA2 acaba en la IRQ del stream; en la BDMA, `HAL_DMA_Abort_IT` termina en el acto, `stm32h7xx_hal_dma.c` l. 919-959) y después `I2C_HAL_Deinit`. El ejemplo C solo aborta si el stream sigue `BUSY`. El comentario de `i2c_hal.h` (antes l. 61-62) dice lo mismo; ninguna firma cambia |
+| m50 | Corregido: §8 dice que ~250 pF (taps) y t\_r de unos 50 ns (notaps) son estimaciones del plan, no medidas |
+| m51 | Corregido: el encabezado da los pases en `ee96c37`, `4fee0f9`, `d1c6f30` y `4e303f3`, con los commits de las ejecuciones del auditor y de las API congeladas entre paréntesis, como §13 |
+| m52 | Corregido: IC1 definido debajo de la tabla de erratas (§6.2), IC3 en §6.4 (con N1 de `03_tim` y SP4 de `06_spi`) |
+| m53 | Corregido: §9.1 da B2 y B3 para `audit_taps_9aa7a37` |
+| m54 | Corregido: la tabla de §9.1 lista las ejecuciones del auditor que pasaron (con `notaps_cd8a0f4` 74/74 y `taps_689f36a` 149/149), los recuentos de las entregas de F0 (28/28, 26/26) y F2 (130/130, 98/98) y las entregas sustituidas que pasaron con sus recuentos (F0 `taps_f7323f2`; F1 `e27c673`, `9c07b93`, `fefacf4`, `notaps_5e44044`, `notaps_3d92f3e`; F2 `48ec427`; F3 `357c60d`); las fallidas, con sus recuentos |
+| m55 | Corregido: §9.5, ordenado por fase, copia lo que faltaba: el límite de 500 ms de S21 solo por mock y a mano (F0); `TIDLE = 1` y `TIMEOUTB`, T10(b) sin tomas acotado solo por arriba, la línea B1 cortada a 160 caracteres (F1); `first_us` registrado sin juzgar y T9(b) sin tomas juzgado como `5 − pulsos` (F2); I2C1 sin transferencias por HAL, ninguna llamada con un `timeout_ms` grande contra SCL retenida, la línea de T7(b)-HAL que dice "WaitEnd" (F3); los ejemplos sin ejecutar en placa (cierre). También lo demás de las listas del informe que no estaba con su texto (las herramientas de F0, `n < 2`/`n > 65 535` por DMA, el `ERR_VERIFY` de LL, B1 con LL) |
+| m56 | Corregido: una línea en §6.3: O23 ya no aplica desde B2 de F2 |
+| m57 | Corregido: §5, "more than 1000 times" |
+| m58 | Corregido: §3.3, `RecoverBus` da `ERR_TIMEOUT` antes de leer SDA si `CYCCNT` no corre |
+| m59 | Corregido: §10.1, el STOP tras un NACK solo con el bus ocupado y sin STOP pedido; `I2C_RESET_CR2` borra `SADD`, `HEAD10R`, `NBYTES`, `RELOAD`, `RD_WRN` (`stm32h7xx_hal_i2c.h` l. 781-784), `AUTOEND` queda |
+| m60 | Corregido: §4 lista los bits de `SYSCFG_PMCR` (13:33-137): `PA0SO`, `PA1SO`, `PC2SO`, `PC3SO`, `EPIS`, `BOOSTVDDSEL`, `BOOSTE`, `PB6FMP`..`PB9FMP`, además de los `I2CxFMP` |
+| m61 | Corregido: §9.3 flashea la F334 desde su directorio, como su README (`pushd`/`popd`), y explica por qué las dos formas programan lo mismo (`flash.py` l. 81-84 toma el proyecto del `CMakePresets.json` más cercano y l. 459 resuelve un `--elf` relativo desde él); menciona el sufijo `_<n>` y el prefijo `i2c_dev_` con `--allow-dirty` |
+| m62 | Corregido: §13 da `5a69267` y la corrección tras `9489df1` |
+| Observación (`i2c_bm.h:106`) | Corregido en `ba7ea45`: "not supported by the tier: only i2c_hal returns it (i2c_hal.h)". Solo el comentario |
+
 ## Decisiones abiertas usadas
 
 | # | Opción usada | Consultada |
