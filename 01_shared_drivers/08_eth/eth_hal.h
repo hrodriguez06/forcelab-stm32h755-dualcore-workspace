@@ -98,7 +98,9 @@ typedef struct
   * @param  mac_addr     Six-byte station address, copied internally.
   * @param  phy_address  SMI address of the transceiver (0 on this board).
   * @note   Leaves the MAC stopped. Call ETH_Driver_Start() once the PHY
-  *         reports a link.
+  *         reports a link. Requires board_def.h defining all 18 BOARD_ETH_<SIG>_PORT
+  *         and _PIN macros for the RMII signals (Rule 1). Pins are configured
+  *         using GPIO_HAL_Init.
   */
 eth_driver_status_t ETH_Driver_Init(const uint8_t *mac_addr, uint32_t phy_address);
 
@@ -168,7 +170,12 @@ ETH_HandleTypeDef *ETH_Driver_GetHandle(void);
 /** @brief  The PHY instance owned by this driver. */
 lan8742_t *ETH_Driver_GetPhy(void);
 
-/** Counters that make a silent failure visible from a debugger or a log. */
+/**
+  * @brief  Counters that make a silent failure visible from a debugger or a log.
+  * @note   Individual fields are incremented atomically (__atomic_fetch_add, relaxed).
+  *         Reading an individual 32-bit field is atomic; reading the whole struct
+  *         through ETH_Driver_GetStats() is not a coherent multi-word snapshot.
+  */
 typedef struct
 {
     uint32_t rx_frames;

@@ -19,52 +19,79 @@
   */
 
 #include "eth_hal.h"
-#include "gpio_bm.h"
+#include "gpio_hal.h"
 #include <stddef.h>
 #include <string.h>
 
 #if defined(HAL_ETH_MODULE_ENABLED)
 
-#if __has_include("board_def.h")
-#include "board_def.h"
+#if defined(USE_HAL_ETH_REGISTER_CALLBACKS) && (USE_HAL_ETH_REGISTER_CALLBACKS != 0)
+#error "USE_HAL_ETH_REGISTER_CALLBACKS must be 0 (register callbacks not supported)"
 #endif
 
-/* Fallback RMII pin map for Nucleo-144 if not overridden in board_def.h */
+#include "board_def.h"
+
 #ifndef BOARD_ETH_REF_CLK_PORT
-#define BOARD_ETH_REF_CLK_PORT    GPIOA
-#define BOARD_ETH_REF_CLK_PIN     GPIO_PIN_1
+#error "BOARD_ETH_REF_CLK_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
 #endif
+#ifndef BOARD_ETH_REF_CLK_PIN
+#error "BOARD_ETH_REF_CLK_PIN must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
+#endif
+
 #ifndef BOARD_ETH_MDIO_PORT
-#define BOARD_ETH_MDIO_PORT       GPIOA
-#define BOARD_ETH_MDIO_PIN        GPIO_PIN_2
+#error "BOARD_ETH_MDIO_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
 #endif
+#ifndef BOARD_ETH_MDIO_PIN
+#error "BOARD_ETH_MDIO_PIN must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
+#endif
+
 #ifndef BOARD_ETH_CRS_DV_PORT
-#define BOARD_ETH_CRS_DV_PORT     GPIOA
-#define BOARD_ETH_CRS_DV_PIN      GPIO_PIN_7
+#error "BOARD_ETH_CRS_DV_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
 #endif
-#ifndef BOARD_ETH_TXD1_PORT
-#define BOARD_ETH_TXD1_PORT       GPIOB
-#define BOARD_ETH_TXD1_PIN        GPIO_PIN_13
+#ifndef BOARD_ETH_CRS_DV_PIN
+#error "BOARD_ETH_CRS_DV_PIN must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
 #endif
+
 #ifndef BOARD_ETH_MDC_PORT
-#define BOARD_ETH_MDC_PORT        GPIOC
-#define BOARD_ETH_MDC_PIN         GPIO_PIN_1
+#error "BOARD_ETH_MDC_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
 #endif
+#ifndef BOARD_ETH_MDC_PIN
+#error "BOARD_ETH_MDC_PIN must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
+#endif
+
 #ifndef BOARD_ETH_RXD0_PORT
-#define BOARD_ETH_RXD0_PORT       GPIOC
-#define BOARD_ETH_RXD0_PIN        GPIO_PIN_4
+#error "BOARD_ETH_RXD0_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
 #endif
+#ifndef BOARD_ETH_RXD0_PIN
+#error "BOARD_ETH_RXD0_PIN must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
+#endif
+
 #ifndef BOARD_ETH_RXD1_PORT
-#define BOARD_ETH_RXD1_PORT       GPIOC
-#define BOARD_ETH_RXD1_PIN        GPIO_PIN_5
+#error "BOARD_ETH_RXD1_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
 #endif
+#ifndef BOARD_ETH_RXD1_PIN
+#error "BOARD_ETH_RXD1_PIN must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
+#endif
+
 #ifndef BOARD_ETH_TX_EN_PORT
-#define BOARD_ETH_TX_EN_PORT      GPIOG
-#define BOARD_ETH_TX_EN_PIN       GPIO_PIN_11
+#error "BOARD_ETH_TX_EN_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
 #endif
+#ifndef BOARD_ETH_TX_EN_PIN
+#error "BOARD_ETH_TX_EN_PIN must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
+#endif
+
 #ifndef BOARD_ETH_TXD0_PORT
-#define BOARD_ETH_TXD0_PORT       GPIOG
-#define BOARD_ETH_TXD0_PIN        GPIO_PIN_13
+#error "BOARD_ETH_TXD0_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
+#endif
+#ifndef BOARD_ETH_TXD0_PIN
+#error "BOARD_ETH_TXD0_PIN must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
+#endif
+
+#ifndef BOARD_ETH_TXD1_PORT
+#error "BOARD_ETH_TXD1_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
+#endif
+#ifndef BOARD_ETH_TXD1_PIN
+#error "BOARD_ETH_TXD1_PIN must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
 #endif
 
 typedef struct {
@@ -223,6 +250,8 @@ static void eth_pools_reset(void)
  * Low level MSP: clocks, RMII pins, NVIC.
  * ========================================================================== */
 
+static HAL_StatusTypeDef s_msp_gpio_status = HAL_OK;
+
 /**
   * @brief  Default MSP pinout and clock configuration for Nucleo-144 on-board
   *         Ethernet RMII interface.
@@ -255,9 +284,12 @@ __weak void ETH_HAL_MspInit_User(ETH_HandleTypeDef *heth)
     {
         if (s_rmii_pins[i].port != NULL)
         {
-            (void)GPIO_BM_EnablePortClock(s_rmii_pins[i].port);
             gpio.Pin = s_rmii_pins[i].pin;
-            HAL_GPIO_Init(s_rmii_pins[i].port, &gpio);
+            HAL_StatusTypeDef st = GPIO_HAL_Init(s_rmii_pins[i].port, &gpio);
+            if ((st != HAL_OK) && (s_msp_gpio_status == HAL_OK))
+            {
+                s_msp_gpio_status = st;
+            }
         }
     }
 
@@ -388,7 +420,14 @@ eth_driver_status_t ETH_Driver_Init(const uint8_t *mac_addr, uint32_t phy_addres
     g_heth.Init.RxDesc         = g_rx_desc;
     g_heth.Init.RxBuffLen      = ETH_DRIVER_BUFFER_SIZE;
 
+    s_msp_gpio_status          = HAL_OK;
+
     if (HAL_ETH_Init(&g_heth) != HAL_OK)
+    {
+        return ETH_DRIVER_ERROR;
+    }
+
+    if (s_msp_gpio_status != HAL_OK)
     {
         return ETH_DRIVER_ERROR;
     }
@@ -577,7 +616,7 @@ uint8_t *ETH_Driver_TxBufferAcquire(void)
 
     if (buffer == NULL)
     {
-        g_stats.tx_alloc_failures++;
+        (void)__atomic_fetch_add(&g_stats.tx_alloc_failures, 1U, __ATOMIC_RELAXED);
     }
 
     return buffer;
@@ -630,7 +669,7 @@ eth_driver_status_t ETH_Driver_Transmit(uint8_t *buffer, uint16_t length)
         return ETH_DRIVER_ERROR;
     }
 
-    g_stats.tx_frames++;
+    (void)__atomic_fetch_add(&g_stats.tx_frames, 1U, __ATOMIC_RELAXED);
     return ETH_DRIVER_OK;
 }
 
@@ -665,7 +704,7 @@ eth_driver_status_t ETH_Driver_ReadPacket(eth_rx_segment_t **packet)
     }
 
     *packet = (eth_rx_segment_t *)head;
-    g_stats.rx_frames++;
+    (void)__atomic_fetch_add(&g_stats.rx_frames, 1U, __ATOMIC_RELAXED);
 
     return ETH_DRIVER_OK;
 }
@@ -729,7 +768,7 @@ void HAL_ETH_RxAllocateCallback(uint8_t **buff)
            next HAL_ETH_ReadData(). A rising counter here means the input
            thread is not releasing packets fast enough, or the pool is too
            small for the traffic. */
-        g_stats.rx_alloc_failures++;
+        (void)__atomic_fetch_add(&g_stats.rx_alloc_failures, 1U, __ATOMIC_RELAXED);
     }
 }
 
@@ -791,7 +830,7 @@ void HAL_ETH_ErrorCallback(ETH_HandleTypeDef *heth)
 {
     uint32_t error = HAL_ETH_GetError(heth);
 
-    g_stats.dma_errors++;
+    (void)__atomic_fetch_add(&g_stats.dma_errors, 1U, __ATOMIC_RELAXED);
 
     if (g_callbacks.on_error != NULL)
     {

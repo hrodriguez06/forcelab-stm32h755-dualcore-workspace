@@ -155,7 +155,7 @@ target_sources(stm32h7_driver_eth INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/08_eth/eth_hal.c
     ${CMAKE_CURRENT_LIST_DIR}/08_eth/lan8742_phy.c
 )
-target_link_libraries(stm32h7_driver_eth INTERFACE stm32h7_driver_gpio)
+target_link_libraries(stm32h7_driver_eth INTERFACE stm32h7_driver_gpio_hal)
 
 # 10_hsem: Hardware Semaphore for dual-core mutual exclusion & boot synchronization.
 # Rule C4: There is deliberately no unsuffixed stm32h7_driver_hsem target (no legacy
