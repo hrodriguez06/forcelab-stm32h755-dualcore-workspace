@@ -17,7 +17,7 @@ loopback. What that run covers, and what it does not, is in
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Bare-Metal** | `uart_bm.[c\|h]` | `stm32h7_driver_uart_bm` | `stm32h7_driver_gpio` | CMSIS only (`stm32h7xx.h`) | Console before `SystemClock_Config()`, fault handlers, Cortex-M4 without HAL UART |
 | **Low-Level** | `uart_ll.[c\|h]` | `stm32h7_driver_uart_ll` | `stm32h7_driver_gpio` | `stm32h7xx_ll_usart.h`, `stm32h7xx_ll_lpuart.h` inlines | Same as BM, plus interrupt-driven RX into a ring buffer |
-| **HAL** | `uart_hal.[c\|h]` | `stm32h7_driver_uart` | `stm32h7_driver_gpio` | ST HAL (`HAL_UART_*`) | The ST-LINK VCP console of CPU1, FreeRTOS / lwIP projects |
+| **HAL** | `uart_hal.[c\|h]` | `stm32h7_driver_uart` | `stm32h7_driver_gpio_hal` | ST HAL (`HAL_UART_*`) | The ST-LINK VCP console of CPU1, FreeRTOS / lwIP projects |
 
 ```cmake
 target_link_libraries(cm4_firmware PRIVATE stm32h7_driver_uart_bm)   # or _ll, or stm32h7_driver_uart
@@ -119,7 +119,8 @@ by this contract.
 ```
 
 > **Pin mask vs pin index.** `BOARD_CONSOLE_*_PIN` is a HAL mask (`GPIO_PIN_8`
-> = `0x0100`), because the default MSP hands it to `HAL_GPIO_Init()`. Every
+> = `0x0100`), because the default MSP hands it to `GPIO_HAL_Init()` (from
+> `00_gpio`, which runs inside the `gpio_bm` cross-core section; since F1b). Every
 > `*_Pin_t` structure of the driver (`UartBm_Pin_t`, `UartLL_Pin_t`,
 > `uart_hal_pin_t`) takes a pin **index** (`8`). Passing `GPIO_PIN_8` to
 > `pin_idx` makes `Init` return `false`.
@@ -129,6 +130,13 @@ by this contract.
 `uart_hal.c` defines `HAL_UART_MspInit()` / `HAL_UART_MspDeInit()` and forwards
 them to two weak hooks. The default hook clocks the console instance and muxes
 its pins from the macros above; any other instance is left alone.
+
+Since F1b of `00_gpio`, the default MSP configures the console pins using
+`GPIO_HAL_Init()` and releases them using `GPIO_HAL_DeinitPin()`, executing
+every register access inside `gpio_bm`'s cross-core critical section. Any error
+from `GPIO_HAL_Init()` is captured in `s_msp_gpio_status` and propagated by
+`UART_HAL_InitEx()` / `UART_Console_Init()`, returning `HAL_ERROR` rather than
+silently proceeding with misconfigured pins.
 
 | Situation | What to do |
 | :--- | :--- |
@@ -214,11 +222,11 @@ static UartLL_RingBuffer_t rx_ring = { .data = rx_storage, .size = sizeof(rx_sto
 | :--- | :--- | :--- |
 | `UART_HAL_Init(huart, cfg)` | original, frozen | 8N1, no flow control, oversampling 16. |
 | `UART_HAL_Write(huart, data, len)` | original, frozen | 100 ms timeout; the status is discarded. |
-| `UART_Console_Init(baud)` | original, frozen | Instance from `BOARD_CONSOLE_UART_INSTANCE`; pins through the MSP hook. |
+| `UART_Console_Init(baud)` | original, frozen | Instance from `BOARD_CONSOLE_UART_INSTANCE`; pins through the MSP hook. Returns `HAL_ERROR` if the MSP pin initialization fails. |
 | `UART_Console_Write(data, len)` | original, frozen | |
 | `UART_Console_GetHandle()` | original, frozen | For `HAL_UART_IRQHandler` and debugging. |
-| `UART_HAL_MspInit_User()` / `MspDeInit_User()` | original, frozen, weak | See [3.1](#31-overriding-the-console-msp). |
-| `UART_HAL_InitEx(huart, cfg)` | new | Framing, flow control, oversampling, optional bus clock and pins (pull-up, very high speed). `PRESC` is fixed at /1. |
+| `UART_HAL_MspInit_User()` / `MspDeInit_User()` | original, frozen, weak | See [3.1](#31-overriding-the-console-msp). Default MSP uses `GPIO_HAL_Init` / `GPIO_HAL_DeinitPin` within `gpio_bm` cross-core section. |
+| `UART_HAL_InitEx(huart, cfg)` | new | Framing, flow control, oversampling, optional bus clock and pins (pull-up, very high speed). `PRESC` is fixed at /1. Returns MSP error if pin setup fails. |
 | `UART_HAL_WriteEx(huart, data, len, timeout_ms)` | new | Returns the `HAL_StatusTypeDef`. |
 | `UART_HAL_CheckDmaErrata(hdma)` | new | See [section 8](#8-silicon-errata-es0445). |
 
@@ -570,3 +578,4 @@ selftest. Before changing the driver:
 | Selftest on USART2 behind `UART_DRIVER_SELFTEST`, and its hardware record with the PD5-PD6 wire | `c0ca222`, `a7f700a` |
 | README rewritten around what was validated | `b23b99b` |
 | USART + DMA exercised by the `02_dma` selftest (T3, T10) | `02_dma/README.md` §13 |
+| Default MSP migrated to `GPIO_HAL_Init` / `GPIO_HAL_DeinitPin` under `gpio_bm` (F1b, H3, G13) | `c8001bf` |
