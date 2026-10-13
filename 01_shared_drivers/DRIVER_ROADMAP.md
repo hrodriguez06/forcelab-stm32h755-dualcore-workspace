@@ -17,11 +17,11 @@ no lo sustituye.
 
 | Carpeta | Estado | Notas |
 | :--- | :--- | :--- |
-| `00_gpio` | Hecho (F1) y auditado | BM, LL, HAL. Validado en `prj_01` con el AD2 (`00_gpio/README.md` §9). Auditoría cerrada con la re-auditoría 5 en `75d106a` (veredicto de merge, §12.7); sin auditoría independiente en la placa. Pendiente: F1b en `prj_04` (G1 sigue abierto allí) y F2 (EXTI, celda de compensación), `00_gpio/README.md` §13. |
+| `00_gpio` | Hecho (F1, F1b) y auditado | BM, LL, HAL. F1: validado en `prj_01` con el AD2 (`00_gpio/README.md` §9), auditoría cerrada con la re-auditoría 5 en `75d106a`, sin auditoría independiente en la placa. F1b: el lock entre núcleos instalado en `prj_04` y todos sus escritores de configuración de GPIO por el driver (también la MSP de la consola de `04_uart`); G1 y G13 cerrados allí, con auditoría independiente en la placa y arranque en frío (`00_gpio/README.md` §13.1). Pendiente: F1c, G1 en `prj_03` (su CM4 configura PB1 con `HAL_GPIO_Init` y no instala el hook); F2 (EXTI, celda de compensación), §13. |
 | `01_led` | Hecho | `led_bm`. Sin README. |
 | `02_dma` | Hecho y auditado | BM, LL, HAL. BDMA validado en M2M y con dos periféricos de D3: SPI6 (`06_spi` T7(b)) e I2C4 (`05_i2c` T7(b), con los tres tiers de I2C). N3 (`DMA_HAL_Init` rechazaba el modo directo con media palabra o palabra) corregido en `57b1bf7`, con la prueba T13 en `dd65b06` y dos controles negativos; falta una ejecución independiente (`02_dma/README.md` §9). |
 | `03_tim` | Hecho (F0–F3) y auditado | BM, LL, HAL (TIM1–8, TIM12–17). Validado en `prj_01` con el AD2 (`03_tim/README.md` §9). Cada fase pasó una auditoría independiente con ejecución propia del auditor en la placa (la última, F3 en `70b2062`: 259/259); cierre auditado en `1cf8ad4`. Pendiente: migrar TIM3/TIM7 de `prj_03`/`prj_04` (siguen a mano); TRGO → ADC/DAC no validado; LPTIM y HRTIM fuera (`03_tim/README.md` §9.5, §11). Abierto fuera del driver: el reloj de la placa va un +1,3 % alto (HSE del MCO del ST-LINK), por encima de VOS1 (§10.5). |
-| `04_uart` | Hecho | BM, LL, HAL. |
+| `04_uart` | Hecho | BM, LL, HAL. Desde `00_gpio` F1b, la MSP de la consola configura sus pines con `GPIO_HAL_Init`/`GPIO_HAL_DeinitPin` y `UART_Console_Init` devuelve su error (`04_uart/README.md` §3.1). |
 | `05_i2c` | Hecho (F0–F3) y auditado | BM, LL, HAL (I2C1–I2C4, maestro, 7 bits, hasta 1 MHz; sondeo, IRQ y DMA/BDMA; `CalcTiming`, timeout de SCL bajo, recuperación del bus). Validado en `prj_01` contra una NUCLEO-F334R8 como target (`tools/i2c_target_f334/`) y el AD2 en dos tomas desmontables (`05_i2c/README.md` §8–§9). Cada fase pasó una auditoría independiente con dos ejecuciones propias del auditor en la placa (con y sin tomas; la última, F3 en `01e462f`: 149/149 y 112/112); cierre auditado. I2C4 por BDMA en verde. Hechos de silicio nuevos: TIMEOUT se repite cada TIMEOUTA con SCL retenida, el TIMEOUT de maestro no manda STOP, `BUSY` solo tras un START visto con `PE = 1` (§6.3). Pendiente: esclavo, 10 bits y SMBus/PEC (segunda iteración); I2C2/I2C3 sin pines en el banco; sin consumidores fuera del selftest. Abierto fuera del driver: el reloj de la placa (+1,3 %: el bus va un +0,8 a +1,1 % por encima de lo pedido, §6.4). |
 | `06_spi` | Hecho (F0–F3) y auditado | BM, LL, HAL (SPI1–SPI6, maestro). Validado en `prj_01` con el AD2 y el puente J1 (`06_spi/README.md` §9). Cada fase pasó una auditoría independiente con ejecución propia del auditor en la placa (la última, F3 en `b267f4c`: 45/45); cierre auditado en `e128eed`. Primer consumidor real de BDMA (SPI6). Pendiente: esclavo, CRC, TI e I2S (segunda iteración); SPI2/3/5 sin transferencias en el banco, porque un maestro sin SCK en AF no termina (`06_spi/README.md` §10.2); sin consumidores fuera del selftest. Abierto fuera del driver: N3 en `02_dma` y el reloj de la placa (+1,3 %, §6.3). |
 | `07_adc` | Hecho y auditado | BM, LL, HAL. |
@@ -75,7 +75,7 @@ En este orden de peso:
 | 5 | `05_i2c` | Depende de open-drain y necesita un dispositivo externo |
 | 6 | `09_fdcan` | El más complejo, sin consumidor y sin transceptor en la Nucleo |
 
-Tareas que se intercalan sin bloquear a nadie: README de `01_led`; `00_gpio` F3–F4 cuando aparezca un
+Tareas que se intercalan sin bloquear a nadie: README de `01_led`; `00_gpio` F1c (G1 en `prj_03`); `00_gpio` F3–F4 cuando aparezca un
 consumidor de `gpio_ll` / `gpio_hal`.
 
 ---

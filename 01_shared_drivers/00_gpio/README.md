@@ -1089,7 +1089,9 @@ routing all GPIO configuration writers through `00_gpio`:
 
 **What was not exercised:**
 `selftest-gpio` in `prj_04` was only compiled (G-S1 bench safety rule: moves lines wired to AD2).
-Phase T15 contention test was not executed on the physical bench in `prj_04` (already proven in `prj_01`).
+Phase T15 (the cross-core contention test) ran in `prj_04` only in its own F1a, before F1b and
+without the production hook (`docs/gpio_f1a_selftest_ededa84.txt`); `selftest-gpio` with the F1b
+changes (H5, M2) was not run.
 
 ### 13.2 F2: EXTI 0–15 and the compensation cell (not implemented)
 
