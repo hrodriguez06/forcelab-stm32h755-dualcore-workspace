@@ -59,3 +59,62 @@ Entrega: `50f16d8..63a746c`. Código en `9051a6a`, `53f0f88`, `c8001bf`, `ee2ba2
 - corregir el informe (m1, m2, M6, §5.5).
 
 Las capturas de `0f2f7b1` se quedan (no se editan); el informe dice cuáles sustituyen las nuevas. T6b sigue pendiente del responsable en el banco.
+
+## F1, corrección (`32f343a`)
+
+Entrega: `198be5b..32f343a`. Selftest en `5a8f13a`; herramienta en `79ef531`, `03d4e54`, `9125d64`, `8444cb3`, `8ee9a13`; capturas de `8ee9a13` en `6f49e8e`; informe en `32f343a`. El código de producción no cambia desde `63a746c`.
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| `build_all -Clean` en `32f343a`, árbol limpio (mi ejecución) | 8/8, tamaños iguales a los de T1; `selftest-gpio` de `prj_04`: exit 0, 0 avisos |
+| SWD independiente (`gpio_f1b_audit2_swd_32f343a.txt`) | `prj_04` debug compilado en `32f343a` y flasheado ("Download verified successfully"). Los dos hooks instalados, `HSEM_R5` = 0, contadores a 0, retención 1228/356 ciclos (19,5×/33,7×), pines y controles exactos. **PASS** |
+| T6a independiente (`gpio_f1b_audit2_t6a_32f343a.txt`) | 20 × (`-rst` por SWD, 10 s, mi lectura completa): **20/20 PASS**. La retención cambia entre 1226 y 1228 ciclos de un arranque a otro: `Shared_Init` la pone a cero en cada arranque, así que hubo reinicio |
+| T5 independiente (`gpio_f1b_audit2_t5_netcheck_32f343a.txt`, `…_query_32f343a.txt`) | Misma imagen, tras los 20 resets: ICMP 4/4, UDP de 1 a 1472 B idénticos, ráfaga 100/100, contadores de red a 0; `query_adc.py`: las muestras crecen, `OVR: 0`. **PASS** |
+| `grep` de escrituras con macro (`MODIFY_REG`/`WRITE_REG`/`SET_BIT`/`CLEAR_BIT` sobre `MODER`/`OTYPER`/`OSPEEDR`/`PUPDR`/`AFR`) en `01_shared_drivers` y en las fuentes de `prj_04` | Solo `led_bm.c:66` y `:146`, que están en la lista de excepciones (`LED_Init` antes de liberar a CPU2; G14). Es la comprobación que T2b todavía no hace (M1, abajo) |
+| Revisión de la herramienta y de las capturas | Un subagente la revisó de nuevo; los hallazgos de abajo los comprobé yo en el código (`gpio_f1b_checks.py:860`, `:1076`, `:1090-1096`, `:1220`, `:466-472`) |
+
+### Los hallazgos de la primera entrega
+
+| ID | Estado |
+| --- | --- |
+| M2 | **Cerrado.** `GPIO_BM_SetSharedLock(NULL)` antes de T15 (d) en los dos núcleos y antes de (g) en CM7. `b1_measure` vuelve a dejar `NULL` como antes. `Shared_GpioLockInstall()` al final del selftest y en todos los caminos de fallo: `goto test_failed` en CM7 y `cm4_fail` en CM4, y no hay otro `return`. Verificado por revisión y build; sin ejecutar (G-S1) |
+| B1 | **Cerrado.** `HSEM_R5` en `0x58026414` (`gpio_f1b_checks.py:73-74`); ninguna lectura cae en `0x58026480…0x580264FC` (`RLR`) |
+| B2, B3, B4 | **Cerrados.** Siete ELF con sus rutas reales; los objetos enlazados salen de `build.ninja` (no del `.map`, como dice el informe); FAIL si falta una ELF o un objeto. El control falla en las cinco CM7 de `07db657`. **Desviación no declarada:** los objetos `stm32h7xx_hal_*` se filtran porque `stm32h7xx_hal_rcc.c.obj` referencia `HAL_GPIO_Init` (por `HAL_RCC_MCOConfig`, que no está enlazada en ninguna de las siete ELF; en las cinco CM7 el único llamador es `apply` de `gpio_hal.c`, comprobado con `objdump`). Aceptable, pero tiene que estar en el informe |
+| B5, B6 | **Cerrados en las capturas.** Cada sesión de placa flashea su ELF con "Download verified successfully". El control de T3 flasheó las ELF de `07db657` y leyó 0 en las direcciones de `nm` de esas ELF (`0x20012904`, `0x30020928`). La herramienta tiene un hueco nuevo: N4 |
+| B7 | **Parcial.** En el árbol actual, un fallo de preprocesado o un preset que falta es FAIL y se imprimen las cuentas (1951 unidades, 0 fallidas). En el control, `ctrl_ok` se calcula y no se usa (l. 634-649) y sus cuentas no se imprimen: en `07db657` faltan `selftest-adc` y `selftest-hsem` y el control da PASS igual |
+| M1 | **Parcial; lo que dice el informe es falso.** Ahora detecta `->MODER =`, `AFR[expr] |=`, `<<=` y sentencias en varias líneas. **No detecta** `((X)->MODER) =` con la base expandida del CMSIS ni las expansiones de `WRITE_REG`/`MODIFY_REG`/`SET_BIT`/`CLEAR_BIT`, que dan `(((x->MODER)) = …)`. `PAREN_WRITE_RE` (l. 470-472) solo acepta un identificador o un nivel de paréntesis como base y un solo `)` antes del `=`. Además, `== ` cuenta como escritura (falso positivo, seguro). El control sigue comparando por nombre y "cualquier preset" (`any(name == "main.c")`, l. 636-639), sin casos de macro y sin imprimir los hallazgos. La lista de excepciones añade `gpio_bm.h`, `gpio_ll.h`, `led_bm.h` y `stm32h7xx_hal_gpio.*`, que el plan no incluye. Hoy no se escapa nada (mi `grep`, arriba), pero el "0 hallazgos" de T2b no lo demuestra |
+| M3 | **Cerrado.** Capturas de `8ee9a13` con el árbol limpio; con el árbol sucio imprime `--porcelain`. El `-uno` es aceptable: el único `file(GLOB)` de los proyectos recorre el submódulo de Cube |
+| M4 | **Parcial.** El arnés está commiteado y nunca resetea con una herramienta corriendo. T5 es secuencial (monitor, `net_check`, `query_adc`, monitor) y no "a la vez": es una desviación aceptable, pero sin declarar. Sus comprobaciones son vacías (N2, N3) |
+| M5 | **Cerrado** |
+| M6 | **No cerrado.** El informe §5.8 dice que se reflasheó `prj_04` y que `net_check` dio 3/3 tras T7, pero no hay captura de eso. (La placa tiene ahora `prj_04` debug de `32f343a`, flasheado por mí) |
+| m1 | **Cerrado** |
+| m2 | **Parcial.** `gpio_f1b_t1_8ee9a13.txt` son dos escritores en un archivo: una cabecera UTF-8 con BOM y una tabla en UTF-16LE (git lo trata como binario). No tiene la línea de comando ni las compilaciones con `-Werror` que pide T1. Las cifras coinciden con las mías |
+| m3, m5 | Sin cambios, como se acordó |
+| m4 | **Casi cerrado.** Desplazamientos de DWARF y límites del header, con un respaldo silencioso a los valores escritos a mano. En el modo control, la captura dice "from DWARF" para un campo que la ELF de `07db657` no tiene |
+
+### Hallazgos nuevos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| N1 | Mayor | **T3 no puede fallar por PD8:** `gpio_f1b_checks.py:860` comprueba `pb1_ok` en lugar de `pd8_ok`. Un PD8 equivocado imprime FAIL pero el veredicto de T3 y el de cada reset de T6a quedan en PASS. Las capturas no cambian: PD8 es exacto en T3 y en los 20 resets de T6a | `pd8_ok` |
+| N2 | Mayor | **El control del ADC de T5 es vacío:** `query_ok` (l. 1076) acepta `"0" in stdout`, que siempre se cumple. No comprueba que `Samples` crezca, y `dma_error_count`/`half_overrun_count` ni se miran (lo debilitó `8444cb3`) | Comparar dos lecturas de `Samples` y exigir `OVR: 0`; si `query_adc.py` no da los otros contadores, decirlo |
+| N3 | Mayor | **Otras dos comprobaciones siempre dan PASS:**<br>• contadores de T5 (l. 1090-1096): pasa si no aparece `dma_err`; no mira `rx_nobuf`, `tx_nobuf` ni `acl_drop`; no afecta a `results["pass"]`;<br>• banner de T7 (l. 1220): `banner_found or has_download_ok`, verdadero siempre que el flasheo vaya bien (lo debilitó `8ee9a13`). El build id que pide el plan no se comprueba.<br>A mano, los valores de las capturas son correctos | Parsear las líneas `[net]` y exigir los cuatro a 0 en todas, contando en el veredicto. T7: comprobar la identidad sin el banner (B6 ya lo cubre: decirlo) o leer el build id; no fingir que se leyó |
+| N4 | Mayor | **El control de T3 puede pasar sin flasheo:** el modo `--control` no exige `--flash` (l. 675, 736-745). En la imagen actual, `0x20012904` y `0x30020928` son `s_section_depth` (0 en reposo), así que `--test t3 --control` sin `--flash` pasa sobre la imagen de producción | `--control` implica `--flash` (o lo exige) |
+| N5 | Menor | T3 lee justo después del flasheo, sin espera (T4 y T6a sí esperan). Solo puede dar un FAIL falso | Una espera como en T4 |
+| N6 | Menor | T2b sin directorio de control no añade el caso de control y pasa (l. 632) | Sin control, FAIL |
+| N7 | Menor | El informe: §5.5 no declara el filtro de la HAL de ST ni T5 secuencial; dice que los objetos salen "del .map"; §5.6 M1 afirma una cobertura que no existe | Corregir |
+
+(El subagente dio además las líneas `[ipc]` duplicadas en `gpio_f1b_t5_release_8ee9a13.txt`: no lo están. Hay cinco, de dos lecturas distintas de `monitor.py`. Descartado.)
+
+### Estado
+
+**F1 no pasa todavía, pero queda poco.** El código de producción y `selftest-gpio` están bien. Mi evidencia independiente lo muestra en tres frentes: SWD, 20 resets y T5. Lo que falta es que la herramienta pueda fallar donde dice que comprueba: M1, N1–N4 y B7 en el control. También falta que el informe diga la verdad: M1, N7, M6 y m2. La herramienta es parte de la entrega y se reutiliza en F1c.
+
+**Qué repetir tras la corrección:**
+- T2 (sin placa), porque cambia T2b;
+- T3 y su control, T5 debug y release, y T7, porque cambian sus comprobaciones;
+- T1, con una sola salida legible que incluya las compilaciones con `-Werror`.
+
+La T6a de `8ee9a13` se queda: N1 no cambia sus valores, y PD8 es exacto en las 20. También mi T6a de `32f343a`. T6b sigue pendiente del responsable en el banco.

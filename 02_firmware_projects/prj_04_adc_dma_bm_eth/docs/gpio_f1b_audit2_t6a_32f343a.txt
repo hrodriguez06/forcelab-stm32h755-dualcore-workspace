@@ -1,0 +1,24 @@
+=== Auditor, 00_gpio F1b re-audit T6a: 20 x (STM32_Programmer_CLI -c port=SWD sn=0016000C4142501220353451 mode=HOTPLUG -rst; wait 10 s; independent SWD read). Image: prj_04 debug 32f343a, as in gpio_f1b_audit2_swd_32f343a.txt, no flash since; no host tool running ===
+Start: 2026-10-12T21:06:39-06:00
+reset 1: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 2: [Reset mode  : Software reset]   hold max CM7 1228 cyc (3.07 us) margin 19.54x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 3: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 4: [Reset mode  : Software reset]   hold max CM7 1228 cyc (3.07 us) margin 19.54x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 5: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 6: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 7: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 8: [Reset mode  : Software reset]   hold max CM7 1228 cyc (3.07 us) margin 19.54x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 9: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 10: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 11: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 12: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 13: [Reset mode  : Software reset]   hold max CM7 1228 cyc (3.07 us) margin 19.54x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 14: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 15: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 16: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 17: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 18: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 19: [Reset mode  : Software reset]   hold max CM7 1228 cyc (3.07 us) margin 19.54x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+reset 20: [Reset mode  : Software reset]   hold max CM7 1226 cyc (3.06 us) margin 19.58x -> OK   hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK AUDIT SWD VERDICT=PASS 
+T6a auditor: 20/20 PASS
+End: 2026-10-12T21:10:24-06:00

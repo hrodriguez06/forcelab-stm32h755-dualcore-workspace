@@ -1,0 +1,18 @@
+=== Auditor, 00_gpio F1b re-audit: independent SWD read, prj_04 debug built at 32f343a (clean tree) and flashed with tools/flash.py --preset debug --sn ... (Download verified successfully) ===
+Date: 2026-10-12T21:06:26-06:00  HEAD: 32f343a (clean)  build: 02_firmware_projects/prj_04_adc_dma_bm_eth/build/debug
+nm: CM7 s_shared_lock@20012908 g_shared_gpio_lock=08015EBC | CM4 s_shared_lock@3002092C g_shared_gpio_lock=08102638 | g_shared@38008000
+SWD words read: 19 of 19
+  CM7 s_shared_lock                  read=08015EBC want=08015EBC -> OK
+  CM4 s_shared_lock                  read=08102638 want=08102638 -> OK
+  HSEM_R5 (free = 0)                 read=00000000 want=00000000 -> OK
+  m7_gpio_lock_fail_count            read=00000000 want=00000000 -> OK
+  m4_gpio_lock_fail_count            read=00000000 want=00000000 -> OK
+  hold max CM7 1228 cyc (3.07 us) margin 19.54x -> OK
+  hold max CM4 356 cyc (1.78 us) margin 33.71x -> OK
+  PB1  mode/otype/speed/pull/af=(3, 0, 0, 0, 0) want (3, 0, 0, 0, 0) -> OK
+  PB13 mode/otype/speed/pull/af=(2, 0, 3, 0, 11) want (2, 0, 3, 0, 11) -> OK
+  PD8  mode/otype/speed/pull/af=(2, 0, 0, 1, 7) want (2, 0, 0, 1, 7) -> OK
+  PD9  mode/otype/speed/pull/af=(2, 0, 0, 1, 7) want (2, 0, 0, 1, 7) -> OK
+  PB15 mode/otype/speed/pull/af=(3, 0, 0, 0, 0) want (3, 0, 0, 0, 0) -> OK
+  PD0  mode/otype/speed/pull/af=(3, 0, 0, 0, 0) want (3, 0, 0, 0, 0) -> OK
+AUDIT SWD VERDICT=PASS
