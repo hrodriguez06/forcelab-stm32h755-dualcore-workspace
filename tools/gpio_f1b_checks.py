@@ -53,6 +53,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -74,14 +75,17 @@ HSEM_BASE = 0x58026400  # D3_AHB1PERIPH_BASE (0x58020000) + 0x6400
 HSEM_R5_ADDR = HSEM_BASE + 0x14  # R[5] offset = 5 * 4 = 0x14 (0x58026414)
 
 ALLOWED_EXCEPTIONS_REL = {
+    # 00_gpio driver tier
     "01_shared_drivers/00_gpio/gpio_bm.c",
-    "01_shared_drivers/00_gpio/gpio_bm.h",
     "01_shared_drivers/00_gpio/gpio_ll.c",
-    "01_shared_drivers/00_gpio/gpio_ll.h",
+    # 01_led (writes before CPU2 release; G14)
     "01_shared_drivers/01_led/led_bm.c",
-    "01_shared_drivers/01_led/led_bm.h",
+    # selftest-gpio (test instrument for F1a)
     "02_firmware_projects/prj_04_adc_dma_bm_eth/CM7/App/Src/gpio_selftest.c",
     "02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/gpio_selftest.c",
+    # ST vendor HAL/LL driver (Drivers/STM32H7xx_HAL_Driver)
+    "02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c",
+    "02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7/Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_gpio.h",
 }
 
 PRJ04_PRESETS = [
@@ -157,7 +161,7 @@ def get_git_info(tree_dir: Path) -> tuple[str, bool, str]:
     return rev, clean, status_res.stdout.strip()
 
 
-def get_struct_member_offset(readelf_cmd: str, elf_path: Path, member_name: str) -> int:
+def get_struct_member_offset(readelf_cmd: str, elf_path: Path, member_name: str) -> int | None:
     """Derive byte offset of a member in SharedMemory_t from ELF DWARF debug information."""
     proc = subprocess.run([readelf_cmd, "--debug-dump=info", str(elf_path)], capture_output=True, text=True)
     if proc.returncode == 0:
@@ -170,24 +174,20 @@ def get_struct_member_offset(readelf_cmd: str, elf_path: Path, member_name: str)
                         return int(m.group(1))
                     if "DW_TAG" in lines[k]:
                         break
-    fallbacks = {
-        "m7_gpio_lock_fail_count": 0x4FC,
-        "m4_gpio_lock_fail_count": 0x500,
-        "m7_gpio_lock_hold_cycles_max": 0x504,
-        "m4_gpio_lock_hold_cycles_max": 0x508,
-    }
-    return fallbacks[member_name]
+    return None
 
 
 def get_t4_limits(header_path: Path) -> tuple[int, int]:
     """Derive DWT cycle limits for CM7 and CM4 from shared_memory.h."""
     content = header_path.read_text(encoding="utf-8")
     m_us = re.search(r"#define\s+SHARED_GPIO_LOCK_US\s+(\d+)U?", content)
-    us = int(m_us.group(1)) if m_us else 60
     m_cm7 = re.search(r"#define\s+SHARED_GPIO_LOCK_CYCLES_CM7\s+\(?SHARED_GPIO_LOCK_US\s*\*\s*(\d+)U?\)?", content)
     m_cm4 = re.search(r"#define\s+SHARED_GPIO_LOCK_CYCLES_CM4\s+\(?SHARED_GPIO_LOCK_US\s*\*\s*(\d+)U?\)?", content)
-    cm7_mult = int(m_cm7.group(1)) if m_cm7 else 400
-    cm4_mult = int(m_cm4.group(1)) if m_cm4 else 200
+    if not (m_us and m_cm7 and m_cm4):
+        raise RuntimeError(f"Failed to derive T4 limits from {header_path}: us={m_us}, cm7={m_cm7}, cm4={m_cm4}")
+    us = int(m_us.group(1))
+    cm7_mult = int(m_cm7.group(1))
+    cm4_mult = int(m_cm4.group(1))
     return us * cm7_mult, us * cm4_mult
 
 
@@ -465,23 +465,132 @@ def run_t2a(tools: dict[str, str], control_dir: Path | None) -> dict:
 # ==============================================================================
 
 RAW_WRITE_RE = re.compile(
-    r"(?:->|\.)\s*(?:MODER|OTYPER|OSPEEDR|PUPDR|AFR\s*\[[^\]]+\])\s*(?:=|[|&^+\-]=|<<=|>>=)"
-)
-PAREN_WRITE_RE = re.compile(
-    r"\(\s*\(\s*(?:[A-Za-z0-9_]+|(?:\([^()]+\)))\s*->\s*(?:MODER|OTYPER|OSPEEDR|PUPDR|AFR\s*\[[^\]]+\])\s*\)\s*(?:=|[|&^+\-]=|<<=|>>=)"
+    r"(?:->|\.)\s*(?:MODER|OTYPER|OSPEEDR|PUPDR|AFR\s*\[[^\]]+\])(?:\s*\))*\s*(?:=(?!=)|[|&^+\-]=|<<=|>>=)"
 )
 
 
 def is_allowed_exception_path(file_path_str: str) -> bool:
     norm = Path(file_path_str).as_posix()
-    # Direct match against allowed relative exceptions
     for exc in ALLOWED_EXCEPTIONS_REL:
-        if exc in norm:
+        if norm.endswith(exc):
             return True
-    # Drivers/STM32H7xx_HAL_Driver/.../stm32h7xx_hal_gpio.c or .h
-    if "stm32h7xx_hal_gpio." in norm:
-        return True
     return False
+
+
+def run_t2b_selftest(tools: dict[str, str]) -> tuple[bool, str]:
+    """Automated self-test of T2b regex pattern matching against preprocessed CMSIS headers."""
+    c_code = """
+#include "stm32h7xx.h"
+
+void selftest_writes(void) {
+    /* 1. Direct assignment */
+    GPIOD->MODER = 1;
+    /* 2. Compound assignment */
+    GPIOD->MODER |= 1;
+    /* 3. Shift assignment */
+    GPIOD->MODER <<= 2;
+    /* 4. AFR array assignment */
+    GPIOD->AFR[0] = 7;
+    /* 5. Expanded CMSIS base with arbitrary parens */
+    ((GPIO_TypeDef *) (0x58020C00))->MODER = 1;
+    /* 6. Nested parentheses on base */
+    ((((((GPIOD))))->MODER)) = 1;
+    /* 7. WRITE_REG macro */
+    WRITE_REG(GPIOD->MODER, 1);
+    /* 8. MODIFY_REG macro */
+    MODIFY_REG(GPIOD->MODER, 3, 1);
+    /* 9. SET_BIT macro */
+    SET_BIT(GPIOD->MODER, 1);
+    /* 10. CLEAR_BIT macro */
+    CLEAR_BIT(GPIOD->MODER, 1);
+    /* 11. Multiline statement */
+    GPIOD->MODER =
+        1;
+    /* 12. AFR macro */
+    SET_BIT(GPIOD->AFR[1], 7);
+}
+
+void selftest_reads(void) {
+    /* 1. Direct read */
+    uint32_t v1 = GPIOD->MODER;
+    /* 2. Parenthesized read */
+    uint32_t v2 = ((GPIOD->MODER));
+    /* 3. Equality check */
+    if (GPIOD->MODER == 1) { (void)0; }
+    /* 4. Parenthesized equality check */
+    if (((GPIOD->MODER) == 1)) { (void)0; }
+    /* 5. Expanded CMSIS equality check */
+    if ((((GPIO_TypeDef *) (0x58020C00))->MODER) == 0) { (void)0; }
+    /* 6. Inequality check */
+    if (GPIOD->MODER != 1) { (void)0; }
+    /* 7. Relational check */
+    if (GPIOD->MODER <= 1) { (void)0; }
+    /* 8. Bitwise AND read */
+    uint32_t v3 = (GPIOD->MODER & 0x3);
+    /* 9. READ_REG macro */
+    uint32_t v4 = READ_REG(GPIOD->MODER);
+}
+"""
+    inc1 = REPO_ROOT / "02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7/Drivers/CMSIS/Device/ST/STM32H7xx/Include"
+    inc2 = REPO_ROOT / "02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7/Drivers/CMSIS/Include"
+
+    with tempfile.NamedTemporaryFile("w", suffix=".c", delete=False) as tf:
+        tf.write(c_code)
+        tmp_path = tf.name
+
+    try:
+        cmd = [tools["gcc"], "-E", "-DSTM32H755xx", "-DCORE_CM7", f"-I{inc1}", f"-I{inc2}", tmp_path]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            return False, f"gcc -E selftest failed ({proc.returncode}): {proc.stderr[:100]}"
+
+        lines = proc.stdout.splitlines()
+        stmt_buf = ""
+        in_writes_func = False
+        in_reads_func = False
+        writes_detected = 0
+        reads_detected = 0
+        tested_lines = []
+
+        for line in lines:
+            line_str = line.strip()
+            if "void selftest_writes(void)" in line_str:
+                in_writes_func = True
+                in_reads_func = False
+                continue
+            if "void selftest_reads(void)" in line_str:
+                in_writes_func = False
+                in_reads_func = True
+                continue
+            if line_str.startswith("#"):
+                stmt_buf = ""
+                continue
+            stmt_buf += " " + line_str
+            if ";" in line_str or "}" in line_str:
+                stmt_clean = stmt_buf.strip()
+                if "MODER" in stmt_clean or "AFR" in stmt_clean:
+                    is_match = bool(RAW_WRITE_RE.search(stmt_clean))
+                    if in_writes_func:
+                        if is_match:
+                            writes_detected += 1
+                        tested_lines.append(f"    [Write check: {'DETECTED' if is_match else 'MISSED'}] {stmt_clean[:90]}")
+                    elif in_reads_func:
+                        if is_match:
+                            reads_detected += 1
+                        tested_lines.append(f"    [Read  check: {'FALSE_POSITIVE' if is_match else 'IGNORED'}] {stmt_clean[:90]}")
+                stmt_buf = ""
+
+        passed = (writes_detected == 12) and (reads_detected == 0)
+        detail = (
+            f"  Detected writes: {writes_detected}/12, False read detections: {reads_detected}/9\n"
+            + "\n".join(tested_lines)
+        )
+        return passed, detail
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
 
 
 def _check_unit_writes(entry: dict, preset: str, project_dir: Path) -> dict:
@@ -553,9 +662,9 @@ def _check_unit_writes(entry: dict, preset: str, project_dir: Path) -> dict:
 
         if ";" in line or "}" in line or "{" in line:
             # Check statement buffer
-            if RAW_WRITE_RE.search(stmt_buf) or PAREN_WRITE_RE.search(stmt_buf):
+            if RAW_WRITE_RE.search(stmt_buf):
                 norm_rel = Path(cur_file).as_posix()
-                for root_pat in (REPO_ROOT.as_posix(),):
+                for root_pat in (REPO_ROOT.as_posix(), project_dir.parent.parent.as_posix()):
                     if norm_rel.startswith(root_pat):
                         norm_rel = norm_rel[len(root_pat):].lstrip("/")
                 unit_findings.append({
@@ -606,7 +715,7 @@ def run_t2b_on_tree(project_dir: Path, is_control: bool = False) -> tuple[bool, 
             if res["findings"]:
                 findings.extend(res["findings"])
 
-    any_failures = any(stats["failed"] > 0 for stats in preset_stats.values())
+    any_failures = any(stats["failed"] > 0 or stats["scanned"] == 0 for stats in preset_stats.values())
     passed = (not any_failures) and (len(findings) == 0 if not is_control else len(findings) > 0)
     return passed, findings, preset_stats
 
@@ -614,8 +723,33 @@ def run_t2b_on_tree(project_dir: Path, is_control: bool = False) -> tuple[bool, 
 def run_t2b(tools: dict[str, str], control_dir: Path | None) -> dict:
     results = {"pass": True, "cases": []}
     print("--- Running T2b (preprocessor -E scan across all compilation units) ---")
-    prj04_dir = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth"
 
+    # N6: Without control directory, T2b is FAIL
+    if not (control_dir and control_dir.is_dir()):
+        results["cases"].append({
+            "id": "T2b_control_dir_missing",
+            "desc": "Control directory 07db657 is provided and valid (N6)",
+            "pass": False,
+            "detail": f"Control dir {control_dir} not found",
+        })
+        results["pass"] = False
+        return results
+
+    # 1. Run automated self-test of regex against CMSIS preprocessed code
+    st_pass, st_detail = run_t2b_selftest(tools)
+    print("--- T2b Regex Autoprueba (CMSIS expanded forms & reads) ---")
+    print(st_detail)
+    results["cases"].append({
+        "id": "T2b_selftest_macro_and_paren_detection",
+        "desc": "Self-test: CMSIS expanded bases, WRITE_REG/MODIFY_REG/SET_BIT macros, and multiline writes detected; reads and == ignored",
+        "pass": st_pass,
+        "detail": f"Autoprueba result: {'PASS (12/12 writes, 0/9 reads)' if st_pass else 'FAIL'}",
+    })
+    if not st_pass:
+        results["pass"] = False
+
+    # 2. Run scan on current tree
+    prj04_dir = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth"
     curr_ok, curr_findings, curr_stats = run_t2b_on_tree(prj04_dir, is_control=False)
     for p, st in curr_stats.items():
         print(f"  [Preset {p:13s}] scanned: {st['scanned']:4d} units, failed: {st['failed']} units")
@@ -629,32 +763,52 @@ def run_t2b(tools: dict[str, str], control_dir: Path | None) -> dict:
     if not curr_ok:
         results["pass"] = False
 
-    if control_dir and control_dir.is_dir():
-        ctrl_prj04 = control_dir / "02_firmware_projects" / "prj_04_adc_dma_bm_eth"
-        ctrl_ok, ctrl_findings, ctrl_stats = run_t2b_on_tree(ctrl_prj04, is_control=True)
+    # 3. Run scan on control tree (07db657)
+    ctrl_prj04 = control_dir / "02_firmware_projects" / "prj_04_adc_dma_bm_eth"
+    ctrl_ok, ctrl_findings, ctrl_stats = run_t2b_on_tree(ctrl_prj04, is_control=True)
+    for p, st in ctrl_stats.items():
+        print(f"  [Control Preset {p:13s}] scanned: {st['scanned']:4d} units, failed: {st['failed']} units")
 
-        found_pairs = {(f["preset"], Path(f["file"]).name) for f in ctrl_findings}
-        has_adc = any(name == "adc_acquisition.c" for _, name in found_pairs)
-        has_main_probe = ("selftest-uart", "main.c") in found_pairs or any(name == "main.c" for _, name in found_pairs)
-        has_dma = ("selftest", "dma_selftest.c") in found_pairs or any(name == "dma_selftest.c" for _, name in found_pairs)
-        ctrl_pass = has_adc and has_main_probe and has_dma and (len(ctrl_findings) > 0)
+    # B7: un preset que falta en el control es FAIL; unidades escaneadas y fallidas por preset
+    ctrl_presets_ok = all(st["scanned"] > 0 and st["failed"] == 0 for st in ctrl_stats.values())
+    results["cases"].append({
+        "id": "T2b_control_all_presets_scanned",
+        "desc": "Control 07db657: all 6 presets present and scanned without preprocessing failures (B7)",
+        "pass": ctrl_presets_ok,
+        "detail": f"Total control scanned={sum(s['scanned'] for s in ctrl_stats.values())}, failed={sum(s['failed'] for s in ctrl_stats.values())}",
+    })
+    if not ctrl_presets_ok:
+        results["pass"] = False
 
-        results["cases"].append({
-            "id": "T2b_control_07db657_detects_writers",
-            "desc": "Control 07db657 detects raw writes in adc_acquisition.c, main.c, and dma_selftest.c",
-            "pass": ctrl_pass,
-            "detail": f"Found in control: adc_acquisition={has_adc}, main={has_main_probe}, dma_selftest={has_dma} (total findings={len(ctrl_findings)})",
-        })
-        if not ctrl_pass:
-            results["pass"] = False
+    # Print all findings in control (M1, B7)
+    print(f"  [Control findings count] {len(ctrl_findings)} raw writes detected in control 07db657:")
+    for f in ctrl_findings:
+        print(f"    preset={f['preset']:13s} file={f['file']} line={f['line']:3d}: {f['code']}")
+
+    # Check findings by (preset, relative_path)
+    found_pairs = {(f["preset"], f["file"]) for f in ctrl_findings}
+    has_adc = any(p in ("debug", "release", "selftest") and "adc_acquisition.c" in fn for p, fn in found_pairs)
+    has_main_probe = any(p == "selftest-uart" and "main.c" in fn for p, fn in found_pairs)
+    has_dma = any(p == "selftest" and "dma_selftest.c" in fn for p, fn in found_pairs)
+    ctrl_pass = ctrl_presets_ok and has_adc and has_main_probe and has_dma and (len(ctrl_findings) > 0)
+
+    results["cases"].append({
+        "id": "T2b_control_07db657_detects_writers",
+        "desc": "Control 07db657 detects raw writes by (preset, path) in adc_acquisition.c, main.c, and dma_selftest.c",
+        "pass": ctrl_pass,
+        "detail": f"Matched by (preset, path): adc_acquisition={has_adc}, main.c={has_main_probe}, dma_selftest={has_dma} (total control findings={len(ctrl_findings)})",
+    })
+    if not ctrl_pass:
+        results["pass"] = False
 
     return results
 
 
 def flash_image(sn: str, project_dir: Path, preset: str = "debug") -> bool:
-    flash_script = project_dir / "tools" / "flash.py"
+    project_dir = project_dir.resolve()
+    flash_script = (project_dir / "tools" / "flash.py").resolve()
     if not flash_script.is_file():
-        flash_script = REPO_ROOT / "tools" / "flash.py"
+        flash_script = (REPO_ROOT / "tools" / "flash.py").resolve()
     cmd = [sys.executable, str(flash_script), f"--preset={preset}", f"--sn={sn}", "--yes"]
     print(f"--- Flashing {preset} from {project_dir.name} ({' '.join(cmd)}) ---")
     proc = subprocess.run(cmd, cwd=str(project_dir), capture_output=True, text=True)
@@ -684,6 +838,9 @@ def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False, control_d
         if not f_ok:
             results["pass"] = False
             return results
+        # N5: wait after flash in T3, just like T4
+        print("  [T3] Waiting 3.0s after flash for target boot and initialization...")
+        time.sleep(3.0)
 
     if control_mode and control_dir and control_dir.is_dir():
         cm7_elf = control_dir / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM7" / "cm7_firmware.elf"
@@ -707,22 +864,24 @@ def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False, control_d
     if not (cm7_lock_ptr_addr and cm4_lock_ptr_addr):
         raise RuntimeError(f"Could not resolve s_shared_lock symbols: CM7={cm7_lock_ptr_addr}, CM4={cm4_lock_ptr_addr}")
 
-    # Derive member offsets dynamically
-    m7_fail_off = get_struct_member_offset(tools["readelf"], cm7_elf, "m7_gpio_lock_fail_count")
-    m4_fail_off = get_struct_member_offset(tools["readelf"], cm7_elf, "m4_gpio_lock_fail_count")
-    m7_fail_addr = g_shared_base + m7_fail_off
-    m4_fail_addr = g_shared_base + m4_fail_off
-
     print(f"  [SWD origin] s_shared_lock CM7: {hex(cm7_lock_ptr_addr)} (from nm {cm7_elf.name})")
     print(f"  [SWD origin] s_shared_lock CM4: {hex(cm4_lock_ptr_addr)} (from nm {cm4_elf.name})")
     print(f"  [SWD origin] HSEM_R5: {hex(HSEM_R5_ADDR)} (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])")
     print(f"  [SWD origin] g_shared base: {hex(g_shared_base)} (from nm {cm7_elf.name})")
-    print(f"  [SWD origin] m7_gpio_lock_fail_count: {hex(m7_fail_addr)} (g_shared + {hex(m7_fail_off)} from DWARF)")
-    print(f"  [SWD origin] m4_gpio_lock_fail_count: {hex(m4_fail_addr)} (g_shared + {hex(m4_fail_off)} from DWARF)")
     print(f"  [SWD origin] GPIOB base: {hex(GPIO_BASES['B'])} (from stm32h755xx.h)")
     print(f"  [SWD origin] GPIOD base: {hex(GPIO_BASES['D'])} (from stm32h755xx.h)")
 
     if not control_mode:
+        # Derive member offsets dynamically from DWARF (m4: no silent fallbacks, don't query on control)
+        m7_fail_off = get_struct_member_offset(tools["readelf"], cm7_elf, "m7_gpio_lock_fail_count")
+        m4_fail_off = get_struct_member_offset(tools["readelf"], cm7_elf, "m4_gpio_lock_fail_count")
+        if m7_fail_off is None or m4_fail_off is None:
+            raise RuntimeError(f"Could not resolve fail count offsets from DWARF of {cm7_elf}: m7={m7_fail_off}, m4={m4_fail_off}")
+        m7_fail_addr = g_shared_base + m7_fail_off
+        m4_fail_addr = g_shared_base + m4_fail_off
+        print(f"  [SWD origin] m7_gpio_lock_fail_count: {hex(m7_fail_addr)} (g_shared + {hex(m7_fail_off)} from DWARF)")
+        print(f"  [SWD origin] m4_gpio_lock_fail_count: {hex(m4_fail_addr)} (g_shared + {hex(m4_fail_off)} from DWARF)")
+
         cm7_hook_addr = cm7_syms.get("g_shared_gpio_lock")
         cm4_hook_addr = cm4_syms.get("g_shared_gpio_lock")
         if not (cm7_hook_addr and cm4_hook_addr):
@@ -857,7 +1016,7 @@ def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False, control_d
         "pass": pd8_ok,
         "detail": f"mode={pd8_mode}, otype={pd8_otype}, speed={pd8_speed}, pull={pd8_pull}, af={pd8_af}",
     })
-    if not pb1_ok:
+    if not pd8_ok:
         results["pass"] = False
 
     # PD9: AF (2), Push-Pull (0), Low (0), Pull-Up (1), AF7 (7)
@@ -925,6 +1084,8 @@ def run_t4(tools: dict[str, str], sn: str, do_flash: bool = False) -> dict:
 
     m7_hold_off = get_struct_member_offset(tools["readelf"], cm7_elf, "m7_gpio_lock_hold_cycles_max")
     m4_hold_off = get_struct_member_offset(tools["readelf"], cm7_elf, "m4_gpio_lock_hold_cycles_max")
+    if m7_hold_off is None or m4_hold_off is None:
+        raise RuntimeError(f"Could not resolve hold cycles offsets from DWARF of {cm7_elf}: m7={m7_hold_off}, m4={m4_hold_off}")
     m7_hold_addr = g_shared_base + m7_hold_off
     m4_hold_addr = g_shared_base + m4_hold_off
 
@@ -1070,30 +1231,64 @@ def run_t5(tools: dict[str, str], sn: str, preset: str = "debug") -> dict:
     # 4. ADC telemetry query (query_adc.py)
     print("  [Step 4] Querying ADC telemetry via query_adc.py...")
     query_script = prj04_dir / "tools" / "query_adc.py"
-    res_query = subprocess.run([py_cmd, str(query_script), "--host=192.168.1.150", "--count=5", "--rate=10", "--json"],
+    res_query = subprocess.run([py_cmd, str(query_script), "--host=192.168.1.150", "--count=3", "--rate=10", "--json"],
                                cwd=str(prj04_dir), capture_output=True, text=True)
     print(res_query.stdout)
-    query_ok = (res_query.returncode == 0) and ("Samples:" in res_query.stdout or "sample_count" in res_query.stdout) and ("OVR: 0" in res_query.stdout or "0" in res_query.stdout)
+
+    # N2: require Samples to strictly grow and OVR == 0 across readings
+    samples_list = []
+    ovr_list = []
+    for line in res_query.stdout.splitlines():
+        m_s = re.search(r"Samples:\s*(\d+)", line)
+        m_o = re.search(r"OVR:\s*(\d+)", line)
+        if m_s:
+            samples_list.append(int(m_s.group(1)))
+        if m_o:
+            ovr_list.append(int(m_o.group(1)))
+
+    samples_grew = (len(samples_list) >= 2) and (samples_list[-1] > samples_list[0])
+    ovr_zero = (len(ovr_list) >= 2) and all(ovr == 0 for ovr in ovr_list)
+    query_ok = (res_query.returncode == 0) and samples_grew and ovr_zero
+
+    print("  [ADC telemetry note] query_adc.py reports CH5, Rate, Seq, Samples, TC, OVR, M4 HB (does not output dma_error_count or half_overrun_count)")
+
     results["cases"].append({
         "id": f"T5_{preset}_query_adc",
-        "desc": "ADC UDP telemetry streaming valid with zero overruns",
+        "desc": "ADC UDP telemetry streaming valid: samples growing, 0 overruns",
         "pass": query_ok,
-        "detail": "Telemetry streaming verified" if query_ok else "Telemetry query failed",
+        "detail": f"readings={len(samples_list)}, samples_start={samples_list[0] if samples_list else 0}, samples_end={samples_list[-1] if samples_list else 0}, ovr={ovr_list}" if query_ok else f"Telemetry check failed: grew={samples_grew}, ovr_zero={ovr_zero}, returncode={res_query.returncode}",
     })
     if not query_ok:
         results["pass"] = False
 
-    # 5. Check counters via monitor.py (rx_nobuf=0, tx_nobuf=0, dma_err=0, acl_drop=0)
+    # 5. Check counters via monitor.py (rx_nobuf=0, tx_nobuf=0, dma_err=0, acl_drop=0 across all [net] lines)
     print("  [Step 5] Checking Ethernet statistics via monitor.py...")
     res_stat = subprocess.run([py_cmd, str(mon_script), "--timeout=6", f"--sn={sn}"], capture_output=True, text=True)
     print(res_stat.stdout)
-    stat_clean = ("dma_err=0" in res_stat.stdout or "dma_err" not in res_stat.stdout)
+
+    net_lines = [l for l in res_stat.stdout.splitlines() if "[net]" in l]
+    stat_clean = True
+    for line in net_lines:
+        m_rx = re.search(r"rx_nobuf=(\d+)", line)
+        m_tx = re.search(r"tx_nobuf=(\d+)", line)
+        m_dma = re.search(r"dma_err=(\d+)", line)
+        m_acl = re.search(r"acl_drop=(\d+)", line)
+        if not (m_rx and m_tx and m_dma and m_acl):
+            stat_clean = False
+            break
+        if int(m_rx.group(1)) != 0 or int(m_tx.group(1)) != 0 or int(m_dma.group(1)) != 0 or int(m_acl.group(1)) != 0:
+            stat_clean = False
+            break
+
+    stat_pass = (len(net_lines) > 0) and stat_clean
     results["cases"].append({
         "id": f"T5_{preset}_driver_counters",
-        "desc": "Ethernet and DMA driver error counters remain zero",
-        "pass": stat_clean,
-        "detail": "Driver error counters clean",
+        "desc": "Ethernet driver error counters remain zero across all [net] lines",
+        "pass": stat_pass,
+        "detail": f"Verified {len(net_lines)} [net] lines: all rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0" if stat_pass else f"Counters violation or no [net] lines received (count={len(net_lines)})",
     })
+    if not stat_pass:
+        results["pass"] = False
 
     return results
 
@@ -1207,24 +1402,35 @@ def run_t7(tools: dict[str, str], sn: str) -> dict:
         results["pass"] = False
         return results
 
-    # 2. Read banner via monitor.py
-    print("  [Step 2] Reading prj_01 banner via monitor.py...")
+    # 2. Read console output via monitor.py
+    print("  [Step 2] Reading prj_01 console output via monitor.py...")
     mon_script = REPO_ROOT / "tools" / "monitor.py"
     res_mon = subprocess.run([py_cmd, str(mon_script), "--timeout=5", f"--sn={sn}"], capture_output=True, text=True)
     print(res_mon.stdout)
+
     banner_found = False
+    console_active = False
     for line in res_mon.stdout.splitlines():
-        if "prj_01" in line or "build rev=" in line or "Rev " in line or "(CPU2 alive)" in line or "[ipc]" in line:
+        if "prj_01" in line or "build rev=" in line or "Rev " in line:
             banner_found = True
-            break
-    banner_pass = banner_found or has_download_ok
+        if "(CPU2 alive)" in line or "[ipc]" in line:
+            console_active = True
+
+    # N3: Do not pretend banner was captured if only periodic [ipc] lines were seen.
+    # Image identity is established by verified download (B6); console activity by [ipc].
     results["cases"].append({
-        "id": "T7_prj01_banner_captured",
-        "desc": "Console output captured on VCP (identity verified via B6 download)",
-        "pass": banner_pass,
-        "detail": "Console output received on VCP" if banner_found else "Identity verified via B6 download",
+        "id": "T7_prj01_console_active",
+        "desc": "Console output active on VCP (periodic [ipc] CPU2 alive messages received)",
+        "pass": console_active,
+        "detail": "Periodic [ipc] lines received on VCP" if console_active else "No console output received on VCP",
     })
-    if not banner_pass:
+    results["cases"].append({
+        "id": "T7_prj01_image_identity",
+        "desc": "Firmware identity verified via B6 download (banner emitted prior to host attach)",
+        "pass": has_download_ok,
+        "detail": "Download verified successfully confirms prj_01 debug on target (banner emitted prior to host attach)" if has_download_ok else "Flash verification failed",
+    })
+    if not (console_active and has_download_ok):
         results["pass"] = False
 
     # 3. Read PD8 and PD9 by SWD
@@ -1279,6 +1485,10 @@ def main() -> int:
     parser.add_argument("--reset-count", type=int, default=20, help="Number of resets for T6a (default: 20)")
     parser.add_argument("--reset-wait", type=float, default=10.0, help="Wait seconds after reset for T6a (default: 10.0)")
     args = parser.parse_args()
+
+    # N4: --control implies --flash
+    if args.control:
+        args.flash = True
 
     argv_str = " ".join(sys.argv)
     rev, clean, status_porcelain = get_git_info(REPO_ROOT)
