@@ -26,6 +26,7 @@
 
 #include "main.h"
 #include "shared_memory.h"
+#include "hsem_bm.h"
 #include "adc_acquisition.h"
 
 #if defined(ADC_DRIVER_SELFTEST) && ADC_DRIVER_SELFTEST
@@ -65,6 +66,16 @@ int main(void)
        NVIC priority grouping; it does not touch the clock tree. */
     HAL_Init();
     HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
+
+    if (HSEM_BM_Init() != HSEM_BM_OK)
+    {
+        Error_Handler();
+    }
+    if (!HSEM_BM_TimebaseStart())
+    {
+        Error_Handler();
+    }
+    Shared_GpioLockInstall();
 
     /* Deliberately not calling Shared_Init(): the block belongs to CPU1 and is
        already initialised by the time this core is released. Zeroing it here

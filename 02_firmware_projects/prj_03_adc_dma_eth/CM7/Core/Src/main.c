@@ -24,6 +24,7 @@
 #include "app_main.h"
 #include "led_bm.h"
 #include "shared_memory.h"
+#include "hsem_bm.h"
 
 static void SystemClock_Config(void);
 static void PeripheralClock_Config(void);
@@ -91,6 +92,17 @@ int main(void)
        Placed outside the #if: clearing the block is independent of whether
        CPU2 is enabled to boot; only the ordering relative to HSEM 0 matters. */
     Shared_Init();
+
+    /* From the release on, both cores can configure pins: install the cross-core GPIO lock hook */
+    if (HSEM_BM_Init() != HSEM_BM_OK)
+    {
+        Error_Handler();
+    }
+    if (!HSEM_BM_TimebaseStart())
+    {
+        Error_Handler();
+    }
+    Shared_GpioLockInstall();
 
 #if CM4_BOOT_ENABLED
     /* The clock tree is up and shared memory is ready: release CPU2. */

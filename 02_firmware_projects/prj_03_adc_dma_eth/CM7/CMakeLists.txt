@@ -110,7 +110,7 @@ target_link_options(${TARGET} PRIVATE
     -Wl,--no-warn-rwx-segments
 )
 
-target_link_libraries(${TARGET} PRIVATE stm32h7_shared_drivers)
+target_link_libraries(${TARGET} PRIVATE stm32h7_shared_drivers stm32h7_driver_hsem_bm)
 
 if(ADC_DRIVER_SELFTEST)
     target_compile_definitions(${TARGET} PRIVATE ADC_DRIVER_SELFTEST=1)

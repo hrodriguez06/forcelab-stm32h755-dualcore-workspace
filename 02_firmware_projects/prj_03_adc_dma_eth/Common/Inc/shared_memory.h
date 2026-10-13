@@ -19,6 +19,7 @@
 #ifndef SHARED_MEMORY_H
 #define SHARED_MEMORY_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -33,6 +34,10 @@ extern "C" {
 #define HSEM_ID_M7_TO_M4_MBOX   2U   /* guards m7_to_m4                      */
 #define HSEM_ID_M4_TO_M7_MBOX   3U   /* guards m4_to_m7                      */
 #define HSEM_ID_ADC_DATA        4U   /* guards adc telemetry data            */
+#define BOARD_GPIO_HSEM_ID      5U   /* 00_gpio cross-core lock: 1-step, taken only inside the gpio_bm section */
+#define SHARED_GPIO_LOCK_US     60U  /* >= 10x the longest hold measured */
+#define SHARED_GPIO_LOCK_CYCLES_CM7  (SHARED_GPIO_LOCK_US * 400U)   /* 24 000 */
+#define SHARED_GPIO_LOCK_CYCLES_CM4  (SHARED_GPIO_LOCK_US * 200U)   /* 12 000 */
 
 #define SHARED_MBOX_SIZE        64U  /* multiple of 32 (cache line)          */
 #define SHARED_ADC_WAVEFORM_SAMPLES 512U /* 512 samples = 1.024 ms @ 500 kSPS (10 cycles @ 10 kHz) */
@@ -78,6 +83,12 @@ typedef struct __attribute__((aligned(32)))
     volatile uint32_t m4_to_m7_len;
     volatile uint8_t  m4_to_m7[SHARED_MBOX_SIZE];
 
+    /* 00_gpio cross-core lock fail counters (H1) and peak hold cycles (H1, decision 3) */
+    volatile uint32_t m7_gpio_lock_fail_count;
+    volatile uint32_t m4_gpio_lock_fail_count;
+    volatile uint32_t m7_gpio_lock_hold_cycles_max;
+    volatile uint32_t m4_gpio_lock_hold_cycles_max;
+
 } SharedMemory_t;
 
 /* One instance in memory, but shared_memory.c is compiled into BOTH images.
@@ -100,6 +111,20 @@ void Shared_Init(void);
    Requires the HSEM clock: __HAL_RCC_HSEM_CLK_ENABLE();                    */
 #define SHARED_LOCK(id)     do { } while (HAL_HSEM_FastTake(id) != HAL_OK)
 #define SHARED_UNLOCK(id)   HAL_HSEM_Release((id), 0U)
+
+#include "gpio_bm.h"
+
+/* ---- 00_gpio cross-core lock hook ----------------------------------------
+   The GPIO configuration registers (MODER, OTYPER, OSPEEDR, PUPDR, AFR) have
+   one copy for both cores. gpio_bm, gpio_ll and gpio_hal run every write in a
+   section that masks this core's interrupts and then calls this hook, which
+   takes BOARD_GPIO_HSEM_ID with a bounded wait (HSEM_BM_TakeTimeout).
+
+   Install it on each core after HSEM_BM_Init() and HSEM_BM_TimebaseStart(),
+   before the first GPIO configuration that can overlap with the other core:
+   on CPU1 before it releases CPU2, on CPU2 right after it wakes.           */
+extern const GpioBm_SharedLock_t g_shared_gpio_lock;
+void Shared_GpioLockInstall(void);
 
 #ifdef __cplusplus
 }
