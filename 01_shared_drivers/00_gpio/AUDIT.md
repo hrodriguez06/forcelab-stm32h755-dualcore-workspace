@@ -73,6 +73,7 @@ Entrega: `198be5b..32f343a`. Selftest en `5a8f13a`; herramienta en `79ef531`, `0
 | T6a independiente (`gpio_f1b_audit2_t6a_32f343a.txt`) | 20 × (`-rst` por SWD, 10 s, mi lectura completa): **20/20 PASS**. La retención cambia entre 1226 y 1228 ciclos de un arranque a otro: `Shared_Init` la pone a cero en cada arranque, así que hubo reinicio |
 | T5 independiente (`gpio_f1b_audit2_t5_netcheck_32f343a.txt`, `…_query_32f343a.txt`) | Misma imagen, tras los 20 resets: ICMP 4/4, UDP de 1 a 1472 B idénticos, ráfaga 100/100, contadores de red a 0; `query_adc.py`: las muestras crecen, `OVR: 0`. **PASS** |
 | `grep` de escrituras con macro (`MODIFY_REG`/`WRITE_REG`/`SET_BIT`/`CLEAR_BIT` sobre `MODER`/`OTYPER`/`OSPEEDR`/`PUPDR`/`AFR`) en `01_shared_drivers` y en las fuentes de `prj_04` | Solo `led_bm.c:66` y `:146`, que están en la lista de excepciones (`LED_Init` antes de liberar a CPU2; G14). Es la comprobación que T2b todavía no hace (M1, abajo) |
+| `py tools/gpio_f1b_checks.py --test t2 --control-dir ../stm32h755_control_07db657` en `32f343a`, árbol limpio (mi ejecución, `gpio_f1b_audit2_t2_32f343a.txt`) | Reproduce la captura de `8ee9a13`: T2a PASS con su control fallando en las cinco CM7; T2b 1951 unidades, 0 fallidas, 0 escrituras; control con 16 hallazgos. Con los límites de M1 y B7 de abajo |
 | Revisión de la herramienta y de las capturas | Un subagente la revisó de nuevo; los hallazgos de abajo los comprobé yo en el código (`gpio_f1b_checks.py:860`, `:1076`, `:1090-1096`, `:1220`, `:466-472`) |
 
 ### Los hallazgos de la primera entrega
