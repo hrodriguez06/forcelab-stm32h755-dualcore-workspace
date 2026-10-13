@@ -1,0 +1,391 @@
+﻿================================================================================
+STM32H755 GPIO F1b Verification Checks (T2, T3, T4, T5, T6a, T7)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --test t6a --flash --sn 0016000C4142501220353451
+[host] timestamp: 2026-10-12 20:31:34
+[host] git rev: 8ee9a13 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_07db657 (rev 07db657, clean)
+================================================================================
+
+--- Running T6a (20 repeated SWD warm resets, wait=10.0s) ---
+--- Flashing debug from prj_04_adc_dma_bm_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\tools\flash.py --preset=debug --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : debug
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,328,488 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (2,079,388 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\build\debug\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 88.55 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ 0%
+██████████████████████████████████████████████████ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.212
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 9.64 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ 50%
+██████████████████████████████████████████████████ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.909
+
+
+
+Verifying...
+
+
+Read progress:
+▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ 50%
+██████████████████████████████████████████████████ 100%
+
+Time elapsed during verifying operation: 00:00:00.026
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+  [Reset 1/20] Asserting SWD reset...
+  [Reset 1/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 1/20] T3 result: PASS (10/10 cases passed)
+  [Reset 2/20] Asserting SWD reset...
+  [Reset 2/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 2/20] T3 result: PASS (10/10 cases passed)
+  [Reset 3/20] Asserting SWD reset...
+  [Reset 3/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 3/20] T3 result: PASS (10/10 cases passed)
+  [Reset 4/20] Asserting SWD reset...
+  [Reset 4/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 4/20] T3 result: PASS (10/10 cases passed)
+  [Reset 5/20] Asserting SWD reset...
+  [Reset 5/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 5/20] T3 result: PASS (10/10 cases passed)
+  [Reset 6/20] Asserting SWD reset...
+  [Reset 6/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 6/20] T3 result: PASS (10/10 cases passed)
+  [Reset 7/20] Asserting SWD reset...
+  [Reset 7/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 7/20] T3 result: PASS (10/10 cases passed)
+  [Reset 8/20] Asserting SWD reset...
+  [Reset 8/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 8/20] T3 result: PASS (10/10 cases passed)
+  [Reset 9/20] Asserting SWD reset...
+  [Reset 9/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 9/20] T3 result: PASS (10/10 cases passed)
+  [Reset 10/20] Asserting SWD reset...
+  [Reset 10/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 10/20] T3 result: PASS (10/10 cases passed)
+  [Reset 11/20] Asserting SWD reset...
+  [Reset 11/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 11/20] T3 result: PASS (10/10 cases passed)
+  [Reset 12/20] Asserting SWD reset...
+  [Reset 12/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 12/20] T3 result: PASS (10/10 cases passed)
+  [Reset 13/20] Asserting SWD reset...
+  [Reset 13/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 13/20] T3 result: PASS (10/10 cases passed)
+  [Reset 14/20] Asserting SWD reset...
+  [Reset 14/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 14/20] T3 result: PASS (10/10 cases passed)
+  [Reset 15/20] Asserting SWD reset...
+  [Reset 15/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 15/20] T3 result: PASS (10/10 cases passed)
+  [Reset 16/20] Asserting SWD reset...
+  [Reset 16/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 16/20] T3 result: PASS (10/10 cases passed)
+  [Reset 17/20] Asserting SWD reset...
+  [Reset 17/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 17/20] T3 result: PASS (10/10 cases passed)
+  [Reset 18/20] Asserting SWD reset...
+  [Reset 18/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 18/20] T3 result: PASS (10/10 cases passed)
+  [Reset 19/20] Asserting SWD reset...
+  [Reset 19/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 19/20] T3 result: PASS (10/10 cases passed)
+  [Reset 20/20] Asserting SWD reset...
+  [Reset 20/20] Waiting 10.0s for dual-core boot & Ethernet...
+--- Running T3 (live SWD inspection, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x20012908 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x3002092c (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084fc (g_shared + 0x4fc from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x38008500 (g_shared + 0x500 from DWARF)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [Reset 20/20] T3 result: PASS (10/10 cases passed)
+
+--- Results for T6A ---
+  [PASS] T6a_flash_verified: Flashed verified debug image from prj_04_adc_dma_bm_eth
+         Detail: Download verified successfully
+  [PASS] T6a_reset_1_t3: Reset 1/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_2_t3: Reset 2/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_3_t3: Reset 3/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_4_t3: Reset 4/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_5_t3: Reset 5/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_6_t3: Reset 6/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_7_t3: Reset 7/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_8_t3: Reset 8/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_9_t3: Reset 9/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_10_t3: Reset 10/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_11_t3: Reset 11/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_12_t3: Reset 12/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_13_t3: Reset 13/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_14_t3: Reset 14/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_15_t3: Reset 15/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_16_t3: Reset 16/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_17_t3: Reset 17/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_18_t3: Reset 18/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_19_t3: Reset 19/20 T3 validation
+         Detail: 10/10 cases passed
+  [PASS] T6a_reset_20_t3: Reset 20/20 T3 validation
+         Detail: 10/10 cases passed
+Verdict T6A: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================

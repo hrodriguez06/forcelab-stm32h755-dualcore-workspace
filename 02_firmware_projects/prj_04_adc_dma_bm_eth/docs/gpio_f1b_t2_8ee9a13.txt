@@ -1,0 +1,59 @@
+﻿================================================================================
+STM32H755 GPIO F1b Verification Checks (T2, T3, T4, T5, T6a, T7)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --test t2
+[host] timestamp: 2026-10-12 20:05:31
+[host] git rev: 8ee9a13 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_07db657 (rev 07db657, clean)
+================================================================================
+
+--- Running T2a (absence of unprotected HAL_GPIO_Init/DeInit across 7 ELFs) ---
+
+--- Results for T2A ---
+  [PASS] T2a_current_prj_04_debug_cm7: prj_04_debug_cm7 (CM7): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj', 'gpio_hal.c.obj'] (outside HAL: ['gpio_hal.c.obj']), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_04_debug_cm4: prj_04_debug_cm4 (CM4): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj'] (outside HAL: []), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_04_release_cm7: prj_04_release_cm7 (CM7): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj', 'gpio_hal.c.obj'] (outside HAL: ['gpio_hal.c.obj']), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_04_release_cm4: prj_04_release_cm4 (CM4): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj'] (outside HAL: []), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_01_debug_cm7: prj_01_debug_cm7 (CM7): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj', 'gpio_hal.c.obj'] (outside HAL: ['gpio_hal.c.obj']), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_02_debug_cm7: prj_02_debug_cm7 (CM7): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj', 'gpio_hal.c.obj'] (outside HAL: ['gpio_hal.c.obj']), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_03_debug_cm7: prj_03_debug_cm7 (CM7): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj', 'gpio_hal.c.obj'] (outside HAL: ['gpio_hal.c.obj']), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_control_prj_04_debug_cm7_fails_as_expected: Control 07db657: prj_04_debug_cm7 fails oracle (uart_hal.c.obj calls HAL_GPIO_Init)
+         Detail: Correctly caught violation: callers=['stm32h7xx_hal_rcc.c.obj', 'uart_hal.c.obj', 'gpio_hal.c.obj']
+  [PASS] T2a_control_prj_04_release_cm7_fails_as_expected: Control 07db657: prj_04_release_cm7 fails oracle (uart_hal.c.obj calls HAL_GPIO_Init)
+         Detail: Correctly caught violation: callers=['stm32h7xx_hal_rcc.c.obj', 'uart_hal.c.obj', 'gpio_hal.c.obj']
+  [PASS] T2a_control_prj_01_debug_cm7_fails_as_expected: Control 07db657: prj_01_debug_cm7 fails oracle (uart_hal.c.obj calls HAL_GPIO_Init)
+         Detail: Correctly caught violation: callers=['stm32h7xx_hal_rcc.c.obj', 'uart_hal.c.obj']
+  [PASS] T2a_control_prj_02_debug_cm7_fails_as_expected: Control 07db657: prj_02_debug_cm7 fails oracle (uart_hal.c.obj calls HAL_GPIO_Init)
+         Detail: Correctly caught violation: callers=['stm32h7xx_hal_rcc.c.obj', 'uart_hal.c.obj', 'gpio_hal.c.obj']
+  [PASS] T2a_control_prj_03_debug_cm7_fails_as_expected: Control 07db657: prj_03_debug_cm7 fails oracle (uart_hal.c.obj calls HAL_GPIO_Init)
+         Detail: Correctly caught violation: callers=['stm32h7xx_hal_rcc.c.obj', 'uart_hal.c.obj', 'gpio_hal.c.obj']
+  [PASS] T2a_control_oracle_negative_gate: Negative control: all 5 CM7 ELFs from 07db657 fail the T2a oracle
+         Detail: Failed CM7 count=5/5, all_present=True
+Verdict T2A: PASS
+
+--- Running T2b (preprocessor -E scan across all compilation units) ---
+  [Preset debug        ] scanned:  322 units, failed: 0 units
+  [Preset release      ] scanned:  322 units, failed: 0 units
+  [Preset selftest     ] scanned:  328 units, failed: 0 units
+  [Preset selftest-adc ] scanned:  327 units, failed: 0 units
+  [Preset selftest-uart] scanned:  325 units, failed: 0 units
+  [Preset selftest-hsem] scanned:  327 units, failed: 0 units
+
+--- Results for T2B ---
+  [PASS] T2b_current_zero_raw_writes: Current tree has zero raw GPIO writes across presets outside exceptions
+         Detail: Scanned totals: 1951 units; Illegal writes count=0
+  [PASS] T2b_control_07db657_detects_writers: Control 07db657 detects raw writes in adc_acquisition.c, main.c, and dma_selftest.c
+         Detail: Found in control: adc_acquisition=True, main=True, dma_selftest=True (total findings=16)
+Verdict T2B: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================
