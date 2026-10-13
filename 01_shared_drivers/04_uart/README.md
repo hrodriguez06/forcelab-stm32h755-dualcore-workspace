@@ -120,8 +120,9 @@ by this contract.
 
 > **Pin mask vs pin index.** `BOARD_CONSOLE_*_PIN` is a HAL mask (`GPIO_PIN_8`
 > = `0x0100`), because the default MSP hands it to `GPIO_HAL_Init()` (from
-> `00_gpio`, which runs inside the `gpio_bm` cross-core section; since F1b). Every
-> `*_Pin_t` structure of the driver (`UartBm_Pin_t`, `UartLL_Pin_t`,
+> `00_gpio`, which runs inside `gpio_bm`'s critical section; cross-core only if
+> the project installs the shared lock hook, otherwise local `PRIMASK`; since F1b).
+> Every `*_Pin_t` structure of the driver (`UartBm_Pin_t`, `UartLL_Pin_t`,
 > `uart_hal_pin_t`) takes a pin **index** (`8`). Passing `GPIO_PIN_8` to
 > `pin_idx` makes `Init` return `false`.
 
@@ -133,10 +134,12 @@ its pins from the macros above; any other instance is left alone.
 
 Since F1b of `00_gpio`, the default MSP configures the console pins using
 `GPIO_HAL_Init()` and releases them using `GPIO_HAL_DeinitPin()`, executing
-every register access inside `gpio_bm`'s cross-core critical section. Any error
+every register access inside `gpio_bm`'s critical section (cross-core if the
+project installs the shared lock hook, or local `PRIMASK` otherwise). Any error
 from `GPIO_HAL_Init()` is captured in `s_msp_gpio_status` and propagated by
-`UART_HAL_InitEx()` / `UART_Console_Init()`, returning `HAL_ERROR` rather than
-silently proceeding with misconfigured pins.
+`UART_HAL_InitEx()` / `UART_Console_Init()`, returning the MSP status (`HAL_BUSY`
+if the lock timed out, or `HAL_ERROR` on any other failure) rather than silently
+proceeding with misconfigured pins.
 
 | Situation | What to do |
 | :--- | :--- |
@@ -222,11 +225,11 @@ static UartLL_RingBuffer_t rx_ring = { .data = rx_storage, .size = sizeof(rx_sto
 | :--- | :--- | :--- |
 | `UART_HAL_Init(huart, cfg)` | original, frozen | 8N1, no flow control, oversampling 16. |
 | `UART_HAL_Write(huart, data, len)` | original, frozen | 100 ms timeout; the status is discarded. |
-| `UART_Console_Init(baud)` | original, frozen | Instance from `BOARD_CONSOLE_UART_INSTANCE`; pins through the MSP hook. Returns `HAL_ERROR` if the MSP pin initialization fails. |
+| `UART_Console_Init(baud)` | original, frozen | Instance from `BOARD_CONSOLE_UART_INSTANCE`; pins through the MSP hook. Returns the MSP status (`HAL_BUSY` on lock timeout, `HAL_ERROR` on failure) if pin initialization fails. |
 | `UART_Console_Write(data, len)` | original, frozen | |
 | `UART_Console_GetHandle()` | original, frozen | For `HAL_UART_IRQHandler` and debugging. |
-| `UART_HAL_MspInit_User()` / `MspDeInit_User()` | original, frozen, weak | See [3.1](#31-overriding-the-console-msp). Default MSP uses `GPIO_HAL_Init` / `GPIO_HAL_DeinitPin` within `gpio_bm` cross-core section. |
-| `UART_HAL_InitEx(huart, cfg)` | new | Framing, flow control, oversampling, optional bus clock and pins (pull-up, very high speed). `PRESC` is fixed at /1. Returns MSP error if pin setup fails. |
+| `UART_HAL_MspInit_User()` / `MspDeInit_User()` | original, frozen, weak | See [3.1](#31-overriding-the-console-msp). Default MSP uses `GPIO_HAL_Init` / `GPIO_HAL_DeinitPin` within `gpio_bm`'s critical section (cross-core if hook installed, otherwise local `PRIMASK`). |
+| `UART_HAL_InitEx(huart, cfg)` | new | Framing, flow control, oversampling, optional bus clock and pins (pull-up, very high speed). `PRESC` is fixed at /1. Returns MSP status (`HAL_BUSY` or `HAL_ERROR`) if pin setup fails. |
 | `UART_HAL_WriteEx(huart, data, len, timeout_ms)` | new | Returns the `HAL_StatusTypeDef`. |
 | `UART_HAL_CheckDmaErrata(hdma)` | new | See [section 8](#8-silicon-errata-es0445). |
 
