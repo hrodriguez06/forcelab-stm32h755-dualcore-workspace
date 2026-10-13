@@ -1,0 +1,134 @@
+================================================================================
+STM32H755 GPIO F1c Verification Checks (T1 Matrix Build & Presets)
+================================================================================
+[host] timestamp: 2026-10-13 11:50:32
+[host] git rev: f733b98 (tree clean)
+[host] control rev: e6cb75e (C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_e6cb75e)
+================================================================================
+
+--- Step 1: tools/build_all.ps1 -Clean (8 matrix builds) ---
+=================================================================
+ STM32H755 Multi-Project CI Matrix Build
+ Projects: 4 | Presets: debug, release
+=================================================================
+
+>>> Configuring & Building prj_01_template_dualcore [debug] ...
+  -> PASS in 25.4s
+>>> Configuring & Building prj_01_template_dualcore [release] ...
+  -> PASS in 18.0s
+>>> Configuring & Building prj_02_eth_lwip_dualcore [debug] ...
+  -> PASS in 31.4s
+>>> Configuring & Building prj_02_eth_lwip_dualcore [release] ...
+  -> PASS in 23.3s
+>>> Configuring & Building prj_03_adc_dma_eth [debug] ...
+  -> PASS in 30.7s
+>>> Configuring & Building prj_03_adc_dma_eth [release] ...
+  -> PASS in 24.0s
+>>> Configuring & Building prj_04_adc_dma_bm_eth [debug] ...
+  -> PASS in 29.8s
+>>> Configuring & Building prj_04_adc_dma_bm_eth [release] ...
+  -> PASS in 25.3s
+
+==========================================================================================
+ Matrix Build & Binary Size Summary Table
+==========================================================================================
+
+Project                    Preset    Core   Status        Text (B)   Data (B)    Bss (B)  Total (B)     Time
+-------                    ------    ----   ------        --------   --------    -------  ---------     ----
+prj_01_template_dualcore   debug     CM7    PASS             30632        132      55676      86440    25.4s
+prj_01_template_dualcore   debug     CM4    PASS              3456         24      12560      16040    25.4s
+prj_01_template_dualcore   release   CM7    PASS             29620        132      55680      85432    18.0s
+prj_01_template_dualcore   release   CM4    PASS              3112         24      12560      15696    18.0s
+prj_02_eth_lwip_dualcore   debug     CM7    PASS             87312        152     120096     207560    31.4s
+prj_02_eth_lwip_dualcore   debug     CM4    PASS              2580         24      12488      15092    31.4s
+prj_02_eth_lwip_dualcore   release   CM7    PASS             83224        152     120096     203472    23.3s
+prj_02_eth_lwip_dualcore   release   CM4    PASS              2332         24      12488      14844    23.3s
+prj_03_adc_dma_eth         debug     CM7    PASS             89684        152     121224     211060    30.7s
+prj_03_adc_dma_eth         debug     CM4    PASS             21332         24      16192      37548    30.7s
+prj_03_adc_dma_eth         release   CM7    PASS             85480        152     121224     206856    24.0s
+prj_03_adc_dma_eth         release   CM4    PASS             18932         24      16192      35148    24.0s
+prj_04_adc_dma_bm_eth      debug     CM7    PASS             90512        156     121268     211936    29.8s
+prj_04_adc_dma_bm_eth      debug     CM4    PASS              9844         28      15920      25792    29.8s
+prj_04_adc_dma_bm_eth      release   CM7    PASS             86524        156     121264     207944    25.3s
+prj_04_adc_dma_bm_eth      release   CM4    PASS              9296         28      15920      25244    25.3s
+
+
+All 8 builds PASSED successfully.
+[Exit code: 0]
+
+--- Step 2: Build prj_03 selftest preset ---
+STM32 toolchain
+  OK   cmake.exe                C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cmake.win32_1.1.200.202605190741\tools\bin\cmake.exe
+  OK   ninja.exe                C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.ninja.win32_1.1.200.202606260906\tools\bin\ninja.exe
+  OK   arm-none-eabi-gcc.exe    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.exe
+  OK   STM32_Programmer_CLI.exe C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe
+  OK   openocd.exe              C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.openocd.win32_2.4.500.202604080855\tools\bin\openocd.exe
+  OK   ST-LINK_gdbserver.exe    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.stlink-gdb-server.win32_2.2.500.202604010938\tools\bin\ST-LINK_gdbserver.exe
+
+Added 6 directories to PATH for this session.
+  cmake version 4.3.1
+  ninja 1.13.2
+  arm-none-eabi-gcc.exe (GNU Tools for STM32 14.3.rel1.20251027-0700) 14.3.1 20250623
+
+Build from the project root (where CMakePresets.json lives):
+  cmake --preset debug          # configure  (add --fresh after renaming files)
+  cmake --build --preset debug  # build
+
+ninja: no work to do.
+[Exit code: 0]
+
+--- Step 3: Build prj_04 debug ---
+STM32 toolchain
+  OK   cmake.exe                C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cmake.win32_1.1.200.202605190741\tools\bin\cmake.exe
+  OK   ninja.exe                C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.ninja.win32_1.1.200.202606260906\tools\bin\ninja.exe
+  OK   arm-none-eabi-gcc.exe    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.exe
+  OK   STM32_Programmer_CLI.exe C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe
+  OK   openocd.exe              C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.openocd.win32_2.4.500.202604080855\tools\bin\openocd.exe
+  OK   ST-LINK_gdbserver.exe    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.stlink-gdb-server.win32_2.2.500.202604010938\tools\bin\ST-LINK_gdbserver.exe
+
+Added 6 directories to PATH for this session.
+  cmake version 4.3.1
+  ninja 1.13.2
+  arm-none-eabi-gcc.exe (GNU Tools for STM32 14.3.rel1.20251027-0700) 14.3.1 20250623
+
+Build from the project root (where CMakePresets.json lives):
+  cmake --preset debug          # configure  (add --fresh after renaming files)
+  cmake --build --preset debug  # build
+
+ninja: no work to do.
+[Exit code: 0]
+
+================================================================================
+Object size comparisons (.text / data / bss):
+================================================================================
+--- Current branch (f733b98) ---
+[SIZE] adc_acquisition.c.obj (CM4 debug) (02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\CMakeFiles\cm4_firmware.dir\App\Src\adc_acquisition.c.obj):
+text	   data	    bss	    dec	    hex	filename
+    688	      0	   2536	   3224	    c98	C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\CMakeFiles\cm4_firmware.dir\App\Src\adc_acquisition.c.obj
+[SIZE] adc_acquisition.c.obj (CM4 release) (02_firmware_projects\prj_03_adc_dma_eth\build\release\CM4\CMakeFiles\cm4_firmware.dir\App\Src\adc_acquisition.c.obj):
+text	   data	    bss	    dec	    hex	filename
+    624	      0	   2536	   3160	    c58	C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\release\CM4\CMakeFiles\cm4_firmware.dir\App\Src\adc_acquisition.c.obj
+[SIZE] shared_memory.c.obj (CM7 debug) (02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM7\CMakeFiles\cm7_firmware.dir\__\Common\Src\shared_memory.c.obj):
+text	   data	    bss	    dec	    hex	filename
+    200	   1280	      4	   1484	    5cc	C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM7\CMakeFiles\cm7_firmware.dir\__\Common\Src\shared_memory.c.obj
+[SIZE] shared_memory.c.obj (CM4 debug) (02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\CMakeFiles\cm4_firmware.dir\__\Common\Src\shared_memory.c.obj):
+text	   data	    bss	    dec	    hex	filename
+    200	   1280	      4	   1484	    5cc	C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\CMakeFiles\cm4_firmware.dir\__\Common\Src\shared_memory.c.obj
+
+--- Baseline control (e6cb75e) ---
+[CONTROL SIZE] adc_acquisition.c.obj (CM4 debug) (02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\CMakeFiles\cm4_firmware.dir\App\Src\adc_acquisition.c.obj):
+text	   data	    bss	    dec	    hex	filename
+    704	      0	   2536	   3240	    ca8	C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_e6cb75e\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\CMakeFiles\cm4_firmware.dir\App\Src\adc_acquisition.c.obj
+[CONTROL SIZE] adc_acquisition.c.obj (CM4 release) (02_firmware_projects\prj_03_adc_dma_eth\build\release\CM4\CMakeFiles\cm4_firmware.dir\App\Src\adc_acquisition.c.obj):
+text	   data	    bss	    dec	    hex	filename
+    636	      0	   2536	   3172	    c64	C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_e6cb75e\02_firmware_projects\prj_03_adc_dma_eth\build\release\CM4\CMakeFiles\cm4_firmware.dir\App\Src\adc_acquisition.c.obj
+[CONTROL SIZE] shared_memory.c.obj (CM7 debug) (02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM7\CMakeFiles\cm7_firmware.dir\__\Common\Src\shared_memory.c.obj):
+text	   data	    bss	    dec	    hex	filename
+     64	   1280	      0	   1344	    540	C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_e6cb75e\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM7\CMakeFiles\cm7_firmware.dir\__\Common\Src\shared_memory.c.obj
+[CONTROL SIZE] shared_memory.c.obj (CM4 debug) (02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\CMakeFiles\cm4_firmware.dir\__\Common\Src\shared_memory.c.obj):
+text	   data	    bss	    dec	    hex	filename
+     64	   1280	      0	   1344	    540	C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_e6cb75e\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\CMakeFiles\cm4_firmware.dir\__\Common\Src\shared_memory.c.obj
+
+================================================================================
+OVERALL T1 RESULT: ALL BUILDS PASSED (0 WARNINGS, 0 ERRORS)
+================================================================================

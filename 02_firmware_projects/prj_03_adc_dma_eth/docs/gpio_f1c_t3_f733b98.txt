@@ -1,0 +1,408 @@
+=== PART 1: T3 PRODUCTION RUN ===
+================================================================================
+STM32H755 GPIO F1 Verification Checks for prj_03 (T2, T3, T4, T5, T6a, T7)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --project prj_03 --test t3 --flash --sn 0016000C4142501220353451
+[host] timestamp: 2026-10-13 12:01:21
+[host] project: prj_03
+[host] git rev: f733b98 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_e6cb75e (rev e6cb75e, clean)
+================================================================================
+
+--- Running T3 (live SWD inspection for prj_03, control_mode=False) ---
+--- Flashing debug from prj_03_adc_dma_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\tools\flash.py --preset=debug --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : debug
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,324,940 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (2,308,780 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 87.74 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.220
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 20.86 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.969
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.070
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+  [T3] Waiting 3.0s after flash for target boot and initialization...
+  [SWD origin] s_shared_lock CM7: 0x200128f8 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x30020a58 (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084e8 (g_shared + 0x4e8 from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x380084ec (g_shared + 0x4ec from DWARF)
+
+--- Results for T3 ---
+  [PASS] T3_flash_verified: Flashed verified debug image from prj_03_adc_dma_eth
+         Detail: Download verified successfully
+  [PASS] T3_cm7_s_shared_lock: CM7 s_shared_lock matches g_shared_gpio_lock address
+         Detail: Read 0x8015b80, expected 0x8015b80
+  [PASS] T3_cm4_s_shared_lock: CM4 s_shared_lock matches g_shared_gpio_lock address
+         Detail: Read 0x81052f0, expected 0x81052f0
+  [PASS] T3_hsem_r5_free: HSEM_R5 (0x58026414) reads 0 (semaphore is free, non-locking read)
+         Detail: R5=0x0 (want 0)
+  [PASS] T3_lock_fail_counts_zero: m7_gpio_lock_fail_count and m4_gpio_lock_fail_count are 0
+         Detail: m7_fails=0, m4_fails=0
+  [PASS] T3_pin_PB1_analog: PB1 is Analog without pull (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)
+         Detail: mode=3, otype=0, speed=0, pull=0, af=0
+  [PASS] T3_pin_PB13_rmii_txd1: PB13 is AF11 (5 fields: mode=2, otype=0, speed=3, pull=0, af=11)
+         Detail: mode=2, otype=0, speed=3, pull=0, af=11
+  [PASS] T3_pin_PB15_control_reset: Control pin PB15 is at reset value (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)
+         Detail: mode=3, otype=0, speed=0, pull=0, af=0
+  [PASS] T3_pin_PD8_usart3_tx: PD8 is AF7 (5 fields: mode=2, otype=0, speed=0, pull=1, af=7)
+         Detail: mode=2, otype=0, speed=0, pull=1, af=7
+  [PASS] T3_pin_PD9_usart3_rx: PD9 is AF7 (5 fields: mode=2, otype=0, speed=0, pull=1, af=7)
+         Detail: mode=2, otype=0, speed=0, pull=1, af=7
+  [PASS] T3_pin_PD0_control_reset: Control pin PD0 is at reset value (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)
+         Detail: mode=3, otype=0, speed=0, pull=0, af=0
+Verdict T3: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================
+
+=== PART 2: T3 NEGATIVE CONTROL (e6cb75e) ===
+================================================================================
+STM32H755 GPIO F1 Verification Checks for prj_03 (T2, T3, T4, T5, T6a, T7)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --project prj_03 --test t3 --control --sn 0016000C4142501220353451
+[host] timestamp: 2026-10-13 12:01:30
+[host] project: prj_03
+[host] git rev: f733b98 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_e6cb75e (rev e6cb75e, clean)
+================================================================================
+
+--- Running T3 (live SWD inspection for prj_03, control_mode=True) ---
+--- Flashing debug from prj_03_adc_dma_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_e6cb75e\02_firmware_projects\prj_03_adc_dma_eth\tools\flash.py --preset=debug --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : debug
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,305,700 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (2,295,388 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_e6cb75e\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_e6cb75e\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 87.07 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.213
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 20.48 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.960
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.073
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+  [T3] Waiting 3.0s after flash for target boot and initialization...
+  [SWD origin] s_shared_lock CM7: 0x200128f4 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x30020a54 (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+
+--- Results for T3 ---
+  [PASS] T3_flash_verified: Flashed verified debug image from prj_03_adc_dma_eth
+         Detail: Download verified successfully
+  [PASS] T3_control_hook_null: Control e6cb75e: s_shared_lock is NULL on both cores (T3 fails on control)
+         Detail: CM7 s_shared_lock=0x0 (want 0), CM4 s_shared_lock=0x0 (want 0)
+Verdict T3: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================
+
+=== PART 3: RESTORE PRODUCTION DEBUG IMAGE (G-S6) ===
+================================================================================
+STM32H755 GPIO F1 Verification Checks for prj_03 (T2, T3, T4, T5, T6a, T7)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --project prj_03 --test t3 --flash --sn 0016000C4142501220353451
+[host] timestamp: 2026-10-13 12:01:37
+[host] project: prj_03
+[host] git rev: f733b98 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_e6cb75e (rev e6cb75e, clean)
+================================================================================
+
+--- Running T3 (live SWD inspection for prj_03, control_mode=False) ---
+--- Flashing debug from prj_03_adc_dma_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\tools\flash.py --preset=debug --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : debug
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,324,940 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (2,308,780 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 87.74 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.213
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 20.86 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.945
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.061
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+  [T3] Waiting 3.0s after flash for target boot and initialization...
+  [SWD origin] s_shared_lock CM7: 0x200128f8 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x30020a58 (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084e8 (g_shared + 0x4e8 from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x380084ec (g_shared + 0x4ec from DWARF)
+
+--- Results for T3 ---
+  [PASS] T3_flash_verified: Flashed verified debug image from prj_03_adc_dma_eth
+         Detail: Download verified successfully
+  [PASS] T3_cm7_s_shared_lock: CM7 s_shared_lock matches g_shared_gpio_lock address
+         Detail: Read 0x8015b80, expected 0x8015b80
+  [PASS] T3_cm4_s_shared_lock: CM4 s_shared_lock matches g_shared_gpio_lock address
+         Detail: Read 0x81052f0, expected 0x81052f0
+  [PASS] T3_hsem_r5_free: HSEM_R5 (0x58026414) reads 0 (semaphore is free, non-locking read)
+         Detail: R5=0x0 (want 0)
+  [PASS] T3_lock_fail_counts_zero: m7_gpio_lock_fail_count and m4_gpio_lock_fail_count are 0
+         Detail: m7_fails=0, m4_fails=0
+  [PASS] T3_pin_PB1_analog: PB1 is Analog without pull (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)
+         Detail: mode=3, otype=0, speed=0, pull=0, af=0
+  [PASS] T3_pin_PB13_rmii_txd1: PB13 is AF11 (5 fields: mode=2, otype=0, speed=3, pull=0, af=11)
+         Detail: mode=2, otype=0, speed=3, pull=0, af=11
+  [PASS] T3_pin_PB15_control_reset: Control pin PB15 is at reset value (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)
+         Detail: mode=3, otype=0, speed=0, pull=0, af=0
+  [PASS] T3_pin_PD8_usart3_tx: PD8 is AF7 (5 fields: mode=2, otype=0, speed=0, pull=1, af=7)
+         Detail: mode=2, otype=0, speed=0, pull=1, af=7
+  [PASS] T3_pin_PD9_usart3_rx: PD9 is AF7 (5 fields: mode=2, otype=0, speed=0, pull=1, af=7)
+         Detail: mode=2, otype=0, speed=0, pull=1, af=7
+  [PASS] T3_pin_PD0_control_reset: Control pin PD0 is at reset value (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)
+         Detail: mode=3, otype=0, speed=0, pull=0, af=0
+Verdict T3: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================
