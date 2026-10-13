@@ -10,6 +10,8 @@ Una fase de implementación (F1) y un cierre. La fase pasa una auditoría indepe
 
 Base: `e6cb75e` de `main` (cierre de F1b), árbol limpio, rama `driver/gpio-f1c`.
 
+**Decisiones del responsable (2026-10-13):** las cuatro decisiones abiertas, aprobadas con su opción por defecto (1: `10_hsem` BM solo para el hook, el arranque de CPU2 sigue con `HAL_HSEM`; 2: 60 µs; 3: `--project` en `gpio_f1b_checks.py`; 4: los documentos de proceso se borran al cierre).
+
 **Lo que se aprendió en F1b y aquí es norma desde el principio.** La auditoría de F1b no pasó dos veces por la evidencia, no por el código:
 - **HSEM:** leer `HSEM_R5`, nunca `RLR` (leerlo toma el semáforo);
 - **comprobaciones:** cada una tiene que poder fallar y cuenta en el veredicto;
