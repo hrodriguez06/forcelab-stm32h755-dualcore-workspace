@@ -98,3 +98,20 @@ Sin regresiones de `f733b98` a `e9e98c4`: ninguna comprobación se debilita, nin
 - T6b sigue pendiente del responsable en el banco.
 
 La placa tiene `prj_03` debug de `7ba2cf0`, de mi T3. El firmware es el mismo que en `7b56d99`.
+
+## Cierre, parte 2 (`02b1a7f`)
+
+Entrega: `c9a3d23..02b1a7f`. Capturas de placa nuevas de `c9a3d23` (T3, el control de T3, T4, T5 debug), los dos README y el informe. Ni firmware ni herramienta.
+
+| Hallazgo | Verificación |
+| --- | --- |
+| K1 (y m2) | Cuatro capturas, cada una de una sola ejecución, con el árbol limpio en `c9a3d23` y su "Download verified successfully":<br>• `gpio_f1c_t3_c9a3d23.txt`: diez casos PASS con la tabla de pines por proyecto;<br>• `gpio_f1c_t3_control_c9a3d23.txt` (`--control`): flasheó las ELF de `e6cb75e`, leyó `s_shared_lock` en `0x200128F4`/`0x30020A54` (`nm` de esas ELF), NULL en los dos;<br>• `gpio_f1c_t4_c9a3d23.txt`: 1274/363 ciclos, 18,84×/33,06×, con cada dirección y su origen (`g_shared` de `nm` + desplazamiento de DWARF);<br>• `gpio_f1c_t5_debug_c9a3d23.txt`: red, ADC (las muestras crecen, `OVR` [0,0,0]) y `[net]` a 0.<br>El código reescrito de T3, T4 y T5 ya corrió en la placa. **Cerrado** |
+| K2 | `00_gpio` §12.2/§13.2 y `prj_03` §7:<br>• citan las capturas nuevas y las mías por su nombre; ninguna referencia a `…_t3_control_…` inexistente ni a la T3 pegada;<br>• T2b de `prj_03` explicado bien (la autoprueba es el control, y `e6cb75e` lo cubre T2a);<br>• la liberación con `HAL_HSEM_Release(HSEM_ID_BOOT_SYNC, 0)` y sin números de línea.<br>**Cerrado** |
+| k1 | Las capturas de F1c en `00_gpio`, con ruta desde la raíz del repo. **Cerrado** |
+| k2 | El informe, corregido (m2, m6, §5.2.2, las filas T3/T4, el asunto de `e9e98c4`, M1, M3). **Cerrado** |
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| k3 | Menor (cosmético) | La frase de T2b quedó en castellano dentro de dos README en inglés (`00_gpio/README.md` l. 1134, `prj_03/README.md` l. 138) | La traduce el responsable en el commit de cierre, si lo aprueba |
+
+**El cierre pasa en lo documental. Falta T6b** (arranque en frío), con el responsable en el banco. Después: k3, `DRIVER_ROADMAP.md`, borrado de los documentos de proceso y de los dos worktrees de control, merge.
