@@ -230,7 +230,42 @@ A continuación se detalla la resolución de los hallazgos de la auditoría y de
 
 ## 5.8 Lo abierto y lo no ejercitado
 
-1. **T6b (arranque en frío):** Pendiente de ejecución presencial por el responsable en el banco de pruebas físico, debido a la regla de acceso remoto G-S7. No bloquea la entrega de F1; sí el cierre.
+1. **T6b (arranque en frío):** Ejecutado con éxito en el banco físico por el responsable en `492d156` / `74c9119` (`RCC_RSR = 0x00FE0000`, SWD checks PASS, T3 PASS, T5 PASS en debug).
 2. **Caminos no ejercitados en hardware:** `UART_HAL_MspDeInit_User()` y `ETH_HAL_MspDeInit_User()` no son invocados por ninguna ruta de ejecución de los proyectos de firmware actuales.
 3. **M2 (`selftest-gpio`):** No se ejecuta en hardware físico por regla G-S1 (mueve líneas de banco); validado formalmente por revisión de código y compilación limpia.
 4. **Imagen que quedó en la placa (M6):** La placa física quedó flasheada y en ejecución con la imagen de producción **`prj_04_adc_dma_bm_eth` preset `debug` (commit `7cc456d`)**, confirmada mediante ejecución exitosa de `net_check.py --host 192.168.1.150` (3/3 checks PASS, ICMP 4/4, UDP sweep 1..1472 B, burst 100/100), registrada en `docs/gpio_f1b_m6_netcheck_7cc456d.txt`.
+
+---
+
+## 5.9 Cierre
+
+Tras la aprobación de la auditoría de F1 en `7687e91` y la ejecución exitosa de la prueba de arranque en frío T6b en el banco físico (`74c9119`), se procedió a la fase de cierre de la documentación técnica. Se actualizaron los siguientes documentos:
+
+### 1. `01_shared_drivers/00_gpio/README.md`
+- **§3.3 (Escritores fuera del driver):** Se actualizó la tabla de escritores externos: `04_uart` (`uart_hal`) marcado como migrado a `GPIO_HAL_Init` y `GPIO_HAL_DeinitPin` desde F1b; `08_eth` verificado bajo `gpio_hal`; se mantienen como excepciones documentadas `led_bm` (inicialización mono-núcleo previa a la liberación de CPU2) y `LED_PanicRed` (G14, ruta de pánico).
+- **Límite de T2b (m9):** Se documentó explícitamente en §3.3 la limitación del análisis estático de T2b, el cual opera a nivel de AST/código fuente preprocesado y detecta accesos directos a periféricos GPIO o macros CMSIS, pero no puede resolver escrituras a registros a través de punteros genéricos o desreferencias indirectas (`uint32_t *p = ...; *p = ...`).
+- **§11 (Consumidores):**
+  - `04_uart`: Documentada la MSP de consola mediante `GPIO_HAL_Init` y `GPIO_HAL_DeinitPin` bajo la sección crítica de `00_gpio`.
+  - `08_eth`: Corregida la descripción (utiliza `GPIO_HAL_Init` y `GPIO_HAL_DeinitPin` desde el cierre de 08_eth).
+  - `prj_04`: Documentado el hook de bloqueo compartido instalado en ambos núcleos desde F1b.
+- **§12.2 (Hallazgos G1 y G13):**
+  - Marcados como cerrados en `prj_04` con los hashes de commit (`9051a6a`, `53f0f88`, `c8001bf`, `ee2ba23`) y la evidencia documental completa (`docs/gpio_f1b_*`, incluyendo las capturas del auditor `docs/gpio_f1b_audit*`).
+  - Se explicitó que el hallazgo G1 permanece abierto en `prj_03` a la espera de la fase F1c.
+- **§13.1 (F1b completado):**
+  - Transformado de trabajo abierto a entrega completada y cerrada en la rama `driver/gpio-f1b`.
+  - Detalle de la implementación del hook HSEM 5 (60 µs, límites de ciclos, variables en SRAM4 `0x38008000`), migración de escritores en CM7 y CM4, preservación de hooks en `selftest-gpio`, matriz completa de pruebas T1–T7, T6b en frío y pruebas independientes del auditor.
+  - Registro de caminos no ejercitados en hardware: `selftest-gpio` solo compilado (regla de seguridad G-S1); fase T15 de contención no ejecutada en el banco físico para `prj_04` (validada previamente en `prj_01`).
+- **§15 (Historia):**
+  - Añadido el hito F1b con el rango de commits (`9051a6a … 7cc456d, 492d156, 74c9119`).
+  - Actualizada la instrucción para recuperar los documentos de proceso una vez que sean retirados por el responsable de integración mediante `git show <commit que los borra>^:ruta` (con comando exacto usando `git log --diff-filter=D`), idéntico al mecanismo establecido en `05_i2c` y `08_eth`.
+
+### 2. `01_shared_drivers/04_uart/README.md`
+- **Uso de `GPIO_HAL_Init` y `GPIO_HAL_DeinitPin`:** Se especificó en la sección referente a `00_gpio` que la función MSP por defecto de la consola utiliza `GPIO_HAL_Init` y `GPIO_HAL_DeinitPin` bajo la sección crítica de `gpio_bm`, eliminando cualquier referencia a llamadas no protegidas de `HAL_GPIO_Init`.
+- **Propagación de errores:** Se documentó que tanto `UART_HAL_InitEx` como `UART_Console_Init` capturan y propagan cualquier error devuelto por la inicialización de la MSP hacia el llamador.
+
+### 3. `02_firmware_projects/prj_04_adc_dma_bm_eth/README.md`
+- **Hook de `00_gpio`:** Se documentó la arquitectura del hook basado en HSEM 5, timeout de 60 µs (`SHARED_GPIO_LOCK_US = 60U`), con límites de ciclos calibrados por núcleo (24.000 ciclos en CM7 @ 400 MHz, 12.000 ciclos en CM4 @ 200 MHz).
+- **Estructura en memoria compartida:** Se detalló la ubicación en `SharedMemory_t` (SRAM4, base `0x38008000`) de los contadores de fallos (`m7_gpio_lock_fail_count` en `0x4fc`, `m4_gpio_lock_fail_count` en `0x500`) y de los registros de retención máxima en ciclos (`m7_gpio_lock_hold_cycles_max` en `0x504`, `m4_gpio_lock_hold_cycles_max` en `0x508`).
+- **Puntos de instalación:** Documentada la secuencia de arranque en CM7 (`main.c`, tras `Shared_Init()` y antes de `HSEM_BM_BootReleaseCpu2()`) y en CM4 (`main.c`, tras `HSEM_BM_TimebaseStart()` y antes de `ADC_Acquisition_Init()`).
+- **Evidencia documental de F1b:** Tabla detallada referenciando todas las capturas generadas (`gpio_f1b_t1_*`, `gpio_f1b_t2_*`, `gpio_f1b_t3_*`, `gpio_f1b_t4_*`, `gpio_f1b_t5_*`, `gpio_f1b_t6a_*`, `gpio_f1b_t7_*`, `gpio_f1b_m6_*`, `gpio_f1b_t6b_*`, y las capturas del auditor `gpio_f1b_audit*`).
+- **Observación m3:** Se documentó que `App_Log_Init()` en CM7 descarta mediante casteo a `(void)` el valor de retorno de `UART_Console_Init()`, por lo que un fallo en la inicialización de pines de la consola en la MSP no detiene el arranque de la aplicación.

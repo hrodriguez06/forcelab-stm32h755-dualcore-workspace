@@ -263,15 +263,22 @@ void Shared_GpioLockInstall(void) { GPIO_BM_SetSharedLock(&g_shared_gpio_lock); 
 
 The lock protects a port only if **every** writer of that port takes it.
 
-| Writer | What to do |
+| Writer | Status / What to do |
 | :--- | :--- |
-| `HAL_GPIO_Init` in an MSP (`04_uart/uart_hal.c`, `08_eth/eth_hal.c`) | Replace it with `GPIO_HAL_Init` (same arguments), or put `GPIO_BM_SectionEnter/Exit` around each call. Phase T15 `g` shows the section works; phase `h` shows that one unprotected writer breaks the lock for everyone. |
-| Raw `MODER`/`PUPDR` RMW in project code | Replace it with a driver call, or wrap it in the section |
-| `01_led` (`LED_Init`, before the release) | Safe by contract: CPU2 is parked |
-| `LED_PanicRed` (fault path) | Documented exception (G14): a fault handler cannot wait for a semaphore |
+| `04_uart` MSP (`04_uart/uart_hal.c`) | Migrated to `GPIO_HAL_Init` and `GPIO_HAL_DeinitPin` in F1b (`c8001bf`). |
+| `08_eth` MSP (`08_eth/eth_hal.c`) | Migrated to `GPIO_HAL_Init` and `GPIO_HAL_DeinitPin` in `08_eth` close (E8/M1, `d4feb24`, `fe572f3`). |
+| Raw `MODER`/`PUPDR` RMW in `prj_04` | Migrated to `gpio_bm` in F1b (`53f0f88`, `ee2ba23`). |
+| `01_led` (`LED_Init`, before the release) | Safe by contract: CPU2 is parked. |
+| `LED_PanicRed` (fault path) | Documented exception (G14): a fault handler cannot wait for a semaphore. |
 
-In `prj_01`, CPU2 configures no pin in production, and the console MSP (GPIOD)
-is the only `HAL_GPIO_Init` left. Neither is migrated.
+Both shared driver MSPs (`04_uart` and `08_eth`) and all production writers in `prj_04`
+now configure pins exclusively through `00_gpio` under the cross-core lock. In `prj_01`,
+CPU2 configures no pin in production.
+
+> **Limit of T2b preprocessor scan (m9):** T2b scans direct macro and register writes
+> on `GPIO_TypeDef` (`MODER`, `OTYPER`, `OSPEEDR`, `PUPDR`, `AFR`). It does not detect
+> writes performed via an alias pointer (e.g. `volatile uint32_t *p = &GPIOD->MODER; *p = val;`).
+> No such pointer writes exist in the codebase.
 
 ---
 
@@ -820,12 +827,12 @@ cmake --preset selftest-gpio -DCMAKE_C_FLAGS=
 
 | Consumer | Tier | Uses |
 | :--- | :--- | :--- |
-| `01_led/led_bm.c` | BM | `EnablePortClock`, then `MODER` directly |
-| `04_uart` (all tiers) | BM | `ConfigAlternate`; `uart_hal`'s MSP also calls `EnablePortClock` + `HAL_GPIO_Init` |
+| `01_led/led_bm.c` | BM | `EnablePortClock`, then `MODER` directly (before CPU2 boot release; G14 exception) |
+| `04_uart` (all tiers) | BM / HAL | `ConfigAlternate`; `uart_hal`'s console MSP uses `GPIO_HAL_Init` and `GPIO_HAL_DeinitPin` since F1b (`c8001bf`) |
 | `07_adc` (all tiers) | BM | `ConfigAnalog` |
-| `08_eth/eth_hal.c` | BM | `EnablePortClock` + `HAL_GPIO_Init` |
+| `08_eth/eth_hal.c` | BM / HAL | `EnablePortClock`, `GPIO_HAL_Init` and `GPIO_HAL_DeinitPin` since its close (E8/M1, `d4feb24`, `fe572f3`) |
 | `prj_01_template_dualcore` | BM (hook) on both cores; LL and HAL in `selftest-gpio` only | `Shared_GpioLockInstall()` |
-| `prj_04_adc_dma_bm_eth` | BM | F1a selftest; hook not installed (F1b not done) |
+| `prj_04_adc_dma_bm_eth` | BM (hook) on both cores; BM / HAL | `Shared_GpioLockInstall()` on both cores since F1b (`9051a6a`); `GPIO_BM_ConfigPin` in CM4 ADC (`53f0f88`); `gpio_bm` in CM4 selftests (`ee2ba23`) |
 
 ---
 
@@ -864,7 +871,7 @@ The audit of the pre-F1 code found these. Their state at this commit:
 
 | ID | Finding | State |
 | :--- | :--- | :--- |
-| G1 | The configuration registers have one copy for both cores; unprotected RMW from CM7 (PB13, ETH) and CM4 (PB1, ADC) on `GPIOB_MODER` in `prj_04` can put PB13 back to analog, with the link still up and TX dead | **Closed in the driver** (section + hook, T15). **Open in `prj_04`**, which does not install the hook (§13.1) |
+| G1 | The configuration registers have one copy for both cores; unprotected RMW from CM7 (PB13, ETH) and CM4 (PB1, ADC) on `GPIOB_MODER` in `prj_04` can put PB13 back to analog, with the link still up and TX dead | **Closed in the driver** (section + hook, T15). **Closed in `prj_01`** (F1) and **closed in `prj_04`** (F1b, `9051a6a`, `53f0f88`, `5a8f13a`). Verified in `prj_04` by T3 (`docs/gpio_f1b_t3_7cc456d.txt`), T4 (`docs/gpio_f1b_t4_7cc456d.txt`, margin 19.54×/33.71×), T5 (`docs/gpio_f1b_t5_debug_7cc456d.txt`, `_release_`), T6a (20/20 resets, `docs/gpio_f1b_t6a_8ee9a13.txt`), independent audit (`docs/gpio_f1b_audit2_swd_32f343a.txt`, `_t6a_`, `docs/gpio_f1b_audit3_t3_492d156.txt`), and cold boot T6b (`docs/gpio_f1b_t6b_swd_492d156.txt`, `_t5_netcheck_`, `_t5_query_`). Still open in `prj_03` (deferred to F1c). |
 | G2 | Wrong dual-core note in `gpio_bm.h` about `RCC_AHB4ENR` | Closed (`a2096d2`) |
 | G3 | `pull = 3` programmed `PUPDR = 11` and `speed = 4` became LOW, both returning `true` | Closed (`b52ffec`), T1 |
 | G4 | Misaligned port pointers (`GPIOA + 4`) accepted | Closed (`a204b8a`), T1 |
@@ -876,7 +883,7 @@ The audit of the pre-F1 code found these. Their state at this commit:
 | G10 | Five pin types across consumers; `board_def.h` uses masks, `gpio_bm` indices | `GpioBm_Pin_t`, `GPIO_BM_PIN_MASK/INDEX` exist; no consumer uses `GpioBm_Pin_t` yet, and the existing types are untouched |
 | G11 | Target without tier suffix | Closed in F0: `_gpio_bm` + alias |
 | G12 | Output, OD, pulls, input, lock and the race never exercised in hardware | Closed for F1 (§9); EXTI pending |
-| G13 | Writers outside `gpio_bm` on shared ports: `HAL_GPIO_Init` in the `eth_hal`/`uart_hal` MSPs, hand RMW in `prj_04` | `GPIO_HAL_Init` and the section exist (§3.3, T15 `g`/`h`); **the migration in `prj_04` is open** (§13.1) |
+| G13 | Writers outside `gpio_bm` on shared ports: `HAL_GPIO_Init` in the `eth_hal`/`uart_hal` MSPs, hand RMW in `prj_04` | **Closed** in `04_uart` (`c8001bf`), `08_eth` (`d4feb24`, `fe572f3`), and `prj_04` (`ee2ba23`, `53f0f88`). Verified by T2a/T2b (`docs/gpio_f1b_t2_7cc456d.txt`, 0 unprotected HAL calls, 0 raw writes across 1951 units, 20 findings in control `07db657`; auditor's run `docs/gpio_f1b_audit3_t2_492d156.txt`), and T7 (`docs/gpio_f1b_t7_7cc456d.txt`). |
 | G14 | `LED_PanicRed` writes `MODER` from a fault handler without the lock | Accepted exception: the fault path is terminal and cannot wait |
 | G15 | `bool` cannot tell "lock busy" from "bad parameter" | Closed: `GpioBm_Status_t` |
 | — | `LockPins` refused to add pins to a locked port (`ERR_LOCKED`) although the silicon accepts them | Closed (`bbb7f40`), T16 |
@@ -1012,38 +1019,69 @@ condition of §14 is met:
 - against `main`, the driver headers lose only comment lines.
 
 Still open, documented and not blocking:
-- F1b in `prj_04` (§13.1): the hook is not installed there, so G1/G13 stay
-  open in that project;
+- F1c in `prj_03` (G1 in `prj_03` stays open until F1c);
 - F2, EXTI and the compensation cell (§13.2);
-- no independent bench audit: every bench run was made by the implementer.
+- independent bench audit of F1b completed (F1 passed at `7687e91`, cold boot T6b passed at `74c9119`).
 
 ---
 
 ## 13. Open work
 
-### 13.1 F1b in `prj_04` (not done: outside the scope of this delivery)
+### 13.1 F1b in `prj_04` (done in `driver/gpio-f1b`, closed)
 
-`prj_04` has its own F1a selftest (preset `selftest-gpio`,
-`CM4/CM7/App/Src/gpio_selftest.c`, `tools/gpio_hw_check.py`, protocol table in
-`Common/Inc/gpio_bench_protocol.h`, captures `docs/gpio_f1a_*`). Its last
-complete run (`gpio_f1a_selftest_ededa84.txt`) passed every item except the T9
-gate on PF14, measured with 10 edges. The 40-edge interleaved procedure (errata
-E9, used by the `prj_01` bench) was never applied there.
+F1b closed G1 and G13 in `prj_04` by installing the shared lock hook on both cores and
+routing all GPIO configuration writers through `00_gpio`:
 
-To close G1/G13 in `prj_04`, every writer that runs after CPU1 releases CPU2 on
-a port both cores use must go through the driver or the section:
+- **Shared lock hook (H1, `9051a6a`):** HSEM 5, 60 µs timeout (`SHARED_GPIO_LOCK_US = 60U`),
+  implemented in `Common/Src/shared_memory.c` with cycle limits derived from core frequencies
+  (CM7: 24,000 cycles @ 400 MHz; CM4: 12,000 cycles @ 200 MHz). Failure counters
+  (`m7_/m4_gpio_lock_fail_count`) and retention hold cycle measurements
+  (`m7_/m4_gpio_lock_hold_cycles_max`) stored in `SharedMemory_t` (SRAM4 at `0x38008000`).
+  Installed in CM7 after `Shared_Init()` and before `HSEM_BM_BootReleaseCpu2()`; installed in
+  CM4 right after `HSEM_BM_TimebaseStart()` and before `ADC_Acquisition_Init()`.
+- **Writers migrated (H2–H4, `53f0f88`, `c8001bf`, `ee2ba23`):**
+  - CM7 console MSP (`04_uart/uart_hal.c`): `GPIO_HAL_Init` and `GPIO_HAL_DeinitPin` on PD8/PD9.
+  - CM7 Ethernet MSP (`08_eth/eth_hal.c`): already using `GPIO_HAL_Init` and `GPIO_HAL_DeinitPin`
+    from `08_eth` close (E8/M1).
+  - CM4 ADC pin (`adc_acquisition.c`): `GPIO_BM_ConfigPin` on PB1 (analog, no pull).
+  - CM4 selftest bridge probe (`main.c`) and DMA loopback (`dma_selftest.c`): `gpio_bm` calls
+    on PD5/PD6.
+- **Hook preservation in selftests (H5, M2, `61c6e28`, `5a8f13a`):** `gpio_selftest.c` explicitly
+  sets `GPIO_BM_SetSharedLock(NULL)` before unhooked phases T15(d) and (g), and restores the
+  production hook via `Shared_GpioLockInstall()` upon completion.
 
-| Core | Writer | Port / pins | Change |
-| :--- | :--- | :--- | :--- |
-| CM7 | `eth_hal.c` MSP (`net_task`) | GPIOA, **GPIOB PB13**, GPIOC, GPIOG | `GPIO_HAL_Init` (a commit of its own, coordinated with `08_eth` E1/E2) |
-| CM7 | `uart_hal.c` MSP (`App_Log_Init`) | GPIOD PD8/PD9 | `GPIO_HAL_Init` |
-| CM4 | `adc_acquisition.c` `GPIO_Analog_Init` | **GPIOB PB1** | `GPIO_BM_ConfigAnalog(BOARD_ADC_PORT, GPIO_BM_PIN_INDEX(BOARD_ADC_PIN))` |
-| CM4 | `main.c` (`selftest-uart`), `dma_selftest.c` | GPIOD PD5/PD6 | `gpio_bm` calls |
-| CM7 | `LED_Init` (before the release), `LED_PanicRed` | GPIOB, GPIOE | None (safe by contract / G14) |
-| CM7 | H5c of `10_hsem` (EXTI line 15, `selftest-hsem`) | EXTI | None (outside this driver) |
+**Validation evidence:**
+- **T1 (`docs/gpio_f1b_t1_7cc456d.txt`):** Matrix build 8/8 PASS, 7 presets of `prj_04` PASS,
+  5 strict `-Werror` builds PASS (0 warnings).
+- **T2a & T2b (`docs/gpio_f1b_t2_7cc456d.txt`):** T2a verified 0 unprotected HAL calls across
+  7 ELFs (`nm -u` per object from `build.ninja`); control `07db657` fails on all 5 CM7s.
+  T2b scanned 1951 compilation units with 0 raw writes; CMSIS expanded macro autoprueba
+  passed (12/12 writes detected, 0/9 reads ignored); negative control matched 20 raw writes
+  across all 6 presets.
+- **T3 & Control (`docs/gpio_f1b_t3_7cc456d.txt`, `docs/gpio_f1b_t3_control_7cc456d.txt`):**
+  Live SWD verified `s_shared_lock` matches `g_shared_gpio_lock` on both cores, `HSEM_R5 = 0`,
+  fail counts = 0, and PB1, PB13, PD8, PD9, PB15, PD0 exact across 5 fields. Control confirmed
+  `s_shared_lock == NULL` on both cores.
+- **T4 (`docs/gpio_f1b_t4_7cc456d.txt`):** Measured retention hold cycles: CM7 = 1228 cycles
+  (3.07 µs @ 400 MHz, 19.54× margin vs 24000), CM4 = 356 cycles (1.78 µs @ 200 MHz, 33.71× margin
+  vs 12000), both `>= 10.0x`.
+- **T5 (`docs/gpio_f1b_t5_debug_7cc456d.txt`, `docs/gpio_f1b_t5_release_7cc456d.txt`):**
+  Production regression in debug and release: ICMP 4/4, UDP sweep 1..1472 B, burst 100/100,
+  ADC samples growing with `OVR == 0`, and `[net]` error counters all 0.
+- **T6a (`docs/gpio_f1b_t6a_8ee9a13.txt`):** 20 consecutive warm resets via SWD with 10/10
+  T3 checks passing after each reset.
+- **T7 (`docs/gpio_f1b_t7_7cc456d.txt`):** `prj_01` debug console active on VCP, identity verified
+  by B6 download, PD8/PD9 in AF7 PP pull-up.
+- **T6b (`docs/gpio_f1b_t6b_*_492d156.txt`):** Cold boot on physical bench by owner:
+  `RCC_RSR = 0x00FE0000`, SWD checks PASS, T3 PASS, T5 PASS.
+- **Auditor independent verification:** SWD independent check (`docs/gpio_f1b_audit2_swd_32f343a.txt`),
+  20 warm resets (`docs/gpio_f1b_audit2_t6a_32f343a.txt`), T2 run (`docs/gpio_f1b_audit3_t2_492d156.txt`),
+  T3 and T5 (`docs/gpio_f1b_audit3_t3_492d156.txt`, `_t5_debug_`). F1 audit passed at `7687e91`,
+  cold boot T6b passed at `74c9119`.
 
-It also needs `Shared_GpioLockInstall()` on both cores, as in `prj_01` (§3),
-and the production regression repeated with `mX_gpio_lock_fail_count = 0`.
+**What was not exercised:**
+`selftest-gpio` in `prj_04` was only compiled (G-S1 bench safety rule: moves lines wired to AD2).
+Phase T15 contention test was not executed on the physical bench in `prj_04` (already proven in `prj_01`).
 
 ### 13.2 F2: EXTI 0–15 and the compensation cell (not implemented)
 
@@ -1152,6 +1190,7 @@ Before changing it:
 | Re-audit 4 at `7fc7ad2` (R4-a, R4-b) and its instructions | `08627cf` |
 | R4-b arguments in the host tools' captures; R4-a both cores bound under `--allow-dirty` (host tools only) | `674e8ad`, `b45120e`; evidence `e41769c` |
 | Re-audit 5 and merge verdict; 53 superseded captures removed from `docs/` (§9.3.2 keeps their results) | `6c0e792`, the commit after it |
+| F1b in `prj_04` (G1/G13 closed), `uart_hal` MSP migrated; F1 audit passed at `7687e91`; bench cold boot T6b passed at `74c9119` | `9051a6a` … `7cc456d`, `492d156`, `74c9119` |
 
 The implementation plan, the implementer's instructions, the F0 correction and
 F1a instructions, the implementation report and the audit record were removed
@@ -1174,4 +1213,12 @@ git show 31406fa:01_shared_drivers/00_gpio/REAUDIT_1_INSTRUCTIONS.md
 git show 25b6a45:01_shared_drivers/00_gpio/REAUDIT_2_INSTRUCTIONS.md
 git show 8310303:01_shared_drivers/00_gpio/REAUDIT_3_INSTRUCTIONS.md
 git show 08627cf:01_shared_drivers/00_gpio/REAUDIT_4_INSTRUCTIONS.md
+```
+
+F1b process documents (`IMPLEMENTATION_PLAN.md` revision 3, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md`, `AUDIT.md`): here until the catalog owner removes them at close/merge; once removed, each is recoverable at the parent of the commit that removes it (`git show <commit que los borra>^:ruta`), as in `05_i2c` and `08_eth`:
+
+```bash
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/00_gpio/IMPLEMENTATION_PLAN.md)^:01_shared_drivers/00_gpio/IMPLEMENTATION_PLAN.md
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/00_gpio/AUDIT.md)^:01_shared_drivers/00_gpio/AUDIT.md
+# and similarly for IMPLEMENTER_INSTRUCTIONS.md and IMPLEMENTATION_REPORT.md
 ```
