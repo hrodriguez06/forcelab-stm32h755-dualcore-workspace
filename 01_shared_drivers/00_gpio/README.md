@@ -15,11 +15,14 @@ the MPU and `HAL_Init()`.
 Status: phase F1 of the implementation plan (removed, see
 [section 15](#15-history)) plus the LL and HAL tiers, which the plan had
 deferred (F3–F4). Validated on a
-NUCLEO-H755ZI-Q (silicon Rev V, `REV_ID = 0x2003`) on 2026-09-30, in
-`prj_01_template_dualcore` only, with an Analog Discovery 2. Two complete runs
-at `7456494` pass, and one at `b45120e`, where only the host tools changed: see
-[section 9](#9-validation). **EXTI and the compensation
-cell (F2) are not implemented.** A code audit on 2026-09-30 (of `cc1ee88`) found
+NUCLEO-H755ZI-Q (silicon Rev V, `REV_ID = 0x2003`) on 2026-09-30, originally in
+`prj_01_template_dualcore` with an Analog Discovery 2 (runs at `7456494` and
+`b45120e`; see [section 9](#9-validation)). Phase F1b extended validation to
+`prj_04_adc_dma_bm_eth`, closing findings G1 and G13 there with independent
+bench validation and audit (F1 audit passed at `7687e91`, cold boot T6b passed
+at `74c9119`; see [section 13.1](#131-f1b-in-prj_04-done-in-drivergpio-f1b-closed)).
+Finding G1 remains open in `prj_03_adc_dma_eth` (deferred to F1c). **EXTI and
+the compensation cell (F2) are not implemented.** A code audit on 2026-09-30 (of `cc1ee88`) found
 no blocking defect; its findings A1–A7 and their fixes are in
 [section 12](#12-findings). The fixes were then run on the bench, where the
 premise of A1 turned out wrong (an unclocked port reads all ones, not zero), and
@@ -47,7 +50,10 @@ still be one build of the host's commit, and the host tools record their
 arguments (the captures from `674e8ad` on). A fifth re-audit at `75d106a`
 confirmed them, found nothing new, and judged the driver **fit to merge into
 `main`** ([section 12.7](#127-re-audit-5-and-merge-verdict-2026-09-30-at-75d106a)).
-No finding is open. This driver has had no independent bench audit.
+No driver core finding is open, but finding G1 remains open in `prj_03` until F1c.
+F1 of the driver in `prj_01` has had no independent bench audit (every bench run
+was made by the implementer); F1b in `prj_04` had an independent bench audit on
+hardware (`7687e91`, `74c9119`).
 
 ---
 
@@ -827,7 +833,7 @@ cmake --preset selftest-gpio -DCMAKE_C_FLAGS=
 
 | Consumer | Tier | Uses |
 | :--- | :--- | :--- |
-| `01_led/led_bm.c` | BM | `EnablePortClock`, then `MODER` directly (before CPU2 boot release; G14 exception) |
+| `01_led/led_bm.c` | BM | `EnablePortClock`, then `MODER` directly: `LED_Init` is safe by contract (called before CPU2 boot release); `LED_PanicRed` writes `MODER` without lock from fault handler (accepted exception G14) |
 | `04_uart` (all tiers) | BM / HAL | `ConfigAlternate`; `uart_hal`'s console MSP uses `GPIO_HAL_Init` and `GPIO_HAL_DeinitPin` since F1b (`c8001bf`) |
 | `07_adc` (all tiers) | BM | `ConfigAnalog` |
 | `08_eth/eth_hal.c` | BM / HAL | `EnablePortClock`, `GPIO_HAL_Init` and `GPIO_HAL_DeinitPin` since its close (E8/M1, `d4feb24`, `fe572f3`) |
@@ -1019,9 +1025,9 @@ condition of §14 is met:
 - against `main`, the driver headers lose only comment lines.
 
 Still open, documented and not blocking:
+- no independent bench audit of F1 in `prj_01`: every bench run of the driver was made by the implementer (F1b in `prj_04` had an independent bench audit: F1 passed at `7687e91`, cold boot T6b passed at `74c9119`);
 - F1c in `prj_03` (G1 in `prj_03` stays open until F1c);
-- F2, EXTI and the compensation cell (§13.2);
-- independent bench audit of F1b completed (F1 passed at `7687e91`, cold boot T6b passed at `74c9119`).
+- F2, EXTI and the compensation cell (§13.2).
 
 ---
 
@@ -1072,8 +1078,10 @@ routing all GPIO configuration writers through `00_gpio`:
   T3 checks passing after each reset.
 - **T7 (`docs/gpio_f1b_t7_7cc456d.txt`):** `prj_01` debug console active on VCP, identity verified
   by B6 download, PD8/PD9 in AF7 PP pull-up.
-- **T6b (`docs/gpio_f1b_t6b_*_492d156.txt`):** Cold boot on physical bench by owner:
-  `RCC_RSR = 0x00FE0000`, SWD checks PASS, T3 PASS, T5 PASS.
+- **T6b (`docs/gpio_f1b_t6b_*_492d156.txt`):** Cold boot on physical bench: the bench owner
+  power-cycled the board (unplugged and reconnected USB); SWD readings (`RCC_RSR = 0x00FE0000`),
+  T3 and T5 verification were executed by the auditor without flashing or resetting after
+  power-on. SWD checks PASS, T3 PASS, T5 PASS.
 - **Auditor independent verification:** SWD independent check (`docs/gpio_f1b_audit2_swd_32f343a.txt`),
   20 warm resets (`docs/gpio_f1b_audit2_t6a_32f343a.txt`), T2 run (`docs/gpio_f1b_audit3_t2_492d156.txt`),
   T3 and T5 (`docs/gpio_f1b_audit3_t3_492d156.txt`, `_t5_debug_`). F1 audit passed at `7687e91`,
