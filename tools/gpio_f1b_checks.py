@@ -1,30 +1,33 @@
 #!/usr/bin/env python3
-"""Verification tool for STM32H7 GPIO Driver F1b phase (H1-H5, G1, G13).
+"""Verification tool for STM32H7 GPIO Driver F1b / F1c phases (H1-H5, G1, G13).
 
-Covers tests T2a, T2b, T3, T4, T5, T6a, and T7 from IMPLEMENTATION_PLAN.md (Revision 3):
-  - T2a: Verification of HAL_GPIO_Init / HAL_GPIO_DeInit symbol status across 7 ELFs:
-         prj_04 CM7/CM4 debug and release; prj_01/prj_02/prj_03 CM7 debug.
-         Linked objects from build.ninja/map; nm -u on each object.
-         Oracle: uart_hal.c.obj does NOT import HAL_GPIO_Init/DeInit;
+Supports multi-project verification via mandatory --project {prj_04, prj_03}.
+Covers tests T2a, T2b, T3, T4, T5, T6a, and T7 from IMPLEMENTATION_PLAN.md:
+  - T2a: Verification of HAL_GPIO_Init / HAL_GPIO_DeInit symbol status across ELFs:
+         For prj_04: 7 ELFs (prj_04 CM7/CM4 debug & release; prj_01/02/03 CM7 debug).
+         For prj_03: 4 ELFs (prj_03 CM7/CM4 debug & release).
+         Linked objects extracted from build.ninja/map; nm -u on each object.
+         Oracle: adc_acquisition.c.obj / uart_hal.c.obj do NOT call HAL_GPIO_Init;
          HAL_GPIO_Init only referenced by gpio_hal.c.obj (and vendor HAL);
-         HAL_GPIO_DeInit absent from all ELFs; HAL_GPIO_Init absent from CM4 ELFs.
-         Negative control on 07db657: must FAIL on all five CM7 ELFs.
-  - T2b: Preprocessed code scan (-E) across all compile_commands.json units of prj_04
-         presets (debug, release, selftest, selftest-adc, selftest-uart, selftest-hsem).
+         HAL_GPIO_DeInit absent from all ELFs.
+         Negative control: fails as expected on control ELFs (07db657 / e6cb75e).
+  - T2b: Preprocessed code scan (-E) across all compile_commands.json units of project presets.
          Zero raw writes to MODER, OTYPER, OSPEEDR, PUPDR, AFR outside allowed exceptions.
          Exceptions checked by relative path. Covers multi-line statements and macro expansions.
          Fails on any preprocessing or missing unit error.
-         Negative control on 07db657 detects the known raw writers.
+         Autoprueba verified across 12 CMSIS write forms and 9 read forms.
+         Negative control on prj_04 (07db657) detects the 20 known raw writers by (preset, path).
   - T3:  SWD live inspection (mode=HOTPLUG, running debug image):
          - s_shared_lock on CM7 == g_shared_gpio_lock address (from CM7 ELF)
          - s_shared_lock on CM4 == g_shared_gpio_lock address (from CM4 ELF)
          - HSEM_R5 (0x58026414) == 0 (free, NEVER read RLR)
          - m7_gpio_lock_fail_count and m4_gpio_lock_fail_count == 0 (derived from ELF/DWARF)
-         - Pin config: all 5 fields checked for PB1, PB13, PD8, PD9, and control pins PB15, PD0.
+         - Pin config: all 5 fields checked for production and control pins.
          - Prints every address read and its origin.
-         Negative control on 07db657: s_shared_lock == NULL, T3 FAILS.
+         Negative control: s_shared_lock == NULL on control image.
   - T4:  Cycle retention margin check:
          - Limits derived from shared_memory.h (24000 CM7, 12000 CM4).
+         - Derives origins from nm and DWARF.
          - Peak hold cycles > 0, margin >= 10.0x.
          - Negative control with limit / 10 fails.
   - T5:  Production regression harness (debug and release):
@@ -32,12 +35,13 @@ Covers tests T2a, T2b, T3, T4, T5, T6a, and T7 from IMPLEMENTATION_PLAN.md (Revi
          - Reads banner with tools/monitor.py.
          - Runs net_check.py (ICMP, UDP echo, burst).
          - Runs query_adc.py (telemetry streaming, sample count increases, 0 overruns).
-         - Checks counter values (rx_nobuf=0, tx_nobuf=0, dma_err=0, acl_drop=0).
+         - Checks counter values (rx_nobuf=0, tx_nobuf=0, dma_err=0, and acl_drop=0 if present).
          - G-S5 compliant: no resets while monitor, net_check, or query_adc is running.
   - T6a: Repeated warm resets over SWD: 20 sequential resets (-rst), 10s wait,
          running full T3 after each reset. SWD exceptions counted as failed resets.
-  - T7:  Console test on prj_01 debug:
-         - Flashes prj_01 debug, reads banner, reads PD8/PD9 via SWD.
+  - T7:  Compatibility check:
+         For prj_03: verifies that prj_04 passes T2a and T2b identically to F1b.
+         For prj_04: console test on prj_01 debug.
 
 Standard library only.
 """
@@ -88,6 +92,39 @@ ALLOWED_EXCEPTIONS_REL = {
     "02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7/Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_gpio.h",
 }
 
+STANDARD_T3_PINS = [
+    {
+        "port": "B", "pin": 1, "name": "PB1_analog",
+        "expected": {"mode": 3, "otype": 0, "speed": 0, "pull": 0, "af": 0},
+        "desc": "PB1 is Analog without pull (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)",
+    },
+    {
+        "port": "B", "pin": 13, "name": "PB13_rmii_txd1",
+        "expected": {"mode": 2, "otype": 0, "speed": 3, "pull": 0, "af": 11},
+        "desc": "PB13 is AF11 (5 fields: mode=2, otype=0, speed=3, pull=0, af=11)",
+    },
+    {
+        "port": "B", "pin": 15, "name": "PB15_control_reset",
+        "expected": {"mode": 3, "otype": 0, "speed": 0, "pull": 0, "af": 0},
+        "desc": "Control pin PB15 is at reset value (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)",
+    },
+    {
+        "port": "D", "pin": 8, "name": "PD8_usart3_tx",
+        "expected": {"mode": 2, "otype": 0, "speed": 0, "pull": 1, "af": 7},
+        "desc": "PD8 is AF7 (5 fields: mode=2, otype=0, speed=0, pull=1, af=7)",
+    },
+    {
+        "port": "D", "pin": 9, "name": "PD9_usart3_rx",
+        "expected": {"mode": 2, "otype": 0, "speed": 0, "pull": 1, "af": 7},
+        "desc": "PD9 is AF7 (5 fields: mode=2, otype=0, speed=0, pull=1, af=7)",
+    },
+    {
+        "port": "D", "pin": 0, "name": "PD0_control_reset",
+        "expected": {"mode": 3, "otype": 0, "speed": 0, "pull": 0, "af": 0},
+        "desc": "Control pin PD0 is at reset value (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)",
+    },
+]
+
 PROJECTS_CONFIG = {
     "prj_04": {
         "dir": "02_firmware_projects/prj_04_adc_dma_bm_eth",
@@ -112,6 +149,9 @@ PROJECTS_CONFIG = {
         "control_dir_default": "stm32h755_control_07db657",
         "has_acl_drop": True,
         "t2b_tree_control": True,
+        "t3_pins": STANDARD_T3_PINS,
+        "query_adc_note": "In prj_04: query_adc.py reports CH5, Rate, Seq, Samples, TC, OVR (half_overrun_count), M4 HB (JSON also provides dma_error_count); [net] includes rx_nobuf, tx_nobuf, dma_err, acl_drop.",
+        "query_adc_cmd": ["--count=3", "--rate=10", "--json"],
     },
     "prj_03": {
         "dir": "02_firmware_projects/prj_03_adc_dma_eth",
@@ -130,6 +170,9 @@ PROJECTS_CONFIG = {
         "control_dir_default": "stm32h755_control_e6cb75e",
         "has_acl_drop": False,
         "t2b_tree_control": False,
+        "t3_pins": STANDARD_T3_PINS,
+        "query_adc_note": "In prj_03: query_adc.py reports CH5, Rate, Seq, Samples, TC, OVR (where OVR is half_overrun_count); [net] reports rx_nobuf, tx_nobuf, dma_err (without acl_drop).",
+        "query_adc_cmd": ["--count=3", "--rate=10", "--json"],
     },
 }
 
@@ -445,6 +488,18 @@ def run_t2a(tools: dict[str, str], control_dir: Path | None, project_name: str =
         results["pass"] = False
         return results
 
+    c_rev, _, _ = get_git_info(control_dir)
+    ctrl_commit_match = (c_rev == ctrl_commit)
+    results["cases"].append({
+        "id": f"T2a_control_{ctrl_commit}_commit_matches",
+        "desc": f"Control directory commit matches {ctrl_commit} for {project_name} (M1)",
+        "pass": ctrl_commit_match,
+        "detail": f"Expected commit {ctrl_commit}, found {c_rev} in {control_dir}",
+    })
+    if not ctrl_commit_match:
+        results["pass"] = False
+        return results
+
     if project_name == "prj_04":
         ctrl_failed_cm7_count = 0
         ctrl_all_present = True
@@ -533,6 +588,8 @@ def run_t2a(tools: dict[str, str], control_dir: Path | None, project_name: str =
                     "pass": r["pass"],
                     "detail": f"callers={r['callers']}",
                 })
+                if not r["pass"]:
+                    results["pass"] = False
 
         ctrl_ok = ctrl_all_present and (ctrl_failed_cm4_count == 2)
         results["cases"].append({
@@ -827,15 +884,28 @@ def run_t2b(tools: dict[str, str], control_dir: Path | None, project_name: str =
     print(f"--- Running T2b (preprocessor -E scan across all compilation units for {project_name}) ---")
 
     # N6: For prj_04, control directory is required (07db657)
-    if cfg["t2b_tree_control"] and not (control_dir and control_dir.is_dir()):
+    if cfg["t2b_tree_control"]:
+        if not (control_dir and control_dir.is_dir()):
+            results["cases"].append({
+                "id": "T2b_control_dir_missing",
+                "desc": f"Control directory {ctrl_commit} is provided and valid (N6)",
+                "pass": False,
+                "detail": f"Control dir {control_dir} not found",
+            })
+            results["pass"] = False
+            return results
+
+        c_rev, _, _ = get_git_info(control_dir)
+        ctrl_commit_match = (c_rev == ctrl_commit)
         results["cases"].append({
-            "id": "T2b_control_dir_missing",
-            "desc": f"Control directory {ctrl_commit} is provided and valid (N6)",
-            "pass": False,
-            "detail": f"Control dir {control_dir} not found",
+            "id": f"T2b_control_{ctrl_commit}_commit_matches",
+            "desc": f"Control directory commit matches {ctrl_commit} for {project_name} (M1)",
+            "pass": ctrl_commit_match,
+            "detail": f"Expected commit {ctrl_commit}, found {c_rev} in {control_dir}",
         })
-        results["pass"] = False
-        return results
+        if not ctrl_commit_match:
+            results["pass"] = False
+            return results
 
     # 1. Run automated self-test of regex against CMSIS preprocessed code
     st_pass, st_detail = run_t2b_selftest(tools)
@@ -905,12 +975,6 @@ def run_t2b(tools: dict[str, str], control_dir: Path | None, project_name: str =
     else:
         # prj_03: no raw register writers in e6cb75e (used HAL_GPIO_Init, covered by T2a control)
         print(f"  [Control note] No tree scan needed for {project_name}: {ctrl_commit} writes configuration via HAL_GPIO_Init (verified by T2a control), zero raw writes in tree. Autoprueba (12/12 writes, 0/9 reads) serves as negative control.")
-        results["cases"].append({
-            "id": f"T2b_control_{ctrl_commit}_autoprueba_gate",
-            "desc": f"Negative control for {project_name}: regex autoprueba passed (no tree control needed; {ctrl_commit} used HAL, covered by T2a)",
-            "pass": st_pass,
-            "detail": "Autoprueba verified 12/12 macro expansions and paren nestings detected, 0/9 reads ignored",
-        })
 
     return results
 
@@ -939,6 +1003,29 @@ def run_t3(tools: dict[str, str], sn: str, project_name: str = "prj_04", control
     ctrl_commit = cfg["control_commit"]
     pdir_rel = cfg["dir"]
     print(f"--- Running T3 (live SWD inspection for {project_name}, control_mode={control_mode}) ---")
+
+    if control_mode:
+        if not (control_dir and control_dir.is_dir()):
+            results["cases"].append({
+                "id": "T3_control_dir_missing",
+                "desc": f"Control directory {ctrl_commit} is provided and valid",
+                "pass": False,
+                "detail": f"Control dir {control_dir} not found",
+            })
+            results["pass"] = False
+            return results
+
+        c_rev, _, _ = get_git_info(control_dir)
+        ctrl_commit_match = (c_rev == ctrl_commit)
+        results["cases"].append({
+            "id": f"T3_control_{ctrl_commit}_commit_matches",
+            "desc": f"Control directory commit matches {ctrl_commit} for {project_name} (M1)",
+            "pass": ctrl_commit_match,
+            "detail": f"Expected commit {ctrl_commit}, found {c_rev} in {control_dir}",
+        })
+        if not ctrl_commit_match:
+            results["pass"] = False
+            return results
 
     if do_flash:
         pdir = (control_dir / pdir_rel) if (control_mode and control_dir) else (REPO_ROOT / pdir_rel)
@@ -984,8 +1071,9 @@ def run_t3(tools: dict[str, str], sn: str, project_name: str = "prj_04", control
     print(f"  [SWD origin] s_shared_lock CM4: {hex(cm4_lock_ptr_addr)} (from nm {cm4_elf.name})")
     print(f"  [SWD origin] HSEM_R5: {hex(HSEM_R5_ADDR)} (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])")
     print(f"  [SWD origin] g_shared base: {hex(g_shared_base)} (from nm {cm7_elf.name})")
-    print(f"  [SWD origin] GPIOB base: {hex(GPIO_BASES['B'])} (from stm32h755xx.h)")
-    print(f"  [SWD origin] GPIOD base: {hex(GPIO_BASES['D'])} (from stm32h755xx.h)")
+    needed_ports = sorted(set(p["port"] for p in cfg["t3_pins"]))
+    for port in needed_ports:
+        print(f"  [SWD origin] GPIO{port} base: {hex(GPIO_BASES[port])} (from stm32h755xx.h)")
 
     if not control_mode:
         # Derive member offsets dynamically from DWARF (m4: no silent fallbacks, don't query on control)
@@ -1061,111 +1149,41 @@ def run_t3(tools: dict[str, str], sn: str, project_name: str = "prj_04", control
     if not fails_ok:
         results["pass"] = False
 
-    # 5. Read GPIOB registers (0x58020400, 10 words)
-    gpiob = read_swd_mem32(tools["programmer"], sn, GPIO_BASES["B"], 10)
-    b_moder, b_otyper, b_ospeedr, b_pupdr = gpiob[0], gpiob[1], gpiob[2], gpiob[3]
-    b_afrl, b_afrh = gpiob[8], gpiob[9]
+    # 5. Read GPIO registers and verify pins configured in t3_pins
+    gpio_regs = {}
+    for port in needed_ports:
+        base = GPIO_BASES[port]
+        gpio_regs[port] = read_swd_mem32(tools["programmer"], sn, base, 10)
 
-    # PB1: Analog (3), Push-Pull (0), Speed (0), No pull (0), AF0 (0)
-    pb1_mode  = (b_moder   >> (1 * 2)) & 3
-    pb1_otype = (b_otyper  >> 1) & 1
-    pb1_speed = (b_ospeedr >> (1 * 2)) & 3
-    pb1_pull  = (b_pupdr   >> (1 * 2)) & 3
-    pb1_af    = (b_afrl    >> (1 * 4)) & 0xF
-    pb1_ok = (pb1_mode == 3) and (pb1_otype == 0) and (pb1_speed == 0) and (pb1_pull == 0) and (pb1_af == 0)
-    results["cases"].append({
-        "id": "T3_pin_PB1_analog",
-        "desc": "PB1 is Analog without pull (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)",
-        "pass": pb1_ok,
-        "detail": f"mode={pb1_mode}, otype={pb1_otype}, speed={pb1_speed}, pull={pb1_pull}, af={pb1_af}",
-    })
-    if not pb1_ok:
-        results["pass"] = False
+    for pin_spec in cfg["t3_pins"]:
+        port = pin_spec["port"]
+        pin_idx = pin_spec["pin"]
+        exp = pin_spec["expected"]
+        regs = gpio_regs[port]
+        moder, otyper, ospeedr, pupdr = regs[0], regs[1], regs[2], regs[3]
+        afrl, afrh = regs[8], regs[9]
 
-    # PB13: AF (2), Push-Pull (0), Very High (3), No pull (0), AF11 (11)
-    pb13_mode  = (b_moder   >> (13 * 2)) & 3
-    pb13_otype = (b_otyper  >> 13) & 1
-    pb13_speed = (b_ospeedr >> (13 * 2)) & 3
-    pb13_pull  = (b_pupdr   >> (13 * 2)) & 3
-    pb13_af    = (b_afrh    >> ((13 - 8) * 4)) & 0xF
-    pb13_ok = (pb13_mode == 2) and (pb13_otype == 0) and (pb13_speed == 3) and (pb13_pull == 0) and (pb13_af == 11)
-    results["cases"].append({
-        "id": "T3_pin_PB13_rmii_txd1",
-        "desc": "PB13 is AF11 (5 fields: mode=2, otype=0, speed=3, pull=0, af=11)",
-        "pass": pb13_ok,
-        "detail": f"mode={pb13_mode}, otype={pb13_otype}, speed={pb13_speed}, pull={pb13_pull}, af={pb13_af}",
-    })
-    if not pb13_ok:
-        results["pass"] = False
+        actual_mode = (moder >> (pin_idx * 2)) & 3
+        actual_otype = (otyper >> pin_idx) & 1
+        actual_speed = (ospeedr >> (pin_idx * 2)) & 3
+        actual_pull = (pupdr >> (pin_idx * 2)) & 3
+        actual_af = (afrl >> (pin_idx * 4) & 0xF) if pin_idx < 8 else (afrh >> ((pin_idx - 8) * 4) & 0xF)
 
-    # Control pin PB15 (unused): reset value is Analog (3), PP (0), Speed (0), no pull (0), AF0 (0)
-    pb15_mode  = (b_moder   >> (15 * 2)) & 3
-    pb15_otype = (b_otyper  >> 15) & 1
-    pb15_speed = (b_ospeedr >> (15 * 2)) & 3
-    pb15_pull  = (b_pupdr   >> (15 * 2)) & 3
-    pb15_af    = (b_afrh    >> ((15 - 8) * 4)) & 0xF
-    pb15_ok = (pb15_mode == 3) and (pb15_otype == 0) and (pb15_speed == 0) and (pb15_pull == 0) and (pb15_af == 0)
-    results["cases"].append({
-        "id": "T3_pin_PB15_control_reset",
-        "desc": "Control pin PB15 is at reset value (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)",
-        "pass": pb15_ok,
-        "detail": f"mode={pb15_mode}, otype={pb15_otype}, speed={pb15_speed}, pull={pb15_pull}, af={pb15_af}",
-    })
-    if not pb15_ok:
-        results["pass"] = False
-
-    # 6. Read GPIOD registers (0x58020C00, 10 words)
-    gpiod = read_swd_mem32(tools["programmer"], sn, GPIO_BASES["D"], 10)
-    d_moder, d_otyper, d_ospeedr, d_pupdr = gpiod[0], gpiod[1], gpiod[2], gpiod[3]
-    d_afrl, d_afrh = gpiod[8], gpiod[9]
-
-    # PD8: AF (2), Push-Pull (0), Low (0), Pull-Up (1), AF7 (7)
-    pd8_mode  = (d_moder   >> (8 * 2)) & 3
-    pd8_otype = (d_otyper  >> 8) & 1
-    pd8_speed = (d_ospeedr >> (8 * 2)) & 3
-    pd8_pull  = (d_pupdr   >> (8 * 2)) & 3
-    pd8_af    = (d_afrh    >> ((8 - 8) * 4)) & 0xF
-    pd8_ok = (pd8_mode == 2) and (pd8_otype == 0) and (pd8_speed == 0) and (pd8_pull == 1) and (pd8_af == 7)
-    results["cases"].append({
-        "id": "T3_pin_PD8_usart3_tx",
-        "desc": "PD8 is AF7 (5 fields: mode=2, otype=0, speed=0, pull=1, af=7)",
-        "pass": pd8_ok,
-        "detail": f"mode={pd8_mode}, otype={pd8_otype}, speed={pd8_speed}, pull={pd8_pull}, af={pd8_af}",
-    })
-    if not pd8_ok:
-        results["pass"] = False
-
-    # PD9: AF (2), Push-Pull (0), Low (0), Pull-Up (1), AF7 (7)
-    pd9_mode  = (d_moder   >> (9 * 2)) & 3
-    pd9_otype = (d_otyper  >> 9) & 1
-    pd9_speed = (d_ospeedr >> (9 * 2)) & 3
-    pd9_pull  = (d_pupdr   >> (9 * 2)) & 3
-    pd9_af    = (d_afrh    >> ((9 - 8) * 4)) & 0xF
-    pd9_ok = (pd9_mode == 2) and (pd9_otype == 0) and (pd9_speed == 0) and (pd9_pull == 1) and (pd9_af == 7)
-    results["cases"].append({
-        "id": "T3_pin_PD9_usart3_rx",
-        "desc": "PD9 is AF7 (5 fields: mode=2, otype=0, speed=0, pull=1, af=7)",
-        "pass": pd9_ok,
-        "detail": f"mode={pd9_mode}, otype={pd9_otype}, speed={pd9_speed}, pull={pd9_pull}, af={pd9_af}",
-    })
-    if not pd9_ok:
-        results["pass"] = False
-
-    # Control pin PD0 (unused): reset value is Analog (3), PP (0), Speed (0), no pull (0), AF0 (0)
-    pd0_mode  = (d_moder   >> (0 * 2)) & 3
-    pd0_otype = (d_otyper  >> 0) & 1
-    pd0_speed = (d_ospeedr >> (0 * 2)) & 3
-    pd0_pull  = (d_pupdr   >> (0 * 2)) & 3
-    pd0_af    = (d_afrl    >> (0 * 4)) & 0xF
-    pd0_ok = (pd0_mode == 3) and (pd0_otype == 0) and (pd0_speed == 0) and (pd0_pull == 0) and (pd0_af == 0)
-    results["cases"].append({
-        "id": "T3_pin_PD0_control_reset",
-        "desc": "Control pin PD0 is at reset value (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)",
-        "pass": pd0_ok,
-        "detail": f"mode={pd0_mode}, otype={pd0_otype}, speed={pd0_speed}, pull={pd0_pull}, af={pd0_af}",
-    })
-    if not pd0_ok:
-        results["pass"] = False
+        pin_ok = (
+            (actual_mode == exp["mode"]) and
+            (actual_otype == exp["otype"]) and
+            (actual_speed == exp["speed"]) and
+            (actual_pull == exp["pull"]) and
+            (actual_af == exp["af"])
+        )
+        results["cases"].append({
+            "id": f"T3_pin_{pin_spec['name']}",
+            "desc": pin_spec["desc"],
+            "pass": pin_ok,
+            "detail": f"mode={actual_mode}, otype={actual_otype}, speed={actual_speed}, pull={actual_pull}, af={actual_af}",
+        })
+        if not pin_ok:
+            results["pass"] = False
 
     return results
 
@@ -1211,7 +1229,9 @@ def run_t4(tools: dict[str, str], sn: str, project_name: str = "prj_04", do_flas
     cm7_limit_cyc, cm4_limit_cyc = get_t4_limits(hdr_path)
 
     print(f"  [T4 derived limits] from {hdr_path.name}: CM7={cm7_limit_cyc} cycles, CM4={cm4_limit_cyc} cycles")
-    print(f"  [T4 memory origin] m7_hold_addr={hex(m7_hold_addr)}, m4_hold_addr={hex(m4_hold_addr)}")
+    print(f"  [SWD origin] g_shared base: {hex(g_shared_base)} (from nm {cm7_elf.name})")
+    print(f"  [SWD origin] m7_gpio_lock_hold_cycles_max: {hex(m7_hold_addr)} (g_shared {hex(g_shared_base)} from nm + {hex(m7_hold_off)} from DWARF)")
+    print(f"  [SWD origin] m4_gpio_lock_hold_cycles_max: {hex(m4_hold_addr)} (g_shared {hex(g_shared_base)} from nm + {hex(m4_hold_off)} from DWARF)")
 
     m7_hold = read_swd_mem32(tools["programmer"], sn, m7_hold_addr, 1)[0]
     m4_hold = read_swd_mem32(tools["programmer"], sn, m4_hold_addr, 1)[0]
@@ -1354,8 +1374,8 @@ def run_t5(tools: dict[str, str], sn: str, project_name: str = "prj_04", preset:
     query_script = pdir / "tools" / "query_adc.py"
     if not query_script.is_file():
         query_script = REPO_ROOT / "tools" / "query_adc.py"
-    res_query = subprocess.run([py_cmd, str(query_script), "--host=192.168.1.150", "--count=3", "--rate=10", "--json"],
-                               cwd=str(pdir), capture_output=True, text=True)
+    cmd_query = [py_cmd, str(query_script), "--host=192.168.1.150"] + cfg.get("query_adc_cmd", ["--count=3", "--rate=10", "--json"])
+    res_query = subprocess.run(cmd_query, cwd=str(pdir), capture_output=True, text=True)
     print(res_query.stdout)
 
     # N2: require Samples to strictly grow and OVR == 0 across readings
@@ -1373,7 +1393,7 @@ def run_t5(tools: dict[str, str], sn: str, project_name: str = "prj_04", preset:
     ovr_zero = (len(ovr_list) >= 2) and all(ovr == 0 for ovr in ovr_list)
     query_ok = (res_query.returncode == 0) and samples_grew and ovr_zero
 
-    print("  [ADC telemetry note] query_adc.py reports CH5, Rate, Seq, Samples, TC, OVR, M4 HB (does not output dma_error_count or half_overrun_count)")
+    print(f"  [ADC telemetry note] {cfg['query_adc_note']}")
 
     results["cases"].append({
         "id": f"T5_{preset}_query_adc",
@@ -1608,8 +1628,8 @@ def run_t7(tools: dict[str, str], sn: str, project_name: str = "prj_03", control
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--project", choices=["prj_04", "prj_03"], default="prj_03",
-                        help="Project to verify (default: prj_03)")
+    parser.add_argument("--project", choices=["prj_04", "prj_03"], required=True,
+                        help="Project to verify (mandatory: prj_04 or prj_03)")
     parser.add_argument("--test", choices=["t2", "t2a", "t2b", "t3", "t4", "t5", "t6a", "t7", "all"], default="all",
                         help="Which test to run (default: all)")
     parser.add_argument("--preset", choices=["debug", "release"], default="debug",
@@ -1628,9 +1648,9 @@ def main() -> int:
     if args.control:
         args.flash = True
 
+    expected_ctrl_commit = PROJECTS_CONFIG[args.project]["control_commit"]
     if args.control_dir is None:
-        ctrl_commit = PROJECTS_CONFIG[args.project]["control_commit"]
-        args.control_dir = REPO_ROOT.parent / f"stm32h755_control_{ctrl_commit}"
+        args.control_dir = REPO_ROOT.parent / PROJECTS_CONFIG[args.project]["control_dir_default"]
 
     argv_str = " ".join(sys.argv)
     rev, clean, status_porcelain = get_git_info(REPO_ROOT)
@@ -1655,6 +1675,10 @@ def main() -> int:
             print("[host] control git status --porcelain:")
             for line in c_status.splitlines():
                 print(f"       {line}")
+        if c_rev != expected_ctrl_commit:
+            print(f"[host] ERROR: Control directory commit mismatch (M1)! Expected {expected_ctrl_commit} for {args.project}, found {c_rev} in {args.control_dir}")
+    elif args.control_dir:
+        print(f"[host] ERROR: Control directory {args.control_dir} does not exist (M1)")
     print("================================================================================\n")
 
     tools = find_tools()
