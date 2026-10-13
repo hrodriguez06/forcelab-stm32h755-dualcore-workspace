@@ -1,0 +1,114 @@
+================================================================================
+STM32H755 GPIO F1b Verification Checks (T2, T3, T4, T5, T6a, T7)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --test t2 --control-dir ../stm32h755_control_07db657
+[host] timestamp: 2026-10-13 09:38:30
+[host] git rev: 492d156 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: ..\stm32h755_control_07db657 (rev 07db657, clean)
+================================================================================
+
+--- Running T2a (absence of unprotected HAL_GPIO_Init/DeInit across 7 ELFs) ---
+
+--- Results for T2A ---
+  [PASS] T2a_current_prj_04_debug_cm7: prj_04_debug_cm7 (CM7): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj', 'gpio_hal.c.obj'] (outside HAL: ['gpio_hal.c.obj']), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_04_debug_cm4: prj_04_debug_cm4 (CM4): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj'] (outside HAL: []), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_04_release_cm7: prj_04_release_cm7 (CM7): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj', 'gpio_hal.c.obj'] (outside HAL: ['gpio_hal.c.obj']), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_04_release_cm4: prj_04_release_cm4 (CM4): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj'] (outside HAL: []), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_01_debug_cm7: prj_01_debug_cm7 (CM7): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj', 'gpio_hal.c.obj'] (outside HAL: ['gpio_hal.c.obj']), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_02_debug_cm7: prj_02_debug_cm7 (CM7): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj', 'gpio_hal.c.obj'] (outside HAL: ['gpio_hal.c.obj']), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_03_debug_cm7: prj_03_debug_cm7 (CM7): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj', 'gpio_hal.c.obj'] (outside HAL: ['gpio_hal.c.obj']), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_control_prj_04_debug_cm7_fails_as_expected: Control 07db657: prj_04_debug_cm7 fails oracle (uart_hal.c.obj calls HAL_GPIO_Init)
+         Detail: Correctly caught violation: callers=['stm32h7xx_hal_rcc.c.obj', 'uart_hal.c.obj', 'gpio_hal.c.obj']
+  [PASS] T2a_control_prj_04_release_cm7_fails_as_expected: Control 07db657: prj_04_release_cm7 fails oracle (uart_hal.c.obj calls HAL_GPIO_Init)
+         Detail: Correctly caught violation: callers=['stm32h7xx_hal_rcc.c.obj', 'uart_hal.c.obj', 'gpio_hal.c.obj']
+  [PASS] T2a_control_prj_01_debug_cm7_fails_as_expected: Control 07db657: prj_01_debug_cm7 fails oracle (uart_hal.c.obj calls HAL_GPIO_Init)
+         Detail: Correctly caught violation: callers=['stm32h7xx_hal_rcc.c.obj', 'uart_hal.c.obj']
+  [PASS] T2a_control_prj_02_debug_cm7_fails_as_expected: Control 07db657: prj_02_debug_cm7 fails oracle (uart_hal.c.obj calls HAL_GPIO_Init)
+         Detail: Correctly caught violation: callers=['stm32h7xx_hal_rcc.c.obj', 'uart_hal.c.obj', 'gpio_hal.c.obj']
+  [PASS] T2a_control_prj_03_debug_cm7_fails_as_expected: Control 07db657: prj_03_debug_cm7 fails oracle (uart_hal.c.obj calls HAL_GPIO_Init)
+         Detail: Correctly caught violation: callers=['stm32h7xx_hal_rcc.c.obj', 'uart_hal.c.obj', 'gpio_hal.c.obj']
+  [PASS] T2a_control_oracle_negative_gate: Negative control: all 5 CM7 ELFs from 07db657 fail the T2a oracle
+         Detail: Failed CM7 count=5/5, all_present=True
+Verdict T2A: PASS
+
+--- Running T2b (preprocessor -E scan across all compilation units) ---
+--- T2b Regex Autoprueba (CMSIS expanded forms & reads) ---
+  Detected writes: 12/12, False read detections: 0/9
+    [Write check: DETECTED] ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER = 1;
+    [Write check: DETECTED] ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER |= 1;
+    [Write check: DETECTED] ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER <<= 2;
+    [Write check: DETECTED] ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->AFR[0] = 7;
+    [Write check: DETECTED] ((GPIO_TypeDef *) (0x58020C00))->MODER = 1;
+    [Write check: DETECTED] ((((((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))))))->MODER)) = 1;
+    [Write check: DETECTED] ((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER) = (1));
+    [Write check: DETECTED] (((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER)) = ((((((((GPIO
+    [Write check: DETECTED] ((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER) |= (1));
+    [Write check: DETECTED] ((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER) &= ~(1));
+    [Write check: DETECTED] ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER = 1;
+    [Write check: DETECTED] ((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->AFR[1]) |= (7));
+    [Read  check: IGNORED] uint32_t v1 = ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER;
+    [Read  check: IGNORED] uint32_t v2 = ((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER));
+    [Read  check: IGNORED] if (((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER == 1) { (void)0
+    [Read  check: IGNORED] if (((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER) == 1)) { (vo
+    [Read  check: IGNORED] if ((((GPIO_TypeDef *) (0x58020C00))->MODER) == 0) { (void)0; }
+    [Read  check: IGNORED] if (((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER != 1) { (void)0
+    [Read  check: IGNORED] if (((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER <= 1) { (void)0
+    [Read  check: IGNORED] uint32_t v3 = (((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER & 0x
+    [Read  check: IGNORED] uint32_t v4 = ((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER));
+  [Preset debug        ] scanned:  322 units, failed: 0 units
+  [Preset release      ] scanned:  322 units, failed: 0 units
+  [Preset selftest     ] scanned:  328 units, failed: 0 units
+  [Preset selftest-adc ] scanned:  327 units, failed: 0 units
+  [Preset selftest-uart] scanned:  325 units, failed: 0 units
+  [Preset selftest-hsem] scanned:  327 units, failed: 0 units
+  [Control Preset debug        ] scanned:  322 units, failed: 0 units
+  [Control Preset release      ] scanned:  322 units, failed: 0 units
+  [Control Preset selftest     ] scanned:  328 units, failed: 0 units
+  [Control Preset selftest-adc ] scanned:  327 units, failed: 0 units
+  [Control Preset selftest-uart] scanned:  325 units, failed: 0 units
+  [Control Preset selftest-hsem] scanned:  327 units, failed: 0 units
+  [Control findings count] 20 raw writes detected in control 07db657:
+    preset=debug         file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 55: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0400UL))->MODER |= (3UL << (pin_num * 2U));
+    preset=debug         file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 58: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0400UL))->PUPDR &= ~(3UL << (pin_num * 2U));
+    preset=release       file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 55: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0400UL))->MODER |= (3UL << (pin_num * 2U));
+    preset=release       file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 58: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0400UL))->PUPDR &= ~(3UL << (pin_num * 2U));
+    preset=selftest      file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 55: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0400UL))->MODER |= (3UL << (pin_num * 2U));
+    preset=selftest      file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 58: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0400UL))->PUPDR &= ~(3UL << (pin_num * 2U));
+    preset=selftest      file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=832: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER &= ~((0x3UL << (10U)) | (0x3U
+    preset=selftest      file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=835: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER |= ((2UL << (10U)) | (2UL << 
+    preset=selftest      file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=836: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->AFR[0] &= ~((0xFUL << (20U)) | (0xF
+    preset=selftest      file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=837: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->AFR[0] |= ((7UL << (20U)) | (7UL <<
+    preset=selftest-adc  file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 55: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0400UL))->MODER |= (3UL << (pin_num * 2U));
+    preset=selftest-adc  file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 58: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0400UL))->PUPDR &= ~(3UL << (pin_num * 2U));
+    preset=selftest-uart file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/Core/Src/main.c line=233: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER = (((GPIO_TypeDef *) (((0x400
+    preset=selftest-uart file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/Core/Src/main.c line=238: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER &= ~(3UL << (6 * 2));
+    preset=selftest-uart file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/Core/Src/main.c line=239: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->PUPDR = (((GPIO_TypeDef *) (((0x400
+    preset=selftest-uart file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/Core/Src/main.c line=244: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->PUPDR = (((GPIO_TypeDef *) (((0x400
+    preset=selftest-uart file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 55: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0400UL))->MODER |= (3UL << (pin_num * 2U));
+    preset=selftest-uart file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 58: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0400UL))->PUPDR &= ~(3UL << (pin_num * 2U));
+    preset=selftest-hsem file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 55: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0400UL))->MODER |= (3UL << (pin_num * 2U));
+    preset=selftest-hsem file=_control_07db657/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 58: ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0400UL))->PUPDR &= ~(3UL << (pin_num * 2U));
+
+--- Results for T2B ---
+  [PASS] T2b_selftest_macro_and_paren_detection: Self-test: CMSIS expanded bases, WRITE_REG/MODIFY_REG/SET_BIT macros, and multiline writes detected; reads and == ignored
+         Detail: Autoprueba result: PASS (12/12 writes, 0/9 reads)
+  [PASS] T2b_current_zero_raw_writes: Current tree has zero raw GPIO writes across presets outside exceptions
+         Detail: Scanned totals: 1951 units; Illegal writes count=0
+  [PASS] T2b_control_all_presets_scanned: Control 07db657: all 6 presets present and scanned without preprocessing failures (B7)
+         Detail: Total control scanned=1951, failed=0
+  [PASS] T2b_control_07db657_detects_writers: Control 07db657 detects raw writes by (preset, path) in adc_acquisition.c, main.c, and dma_selftest.c
+         Detail: Matched by (preset, path): adc_acquisition=True, main.c=True, dma_selftest=True (total control findings=20)
+Verdict T2B: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================
+exit=0

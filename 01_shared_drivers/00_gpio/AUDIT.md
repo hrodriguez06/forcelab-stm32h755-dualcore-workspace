@@ -119,3 +119,56 @@ Entrega: `198be5b..32f343a`. Selftest en `5a8f13a`; herramienta en `79ef531`, `0
 - T1, con una sola salida legible que incluya las compilaciones con `-Werror`.
 
 La T6a de `8ee9a13` se queda: N1 no cambia sus valores, y PD8 es exacto en las 20. También mi T6a de `32f343a`. T6b sigue pendiente del responsable en el banco.
+
+## F1, segunda corrección (`492d156`)
+
+Entrega: `2485a9f..492d156`. Herramienta en `7cc456d`; informe y capturas de `7cc456d` en `492d156`. Ni el firmware ni `selftest-gpio` cambian desde `32f343a`.
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| Revisión de `7cc456d` (la hice yo, línea a línea) | Cada hallazgo, en la tabla de abajo |
+| `py tools/gpio_f1b_checks.py --test t2 --control-dir ../stm32h755_control_07db657` en `492d156`, árbol limpio (`gpio_f1b_audit3_t2_492d156.txt`) | T2a PASS en las siete ELF, con su control fallando en las cinco CM7. T2b: autoprueba 12/12 y 0/9; 1951 unidades, 0 fallidas, 0 escrituras; control con los seis presets y 20 hallazgos. **PASS** |
+| `--test t3 --flash`, `--test t3 --control …`, `--test t5 --preset debug` en `492d156`, árbol limpio (`gpio_f1b_audit3_t3_492d156.txt`, `…_t3_control_…`, `…_t5_debug_…`) | **T3:** los dos hooks, `HSEM_R5` = 0, contadores a 0 y los seis pines, con sus cinco campos. **Control:** flasheó las ELF de `07db657` y leyó `s_shared_lock` = NULL en `0x20012904` y `0x30020928`. **T5:** ICMP, UDP y ráfaga; las muestras crecen y `OVR` = 0; contadores `[net]` a 0. **PASS** las tres |
+| Revisión de las capturas de `7cc456d` | Todas con el árbol limpio y "Download verified successfully". La autoprueba de T2b da 12/12 escrituras detectadas (base expandida, paréntesis, `WRITE_REG`, `MODIFY_REG`, `SET_BIT`, `CLEAR_BIT`, varias líneas, `AFR[]`) y 0/9 lecturas falsas. El control de T2b tiene 20 hallazgos por preset y archivo. T1 es una sola salida UTF-8, con el comando y las cinco compilaciones con `-Werror` |
+| Evidencia del firmware | La de `32f343a` sigue valiendo: el código es el mismo. SWD independiente, 20/20 resets y T5 |
+
+### Hallazgos anteriores
+
+| ID | Estado |
+| --- | --- |
+| M1 | **Cerrado.** Una expresión con `(?:\s*\))*` entre el registro y el operador, y `=(?!=)`. Con la autoprueba sobre los headers reales del CMSIS, que exige 12/12 y 0/9. Las excepciones son las del plan, por sufijo de ruta relativa, más `stm32h7xx_hal_gpio.c` y `stm32h7xx_ll_gpio.h` del Cube que compila `prj_04` (comprobado en su `compile_commands.json`), justificadas en el informe §5.5 |
+| B7 | **Cerrado.** El control exige los seis presets sin fallos (`scanned > 0`, `failed = 0`) e imprime sus cuentas. Sin directorio de control, FAIL |
+| N1 | **Cerrado.** `pd8_ok` cuenta en el veredicto |
+| N2 | **Cerrado.** Exige que `Samples` crezca y `OVR` = 0 en cada lectura. Dice que `query_adc.py` no da `dma_error_count`/`half_overrun_count` |
+| N3 | **Cerrado.** Los cuatro contadores en cada línea `[net]` (al menos una), y cuentan en el veredicto. T7 separa "consola activa" de "identidad por flasheo" y no dice que leyó el banner |
+| N4, N5, N6 | **Cerrados.** `--control` implica `--flash`; espera de 3 s tras el flasheo; T2b sin control falla |
+| N7 | **Cerrado.** §5.5 declara `build.ninja`, el filtro `stm32h7xx_hal_*` (con `HAL_RCC_MCOConfig`), T5 secuencial y la excepción del LL |
+| M6 | **Cerrado.** `gpio_f1b_m6_netcheck_7cc456d.txt`: `prj_04` debug flasheado y `net_check` 3/3 |
+| m2, m4 | **Cerrados**, salvo m6 de abajo |
+
+### Lo que queda (menor, no bloquea)
+
+| ID | Hallazgo | Acción |
+| --- | --- | --- |
+| m6 | `g_shared` cae en silencio a `0x38008000` si `nm` no lo encuentra (`gpio_f1b_checks.py:862`, `:1083`) | En F1c, al reutilizar la herramienta |
+| m7 | El control de T2b busca `"main.c"` como subcadena (valdría también el `main.c` de CM7); las rutas del control conservan `_control_07db657/` porque se quita el prefijo de la raíz del repo a una ruta que solo empieza igual; la línea de algunos hallazgos es la del comienzo del bloque, no la de la escritura (`adc_acquisition.c` 55/58 en lugar de 57/60) | En F1c |
+| m8 | La captura de M6 son dos salidas pegadas, sin cabecera de comando, fecha ni hash | Nada (el hash está en el nombre y el flasheo verificado en la captura) |
+| m9 | Límite de T2b sin documentar: ninguna expresión ve una escritura por puntero (`volatile uint32_t *p = &GPIOD->MODER; *p = x;`). No hay ninguna en el código | Una frase en el README de `00_gpio` en el cierre |
+| — | T6b (arranque en frío) | Pendiente del responsable en el banco; bloquea el cierre, no F1 |
+
+### Estado
+
+**F1 pasa.**
+- **El código:** es correcto, el hook está en los dos núcleos, todos los escritores de configuración de GPIO de `prj_04` pasan por el driver y `selftest-gpio` respeta sus fases sin hook.
+- **La evidencia:** sostiene cada PASS. La herramienta puede fallar donde dice que comprueba, y mis ejecuciones (SWD independiente, 20 resets, T2, T3 con su control y T5) coinciden con las del implementador.
+
+**El cierre empieza cuando el responsable haga T6b en el banco:**
+- **Implementador:**
+  - `00_gpio/README.md`: §11, también la fila de `08_eth`; §12.2 G1/G13; §13.1; §15; el límite m9;
+  - `04_uart/README.md`: la MSP;
+  - `prj_04/README.md`: el hook, la validación y m3 (`App_Log_Init` descarta el error de la consola).
+- **Responsable:** `DRIVER_ROADMAP.md`, el borrado de los documentos de proceso y el merge.
+
+La placa quedó con `prj_04` debug de mi T5.

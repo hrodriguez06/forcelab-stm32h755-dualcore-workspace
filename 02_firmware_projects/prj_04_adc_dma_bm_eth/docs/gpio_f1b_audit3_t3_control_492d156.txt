@@ -1,0 +1,120 @@
+================================================================================
+STM32H755 GPIO F1b Verification Checks (T2, T3, T4, T5, T6a, T7)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --test t3 --control --control-dir ../stm32h755_control_07db657 --sn 0016000C4142501220353451
+[host] timestamp: 2026-10-13 09:39:18
+[host] git rev: 492d156 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: ..\stm32h755_control_07db657 (rev 07db657, clean)
+================================================================================
+
+--- Running T3 (live SWD inspection, control_mode=True) ---
+--- Flashing debug from prj_04_adc_dma_bm_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_07db657\02_firmware_projects\prj_04_adc_dma_bm_eth\tools\flash.py --preset=debug --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : debug
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,332,244 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (2,078,208 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_07db657\02_firmware_projects\prj_04_adc_dma_bm_eth\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_07db657\02_firmware_projects\prj_04_adc_dma_bm_eth\build\debug\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 88.64 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+北北北北北北北北北北北北北北北北北北北北北北北北北 0%
+圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.207
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 9.49 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+北北北北北北北北北北北北北北北北北北北北北北北北北 50%
+圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.901
+
+
+
+Verifying...
+
+
+Read progress:
+北北北北北北北北北北北北北北北北北北北北北北北北北 50%
+圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹圹 100%
+
+Time elapsed during verifying operation: 00:00:00.025
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+  [T3] Waiting 3.0s after flash for target boot and initialization...
+  [SWD origin] s_shared_lock CM7: 0x20012904 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x30020928 (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+
+--- Results for T3 ---
+  [PASS] T3_flash_verified: Flashed verified debug image from prj_04_adc_dma_bm_eth
+         Detail: Download verified successfully
+  [PASS] T3_control_hook_null: Control 07db657: s_shared_lock is NULL on both cores (T3 fails on control)
+         Detail: CM7 s_shared_lock=0x0 (want 0), CM4 s_shared_lock=0x0 (want 0)
+Verdict T3: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================
