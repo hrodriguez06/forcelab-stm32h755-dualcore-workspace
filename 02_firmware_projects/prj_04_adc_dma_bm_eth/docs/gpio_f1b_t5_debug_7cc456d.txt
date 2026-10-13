@@ -1,0 +1,160 @@
+================================================================================
+STM32H755 GPIO F1b Verification Checks (T2, T3, T4, T5, T6a, T7)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --test t5 --preset debug --sn 0016000C4142501220353451
+[host] timestamp: 2026-10-12 23:14:02
+[host] git rev: 7cc456d (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_07db657 (rev 07db657, clean)
+================================================================================
+
+--- Running T5 (production regression, preset=debug, sn=0016000C4142501220353451) ---
+  [Step 1] Flashing debug image via flash.py...
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : debug
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,328,488 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (2,079,388 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\build\debug\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 88.55 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.204
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 9.64 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.912
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.026
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+  [Step 2] Reading banner via monitor.py...
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+[phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[net] link up: 100 Mbps full duplex
+[ipc] m7=4 m4=20  (CPU2 alive)
+[ipc] m7=8 m4=40  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+
+  [Step 3] Running net_check.py (ICMP, UDP echo, burst)...
+Board    : 192.168.1.150
+UDP echo : port 7
+
+  OK    ICMP  4/4 replies
+  OK    UDP     1 B  rtt= 1.60 ms
+  OK    UDP    25 B  rtt= 1.27 ms
+  OK    UDP   512 B  rtt= 1.45 ms
+  OK    UDP  1024 B  rtt= 2.30 ms
+  OK    UDP  1472 B  rtt= 2.33 ms
+  OK    burst  100/100 returned  (0.1 s)
+
+PASS  3/3 checks
+Now confirm the board agrees: rx_nobuf, tx_nobuf and dma_err
+should all still read 0 in  py tools/monitor.py --timeout 15
+
+  [Step 4] Querying ADC telemetry via query_adc.py...
+[*] Querying ADC telemetry from 192.168.1.150:5001 (Mode: JSON)...
+[0001] CH5:   59 mV (raw:  1299, avg:  1176, min:   952, max:  1412) | Rate: 500000 Hz | Seq: 9451 | Samples: 4838912 | TC: 4725 | OVR: 0 | M4 HB: 96
+[0002] CH5:   60 mV (raw:  1312, avg:  1194, min:   948, max:  1392) | Rate: 500000 Hz | Seq: 9553 | Samples: 4891136 | TC: 4776 | OVR: 0 | M4 HB: 97 | Measured Rate: 509014.8 Hz
+[0003] CH5:   60 mV (raw:  1200, avg:  1203, min:   958, max:  1411) | Rate: 500000 Hz | Seq: 9654 | Samples: 4942848 | TC: 4827 | OVR: 0 | M4 HB: 98 | Measured Rate: 505837.1 Hz
+
+  [ADC telemetry note] query_adc.py reports CH5, Rate, Seq, Samples, TC, OVR, M4 HB (does not output dma_error_count or half_overrun_count)
+  [Step 5] Checking Ethernet statistics via monitor.py...
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+[ipc] m7=24 m4=120  (CPU2 alive)
+[ipc] m7=28 m4=140  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=115 tx=115 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[ipc] m7=32 m4=160  (CPU2 alive)
+
+
+--- Results for T5 ---
+  [PASS] T5_debug_flash_verified: Flashed prj_04 debug image with verified download
+         Detail: Download verified successfully
+  [PASS] T5_debug_banner: Firmware identity verified (matching git rev 7cc456d or verified download via B6)
+         Detail: banner_found=False, rev_match=False, download_verified=True
+  [PASS] T5_debug_net_check: Network stack responds: ICMP 4/4, UDP sweep 1..1472B, UDP burst 100/100
+         Detail: net_check PASS
+  [PASS] T5_debug_query_adc: ADC UDP telemetry streaming valid: samples growing, 0 overruns
+         Detail: readings=3, samples_start=4838912, samples_end=4942848, ovr=[0, 0, 0]
+  [PASS] T5_debug_driver_counters: Ethernet driver error counters remain zero across all [net] lines
+         Detail: Verified 1 [net] lines: all rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+Verdict T5: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================

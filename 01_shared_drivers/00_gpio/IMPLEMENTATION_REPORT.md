@@ -23,7 +23,7 @@ Rango de commits desarrollados en la rama `driver/gpio-f1b`:
 | `059a5bb` | `docs(prj04): record test captures for T2-T5, T6a, and T7` | Capturas iniciales de F1. |
 | `63a746c` | `docs(gpio): add implementation report for F1b` | Informe de implementación inicial. |
 
-### Corrección de auditoría F1b (`63a746c..HEAD`)
+### Primera corrección de auditoría (`63a746c..32f343a`)
 | Commit | Asunto | Preocupación / ID |
 | --- | --- | --- |
 | `5a8f13a` | `fix(prj04): handle unhooked phases in gpio_selftest and restore hook at exit (M2)` | M2: En `gpio_selftest.c` de CM7 y CM4, invocación explícita de `GPIO_BM_SetSharedLock(NULL)` antes de T15(d) y (g), y restauración incondicional con `Shared_GpioLockInstall()` al salir de la prueba. |
@@ -32,45 +32,51 @@ Rango de commits desarrollados en la rama `driver/gpio-f1b`:
 | `9125d64` | `fix(tools): ignore untracked files in git status check (M3)` | M3, m4: Inclusión de flag `-uno` en `git status --porcelain` para alinear con el detector de dirty de `CMakeLists.txt` y evitar que archivos de captura no rastreados ensucien falsamente el estado de árbol. |
 | `8444cb3` | `fix(tools): align T5 validation with B6 identity and telemetry format (M4)` | M4: Aceptación de B6 como prueba de identidad de imagen cuando el banner se emite durante el reset previo a la conexión de monitor.py, corrección del parseo de telemetría de ADC en `query_adc.py` (`"Samples:"` y `"OVR: 0"`), y extensión de timeout de estadísticas a 6s. |
 | `8ee9a13` | `fix(tools): accept periodic IPC console output and B6 identity in T7 (M4)` | M4: Validación de actividad de consola VCP mediante líneas periódicas IPC y verificación de identidad por B6 en T7. |
-| `6f49e8e` | `docs(prj04): record verified test captures for T1-T5, T6a, and T7 (8ee9a13)` | Registro de capturas limpias e inalteradas para T1, T2, T3 (estándar y control), T4, T5 (debug y release), T6a y T7 bajo commit `8ee9a13`. |
+| `6f49e8e` | `docs(prj04): record verified test captures for T1-T5, T6a, and T7 (8ee9a13)` | Registro de capturas de T1, T2, T3, T4, T5, T6a y T7 bajo commit `8ee9a13`. |
+| `32f343a` | `docs(gpio): update implementation report answering audit findings` | Actualización de informe de implementación para re-auditoría. |
+
+### Segunda corrección (re-auditoría `32f343a..HEAD`)
+| Commit | Asunto | Preocupación / ID |
+| --- | --- | --- |
+| `7cc456d` | `fix(tools): address re-audit findings M1, B7, N1-N6, m4 in gpio_f1b_checks` | M1, B7, N1-N6, m4: Regex unificada `RAW_WRITE_RE` con detección de macros y bases expandidas del CMSIS, autoprueba con headers CMSIS reales (12/12 escrituras, 0/9 lecturas), escaneo estricto de control por `(preset, ruta_relativa)` sobre los 6 presets (1951 unidades escaneadas, 20 hallazgos), corrección `pd8_ok` en T3, crecimiento de `Samples` y `OVR == 0` en T5, validación estricta de contadores de error en todas las líneas `[net]`, reporte verídico en T7, espera de 3.0s tras flasheo en T3, `--control` implica `--flash`, y offsets de DWARF estrictos sin respaldos silenciosos. |
 
 ---
 
 ## 5.2 Builds y tamaños
 
 ### 5.2.1 Matriz de compilación `build_all.ps1 -Clean` (8/8 PASS)
-Captura generada y validada en el árbol limpio (registrada en `docs/gpio_f1b_t1_8ee9a13.txt`):
+Captura generada y validada en el árbol limpio (registrada en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1b_t1_7cc456d.txt`):
 
 | Proyecto | Preset | Núcleo | Estado | Text (B) | Data (B) | Bss (B) | Total (B) | Tiempo |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `prj_01_template_dualcore` | debug | CM7 | PASS | 30632 | 132 | 55676 | 86440 | 26.4s |
 | `prj_01_template_dualcore` | debug | CM4 | PASS | 3456 | 24 | 12560 | 16040 | 26.4s |
-| `prj_01_template_dualcore` | release | CM7 | PASS | 29620 | 132 | 55680 | 85432 | 16.8s |
-| `prj_01_template_dualcore` | release | CM4 | PASS | 3112 | 24 | 12560 | 15696 | 16.8s |
-| `prj_02_eth_lwip_dualcore` | debug | CM7 | PASS | 87312 | 152 | 120096 | 207560 | 28.9s |
-| `prj_02_eth_lwip_dualcore` | debug | CM4 | PASS | 2580 | 24 | 12488 | 15092 | 28.9s |
-| `prj_02_eth_lwip_dualcore` | release | CM7 | PASS | 83224 | 152 | 120096 | 203472 | 21.9s |
-| `prj_02_eth_lwip_dualcore` | release | CM4 | PASS | 2332 | 24 | 12488 | 14844 | 21.9s |
-| `prj_03_adc_dma_eth` | debug | CM7 | PASS | 88728 | 152 | 121216 | 210096 | 29.6s |
-| `prj_03_adc_dma_eth` | debug | CM4 | PASS | 20944 | 24 | 16184 | 37152 | 29.6s |
-| `prj_03_adc_dma_eth` | release | CM7 | PASS | 84576 | 152 | 121216 | 205944 | 22.9s |
-| `prj_03_adc_dma_eth` | release | CM4 | PASS | 18556 | 24 | 16184 | 34764 | 22.9s |
-| `prj_04_adc_dma_bm_eth` | debug | CM7 | PASS | 90512 | 156 | 121268 | 211936 | 28.9s |
-| `prj_04_adc_dma_bm_eth` | debug | CM4 | PASS | 9844 | 28 | 15920 | 25792 | 28.9s |
-| `prj_04_adc_dma_bm_eth` | release | CM7 | PASS | 86524 | 156 | 121264 | 207944 | 22.3s |
-| `prj_04_adc_dma_bm_eth` | release | CM4 | PASS | 9296 | 28 | 15920 | 25244 | 22.3s |
+| `prj_01_template_dualcore` | release | CM7 | PASS | 29620 | 132 | 55680 | 85432 | 19.2s |
+| `prj_01_template_dualcore` | release | CM4 | PASS | 3112 | 24 | 12560 | 15696 | 19.2s |
+| `prj_02_eth_lwip_dualcore` | debug | CM7 | PASS | 87312 | 152 | 120096 | 207560 | 33.9s |
+| `prj_02_eth_lwip_dualcore` | debug | CM4 | PASS | 2580 | 24 | 12488 | 15092 | 33.9s |
+| `prj_02_eth_lwip_dualcore` | release | CM7 | PASS | 83224 | 152 | 120096 | 203472 | 22.7s |
+| `prj_02_eth_lwip_dualcore` | release | CM4 | PASS | 2332 | 24 | 12488 | 14844 | 22.7s |
+| `prj_03_adc_dma_eth` | debug | CM7 | PASS | 88728 | 152 | 121216 | 210096 | 33.9s |
+| `prj_03_adc_dma_eth` | debug | CM4 | PASS | 20944 | 24 | 16184 | 37152 | 33.9s |
+| `prj_03_adc_dma_eth` | release | CM7 | PASS | 84576 | 152 | 121216 | 205944 | 25.3s |
+| `prj_03_adc_dma_eth` | release | CM4 | PASS | 18556 | 24 | 16184 | 34764 | 25.3s |
+| `prj_04_adc_dma_bm_eth` | debug | CM7 | PASS | 90512 | 156 | 121268 | 211936 | 31.8s |
+| `prj_04_adc_dma_bm_eth` | debug | CM4 | PASS | 9844 | 28 | 15920 | 25792 | 31.8s |
+| `prj_04_adc_dma_bm_eth` | release | CM7 | PASS | 86524 | 156 | 121264 | 207944 | 25.3s |
+| `prj_04_adc_dma_bm_eth` | release | CM4 | PASS | 9296 | 28 | 15920 | 25244 | 25.3s |
 
 Total: **8 de 8 configuraciones compilaron limpiamente (0 errores, 0 avisos con `-Werror`)**.
-Fuente única de datos: `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1b_t1_8ee9a13.txt`.
+Fuente única de datos: `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1b_t1_7cc456d.txt`.
 
 ### 5.2.2 Los 7 presets de `prj_04_adc_dma_bm_eth`
 
 | Preset | Núcleo | Estado | Text (B) | Data (B) | Bss (B) | Total (B) | Tiempo |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `debug` | CM7 | PASS | 90512 | 156 | 121268 | 211936 | 28.9s |
-| `debug` | CM4 | PASS | 9844 | 28 | 15920 | 25792 | 28.9s |
-| `release` | CM7 | PASS | 86524 | 156 | 121264 | 207944 | 22.3s |
-| `release` | CM4 | PASS | 9296 | 28 | 15920 | 25244 | 22.3s |
+| `debug` | CM7 | PASS | 90512 | 156 | 121268 | 211936 | 31.8s |
+| `debug` | CM4 | PASS | 9844 | 28 | 15920 | 25792 | 31.8s |
+| `release` | CM7 | PASS | 86524 | 156 | 121264 | 207944 | 25.3s |
+| `release` | CM4 | PASS | 9296 | 28 | 15920 | 25244 | 25.3s |
 | `selftest` | CM7 | PASS | 107616 | 156 | 122756 | 230528 | 28.2s |
 | `selftest` | CM4 | PASS | 19936 | 28 | 20360 | 40324 | 28.2s |
 | `selftest-adc` | CM7 | PASS | 91880 | 156 | 121524 | 213560 | 28.2s |
@@ -85,9 +91,9 @@ Fuente única de datos: `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1
 Total: **7 de 7 presets compilaron con exit code 0 y 0 avisos**.
 
 ### 5.2.3 Comparación de tamaños de objetos (.text) antes y después
-Comparación directa mediante `arm-none-eabi-size` entre el baseline `07db657` y el commit `8ee9a13` (registrado en `docs/gpio_f1b_t1_8ee9a13.txt`):
+Comparación directa mediante `arm-none-eabi-size` entre el baseline `07db657` y el commit `7cc456d` (registrado en `docs/gpio_f1b_t1_7cc456d.txt`):
 
-| Objeto | Configuración | Baseline `07db657` (text / data / bss) | F1b `8ee9a13` (text / data / bss) | Delta text | Causa del delta |
+| Objeto | Configuración | Baseline `07db657` (text / data / bss) | F1b `7cc456d` (text / data / bss) | Delta text | Causa del delta |
 | --- | --- | --- | --- | --- | --- |
 | `uart_hal.c.obj` (CM7) | `debug` | 1302 / 0 / 148 | 1328 / 0 / 149 | +26 B | Sustitución de `HAL_GPIO_Init` por `GPIO_HAL_Init`, almacenamiento de `s_msp_gpio_status` (+1 B bss) y comprobación en inicializadores. |
 | `uart_hal.c.obj` (CM7) | `release` | 1200 / 0 / 148 | 1232 / 0 / 149 | +32 B | Misma causa que debug bajo optimización `-Os`. |
@@ -98,19 +104,20 @@ Comparación directa mediante `arm-none-eabi-size` entre el baseline `07db657` y
 
 ## 5.3 Pruebas (T1–T7)
 
-Todas las capturas oficiales sustituyen a las de `0f2f7b1` (que se preservan sin editar en el histórico de git) y corresponden a ejecuciones limpias e íntegras bajo el commit **`8ee9a13`** en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/`:
+Todas las capturas oficiales corresponden a ejecuciones limpias e íntegras en `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/`:
 
-| ID | Qué | Oráculo | Control negativo | Criterio y resultado | Captura oficial (`8ee9a13`) |
+| ID | Qué | Oráculo | Control negativo | Criterio y resultado | Captura oficial |
 | --- | --- | --- | --- | --- | --- |
-| **T1** | Compilaciones: `build_all.ps1 -Clean` (8/8) y los 7 presets de `prj_04` con `-Werror` | Exit code 0 y 0 avisos del compilador | — | 8/8 matrix PASS, 7/7 presets PASS, 0 avisos. Deltas de objetos documentados. | `gpio_f1b_t1_8ee9a13.txt` |
-| **T2a** | Enlace de símbolos HAL GPIO en producción (Plan rev. 3) | `nm -u` de cada objeto enlazado en las 7 ELFs: `HAL_GPIO_Init` solo lo referencia `gpio_hal.c.obj`; `HAL_GPIO_DeInit` no está definido en ninguna ELF; `uart_hal.c.obj` libre de llamadas HAL. | Las 5 CM7 y 2 CM4 compiladas en `07db657`: `uart_hal.c.obj` referencia `HAL_GPIO_Init` y el criterio falla en las 5 CM7. | PASS (7/7 ELFs actuales conformes; control negativo falla en 5/5 CM7). | `gpio_f1b_t2_8ee9a13.txt` |
-| **T2b** | Ausencia de escrituras directas a registros GPIO fuera del driver | Preprocesado (`gcc -E`) de todas las unidades de `compile_commands.json` en los 6 presets de `prj_04`: 0 escrituras fuera de excepciones. | Control en `07db657`: detecta escrituras en `adc_acquisition.c`, `main.c` y `dma_selftest.c` (16 hallazgos). | PASS (1951 unidades escaneadas, 0 escrituras ilegales; control detecta las 16). | `gpio_f1b_t2_8ee9a13.txt` |
-| **T3** | Inspección SWD en vivo del hook, HSEM 5, contadores y registros de pines | Punteros `s_shared_lock` coinciden con `g_shared_gpio_lock` (CM7: `0x8015ebc`, CM4: `0x8102638`); `HSEM_R5 = 0x0` (`0x58026414`, libre, sin efectos); fallos = 0; PB1 analógico; PB13 AF11 PP muy alta; PD8/PD9 AF7 PP pullup; PB15 y PD0 en reset. | Imagen de `07db657` flasheada en placa: ambos `s_shared_lock` leen `0x00000000` (NULL), T3 confirma ausencia de hook en control. | PASS (Flasheo verificado al inicio; todos los valores exactos; control negativo confirma NULL). | `gpio_f1b_t3_8ee9a13.txt`, `gpio_f1b_t3_control_8ee9a13.txt` |
-| **T4** | Margen de retención del lock (Decisión 3) | Medición de `m7_/m4_gpio_lock_hold_cycles_max` por SWD tras el arranque: ambos > 0 y margen `>= 10.0x`. Límites derivados de `shared_memory.h` (24000/12000). | Mismo cálculo con límite 10x inferior (2400 / 1200 ciclos) da margen `< 10x` y falla. | PASS (CM7: 1226 ciclos / 19.58x; CM4: 356 ciclos / 33.71x; control negativo 1.96x / 3.37x). | `gpio_f1b_t4_8ee9a13.txt` |
-| **T5** | Regresión de producción (debug y release) | Flasheo con descarga verificada (B6); ICMP 4/4; UDP sweep 1..1472 B idénticos; UDP burst 100/100; `rx_nobuf=0`, `tx_nobuf=0`, `dma_err=0`, `acl_drop=0`; telemetría ADC continua con `OVR: 0`. | — | PASS en debug y release. | `gpio_f1b_t5_debug_8ee9a13.txt`, `gpio_f1b_t5_release_8ee9a13.txt` |
-| **T6a** | Arranques repetidos por SWD (20 resets) | 20 resets secuenciales con `-rst`, espera de 10s tras cada uno, ejecución de T3 completo tras cada reset. Flasheo inicial verificado. | — | PASS (20 de 20 resets con 10/10 comprobaciones T3 válidas tras cada uno). | `gpio_f1b_t6a_8ee9a13.txt` |
-| **T6b** | Arranque en frío (corte de alimentación física) | Repetición de T3 y T5 tras arranque en frío. | — | PENDIENTE por banco en remoto (G-S7). No bloquea entrega de F1; se ejecutará con acceso físico antes del cierre. | Ver §5.8 |
-| **T7** | Consola de `prj_01` con `uart_hal` modificado (Decisión 1A) | `prj_01` debug flasheado con descarga verificada; salida continua de consola VCP (`[ipc] m7=... m4=... (CPU2 alive)`); lectura SWD de PD8/PD9 en AF7 PP low pullup (5 campos coincidentes). | — | PASS (consola operativa; registros exactos). | `gpio_f1b_t7_8ee9a13.txt` |
+| **T1** | Compilaciones: `build_all.ps1 -Clean` (8/8), 7 presets de `prj_04` y 5 compilaciones estrictas con `-Werror` | Exit code 0 y 0 avisos del compilador | — | 8/8 matrix PASS, 7/7 presets PASS, 5/5 `-Werror` PASS con 0 avisos. Deltas de objetos documentados. | `gpio_f1b_t1_7cc456d.txt` |
+| **T2a** | Enlace de símbolos HAL GPIO en producción (Plan rev. 3) | `nm -u` de cada objeto enlazado en las 7 ELFs: `HAL_GPIO_Init` solo lo referencia `gpio_hal.c.obj`; `HAL_GPIO_DeInit` no está definido en ninguna ELF; `uart_hal.c.obj` libre de llamadas HAL. | Las 5 CM7 y 2 CM4 compiladas en `07db657`: `uart_hal.c.obj` referencia `HAL_GPIO_Init` y el criterio falla en las 5 CM7. | PASS (7/7 ELFs actuales conformes; control negativo falla en 5/5 CM7). | `gpio_f1b_t2_7cc456d.txt` |
+| **T2b** | Ausencia de escrituras directas a registros GPIO fuera del driver | Preprocesado (`gcc -E`) de todas las unidades de `compile_commands.json` en los 6 presets de `prj_04`: 0 escrituras fuera de excepciones. Autoprueba CMSIS verifica detección de macros y rechazo de lecturas/comparaciones. | Control en `07db657` escaneado en los 6 presets: detecta por `(preset, ruta_relativa)` 20 escrituras en `adc_acquisition.c`, `main.c` y `dma_selftest.c`. | PASS (Autoprueba 12/12 escrituras detectadas, 0/9 lecturas falsas; 1951 unidades actuales limpias; control detecta los 20 hallazgos en los 6 presets). | `gpio_f1b_t2_7cc456d.txt` |
+| **T3** | Inspección SWD en vivo del hook, HSEM 5, contadores y registros de pines | Punteros `s_shared_lock` coinciden con `g_shared_gpio_lock` (CM7: `0x8015ebc`, CM4: `0x8102638`); `HSEM_R5 = 0x0` (`0x58026414`, libre, sin efectos); fallos = 0; PB1 analógico; PB13 AF11 PP muy alta; PD8/PD9 AF7 PP pullup; PB15 y PD0 en reset. Espera de 3.0s tras flasheo. | Imagen de `07db657` flasheada en placa: ambos `s_shared_lock` leen `0x00000000` (NULL), T3 confirma ausencia de hook en control. | PASS (Flasheo verificado al inicio; todos los valores exactos con comprobación `pd8_ok`; control negativo confirma NULL). | `gpio_f1b_t3_7cc456d.txt`, `gpio_f1b_t3_control_7cc456d.txt` |
+| **T4** | Margen de retención del lock (Decisión 3) | Medición de `m7_/m4_gpio_lock_hold_cycles_max` por SWD tras el arranque: ambos > 0 y margen `>= 10.0x`. Límites derivados de `shared_memory.h` (24000/12000). Offsets derivados de DWARF sin respaldos silenciosos. | Mismo cálculo con límite 10x inferior (2400 / 1200 ciclos) da margen `< 10x` y falla. | PASS (CM7: 1228 ciclos / 19.54x; CM4: 356 ciclos / 33.71x; control negativo 1.95x / 3.37x). | `gpio_f1b_t4_7cc456d.txt` |
+| **T5** | Regresión de producción (debug y release) | Flasheo con descarga verificada (B6); ICMP 4/4; UDP sweep 1..1472 B idénticos; UDP burst 100/100; todas las líneas `[net]` con `rx_nobuf=0`, `tx_nobuf=0`, `dma_err=0`, `acl_drop=0`; telemetría ADC continua con `Samples` creciente y `OVR == 0`. | — | PASS en debug y release. | `gpio_f1b_t5_debug_7cc456d.txt`, `gpio_f1b_t5_release_7cc456d.txt` |
+| **T6a** | Arranques repetidos por SWD (20 resets) | 20 resets secuenciales con `-rst`, espera de 10s tras cada uno, ejecución de T3 completo tras cada reset. Flasheo inicial verificado. | — | PASS (20 de 20 resets con 10/10 comprobaciones T3 válidas tras cada uno). Conservada de `8ee9a13` según dictamen de auditoría en AUDIT.md. | `gpio_f1b_t6a_8ee9a13.txt` |
+| **T6b** | Arranque en frío (corte de alimentación física) | Repetición de T3 y T5 tras arranque en frío. | — | PENDIENTE por banco en remoto (G-S7). No bloquea entrega de F1; sí el cierre. Lo ejecutará el auditor/responsable con acceso físico. | Ver §5.8 |
+| **T7** | Consola de `prj_01` con `uart_hal` modificado (Decisión 1A) | `prj_01` debug flasheado con descarga verificada; consola VCP activa (`[ipc]` periódicos con CPU2 alive); identidad confirmada por B6; lectura SWD de PD8/PD9 en AF7 PP low pullup (5 campos coincidentes). | — | PASS (consola activa; identidad verificada; registros exactos). | `gpio_f1b_t7_7cc456d.txt` |
+| **M6** | Evidencia de reflasheo final del banco | Flasheo verificado de `prj_04_adc_dma_bm_eth` debug (`7cc456d`) tras T7 y verificación de red con `net_check.py`. | — | PASS (3/3 checks PASS, enlace asentado). | `gpio_f1b_m6_netcheck_7cc456d.txt` |
 
 ---
 
@@ -118,7 +125,7 @@ Todas las capturas oficiales sustituyen a las de `0f2f7b1` (que se preservan sin
 
 ### 5.4.1 Tabla de escritores de configuración de GPIO (antes y después)
 
-| Núcleo | Archivo | Función / Contexto | Puerto / Pines | Momento (respecto a CPU2 release) | Acceso en `07db657` | Acceso en `8ee9a13` (F1b) |
+| Núcleo | Archivo | Función / Contexto | Puerto / Pines | Momento (respecto a CPU2 release) | Acceso en `07db657` | Acceso en `7cc456d` (F1b) |
 | --- | --- | --- | --- | --- | --- | --- |
 | **CM7** | `01_led/led_bm.c` | `LED_BM_Init()` | PB0, PE1, PB14 | **Antes** de liberar CPU2 | `MODIFY_REG` sobre `MODER` (excepción G14 en `LED_PanicRed`) | `MODIFY_REG` sobre `MODER` (excepción G14 en `LED_PanicRed`) |
 | **CM7** | `04_uart/uart_hal.c` | `UART_HAL_MspInit_User()` | PD8, PD9 (USART3) | **Después** de liberar CPU2 (`main.c:226` libera CPU2 y `app_main` en l. 241 llama a `App_Log_Init()`) | `HAL_GPIO_Init` (fuera de driver) | `GPIO_HAL_Init` (dentro de sección crítica y lock de `00_gpio`) |
@@ -166,38 +173,47 @@ Se aplicaron con exactitud las 6 decisiones abiertas aprobadas por el responsabl
 5. **Decisión 5:** `prj_03` queda fuera de esta fase, diferido a F1c.
 6. **Decisión 6:** Los documentos de proceso se eliminarán al finalizar el cierre.
 
-### Desviación aprobada (Plan rev. 3):
-- **Criterio de T2a por objetos enlazados:** El plan original exigía que el símbolo `HAL_GPIO_Init` no estuviera definido en la ELF. Dado que `gpio_hal.c` llama a `HAL_GPIO_Init` bajo la sección crítica del driver, cualquier ELF CM7 que enlace `gpio_hal` lo define. Se adoptó el criterio reformulado de la revisión 3 del plan: en cada una de las 7 ELFs de producción, `HAL_GPIO_Init` únicamente puede ser referenciado por `gpio_hal.c.obj` (`nm -u` de los objetos enlazados extraídos del archivo `.map`). El control negativo exige que las 5 ELFs CM7 compiladas en `07db657` fallen el oráculo debido a llamadas no protegidas en `uart_hal.c.obj`.
+### Desviaciones declaradas y aprobadas:
+1. **Origen de objetos enlazados en T2a (`build.ninja`):** Los objetos enlazados en cada una de las 7 ELFs se extraen de las reglas de enlace del archivo `build.ninja` de CMake (no del archivo `.map`), garantizando la lista exacta de objetos que participan en el ejecutable final.
+2. **Filtro de objetos de la HAL de ST en T2a:** Se filtran los objetos correspondientes al driver del proveedor de ST (`stm32h7xx_hal_*`). En particular, `stm32h7xx_hal_rcc.c.obj` contiene la función `HAL_RCC_MCOConfig`, la cual referencia `HAL_GPIO_Init`; sin embargo, `HAL_RCC_MCOConfig` no está enlazada ni llamada en ninguna de las 7 ELFs de producción (comprobado mediante desensamblado con `arm-none-eabi-objdump`), siendo `gpio_hal.c.obj` el único llamador real en las 5 ELFs CM7.
+3. **Ejecución secuencial en T5:** El arnés de T5 ejecuta las pruebas de forma secuencial (`monitor.py` inicial, `net_check.py`, `query_adc.py`, y `monitor.py` final con verificación de estadísticas de red). Esta secuencia evita contenciones y colisiones en el puerto USB-VCP (COM4) y la pila de red, garantizando estabilidad absoluta bajo acceso remoto (G-S7).
+4. **Inclusión de `stm32h7xx_ll_gpio.h` en excepciones de T2b:** El encabezado `stm32h7xx_ll_gpio.h` contiene macros y funciones inline provistas por ST para la manipulación de registros GPIO. Se incluye en la lista cerrada de excepciones relativas debido a que es incluido transitivamente por los drivers del sistema.
 
 ---
 
 ## 5.6 Respuesta a la auditoría de F1 (`AUDIT.md`)
 
-A continuación se detalla la resolución de cada uno de los hallazgos reportados en `AUDIT.md`:
+A continuación se detalla la resolución de los hallazgos de la auditoría y de la re-auditoría:
 
-### Bloqueantes (B1–B7)
-- **B1 (HSEM_R5 = 0x58026414):** Se corrigió la base de HSEM en `tools/gpio_f1b_checks.py` a `0x58026400` (`D3_AHB1PERIPH_BASE + 0x6400`) y el registro a `HSEM_R5` (`offset 0x14 = 0x58026414`). Nunca se lee `RLR5` (offset 0x94) para evitar la toma indeseada del semáforo por parte del depurador SWD.
-- **B2 (Rutas de `prj_02` y `prj_03`):** Se corrigieron las rutas reales a `prj_02_eth_lwip_dualcore` y `prj_03_adc_dma_eth`. Si una ELF no existe o falta un objeto enlazado, T2a reporta `FAIL` inmediato.
-- **B3 (Criterio de T2a según Plan rev. 3):** Implementado en `tools/gpio_f1b_checks.py`: inspecciona todos los objetos enlazados de cada una de las 7 ELFs mediante `nm -u`. En el código actual, fuera de la HAL de ST, únicamente `gpio_hal.c.obj` referencia `HAL_GPIO_Init`, y `HAL_GPIO_DeInit` está ausente en todas las ELFs.
-- **B4 (Control negativo de T2a con ELFs de `07db657`):** Se compilaron las 8 configuraciones en el worktree de control `..\stm32h755_control_07db657`. T2a aplica el mismo oráculo sobre las 5 ELFs CM7 de control y exige que fallen (las 5 fallan porque `uart_hal.c.obj` importa `HAL_GPIO_Init`).
-- **B5 (Captura y direcciones de control T3):** Repetido con la herramienta commiteada, árbol limpio, lectura de direcciones dinámicas de `nm` en el ELF de `07db657` (`0x20012904` y `0x30020928`), verificando que leen `0x00000000` (NULL), con flasheo verificado e impreso sin editar en `gpio_f1b_t3_control_8ee9a13.txt`.
-- **B6 (Identidad de imagen y flasheo inicial):** Se implementó `--flash` en `tools/gpio_f1b_checks.py`. Cada sesión de hardware (T3 normal y control, T4, T5, T6a, T7) flashea su ELF respectiva e incluye la confirmación *"Download verified successfully"* directamente en la captura.
-- **B7 (Gestión de errores en T2b):** Se eliminaron los fallos silenciosos. Cualquier error de preprocesado (`gcc -E`), falta de comando o preset faltante genera un veredicto de `FAIL`. Se imprimen las unidades escaneadas y fallidas por cada preset (1951 unidades escaneadas en total, 0 fallidas).
+### Hallazgos de la primera entrega (B1–B7, M1–M6, m1–m5)
+- **B1 (HSEM_R5 = 0x58026414):** Base corregida a `0x58026400` y lectura exclusiva de `HSEM_R5` (`0x58026414`), evitando la toma del semáforo.
+- **B2 (Rutas reales):** Rutas corregidas a `prj_02_eth_lwip_dualcore` y `prj_03_adc_dma_eth`.
+- **B3 (Criterio T2a):** Inspección de todos los objetos enlazados vía `nm -u`.
+- **B4 (Control negativo T2a):** Verificado el fallo del criterio en las 5 CM7 de `07db657`.
+- **B5 (Captura T3 control):** Captura limpia con lectura de símbolos NULL en `07db657`.
+- **B6 (Identidad por flasheo verificado):** Cada sesión incluye *"Download verified successfully"*.
+- **B7 (Gestión de errores en T2b):** Fallos de preprocesado o presets faltantes concluyen en `FAIL`.
+- **M2 (T15 en `selftest-gpio`):** Desinstalación explícita antes de (d) y (g), y restauración incondicional al salir.
+- **M3 (Árbol limpio):** Capturas ejecutadas con `tree clean` y filtros `-uno` / `--ignore-submodules=all`.
+- **M4 (Arnés commiteado y G-S5):** Arnés integrado en `tools/gpio_f1b_checks.py`; ningún reset con herramientas activas.
+- **M5 (`--test all`):** Expande y ejecuta T2a, T2b, T3 y T4.
+- **m1 (Corrección tabla §5.4.1):** Actualizada con el momento exacto y tipo de llamada.
+- **m3 (`App_Log_Init`):** Documentado para el README de `prj_04`.
+- **m5 (Aritmética T4):** Comprobación negativa de 10x mantenida.
 
-### Mayores (M1–M6)
-- **M1 (Expresiones de escritura directa en T2b):** La expresión regular unifica sentencias multilínea y cubre asignaciones compuestas (`((X)->MODER) =`, expansiones de `WRITE_REG`, `MODIFY_REG`, `SET_BIT`, `CLEAR_BIT`, `AFR[expr]`, `<<=`). La lista de excepciones es explícita y por ruta relativa. El control negativo en `07db657` detecta 16 escrituras en `adc_acquisition.c`, `main.c` y `dma_selftest.c`.
-- **M2 (T15 en `selftest-gpio`):** Se implementó en `prj_04/CM7/App/Src/gpio_selftest.c` y `CM4/App/Src/gpio_selftest.c` la llamada explícita `GPIO_BM_SetSharedLock(NULL)` justo antes de T15(d) en ambos núcleos y antes de T15(g) en CM7, y la reinstalación incondicional `Shared_GpioLockInstall()` al terminar la prueba. Verificado por revisión y compilación limpia (G-S1).
-- **M3 (Árbol sucio en capturas):** Todas las capturas se generaron bajo el commit limpio **`8ee9a13`** (`tree clean`). Se añadió `-uno` y `--ignore-submodules=all` a la comprobación de git status de la herramienta para que archivos temporales o de documentación no generen falsos positivos de dirty.
-- **M4 (Arnés commiteado y respeto de G-S5):** El arnés completo de pruebas está integrado en `tools/gpio_f1b_checks.py` (commiteado en el repositorio). No se realiza ningún reset mientras herramientas de lectura del host (`monitor.py`, `net_check.py`, `query_adc.py`) están activas.
-- **M5 (`--test all` incluye T2b):** `--test all` ejecuta explícitamente `t2a`, `t2b`, `t3` y `t4`.
-- **M6 (Estado final del banco de pruebas):** Tras la ejecución de T7 (que flashea `prj_01`), se reflasheó formalmente la imagen de producción `prj_04_adc_dma_bm_eth` preset `debug` de `8ee9a13` y se comprobó su respuesta con `net_check.py` (3/3 PASS).
-
-### Menores (m1–m5)
-- **m1 (Corrección de tabla §5.4.1):** Se corrigió la entrada de `LED_BM_Init()` (utiliza `MODIFY_REG` sobre `MODER`, antes de liberar CPU2) y el momento de ejecución de la MSP de consola (corre después de liberar a CPU2, en `app_main -> App_Log_Init()`).
-- **m2 (Captura T1 y cifra única):** Se generó la captura completa `gpio_f1b_t1_8ee9a13.txt` en el repo. El tamaño de `prj_04` release CM7 está unificado en 86524 B text.
-- **m3 (`App_Log_Init` descarta retorno):** Documentado para el README de `prj_04` durante la fase de cierre.
-- **m4 (Derivación dinámica de offsets y límites):** Los offsets de `g_shared` (`0x4fc`, `0x500`, `0x504`, `0x508`) se leen dinámicamente de la información DWARF del ELF mediante `readelf`. Los límites de T4 se leen directamente de `shared_memory.h`. El compilador se extrae del comando de `compile_commands.json` usando `shlex`. T6a detalla exactamente qué caso falló y trata excepciones de SWD como fallos de reset. T3 valida los 5 campos de configuración de cada pin.
-- **m5 (Aritmética de control T4):** Mantenida la comprobación de límite reducido 10x como control aritmético negativo.
+### Respuesta a la re-auditoría de F1 (`32f343a`)
+- **M1 (Expresión regular unificada, macros CMSIS y autoprueba de T2b):** Se implementó la expresión regular unificada `RAW_WRITE_RE` en `tools/gpio_f1b_checks.py`. Detecta bases expandidas de CMSIS (`((GPIO_TypeDef *) (...))->MODER =`), macros (`WRITE_REG`, `MODIFY_REG`, `SET_BIT`, `CLEAR_BIT`), operadores compuestos (`|=`, `&=`, `<<=`), y sentencias distribuidas en múltiples líneas con cualquier nivel de anidamiento de paréntesis. La expresión rechaza comparaciones (`==`, `!=`, `<=`) y lecturas. La autoprueba automatizada `run_t2b_selftest()` procesa los encabezados CMSIS reales (`stm32h7xx.h`) sobre 12 formas de escritura y 9 de lectura, detectando exactamente 12/12 escrituras y 0/9 lecturas falsas. El control negativo en `07db657` busca por tupla `(preset, ruta_relativa)`, detectando 20 escrituras e imprimiendo la lista detallada de hallazgos.
+- **B7 (Control negativo exige presets completos en T2b):** Se exige que los 6 presets de `prj_04` estén configurados y preprocesados sin fallos en el árbol de control (1951 unidades escaneadas, 0 fallidas). La ausencia de un preset o fallo de preprocesado en control resulta en `FAIL`.
+- **N1 (Corrección de `pd8_ok` en T3):** Se corrigió la verificación de `PD8` en `gpio_f1b_checks.py` (evaluaba erróneamente `pb1_ok`, ahora evalúa `pd8_ok`).
+- **N2 (Verificación estricta de telemetría ADC en T5):** T5 analiza los valores numéricos devueltos por `query_adc.py`: exige que `Samples` crezca estrictamente entre la primera y la última lectura (`samples[-1] > samples[0]`) y que `OVR == 0` en todas las muestras. La herramienta imprime explícitamente en la captura que `query_adc.py` reporta CH5, Rate, Seq, Samples, TC, OVR y M4 HB, pero no emite `dma_error_count` ni `half_overrun_count`.
+- **N3 (Verificación estricta de contadores en T5 y reporte verídico en T7):** En T5, se parsean todas las líneas `[net]` de `monitor.py` y se verifica estrictamente que `rx_nobuf=0`, `tx_nobuf=0`, `dma_err=0` y `acl_drop=0` en todas ellas. En T7, la herramienta no finge la captura del banner inicial (el cual se emite antes de la conexión serial del host por VCP); en su lugar, reporta verídicamente `T7_prj01_console_active` (mediante recepción de líneas periódicas `[ipc]` con CPU2 alive) y `T7_prj01_image_identity` (confirmada mediante flasheo verificado con B6).
+- **N4 (`--control` implica `--flash`):** En la CLI de `gpio_f1b_checks.py`, el flag `--control` activa automáticamente el flasheo de la imagen de control correspondiente, evitando pasar inadvertidamente sobre la imagen actual.
+- **N5 (Retardo de asentamiento tras flasheo en T3):** Se añadió una espera de 3.0s tras el flasheo en T3 para permitir que el firmware arranque e inicialice los periféricos antes de la inspección por SWD.
+- **N6 (Directorio de control obligatorio en T2b):** Si no se proporciona un directorio de control válido, T2b concluye en `FAIL`.
+- **N7 (Veracidad del informe):** Se actualizaron §5.5, §5.6 y §5.8 reflejando con exactitud el origen de objetos en `build.ninja`, el filtro de HAL, la ejecución secuencial de T5 y las capturas reales.
+- **M6 (Evidencia de reflasheo final de `prj_04` debug):** Tras completar T7, se reflasheó formalmente `prj_04` debug y se ejecutó `net_check.py --host 192.168.1.150` (3/3 PASS), registrando la evidencia completa en `docs/gpio_f1b_m6_netcheck_7cc456d.txt`.
+- **m2 (Captura T1 en formato limpio):** Captura `gpio_f1b_t1_7cc456d.txt` generada en UTF-8 puro, sin BOM ni fragmentos UTF-16, registrando las líneas de comando, los 8 proyectos del build matrix, los 5 presets adicionales de `prj_04`, las 5 compilaciones con `-Werror` (todas con 0 avisos) y los tamaños de objetos.
+- **m4 (Offsets DWARF y límites dinámicos sin respaldos silenciosos):** En `gpio_f1b_checks.py`, la función `get_struct_member_offset()` devuelve `None` si un campo no se encuentra en DWARF (generando una excepción explícita si se requiere), y `get_t4_limits()` lanza excepción si las macros no están presentes en el header. En modo control, T3 no intenta consultar en DWARF campos inexistentes de versiones anteriores.
 
 ---
 
@@ -217,4 +233,4 @@ A continuación se detalla la resolución de cada uno de los hallazgos reportado
 1. **T6b (arranque en frío):** Pendiente de ejecución presencial por el responsable en el banco de pruebas físico, debido a la regla de acceso remoto G-S7. No bloquea la entrega de F1; sí el cierre.
 2. **Caminos no ejercitados en hardware:** `UART_HAL_MspDeInit_User()` y `ETH_HAL_MspDeInit_User()` no son invocados por ninguna ruta de ejecución de los proyectos de firmware actuales.
 3. **M2 (`selftest-gpio`):** No se ejecuta en hardware físico por regla G-S1 (mueve líneas de banco); validado formalmente por revisión de código y compilación limpia.
-4. **Imagen que quedó en la placa (M6):** La placa física quedó flasheada y en ejecución con la imagen de producción **`prj_04_adc_dma_bm_eth` preset `debug` (commit `8ee9a13`)**, confirmada mediante ejecución exitosa de `net_check.py --host 192.168.1.150` (3/3 checks PASS, ICMP 4/4, UDP sweep 1..1472 B, burst 100/100).
+4. **Imagen que quedó en la placa (M6):** La placa física quedó flasheada y en ejecución con la imagen de producción **`prj_04_adc_dma_bm_eth` preset `debug` (commit `7cc456d`)**, confirmada mediante ejecución exitosa de `net_check.py --host 192.168.1.150` (3/3 checks PASS, ICMP 4/4, UDP sweep 1..1472 B, burst 100/100), registrada en `docs/gpio_f1b_m6_netcheck_7cc456d.txt`.
