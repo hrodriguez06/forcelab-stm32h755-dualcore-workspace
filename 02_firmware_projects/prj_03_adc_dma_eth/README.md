@@ -107,3 +107,39 @@ For detailed bring-up and calibration procedures, refer to [docs/ADC_BRINGUP.md]
 ### Cold boot
 
 Since `5dd43a2`, `SystemClock_Config()` writes the supply configuration (`HAL_PWREx_ConfigSupply(PWR_DIRECT_SMPS_SUPPLY)`) before raising VOS. Earlier images waited forever for `VOSRDY` after a power-on reset (no console, no link), because `PWR_CR3` is write-once per power-on reset; they only ran when another image had written it since the last power-up. Checked after a real power cycle with nothing else run since (2026-10-12): `RCC_RSR = 0x00FE0000` (power-on), `PWR_CR3 = 0x00010044`, and `net_check.py` with `monitor.py` at the same time pass (ICMP 4/4, UDP 1-1472 B byte-identical, burst 100/100, `rx_nobuf`/`tx_nobuf`/`dma_err` 0, both cores alive). Captures: `docs/x1_cold_boot_swd_5dd43a2.txt`, `docs/x1_cold_boot_t6_netcheck_5dd43a2.txt`.
+
+---
+
+## 7. Cross-Core GPIO Lock Hook (`00_gpio`, G1 Resolution)
+
+To prevent inter-core races on shared GPIO configuration registers (`MODER`, `PUPDR`, `OTYPER`, etc.), `prj_03_adc_dma_eth` installs the cross-core lock hook from `00_gpio` (closing finding G1):
+
+- **Hardware Semaphore & Timeout**: Uses Hardware Semaphore 5 (`BOARD_GPIO_HSEM_ID 5U`) with a 60 µs timeout defined by `SHARED_GPIO_LOCK_US = 60U` in `Common/Inc/shared_memory.h`.
+- **Cycle Limits**: Derived as the product of core frequency and lock timeout constant:
+  - CM7: `SHARED_GPIO_LOCK_US * 400U` (24,000 cycles at 400 MHz).
+  - CM4: `SHARED_GPIO_LOCK_US * 200U` (12,000 cycles at 200 MHz).
+- **Telemetry & Retention Metrics in `g_shared`**: Stored at the end of `SharedMemory_t` in Domain D3 SRAM4 (`0x38008000`, 32-byte cache-line aligned):
+  - `m7_gpio_lock_fail_count` / `m4_gpio_lock_fail_count`: Lock acquisition timeout counters.
+  - `m7_gpio_lock_hold_cycles_max` / `m4_gpio_lock_hold_cycles_max`: Maximum recorded cycles holding the lock.
+- **Hook Implementation & Installation**:
+  - Implemented in `Common/Src/shared_memory.c` via static functions `shared_gpio_lock()` / `shared_gpio_unlock()` and public registration function `Shared_GpioLockInstall()`.
+  - **CM7 Entry Point** (`CM7/Core/Src/main.c:103-107`): Installed immediately after `Shared_Init()` and before releasing CPU2 via `HAL_HSEM_Release(HSEM_ID_CPU2_BOOT)`.
+  - **CM4 Entry Point** (`CM4/Core/Src/main.c:48-52`): Installed immediately after `CPU2_WaitForCPU1()` and `HAL_Init()`, before any peripheral or pin initialization.
+  - Driver link: `stm32h7_driver_hsem_bm` linked in both cores strictly for the lock hook (`HSEM_BM_Init`, `HSEM_BM_TimebaseStart`, `HSEM_BM_TakeTimeout`). The CPU2 boot release/wake mechanism remains on `HAL_HSEM` (Decision 1).
+- **Writers Protected**:
+  - CM4 ADC pin PB1 (`CM4/App/Src/adc_acquisition.c`): Migrated from unprotected `HAL_GPIO_Init` to `GPIO_BM_ConfigPin` protected by `s_shared_lock` (G1 resolved).
+  - CM7 Console (PD8/PD9) and Ethernet (PA1, PA2, PA7, PB13, PC1, PC4, PC5, PG11, PG13): Initialized in `app_main()` after CPU2 release; protected by `s_shared_lock` via `GPIO_HAL_Init`.
+  - `LED_Init()`: Initialized mono-core in CM7 before CPU2 release (safe without lock).
+  - `LED_PanicRed`: Hard fault / panic handler write (accepted exception G14).
+
+### F1c Validation Evidence
+
+- **T1 (`docs/gpio_f1c_t1_e9e98c4.txt`)**: Clean matrix build 8/8 PASS, `selftest` preset PASS, `prj_04` `debug` preset PASS, strict `-Werror` enforced in debug and release with 0 warnings/errors.
+- **T2a & T2b (`docs/gpio_f1c_t2_e9e98c4.txt`)**: T2a verified 0 unprotected HAL calls across 4 ELFs (`nm -u` per linked object; control `e6cb75e` fails on both CM4 ELFs). T2b scanned 970 compilation units with 0 raw writes; CMSIS macro autoprueba passed (12/12 writes detected, 0/9 reads ignored); negative control in `e6cb75e` confirmed.
+- **T3 & Control (`docs/gpio_f1c_t3_f733b98.txt`, `..._t3_control_...`)**: Live SWD verified `s_shared_lock` matches `g_shared_gpio_lock` on both cores (`0x8015B80` on CM7, `0x81052F0` on CM4), `HSEM_R5 = 0x0`, fail counts = 0, and PB1, PB13, PD8, PD9, PB15, PD0 exact across 5 fields. Negative control confirmed `s_shared_lock == NULL` on both cores.
+- **T4 (`docs/gpio_f1c_t4_f733b98.txt`)**: Measured retention hold cycles: CM7 = 1274 cycles (3.19 µs @ 400 MHz, 18.84× margin vs 24000), CM4 = 363 cycles (1.81 µs @ 200 MHz, 33.06× margin vs 12000), both `>= 10.0x`.
+- **T5 (`docs/gpio_f1c_t5_debug_f733b98.txt`, `..._release_...`)**: Production regression in debug and release: ICMP 4/4, UDP sweep 1..1472 B, burst 100/100, ADC samples growing with `OVR == 0`, and `[net]` error counters all 0.
+- **T6a (`docs/gpio_f1c_t6a_f733b98.txt`)**: 20 consecutive warm resets via SWD with 10/10 T3 checks passing after each reset.
+- **T6b (PENDING)**: Cold boot power cycle on physical bench to be executed by bench owner.
+- **T7 (`../prj_04_adc_dma_bm_eth/docs/gpio_f1c_t7_e9e98c4.txt`)**: Compatibility check for `prj_04`: 1951 compilation units clean, 0 illegal writes, control in `07db657` reproduces all 20 findings.
+- **Auditor Independent Runs**: SWD (`docs/gpio_f1c_audit_swd_7ba2cf0.txt`), 20 resets (`docs/gpio_f1c_audit_t6a_7ba2cf0.txt`), T2 (`docs/gpio_f1c_audit_t2_7ba2cf0.txt`), T7 (`docs/gpio_f1c_audit_t7_7ba2cf0.txt`), T3 and control (`docs/gpio_f1c_audit_t3_7ba2cf0.txt`, `..._t3_control_...`), and T5 net check (`docs/gpio_f1c_audit_t5_netcheck_7ba2cf0.txt`, `..._t5_query_...`).
