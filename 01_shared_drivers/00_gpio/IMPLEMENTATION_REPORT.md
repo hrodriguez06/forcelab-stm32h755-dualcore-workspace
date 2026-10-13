@@ -269,3 +269,26 @@ Tras la aprobación de la auditoría de F1 en `7687e91` y la ejecución exitosa 
 - **Puntos de instalación:** Documentada la secuencia de arranque en CM7 (`main.c`, tras `Shared_Init()` y antes de `HSEM_BM_BootReleaseCpu2()`) y en CM4 (`main.c`, tras `HSEM_BM_TimebaseStart()` y antes de `ADC_Acquisition_Init()`).
 - **Evidencia documental de F1b:** Tabla detallada referenciando todas las capturas generadas (`gpio_f1b_t1_*`, `gpio_f1b_t2_*`, `gpio_f1b_t3_*`, `gpio_f1b_t4_*`, `gpio_f1b_t5_*`, `gpio_f1b_t6a_*`, `gpio_f1b_t7_*`, `gpio_f1b_m6_*`, `gpio_f1b_t6b_*`, y las capturas del auditor `gpio_f1b_audit*`).
 - **Observación m3:** Se documentó que `App_Log_Init()` en CM7 descarta mediante casteo a `(void)` el valor de retorno de `UART_Console_Init()`, por lo que un fallo en la inicialización de pines de la consola en la MSP no detiene el arranque de la aplicación.
+
+### Respuesta a la auditoría del cierre, parte 1 (`37961cf`)
+
+En la primera auditoría del cierre se emitieron los hallazgos C1–C5. A continuación se detalla su corrección:
+
+- **C1 (`00_gpio/README.md`):** Corregido en `cd10699`, pendiente de verificación.
+  - En §12.7 se restauró la declaración explícita de que F1 del driver en `prj_01` no tuvo auditoría independiente en placa (todas las ejecuciones fueron del implementador), añadiendo a continuación que F1b en `prj_04` sí tuvo auditoría independiente en placa (`7687e91`, `74c9119`).
+  - En la introducción (líneas 15–50) se matizó la afirmación de validación original en `prj_01_template_dualcore`, agregando que la fase F1b extendió la validación a `prj_04` con auditoría independiente, y explicitando que el hallazgo G1 permanece abierto en `prj_03` a la espera de F1c (por lo que ningún estado afirma "prj_01 only" ni "No finding is open" sin matiz).
+- **C2 (`prj_04/README.md`):** Corregido en `4a37228`, pendiente de verificación.
+  - Los límites de ciclos del lock se declararon como constantes fijas de compilación calculadas a partir de `SHARED_GPIO_LOCK_US` (`SHARED_GPIO_LOCK_US * 400U = 24.000` en CM7 y `SHARED_GPIO_LOCK_US * 200U = 12.000` en CM4, definidas en `Common/Inc/shared_memory.h`), corrigiendo la referencia errónea a `SystemCoreClock`.
+  - La observación `m3` sitúa ahora con precisión la llamada de `App_Log_Init()` en `CM7/App/Src/app_log.c:24`, aclarando que descarta el código de estado (`HAL_BUSY` o `HAL_ERROR`) y eliminando la afirmación errónea de que `m7_gpio_lock_fail_count` incrementa ante fallos de configuración de pines (dicho contador solo incrementa si expira el tiempo de espera del semáforo hardware).
+  - La tabla de T6b enlaza las capturas existentes de la ejecución del arranque en frío (`gpio_f1b_t6b_rsr_492d156.txt`, `_swd_`, `_t3_`, `_t5_netcheck_`, `_t5_query_492d156.txt`).
+  - En §9.3 se aclaró que la fase T15 sí fue ejecutada en hardware en el F1a propio de `prj_04` (`docs/gpio_f1a_selftest_ededa84.txt`, sin hook de producción); lo que quedó no ejercitado en el banco físico para F1b fue `selftest-gpio` con las modificaciones de preservación de hook (H5 y M2). F1a pertenece a `prj_04`, no a `prj_01`.
+  - Se corrigió la descripción de T2b a búsqueda con expresiones regulares sobre el código preprocesado (`Preprocessor Regex Scan`), no AST.
+  - Se corrigieron los nombres de las funciones estáticas del hook (`shared_gpio_lock` y `shared_gpio_unlock`), siendo `Shared_GpioLockInstall()` la interfaz pública.
+  - Se corrigió el alcance de protección de HSEM 5 para cubrir cualquier puerto GPIO configurado mediante el driver en ambos núcleos (no una lista cerrada de puertos).
+- **C3 (`04_uart/README.md`):** Corregido en `355ccdd`, pendiente de verificación.
+  - Se aclaró que la sección crítica gestionada por `gpio_bm` es entre núcleos únicamente cuando el proyecto instala el hook compartido (en caso contrario, opera bajo `PRIMASK` local del propio núcleo).
+  - Se documentó que la MSP devuelve su código de estado específico (`HAL_BUSY` si expira el tiempo de adquisición del lock o `HAL_ERROR` ante cualquier otro fallo de configuración o verificación), el cual es propagado por `UART_Console_Init` y `UART_HAL_InitEx`.
+- **C4 (T6b en `00_gpio` §13.1 y en `prj_04` §9.2):** Corregido en `cd10699` y `4a37228`, pendiente de verificación.
+  - Se especificó verídicamente la división de tareas de T6b: el responsable del banco físico realizó el apagado y encendido de la placa (desconexión y reconexión USB), mientras que la inspección por SWD (`RCC_RSR = 0x00FE0000`), el test T3 y la verificación de producción T5 fueron ejecutados por el auditor sin flashear ni resetear tras el encendido.
+- **C5 (`00_gpio/README.md` §11):** Corregido en `cd10699`, pendiente de verificación.
+  - En la fila de `01_led/led_bm.c` se separó claramente que `LED_Init` es seguro por contrato al invocarse antes de la liberación de arranque de CPU2, mientras que la excepción G14 corresponde exclusivamente a `LED_PanicRed` al escribir `MODER` sin tomar el lock desde el manejador de fallos de pánico.
