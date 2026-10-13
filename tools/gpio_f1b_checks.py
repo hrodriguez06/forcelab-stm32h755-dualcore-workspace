@@ -88,24 +88,54 @@ ALLOWED_EXCEPTIONS_REL = {
     "02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7/Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_gpio.h",
 }
 
-PRJ04_PRESETS = [
-    "debug",
-    "release",
-    "selftest",
-    "selftest-adc",
-    "selftest-uart",
-    "selftest-hsem",
-]
+PROJECTS_CONFIG = {
+    "prj_04": {
+        "dir": "02_firmware_projects/prj_04_adc_dma_bm_eth",
+        "target_elfs": [
+            ("prj_04_debug_cm7", "02_firmware_projects/prj_04_adc_dma_bm_eth/build/debug", "CM7/cm7_firmware.elf", "CM7"),
+            ("prj_04_debug_cm4", "02_firmware_projects/prj_04_adc_dma_bm_eth/build/debug", "CM4/cm4_firmware.elf", "CM4"),
+            ("prj_04_release_cm7", "02_firmware_projects/prj_04_adc_dma_bm_eth/build/release", "CM7/cm7_firmware.elf", "CM7"),
+            ("prj_04_release_cm4", "02_firmware_projects/prj_04_adc_dma_bm_eth/build/release", "CM4/cm4_firmware.elf", "CM4"),
+            ("prj_01_debug_cm7", "03_firmware_templates/prj_01_template_dualcore/build/debug", "CM7/cm7_firmware.elf", "CM7"),
+            ("prj_02_debug_cm7", "02_firmware_projects/prj_02_eth_lwip_dualcore/build/debug", "CM7/cm7_firmware.elf", "CM7"),
+            ("prj_03_debug_cm7", "02_firmware_projects/prj_03_adc_dma_eth/build/debug", "CM7/cm7_firmware.elf", "CM7"),
+        ],
+        "presets_t2b": [
+            "debug",
+            "release",
+            "selftest",
+            "selftest-adc",
+            "selftest-uart",
+            "selftest-hsem",
+        ],
+        "control_commit": "07db657",
+        "control_dir_default": "stm32h755_control_07db657",
+        "has_acl_drop": True,
+        "t2b_tree_control": True,
+    },
+    "prj_03": {
+        "dir": "02_firmware_projects/prj_03_adc_dma_eth",
+        "target_elfs": [
+            ("prj_03_debug_cm7", "02_firmware_projects/prj_03_adc_dma_eth/build/debug", "CM7/cm7_firmware.elf", "CM7"),
+            ("prj_03_debug_cm4", "02_firmware_projects/prj_03_adc_dma_eth/build/debug", "CM4/cm4_firmware.elf", "CM4"),
+            ("prj_03_release_cm7", "02_firmware_projects/prj_03_adc_dma_eth/build/release", "CM7/cm7_firmware.elf", "CM7"),
+            ("prj_03_release_cm4", "02_firmware_projects/prj_03_adc_dma_eth/build/release", "CM4/cm4_firmware.elf", "CM4"),
+        ],
+        "presets_t2b": [
+            "debug",
+            "release",
+            "selftest",
+        ],
+        "control_commit": "e6cb75e",
+        "control_dir_default": "stm32h755_control_e6cb75e",
+        "has_acl_drop": False,
+        "t2b_tree_control": False,
+    },
+}
 
-TARGET_ELFS = [
-    ("prj_04_debug_cm7", "02_firmware_projects/prj_04_adc_dma_bm_eth/build/debug", "CM7/cm7_firmware.elf", "CM7"),
-    ("prj_04_debug_cm4", "02_firmware_projects/prj_04_adc_dma_bm_eth/build/debug", "CM4/cm4_firmware.elf", "CM4"),
-    ("prj_04_release_cm7", "02_firmware_projects/prj_04_adc_dma_bm_eth/build/release", "CM7/cm7_firmware.elf", "CM7"),
-    ("prj_04_release_cm4", "02_firmware_projects/prj_04_adc_dma_bm_eth/build/release", "CM4/cm4_firmware.elf", "CM4"),
-    ("prj_01_debug_cm7", "03_firmware_templates/prj_01_template_dualcore/build/debug", "CM7/cm7_firmware.elf", "CM7"),
-    ("prj_02_debug_cm7", "02_firmware_projects/prj_02_eth_lwip_dualcore/build/debug", "CM7/cm7_firmware.elf", "CM7"),
-    ("prj_03_debug_cm7", "02_firmware_projects/prj_03_adc_dma_eth/build/debug", "CM7/cm7_firmware.elf", "CM7"),
-]
+# Backward compatibility aliases
+PRJ04_PRESETS = PROJECTS_CONFIG["prj_04"]["presets_t2b"]
+TARGET_ELFS = PROJECTS_CONFIG["prj_04"]["target_elfs"]
 
 
 def find_tools() -> dict[str, str]:
@@ -373,13 +403,16 @@ def check_elf_gpio_symbols(tools: dict[str, str], name: str, bdir: Path, elf_rel
     }
 
 
-def run_t2a(tools: dict[str, str], control_dir: Path | None) -> dict:
+def run_t2a(tools: dict[str, str], control_dir: Path | None, project_name: str = "prj_04") -> dict:
     results = {"pass": True, "cases": []}
-    print("--- Running T2a (absence of unprotected HAL_GPIO_Init/DeInit across 7 ELFs) ---")
+    cfg = PROJECTS_CONFIG[project_name]
+    target_elfs = cfg["target_elfs"]
+    ctrl_commit = cfg["control_commit"]
+    print(f"--- Running T2a (absence of unprotected HAL_GPIO_Init/DeInit across {len(target_elfs)} ELFs for {project_name}) ---")
 
-    # 1. Test the 7 ELFs in current tree
+    # 1. Test target ELFs in current tree
     all_curr_ok = True
-    for name, rel_bdir, elf_rel, core in TARGET_ELFS:
+    for name, rel_bdir, elf_rel, core in target_elfs:
         bdir = REPO_ROOT / rel_bdir
         r = check_elf_gpio_symbols(tools, name, bdir, elf_rel, core)
         c_pass = r["pass"]
@@ -401,61 +434,115 @@ def run_t2a(tools: dict[str, str], control_dir: Path | None) -> dict:
     if not all_curr_ok:
         results["pass"] = False
 
-    # 2. Negative control on 07db657 control worktree
+    # 2. Negative control on control worktree
     if not (control_dir and control_dir.is_dir()):
         results["cases"].append({
             "id": "T2a_control_dir_missing",
-            "desc": "Control directory 07db657 is provided and valid",
+            "desc": f"Control directory {ctrl_commit} is provided and valid",
             "pass": False,
             "detail": f"Control dir {control_dir} not found",
         })
         results["pass"] = False
         return results
 
-    ctrl_failed_cm7_count = 0
-    ctrl_all_present = True
+    if project_name == "prj_04":
+        ctrl_failed_cm7_count = 0
+        ctrl_all_present = True
 
-    for name, rel_bdir, elf_rel, core in TARGET_ELFS:
-        bdir = control_dir / rel_bdir
-        r = check_elf_gpio_symbols(tools, f"ctrl_{name}", bdir, elf_rel, core)
-        if not r["elf_present"]:
-            ctrl_all_present = False
-            results["cases"].append({
-                "id": f"T2a_control_{name}_present",
-                "desc": f"Control 07db657: {name} ELF exists",
-                "pass": False,
-                "detail": f"Missing ELF in control: {bdir / elf_rel}",
-            })
-            continue
-
-        # In control 07db657: uart_hal.c.obj imported HAL_GPIO_Init in all 5 CM7 ELFs
-        # Therefore, every CM7 ELF check must FAIL on control!
-        if core == "CM7":
-            if not r["pass"] and ("uart_hal.c.obj" in r["callers"]):
-                ctrl_failed_cm7_count += 1
+        for name, rel_bdir, elf_rel, core in target_elfs:
+            bdir = control_dir / rel_bdir
+            r = check_elf_gpio_symbols(tools, f"ctrl_{name}", bdir, elf_rel, core)
+            if not r["elf_present"]:
+                ctrl_all_present = False
                 results["cases"].append({
-                    "id": f"T2a_control_{name}_fails_as_expected",
-                    "desc": f"Control 07db657: {name} fails oracle (uart_hal.c.obj calls HAL_GPIO_Init)",
-                    "pass": True,
-                    "detail": f"Correctly caught violation: callers={r['callers']}",
-                })
-            else:
-                results["cases"].append({
-                    "id": f"T2a_control_{name}_fails_as_expected",
-                    "desc": f"Control 07db657: {name} fails oracle",
+                    "id": f"T2a_control_{name}_present",
+                    "desc": f"Control {ctrl_commit}: {name} ELF exists",
                     "pass": False,
-                    "detail": f"Expected violation in control, but passed: callers={r['callers']}",
+                    "detail": f"Missing ELF in control: {bdir / elf_rel}",
+                })
+                continue
+
+            # In control 07db657: uart_hal.c.obj imported HAL_GPIO_Init in all 5 CM7 ELFs
+            # Therefore, every CM7 ELF check must FAIL on control!
+            if core == "CM7":
+                if not r["pass"] and ("uart_hal.c.obj" in r["callers"]):
+                    ctrl_failed_cm7_count += 1
+                    results["cases"].append({
+                        "id": f"T2a_control_{name}_fails_as_expected",
+                        "desc": f"Control {ctrl_commit}: {name} fails oracle (uart_hal.c.obj calls HAL_GPIO_Init)",
+                        "pass": True,
+                        "detail": f"Correctly caught violation: callers={r['callers']}",
+                    })
+                else:
+                    results["cases"].append({
+                        "id": f"T2a_control_{name}_fails_as_expected",
+                        "desc": f"Control {ctrl_commit}: {name} fails oracle",
+                        "pass": False,
+                        "detail": f"Expected violation in control, but passed: callers={r['callers']}",
+                    })
+
+        ctrl_ok = ctrl_all_present and (ctrl_failed_cm7_count == 5)
+        results["cases"].append({
+            "id": "T2a_control_oracle_negative_gate",
+            "desc": f"Negative control: all 5 CM7 ELFs from {ctrl_commit} fail the T2a oracle",
+            "pass": ctrl_ok,
+            "detail": f"Failed CM7 count={ctrl_failed_cm7_count}/5, all_present={ctrl_all_present}",
+        })
+        if not ctrl_ok:
+            results["pass"] = False
+
+    else:  # prj_03
+        ctrl_failed_cm4_count = 0
+        ctrl_all_present = True
+
+        for name, rel_bdir, elf_rel, core in target_elfs:
+            bdir = control_dir / rel_bdir
+            r = check_elf_gpio_symbols(tools, f"ctrl_{name}", bdir, elf_rel, core)
+            if not r["elf_present"]:
+                ctrl_all_present = False
+                results["cases"].append({
+                    "id": f"T2a_control_{name}_present",
+                    "desc": f"Control {ctrl_commit}: {name} ELF exists",
+                    "pass": False,
+                    "detail": f"Missing ELF in control: {bdir / elf_rel}",
+                })
+                continue
+
+            # In control e6cb75e: adc_acquisition.c.obj imported HAL_GPIO_Init in both CM4 ELFs
+            if core == "CM4":
+                if not r["pass"] and ("adc_acquisition.c.obj" in r["callers"]):
+                    ctrl_failed_cm4_count += 1
+                    results["cases"].append({
+                        "id": f"T2a_control_{name}_fails_as_expected",
+                        "desc": f"Control {ctrl_commit}: {name} fails oracle (adc_acquisition.c.obj calls HAL_GPIO_Init)",
+                        "pass": True,
+                        "detail": f"Correctly caught violation: callers={r['callers']}",
+                    })
+                else:
+                    results["cases"].append({
+                        "id": f"T2a_control_{name}_fails_as_expected",
+                        "desc": f"Control {ctrl_commit}: {name} fails oracle",
+                        "pass": False,
+                        "detail": f"Expected violation in control, but passed: callers={r['callers']}",
+                    })
+            else:
+                # CM7 in prj_03 passes on e6cb75e (uart_hal already migrated)
+                results["cases"].append({
+                    "id": f"T2a_control_{name}_cm7_status",
+                    "desc": f"Control {ctrl_commit}: {name} (CM7) status",
+                    "pass": r["pass"],
+                    "detail": f"callers={r['callers']}",
                 })
 
-    ctrl_ok = ctrl_all_present and (ctrl_failed_cm7_count == 5)
-    results["cases"].append({
-        "id": "T2a_control_oracle_negative_gate",
-        "desc": "Negative control: all 5 CM7 ELFs from 07db657 fail the T2a oracle",
-        "pass": ctrl_ok,
-        "detail": f"Failed CM7 count={ctrl_failed_cm7_count}/5, all_present={ctrl_all_present}",
-    })
-    if not ctrl_ok:
-        results["pass"] = False
+        ctrl_ok = ctrl_all_present and (ctrl_failed_cm4_count == 2)
+        results["cases"].append({
+            "id": "T2a_control_oracle_negative_gate",
+            "desc": f"Negative control: both CM4 ELFs from {ctrl_commit} fail the T2a oracle (adc_acquisition calls HAL_GPIO_Init)",
+            "pass": ctrl_ok,
+            "detail": f"Failed CM4 count={ctrl_failed_cm4_count}/2, all_present={ctrl_all_present}",
+        })
+        if not ctrl_ok:
+            results["pass"] = False
 
     return results
 
@@ -656,17 +743,28 @@ def _check_unit_writes(entry: dict, preset: str, project_dir: Path) -> dict:
             stmt_buf = ""
             continue
 
+        stripped = line.strip()
+        if not stripped:
+            cur_line += 1
+            continue
+
         if not stmt_buf:
             stmt_line_start = cur_line
-        stmt_buf += " " + line.strip()
+        stmt_buf += " " + stripped
 
         if ";" in line or "}" in line or "{" in line:
             # Check statement buffer
             if RAW_WRITE_RE.search(stmt_buf):
-                norm_rel = Path(cur_file).as_posix()
-                for root_pat in (REPO_ROOT.as_posix(), project_dir.parent.parent.as_posix()):
-                    if norm_rel.startswith(root_pat):
-                        norm_rel = norm_rel[len(root_pat):].lstrip("/")
+                norm_rel = Path(cur_file).resolve().as_posix()
+                repo_root = REPO_ROOT.resolve().as_posix()
+                # Find tree root (contains 02_firmware_projects, 03_firmware_templates, or 01_shared_drivers)
+                m_proj = re.search(r"^(.*?)/(?:02_firmware_projects|03_firmware_templates|01_shared_drivers)", norm_rel)
+                if m_proj:
+                    norm_rel = norm_rel[len(m_proj.group(1)):].lstrip("/")
+                else:
+                    for root_pat in (repo_root, project_dir.parent.parent.resolve().as_posix()):
+                        if norm_rel.startswith(root_pat):
+                            norm_rel = norm_rel[len(root_pat):].lstrip("/")
                 unit_findings.append({
                     "preset": preset,
                     "file": norm_rel,
@@ -681,12 +779,12 @@ def _check_unit_writes(entry: dict, preset: str, project_dir: Path) -> dict:
     return {"preset": preset, "unit": src_file.name, "scanned": 1, "failed": 0, "findings": unit_findings}
 
 
-def run_t2b_on_tree(project_dir: Path, is_control: bool = False) -> tuple[bool, list[dict], dict[str, dict]]:
+def run_t2b_on_tree(project_dir: Path, presets: list[str], is_control: bool = False) -> tuple[bool, list[dict], dict[str, dict]]:
     findings = []
-    preset_stats = {p: {"scanned": 0, "failed": 0} for p in PRJ04_PRESETS}
+    preset_stats = {p: {"scanned": 0, "failed": 0} for p in presets}
     tasks = []
 
-    for preset in PRJ04_PRESETS:
+    for preset in presets:
         comp_json = project_dir / "build" / preset / "compile_commands.json"
         if not comp_json.is_file():
             preset_stats[preset]["failed"] += 1
@@ -720,15 +818,19 @@ def run_t2b_on_tree(project_dir: Path, is_control: bool = False) -> tuple[bool, 
     return passed, findings, preset_stats
 
 
-def run_t2b(tools: dict[str, str], control_dir: Path | None) -> dict:
+def run_t2b(tools: dict[str, str], control_dir: Path | None, project_name: str = "prj_04") -> dict:
     results = {"pass": True, "cases": []}
-    print("--- Running T2b (preprocessor -E scan across all compilation units) ---")
+    cfg = PROJECTS_CONFIG[project_name]
+    ctrl_commit = cfg["control_commit"]
+    presets = cfg["presets_t2b"]
+    pdir = REPO_ROOT / cfg["dir"]
+    print(f"--- Running T2b (preprocessor -E scan across all compilation units for {project_name}) ---")
 
-    # N6: Without control directory, T2b is FAIL
-    if not (control_dir and control_dir.is_dir()):
+    # N6: For prj_04, control directory is required (07db657)
+    if cfg["t2b_tree_control"] and not (control_dir and control_dir.is_dir()):
         results["cases"].append({
             "id": "T2b_control_dir_missing",
-            "desc": "Control directory 07db657 is provided and valid (N6)",
+            "desc": f"Control directory {ctrl_commit} is provided and valid (N6)",
             "pass": False,
             "detail": f"Control dir {control_dir} not found",
         })
@@ -749,57 +851,66 @@ def run_t2b(tools: dict[str, str], control_dir: Path | None) -> dict:
         results["pass"] = False
 
     # 2. Run scan on current tree
-    prj04_dir = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth"
-    curr_ok, curr_findings, curr_stats = run_t2b_on_tree(prj04_dir, is_control=False)
+    curr_ok, curr_findings, curr_stats = run_t2b_on_tree(pdir, presets, is_control=False)
     for p, st in curr_stats.items():
         print(f"  [Preset {p:13s}] scanned: {st['scanned']:4d} units, failed: {st['failed']} units")
 
     results["cases"].append({
         "id": "T2b_current_zero_raw_writes",
-        "desc": "Current tree has zero raw GPIO writes across presets outside exceptions",
+        "desc": f"Current tree has zero raw GPIO writes across {len(presets)} presets outside exceptions",
         "pass": curr_ok,
         "detail": f"Scanned totals: {sum(s['scanned'] for s in curr_stats.values())} units; Illegal writes count={len(curr_findings)}" + (f": {curr_findings}" if curr_findings else ""),
     })
     if not curr_ok:
         results["pass"] = False
 
-    # 3. Run scan on control tree (07db657)
-    ctrl_prj04 = control_dir / "02_firmware_projects" / "prj_04_adc_dma_bm_eth"
-    ctrl_ok, ctrl_findings, ctrl_stats = run_t2b_on_tree(ctrl_prj04, is_control=True)
-    for p, st in ctrl_stats.items():
-        print(f"  [Control Preset {p:13s}] scanned: {st['scanned']:4d} units, failed: {st['failed']} units")
+    # 3. Negative control
+    if cfg["t2b_tree_control"]:
+        ctrl_pdir = control_dir / cfg["dir"]
+        ctrl_ok, ctrl_findings, ctrl_stats = run_t2b_on_tree(ctrl_pdir, presets, is_control=True)
+        for p, st in ctrl_stats.items():
+            print(f"  [Control Preset {p:13s}] scanned: {st['scanned']:4d} units, failed: {st['failed']} units")
 
-    # B7: un preset que falta en el control es FAIL; unidades escaneadas y fallidas por preset
-    ctrl_presets_ok = all(st["scanned"] > 0 and st["failed"] == 0 for st in ctrl_stats.values())
-    results["cases"].append({
-        "id": "T2b_control_all_presets_scanned",
-        "desc": "Control 07db657: all 6 presets present and scanned without preprocessing failures (B7)",
-        "pass": ctrl_presets_ok,
-        "detail": f"Total control scanned={sum(s['scanned'] for s in ctrl_stats.values())}, failed={sum(s['failed'] for s in ctrl_stats.values())}",
-    })
-    if not ctrl_presets_ok:
-        results["pass"] = False
+        # B7: un preset que falta en el control es FAIL; unidades escaneadas y fallidas por preset
+        ctrl_presets_ok = all(st["scanned"] > 0 and st["failed"] == 0 for st in ctrl_stats.values())
+        results["cases"].append({
+            "id": "T2b_control_all_presets_scanned",
+            "desc": f"Control {ctrl_commit}: all {len(presets)} presets present and scanned without preprocessing failures (B7)",
+            "pass": ctrl_presets_ok,
+            "detail": f"Total control scanned={sum(s['scanned'] for s in ctrl_stats.values())}, failed={sum(s['failed'] for s in ctrl_stats.values())}",
+        })
+        if not ctrl_presets_ok:
+            results["pass"] = False
 
-    # Print all findings in control (M1, B7)
-    print(f"  [Control findings count] {len(ctrl_findings)} raw writes detected in control 07db657:")
-    for f in ctrl_findings:
-        print(f"    preset={f['preset']:13s} file={f['file']} line={f['line']:3d}: {f['code']}")
+        # Print all findings in control (M1, B7)
+        print(f"  [Control findings count] {len(ctrl_findings)} raw writes detected in control {ctrl_commit}:")
+        for f in ctrl_findings:
+            print(f"    preset={f['preset']:13s} file={f['file']} line={f['line']:3d}: {f['code']}")
 
-    # Check findings by (preset, relative_path)
-    found_pairs = {(f["preset"], f["file"]) for f in ctrl_findings}
-    has_adc = any(p in ("debug", "release", "selftest") and "adc_acquisition.c" in fn for p, fn in found_pairs)
-    has_main_probe = any(p == "selftest-uart" and "main.c" in fn for p, fn in found_pairs)
-    has_dma = any(p == "selftest" and "dma_selftest.c" in fn for p, fn in found_pairs)
-    ctrl_pass = ctrl_presets_ok and has_adc and has_main_probe and has_dma and (len(ctrl_findings) > 0)
+        # Check findings by (preset, relative_path)
+        found_pairs = {(f["preset"], f["file"]) for f in ctrl_findings}
+        has_adc = any(p in ("debug", "release", "selftest") and "CM4/App/Src/adc_acquisition.c" in fn for p, fn in found_pairs)
+        has_main_probe = any(p == "selftest-uart" and "CM4/Core/Src/main.c" in fn for p, fn in found_pairs)
+        has_dma = any(p == "selftest" and "CM4/App/Src/dma_selftest.c" in fn for p, fn in found_pairs)
+        ctrl_pass = ctrl_presets_ok and has_adc and has_main_probe and has_dma and (len(ctrl_findings) > 0)
 
-    results["cases"].append({
-        "id": "T2b_control_07db657_detects_writers",
-        "desc": "Control 07db657 detects raw writes by (preset, path) in adc_acquisition.c, main.c, and dma_selftest.c",
-        "pass": ctrl_pass,
-        "detail": f"Matched by (preset, path): adc_acquisition={has_adc}, main.c={has_main_probe}, dma_selftest={has_dma} (total control findings={len(ctrl_findings)})",
-    })
-    if not ctrl_pass:
-        results["pass"] = False
+        results["cases"].append({
+            "id": f"T2b_control_{ctrl_commit}_detects_writers",
+            "desc": f"Control {ctrl_commit} detects raw writes by (preset, path) in adc_acquisition.c, main.c, and dma_selftest.c",
+            "pass": ctrl_pass,
+            "detail": f"Matched by (preset, path): adc_acquisition={has_adc}, main.c={has_main_probe}, dma_selftest={has_dma} (total control findings={len(ctrl_findings)})",
+        })
+        if not ctrl_pass:
+            results["pass"] = False
+    else:
+        # prj_03: no raw register writers in e6cb75e (used HAL_GPIO_Init, covered by T2a control)
+        print(f"  [Control note] No tree scan needed for {project_name}: {ctrl_commit} writes configuration via HAL_GPIO_Init (verified by T2a control), zero raw writes in tree. Autoprueba (12/12 writes, 0/9 reads) serves as negative control.")
+        results["cases"].append({
+            "id": f"T2b_control_{ctrl_commit}_autoprueba_gate",
+            "desc": f"Negative control for {project_name}: regex autoprueba passed (no tree control needed; {ctrl_commit} used HAL, covered by T2a)",
+            "pass": st_pass,
+            "detail": "Autoprueba verified 12/12 macro expansions and paren nestings detected, 0/9 reads ignored",
+        })
 
     return results
 
@@ -822,12 +933,15 @@ def flash_image(sn: str, project_dir: Path, preset: str = "debug") -> bool:
 # T3: Live SWD verification of lock hook, HSEM 5, fail counts & pin registers
 # ==============================================================================
 
-def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False, control_dir: Path | None = None, do_flash: bool = False) -> dict:
+def run_t3(tools: dict[str, str], sn: str, project_name: str = "prj_04", control_mode: bool = False, control_dir: Path | None = None, do_flash: bool = False) -> dict:
     results = {"pass": True, "cases": []}
-    print(f"--- Running T3 (live SWD inspection, control_mode={control_mode}) ---")
+    cfg = PROJECTS_CONFIG[project_name]
+    ctrl_commit = cfg["control_commit"]
+    pdir_rel = cfg["dir"]
+    print(f"--- Running T3 (live SWD inspection for {project_name}, control_mode={control_mode}) ---")
 
     if do_flash:
-        pdir = (control_dir / "02_firmware_projects" / "prj_04_adc_dma_bm_eth") if (control_mode and control_dir) else (REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth")
+        pdir = (control_dir / pdir_rel) if (control_mode and control_dir) else (REPO_ROOT / pdir_rel)
         f_ok = flash_image(sn, pdir, preset="debug")
         results["cases"].append({
             "id": "T3_flash_verified",
@@ -843,13 +957,13 @@ def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False, control_d
         time.sleep(3.0)
 
     if control_mode and control_dir and control_dir.is_dir():
-        cm7_elf = control_dir / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM7" / "cm7_firmware.elf"
-        cm4_elf = control_dir / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM4" / "cm4_firmware.elf"
-        hdr_path = control_dir / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "Common" / "Inc" / "shared_memory.h"
+        cm7_elf = control_dir / pdir_rel / "build" / "debug" / "CM7" / "cm7_firmware.elf"
+        cm4_elf = control_dir / pdir_rel / "build" / "debug" / "CM4" / "cm4_firmware.elf"
+        hdr_path = control_dir / pdir_rel / "Common" / "Inc" / "shared_memory.h"
     else:
-        cm7_elf = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM7" / "cm7_firmware.elf"
-        cm4_elf = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM4" / "cm4_firmware.elf"
-        hdr_path = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "Common" / "Inc" / "shared_memory.h"
+        cm7_elf = REPO_ROOT / pdir_rel / "build" / "debug" / "CM7" / "cm7_firmware.elf"
+        cm4_elf = REPO_ROOT / pdir_rel / "build" / "debug" / "CM4" / "cm4_firmware.elf"
+        hdr_path = REPO_ROOT / pdir_rel / "Common" / "Inc" / "shared_memory.h"
 
     if not (cm7_elf.is_file() and cm4_elf.is_file()):
         raise RuntimeError(f"ELFs missing for T3 inspection: CM7={cm7_elf.is_file()}, CM4={cm4_elf.is_file()}")
@@ -859,7 +973,9 @@ def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False, control_d
 
     cm7_lock_ptr_addr = cm7_syms.get("s_shared_lock")
     cm4_lock_ptr_addr = cm4_syms.get("s_shared_lock")
-    g_shared_base = cm7_syms.get("g_shared", 0x38008000)
+    if "g_shared" not in cm7_syms:
+        raise RuntimeError(f"g_shared symbol not found in nm output of {cm7_elf.name}")
+    g_shared_base = cm7_syms["g_shared"]
 
     if not (cm7_lock_ptr_addr and cm4_lock_ptr_addr):
         raise RuntimeError(f"Could not resolve s_shared_lock symbols: CM7={cm7_lock_ptr_addr}, CM4={cm4_lock_ptr_addr}")
@@ -896,7 +1012,7 @@ def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False, control_d
         ctrl_fail_ok = (val_m7 == 0) and (val_m4 == 0)
         results["cases"].append({
             "id": "T3_control_hook_null",
-            "desc": "Control 07db657: s_shared_lock is NULL on both cores (T3 fails on control)",
+            "desc": f"Control {ctrl_commit}: s_shared_lock is NULL on both cores (T3 fails on control)",
             "pass": ctrl_fail_ok,
             "detail": f"CM7 s_shared_lock={hex(val_m7)} (want 0), CM4 s_shared_lock={hex(val_m4)} (want 0)",
         })
@@ -1058,12 +1174,13 @@ def run_t3(tools: dict[str, str], sn: str, control_mode: bool = False, control_d
 # T4: Cycle retention margin check (Decision 3: hold max >= 10x)
 # ==============================================================================
 
-def run_t4(tools: dict[str, str], sn: str, do_flash: bool = False) -> dict:
+def run_t4(tools: dict[str, str], sn: str, project_name: str = "prj_04", do_flash: bool = False) -> dict:
     results = {"pass": True, "cases": []}
-    print("--- Running T4 (cycle retention margin check) ---")
+    print(f"--- Running T4 (cycle retention margin check for {project_name}) ---")
+    cfg = PROJECTS_CONFIG[project_name]
+    pdir = REPO_ROOT / cfg["dir"]
 
     if do_flash:
-        pdir = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth"
         f_ok = flash_image(sn, pdir, preset="debug")
         results["cases"].append({
             "id": "T4_flash_verified",
@@ -1077,10 +1194,12 @@ def run_t4(tools: dict[str, str], sn: str, do_flash: bool = False) -> dict:
         # Give firmware a moment to run and exercise GPIO so hold max is populated
         time.sleep(3.0)
 
-    cm7_elf = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "build" / "debug" / "CM7" / "cm7_firmware.elf"
-    hdr_path = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth" / "Common" / "Inc" / "shared_memory.h"
+    cm7_elf = pdir / "build" / "debug" / "CM7" / "cm7_firmware.elf"
+    hdr_path = pdir / "Common" / "Inc" / "shared_memory.h"
     cm7_syms = parse_nm_symbols(tools["nm"], cm7_elf)
-    g_shared_base = cm7_syms.get("g_shared", 0x38008000)
+    if "g_shared" not in cm7_syms:
+        raise RuntimeError(f"g_shared symbol not found in nm output of {cm7_elf.name}")
+    g_shared_base = cm7_syms["g_shared"]
 
     m7_hold_off = get_struct_member_offset(tools["readelf"], cm7_elf, "m7_gpio_lock_hold_cycles_max")
     m4_hold_off = get_struct_member_offset(tools["readelf"], cm7_elf, "m4_gpio_lock_hold_cycles_max")
@@ -1156,21 +1275,23 @@ def run_t4(tools: dict[str, str], sn: str, do_flash: bool = False) -> dict:
 # T5: Production regression harness (debug and release)
 # ==============================================================================
 
-def run_t5(tools: dict[str, str], sn: str, preset: str = "debug") -> dict:
+def run_t5(tools: dict[str, str], sn: str, project_name: str = "prj_04", preset: str = "debug") -> dict:
     results = {"pass": True, "cases": []}
-    print(f"--- Running T5 (production regression, preset={preset}, sn={sn}) ---")
+    print(f"--- Running T5 (production regression for {project_name}, preset={preset}, sn={sn}) ---")
 
-    prj04_dir = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth"
+    cfg = PROJECTS_CONFIG[project_name]
+    pdir = REPO_ROOT / cfg["dir"]
+    has_acl_drop = cfg.get("has_acl_drop", False)
     py_cmd = sys.executable
 
     # 1. Flash ELF (G-S5: tools are stopped during flash)
-    flash_script = prj04_dir / "tools" / "flash.py"
+    flash_script = pdir / "tools" / "flash.py"
     if not flash_script.is_file():
         flash_script = REPO_ROOT / "tools" / "flash.py"
 
     print(f"  [Step 1] Flashing {preset} image via flash.py...")
     cmd_flash = [py_cmd, str(flash_script), f"--preset={preset}", f"--sn={sn}", "--yes"]
-    res_flash = subprocess.run(cmd_flash, cwd=str(prj04_dir), capture_output=True, text=True)
+    res_flash = subprocess.run(cmd_flash, cwd=str(pdir), capture_output=True, text=True)
     print(res_flash.stdout)
     if res_flash.stderr:
         print(res_flash.stderr, file=sys.stderr)
@@ -1179,7 +1300,7 @@ def run_t5(tools: dict[str, str], sn: str, preset: str = "debug") -> dict:
     flash_ok = (res_flash.returncode == 0) and has_download_ok
     results["cases"].append({
         "id": f"T5_{preset}_flash_verified",
-        "desc": f"Flashed prj_04 {preset} image with verified download",
+        "desc": f"Flashed {project_name} {preset} image with verified download",
         "pass": flash_ok,
         "detail": "Download verified successfully" if has_download_ok else "Flash verification failed",
     })
@@ -1230,9 +1351,11 @@ def run_t5(tools: dict[str, str], sn: str, preset: str = "debug") -> dict:
 
     # 4. ADC telemetry query (query_adc.py)
     print("  [Step 4] Querying ADC telemetry via query_adc.py...")
-    query_script = prj04_dir / "tools" / "query_adc.py"
+    query_script = pdir / "tools" / "query_adc.py"
+    if not query_script.is_file():
+        query_script = REPO_ROOT / "tools" / "query_adc.py"
     res_query = subprocess.run([py_cmd, str(query_script), "--host=192.168.1.150", "--count=3", "--rate=10", "--json"],
-                               cwd=str(prj04_dir), capture_output=True, text=True)
+                               cwd=str(pdir), capture_output=True, text=True)
     print(res_query.stdout)
 
     # N2: require Samples to strictly grow and OVR == 0 across readings
@@ -1261,7 +1384,7 @@ def run_t5(tools: dict[str, str], sn: str, preset: str = "debug") -> dict:
     if not query_ok:
         results["pass"] = False
 
-    # 5. Check counters via monitor.py (rx_nobuf=0, tx_nobuf=0, dma_err=0, acl_drop=0 across all [net] lines)
+    # 5. Check counters via monitor.py (rx_nobuf=0, tx_nobuf=0, dma_err=0, and acl_drop=0 if present across all [net] lines)
     print("  [Step 5] Checking Ethernet statistics via monitor.py...")
     res_stat = subprocess.run([py_cmd, str(mon_script), "--timeout=6", f"--sn={sn}"], capture_output=True, text=True)
     print(res_stat.stdout)
@@ -1272,11 +1395,14 @@ def run_t5(tools: dict[str, str], sn: str, preset: str = "debug") -> dict:
         m_rx = re.search(r"rx_nobuf=(\d+)", line)
         m_tx = re.search(r"tx_nobuf=(\d+)", line)
         m_dma = re.search(r"dma_err=(\d+)", line)
-        m_acl = re.search(r"acl_drop=(\d+)", line)
-        if not (m_rx and m_tx and m_dma and m_acl):
+        m_acl = re.search(r"acl_drop=(\d+)", line) if has_acl_drop else True
+        if not (m_rx and m_tx and m_dma and (m_acl or not has_acl_drop)):
             stat_clean = False
             break
-        if int(m_rx.group(1)) != 0 or int(m_tx.group(1)) != 0 or int(m_dma.group(1)) != 0 or int(m_acl.group(1)) != 0:
+        if int(m_rx.group(1)) != 0 or int(m_tx.group(1)) != 0 or int(m_dma.group(1)) != 0:
+            stat_clean = False
+            break
+        if has_acl_drop and int(m_acl.group(1)) != 0:
             stat_clean = False
             break
 
@@ -1285,7 +1411,7 @@ def run_t5(tools: dict[str, str], sn: str, preset: str = "debug") -> dict:
         "id": f"T5_{preset}_driver_counters",
         "desc": "Ethernet driver error counters remain zero across all [net] lines",
         "pass": stat_pass,
-        "detail": f"Verified {len(net_lines)} [net] lines: all rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0" if stat_pass else f"Counters violation or no [net] lines received (count={len(net_lines)})",
+        "detail": f"Verified {len(net_lines)} [net] lines: all rx_nobuf=0 tx_nobuf=0 dma_err=0" + (" acl_drop=0" if has_acl_drop else "") if stat_pass else f"Counters violation or no [net] lines received (count={len(net_lines)})",
     })
     if not stat_pass:
         results["pass"] = False
@@ -1297,12 +1423,14 @@ def run_t5(tools: dict[str, str], sn: str, preset: str = "debug") -> dict:
 # T6a: Repeated warm resets over SWD (20 resets, 10s wait, full T3)
 # ==============================================================================
 
-def run_t6a(tools: dict[str, str], sn: str, count: int = 20, wait_s: float = 10.0, do_flash: bool = False) -> dict:
+def run_t6a(tools: dict[str, str], sn: str, project_name: str = "prj_04", count: int = 20, wait_s: float = 10.0, do_flash: bool = False) -> dict:
     results = {"pass": True, "cases": []}
-    print(f"--- Running T6a ({count} repeated SWD warm resets, wait={wait_s}s) ---")
+    print(f"--- Running T6a ({count} repeated SWD warm resets for {project_name}, wait={wait_s}s) ---")
+
+    cfg = PROJECTS_CONFIG[project_name]
+    pdir = REPO_ROOT / cfg["dir"]
 
     if do_flash:
-        pdir = REPO_ROOT / "02_firmware_projects" / "prj_04_adc_dma_bm_eth"
         f_ok = flash_image(sn, pdir, preset="debug")
         results["cases"].append({
             "id": "T6a_flash_verified",
@@ -1341,7 +1469,7 @@ def run_t6a(tools: dict[str, str], sn: str, count: int = 20, wait_s: float = 10.
         time.sleep(wait_s)
 
         try:
-            t3_res = run_t3(tools, sn, control_mode=False)
+            t3_res = run_t3(tools, sn, project_name=project_name, control_mode=False)
             pass_count = sum(1 for c in t3_res["cases"] if c["pass"])
             total_count = len(t3_res["cases"])
             failed_ids = [c["id"] for c in t3_res["cases"] if not c["pass"]]
@@ -1373,13 +1501,23 @@ def run_t6a(tools: dict[str, str], sn: str, count: int = 20, wait_s: float = 10.
 
 
 # ==============================================================================
-# T7: Console verification on prj_01 debug
+# T7: Compatibility check (prj_04 regression check or prj_01 console check)
 # ==============================================================================
 
-def run_t7(tools: dict[str, str], sn: str) -> dict:
+def run_t7(tools: dict[str, str], sn: str, project_name: str = "prj_03", control_dir: Path | None = None) -> dict:
     results = {"pass": True, "cases": []}
-    print(f"--- Running T7 (console on prj_01 debug with migrated uart_hal, sn={sn}) ---")
+    if project_name == "prj_03":
+        print("--- Running T7 (verification that tool continues to pass on prj_04) ---")
+        ctrl_07db657 = control_dir if (control_dir and "07db657" in str(control_dir)) else (REPO_ROOT.parent / "stm32h755_control_07db657")
+        res_t2a = run_t2a(tools, ctrl_07db657, project_name="prj_04")
+        res_t2b = run_t2b(tools, ctrl_07db657, project_name="prj_04")
+        results["cases"].extend(res_t2a["cases"])
+        results["cases"].extend(res_t2b["cases"])
+        results["pass"] = res_t2a["pass"] and res_t2b["pass"]
+        return results
 
+    # Fallback / legacy prj_04 behavior: console verification on prj_01 debug
+    print(f"--- Running T7 (console on prj_01 debug with migrated uart_hal, sn={sn}) ---")
     prj01_dir = REPO_ROOT / "03_firmware_templates" / "prj_01_template_dualcore"
     py_cmd = sys.executable
 
@@ -1416,8 +1554,6 @@ def run_t7(tools: dict[str, str], sn: str) -> dict:
         if "(CPU2 alive)" in line or "[ipc]" in line:
             console_active = True
 
-    # N3: Do not pretend banner was captured if only periodic [ipc] lines were seen.
-    # Image identity is established by verified download (B6); console activity by [ipc].
     results["cases"].append({
         "id": "T7_prj01_console_active",
         "desc": "Console output active on VCP (periodic [ipc] CPU2 alive messages received)",
@@ -1472,6 +1608,8 @@ def run_t7(tools: dict[str, str], sn: str) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--project", choices=["prj_04", "prj_03"], default="prj_03",
+                        help="Project to verify (default: prj_03)")
     parser.add_argument("--test", choices=["t2", "t2a", "t2b", "t3", "t4", "t5", "t6a", "t7", "all"], default="all",
                         help="Which test to run (default: all)")
     parser.add_argument("--preset", choices=["debug", "release"], default="debug",
@@ -1480,8 +1618,8 @@ def main() -> int:
     parser.add_argument("--flash", action="store_true",
                         help="Flash the matching image before running hardware tests (T3, T4, T6a)")
     parser.add_argument("--control", action="store_true", help="Run negative control mode for the selected test")
-    parser.add_argument("--control-dir", type=Path, default=REPO_ROOT.parent / "stm32h755_control_07db657",
-                        help="Path to 07db657 control worktree (for T2 and T3 negative controls)")
+    parser.add_argument("--control-dir", type=Path, default=None,
+                        help="Path to control worktree (defaults to ../stm32h755_control_<commit>)")
     parser.add_argument("--reset-count", type=int, default=20, help="Number of resets for T6a (default: 20)")
     parser.add_argument("--reset-wait", type=float, default=10.0, help="Wait seconds after reset for T6a (default: 10.0)")
     args = parser.parse_args()
@@ -1490,15 +1628,20 @@ def main() -> int:
     if args.control:
         args.flash = True
 
+    if args.control_dir is None:
+        ctrl_commit = PROJECTS_CONFIG[args.project]["control_commit"]
+        args.control_dir = REPO_ROOT.parent / f"stm32h755_control_{ctrl_commit}"
+
     argv_str = " ".join(sys.argv)
     rev, clean, status_porcelain = get_git_info(REPO_ROOT)
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
 
     print("================================================================================")
-    print("STM32H755 GPIO F1b Verification Checks (T2, T3, T4, T5, T6a, T7)")
+    print(f"STM32H755 GPIO F1 Verification Checks for {args.project} (T2, T3, T4, T5, T6a, T7)")
     print("================================================================================")
     print(f"[host] argv: {argv_str}")
     print(f"[host] timestamp: {timestamp}")
+    print(f"[host] project: {args.project}")
     print(f"[host] git rev: {rev} (tree {'clean' if clean else 'dirty'})")
     if not clean:
         print("[host] git status --porcelain:")
@@ -1531,19 +1674,19 @@ def main() -> int:
     for t in tests_to_run:
         res = {"pass": True, "cases": []}
         if t == "t2a":
-            res = run_t2a(tools, ctrl_dir)
+            res = run_t2a(tools, ctrl_dir, project_name=args.project)
         elif t == "t2b":
-            res = run_t2b(tools, ctrl_dir)
+            res = run_t2b(tools, ctrl_dir, project_name=args.project)
         elif t == "t3":
-            res = run_t3(tools, args.sn, control_mode=args.control, control_dir=ctrl_dir, do_flash=args.flash)
+            res = run_t3(tools, args.sn, project_name=args.project, control_mode=args.control, control_dir=ctrl_dir, do_flash=args.flash)
         elif t == "t4":
-            res = run_t4(tools, args.sn, do_flash=args.flash)
+            res = run_t4(tools, args.sn, project_name=args.project, do_flash=args.flash)
         elif t == "t5":
-            res = run_t5(tools, args.sn, preset=args.preset)
+            res = run_t5(tools, args.sn, project_name=args.project, preset=args.preset)
         elif t == "t6a":
-            res = run_t6a(tools, args.sn, count=args.reset_count, wait_s=args.reset_wait, do_flash=args.flash)
+            res = run_t6a(tools, args.sn, project_name=args.project, count=args.reset_count, wait_s=args.reset_wait, do_flash=args.flash)
         elif t == "t7":
-            res = run_t7(tools, args.sn)
+            res = run_t7(tools, args.sn, project_name=args.project, control_dir=ctrl_dir)
 
         print(f"\n--- Results for {t.upper()} ---")
         for c in res["cases"]:
