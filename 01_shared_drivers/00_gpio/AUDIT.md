@@ -172,3 +172,16 @@ Entrega: `2485a9f..492d156`. Herramienta en `7cc456d`; informe y capturas de `7c
 - **Responsable:** `DRIVER_ROADMAP.md`, el borrado de los documentos de proceso y el merge.
 
 La placa quedó con `prj_04` debug de mi T5.
+
+## T6b, arranque en frío (2026-10-13, en `7687e91`)
+
+El responsable desconectó y reconectó la placa. La ejecuté yo, sin flashear ni resetear desde el encendido. La imagen es `prj_04` debug, la de `gpio_f1b_audit3_t5_debug_492d156.txt`; el código de producción no cambió.
+
+| Captura | Resultado |
+| --- | --- |
+| `gpio_f1b_t6b_rsr_492d156.txt` | `RCC_RSR = 0x00FE0000` (reset de encendido), `PWR_CR3 = 0x00010044`, `RCC_CR = 0x0F07C1A5` (HSE y PLL listos): la imagen arrancó sola tras el encendido |
+| `gpio_f1b_t6b_swd_492d156.txt` (mi script) | Hooks de los dos núcleos instalados, `HSEM_R5` = 0, contadores a 0, retención 1228/356 ciclos (19,5×/33,7×), pines y controles exactos. **PASS** |
+| `gpio_f1b_t6b_t3_492d156.txt` (`gpio_f1b_checks.py --test t3`, sin `--flash`) | **PASS** |
+| `gpio_f1b_t6b_t5_netcheck_492d156.txt`, `…_t5_query_492d156.txt` | ICMP 4/4, UDP de 1 a 1472 B idénticos, ráfaga 100/100, contadores `[net]` a 0; las muestras del ADC crecen, `OVR: 0`. **PASS** |
+
+**T6b pasa.** El cierre puede empezar.

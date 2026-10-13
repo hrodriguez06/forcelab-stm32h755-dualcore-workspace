@@ -1,0 +1,43 @@
+=== 00_gpio F1b T6b: T5 after the cold boot (net_check.py and monitor.py at the same time; same image and boot as gpio_f1b_t6b_rsr_492d156.txt, no reset) ===
+Date: 2026-10-13T10:31:57-06:00
+Host:   py tools/net_check.py --host 192.168.1.150   (exit 0)
+Target: py tools/monitor.py --sn 0016000C4142501220353451 --timeout 30 (started 6 s before net_check)
+--- net_check.py ---
+Board    : 192.168.1.150 (prj_04_adc_dma_bm_eth)
+UDP echo : port 7
+
+  OK    ICMP  4/4 replies
+  OK    UDP     1 B  rtt= 1.90 ms
+  OK    UDP    25 B  rtt= 1.08 ms
+  OK    UDP   512 B  rtt= 1.83 ms
+  OK    UDP  1024 B  rtt= 3.35 ms
+  OK    UDP  1472 B  rtt= 3.42 ms
+  OK    burst  100/100 returned  (0.1 s)
+
+PASS  3/3 checks
+Now confirm the board agrees: rx_nobuf, tx_nobuf and dma_err
+should all still read 0 in  py tools/monitor.py --timeout 15
+--- monitor.py ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+[ipc] m7=108 m4=540  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[ipc] m7=112 m4=560  (CPU2 alive)
+[ipc] m7=116 m4=580  (CPU2 alive)
+[ipc] m7=120 m4=600  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=2 tx=3 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[ipc] m7=124 m4=620  (CPU2 alive)
+[ipc] m7=128 m4=640  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=111 tx=112 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[ipc] m7=132 m4=660  (CPU2 alive)
+[ipc] m7=136 m4=680  (CPU2 alive)
+[ipc] m7=140 m4=700  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=111 tx=112 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[ipc] m7=144 m4=720  (CPU2 alive)
+[ipc] m7=148 m4=740  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=111 tx=112 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[ipc] m7=152 m4=760  (CPU2 alive)
+[ipc] m7=156 m4=780  (CPU2 alive)
+[ipc] m7=160 m4=800  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=111 tx=112 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[ipc] m7=164 m4=820  (CPU2 alive)

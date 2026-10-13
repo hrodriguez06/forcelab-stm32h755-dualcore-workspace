@@ -1,0 +1,4 @@
+[*] Querying ADC telemetry from 192.168.1.150:5001 (Mode: JSON)...
+[0001] CH5:   63 mV (raw:  1296, avg:  1258, min:   982, max:  1582) | Rate: 500000 Hz | Seq: 82240 | Samples: 42106880 | TC: 41120 | OVR: 0 | M4 HB: 842
+[0002] CH5:   61 mV (raw:  1256, avg:  1229, min:   907, max:  1396) | Rate: 500000 Hz | Seq: 83235 | Samples: 42616320 | TC: 41617 | OVR: 0 | M4 HB: 852 | Measured Rate: 507730.1 Hz
+[0003] CH5:   59 mV (raw:  1056, avg:  1188, min:   917, max:  1396) | Rate: 500000 Hz | Seq: 84228 | Samples: 43124736 | TC: 42114 | OVR: 0 | M4 HB: 862 | Measured Rate: 504180.5 Hz
