@@ -49,3 +49,52 @@ Entrega: `0244b31..7ba2cf0`. H1 en `90a866f`, H2 en `ee5e3b3`, la herramienta en
   - ninguna comprobación de la herramienta es vacía.
 - **Qué queda para el cierre:** M1–M3 y m1–m6 se corrigen con la entrega del cierre (un commit de la herramienta y el informe), y se repiten T2 de `prj_03` y T7, sin placa.
 - **El cierre necesita además T6b** (arranque en frío), con el responsable en el banco.
+
+## Correcciones de F1 y cierre, parte 1 (`7b56d99`)
+
+Entrega: `a20e27c..7b56d99`. Herramienta en `e9e98c4`; informe, capturas de `e9e98c4` (T1, T2, T7) y README en `7b56d99`. El firmware no cambia. El plan y `AUDIT.md` no se tocaron (comprobado en los dos commits).
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| `py tools/gpio_f1b_checks.py --test t2` (sin `--project`) | Sale con código 2: "the following arguments are required: --project". M1 |
+| `--project prj_03 --test t2` en `7b56d99`, árbol limpio (`gpio_f1c_audit2_t2_7b56d99.txt`) | `T2a_control_e6cb75e_commit_matches` PASS; T2a PASS (control 2/2 CM4); T2b: autoprueba 12/12 y 0/9; 323/323/324 unidades, 0 fallidas, 0 escrituras. **PASS** |
+| `--project prj_04 --test t2 --control-dir ../stm32h755_control_07db657` (T7, `prj_04/docs/gpio_f1c_audit2_t7_7b56d99.txt`) | Comprobación del commit del control PASS en T2a y T2b; T2a 7/7 con control 5/5 CM7; T2b: autoprueba 12/12 y 0/9; 1951 unidades, 0 escrituras; control con 1951 unidades y 20 hallazgos. **PASS** |
+| `--project prj_03 --test t2 --control-dir ../stm32h755_control_07db657`: un control que no es del proyecto (`gpio_f1c_audit2_wrongctrl_7b56d99.txt`) | `T2a_control_e6cb75e_commit_matches` **FAIL** ("Expected e6cb75e … found 07db657"), veredicto final FAIL, código de salida 1: la comprobación de M1 falla de verdad |
+| Revisión de `e9e98c4` y de las capturas | Un subagente la revisó línea a línea; lo de abajo lo comprobé yo |
+
+### Hallazgos de F1
+
+| ID | Estado |
+| --- | --- |
+| M1 | **Cerrado.**<br>• `--project` obligatorio (l. 1631).<br>• El commit del control se compara con el del proyecto en T2a, T2b, el control de T3 y T7; si no coincide, FAIL.<br>• Si falta el directorio de control, FAIL.<br>• No queda ningún camino que use el árbol actual en lugar del control.<br>Queda un residuo menor: `run_t7` elige el directorio de `07db657` por subcadena y con una ruta escrita a mano (l. 1531). Es seguro, porque la comprobación del commit sigue corriendo |
+| M2 | **Cerrado.** §5.8 cita mi `gpio_f1c_audit_t5_netcheck_7ba2cf0.txt` |
+| M3 | **Cerrado, salvo dos detalles:**<br>• `LED_PanicRed` no está en `main.c:134`, sino en `Error_Handler` (`main.c:282`) y en los manejadores de fallo de `stm32h7xx_it.c`;<br>• el escritor del preset `selftest` solo toca PB1, no PA3 |
+| m1 | **Cerrado.** Las notas por proyecto de T5 son verdaderas: en los dos proyectos `OVR` es `half_overrun_count`, y `prj_03` no tiene `acl_drop`. No hay captura, porque T5 no se repitió |
+| m2 | **No cerrado, y el informe dice lo contrario.** §5.6 afirma que "todas las capturas se generan … sin concatenación manual". `gpio_f1c_t3_f733b98.txt` sigue siendo tres ejecuciones pegadas (`=== PART 1/2/3 ===`, l. 1, 144, 267), y el informe y los dos README la citan como la T3 oficial |
+| m3 | **Cerrado.** T1 de `e9e98c4` compila de verdad cada preset (`-Clean` y `--fresh`, sin "no work to do"), en UTF-8, con `-Werror` en `prj_03` debug y release. Le falta la línea de comando del arnés (no está en el repo) |
+| m4, m5 | **Cerrados.** T4 imprime el origen de cada dirección. Los pines de T3 y el comando de `query_adc` van en la tabla por proyecto, sin cambiar los valores. Se quitó el caso repetido del control de T2b. Los casos "status" del control de T2a cuentan en el veredicto |
+| m6 | **Valores bien, redacción mal:** llama "punteros de función" a direcciones de un descriptor `GpioBm_SharedLock_t` |
+
+Sin regresiones de `f733b98` a `e9e98c4`: ninguna comprobación se debilita, ninguna excepción se traga y no hay nuevos respaldos escritos a mano.
+
+### Hallazgos del cierre
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| K1 | Mayor | **`e9e98c4` reescribe T3 (los pines en tabla, el bucle), T4 (la impresión) y T5 (nota y comando), y nada de eso se ha ejecutado en la placa.** Las T3, T4 y T5 citadas son de `f733b98`, con el código anterior | Repetir, con la herramienta de este commit y desde el árbol limpio, T3, T3 `--control`, T4 y T5 debug de `prj_03`, **una captura por ejecución**. Eso cierra también m2. T6a no hace falta |
+| K2 | Mayor (referencias falsas en los README) | **`00_gpio` §13.2 y `prj_03` §7:**<br>• citan `…_t3_control_…` del implementador, que no existe (su control está dentro de `gpio_f1c_t3_f733b98.txt`; la única `t3_control` es mía);<br>• los dos dicen que T2b tiene un "negative control in `e6cb75e` confirmed": en `prj_03` T2b no tiene control de árbol (la captura lo dice; el control es la autoprueba y `e6cb75e` lo cubre T2a);<br>• `prj_03` §7 sitúa la instalación en `CM7/Core/Src/main.c:103-107` y `CM4/Core/Src/main.c:48-52` (son l. 97-105 y 70-78) y cita `HAL_HSEM_Release(HSEM_ID_CPU2_BOOT)`, un símbolo que no existe (es `HSEM_ID_BOOT_SYNC`, l. 111) | Corregir. Con K1, citar las capturas nuevas |
+| k1 | Menor | `00_gpio` §12.2 y §13.2 citan las capturas de `prj_03` como `docs/…` sin decir de qué proyecto (las de `prj_04` usan la misma forma) | Ruta desde la raíz del repo para las de F1c |
+| k2 | Menor | Informe:<br>• m2 y m6 (arriba);<br>• §5.2.2 dice `-Os` (es `-O2`) y nombra `s_hook_installed` (es `s_gpio_lock_start_cyc`);<br>• la fila T4 llama "g_shared base" a las direcciones de los campos;<br>• la fila T3 menciona `pd8_ok`, que ya no existe;<br>• cita mal el asunto de `e9e98c4`;<br>• dice que M1 "aborta inmediatamente" (la prueba afectada falla y la ejecución sigue) | Corregir |
+
+### Estado
+
+**Las correcciones de F1 pasan**, salvo m2, que se cierra con K1.
+
+**El cierre no pasa:**
+- K1: las pruebas de placa no se han repetido con la herramienta reescrita;
+- K2: los README contienen referencias falsas;
+- T6b sigue pendiente del responsable en el banco.
+
+La placa tiene `prj_03` debug de `7ba2cf0`, de mi T3. El firmware es el mismo que en `7b56d99`.

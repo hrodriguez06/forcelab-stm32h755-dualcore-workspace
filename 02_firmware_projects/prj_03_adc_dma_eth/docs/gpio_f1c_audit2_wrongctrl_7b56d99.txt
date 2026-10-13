@@ -1,0 +1,67 @@
+================================================================================
+STM32H755 GPIO F1 Verification Checks for prj_03 (T2, T3, T4, T5, T6a, T7)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --project prj_03 --test t2 --control-dir ../stm32h755_control_07db657
+[host] timestamp: 2026-10-13 15:24:53
+[host] project: prj_03
+[host] git rev: 7b56d99 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: ..\stm32h755_control_07db657 (rev 07db657, clean)
+[host] ERROR: Control directory commit mismatch (M1)! Expected e6cb75e for prj_03, found 07db657 in ..\stm32h755_control_07db657
+================================================================================
+
+--- Running T2a (absence of unprotected HAL_GPIO_Init/DeInit across 4 ELFs for prj_03) ---
+
+--- Results for T2A ---
+  [PASS] T2a_current_prj_03_debug_cm7: prj_03_debug_cm7 (CM7): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj', 'gpio_hal.c.obj'] (outside HAL: ['gpio_hal.c.obj']), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_03_debug_cm4: prj_03_debug_cm4 (CM4): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj'] (outside HAL: []), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_03_release_cm7: prj_03_release_cm7 (CM7): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj', 'gpio_hal.c.obj'] (outside HAL: ['gpio_hal.c.obj']), uart_clean=True, deinit_in_elf=False
+  [PASS] T2a_current_prj_03_release_cm4: prj_03_release_cm4 (CM4): HAL_GPIO_Init referenced only by gpio_hal.c.obj; DeInit absent
+         Detail: callers=['stm32h7xx_hal_rcc.c.obj'] (outside HAL: []), uart_clean=True, deinit_in_elf=False
+  [FAIL] T2a_control_e6cb75e_commit_matches: Control directory commit matches e6cb75e for prj_03 (M1)
+         Detail: Expected commit e6cb75e, found 07db657 in ..\stm32h755_control_07db657
+Verdict T2A: FAIL
+
+--- Running T2b (preprocessor -E scan across all compilation units for prj_03) ---
+--- T2b Regex Autoprueba (CMSIS expanded forms & reads) ---
+  Detected writes: 12/12, False read detections: 0/9
+    [Write check: DETECTED] ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER = 1;
+    [Write check: DETECTED] ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER |= 1;
+    [Write check: DETECTED] ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER <<= 2;
+    [Write check: DETECTED] ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->AFR[0] = 7;
+    [Write check: DETECTED] ((GPIO_TypeDef *) (0x58020C00))->MODER = 1;
+    [Write check: DETECTED] ((((((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))))))->MODER)) = 1;
+    [Write check: DETECTED] ((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER) = (1));
+    [Write check: DETECTED] (((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER)) = ((((((((GPIO
+    [Write check: DETECTED] ((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER) |= (1));
+    [Write check: DETECTED] ((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER) &= ~(1));
+    [Write check: DETECTED] ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER = 1;
+    [Write check: DETECTED] ((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->AFR[1]) |= (7));
+    [Read  check: IGNORED] uint32_t v1 = ((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER;
+    [Read  check: IGNORED] uint32_t v2 = ((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER));
+    [Read  check: IGNORED] if (((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER == 1) { (void)0
+    [Read  check: IGNORED] if (((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER) == 1)) { (vo
+    [Read  check: IGNORED] if ((((GPIO_TypeDef *) (0x58020C00))->MODER) == 0) { (void)0; }
+    [Read  check: IGNORED] if (((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER != 1) { (void)0
+    [Read  check: IGNORED] if (((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER <= 1) { (void)0
+    [Read  check: IGNORED] uint32_t v3 = (((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER & 0x
+    [Read  check: IGNORED] uint32_t v4 = ((((GPIO_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x0C00UL))->MODER));
+  [Preset debug        ] scanned:  323 units, failed: 0 units
+  [Preset release      ] scanned:  323 units, failed: 0 units
+  [Preset selftest     ] scanned:  324 units, failed: 0 units
+  [Control note] No tree scan needed for prj_03: e6cb75e writes configuration via HAL_GPIO_Init (verified by T2a control), zero raw writes in tree. Autoprueba (12/12 writes, 0/9 reads) serves as negative control.
+
+--- Results for T2B ---
+  [PASS] T2b_selftest_macro_and_paren_detection: Self-test: CMSIS expanded bases, WRITE_REG/MODIFY_REG/SET_BIT macros, and multiline writes detected; reads and == ignored
+         Detail: Autoprueba result: PASS (12/12 writes, 0/9 reads)
+  [PASS] T2b_current_zero_raw_writes: Current tree has zero raw GPIO writes across 3 presets outside exceptions
+         Detail: Scanned totals: 970 units; Illegal writes count=0
+Verdict T2B: PASS
+
+================================================================================
+OVERALL SUMMARY: VERIFICATION FAILED
+================================================================================
+exit=1
