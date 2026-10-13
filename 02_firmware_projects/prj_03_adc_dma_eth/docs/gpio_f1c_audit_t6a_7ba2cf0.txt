@@ -1,0 +1,24 @@
+=== Auditor, 00_gpio F1c T6a: 20 x (STM32_Programmer_CLI -c port=SWD sn=0016000C4142501220353451 mode=HOTPLUG -rst; wait 10 s; independent SWD read). Image: prj_03 debug 7ba2cf0, as in gpio_f1c_audit_swd_7ba2cf0.txt, no flash since; no host tool running ===
+Start: 2026-10-13T13:09:04-06:00
+reset 1:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 2:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 3:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 4:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 5:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 6:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 7:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 8:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 9:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 10:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 11:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 12:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 13:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 14:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 15:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 16:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 17:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 18:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 19:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+reset 20:   hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK   hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK AUDIT SWD VERDICT=PASS 
+T6a auditor: 20/20 PASS
+End: 2026-10-13T13:13:17-06:00
