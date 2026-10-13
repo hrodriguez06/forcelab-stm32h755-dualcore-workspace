@@ -882,7 +882,7 @@ The audit of the pre-F1 code found these. Their state at this commit:
 
 | ID | Finding | State |
 | :--- | :--- | :--- |
-| G1 | The configuration registers have one copy for both cores; unprotected RMW from CM7 (PB13, ETH) and CM4 (PB1, ADC) on `GPIOB_MODER` in `prj_04` and `prj_03` can put PB13 back to analog, with the link still up and TX dead | **Closed in the driver** (section + hook, T15). **Closed in `prj_01`** (F1), **closed in `prj_04`** (F1b, `9051a6a`, `53f0f88`, `5a8f13a`), and **closed in `prj_03`** (F1c, `90a866f`, `ee5e3b3`). Verified in `prj_04` by T3 (`docs/gpio_f1b_t3_7cc456d.txt`), T4 (`docs/gpio_f1b_t4_7cc456d.txt`, margin 19.54×/33.71×), T5 (`docs/gpio_f1b_t5_debug_7cc456d.txt`, `_release_`), T6a (20/20 resets, `docs/gpio_f1b_t6a_8ee9a13.txt`), independent audit (`docs/gpio_f1b_audit2_swd_32f343a.txt`, `_t6a_`, `docs/gpio_f1b_audit3_t3_492d156.txt`), and cold boot T6b (`docs/gpio_f1b_t6b_swd_492d156.txt`, `_t5_netcheck_`, `_t5_query_`). Verified in `prj_03` by T1 (`docs/gpio_f1c_t1_e9e98c4.txt`), T2a/T2b (`docs/gpio_f1c_t2_e9e98c4.txt`), T3 (`docs/gpio_f1c_t3_f733b98.txt`), T4 (`docs/gpio_f1c_t4_f733b98.txt`, margin 18.84×/33.06×), T5 (`docs/gpio_f1c_t5_debug_f733b98.txt`, `_release_`), T6a (20/20 resets, `docs/gpio_f1c_t6a_f733b98.txt`), and independent auditor runs (`docs/gpio_f1c_audit_t2_7ba2cf0.txt`, `_t7_`, `_swd_`, `_t6a_`, `_t5_netcheck_`, `_t3_control_`, `_t3_`); cold boot T6b pending on bench. G1 is closed in all projects. |
+| G1 | The configuration registers have one copy for both cores; unprotected RMW from CM7 (PB13, ETH) and CM4 (PB1, ADC) on `GPIOB_MODER` in `prj_04` and `prj_03` can put PB13 back to analog, with the link still up and TX dead | **Closed in the driver** (section + hook, T15). **Closed in `prj_01`** (F1), **closed in `prj_04`** (F1b, `9051a6a`, `53f0f88`, `5a8f13a`), and **closed in `prj_03`** (F1c, `90a866f`, `ee5e3b3`). Verified in `prj_04` by T3 (`docs/gpio_f1b_t3_7cc456d.txt`), T4 (`docs/gpio_f1b_t4_7cc456d.txt`, margin 19.54×/33.71×), T5 (`docs/gpio_f1b_t5_debug_7cc456d.txt`, `_release_`), T6a (20/20 resets, `docs/gpio_f1b_t6a_8ee9a13.txt`), independent audit (`docs/gpio_f1b_audit2_swd_32f343a.txt`, `_t6a_`, `docs/gpio_f1b_audit3_t3_492d156.txt`), and cold boot T6b (`docs/gpio_f1b_t6b_swd_492d156.txt`, `_t5_netcheck_`, `_t5_query_`). Verified in `prj_03` by T1 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t1_e9e98c4.txt`), T2a/T2b (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t2_e9e98c4.txt`), T3 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t3_c9a3d23.txt`), T3 control (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t3_control_c9a3d23.txt`), T4 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t4_c9a3d23.txt`, margin 18.84×/33.06×), T5 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t5_debug_c9a3d23.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t5_release_f733b98.txt`), T6a (20/20 resets, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t6a_f733b98.txt`), and independent auditor runs (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t2_7ba2cf0.txt`, `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1c_audit_t7_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_swd_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t6a_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t5_netcheck_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t3_control_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t3_7ba2cf0.txt`, and audit 2: `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit2_t2_7b56d99.txt`, `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1c_audit2_t7_7b56d99.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit2_wrongctrl_7b56d99.txt`); cold boot T6b pending on bench. G1 is closed in all projects. |
 | G2 | Wrong dual-core note in `gpio_bm.h` about `RCC_AHB4ENR` | Closed (`a2096d2`) |
 | G3 | `pull = 3` programmed `PUPDR = 11` and `speed = 4` became LOW, both returning `true` | Closed (`b52ffec`), T1 |
 | G4 | Misaligned port pointers (`GPIOA + 4`) accepted | Closed (`a204b8a`), T1 |
@@ -1131,25 +1131,28 @@ migrating CM4's analog ADC pin configuration from raw `HAL_GPIO_Init` to `GPIO_B
 - **T2a & T2b (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t2_e9e98c4.txt`):** T2a verified 0
   unprotected HAL calls across 4 ELFs (`nm -u` per linked object); control `e6cb75e` fails on both CM4 ELFs.
   T2b scanned 970 compilation units with 0 raw writes; CMSIS expanded macro autoprueba passed (12/12 writes
-  detected, 0/9 reads ignored); negative control in `e6cb75e` confirmed.
-- **T3 & Control (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t3_f733b98.txt`, `..._t3_control_...`):**
+  detected, 0/9 reads ignored); T2b en `prj_03` no tiene control de árbol: su control es la autoprueba, y
+  `e6cb75e` lo cubre T2a.
+- **T3 & Control (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t3_c9a3d23.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t3_control_c9a3d23.txt`):**
   Live SWD verified `s_shared_lock` matches `g_shared_gpio_lock` on both cores (`0x8015B80` on CM7, `0x81052F0`
   on CM4), `HSEM_R5 = 0x0`, fail counts = 0, and PB1, PB13, PD8, PD9, PB15, PD0 exact across 5 fields.
-  Negative control confirmed `s_shared_lock == NULL` on both cores.
-- **T4 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t4_f733b98.txt`):** Measured retention hold
+  Dedicated control run confirmed `s_shared_lock == NULL` on both cores.
+- **T4 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t4_c9a3d23.txt`):** Measured retention hold
   cycles: CM7 = 1274 cycles (3.19 µs @ 400 MHz, 18.84× margin vs 24000), CM4 = 363 cycles (1.81 µs @ 200 MHz,
   33.06× margin vs 12000), both `>= 10.0x`.
-- **T5 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t5_debug_f733b98.txt`, `..._release_...`):**
+- **T5 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t5_debug_c9a3d23.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t5_release_f733b98.txt`):**
   Production regression in debug and release: ICMP 4/4, UDP sweep 1..1472 B, burst 100/100, ADC samples
   growing with `OVR == 0`, and `[net]` error counters all 0.
 - **T6a (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t6a_f733b98.txt`):** 20 consecutive warm resets
   via SWD with 10/10 T3 checks passing after each reset.
 - **T7 (`02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1c_t7_e9e98c4.txt`):** Regression check for
   `prj_04`: 1951 compilation units clean, 0 illegal writes, control in `07db657` reproduces all 20 findings.
-- **Auditor independent verification:** SWD independent check (`docs/gpio_f1c_audit_swd_7ba2cf0.txt`),
-  20 warm resets (`docs/gpio_f1c_audit_t6a_7ba2cf0.txt`), T2 run (`docs/gpio_f1c_audit_t2_7ba2cf0.txt`),
-  T7 run (`docs/gpio_f1c_audit_t7_7ba2cf0.txt`), T3 and control (`docs/gpio_f1c_audit_t3_7ba2cf0.txt`,
-  `..._t3_control_...`), and T5 net check (`docs/gpio_f1c_audit_t5_netcheck_7ba2cf0.txt`, `..._t5_query_...`).
+- **Auditor independent verification:** SWD independent check (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_swd_7ba2cf0.txt`),
+  20 warm resets (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t6a_7ba2cf0.txt`), T2 run (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t2_7ba2cf0.txt`),
+  T7 run (`02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1c_audit_t7_7ba2cf0.txt`), T3 control (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t3_control_7ba2cf0.txt`),
+  T3 run (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t3_7ba2cf0.txt`), and T5 net check (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t5_netcheck_7ba2cf0.txt`,
+  `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t5_query_7ba2cf0.txt`); audit 2 runs (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit2_t2_7b56d99.txt`,
+  `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1c_audit2_t7_7b56d99.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit2_wrongctrl_7b56d99.txt`).
   F1 audit conditionally passed at `a20e27c`.
 - **T6b (PENDING):** Cold boot on physical bench to be executed by the bench owner (power cycle without
   reflashing, verifying `RCC_RSR` power-on flags, T3, and T5).
