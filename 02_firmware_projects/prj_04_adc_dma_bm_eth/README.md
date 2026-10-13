@@ -71,6 +71,23 @@ the CM4 image, and update the table rather than leaving it to drift.
 - **Input Validation & Clean Start**: Rejects an out-of-range channel (the sampling-time write shifts by `(channel - 10) * 3`, which is undefined behaviour past 19), and clears `CFGR`, `CFGR2`, `PCSEL`, `SQR1..4`, `SMPR1..2`, `DIFSEL`, `IER` and `ISR` on init - enabling the peripheral clock does not reset the ADC, so a warm reset otherwise inherits the previous configuration.
 - **Teardown**: `ADC_BM_Deinit()` stops conversions, disables the ADC and returns it to Deep-Power-Down.
 
+### C. GPIO Shared Driver & Cross-Core Lock Hook (`00_gpio/gpio_bm.[ch]`, F1b)
+- **Shared Mutex via Hardware Semaphore**: Hardware semaphore HSEM 5 protects concurrent register modifications on GPIO ports shared across cores (GPIOA, GPIOB, GPIOC, GPIOD, GPIOG).
+- **Timeout and Cycle Limits**: 60 µs timeout (`SHARED_GPIO_LOCK_US = 60U`), translated into maximum core cycle counts using `SystemCoreClock` (24,000 cycles on CM7 @ 400 MHz; 12,000 cycles on CM4 @ 200 MHz).
+- **Shared Memory Diagnostics**: Diagnostic counters and hold measurements allocated in `SharedMemory_t` located in SRAM4 (`0x38008000`):
+  - `m7_gpio_lock_fail_count` (offset `0x4fc`)
+  - `m4_gpio_lock_fail_count` (offset `0x500`)
+  - `m7_gpio_lock_hold_cycles_max` (offset `0x504`)
+  - `m4_gpio_lock_hold_cycles_max` (offset `0x508`)
+- **Hook Installation Sequence**:
+  - **Cortex-M7**: Installed in `CM7/Core/Src/main.c` via `Shared_GpioLockInstall()` immediately after `Shared_Init()` and before releasing CPU2 via `HSEM_BM_BootReleaseCpu2()`.
+  - **Cortex-M4**: Installed in `CM4/Core/Src/main.c` via `Shared_GpioLockInstall()` right after `HSEM_BM_TimebaseStart()` and before `ADC_Acquisition_Init()`.
+- **Writers Protected (G1, G13)**: All GPIO configuration writers are routed through `00_gpio`:
+  - CM7 Ethernet RMII (`08_eth`): uses `GPIO_HAL_Init` / `GPIO_HAL_DeinitPin`.
+  - CM7 Console VCP (`04_uart`): uses `GPIO_HAL_Init` / `GPIO_HAL_DeinitPin`.
+  - CM4 ADC pin setup (`adc_acquisition.c`): uses `GPIO_BM_ConfigPin` on PB1.
+  - CM4 selftest bridge / loopback (`main.c`, `dma_selftest.c`): use `gpio_bm` on PD5/PD6.
+
 ---
 
 ## 5. Build and Flash Instructions
@@ -195,4 +212,47 @@ reachability check.
 See [`docs/ADC_BRINGUP.md`](docs/ADC_BRINGUP.md) section 6 for the configuration detail
 and section 7B for how the refuse path was actually proved, which needs more than a
 timeout to be convincing.
+
+---
+
+## 9. GPIO Cross-Core Synchronization & F1b Validation
+
+Phase F1b integrated and verified the cross-core GPIO lock hook and resolved all shared-port concurrency risks (findings G1 and G13 closed in `prj_04`).
+
+### 9.1 Hook Implementation & Error Semantics
+
+- **Hook Architecture**: Implemented in `Common/Src/shared_memory.c` (`Shared_GpioLock()`, `Shared_GpioUnlock()`, `Shared_GpioLockInstall()`). Uses HSEM channel 5 with a 60 µs bounded spin timeout (`SHARED_GPIO_LOCK_US = 60U`) calibrated by core frequency (24,000 cycles on CM7 @ 400 MHz, 12,000 cycles on CM4 @ 200 MHz). Retention hold time is measured using DWT `CYCCNT`.
+- **Diagnostic Variables**: Placed in `SharedMemory_t` at SRAM4 (`0x38008000`):
+  - `m7_gpio_lock_fail_count` (offset `0x4fc`)
+  - `m4_gpio_lock_fail_count` (offset `0x500`)
+  - `m7_gpio_lock_hold_cycles_max` (offset `0x504`)
+  - `m4_gpio_lock_hold_cycles_max` (offset `0x508`)
+- **Core Startup Sequence**:
+  - **Cortex-M7**: `CM7/Core/Src/main.c` invokes `Shared_GpioLockInstall()` right after `Shared_Init()` and before releasing CPU2 via `HSEM_BM_BootReleaseCpu2()`.
+  - **Cortex-M4**: `CM4/Core/Src/main.c` invokes `Shared_GpioLockInstall()` right after `HSEM_BM_TimebaseStart()` and before `ADC_Acquisition_Init()`.
+- **Console MSP Error Discard (Observation m3)**: In `CM7/App/Src/main.c`, `App_Log_Init()` calls `(void)UART_Console_Init(UART_CONSOLE_DEFAULT_BAUDRATE);` discarding the `HAL_StatusTypeDef` return value. While `UART_Console_Init()` and `UART_HAL_InitEx()` now detect MSP pin configuration errors and return `HAL_ERROR`, `App_Log_Init()` ignores this return value, allowing boot to continue silently if console GPIO initialization fails (though `m7_gpio_lock_fail_count` will increment).
+
+### 9.2 Validation Evidence (Captures in `docs/`)
+
+All F1b test procedures were executed and verified against strict criteria:
+
+| Test | Objective | Status / Key Metrics | Primary Captures |
+| :--- | :--- | :--- | :--- |
+| **T1** | Build Matrix & Presets | PASS: 8/8 matrix clean, 7 `prj_04` presets clean, 5 strict `-Werror` builds (0 warnings) | [`docs/gpio_f1b_t1_7cc456d.txt`](docs/gpio_f1b_t1_7cc456d.txt) |
+| **T2a** | Static HAL Symbol Check | PASS: 0 unprotected HAL calls across 7 ELFs (`nm -u` per object from `build.ninja`); control `07db657` fails on all 5 CM7s | [`docs/gpio_f1b_t2_7cc456d.txt`](docs/gpio_f1b_t2_7cc456d.txt) |
+| **T2b** | AST Preprocessor Scan | PASS: 0 raw writes across 1951 units; CMSIS macro autoprueba detected 12/12 writes and 0/9 reads; negative control matched 20 raw writes in `07db657` | [`docs/gpio_f1b_t2_7cc456d.txt`](docs/gpio_f1b_t2_7cc456d.txt) |
+| **T3** | Live SWD Hook Inspection | PASS: `s_shared_lock == g_shared_gpio_lock` on both cores, `HSEM_R5 = 0`, fail counts = 0, PB1/PB13/PD8/PD9/PB15/PD0 verified; negative control confirmed `s_shared_lock == NULL` | [`docs/gpio_f1b_t3_7cc456d.txt`](docs/gpio_f1b_t3_7cc456d.txt), [`docs/gpio_f1b_t3_control_7cc456d.txt`](docs/gpio_f1b_t3_control_7cc456d.txt) |
+| **T4** | Lock Hold Time Measurement | PASS: CM7 = 1228 cycles (3.07 µs, 19.54× margin vs 24000), CM4 = 356 cycles (1.78 µs, 33.71× margin vs 12000), both `>= 10.0x` | [`docs/gpio_f1b_t4_7cc456d.txt`](docs/gpio_f1b_t4_7cc456d.txt) |
+| **T5** | Production Regression (Debug/Release) | PASS: ICMP 4/4, UDP sweep 1..1472 B, burst 100/100, ADC samples growing strictly with `OVR == 0`, net error counters = 0 | [`docs/gpio_f1b_t5_debug_7cc456d.txt`](docs/gpio_f1b_t5_debug_7cc456d.txt), [`docs/gpio_f1b_t5_release_7cc456d.txt`](docs/gpio_f1b_t5_release_7cc456d.txt) |
+| **T6a** | Warm Reset Stability | PASS: 20 consecutive warm resets via SWD with 10/10 T3 checks passing after each reset | [`docs/gpio_f1b_t6a_8ee9a13.txt`](docs/gpio_f1b_t6a_8ee9a13.txt) |
+| **T7** | Template Identity & Non-interference | PASS: `prj_01` debug console active on VCP, identity confirmed by B6 download, PD8/PD9 in AF7 PP pull-up | [`docs/gpio_f1b_t7_7cc456d.txt`](docs/gpio_f1b_t7_7cc456d.txt) |
+| **M6** | Final Image Reflash & Verification | PASS: `prj_04` debug reflashed and verified via `net_check.py` 3/3 PASS (ICMP, UDP sweep, burst) | [`docs/gpio_f1b_m6_netcheck_7cc456d.txt`](docs/gpio_f1b_m6_netcheck_7cc456d.txt) |
+| **T6b** | Cold Boot Bench Verification | PASS: Physical cold boot by bench owner: `RCC_RSR = 0x00FE0000`, SWD checks PASS, T3 PASS, T5 PASS | [`docs/gpio_f1b_t6b_rsr_492d156.txt`](docs/gpio_f1b_t6b_rsr_492d156.txt), [`docs/gpio_f1b_t6b_swd_492d156.txt`](docs/gpio_f1b_t6b_swd_492d156.txt), [`docs/gpio_f1b_t6b_t3_492d156.txt`](docs/gpio_f1b_t6b_t3_492d156.txt), [`docs/gpio_f1b_t6b_t5_debug_492d156.txt`](docs/gpio_f1b_t6b_t5_debug_492d156.txt) |
+| **Audit** | Independent Auditor Verification | PASS: SWD inspection (`docs/gpio_f1b_audit2_swd_32f343a.txt`), 20 warm resets (`docs/gpio_f1b_audit2_t6a_32f343a.txt`), T2 scan (`docs/gpio_f1b_audit3_t2_492d156.txt`), T3 and T5 (`docs/gpio_f1b_audit3_t3_492d156.txt`, `_t5_debug_`). F1 audit passed at `7687e91`, cold boot T6b passed at `74c9119`. |
+
+### 9.3 Unexercised Tests in Hardware
+
+- **`selftest-gpio`**: Preset was compiled cleanly with zero warnings, but not executed on physical hardware per bench safety rule G-S1 (lines wired to AD2 instruments).
+- **T15 contention test**: Hardware contention under deliberate cross-core collision was validated on `prj_01` during F1a, not re-run in `prj_04`.
+
 
