@@ -185,3 +185,22 @@ El responsable desconectó y reconectó la placa. La ejecuté yo, sin flashear n
 | `gpio_f1b_t6b_t5_netcheck_492d156.txt`, `…_t5_query_492d156.txt` | ICMP 4/4, UDP de 1 a 1472 B idénticos, ráfaga 100/100, contadores `[net]` a 0; las muestras del ADC crecen, `OVR: 0`. **PASS** |
 
 **T6b pasa.** El cierre puede empezar.
+
+## Cierre, parte 1 (`37961cf`)
+
+Entrega: `74c9119..37961cf`. `00_gpio/README.md`, `04_uart/README.md`, `prj_04/README.md` y la sección "Cierre" del informe. Solo documentación (comprobado con `git diff --stat`).
+
+**Bien:**
+- `00_gpio` §3.3, §11, §12.2 (G1 y G13 con commits y capturas; G1 abierto en `prj_03`), §13.1 y §15 (con la recuperación de los documentos de proceso), y el límite m9 de T2b;
+- `04_uart`, la tabla de tiers, la MSP y la historia;
+- `prj_04`, la instalación del hook, los campos y la tabla de evidencia.
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| C1 | Mayor (afirmación falsa) | **`00_gpio/README.md`, el estado del driver:**<br>• §12.7 cambia "no independent bench audit: every bench run was made by the implementer" por "independent bench audit of F1b completed". Lo primero sigue siendo cierto para F1 del driver en `prj_01`: la auditoría independiente en placa fue de F1b, en `prj_04`;<br>• la introducción (l. 15-50) no se tocó: "validated … in `prj_01_template_dualcore` only", "No finding is open", "has had no independent bench audit". No dice nada de F1b ni de G1 abierto en `prj_03` | §12.7: las dos cosas (F1 sin auditoría independiente en placa; F1b con ella, `7687e91`, `74c9119`). Introducción: una frase con F1b en `prj_04` (validación y auditoría independiente) y G1 abierto en `prj_03` (F1c) |
+| C2 | Mayor (afirmaciones falsas) | **`prj_04/README.md`:**<br>• "translated into maximum core cycle counts using `SystemCoreClock`": falso, son constantes (`SHARED_GPIO_LOCK_US * 400U` / `* 200U`, `Common/Inc/shared_memory.h`);<br>• m3 sitúa `App_Log_Init` en `CM7/App/Src/main.c` (está en `CM7/App/Src/app_log.c:24`) y dice que si falla la MSP "`m7_gpio_lock_fail_count` will increment": solo cuenta los tiempos agotados del lock, no `ERR_VERIFY`, `ERR_LOCKED` ni un parámetro;<br>• la fila T6b enlaza `docs/gpio_f1b_t6b_t5_debug_492d156.txt`, que no existe (son `…_t5_netcheck_…` y `…_t5_query_…`);<br>• §9.3 dice que T15 no se ejecutó en `prj_04` y que se validó "on `prj_01` during F1a": sí se ejecutó en el F1a propio de `prj_04` (`docs/gpio_f1a_selftest_ededa84.txt`, antes de F1b y sin hook de producción); F1a no es de `prj_01`;<br>• "AST Preprocessor Scan": es una búsqueda con expresiones regulares sobre el texto preprocesado;<br>• `Shared_GpioLock()`/`Shared_GpioUnlock()` no existen (son `shared_gpio_lock`/`shared_gpio_unlock`, estáticas);<br>• "HSEM 5 protects … ports (GPIOA, GPIOB, GPIOC, GPIOD, GPIOG)": el lock cubre cualquier puerto que se configure por el driver | Corregir cada punto |
+| C3 | Menor | **`04_uart/README.md`:**<br>• "returning `HAL_ERROR`": devuelve el estado de la MSP, que puede ser `HAL_BUSY` (tiempo del lock agotado) o `HAL_ERROR`;<br>• "executing every register access inside `gpio_bm`'s cross-core critical section": la parte entre núcleos solo existe si el proyecto instala el hook; sin él, es PRIMASK del núcleo propio | Precisarlo |
+| C4 | Menor | **T6b, en `00_gpio` §13.1 y en `prj_04`:** "cold boot … by bench owner". El responsable apagó y encendió la placa; las lecturas y T5 las hizo el auditor | Decirlo así |
+| C5 | Menor | **`00_gpio` §11, la fila de `led_bm.c`:** "(before CPU2 boot release; G14 exception)" mezcla dos cosas. `LED_Init` es seguro por contrato (antes de liberar a CPU2); G14 es `LED_PanicRed` | Separarlas |
+
+**El cierre no pasa** por C1 y C2. Son afirmaciones falsas en los README, que es lo que queda tras borrar los documentos de proceso.
