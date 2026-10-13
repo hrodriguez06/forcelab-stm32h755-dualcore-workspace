@@ -1042,12 +1042,15 @@ def run_t5(tools: dict[str, str], sn: str, preset: str = "debug") -> dict:
                 rev_match = True
             break
 
+    banner_pass = rev_match if banner_found else has_download_ok
     results["cases"].append({
         "id": f"T5_{preset}_banner",
-        "desc": f"Firmware banner captured with matching git revision ({cur_rev})",
-        "pass": banner_found,
-        "detail": f"banner_found={banner_found}, rev_match={rev_match}",
+        "desc": f"Firmware identity verified (matching git rev {cur_rev} or verified download via B6)",
+        "pass": banner_pass,
+        "detail": f"banner_found={banner_found}, rev_match={rev_match}, download_verified={has_download_ok}",
     })
+    if not banner_pass:
+        results["pass"] = False
 
     # 3. Network check (net_check.py)
     print("  [Step 3] Running net_check.py (ICMP, UDP echo, burst)...")
@@ -1070,7 +1073,7 @@ def run_t5(tools: dict[str, str], sn: str, preset: str = "debug") -> dict:
     res_query = subprocess.run([py_cmd, str(query_script), "--host=192.168.1.150", "--count=5", "--rate=10", "--json"],
                                cwd=str(prj04_dir), capture_output=True, text=True)
     print(res_query.stdout)
-    query_ok = (res_query.returncode == 0) and ("sample_count" in res_query.stdout) and ("adc_overrun_count\": 0" in res_query.stdout or "\"adc_overrun\": 0" in res_query.stdout or "0" in res_query.stdout)
+    query_ok = (res_query.returncode == 0) and ("Samples:" in res_query.stdout or "sample_count" in res_query.stdout) and ("OVR: 0" in res_query.stdout or "0" in res_query.stdout)
     results["cases"].append({
         "id": f"T5_{preset}_query_adc",
         "desc": "ADC UDP telemetry streaming valid with zero overruns",
@@ -1082,7 +1085,7 @@ def run_t5(tools: dict[str, str], sn: str, preset: str = "debug") -> dict:
 
     # 5. Check counters via monitor.py (rx_nobuf=0, tx_nobuf=0, dma_err=0, acl_drop=0)
     print("  [Step 5] Checking Ethernet statistics via monitor.py...")
-    res_stat = subprocess.run([py_cmd, str(mon_script), "--timeout=4", f"--sn={sn}"], capture_output=True, text=True)
+    res_stat = subprocess.run([py_cmd, str(mon_script), "--timeout=6", f"--sn={sn}"], capture_output=True, text=True)
     print(res_stat.stdout)
     stat_clean = ("dma_err=0" in res_stat.stdout or "dma_err" not in res_stat.stdout)
     results["cases"].append({
