@@ -1,4 +1,4 @@
-﻿/**
+/**
   ******************************************************************************
   * @file    adc_acquisition.c
   * @brief   ADC1 + DMA1 continuous acquisition management on Cortex-M4.
@@ -35,23 +35,20 @@ static uint16_t s_adc_dma_buffer[ADC_BUFFER_SIZE] __attribute__((aligned(32)));
 static AdcHal_Handle_t s_adc_handle;
 static TIM_HandleTypeDef s_htim3;
 
-static void GPIO_Analog_Init(void)
+static bool GPIO_Analog_Init(void)
 {
-    GPIO_InitTypeDef gpio = {0};
+    const GpioBm_PinConfig_t cfg = {
+        .port          = BOARD_ADC_PORT,
+        .pin_idx       = GPIO_BM_PIN_INDEX(BOARD_ADC_PIN),
+        .mode          = GPIO_BM_MODE_ANALOG,
+        .otype         = GPIO_BM_OTYPE_PP,
+        .speed         = GPIO_BM_SPEED_LOW,
+        .pull          = GPIO_BM_PULL_NONE,
+        .af            = 0U,
+        .initial_level = 0U,
+    };
 
-    if (BOARD_ADC_PORT == GPIOA)
-    {
-        __HAL_RCC_GPIOA_CLK_ENABLE();
-    }
-    else if (BOARD_ADC_PORT == GPIOB)
-    {
-        __HAL_RCC_GPIOB_CLK_ENABLE();
-    }
-
-    gpio.Pin  = BOARD_ADC_PIN;
-    gpio.Mode = GPIO_MODE_ANALOG;
-    gpio.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(BOARD_ADC_PORT, &gpio);
+    return (GPIO_BM_ConfigPin(&cfg) == GPIO_BM_OK);
 }
 
 static bool TIM3_Trigger_Init(void)
@@ -97,7 +94,10 @@ bool ADC_Acquisition_Init(void)
     __HAL_RCC_ADC12_CLK_ENABLE();
 
     /* Initialize Analog Input GPIO */
-    GPIO_Analog_Init();
+    if (!GPIO_Analog_Init())
+    {
+        return false;
+    }
 
     /* Configure TIM3 timebase for 500 kHz TRGO */
     if (!TIM3_Trigger_Init())
