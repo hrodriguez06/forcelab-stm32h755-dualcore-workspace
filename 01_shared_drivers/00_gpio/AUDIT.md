@@ -204,3 +204,20 @@ Entrega: `74c9119..37961cf`. `00_gpio/README.md`, `04_uart/README.md`, `prj_04/R
 | C5 | Menor | **`00_gpio` §11, la fila de `led_bm.c`:** "(before CPU2 boot release; G14 exception)" mezcla dos cosas. `LED_Init` es seguro por contrato (antes de liberar a CPU2); G14 es `LED_PanicRed` | Separarlas |
 
 **El cierre no pasa** por C1 y C2. Son afirmaciones falsas en los README, que es lo que queda tras borrar los documentos de proceso.
+
+## Cierre, parte 2 (`8ef3e61`)
+
+Entrega: `9b8bf5c..8ef3e61` (`cd10699` 00_gpio, `355ccdd` 04_uart, `4a37228` prj_04, `8ef3e61` el informe). Solo documentación.
+
+| Hallazgo | Verificación |
+| --- | --- |
+| C1 | Introducción: F1b en `prj_04` con validación y auditoría independiente (`7687e91`, `74c9119`), G1 abierto en `prj_03`, y F1 de `prj_01` sin auditoría independiente en placa. §12.7 dice las dos cosas. El ancla `#131-f1b-in-prj_04-done-in-drivergpio-f1b-closed` corresponde al título de §13.1. **Cerrado** |
+| C2 | `prj_04/README.md`: límites como constantes de `shared_memory.h`; m3 en `app_log.c:24` y el contador, bien descrito; la fila T6b enlaza las cinco capturas que existen; §9.3 sitúa T15 en el F1a propio de `prj_04` (`gpio_f1a_selftest_ededa84.txt`); T2b, "regex scan"; los nombres reales de las funciones del hook; cualquier puerto. **Cerrado** |
+| C3 | `04_uart`: `HAL_BUSY`/`HAL_ERROR`, y la sección es entre núcleos solo con el hook (si no, PRIMASK). **Cerrado** |
+| C4, C5 | T6b: el responsable apaga y enciende, el auditor mide. `led_bm`: contrato frente a G14. **Cerrado** |
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| C6 | Menor (omisión mía al listar C2) | `00_gpio/README.md` §13.1 (l. 1092) conserva la frase que C2 corrigió en `prj_04`: "Phase T15 contention test was not executed on the physical bench in `prj_04` (already proven in `prj_01`)". T15 se ejecutó en el F1a propio de `prj_04` (`gpio_f1a_selftest_ededa84.txt`); lo no ejecutado es `selftest-gpio` con los cambios de F1b | Una línea; la corrige el responsable en el commit de cierre, si lo aprueba |
+
+**El cierre pasa** con C6 corregido en el commit de cierre. Pasos del responsable: C6, la fila de `00_gpio` en `DRIVER_ROADMAP.md`, el borrado de los documentos de proceso (decisión 6), el merge de `driver/gpio-f1b` en `main` y el borrado de la rama.
