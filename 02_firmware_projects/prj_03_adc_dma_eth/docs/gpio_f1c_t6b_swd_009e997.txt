@@ -1,0 +1,19 @@
+=== 00_gpio F1c T6b: auditor's independent SWD read after the cold boot of gpio_f1c_t6b_rsr_009e997.txt (image: prj_03 debug flashed by gpio_f1c_t5_debug_c9a3d23.txt, no flash since) ===
+Date: 2026-10-13T20:56:47-06:00  HEAD: 009e997 (dirty)  build: 02_firmware_projects/prj_03_adc_dma_eth/build/debug
+DWARF offsets (CM7 ELF): m7_gpio_lock_fail_count=0x4E8, m4_gpio_lock_fail_count=0x4EC, m7_gpio_lock_hold_cycles_max=0x4F0, m4_gpio_lock_hold_cycles_max=0x4F4
+nm: CM7 s_shared_lock@200128F8 g_shared_gpio_lock=08015B80 | CM4 s_shared_lock@30020A58 g_shared_gpio_lock=081052F0 | g_shared@38008000
+SWD words read: 19 of 19
+  CM7 s_shared_lock                  read=08015B80 want=08015B80 -> OK
+  CM4 s_shared_lock                  read=081052F0 want=081052F0 -> OK
+  HSEM_R5 (free = 0)                 read=00000000 want=00000000 -> OK
+  m7_gpio_lock_fail_count            read=00000000 want=00000000 -> OK
+  m4_gpio_lock_fail_count            read=00000000 want=00000000 -> OK
+  hold max CM7 1274 cyc (3.19 us) margin 18.84x -> OK
+  hold max CM4 363 cyc (1.81 us) margin 33.06x -> OK
+  PB1  mode/otype/speed/pull/af=(3, 0, 0, 0, 0) want (3, 0, 0, 0, 0) -> OK
+  PB13 mode/otype/speed/pull/af=(2, 0, 3, 0, 11) want (2, 0, 3, 0, 11) -> OK
+  PD8  mode/otype/speed/pull/af=(2, 0, 0, 1, 7) want (2, 0, 0, 1, 7) -> OK
+  PD9  mode/otype/speed/pull/af=(2, 0, 0, 1, 7) want (2, 0, 0, 1, 7) -> OK
+  PB15 mode/otype/speed/pull/af=(3, 0, 0, 0, 0) want (3, 0, 0, 0, 0) -> OK
+  PD0  mode/otype/speed/pull/af=(3, 0, 0, 0, 0) want (3, 0, 0, 0, 0) -> OK
+AUDIT SWD VERDICT=PASS

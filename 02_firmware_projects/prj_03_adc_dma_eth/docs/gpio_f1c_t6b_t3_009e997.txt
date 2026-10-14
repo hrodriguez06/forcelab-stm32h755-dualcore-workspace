@@ -1,0 +1,47 @@
+================================================================================
+STM32H755 GPIO F1 Verification Checks for prj_03 (T2, T3, T4, T5, T6a, T7)
+================================================================================
+[host] argv: tools/gpio_f1b_checks.py --project prj_03 --test t3 --sn 0016000C4142501220353451
+[host] timestamp: 2026-10-13 20:56:47
+[host] project: prj_03
+[host] git rev: 009e997 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_e6cb75e (rev e6cb75e, clean)
+================================================================================
+
+--- Running T3 (live SWD inspection for prj_03, control_mode=False) ---
+  [SWD origin] s_shared_lock CM7: 0x200128f8 (from nm cm7_firmware.elf)
+  [SWD origin] s_shared_lock CM4: 0x30020a58 (from nm cm4_firmware.elf)
+  [SWD origin] HSEM_R5: 0x58026414 (from stm32h755xx.h: D3_AHB1PERIPH_BASE + 0x6400 + R[5])
+  [SWD origin] g_shared base: 0x38008000 (from nm cm7_firmware.elf)
+  [SWD origin] GPIOB base: 0x58020400 (from stm32h755xx.h)
+  [SWD origin] GPIOD base: 0x58020c00 (from stm32h755xx.h)
+  [SWD origin] m7_gpio_lock_fail_count: 0x380084e8 (g_shared + 0x4e8 from DWARF)
+  [SWD origin] m4_gpio_lock_fail_count: 0x380084ec (g_shared + 0x4ec from DWARF)
+
+--- Results for T3 ---
+  [PASS] T3_cm7_s_shared_lock: CM7 s_shared_lock matches g_shared_gpio_lock address
+         Detail: Read 0x8015b80, expected 0x8015b80
+  [PASS] T3_cm4_s_shared_lock: CM4 s_shared_lock matches g_shared_gpio_lock address
+         Detail: Read 0x81052f0, expected 0x81052f0
+  [PASS] T3_hsem_r5_free: HSEM_R5 (0x58026414) reads 0 (semaphore is free, non-locking read)
+         Detail: R5=0x0 (want 0)
+  [PASS] T3_lock_fail_counts_zero: m7_gpio_lock_fail_count and m4_gpio_lock_fail_count are 0
+         Detail: m7_fails=0, m4_fails=0
+  [PASS] T3_pin_PB1_analog: PB1 is Analog without pull (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)
+         Detail: mode=3, otype=0, speed=0, pull=0, af=0
+  [PASS] T3_pin_PB13_rmii_txd1: PB13 is AF11 (5 fields: mode=2, otype=0, speed=3, pull=0, af=11)
+         Detail: mode=2, otype=0, speed=3, pull=0, af=11
+  [PASS] T3_pin_PB15_control_reset: Control pin PB15 is at reset value (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)
+         Detail: mode=3, otype=0, speed=0, pull=0, af=0
+  [PASS] T3_pin_PD8_usart3_tx: PD8 is AF7 (5 fields: mode=2, otype=0, speed=0, pull=1, af=7)
+         Detail: mode=2, otype=0, speed=0, pull=1, af=7
+  [PASS] T3_pin_PD9_usart3_rx: PD9 is AF7 (5 fields: mode=2, otype=0, speed=0, pull=1, af=7)
+         Detail: mode=2, otype=0, speed=0, pull=1, af=7
+  [PASS] T3_pin_PD0_control_reset: Control pin PD0 is at reset value (5 fields: mode=3, otype=0, speed=0, pull=0, af=0)
+         Detail: mode=3, otype=0, speed=0, pull=0, af=0
+Verdict T3: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================

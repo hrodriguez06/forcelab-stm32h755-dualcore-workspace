@@ -115,3 +115,25 @@ Entrega: `c9a3d23..02b1a7f`. Capturas de placa nuevas de `c9a3d23` (T3, el contr
 | k3 | Menor (cosmético) | La frase de T2b quedó en castellano dentro de dos README en inglés (`00_gpio/README.md` l. 1134, `prj_03/README.md` l. 138) | La traduce el responsable en el commit de cierre, si lo aprueba |
 
 **El cierre pasa en lo documental. Falta T6b** (arranque en frío), con el responsable en el banco. Después: k3, `DRIVER_ROADMAP.md`, borrado de los documentos de proceso y de los dos worktrees de control, merge.
+
+## T6b, arranque en frío (2026-10-13, en `009e997`)
+
+Las ejecuté yo, sin flashear ni resetear desde el encendido salvo donde se dice. La imagen es `prj_03` debug, la de `gpio_f1c_t5_debug_c9a3d23.txt` (el código de producción no cambió).
+
+**Primer arranque en frío: anulado.** El responsable reconectó la placa:
+- `gpio_f1c_t6b_rsr_009e997.txt`: `RCC_RSR = 0x00FE0000`;
+- `…_swd_…`: PASS;
+- `…_t3_…`: PASS.
+
+T5, en cambio, salió errático (`…_t5_netcheck_009e997.txt`: UDP de 512 B o más sin respuesta, ráfaga 95/100 en 12 s; `…_2.txt`: ICMP 1/4, tiempos de 6 a 105 ms; el `ping` del sistema, 30 ms). Para separar la placa del entorno resetear por SWD (`-rst`): con la imagen en caliente siguió igual (`…_3_after_warm_reset.txt`: ICMP 3/4, 40 ms). El responsable informó de un problema de conexión en su lado. Una vez arreglado, la misma imagen pasó (`…_4_network_recovered.txt`: 3/3, 1–2 ms). Los fallos eran de la red del host, no de la placa: los contadores `rx_nobuf`, `tx_nobuf` y `dma_err` estuvieron a 0 en todas, y el ADC siguió bien (`…_t5_query_009e997.txt`). Como el reset en caliente anuló la condición de arranque en frío, se repitió todo.
+
+**Segundo arranque en frío: el que cuenta.** El responsable desconectó y reconectó la placa otra vez.
+
+| Captura | Resultado |
+| --- | --- |
+| `gpio_f1c_t6b2_rsr_009e997.txt` | `RCC_RSR = 0x00FE0000` (reset de encendido, sin el bit de reset por software), `PWR_CR3 = 0x00010044`, `RCC_CR = 0x0F07C1A5` |
+| `gpio_f1c_t6b2_swd_009e997.txt` (mi script) | Hooks, `HSEM_R5` = 0, contadores a 0, retención 1274/363 ciclos (18,8×/33,1×), pines y controles exactos. **PASS** |
+| `gpio_f1c_t6b2_t3_009e997.txt` (`gpio_f1b_checks.py --project prj_03 --test t3`, sin `--flash`) | **PASS** |
+| `gpio_f1c_t6b2_t5_netcheck_009e997.txt`, `…_t5_query_…` | ICMP 4/4, UDP de 1 a 1472 B (1,2–2,2 ms), ráfaga 100/100, `[net]` a 0; las muestras del ADC crecen, `OVR: 0`. **PASS** |
+
+**T6b pasa. El cierre de F1c pasa.** Pasos del responsable (aprobados): k3, el estado de T6b en los README (de "pending" a hecho, con estas capturas), `DRIVER_ROADMAP.md`, el borrado de los documentos de proceso y de los dos worktrees de control, y el merge.

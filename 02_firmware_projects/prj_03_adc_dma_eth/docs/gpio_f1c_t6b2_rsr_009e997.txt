@@ -1,0 +1,6 @@
+=== 00_gpio F1c T6b, second cold boot (the first one was spoiled by a host connection problem and an SWD warm reset made for diagnosis). Owner reconnected the board. Live SWD read, mode=HOTPLUG, no halt, no flash or reset since the power-up ===
+Date: 2026-10-13T21:06:37-06:00  HEAD: 009e997
+Registers: RCC_RSR 0x580244D0, PWR_CR3 0x5802480C, RCC_CR 0x58024400
+0x580244D0 : 00FE0000
+0x5802480C : 00010044
+0x58024400 : 0F07C1A5

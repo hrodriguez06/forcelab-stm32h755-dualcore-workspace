@@ -1,0 +1,42 @@
+=== 00_gpio F1c T6b diagnosis: T5 after an SWD warm reset (-rst) of the same image, to tell host/network from board ===
+Date: 2026-10-13T20:59:17-06:00
+Host:   py tools/net_check.py --host 192.168.1.150   (exit 1)
+Target: py tools/monitor.py --sn 0016000C4142501220353451 --timeout 30 (started 6 s before net_check)
+--- net_check.py ---
+Board    : 192.168.1.150 (prj_03_adc_dma_eth)
+UDP echo : port 7
+
+  FAIL  ICMP  3/4 replies
+        the board is not answering: check the link LED, the
+        address, and that the host is on the same segment
+  OK    UDP     1 B  rtt= 2.15 ms
+  OK    UDP    25 B  rtt=40.38 ms
+  OK    UDP   512 B  rtt=40.65 ms
+  OK    UDP  1024 B  rtt=44.83 ms
+  OK    UDP  1472 B  rtt=18.72 ms
+  OK    burst  100/100 returned  (0.5 s)
+
+FAIL  2/3 checks
+--- monitor.py ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+[ipc] m7=28 m4=140  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=32 m4=160  (CPU2 alive)
+[ipc] m7=36 m4=180  (CPU2 alive)
+[ipc] m7=40 m4=200  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=8 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=44 m4=220  (CPU2 alive)
+[ipc] m7=48 m4=240  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=123 tx=110 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=52 m4=260  (CPU2 alive)
+[ipc] m7=56 m4=280  (CPU2 alive)
+[ipc] m7=60 m4=300  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=125 tx=110 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=64 m4=320  (CPU2 alive)
+[ipc] m7=68 m4=340  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=125 tx=110 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=72 m4=360  (CPU2 alive)
+[ipc] m7=76 m4=380  (CPU2 alive)
+[ipc] m7=80 m4=400  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=125 tx=110 rx_nobuf=0 tx_nobuf=0 dma_err=0

@@ -1,0 +1,43 @@
+=== 00_gpio F1c T6b: T5 second run, about 2 min after the failed first run (gpio_f1c_t6b_t5_netcheck_009e997.txt); same image and boot, no reset ===
+Date: 2026-10-13T20:57:45-06:00
+Host:   py tools/net_check.py --host 192.168.1.150   (exit 1)
+Target: py tools/monitor.py --sn 0016000C4142501220353451 --timeout 30 (started 6 s before net_check)
+--- net_check.py ---
+Board    : 192.168.1.150 (prj_03_adc_dma_eth)
+UDP echo : port 7
+
+  FAIL  ICMP  1/4 replies
+        the board is not answering: check the link LED, the
+        address, and that the host is on the same segment
+  OK    UDP     1 B  rtt= 6.40 ms
+  OK    UDP    25 B  rtt=19.87 ms
+  OK    UDP   512 B  rtt=15.12 ms
+  OK    UDP  1024 B  rtt=27.83 ms
+  OK    UDP  1472 B  rtt=104.68 ms
+  OK    burst  100/100 returned  (0.4 s)
+
+FAIL  2/3 checks
+--- monitor.py ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+[ipc] m7=204 m4=1020  (CPU2 alive)
+[ipc] m7=208 m4=1040  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=276 tx=107 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=212 m4=1060  (CPU2 alive)
+[ipc] m7=216 m4=1080  (CPU2 alive)
+[ipc] m7=220 m4=1100  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=287 tx=107 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=224 m4=1120  (CPU2 alive)
+[ipc] m7=228 m4=1140  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=300 tx=107 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=232 m4=1160  (CPU2 alive)
+[ipc] m7=236 m4=1180  (CPU2 alive)
+[ipc] m7=240 m4=1200  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=429 tx=214 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=244 m4=1220  (CPU2 alive)
+[ipc] m7=248 m4=1240  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=434 tx=214 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=252 m4=1260  (CPU2 alive)
+[ipc] m7=256 m4=1280  (CPU2 alive)
+[ipc] m7=260 m4=1300  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=442 tx=214 rx_nobuf=0 tx_nobuf=0 dma_err=0
