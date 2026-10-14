@@ -10,8 +10,9 @@ Status: every tier was validated on a NUCLEO-H755ZI-Q (silicon Rev V,
 self-identifying (`rev=df46b94`) and each hardware test has a recorded negative
 control. On 2026-10-04 the same board ran the fix to the direct-mode size
 check in `DMA_HAL_Init` and its test, T13 (`rev=dd65b06`, with two negative
-controls). That change has not had an independent run yet. What all this
-covers, and what it does not, is in [section 9](#9-validation).
+controls). On 2026-10-13 that fix had an independent run by the auditor at
+`04fb865` (T13 PASS, NC1 FAIL). What all this covers, and what it does not,
+is in [section 9](#9-validation).
 
 ---
 
@@ -421,9 +422,21 @@ results.
     catch, reintroduced, with the resulting FAIL on a `-dirty` image. For T13:
     NC1 (`dma_t13_nc1_dd65b06-dirty.txt`) and NC2
     (`dma_t13_nc2_dd65b06-dirty.txt`).
-- **Independent run by the auditor:** repeated at `f3ab055` from a clean build,
-  including a negative control that reintroduced the NDTR-unit bug and made T9
-  fail.
+  - `dma_t13_independent_04fb865.txt`: clean independent run of T1-T11 and T13
+    by the auditor at `rev=04fb865` (T13 `ok=3 rej=6 mismatch=0`, both
+    direct-mode lines printed intact, OVERALL PASS on CM7 and CM4).
+  - `dma_t13_independent_nc_04fb865-dirty.txt`: negative control NC1 repeated
+    by the auditor in an isolated worktree (`rev=04fb865-dirty`, `ok=1 rej=6
+    mismatch=2`, `T13_HAL_DIRECT_SIZES: FAIL`, `OVERALL: FAIL`).
+- **Independent run by the auditor:** repeated at `f3ab055` from a clean build
+  (T1-T11, including a negative control that reintroduced the NDTR-unit bug and
+  made T9 fail). Repeated for N3 (T13) at `04fb865` on 2026-10-13 from a clean
+  build: T1-T11 and T13 PASS (`ok=3 rej=6 mismatch=0`, overall PASS on both
+  cores, `dma_t13_independent_04fb865.txt`), and a negative control in an
+  isolated worktree reintroducing the raw alignment comparison of `57b1bf7`
+  (NC1) failed T13 as expected (`ok=1 rej=6 mismatch=2`,
+  `dma_t13_independent_nc_04fb865-dirty.txt`). The board was restored to
+  `prj_03_adc_dma_eth` debug from `main` with `net_check.py` 3/3 PASS.
 
 **To reproduce:**
 
