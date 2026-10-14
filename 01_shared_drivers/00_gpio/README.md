@@ -22,8 +22,9 @@ NUCLEO-H755ZI-Q (silicon Rev V, `REV_ID = 0x2003`) on 2026-09-30, originally in
 bench validation and audit (F1 audit passed at `7687e91`, cold boot T6b passed
 at `74c9119`; see [section 13.1](#131-f1b-in-prj_04-done-in-drivergpio-f1b-closed)).
 Phase F1c extended validation to `prj_03_adc_dma_eth`, closing finding G1 across
-all projects with independent bench validation and audit (F1 audit passed conditionally
-at `a20e27c`, cold boot T6b pending on bench; see [section 13.2](#132-f1c-in-prj_03-done-in-drivergpio-f1c-closing)).
+all projects with independent bench validation and audit (F1 audit passed with conditions
+at `a20e27c`, close audit passed at `009e997`, cold boot T6b passed at `51efd1e`; see
+[section 13.2](#132-f1c-in-prj_03-done-in-drivergpio-f1c-closed)).
 Finding G1 is closed in all projects that had it (`prj_04` and `prj_03`). **EXTI and
 the compensation cell (F2) are not implemented.** A code audit on 2026-09-30 (of `cc1ee88`) found
 no blocking defect; its findings A1–A7 and their fixes are in
@@ -57,7 +58,7 @@ No driver core finding is open; finding G1 is closed in all projects that had it
 F1 of the driver in `prj_01` has had no independent bench audit (every bench run
 was made by the implementer); F1b in `prj_04` had an independent bench audit on
 hardware (`7687e91`, `74c9119`); F1c in `prj_03` had an independent bench audit on
-hardware (`a20e27c`, cold boot T6b pending on bench).
+hardware (`a20e27c`, `009e997`, cold boot T6b `51efd1e`).
 
 ---
 
@@ -882,7 +883,7 @@ The audit of the pre-F1 code found these. Their state at this commit:
 
 | ID | Finding | State |
 | :--- | :--- | :--- |
-| G1 | The configuration registers have one copy for both cores; unprotected RMW from CM7 (PB13, ETH) and CM4 (PB1, ADC) on `GPIOB_MODER` in `prj_04` and `prj_03` can put PB13 back to analog, with the link still up and TX dead | **Closed in the driver** (section + hook, T15). **Closed in `prj_01`** (F1), **closed in `prj_04`** (F1b, `9051a6a`, `53f0f88`, `5a8f13a`), and **closed in `prj_03`** (F1c, `90a866f`, `ee5e3b3`). Verified in `prj_04` by T3 (`docs/gpio_f1b_t3_7cc456d.txt`), T4 (`docs/gpio_f1b_t4_7cc456d.txt`, margin 19.54×/33.71×), T5 (`docs/gpio_f1b_t5_debug_7cc456d.txt`, `_release_`), T6a (20/20 resets, `docs/gpio_f1b_t6a_8ee9a13.txt`), independent audit (`docs/gpio_f1b_audit2_swd_32f343a.txt`, `_t6a_`, `docs/gpio_f1b_audit3_t3_492d156.txt`), and cold boot T6b (`docs/gpio_f1b_t6b_swd_492d156.txt`, `_t5_netcheck_`, `_t5_query_`). Verified in `prj_03` by T1 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t1_e9e98c4.txt`), T2a/T2b (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t2_e9e98c4.txt`), T3 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t3_c9a3d23.txt`), T3 control (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t3_control_c9a3d23.txt`), T4 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t4_c9a3d23.txt`, margin 18.84×/33.06×), T5 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t5_debug_c9a3d23.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t5_release_f733b98.txt`), T6a (20/20 resets, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t6a_f733b98.txt`), and independent auditor runs (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t2_7ba2cf0.txt`, `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1c_audit_t7_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_swd_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t6a_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t5_netcheck_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t3_control_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t3_7ba2cf0.txt`, and audit 2: `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit2_t2_7b56d99.txt`, `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1c_audit2_t7_7b56d99.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit2_wrongctrl_7b56d99.txt`); cold boot T6b pending on bench. G1 is closed in all projects. |
+| G1 | The configuration registers have one copy for both cores; unprotected RMW from CM7 (PB13, ETH) and CM4 (PB1, ADC) on `GPIOB_MODER` in `prj_04` and `prj_03` can put PB13 back to analog, with the link still up and TX dead | **Closed in the driver** (section + hook, T15). **Closed in `prj_01`** (F1), **closed in `prj_04`** (F1b, `9051a6a`, `53f0f88`, `5a8f13a`), and **closed in `prj_03`** (F1c, `90a866f`, `ee5e3b3`). Verified in `prj_04` by T3 (`docs/gpio_f1b_t3_7cc456d.txt`), T4 (`docs/gpio_f1b_t4_7cc456d.txt`, margin 19.54×/33.71×), T5 (`docs/gpio_f1b_t5_debug_7cc456d.txt`, `_release_`), T6a (20/20 resets, `docs/gpio_f1b_t6a_8ee9a13.txt`), independent audit (`docs/gpio_f1b_audit2_swd_32f343a.txt`, `_t6a_`, `docs/gpio_f1b_audit3_t3_492d156.txt`), and cold boot T6b (`docs/gpio_f1b_t6b_swd_492d156.txt`, `_t5_netcheck_`, `_t5_query_`). Verified in `prj_03` by T1 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t1_e9e98c4.txt`), T2a/T2b (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t2_e9e98c4.txt`), T3 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t3_c9a3d23.txt`), T3 control (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t3_control_c9a3d23.txt`), T4 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t4_c9a3d23.txt`, margin 18.84×/33.06×), T5 (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t5_debug_c9a3d23.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t5_release_f733b98.txt`), T6a (20/20 resets, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t6a_f733b98.txt`), and independent auditor runs (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t2_7ba2cf0.txt`, `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1c_audit_t7_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_swd_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t6a_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t5_netcheck_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t3_control_7ba2cf0.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t3_7ba2cf0.txt`, and audit 2: `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit2_t2_7b56d99.txt`, `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1c_audit2_t7_7b56d99.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit2_wrongctrl_7b56d99.txt`); cold boot T6b passed at `51efd1e` (second power cycle; `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t6b2_rsr_009e997.txt`, `_swd_`, `_t3_`, `_t5_netcheck_`, `_t5_query_`). G1 is closed in all projects. |
 | G2 | Wrong dual-core note in `gpio_bm.h` about `RCC_AHB4ENR` | Closed (`a2096d2`) |
 | G3 | `pull = 3` programmed `PUPDR = 11` and `speed = 4` became LOW, both returning `true` | Closed (`b52ffec`), T1 |
 | G4 | Misaligned port pointers (`GPIOA + 4`) accepted | Closed (`a204b8a`), T1 |
@@ -1098,7 +1099,7 @@ Phase T15 (the cross-core contention test) ran in `prj_04` only in its own F1a, 
 without the production hook (`docs/gpio_f1a_selftest_ededa84.txt`); `selftest-gpio` with the F1b
 changes (H5, M2) was not run.
 
-### 13.2 F1c in `prj_03` (done in `driver/gpio-f1c`, closing)
+### 13.2 F1c in `prj_03` (done in `driver/gpio-f1c`, closed)
 
 F1c closed G1 in `prj_03_adc_dma_eth` by installing the shared lock hook on both cores and
 migrating CM4's analog ADC pin configuration from raw `HAL_GPIO_Init` to `GPIO_BM_ConfigPin`:
@@ -1131,8 +1132,8 @@ migrating CM4's analog ADC pin configuration from raw `HAL_GPIO_Init` to `GPIO_B
 - **T2a & T2b (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t2_e9e98c4.txt`):** T2a verified 0
   unprotected HAL calls across 4 ELFs (`nm -u` per linked object); control `e6cb75e` fails on both CM4 ELFs.
   T2b scanned 970 compilation units with 0 raw writes; CMSIS expanded macro autoprueba passed (12/12 writes
-  detected, 0/9 reads ignored); T2b en `prj_03` no tiene control de árbol: su control es la autoprueba, y
-  `e6cb75e` lo cubre T2a.
+  detected, 0/9 reads ignored); T2b has no tree control in `prj_03`: its control is the self-test, and
+  T2a covers `e6cb75e`.
 - **T3 & Control (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t3_c9a3d23.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t3_control_c9a3d23.txt`):**
   Live SWD verified `s_shared_lock` matches `g_shared_gpio_lock` on both cores (`0x8015B80` on CM7, `0x81052F0`
   on CM4), `HSEM_R5 = 0x0`, fail counts = 0, and PB1, PB13, PD8, PD9, PB15, PD0 exact across 5 fields.
@@ -1154,8 +1155,11 @@ migrating CM4's analog ADC pin configuration from raw `HAL_GPIO_Init` to `GPIO_B
   `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit_t5_query_7ba2cf0.txt`); audit 2 runs (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit2_t2_7b56d99.txt`,
   `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/gpio_f1c_audit2_t7_7b56d99.txt`, `02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_audit2_wrongctrl_7b56d99.txt`).
   F1 audit conditionally passed at `a20e27c`.
-- **T6b (PENDING):** Cold boot on physical bench to be executed by the bench owner (power cycle without
-  reflashing, verifying `RCC_RSR` power-on flags, T3, and T5).
+- **T6b (`02_firmware_projects/prj_03_adc_dma_eth/docs/gpio_f1c_t6b2_*_009e997.txt`):** cold boot on the
+  bench: the owner power-cycled the board and the auditor, with no flash or reset since the power-up,
+  read `RCC_RSR = 0x00FE0000`, ran an independent SWD read, the tool's T3 and T5: all PASS. A first
+  power cycle (`gpio_f1c_t6b_*_009e997.txt`) was voided: T5 was erratic because of a host network problem
+  (board counters at 0), and the SWD warm reset made to diagnose it broke the cold-boot condition.
 
 **What was not exercised:**
 Preset `selftest` of `prj_03` was only compiled (G-S1 bench safety rule: `ADC_SelfTestHw` exercises hardware ADC
@@ -1269,7 +1273,7 @@ Before changing it:
 | R4-b arguments in the host tools' captures; R4-a both cores bound under `--allow-dirty` (host tools only) | `674e8ad`, `b45120e`; evidence `e41769c` |
 | Re-audit 5 and merge verdict; 53 superseded captures removed from `docs/` (§9.3.2 keeps their results) | `6c0e792`, the commit after it |
 | F1b in `prj_04` (G1/G13 closed), `uart_hal` MSP migrated; F1 audit passed at `7687e91`; bench cold boot T6b passed at `74c9119` | `9051a6a` … `7cc456d`, `492d156`, `74c9119` |
-| F1c in `prj_03` (G1 closed across all projects), tools extended; F1 audit conditionally passed at `a20e27c`; cold boot T6b pending | `90a866f` … `e9e98c4` |
+| F1c in `prj_03` (G1 closed across all projects), tools extended; F1 audit passed with conditions at `a20e27c`; close audit passed at `009e997`; cold boot T6b passed at `51efd1e` | `90a866f` … `e9e98c4`, `02b1a7f`, `51efd1e` |
 
 The implementation plan, the implementer's instructions, the F0 correction and
 F1a instructions, the implementation report and the audit record were removed
@@ -1294,10 +1298,12 @@ git show 8310303:01_shared_drivers/00_gpio/REAUDIT_3_INSTRUCTIONS.md
 git show 08627cf:01_shared_drivers/00_gpio/REAUDIT_4_INSTRUCTIONS.md
 ```
 
-F1b/F1c process documents (`IMPLEMENTATION_PLAN.md` revision 1/3, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md`, `AUDIT.md`): here until the catalog owner removes them at close/merge; once removed, each is recoverable at the parent of the commit that removes it (`git show <commit que los borra>^:ruta`), as in `05_i2c` and `08_eth`:
+F1b and F1c process documents (`IMPLEMENTATION_PLAN.md`, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md`,
+`AUDIT.md`) were removed after each close. F1c's (plan revision 1) are at the parent of the commit that
+removes them, which is the latest deletion of each path; F1b's (plan revision 3) at `e6cb75e^`:
 
 ```bash
-git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/00_gpio/IMPLEMENTATION_PLAN.md)^:01_shared_drivers/00_gpio/IMPLEMENTATION_PLAN.md
-git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/00_gpio/AUDIT.md)^:01_shared_drivers/00_gpio/AUDIT.md
-# and similarly for IMPLEMENTER_INSTRUCTIONS.md and IMPLEMENTATION_REPORT.md
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/00_gpio/AUDIT.md)^:01_shared_drivers/00_gpio/AUDIT.md   # F1c
+git show e6cb75e^:01_shared_drivers/00_gpio/AUDIT.md                                                                            # F1b
+# and the same for IMPLEMENTATION_PLAN.md, IMPLEMENTER_INSTRUCTIONS.md and IMPLEMENTATION_REPORT.md
 ```
