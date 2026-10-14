@@ -436,7 +436,9 @@ results.
   isolated worktree reintroducing the raw alignment comparison of `57b1bf7`
   (NC1) failed T13 as expected (`ok=1 rej=6 mismatch=2`,
   `dma_t13_independent_nc_04fb865-dirty.txt`). The board was restored to
-  `prj_03_adc_dma_eth` debug from `main` with `net_check.py` 3/3 PASS.
+  `prj_03_adc_dma_eth` debug from `main`; `dma_t13_independent_restore_d7dbd0f.txt`
+  records it (`net_check.py` 3/3 with `monitor.py`, after an SWD check that the
+  running image is `prj_03`'s).
 
 **To reproduce:**
 

@@ -1,0 +1,43 @@
+=== 02_dma T13 independent run: board state after the run. prj_03_adc_dma_eth debug running (confirmed by SWD: s_shared_lock of both cores equals g_shared_gpio_lock of prj_03 build/debug ELFs); net_check.py and monitor.py at the same time ===
+Date: 2026-10-13T21:51:01-06:00
+Host:   py tools/net_check.py --host 192.168.1.150   (exit 0)
+Target: py tools/monitor.py --sn 0016000C4142501220353451 --timeout 30 (started 6 s before net_check)
+--- net_check.py ---
+Board    : 192.168.1.150 (prj_03_adc_dma_eth)
+UDP echo : port 7
+
+  OK    ICMP  4/4 replies
+  OK    UDP     1 B  rtt= 1.74 ms
+  OK    UDP    25 B  rtt= 1.45 ms
+  OK    UDP   512 B  rtt= 1.32 ms
+  OK    UDP  1024 B  rtt= 1.55 ms
+  OK    UDP  1472 B  rtt= 1.86 ms
+  OK    burst  100/100 returned  (0.1 s)
+
+PASS  3/3 checks
+Now confirm the board agrees: rx_nobuf, tx_nobuf and dma_err
+should all still read 0 in  py tools/monitor.py --timeout 15
+--- monitor.py ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+[ipc] m7=1956 m4=9780  (CPU2 alive)
+[ipc] m7=1960 m4=9800  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=303 tx=222 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=1964 m4=9820  (CPU2 alive)
+[ipc] m7=1968 m4=9840  (CPU2 alive)
+[ipc] m7=1972 m4=9860  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=311 tx=229 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=1976 m4=9880  (CPU2 alive)
+[ipc] m7=1980 m4=9900  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=414 tx=332 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=1984 m4=9920  (CPU2 alive)
+[ipc] m7=1988 m4=9940  (CPU2 alive)
+[ipc] m7=1992 m4=9960  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=414 tx=332 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=1996 m4=9980  (CPU2 alive)
+[ipc] m7=2000 m4=10000  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=415 tx=332 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=2004 m4=10020  (CPU2 alive)
+[ipc] m7=2008 m4=10040  (CPU2 alive)
+[ipc] m7=2012 m4=10060  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=415 tx=332 rx_nobuf=0 tx_nobuf=0 dma_err=0
