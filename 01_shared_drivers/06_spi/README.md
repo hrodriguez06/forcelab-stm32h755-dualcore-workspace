@@ -554,10 +554,12 @@ against 400 000; control 0xA5 received); first seen in `spi_dev_f1_bench_25426f8
 
 - **SP3, `.d3_ram`:** both linker scripts of `prj_01` place it at `0x38000000` (`stm32h755zi_cm7.ld`
   l. 182-190, `stm32h755zi_cm4.ld` l. 107-115): only one core may use it (CPU1 in the selftest).
-- **N3, for DMA1/DMA2 through `02_dma`:** `DMA_HAL_Init` (`02_dma/dma_hal.c:183-186`) compares `periph_align`
-  (`DMA_PDATAALIGN_*`, `PSIZE`, bits 12:11) with `mem_align` (`DMA_MDATAALIGN_*`, `MSIZE`, bits 14:13) in direct
-  mode, so it refuses half-words and words although `PSIZE = MSIZE`. Until `02_dma` changes, use FIFO mode for
-  9..32-bit frames on DMA1/DMA2 (T7(c) HAL does); the BDMA path does not run this check.
+- **N3, for DMA1/DMA2 through `02_dma`, fixed in `02_dma` at `57b1bf7`:** before that commit, `DMA_HAL_Init`
+  compared `periph_align` (`DMA_PDATAALIGN_*`, bits 12:11) with `mem_align` (`DMA_MDATAALIGN_*`, bits 14:13) in
+  direct mode, so it refused half-words and words although `PSIZE = MSIZE`. It now compares the field values;
+  `02_dma` T13 covers it (`02_dma/README.md` §9, without an independent run yet). This driver's T7(c) HAL still
+  uses FIFO mode for 9..32-bit frames on DMA1/DMA2 and was not re-run in direct mode after the fix. A build
+  older than `57b1bf7` needs FIFO mode. The BDMA path never ran this check.
 
 ---
 
