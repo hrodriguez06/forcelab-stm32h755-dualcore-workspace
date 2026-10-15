@@ -1,0 +1,83 @@
+================================================================================
+STM32H755 TIM F4 Verification Checks for prj_04 (T1 to T8)
+================================================================================
+[host] argv: tools/tim_f4_checks.py --project prj_04 --test t1 --output 02_firmware_projects/prj_04_adc_dma_bm_eth/docs/tim_f4_t1_e9afdbb.txt
+[host] timestamp: 2026-10-15 10:17:38
+[host] project: prj_04
+[host] git rev: e9afdbb (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865 (rev 04fb865, clean)
+[host] output capture: 02_firmware_projects\prj_04_adc_dma_bm_eth\docs\tim_f4_t1_e9afdbb.txt
+================================================================================
+
+--- Running T1 (Full CI Matrix 8/8 and Selftest Presets for prj_04) ---
+  [T1] Executing full CI matrix: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\tools\build_all.ps1 -Clean -Fresh
+=================================================================
+ STM32H755 Multi-Project CI Matrix Build
+ Projects: 4 | Presets: debug, release
+=================================================================
+
+>>> Configuring & Building prj_01_template_dualcore [debug] ...
+  -> PASS in 24.5s
+>>> Configuring & Building prj_01_template_dualcore [release] ...
+  -> PASS in 16.9s
+>>> Configuring & Building prj_02_eth_lwip_dualcore [debug] ...
+  -> PASS in 29.7s
+>>> Configuring & Building prj_02_eth_lwip_dualcore [release] ...
+  -> PASS in 22.9s
+>>> Configuring & Building prj_03_adc_dma_eth [debug] ...
+  -> PASS in 31.8s
+>>> Configuring & Building prj_03_adc_dma_eth [release] ...
+  -> PASS in 25.6s
+>>> Configuring & Building prj_04_adc_dma_bm_eth [debug] ...
+  -> PASS in 30.7s
+>>> Configuring & Building prj_04_adc_dma_bm_eth [release] ...
+  -> PASS in 25.0s
+
+==========================================================================================
+ Matrix Build & Binary Size Summary Table
+==========================================================================================
+
+Project                    Preset    Core   Status        Text (B)   Data (B)    Bss (B)  Total (B)     Time
+-------                    ------    ----   ------        --------   --------    -------  ---------     ----
+prj_01_template_dualcore   debug     CM7    PASS             30632        132      55676      86440    24.5s
+prj_01_template_dualcore   debug     CM4    PASS              3456         24      12560      16040    24.5s
+prj_01_template_dualcore   release   CM7    PASS             29620        132      55680      85432    16.9s
+prj_01_template_dualcore   release   CM4    PASS              3112         24      12560      15696    16.9s
+prj_02_eth_lwip_dualcore   debug     CM7    PASS             87312        152     120096     207560    29.7s
+prj_02_eth_lwip_dualcore   debug     CM4    PASS              2580         24      12488      15092    29.7s
+prj_02_eth_lwip_dualcore   release   CM7    PASS             83224        152     120096     203472    22.9s
+prj_02_eth_lwip_dualcore   release   CM4    PASS              2332         24      12488      14844    22.9s
+prj_03_adc_dma_eth         debug     CM7    PASS             89684        152     121224     211060    31.8s
+prj_03_adc_dma_eth         debug     CM4    PASS             23084         24      16192      39300    31.8s
+prj_03_adc_dma_eth         release   CM7    PASS             85480        152     121224     206856    25.6s
+prj_03_adc_dma_eth         release   CM4    PASS             20660         24      16192      36876    25.6s
+prj_04_adc_dma_bm_eth      debug     CM7    PASS             90512        156     121268     211936    30.7s
+prj_04_adc_dma_bm_eth      debug     CM4    PASS             11224         28      15920      27172    30.7s
+prj_04_adc_dma_bm_eth      release   CM7    PASS             86524        156     121264     207944    25.0s
+prj_04_adc_dma_bm_eth      release   CM4    PASS             10672         28      15920      26620    25.0s
+
+
+All 8 builds PASSED successfully.
+
+  [T1] Configuring & building selftest preset 'selftest' in 02_firmware_projects/prj_04_adc_dma_bm_eth...
+  [T1] Configuring & building selftest preset 'selftest-adc' in 02_firmware_projects/prj_04_adc_dma_bm_eth...
+  [T1] Configuring & building selftest preset 'selftest' in 02_firmware_projects/prj_03_adc_dma_eth...
+  [T1] Configuring & building selftest preset 'selftest-tim' in 03_firmware_templates/prj_01_template_dualcore...
+
+--- Results for T1 ---
+  [PASS] T1_matrix_8_of_8_clean_builds: Multi-project CI Matrix: 8/8 configurations compile cleanly with 0 errors and 0 warnings
+         Detail: build_all.ps1 -Clean -Fresh completed successfully
+  [PASS] T1_build_prj_04_selftest: Build selftest preset 'selftest' in 02_firmware_projects/prj_04_adc_dma_bm_eth
+         Detail: Build completed with exit code 0
+  [PASS] T1_build_prj_04_selftest_adc: Build selftest preset 'selftest-adc' in 02_firmware_projects/prj_04_adc_dma_bm_eth
+         Detail: Build completed with exit code 0
+  [PASS] T1_build_prj_03_selftest: Build selftest preset 'selftest' in 02_firmware_projects/prj_03_adc_dma_eth
+         Detail: Build completed with exit code 0
+  [PASS] T1_build_prj_01_selftest_tim: Build selftest preset 'selftest-tim' in 03_firmware_templates/prj_01_template_dualcore
+         Detail: Build completed with exit code 0
+Verdict T1: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================

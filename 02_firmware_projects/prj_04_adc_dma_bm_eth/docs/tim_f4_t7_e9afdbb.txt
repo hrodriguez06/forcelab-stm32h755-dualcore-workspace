@@ -1,0 +1,27 @@
+================================================================================
+STM32H755 TIM F4 Verification Checks for prj_04 (T1 to T8)
+================================================================================
+[host] argv: tools/tim_f4_checks.py --project prj_04 --test t7 --output 02_firmware_projects/prj_04_adc_dma_bm_eth/docs/tim_f4_t7_e9afdbb.txt
+[host] timestamp: 2026-10-15 10:17:26
+[host] project: prj_04
+[host] git rev: e9afdbb (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865 (rev 04fb865, clean)
+[host] output capture: 02_firmware_projects\prj_04_adc_dma_bm_eth\docs\tim_f4_t7_e9afdbb.txt
+================================================================================
+
+--- Running T7 (Driver Regression & Frozen API Contract) ---
+  [T7] Configuring prj_01 with preset selftest-tim...
+  [T7] Building prj_01 with preset selftest-tim...
+  [T7] Checking API frozen contract diff on 01_shared_drivers/03_tim/*.h...
+
+--- Results for T7 ---
+  [PASS] T7_prj01_selftest_tim_compiles: prj_01 template compiles cleanly with selftest-tim preset (0 errors, 0 warnings)
+         Detail: Build succeeded
+  [PASS] T7_api_headers_frozen_contract: API headers in 01_shared_drivers/03_tim/*.h are completely unchanged (frozen)
+         Detail: Diff is strictly empty (API frozen)
+Verdict T7: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================
