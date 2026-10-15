@@ -15,6 +15,7 @@
 #include "adc_bm.h"
 #include "dma_bm.h"
 #include "gpio_bm.h"
+#include "tim_bm.h"
 #include "board_def.h"
 #include "shared_memory.h"
 #include "stm32h7xx_hal.h"
@@ -57,23 +58,33 @@ static bool GPIO_Analog_Init(void)
 
 static bool TIM3_Trigger_Init(void)
 {
-    /* Enable TIM3 clock on APB1 */
-    RCC->APB1LENR |= RCC_APB1LENR_TIM3EN;
-    volatile uint32_t dummy = RCC->APB1LENR;
-    (void)dummy;
+    /* Habilitar reloj en el banco RCC del propio núcleo CM4 */
+    if (TIM_BM_EnableClock(TIM3) != TIM_BM_OK)
+    {
+        return false;
+    }
 
-    /* APB1 timer clock = 200 MHz
-     * Prescaler = 0   -> Counter clock = 200 MHz (5 ns per tick)
-     * Period = 399    -> Update frequency = 200 MHz / 400 = 500,000 Hz (2.0 us period)
-     * Exactly 50 samples per period for a 10 kHz signal.
-     */
-    TIM3->CR1 = 0U;
-    TIM3->PSC = 0U;
-    TIM3->ARR = 399U;
+    const TimBm_TimeBaseConfig_t cfg = {
+        .tim               = TIM3,
+        .psc               = 0U,
+        .arr               = 399U,
+        .count_mode        = TIM_BM_COUNT_UP,
+        .repetition        = 0U,
+        .arr_preload       = false,  /* ARPE = 0: actualización inmediata */
+        .one_pulse         = false,
+        .urs_overflow_only = false
+    };
 
-    /* Set MMS (Master Mode Selection) to 010 (Update event sent as TRGO) */
-    TIM3->CR2 &= ~TIM_CR2_MMS_Msk;
-    TIM3->CR2 |= (0x2U << TIM_CR2_MMS_Pos);
+    /* Inicializar base de tiempos (genera UG bajo MMS=000, sin TRGO espurio) */
+    if (TIM_BM_InitTimeBase(&cfg) != TIM_BM_OK)
+    {
+        return false;
+    }
+
+    if (TIM_BM_ConfigMaster(TIM3, TIM_BM_MMS_UPDATE, false) != TIM_BM_OK)
+    {
+        return false;
+    }
 
     return true;
 }
@@ -165,7 +176,10 @@ bool ADC_Acquisition_Init(void)
     ADC_BM_StartConversion(ADC1);
 
     /* 9. Start hardware trigger timer (TIM3 counter enable) */
-    TIM3->CR1 |= TIM_CR1_CEN;
+    if (TIM_BM_Start(TIM3) != TIM_BM_OK)
+    {
+        return false;
+    }
 
     /* 10. Initial metadata in shared memory */
     if (Shared_TryLockCycles(HSEM_ID_ADC_DATA, SHARED_ADC_TRYLOCK_CYCLES))
