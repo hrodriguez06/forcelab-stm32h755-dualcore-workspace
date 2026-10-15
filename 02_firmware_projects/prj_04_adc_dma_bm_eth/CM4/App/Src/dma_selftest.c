@@ -8,6 +8,7 @@
 #include "dma_selftest.h"
 #include "dma_bm.h"
 #include "dma_ll.h"
+#include "tim_bm.h"
 #include "board_def.h"
 #include "shared_memory.h"
 #include <string.h>
@@ -998,14 +999,37 @@ static bool Test_T3(void)
 /* ---- T4: TIM7_UP Circular P2M ------------------------------------------- */
 static bool Test_T4(void)
 {
-    __HAL_RCC_TIM7_CLK_ENABLE();
+    if (TIM_BM_EnableClock(TIM7) != TIM_BM_OK)
+    {
+        return false;
+    }
 
     /* TIM7 at 10 kHz (200 MHz APB1 timer clock, prescaler 199 -> 1 MHz counter, ARR 99 -> 10 kHz) */
-    TIM7->CR1 = 0U;
-    TIM7->PSC = 199U;
-    TIM7->ARR = 99U;
-    TIM7->CR2 = (2U << TIM_CR2_MMS_Pos); /* Update event triggers TRGO */
-    TIM7->DIER = TIM_DIER_UDE;           /* Update DMA request enable */
+    const TimBm_TimeBaseConfig_t tim_cfg = {
+        .tim               = TIM7,
+        .psc               = 199U,
+        .arr               = 99U,
+        .count_mode        = TIM_BM_COUNT_UP,
+        .repetition        = 0U,
+        .arr_preload       = false,
+        .one_pulse         = false,
+        .urs_overflow_only = false
+    };
+
+    if (TIM_BM_InitTimeBase(&tim_cfg) != TIM_BM_OK)
+    {
+        return false;
+    }
+
+    if (TIM_BM_ConfigMaster(TIM7, TIM_BM_MMS_UPDATE, false) != TIM_BM_OK)
+    {
+        return false;
+    }
+
+    if (TIM_BM_EnableDmaRequest(TIM7, TIM_BM_EV_UPDATE) != TIM_BM_OK)
+    {
+        return false;
+    }
 
     DmaBm_Config_t cfg = {
         .stream           = DMA1_Stream3,
@@ -1024,11 +1048,17 @@ static bool Test_T4(void)
 
     if (!DMA_BM_InitStream(&cfg))
     {
+        (void)TIM_BM_Deinit(TIM7);
         return false;
     }
 
     DMA_BM_Start(DMA1_Stream3);
-    TIM7->CR1 |= TIM_CR1_CEN;
+    if (TIM_BM_Start(TIM7) != TIM_BM_OK)
+    {
+        (void)TIM_BM_Deinit(TIM7);
+        DMA_BM_Stop(DMA1_Stream3);
+        return false;
+    }
 
     uint32_t start = HAL_GetTick();
     uint32_t tc = 0U, ht = 0U;
@@ -1040,13 +1070,14 @@ static bool Test_T4(void)
         if ((flags & DMA_BM_FLAG_HT) != 0U) ht++;
         if ((flags & (DMA_BM_FLAG_TE | DMA_BM_FLAG_DME)) != 0U)
         {
-            TIM7->CR1 = 0U;
+            (void)TIM_BM_Stop(TIM7);
+            (void)TIM_BM_Deinit(TIM7);
             DMA_BM_Stop(DMA1_Stream3);
             return false;
         }
     }
 
-    TIM7->CR1 = 0U;
+    (void)TIM_BM_Stop(TIM7);
     DMA_BM_Stop(DMA1_Stream3);
     DMA_BM_DeinitStream(DMA1_Stream3);
 
@@ -1055,6 +1086,7 @@ static bool Test_T4(void)
 
     if (tc < 8U || tc > 13U || ht < 8U || ht > 13U)
     {
+        (void)TIM_BM_Deinit(TIM7);
         return false;
     }
 
@@ -1080,20 +1112,29 @@ static bool Test_T4(void)
     };
     if (!DMA_LL_Init(&h_tim, &cfg_tim))
     {
+        (void)TIM_BM_Deinit(TIM7);
         return false;
     }
     if (!DMA_LL_Start(&h_tim, (uint32_t)&(TIM7->CNT), (uint32_t)s_tim_rx_buf, 1000U))
     {
+        (void)TIM_BM_Deinit(TIM7);
         return false;
     }
 
-    TIM7->CR1 |= TIM_CR1_CEN;
+    if (TIM_BM_Start(TIM7) != TIM_BM_OK)
+    {
+        (void)TIM_BM_Deinit(TIM7);
+        DMA_LL_Stop(&h_tim, 10000U);
+        DMA_LL_Deinit(&h_tim, 10000U);
+        return false;
+    }
     start = HAL_GetTick();
     while ((HAL_GetTick() - start) < 1000U)
     {
         DMA_LL_IrqService(&h_tim, NULL, NULL);
     }
-    TIM7->CR1 = 0U;
+    (void)TIM_BM_Stop(TIM7);
+    (void)TIM_BM_Deinit(TIM7);
     s_diag_t4_ll_tc = h_tim.tc_count;
     s_diag_t4_ll_ht = h_tim.ht_count;
     DMA_LL_Stop(&h_tim, 10000U);

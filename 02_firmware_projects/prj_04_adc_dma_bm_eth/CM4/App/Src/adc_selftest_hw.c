@@ -11,6 +11,7 @@
 #include "adc_bm.h"
 #include "adc_ll.h"
 #include "dma_bm.h"
+#include "tim_bm.h"
 #include <string.h>
 
 /* adc_ker_ck is PLL2P = 25 MHz, programmed by CPU1 in CM7/Core/Src/main.c. */
@@ -131,27 +132,31 @@ static uint32_t Sthw_Rate_x10(uint32_t events, uint32_t ms)
 
 static void Tim3_Prepare(uint32_t rate_hz)
 {
-    RCC->APB1LENR |= RCC_APB1LENR_TIM3EN;
-    (void)RCC->APB1LENR;
+    (void)TIM_BM_EnableClock(TIM3);
 
-    TIM3->CR1 = 0U;
-    TIM3->PSC = 0U;
-    TIM3->ARR = (STHW_TIM_CLK_HZ / rate_hz) - 1U;
-    TIM3->CNT = 0U;
-    TIM3->CR2 = (TIM3->CR2 & ~TIM_CR2_MMS_Msk) | (0x2UL << TIM_CR2_MMS_Pos); /* TRGO = update */
-    TIM3->SR  = 0U;
+    const TimBm_TimeBaseConfig_t cfg = {
+        .tim               = TIM3,
+        .psc               = 0U,
+        .arr               = (STHW_TIM_CLK_HZ / rate_hz) - 1U,
+        .count_mode        = TIM_BM_COUNT_UP,
+        .repetition        = 0U,
+        .arr_preload       = false,
+        .one_pulse         = false,
+        .urs_overflow_only = false
+    };
+
+    (void)TIM_BM_InitTimeBase(&cfg);
+    (void)TIM_BM_ConfigMaster(TIM3, TIM_BM_MMS_UPDATE, false);
 }
 
 static void Tim3_Run(void)
 {
-    TIM3->CR1 |= TIM_CR1_CEN;
+    (void)TIM_BM_Start(TIM3);
 }
 
 static void Tim3_Halt(void)
 {
-    TIM3->CR1 &= ~TIM_CR1_CEN;
-    TIM3->CNT = 0U;
-    TIM3->SR  = 0U;
+    (void)TIM_BM_Stop(TIM3);
 }
 
 static void Sthw_DmaConfig(DmaBm_Config_t *dma, const Sthw_FlowCfg_t *fc)
