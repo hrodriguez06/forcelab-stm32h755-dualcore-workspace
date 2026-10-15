@@ -1,6 +1,6 @@
 # Plan de implementación de `03_tim` F4: TIM3 (y TIM7 de selftest) de `prj_03` y `prj_04` por el driver
 
-Oct 13, 2026 · @Hector · revisión 3 (Oct 15, 2026)
+Oct 13, 2026 · @Hector · revisión 4 (Oct 15, 2026)
 
 Migración de los temporizadores de disparo del ADC y de los selftests de hardware de los proyectos dual-core `prj_04_adc_dma_bm_eth` y `prj_03_adc_dma_eth` a los drivers compartidos de `01_shared_drivers/03_tim` (`tim_bm` y `tim_hal`).
 
@@ -17,6 +17,10 @@ No es un driver nuevo y **ninguna firma pública de `01_shared_drivers/03_tim/*.
 Una sola fase de implementación (F1) y un cierre formal. La fase pasa una auditoría independiente con ejecución propia del auditor sobre la placa física. Las reglas para el implementador se recogen en [`IMPLEMENTER_INSTRUCTIONS.md`](IMPLEMENTER_INSTRUCTIONS.md).
 
 Base: `main` en `897bf8d` (la rama `driver/tim-f4` se puso al día el 2026-10-15). Control: `04fb865`, el último `main` antes de esta fase; el código de TIM no cambió desde entonces.
+
+**Revisión 4 (2026-10-15), tras la segunda ronda de F1: dos erratas más del auditor.**
+- **T8, identidad:** la revisión 3 pedía "las dos líneas Download verified (CM7 y CM4)". `flash.py` graba las dos imágenes en **una sola** llamada a CubeProgrammer (`-w cm7 -w cm4 -v -rst`), que imprime esa línea **una vez**. Vale una línea por llamada a `flash.py` y `returncode == 0`.
+- **RM0399:** TIM2–TIM5 es el capítulo **41** (TIMx_CR2 en §41.4.2); el 40 es TIM1/TIM8 (`00_docs_stm32h7/docs/peripherals/timers_pwm/`). Las citas a "§40" para TIM3 se corrigen a §41.
 
 **Revisión 3 (2026-10-15), tras la auditoría de F1 (`AUDIT.md`): dos erratas del plan, del auditor.**
 - **T4.** La ventana absoluta +1,327 % ± 0,2 % era demasiado estrecha: el reloj de la placa va hoy a +1,1 % (la imagen de control de `prj_04` midió 505 631 Hz en 60 s). Pasa a equivalencia con el control en la misma sesión y a un oráculo de la propia placa (`m4_hb`).
@@ -237,7 +241,7 @@ Se desarrolla una herramienta dedicada que automatiza la batería completa de pr
 | **T6a** | 20 arranques repetidos por SWD (`-rst`) sobre la imagen `debug`: tras cada reset se espera 10 s y se ejecutan T3 y T4 | T3 y T4 pasan satisfactoriamente en cada uno de los 20 arranques | — | 20/20 PASS |
 | **T6b** | Arranque en frío (power cycle físico en banco con el responsable): lectura de flags de arranque en `RCC_RSR` y ejecución de T3, T4 y T5 | T3, T4 y T5 PASS tras el encendido en frío | — | PASS. Requiere presencia física en el banco (no bloquea entrega de F1, sí el cierre) |
 | **T7** | Regresión de driver y compatibilidad cruzada:<br>• Preset `selftest-tim` de `prj_01_template_dualcore` compila limpiamente;<br>• Comprobación de API congelada (`git diff main -- '01_shared_drivers/03_tim/*.h'`) | `selftest-tim` genera binario con 0 errores; diff de cabeceras es estrictamente vacío | — | PASS en ambos aspectos |
-| **T8** | **Los selftests migrados, en la placa** (opción A): `prj_04` preset `selftest` (`02_dma` T1–T11 y T13; T4/T5 usan TIM7) y preset `selftest-adc` (`07_adc`, con TIM3), y `prj_03` preset `selftest` (`07_adc`, con TIM3), migrados y de control (`04fb865`). Identidad por el flasheo verificado (las dos líneas "Download verified successfully" de CM7 y CM4). **Excepción de G-S5 solo para T8:** `monitor.py --sn` se arranca **antes** de `flash.py`, con `PYTHONIOENCODING=utf-8:backslashreplace`; el reset del propio flasheo es el único reset; la captura dura hasta ver todas las líneas de veredicto esperadas o 45 s. Las líneas de CM4 llegan a ~16–18 s del arranque | Líneas exactas, todas obligatorias: `selftest` de `prj_04`: `[m7_dma_test] OVERALL: PASS` y `[m4_dma_test] …OVERALL=PASS`; `selftest-adc` de `prj_04` y `selftest` de `prj_03`: `[m4_adc_test] HW RESULT PASS`. Ninguna línea con `FAIL`. La consola completa, en la captura | Las mismas imágenes de control dan las mismas líneas (equivalencia), y una línea esperada que falta es FAIL | Los tres selftests PASS en migrada y en control, con las líneas exactas |
+| **T8** | **Los selftests migrados, en la placa** (opción A): `prj_04` preset `selftest` (`02_dma` T1–T11 y T13; T4/T5 usan TIM7) y preset `selftest-adc` (`07_adc`, con TIM3), y `prj_03` preset `selftest` (`07_adc`, con TIM3), migrados y de control (`04fb865`). Identidad por el flasheo verificado (`flash.py` con `returncode == 0` y su línea "Download verified successfully", una por llamada). **Excepción de G-S5 solo para T8:** `monitor.py --sn` se arranca **antes** de `flash.py`, con `PYTHONIOENCODING=utf-8:backslashreplace`; el reset del propio flasheo es el único reset; la captura dura hasta ver todas las líneas de veredicto esperadas o 45 s. Las líneas de CM4 llegan a ~16–18 s del arranque | Líneas exactas, todas obligatorias: `selftest` de `prj_04`: `[m7_dma_test] OVERALL: PASS` y `[m4_dma_test] …OVERALL=PASS`; `selftest-adc` de `prj_04` y `selftest` de `prj_03`: `[m4_adc_test] HW RESULT PASS`. Ninguna línea con `FAIL`. La consola completa, en la captura | Las mismas imágenes de control dan las mismas líneas (equivalencia), y una línea esperada que falta es FAIL | Los tres selftests PASS en migrada y en control, con las líneas exactas |
 
 ### Normas para las capturas de evidencia
 - **Unicidad e integridad:** una captura por prueba y herramienta, generada en una sola ejecución sin cortes ni ediciones manuales, guardada en codificación UTF-8 en `prj_04/docs/tim_f4_<prueba>_<hash>.txt` y `prj_03/docs/tim_f4_<prueba>_<hash>.txt`.

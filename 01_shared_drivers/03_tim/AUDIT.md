@@ -54,3 +54,44 @@ El implementador no tiene placa, y el informe declara NO VERIFICADO todo lo que 
 - **El informe afirma cosas sin respaldo** (M5), y los comentarios del firmware son falsos (M6).
 
 Con la revisión 3: corregir B1–B3, M1–M6, m1 y m2; repetir T1, T2 y T7, y dejar T3–T6 y T8 listas para que las ejecute el auditor. Las capturas de `da0fc87` se quedan.
+
+## F1, corrección (`7168361`, herramienta en `e9afdbb`)
+
+Entrega: `765e2b3..7168361` (`1b01e9a` firmware, `42ed495` y `e9afdbb` herramienta, `284512a` capturas, `7168361` informe).
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| Revisión del firmware (`1b01e9a`) | **M6 cerrado:** comentarios en inglés, la afirmación correcta sobre `UG`/TRGO y el cálculo de PSC/ARR de vuelta. **m1 cerrado:** `Tim3_Prepare`/`Run`/`Halt` devuelven `bool` y se comprueban; `started` solo tras arrancar. Nuevo, menor: `Tim3_Prepare` llama a `TIM_BM_Stop(TIM3)` **antes** de `TIM_BM_EnableClock(TIM3)`. En `prj_03` el reloj de TIM3 de CM4 no está habilitado antes del selftest, así que el primer `Stop` escribe y lee TIM3 sin reloj; T8 lo ejercitará, pero el orden correcto es habilitar el reloj primero (k1) |
+| Revisión de la herramienta | Un subagente la revisó línea a línea, con sondas que sustituyen el flasheo y la red por las capturas reales; lo de abajo lo comprobé yo en el código |
+
+Los analizadores de veredicto ya son correctos con las capturas reales:
+- T8 da PASS con la consola de `dma_t13_independent_04fb865.txt` y FAIL si falta un `OVERALL` o si dice `FAIL`;
+- T4 da PASS con los pares JSON de mis capturas de 60 s y FAIL con 40 000 muestras por latido, `ovr = 1` o una clave que falta;
+- T5 da PASS con mi captura de `prj_03` y FAIL sin línea `[net]` o con un contador distinto de 0.
+
+La parte de la placa sigue siendo segura.
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| N1 | Bloqueante (errata del plan, del auditor) | `flash_image` exige `count("Download verified successfully") >= 2` (`tim_f4_checks.py:334-335`), como pedía la revisión 3. `flash.py` imprime esa línea una vez por llamada, así que **todo flasheo da FAIL**: T3/T4/T6a con `--flash`, T5, las seis imágenes de T8 y la restauración final | `returncode == 0` y una línea por llamada (plan revisión 4) |
+| B2 | Bloqueante (parcial) | T4 no implementa la **equivalencia** migrada frente a control en la misma sesión (\|Δ\| ≤ 0,1 %), que es el criterio principal de la revisión 3. Su control negativo es una constante (`not (49750 <= 40000 <= 50250)`, l. 1164), que no puede fallar, y falta el de la tasa desplazada un 1 % | T4 flashea la migrada, mide, flashea el control, mide y compara, en una ejecución; controles negativos que pasen por la misma comparación |
+| B1 | Mayor (parcial) | T8:<br>• el límite de 45 s depende del `--timeout` de `monitor.py`, que deja de contar si el puerto no vuelve, y entonces T8 se queda colgada;<br>• no separa la salida anterior al reset de la posterior;<br>• si `flash.py` falla de verdad, sigue flasheando la siguiente imagen (G-S7 pide parar) | Límite propio en la herramienta; contar solo las líneas posteriores al banner de arranque de CM7; parar ante un fallo real de `flash.py` |
+| B3 | Mayor (parcial) | T5:<br>• no exige que existan `rx_nobuf`, `tx_nobuf` y `dma_err` en la línea `[net]` (si faltan, pasa);<br>• el monitor dura 5 s, y las líneas `[net]` salen cada ~5 s, así que puede fallar sin motivo | Claves obligatorias; monitor de 15 s |
+| M1 | Mayor (parcial) | T2b:<br>• ahora **salta todas las unidades de CM7** (l. 680-683), más que antes y contra "excepciones solo las del plan": no ve `CM7/Core/Src/main.c:203 __HAL_RCC_TIM3_CLK_ENABLE()` ni una escritura futura de CM7;<br>• no detecta escrituras a TIM a través de un handle (`(&s_htim3)->Instance->CR1 \|= …`, `__HAL_TIM_SET_AUTORELOAD`, `htim->Instance->PSC = 0`), y la autoprueba no las cubre;<br>• algunas líneas se desvían en una | Escanear CM7 con las excepciones del plan (`stm32h7xx_hal_timebase_tim.c`); `main.c:203` es una habilitación de reloj legítima, que se lista como hallazgo conocido y explicado, no se oculta; detectar `Instance->REG` escrito y `__HAL_TIM_*` en `prj_03` fuera de `tim_hal.c`, con casos en la autoprueba |
+| M2 | Mayor (no cerrado) | La comprobación de G-S1 busca `PE5` y similares en `board_def.h`, que solo aparecen en comentarios. Cruza dos constantes y da True | Quitarla y decir en el informe que la lista de pines es manual (la comprobé yo en la revisión del plan: PB1, canales internos, PD5/PD6), o derivarla de las unidades preprocesadas |
+| M3 | Mayor (parcial) | `e9afdbb` ignora **cualquier** línea de `git status` que acabe en `docs/tim_f4_*.txt` (l. 268): también capturas commiteadas modificadas (` M`), borradas (` D`) o en el índice. Una captura editada pasaría por árbol limpio, y el informe (§6.3) dice "excluyendo exclusivamente" las nuevas | Ignorar solo líneas `??` de las capturas de esta ejecución |
+| M5 | Mayor | El informe afirma cosas sin respaldo:<br>• "solventado íntegramente";<br>• las 8 compilaciones "con -Werror, cero advertencias" (`prj_01`/`prj_02` no usan `-Werror` y T1 no cuenta avisos);<br>• "2282 unidades CM4" (incluye unidades saltadas);<br>• dos confirmaciones de descarga;<br>• "excluyendo exclusivamente";<br>• la equivalencia de los registros del control, afirmada como hecho sin citar mi captura | Corregir; cada afirmación, de una captura |
+| m2 | Menor | `--test all` sigue recompilando todo y no deja `prj_03` debug; `--control` sin `--flash` mide la imagen que haya, sin identidad; `--reset-count` menor que 20 sigue etiquetando "20/20"; T7 cae a `897bf8d` si el diff contra `main` no está vacío | Corregir |
+| k1 | Menor (firmware) | `Stop` antes de `EnableClock` en `Tim3_Prepare` (arriba) | `EnableClock` primero |
+| k2 | Menor (errata del auditor) | Mi primera auditoría corrigió "RM0399 §34.4" por "§40" para TIM3: es §41 (TIM2–TIM5; TIMx_CR2 en §41.4.2) | Citas a §41 en código, informe y plan (revisión 4) |
+
+### Estado
+
+**F1 no pasa.**
+- **Por qué no pasa:** por N1, que es un error mío del plan e impide cualquier flasheo; por la equivalencia de T4, que falta; y por M1, M3 y M5.
+- **El firmware sigue siendo correcto:** mi evidencia independiente de la primera ronda vale, porque `1b01e9a` solo cambia comentarios en producción y el manejo de errores en los selftests.
+- **Siguiente ronda:** corregir N1, B1–B3, M1–M3, M5, m2, k1 y k2, y repetir T1, T2 y T7 sin placa.
