@@ -198,3 +198,43 @@ Con A y B alineados, el oráculo de T6a queda dentro de ±0,35 % en los 40 ciclo
   - el README de `03_tim` (§9.5 TRGO → ADC validado y `tim_hal` en CM4, §11) y los README de `prj_03` y `prj_04`;
   - T6b, arranque en frío con el responsable en el banco;
   - la hoja de ruta, el borrado de los documentos de proceso, la retirada de `../stm32h755_control_04fb865` y el merge.
+
+## Cierre del implementador (`d5bf104`, documentación en `9fdc0e7`)
+
+Entrega: `063603c..d5bf104`. Revisé cada afirmación nueva contra el código, los `CMakeLists.txt`, la historia y las capturas.
+
+### Lo que está bien
+
+- **Informe:**
+  - T6a de la ronda 3 con 11/20 y 14/20;
+  - sin el "0 advertencias" de `prj_01`;
+  - cita las capturas `audit4`;
+  - T6b como pendiente.
+- **Herramienta:** la restauración tras `--test all` es un caso que puede fallar (m3 cerrado).
+- **README de `03_tim`, §13:**
+  - los comandos de F3 usan `8901b77`, que es el commit que borró los cuatro documentos de proceso tras F3 (comprobado con `git show --stat`);
+  - los de F4 siguen la forma `--diff-filter=D`, que apuntará al borrado de F4.
+- **README de `03_tim`, §11:**
+  - los tiers enlazados coinciden con los `CMakeLists.txt` (`stm32h7_driver_tim_bm` en `prj_04`, `stm32h7_driver_tim_hal` en `prj_03`);
+  - también las funciones que llama cada archivo, incluidas `TIM_BM_EnableDmaRequest` y `TIM_BM_Deinit` en `dma_selftest.c` y `tim_bm` en el selftest de `prj_03`.
+- **Cifras de los README de los proyectos:** salen de las capturas:
+  - 2282 unidades es la suma de las unidades escaneadas en los siete presets de `prj_04`;
+  - ICMP 4/4 y ráfaga 100/100 están en la captura de T5;
+  - `EXTSEL = 4` es `ADC_BM_TRIG_TIM3_TRGO`;
+  - `-Werror` sale de `cmake/common_flags.cmake` de los dos proyectos.
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| C1 | Mayor | `prj_04/README.md` §10: "All F4 verification tests were executed and validated on hardware by the auditor". T1, T2 y T7 los ejecutó el implementador, sin placa; T6b está pendiente y no aparece | Decir quién ejecutó cada prueba (T1, T2 y T7 el implementador, sin placa; T3–T6a y T8 el auditor) y una fila T6b pendiente |
+| C2 | Mayor | Afirmaciones que ninguna prueba mide:<br>• `prj_04/README.md` §D: el arranque tardío del contador "eliminating spurious initial conversions and phase jitter";<br>• `prj_03/README.md` §8: "ensuring zero lost or misaligned early conversion pulses" | Describir lo que hace el código: el contador arranca cuando el ADC y el DMA ya están armados, así que el primer TRGO encuentra el ADC listo. Sin promesas que no se midieron |
+| C3 | Menor | `03_tim/README.md` §9.5: "~506 kHz nominal". 500 kHz es lo nominal; ~506 kHz es lo medido, con el HSE de la placa rápido | "500 kHz nominal (~506 kHz measured on this board's fast HSE)" |
+| C4 | Menor | `03_tim/README.md` §9.5 perdió "any clock tree, board or silicon other than `prj_01`'s on Rev V (except T3)" de los no ejercitados | Recuperarlo con `prj_01`, `prj_03` y `prj_04` |
+| C5 | Menor | `03_tim/README.md` §11: "Cero `HAL_TIM_*` calls" (español en un README en inglés) | "No" |
+
+Fuera del cierre: el comentario de `prj_03/CM4/App/Inc/adc_acquisition.h` (l. 6 y 24) dice "TIM3 10 kHz TRGO", y TIM3 dispara a 500 kHz. Ya estaba antes de F4 y F4 no tocó ese archivo; no bloquea.
+
+### Estado
+
+**El cierre del implementador no pasa todavía**, por C1 y C2. Siguiente ronda: corregir C1–C5, solo en los README.
