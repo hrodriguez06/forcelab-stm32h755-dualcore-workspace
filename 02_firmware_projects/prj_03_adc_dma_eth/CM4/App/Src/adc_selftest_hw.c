@@ -144,13 +144,14 @@ static uint32_t Sthw_CcrClockHz(uint32_t ccr)
 
 static bool Tim3_Prepare(uint32_t rate_hz)
 {
-    /* Ensure counter is stopped before configuring timebase (CEN=0 required by tim_bm) */
-    if (TIM_BM_Stop(TIM3) != TIM_BM_OK)
+    /* Enable peripheral clock first before accessing registers (k1) */
+    if (TIM_BM_EnableClock(TIM3) != TIM_BM_OK)
     {
         return false;
     }
 
-    if (TIM_BM_EnableClock(TIM3) != TIM_BM_OK)
+    /* Ensure counter is stopped before configuring timebase (CEN=0 required by tim_bm) */
+    if (TIM_BM_Stop(TIM3) != TIM_BM_OK)
     {
         return false;
     }

@@ -132,13 +132,14 @@ static uint32_t Sthw_Rate_x10(uint32_t events, uint32_t ms)
 
 static bool Tim3_Prepare(uint32_t rate_hz)
 {
-    /* Ensure counter is stopped before configuring timebase (CEN=0 required by tim_bm) */
-    if (TIM_BM_Stop(TIM3) != TIM_BM_OK)
+    /* Enable peripheral clock first before accessing registers (k1) */
+    if (TIM_BM_EnableClock(TIM3) != TIM_BM_OK)
     {
         return false;
     }
 
-    if (TIM_BM_EnableClock(TIM3) != TIM_BM_OK)
+    /* Ensure counter is stopped before configuring timebase (CEN=0 required by tim_bm) */
+    if (TIM_BM_Stop(TIM3) != TIM_BM_OK)
     {
         return false;
     }

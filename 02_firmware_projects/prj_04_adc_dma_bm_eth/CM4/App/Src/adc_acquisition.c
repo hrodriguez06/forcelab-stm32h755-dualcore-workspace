@@ -82,7 +82,7 @@ static bool TIM3_Trigger_Init(void)
 
     /* Initialize time base: TIM_BM_InitTimeBase generates a software UG event
      * to latch PSC and ARR into shadow registers. With CR2.MMS = 000 (reset state),
-     * the UG event is routed to TRGO (RM0399 §40.6.2). This initial TRGO pulse
+     * the UG event is routed to TRGO (RM0399 §41.4.2). This initial TRGO pulse
      * is completely harmless because TIM3_Trigger_Init() runs before ADC and DMA
      * initialization, so ADSTART is not asserted and the ADC ignores external triggers.
      */
