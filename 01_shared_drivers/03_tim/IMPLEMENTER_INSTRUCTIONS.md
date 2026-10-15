@@ -2,7 +2,7 @@
 
 Oct 13, 2026 · @Hector
 
-Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 1) de esta carpeta: sustituir la programación manual y ad-hoc de TIM3 y TIM7 en los proyectos `prj_04_adc_dma_bm_eth` y `prj_03_adc_dma_eth` por los drivers compartidos `tim_bm` y `tim_hal`, y crear la herramienta de verificación `tools/tim_f4_checks.py`.
+Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta: sustituir la programación manual y ad-hoc de TIM3 y TIM7 en los proyectos `prj_04_adc_dma_bm_eth` y `prj_03_adc_dma_eth` por los drivers compartidos `tim_bm` y `tim_hal`, y crear la herramienta de verificación `tools/tim_f4_checks.py`.
 
 Ninguna firma pública en `01_shared_drivers/03_tim/*.h` cambia (API congelada). Otra persona auditará independientemente tu fase y repetirá las pruebas sobre la placa física antes del cierre.
 
@@ -40,7 +40,7 @@ Si alguna indicación de este documento entra en conflicto con el plan, prevalec
 | `01_shared_drivers/03_tim/IMPLEMENTATION_REPORT.md` | Tu informe técnico de implementación |
 | `01_shared_drivers/03_tim/README.md`, `prj_03/README.md`, `prj_04/README.md` | Solo en el cierre, cuando el auditor lo autorice |
 
-Cualquier otra modificación fuera de esta lista está estrictamente prohibida (`git diff 04fb865 --stat`).
+Cualquier otra modificación fuera de esta lista está estrictamente prohibida (`git diff 897bf8d --stat`).
 
 ### 2.2 Prohibido
 
@@ -49,7 +49,7 @@ Cualquier otra modificación fuera de esta lista está estrictamente prohibida (
 | Cabeceras públicas de `01_shared_drivers/03_tim/*.h` | Contrato de catálogo (regla 2): API congelada. Si crees que falta una función o firma, para y consulta al responsable |
 | `prj_04/CM7/Core/Src/stm32h7xx_hal_timebase_tim.c` | TIM6 actúa como timebase de FreeRTOS para la HAL en CM7. Está fuera de alcance del plan |
 | `SystemClock_Config`, `HAL_PWREx_ConfigSupply`, option bytes | Regla G-S7: ante trabajo en remoto, cualquier fallo en la configuración de alimentación o reloj bloquea el procesador sin posibilidad de rescate por SWD |
-| Flashear presets de selftest (`selftest`, `selftest-adc`, etc.) | Regla G-S1: los selftests conmutan pines y pueden interferir con el cableado del banco analógico. Solo se compilan en host |
+| Programar, resetear o leer la placa (flash.py, STM32_Programmer_CLI, monitor.py, net_check.py, query_adc.py) | **No tienes acceso a la placa.** T3–T6 y T8 las ejecuta el auditor con tu herramienta. No escribas en tu informe ninguna medida de hardware como hecha por ti |
 | Otros proyectos (`prj_01`, `prj_02`, `prj_eth_lwip_node`) | Fuera de alcance (`prj_01` solo se compila en preset `selftest-tim` para la comprobación T7) |
 | Retocar o editar capturas commiteadas | Violación de integridad de evidencias |
 | Modificar la configuración de red del adaptador del PC | Regla G-S4: la red está fijada por el responsable del banco |
@@ -62,14 +62,14 @@ Cualquier otra modificación fuera de esta lista está estrictamente prohibida (
 
 ### 3.1 Rama y commits
 
-- Trabaja en la rama **`driver/tim-f4`**, creada a partir de `04fb865` (`main`).
+- Trabaja en la rama **`driver/tim-f4`**, al día con `main` en `897bf8d` (el plan, revisión 2, está en ella). El control es `04fb865`.
 - Realiza commits atómicos por objetivo claro:
   - `refactor(prj04): migrate TIM3 acquisition to tim_bm (H1)`
   - `refactor(prj03): migrate TIM3 acquisition to tim_hal (H2)`
   - `refactor(prj04): migrate TIM3 and TIM7 selftests to tim_bm (H3)`
   - `refactor(prj03): migrate TIM3 selftest to tim_bm (H4)`
   - `feat(tools): add tim_f4_checks.py automated verification tool (H5)`
-  - `test(tim): record T1-T7 test runs on prj_03 and prj_04`
+  - `test(tim): record T1, T2 and T7 runs (no board)`
   - `docs(tim): add implementation report for F4`
 - Redacta mensajes de commit en inglés, modo imperativo, explicando el motivo técnico en el cuerpo.
 - En Windows PowerShell, usa siempre archivos temporales o pipes limpios en UTF-8 para evitar caracteres BOM residuales.
@@ -78,7 +78,7 @@ Cualquier otra modificación fuera de esta lista está estrictamente prohibida (
 
 Aplica estrictamente las **opciones por defecto** declaradas en el plan (Decisiones 1–4):
 1. `tim_bm` en `prj_04`; `tim_hal` en `prj_03`.
-2. Migrar tanto TIM3 de `adc_selftest_hw` como TIM7 de `dma_selftest`.
+2. Migrar tanto TIM3 de `adc_selftest_hw` como TIM7 de `dma_selftest` (opción A, aprobada: el auditor los ejecutará en la placa, T8).
 3. Secuencia estricta de arranque (InitTimeBase con ARPE=0 antes de ConfigMaster; arranque con `TIM_BM_Start` tras armar ADC y DMA).
 4. Borrado de documentos de proceso tras el cierre.
 
@@ -87,9 +87,8 @@ Aplica estrictamente las **opciones por defecto** declaradas en el plan (Decisio
 - Ejecuta `.\tools\env.ps1` en cada nueva sesión de consola para asegurar la presencia de las herramientas en el `PATH`.
 - Compilación de la matriz global: `.\tools\build_all.ps1 -Clean`.
 - Utiliza el lanzador `py`, nunca `python`. Solo bibliotecas estándar de Python.
-- **Sonda ST-LINK:** `sn=0016000C4142501220353451` en toda invocación a `STM32_Programmer_CLI`, `flash.py` y `monitor.py`.
-- **Inspección SWD:** en caliente (`mode=HOTPLUG`) sin detener los núcleos, empleando `STM32_Programmer_CLI -c port=SWD sn=0016000C4142501220353451 mode=HOTPLUG -r32 <addr> <bytes>`.
-- **Compilación de la imagen de control:** compila la versión base `04fb865` en un worktree independiente (`git worktree add ../stm32h755_control_04fb865 04fb865`), garantizando que tu árbol principal permanezca limpio.
+- **La placa es del auditor.** La herramienta debe usar `sn=0016000C4142501220353451` en toda llamada a `STM32_Programmer_CLI`, `flash.py` y `monitor.py`, leer por SWD en caliente (`mode=HOTPLUG`), nunca leer `HSEM_RLR` ni registros con efectos al leer, y no resetear con `monitor.py`, `net_check.py` o `query_adc.py` corriendo. Tú no la ejecutas contra la placa.
+- **Compilación de la imagen de control:** compila `04fb865` en un worktree independiente (`git worktree add ../stm32h755_control_04fb865 04fb865`), con todos los presets que usan T2 y T8, garantizando que tu árbol principal permanezca limpio. Si para el submódulo de Cube enlazas el del repo, dilo en el informe.
 
 ### 3.4 Capturas de evidencia
 
@@ -100,20 +99,20 @@ Aplica estrictamente las **opciones por defecto** declaradas en el plan (Decisio
 
 ### 3.5 Metodología de pruebas
 
-- **T1 (Builds):** matriz 8/8 (`build_all.ps1 -Clean`) y presets de selftest (`selftest-adc` en `prj_04`, `selftest` en `prj_03`, `selftest-tim` en `prj_01`). Cero errores y cero avisos.
+- **T1 (Builds):** matriz 8/8 (`build_all.ps1 -Clean`) y presets de selftest (`selftest` y `selftest-adc` en `prj_04`, `selftest` en `prj_03`, `selftest-tim` en `prj_01`), compilados de cero (`--fresh`), con los comandos en la salida. Cero errores y cero avisos.
 - **T2 (Símbolos y estática):**
   - T2a: con `nm`, demostrar presencia de símbolos de `tim_bm` en CM4 de `prj_04`, y de `tim_hal` / `tim_bm` en CM4 de `prj_03`. El control negativo sobre `04fb865` debe fallar.
-  - T2b: verificar con regex/grep que no queden accesos `TIM3->` ni `TIM7->` en los archivos migrados. El control negativo sobre `04fb865` debe detectar las escrituras preexistentes.
+  - T2b: solo **escrituras** a registros de TIM3/TIM7 y habilitaciones de reloj a mano, sobre el código preprocesado, con la expresión y la autoprueba de `gpio_f1b_checks.py`. Las lecturas y `&TIM7->CNT` usado como dirección (`dma_selftest.c` l. 748, 770, 807) no cuentan. Ninguna llamada `HAL_TIM_*` en `prj_03` fuera de `tim_hal.c`. El control en `04fb865` las encuentra por (preset, ruta relativa).
 - **T3 (Registros SWD en caliente):**
   - Leer en caliente `CR1` (`0x40000400`), `CR2` (`0x40000404`), `SMCR` (`0x40000408`), `DIER` (`0x4000040C`), `PSC` (`0x40000428`) y `ARR` (`0x4000042C`).
   - Comparar contra la tabla esperada de RM0399 (`CR1=0x0001`, `CR2=0x0020`, `SMCR=0`, `DIER=0`, `PSC=0`, `ARR=0x018F`).
-  - El control negativo debe comparar contra una tabla intencionadamente alterada y fallar.
+  - Controles: la imagen de control `04fb865` debe dar los mismos seis valores (equivalencia), y la comparación contra una tabla alterada debe fallar.
 - **T4 (Ritmo del ADC y OVR):**
-  - Ejecutar `query_adc.py --json --count 20` para `prj_04` y `prj_03`.
-  - Comprobar que `Measured Rate` se sitúa estrictamente en el intervalo `[502.000, 509.000] Hz` (reloj ST-LINK con +1,327 %).
-  - Comprobar que `OVR == 0` en el 100 % de los paquetes y que `Samples` crece continuamente.
+  - Tasa = Δ`Samples`/Δt (tiempo del PC) en una ventana de al menos 10 s, no el `Measured Rate` de cada respuesta, que oscila. Ventana: 500 kHz × (1 + 1,327 % ± 0,2 %).
+  - `OVR == 0` en todas las respuestas (en los dos proyectos es `half_overrun_count`); en `prj_04`, además `adc_ovr == 0` del JSON. `Samples` estrictamente creciente.
+  - Control: la misma cuenta contra una ventana desplazada falla.
 - **T5 (Regresión de red y monitor):**
-  - `monitor.py --sn` muestra banner con commit y build id limpio.
+  - Identidad: el flasheo verificado de la ELF del commit (no se exige leer el banner).
   - `net_check.py` pasa 4/4 pings y 100/100 UDP con 0 pérdidas y contadores `rx_nobuf=0`, `tx_nobuf=0`, `dma_err=0`.
 - **T6a (20 arranques SWD):**
   - La herramienta ejecuta 20 ciclos de reset por SWD (`-rst`), esperando 10 s tras cada reset y validando T3 y T4. Veredicto obligatorio: 20/20 PASS.
@@ -121,10 +120,11 @@ Aplica estrictamente las **opciones por defecto** declaradas en el plan (Decisio
   - Prueba de encendido físico con lectura de `RCC_RSR`. Queda pendiente si el responsable opera en remoto (no bloquea F1).
 - **T7 (Preset selftest-tim de prj_01 y diff de cabeceras):**
   - Demostrar que `prj_01` preset `selftest-tim` compila intacto y que `git diff main -- '01_shared_drivers/03_tim/*.h'` no produce ninguna salida.
+- **T8 (Selftests en la placa, la ejecuta el auditor):** la herramienta flashea y captura `prj_04` `selftest` y `selftest-adc` y `prj_03` `selftest`, migrados y de control (`04fb865`), y compara los veredictos: tienen que ser PASS e iguales antes y después.
 
 ### 3.6 Seguridad del banco (G-S1 a G-S7)
 
-- Respeta rigurosamente las reglas del banco del plan. Nunca intentes flashear presets de selftest ni modificar registros de bajo nivel del sistema de alimentación o reloj base. Si la placa deja de responder, avisa de inmediato.
+- No tocas la placa. La herramienta que escribes tiene que respetar G-S1 a G-S7 cuando la ejecute el auditor: solo los presets que lista G-S1, nunca alimentación, reloj base, option bytes ni borrado completo de la flash.
 
 ---
 
@@ -144,11 +144,9 @@ Aplica estrictamente las **opciones por defecto** declaradas en el plan (Decisio
    - Modifica `adc_selftest_hw.c` migrando a `tim_bm`.
    - Compila y verifica con `build_all.ps1 -Clean`.
 4. **Ejecución de pruebas en hardware:**
-   - Flashea `prj_04` debug, ejecuta T3, T4, T5 y T6a guardando las capturas UTF-8 en `prj_04/docs/`.
-   - Flashea `prj_04` release, ejecuta T4 y T5 guardando las capturas.
-   - Flashea `prj_03` debug, ejecuta T3, T4, T5 y T6a guardando las capturas en `prj_03/docs/`.
-   - Flashea `prj_03` release, ejecuta T4 y T5 guardando las capturas.
-   - Ejecuta T7 (build de `prj_01` `selftest-tim` y diff de cabeceras).
+   - **No las ejecutes tú.** Deja la herramienta lista para que el auditor ejecute T3–T6 y T8 y di en el informe el comando exacto de cada una.
+   - Ejecuta T1, T2 y T7 (sin placa) y commitea sus capturas.
+   - Escribe en el informe la lista de pines de G-S1 comprobada contra el código de los presets que se flashearán.
 5. **Redacción de `IMPLEMENTATION_REPORT.md`:**
    - Documenta los resultados obtenidos, los valores leídos en cada prueba, las tablas de registros y el estado de la placa al terminar.
 6. **Entrega para auditoría:**
@@ -162,8 +160,8 @@ El informe debe estructurarse con las siguientes secciones:
 1. **Resumen de la entrega:** hash del commit, lista de cambios realizados y estado ("entregado para auditoría").
 2. **Resultados de las pruebas T1 a T7:** tablas con veredicto, valores medidos, control negativo y ruta de la captura asociada.
 3. **Inspección de registros SWD:** tabla detallada de los 6 registros de TIM3 leídos en placa frente a los esperados de RM0399.
-4. **Medición de frecuencia del ADC:** tabla con el `Measured Rate` obtenido, `OVR` y comparación con el valor teórico con offset (+1,327 %).
-5. **Estado de la placa al término de la sesión:** imagen y preset que quedan flasheados en la memoria Flash.
+4. **Comandos de las pruebas de placa** (T3–T6, T8) para el auditor, y la lista de pines de G-S1.
+5. **Lo no ejecutado:** todo lo que necesita la placa queda como NO VERIFICADO hasta la ejecución del auditor.
 6. **Desviaciones o notas técnicas:** discrepancias encontradas respecto al plan original o peculiaridades de la ejecución.
 
 ---
@@ -173,11 +171,11 @@ El informe debe estructurarse con las siguientes secciones:
 Antes de solicitar la auditoría, verifica que:
 - [ ] El árbol de trabajo está completamente limpio (`git status --porcelain` vacío).
 - [ ] Todos los presets de la matriz compilan sin errores ni avisos (8/8 en `build_all.ps1 -Clean`).
-- [ ] Los presets `selftest-adc` (`prj_04`), `selftest` (`prj_03`) y `selftest-tim` (`prj_01`) compilan limpiamente.
+- [ ] Los presets `selftest` y `selftest-adc` (`prj_04`), `selftest` (`prj_03`) y `selftest-tim` (`prj_01`) compilan limpiamente.
 - [ ] No se ha modificado ninguna cabecera en `01_shared_drivers/03_tim/*.h`.
 - [ ] No se ha tocado `stm32h7xx_hal_timebase_tim.c` en `prj_04 CM7`.
 - [ ] Todas las capturas de evidencias existen en `prj_04/docs/` y `prj_03/docs/`, en UTF-8 y sin edición manual.
-- [ ] Cada sesión de hardware en las capturas inicia con la línea de verificación de descarga (`Download verified successfully`).
-- [ ] Los controles negativos de T2a, T2b, T3 y T4 han sido ejecutados y han fallado con datos no conformes.
-- [ ] Las 20 iteraciones de reset en caliente (T6a) han completado con éxito (20/20 PASS).
+- [ ] La herramienta empieza cada sesión de placa flasheando la ELF del commit y registrando `Download verified successfully`.
+- [ ] Los controles negativos de T2a y T2b se ejecutaron y fallaron como deben; los de T3, T4 y T8 están implementados y probados sin placa donde se pueda.
+- [ ] El informe no da por hecha ninguna prueba de placa.
 - [ ] `IMPLEMENTATION_REPORT.md` está redactado y commiteado en la rama `driver/tim-f4`.
