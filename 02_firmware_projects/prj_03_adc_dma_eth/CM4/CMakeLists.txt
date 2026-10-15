@@ -91,8 +91,8 @@ target_link_options(${TARGET} PRIVATE
     -Wl,--no-warn-rwx-segments
 )
 
-# CPU2 links the ADC driver (which pulls in GPIO and adc_hal) and HSEM BM (for GPIO lock hook)
-target_link_libraries(${TARGET} PRIVATE stm32h7_driver_adc stm32h7_driver_hsem_bm)
+# CPU2 links the ADC driver (which pulls in GPIO and adc_hal), HSEM BM and TIM HAL driver
+target_link_libraries(${TARGET} PRIVATE stm32h7_driver_adc stm32h7_driver_hsem_bm stm32h7_driver_tim_hal)
 
 if(ADC_DRIVER_SELFTEST)
     target_compile_definitions(${TARGET} PRIVATE ADC_DRIVER_SELFTEST=1)

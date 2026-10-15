@@ -13,6 +13,7 @@
 
 #include "adc_acquisition.h"
 #include "adc_hal.h"
+#include "tim_hal.h"
 #include "board_def.h"
 #include "shared_memory.h"
 #include "stm32h7xx_hal.h"
@@ -53,31 +54,32 @@ static bool GPIO_Analog_Init(void)
 
 static bool TIM3_Trigger_Init(void)
 {
-    TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-    __HAL_RCC_TIM3_CLK_ENABLE();
-
-    /* APB1 timer clock = 200 MHz
-     * Prescaler = 0   -> Counter clock = 200 MHz (5 ns per tick)
-     * Period = 399    -> Update frequency = 200 MHz / 400 = 500,000 Hz (2.0 us period)
-     * Exactly 50 samples per period for a 10 kHz signal.
-     */
-    s_htim3.Instance               = TIM3;
-    s_htim3.Init.Prescaler         = 0U;
-    s_htim3.Init.CounterMode       = TIM_COUNTERMODE_UP;
-    s_htim3.Init.Period            = 399U;
-    s_htim3.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
-    s_htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-
-    if (HAL_TIM_Base_Init(&s_htim3) != HAL_OK)
+    /* Habilitar reloj en el banco RCC del propio núcleo CM4 */
+    if (TIM_BM_EnableClock(TIM3) != TIM_BM_OK)
     {
         return false;
     }
 
-    sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
-    sMasterConfig.MasterSlaveMode     = TIM_MASTERSLAVEMODE_DISABLE;
+    s_htim3.Instance = TIM3;
 
-    if (HAL_TIMEx_MasterConfigSynchronization(&s_htim3, &sMasterConfig) != HAL_OK)
+    const TimBm_TimeBaseConfig_t cfg = {
+        .tim               = TIM3,
+        .psc               = 0U,
+        .arr               = 399U,
+        .count_mode        = TIM_BM_COUNT_UP,
+        .repetition        = 0U,
+        .arr_preload       = false,  /* ARPE = 0: actualización inmediata */
+        .one_pulse         = false,
+        .urs_overflow_only = false
+    };
+
+    /* Inicializar base de tiempos (genera UG bajo MMS=000, sin TRGO espurio) */
+    if (TIM_HAL_InitTimeBase(&s_htim3, &cfg) != TIM_BM_OK)
+    {
+        return false;
+    }
+
+    if (TIM_HAL_ConfigMaster(&s_htim3, TIM_BM_MMS_UPDATE, false) != TIM_BM_OK)
     {
         return false;
     }
@@ -143,7 +145,7 @@ bool ADC_Acquisition_Init(void)
     }
 
     /* Start hardware trigger timer */
-    if (HAL_TIM_Base_Start(&s_htim3) != HAL_OK)
+    if (TIM_BM_Start(TIM3) != TIM_BM_OK)
     {
         return false;
     }
