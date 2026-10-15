@@ -1,0 +1,156 @@
+================================================================================
+STM32H755 TIM F4 Verification Checks for prj_04 (T1 to T8)
+================================================================================
+[host] argv: tools/tim_f4_checks.py --project prj_04 --test t2
+[host] timestamp: 2026-10-15 08:24:59
+[host] project: prj_04
+[host] git rev: da0fc87 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865 (rev 04fb865, clean)
+================================================================================
+
+--- Running T2a (Linker symbol audit with nm for prj_04) ---
+
+--- Results for T2A ---
+  [PASS] T2a_current_prj_04_debug_cm4_symbols_present: Current prj_04_debug_cm4 (CM4) contains driver symbols ['TIM_BM_InitTimeBase', 'TIM_BM_EnableClock', 'TIM_BM_ConfigMaster', 'TIM_BM_Start']
+         Detail: Present: 4/4
+  [PASS] T2a_current_prj_04_release_cm4_symbols_present: Current prj_04_release_cm4 (CM4) contains driver symbols ['TIM_BM_InitTimeBase', 'TIM_BM_EnableClock', 'TIM_BM_ConfigMaster', 'TIM_BM_Start']
+         Detail: Present: 4/4
+  [PASS] T2a_control_04fb865_commit_matches: Control directory commit matches 04fb865 for prj_04
+         Detail: Expected commit 04fb865, found 04fb865 in C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865
+  [PASS] T2a_control_prj_04_debug_cm4_symbols_absent_as_expected: Negative control 04fb865: prj_04_debug_cm4 (CM4) has zero 03_tim symbols
+         Detail: Symbols absent as expected (present: [])
+  [PASS] T2a_control_prj_04_release_cm4_symbols_absent_as_expected: Negative control 04fb865: prj_04_release_cm4 (CM4) has zero 03_tim symbols
+         Detail: Symbols absent as expected (present: [])
+  [PASS] T2a_control_oracle_negative_gate: Negative control gate: all control ELFs from 04fb865 lack driver symbols
+         Detail: All control ELFs correctly verified as negative baseline
+Verdict T2A: PASS
+
+--- Running T2b (Preprocessed code scan across 7 presets for prj_04) ---
+--- T2b Regex Autoprueba (CMSIS expanded forms, writes & reads) ---
+  Detected writes: 12/12, False read detections: 0/9
+    [Write check: DETECTED] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 = 1;
+    [Write check: DETECTED] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 |= 1;
+    [Write check: DETECTED] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->PSC <<= 2;
+    [Write check: DETECTED] ((((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))))->ARR = 399;
+    [Write check: DETECTED] ((TIM_TypeDef *) (0x40000400))->CR1 = 1;
+    [Write check: DETECTED] ((((((((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))))))->CR1)) = 1;
+    [Write check: DETECTED] ((((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1) = (1));
+    [Write check: DETECTED] (((((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1)) = ((((((((TIM_TypeDef *) ((0x40000
+    [Write check: DETECTED] ((((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1) |= (1));
+    [Write check: DETECTED] ((((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1) &= ~(1));
+    [Write check: DETECTED] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 = 1;
+    [Write check: DETECTED] ((RCC_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x4400UL))->APB1LENR |= (0x1UL << (1U)
+    [Write check: MISSED] }
+    [Read  check: IGNORED] uint32_t v1 = ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CNT;
+    [Read  check: IGNORED] uint32_t v2 = ((((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CNT));
+    [Read  check: IGNORED] if (((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 == 1) { (void)0; }
+    [Read  check: IGNORED] if (((((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1) == 1)) { (void)0; }
+    [Read  check: IGNORED] if ((((TIM_TypeDef *) (0x40000400))->CR1) == 0) { (void)0; }
+    [Read  check: IGNORED] if (((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 != 1) { (void)0; }
+    [Read  check: IGNORED] if (((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CNT <= 100) { (void)0; }
+    [Read  check: IGNORED] uint32_t v3 = (((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->SR & 0x1);
+    [Read  check: IGNORED] uint32_t addr = (uint32_t)&(((TIM_TypeDef *) ((0x40000000UL) + 0x1400UL))->CNT);
+    [Read  check: IGNORED] }
+  [Preset debug        ] scanned:  323 units, failed: 0 units
+  [Preset release      ] scanned:  323 units, failed: 0 units
+  [Preset selftest     ] scanned:  329 units, failed: 0 units
+  [Preset selftest-adc ] scanned:  328 units, failed: 0 units
+  [Preset selftest-uart] scanned:  326 units, failed: 0 units
+  [Preset selftest-hsem] scanned:  328 units, failed: 0 units
+  [Preset selftest-gpio] scanned:  325 units, failed: 0 units
+  [Control Preset debug        ] scanned:  322 units, failed: 0 units
+  [Control Preset release      ] scanned:  322 units, failed: 0 units
+  [Control Preset selftest     ] scanned:  328 units, failed: 0 units
+  [Control Preset selftest-adc ] scanned:  327 units, failed: 0 units
+  [Control Preset selftest-uart] scanned:  325 units, failed: 0 units
+  [Control Preset selftest-hsem] scanned:  327 units, failed: 0 units
+  [Control Preset selftest-gpio] scanned:  324 units, failed: 0 units
+  [Control findings count] 70 raw writes / legacy calls detected in control 04fb865:
+    preset=debug         file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 60: [manual_rcc_enable] ((RCC_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x4400UL))->APB1LENR |= (0x1UL << (1U));
+    preset=debug         file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 64: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 = 0U;
+    preset=debug         file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 71: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->PSC = 0U;
+    preset=debug         file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 72: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->ARR = 399U;
+    preset=debug         file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 73: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 &= ~(0x7UL << (4U));
+    preset=debug         file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 76: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 |= (0x2U << (4U));
+    preset=debug         file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line=166: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 |= (0x1UL << (0U));
+    preset=release       file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 60: [manual_rcc_enable] ((RCC_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x4400UL))->APB1LENR |= (0x1UL << (1U));
+    preset=release       file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 64: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 = 0U;
+    preset=release       file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 71: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->PSC = 0U;
+    preset=release       file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 72: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->ARR = 399U;
+    preset=release       file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 73: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 &= ~(0x7UL << (4U));
+    preset=release       file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 76: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 |= (0x2U << (4U));
+    preset=release       file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line=166: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 |= (0x1UL << (0U));
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 60: [manual_rcc_enable] ((RCC_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x4400UL))->APB1LENR |= (0x1UL << (1U));
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 64: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 = 0U;
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 71: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->PSC = 0U;
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 72: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->ARR = 399U;
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 73: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 &= ~(0x7UL << (4U));
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 76: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 |= (0x2U << (4U));
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line=166: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 |= (0x1UL << (0U));
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=1002: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x1400UL))->CR1 = 0U;
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=1005: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x1400UL))->PSC = 199U;
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=1006: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x1400UL))->ARR = 99U;
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=1007: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x1400UL))->CR2 = (2U << (4U));
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=1008: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x1400UL))->DIER = (0x1UL << (8U));
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=1031: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x1400UL))->CR1 |= (0x1UL << (0U));
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=1043: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x1400UL))->CR1 = 0U;
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=1048: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x1400UL))->CR1 = 0U;
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=1089: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x1400UL))->CR1 |= (0x1UL << (0U));
+    preset=selftest      file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/dma_selftest.c line=1096: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x1400UL))->CR1 = 0U;
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 60: [manual_rcc_enable] ((RCC_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x4400UL))->APB1LENR |= (0x1UL << (1U));
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 64: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 = 0U;
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 71: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->PSC = 0U;
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 72: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->ARR = 399U;
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 73: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 &= ~(0x7UL << (4U));
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 76: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 |= (0x2U << (4U));
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line=166: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 |= (0x1UL << (0U));
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_selftest_hw.c line=134: [manual_rcc_enable] ((RCC_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x4400UL))->APB1LENR |= (0x1UL << (1U));
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_selftest_hw.c line=136: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 = 0U;
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_selftest_hw.c line=138: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->PSC = 0U;
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_selftest_hw.c line=139: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->ARR = ((2UL * 100000000UL) / rate_hz) - 1U;
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_selftest_hw.c line=140: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CNT = 0U;
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_selftest_hw.c line=141: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 = (((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 & ~(0x7UL << (4
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_selftest_hw.c line=142: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->SR = 0U;
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_selftest_hw.c line=147: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 |= (0x1UL << (0U));
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_selftest_hw.c line=152: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 &= ~(0x1UL << (0U));
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_selftest_hw.c line=153: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CNT = 0U;
+    preset=selftest-adc  file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_selftest_hw.c line=154: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->SR = 0U;
+    preset=selftest-uart file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 60: [manual_rcc_enable] ((RCC_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x4400UL))->APB1LENR |= (0x1UL << (1U));
+    preset=selftest-uart file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 64: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 = 0U;
+    preset=selftest-uart file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 71: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->PSC = 0U;
+    preset=selftest-uart file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 72: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->ARR = 399U;
+    preset=selftest-uart file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 73: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 &= ~(0x7UL << (4U));
+    preset=selftest-uart file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 76: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 |= (0x2U << (4U));
+    preset=selftest-uart file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line=166: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 |= (0x1UL << (0U));
+    preset=selftest-hsem file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 60: [manual_rcc_enable] ((RCC_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x4400UL))->APB1LENR |= (0x1UL << (1U));
+    preset=selftest-hsem file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 64: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 = 0U;
+    preset=selftest-hsem file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 71: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->PSC = 0U;
+    preset=selftest-hsem file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 72: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->ARR = 399U;
+    preset=selftest-hsem file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 73: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 &= ~(0x7UL << (4U));
+    preset=selftest-hsem file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 76: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 |= (0x2U << (4U));
+    preset=selftest-hsem file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line=166: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 |= (0x1UL << (0U));
+    preset=selftest-gpio file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 60: [manual_rcc_enable] ((RCC_TypeDef *) (((0x40000000UL) + 0x18020000UL) + 0x4400UL))->APB1LENR |= (0x1UL << (1U));
+    preset=selftest-gpio file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 64: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 = 0U;
+    preset=selftest-gpio file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 71: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->PSC = 0U;
+    preset=selftest-gpio file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 72: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->ARR = 399U;
+    preset=selftest-gpio file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 73: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 &= ~(0x7UL << (4U));
+    preset=selftest-gpio file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line= 76: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR2 |= (0x2U << (4U));
+    preset=selftest-gpio file=C:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755_control_04fb865/02_firmware_projects/prj_04_adc_dma_bm_eth/CM4/App/Src/adc_acquisition.c line=166: [raw_write] ((TIM_TypeDef *) ((0x40000000UL) + 0x0400UL))->CR1 |= (0x1UL << (0U));
+
+--- Results for T2B ---
+  [PASS] T2b_selftest_macro_and_paren_detection: Self-test: CMSIS expanded bases, WRITE_REG/MODIFY_REG/SET_BIT macros, and multiline writes detected; reads and addresses ignored
+         Detail: Autoprueba result: PASS (12/12 writes, 0/9 reads)
+  [PASS] T2b_current_zero_raw_writes: Current tree has zero raw TIM writes / unprotected HAL calls across 7 presets outside exceptions
+         Detail: Scanned totals: 2282 units; Illegal findings count=0
+  [PASS] T2b_control_04fb865_commit_matches: Control directory commit matches 04fb865 for prj_04
+         Detail: Expected commit 04fb865, found 04fb865 in C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865
+  [PASS] T2b_control_all_presets_scanned: Control 04fb865: all 7 presets present and scanned without preprocessing failures
+         Detail: Total control scanned=2275, failed=0
+  [PASS] T2b_control_04fb865_detects_writers: Control 04fb865 detects legacy raw writes / HAL calls in ['CM4/App/Src/adc_acquisition.c', 'CM4/App/Src/adc_selftest_hw.c', 'CM4/App/Src/dma_selftest.c']
+         Detail: Matched known writers=True (total control findings=70)
+Verdict T2B: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================
