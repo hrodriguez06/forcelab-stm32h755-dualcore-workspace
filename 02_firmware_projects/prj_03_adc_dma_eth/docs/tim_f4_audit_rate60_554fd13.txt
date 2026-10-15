@@ -1,0 +1,24 @@
+=== Auditor, 03_tim F4: prj_03_adc_dma_eth debug built at 554fd13 (MIGRATED): TIM3 by SWD, ADC rate over 60 s (queries with rtt < 5 ms), OVR; the control of the same method ran minutes before (tim_f4_audit_rate60_control_04fb865.txt) ===
+Date: 2026-10-15T09:06:00-06:00  HEAD: 554fd13  project: prj_03_adc_dma_eth
+flash: Probe    : ST-LINK SN 0016000C4142501220353451
+flash: CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,324,940 B)
+flash: CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (2,388,912 B)
+flash: $ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\cm4_firmware.elf -v -rst
+flash: Opening and parsing file: cm7_firmware.elf
+flash: File          : cm7_firmware.elf
+flash: Opening and parsing file: cm4_firmware.elf
+flash: File          : cm4_firmware.elf
+flash: Download verified successfully
+TIM3 CR1  @0x40000400 read=0x00000001 want=0x00000001 -> OK
+TIM3 CR2  @0x40000404 read=0x00000020 want=0x00000020 -> OK
+TIM3 SMCR @0x40000408 read=0x00000000 want=0x00000000 -> OK
+TIM3 DIER @0x4000040C read=0x00000000 want=0x00000000 -> OK
+TIM3 PSC  @0x40000428 read=0x00000000 want=0x00000000 -> OK
+TIM3 ARR  @0x4000042C read=0x0000018F want=0x0000018F -> OK
+UDP JSON A (rtt 1.8 ms): {"ch":351272992,"raw":1039,"avg":1089,"min":895,"max":1376,"mv":54,"rate":500000,"seq":12039,"samples":6163968,"tc":6019,"ht":6020,"err":0,"ovr":0,"m4_hb":123}
+UDP JSON B (rtt 1.9 ms): {"ch":351272992,"raw":1086,"avg":1072,"min":895,"max":1386,"mv":53,"rate":500000,"seq":71309,"samples":36510208,"tc":35654,"ht":35655,"err":0,"ovr":0,"m4_hb":730}
+ADC rate = dSamples/dt = (36510208 - 6163968) / 60.002 s = 505750.8 Hz; window [505635, 507635] -> OK
+ovr A=0 B=0 -> OK
+adc_ovr: not in this project's JSON
+err A=0 B=0 -> OK
+AUDIT TIM F4 BOARD VERDICT=PASS

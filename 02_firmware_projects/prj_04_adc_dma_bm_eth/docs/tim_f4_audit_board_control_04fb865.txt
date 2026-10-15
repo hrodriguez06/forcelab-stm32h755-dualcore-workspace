@@ -1,0 +1,24 @@
+=== Auditor, 03_tim F4: same board check on the CONTROL image prj_04 debug built at 04fb865 (implementer's control worktree), same session as tim_f4_audit_board_554fd13.txt ===
+Date: 2026-10-15T09:00:35-06:00  HEAD: 554fd13  project: prj_04_adc_dma_bm_eth
+flash: Probe    : ST-LINK SN 0016000C4142501220353451
+flash: CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,324,028 B)
+flash: CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (2,078,940 B)
+flash: $ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865\02_firmware_projects\prj_04_adc_dma_bm_eth\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865\02_firmware_projects\prj_04_adc_dma_bm_eth\build\debug\CM4\cm4_firmware.elf -v -rst
+flash: Opening and parsing file: cm7_firmware.elf
+flash: File          : cm7_firmware.elf
+flash: Opening and parsing file: cm4_firmware.elf
+flash: File          : cm4_firmware.elf
+flash: Download verified successfully
+TIM3 CR1  @0x40000400 read=0x00000001 want=0x00000001 -> OK
+TIM3 CR2  @0x40000404 read=0x00000020 want=0x00000020 -> OK
+TIM3 SMCR @0x40000408 read=0x00000000 want=0x00000000 -> OK
+TIM3 DIER @0x4000040C read=0x00000000 want=0x00000000 -> OK
+TIM3 PSC  @0x40000428 read=0x00000000 want=0x00000000 -> OK
+TIM3 ARR  @0x4000042C read=0x0000018F want=0x0000018F -> OK
+UDP JSON A (rtt 75.7 ms): {"ch":5,"raw":1088,"avg":1108,"min":904,"max":1384,"mv":55,"rate":500000,"seq":12051,"samples":6170112,"tc":6025,"ht":6026,"err":0,"ovr":0,"adc_ovr":0,"m4_hb":123}
+UDP JSON B (rtt 1.8 ms): {"ch":5,"raw":1081,"avg":1083,"min":913,"max":1358,"mv":54,"rate":500000,"seq":23978,"samples":12276736,"tc":11989,"ht":11989,"err":0,"ovr":0,"adc_ovr":0,"m4_hb":245}
+ADC rate = dSamples/dt = (12276736 - 6170112) / 12.040 s = 507207.7 Hz; window [505635, 507635] -> OK
+ovr A=0 B=0 -> OK
+adc_ovr A=0 B=0 -> OK
+err A=0 B=0 -> OK
+AUDIT TIM F4 BOARD VERDICT=PASS

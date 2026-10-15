@@ -2,7 +2,7 @@
 
 Oct 13, 2026 · @Hector
 
-Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta: sustituir la programación manual y ad-hoc de TIM3 y TIM7 en los proyectos `prj_04_adc_dma_bm_eth` y `prj_03_adc_dma_eth` por los drivers compartidos `tim_bm` y `tim_hal`, y crear la herramienta de verificación `tools/tim_f4_checks.py`.
+Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 3) de esta carpeta: sustituir la programación manual y ad-hoc de TIM3 y TIM7 en los proyectos `prj_04_adc_dma_bm_eth` y `prj_03_adc_dma_eth` por los drivers compartidos `tim_bm` y `tim_hal`, y crear la herramienta de verificación `tools/tim_f4_checks.py`.
 
 Ninguna firma pública en `01_shared_drivers/03_tim/*.h` cambia (API congelada). Otra persona auditará independientemente tu fase y repetirá las pruebas sobre la placa física antes del cierre.
 
