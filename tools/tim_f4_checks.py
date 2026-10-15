@@ -503,6 +503,10 @@ HAL_TIM_CALL_RE = re.compile(
     r"\bHAL_TIM[A-Za-z0-9_]*\s*\("
 )
 
+TIM37_TARGET_RE = re.compile(
+    r"(?:TIM[37]\b|0x0*400(?:UL)?\b|0x40000400(?:UL)?\b|0x0*1400(?:UL)?\b|0x40001400(?:UL)?\b)"
+)
+
 
 def is_allowed_exception_path(file_path_str: str) -> bool:
     norm = Path(file_path_str).as_posix()
@@ -607,7 +611,7 @@ void selftest_reads(void) {
             stmt_buf += " " + line_str
             if ";" in line_str or "}" in line_str:
                 stmt_clean = stmt_buf.strip()
-                is_match = bool(RAW_WRITE_RE.search(stmt_clean) or RAW_RCC_TIM_RE.search(stmt_clean))
+                is_match = bool((RAW_WRITE_RE.search(stmt_clean) and TIM37_TARGET_RE.search(stmt_clean)) or RAW_RCC_TIM_RE.search(stmt_clean))
                 if in_writes_func:
                     if is_match:
                         writes_detected += 1
@@ -701,7 +705,7 @@ def _check_unit_writes(entry: dict, preset: str, project_dir: Path, is_prj03: bo
         if ";" in line or "}" in line or "{" in line:
             stmt_clean = stmt_buf.strip()
             # 1. Match raw writes to TIM registers or RCC manual enable
-            m_write = RAW_WRITE_RE.search(stmt_clean)
+            m_write = RAW_WRITE_RE.search(stmt_clean) and TIM37_TARGET_RE.search(stmt_clean)
             m_rcc = RAW_RCC_TIM_RE.search(stmt_clean)
             if m_write or m_rcc:
                 unit_findings.append({
