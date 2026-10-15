@@ -1,0 +1,150 @@
+================================================================================
+STM32H755 TIM F4 Verification Checks for prj_03 (T1 to T8)
+================================================================================
+[host] argv: tools/tim_f4_checks.py --project prj_03 --test t5 --preset release --output 02_firmware_projects/prj_03_adc_dma_eth/docs/tim_f4_audit3_t5_release_1caa7c3.txt
+[host] timestamp: 2026-10-15 12:02:48
+[host] project: prj_03
+[host] git rev: 1caa7c3 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865 (rev 04fb865, clean)
+[host] output capture: 02_firmware_projects\prj_03_adc_dma_eth\docs\tim_f4_audit3_t5_release_1caa7c3.txt
+================================================================================
+
+--- Running T5 (Network & Production Regression for prj_03 [release]) ---
+--- Flashing release from prj_03_adc_dma_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\tools\flash.py --preset=release --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : release
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\release\CM7\cm7_firmware.elf  (1,182,300 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\release\CM4\cm4_firmware.elf  (527,852 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\release\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\release\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 83.63 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.205
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 20.20 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.948
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.069
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+  [T5] Waiting 5.0s for Ethernet PHY auto-negotiation and lwIP stack init...
+  [T5] Running network checks: C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\tools\net_check.py --host 192.168.1.150
+Board    : 192.168.1.150
+UDP echo : port 7
+
+  OK    ICMP  4/4 replies
+  OK    UDP     1 B  rtt= 1.64 ms
+  OK    UDP    25 B  rtt= 1.23 ms
+  OK    UDP   512 B  rtt=14.89 ms
+  OK    UDP  1024 B  rtt= 1.99 ms
+  OK    UDP  1472 B  rtt= 1.57 ms
+  OK    burst  100/100 returned  (0.1 s)
+
+PASS  3/3 checks
+Now confirm the board agrees: rx_nobuf, tx_nobuf and dma_err
+should all still read 0 in  py tools/monitor.py --timeout 15
+
+  [T5 Monitor Output (15.0s)]:
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+[ipc] m7=20 m4=100  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=110 tx=111 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=24 m4=120  (CPU2 alive)
+[ipc] m7=28 m4=140  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=110 tx=111 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=32 m4=160  (CPU2 alive)
+[ipc] m7=36 m4=180  (CPU2 alive)
+[ipc] m7=40 m4=200  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=110 tx=111 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=44 m4=220  (CPU2 alive)
+[ipc] m7=48 m4=240  (CPU2 alive)
+
+  [T5 Last [net] line]: [net] link=100 Mbps full duplex ip=192.168.1.150 rx=110 tx=111 rx_nobuf=0 tx_nobuf=0 dma_err=0
+
+--- Results for T5 ---
+  [PASS] T5_flash_release_verified: Flashed verified release image for prj_03
+         Detail: Download verified successfully
+  [PASS] T5_network_integrity_release: net_check.py produces PASS 3/3 checks with 0 packet loss on release
+         Detail: PASS 3/3 checks verified
+  [PASS] T5_net_counters_zero_release: [net] mandatory counters rx_nobuf=0, tx_nobuf=0, dma_err=0 on release
+         Detail: All counters strictly present and 0
+Verdict T5: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================

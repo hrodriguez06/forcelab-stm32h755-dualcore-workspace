@@ -1,0 +1,978 @@
+================================================================================
+STM32H755 TIM F4 Verification Checks for prj_04 (T1 to T8)
+================================================================================
+[host] argv: tools/tim_f4_checks.py --project prj_04 --test t8 --output 02_firmware_projects/prj_04_adc_dma_bm_eth/docs/tim_f4_audit3_t8_1caa7c3.txt
+[host] timestamp: 2026-10-15 12:10:34
+[host] project: prj_04
+[host] git rev: 1caa7c3 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865 (rev 04fb865, clean)
+[host] output capture: 02_firmware_projects\prj_04_adc_dma_bm_eth\docs\tim_f4_audit3_t8_1caa7c3.txt
+================================================================================
+
+--- Running T8 (Hardware Selftests on Board & Control Equivalence) ---
+
+=======================================================
+  [T8] Running migrated prj_04_selftest on target...
+=======================================================
+
+  [T8] Starting background monitor before flash (Migrated prj_04_selftest) [G-S5 exception]...
+--- Flashing selftest from prj_04_adc_dma_bm_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\tools\flash.py --preset=selftest --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : selftest
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\selftest\CM7\cm7_firmware.elf  (3,486,528 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\selftest\CM4\cm4_firmware.elf  (2,231,064 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\build\selftest\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\build\selftest\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 105.25 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.292
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 22.14 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.967
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.078
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+  --- Monitor Full Console Log (Migrated prj_04_selftest) ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 1caa7c3 ===
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[net] starting TCP/IP stack
+[net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[net] mac=02:00:00:00:00:01 phy_addr=0
+[phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[phy] partner advertised:
+[net] udp echo listening on port 7
+[adc_srv] listening on UDP port 5001
+[m7_dma_test] rev=1caa7c3
+[m7_dma_test] T8_DCACHE_COHERENCY: PASS
+[m7_dma_test] T9_HAL_MEMCOPY_IT: PASS
+[m7_dma_test] T10_USART3_DMA: PASS (TRBUFF verified)
+[m7_dma_test] T10_USART3_DMA: PASS
+[m7_dma_test] T11_BDMA_SRAM4: PASS
+[m7_dma_test] T13 direct mode HALFWORD -> USART3 TDR
+[m7_dma_test] T13 direct mode WORD -> USART3 TDR
+[m7_dma_test] T13 combos valid=3 ok=3 invalid=6 rej=6 mismatch=0
+[m7_dma_test] T13_HAL_DIRECT_SIZES: PASS
+[m7_dma_test] OVERALL: PASS (T8-T11, T13)
+[ipc] m7=1 m4=0  (CPU2 starting)
+[phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[net] link up: 100 Mbps full duplex
+[ipc] m7=4 m4=0  (CPU2 NOT RESPONDING)
+[ipc] m7=8 m4=0  (CPU2 NOT RESPONDING)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=3 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_dma_test] rev=1caa7c3
+[ipc] m7=13 m4=10  (CPU2 alive)
+[m4_dma_test] T1_M2M=PASS T2_REJ=PASS T3_UART=PASS
+[ipc] m7=17 m4=30  (CPU2 alive)
+[m4_dma_test] T1 combos valid=23 ok=23 invalid=25 rej=25 mismatch=0
+[ipc] m7=21 m4=50  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=6 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_dma_test] T4_TIM7=PASS (tc=9,ht=10) T5_DBM=PASS
+[ipc] m7=25 m4=70  (CPU2 alive)
+[m4_dma_test] T6_REARM=PASS T7_ITCM=PASS (te=1)
+[ipc] m7=29 m4=90  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=6 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_dma_test] OVERALL=PASS (mask=0xFE/0xFE)
+[ipc] m7=33 m4=110  (CPU2 alive)
+  --- End Monitor Log (Migrated prj_04_selftest) ---
+
+=======================================================
+  [T8] Running control prj_04_selftest on target from stm32h755_control_04fb865...
+=======================================================
+
+  [T8] Starting background monitor before flash (Control prj_04_selftest) [G-S5 exception]...
+--- Flashing selftest from prj_04_adc_dma_bm_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865\02_firmware_projects\prj_04_adc_dma_bm_eth\tools\flash.py --preset=selftest --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : selftest
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\selftest\CM7\cm7_firmware.elf  (3,481,808 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\selftest\CM4\cm4_firmware.elf  (2,167,844 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865\02_firmware_projects\prj_04_adc_dma_bm_eth\build\selftest\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865\02_firmware_projects\prj_04_adc_dma_bm_eth\build\selftest\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 105.27 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.290
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 19.50 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.941
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.053
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+  --- Monitor Full Console Log (Control prj_04_selftest) ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 04fb865 ===
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[net] starting TCP/IP stack
+[net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[net] mac=02:00:00:00:00:01 phy_addr=0
+[phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[phy] partner advertised:
+[net] udp echo listening on port 7
+[adc_srv] listening on UDP port 5001
+[m7_dma_test] rev=04fb865
+[m7_dma_test] T8_DCACHE_COHERENCY: PASS
+[m7_dma_test] T9_HAL_MEMCOPY_IT: PASS
+[m7_dma_test] T10_USART3_DMA: PASS (TRBUFF verified)
+[m7_dma_test] T10_USART3_DMA: PASS
+[m7_dma_test] T11_BDMA_SRAM4: PASS
+[m7_dma_test] T13 direct mode HALFWORD -> USART3 TDR
+[m7_dma_test] T13 direct mode WORD -> USART3 TDR
+[m7_dma_test] T13 combos valid=3 ok=3 invalid=6 rej=6 mismatch=0
+[m7_dma_test] T13_HAL_DIRECT_SIZES: PASS
+[m7_dma_test] OVERALL: PASS (T8-T11, T13)
+[ipc] m7=1 m4=0  (CPU2 starting)
+[phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[net] link up: 100 Mbps full duplex
+[ipc] m7=4 m4=0  (CPU2 NOT RESPONDING)
+[ipc] m7=8 m4=0  (CPU2 NOT RESPONDING)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_dma_test] rev=04fb865
+[ipc] m7=13 m4=10  (CPU2 alive)
+[m4_dma_test] T1_M2M=PASS T2_REJ=PASS T3_UART=PASS
+[ipc] m7=17 m4=30  (CPU2 alive)
+[m4_dma_test] T1 combos valid=23 ok=23 invalid=25 rej=25 mismatch=0
+[ipc] m7=21 m4=50  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_dma_test] T4_TIM7=PASS (tc=9,ht=10) T5_DBM=PASS
+[ipc] m7=25 m4=70  (CPU2 alive)
+[m4_dma_test] T6_REARM=PASS T7_ITCM=PASS (te=1)
+[ipc] m7=29 m4=90  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_dma_test] OVERALL=PASS (mask=0xFE/0xFE)
+[ipc] m7=33 m4=110  (CPU2 alive)
+  --- End Monitor Log (Control prj_04_selftest) ---
+
+=======================================================
+  [T8] Running migrated prj_04_selftest-adc on target...
+=======================================================
+
+  [T8] Starting background monitor before flash (Migrated prj_04_selftest-adc) [G-S5 exception]...
+--- Flashing selftest-adc from prj_04_adc_dma_bm_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\tools\flash.py --preset=selftest-adc --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : selftest-adc
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\selftest-adc\CM7\cm7_firmware.elf  (3,456,808 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\selftest-adc\CM4\cm4_firmware.elf  (2,243,364 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\build\selftest-adc\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\build\selftest-adc\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 89.89 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.220
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 23.36 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.953
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.080
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+  --- Monitor Full Console Log (Migrated prj_04_selftest-adc) ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 1caa7c3 ===
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[net] starting TCP/IP stack
+[net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[net] mac=02:00:00:00:00:01 phy_addr=0
+[phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[phy] partner advertised:
+[net] udp echo listening on port 7
+[adc_srv] listening on UDP port 5001
+[cm7_dcache_test] PASS: 32B alignment=1, dma_dcache_verified=1 (BM: dirty=39321->2048, LL: dirty=34952->2048)
+[m4_adc_test] ADC:B=1 L=1 Rg=1 U=1 C=1 V=1 T=1 Rs=1 O=1 A=1 Vd=3300
+[ipc] m7=1 m4=0  (CPU2 starting)
+[phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[net] link up: 100 Mbps full duplex
+[ipc] m7=4 m4=20  (CPU2 alive)
+[m4_adc_test] HW T2 BM:1 LL:1 r8=7/7 v16=24329 v8=95/95
+[ipc] m7=9 m4=40  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_adc_test] HW T3 BM:1 ht=488.0 tc=487.0 err=0 ovr=0 hovr=0
+[ipc] m7=13 m4=60  (CPU2 alive)
+[m4_adc_test] HW T3 LL:1 ht=488.0 tc=488.0 err=0 ovr=0 hovr=0
+[ipc] m7=17 m4=80  (CPU2 alive)
+[m4_adc_test] HW T3b BM:1 LL:1 vref=24342/24360 ts=12601/12629
+[ipc] m7=21 m4=100  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_adc_test] HW T4 BM:1 LL:1 ovr=2483/2482 dma=0/0
+[ipc] m7=25 m4=120  (CPU2 alive)
+[m4_adc_test] HW T6 BM:1 LL:1 rej=1/1 ok=1/1 adc2=1/1
+[ipc] m7=29 m4=140  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_adc_test] HW G5 BM_LL:1 match=1 diff=0
+[ipc] m7=33 m4=160  (CPU2 alive)
+[m4_adc_test] HW RESULT PASS mask=2047/2047
+[ipc] m7=37 m4=180  (CPU2 alive)
+  --- End Monitor Log (Migrated prj_04_selftest-adc) ---
+
+=======================================================
+  [T8] Running control prj_04_selftest-adc on target from stm32h755_control_04fb865...
+=======================================================
+
+  [T8] Starting background monitor before flash (Control prj_04_selftest-adc) [G-S5 exception]...
+--- Flashing selftest-adc from prj_04_adc_dma_bm_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865\02_firmware_projects\prj_04_adc_dma_bm_eth\tools\flash.py --preset=selftest-adc --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : selftest-adc
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\selftest-adc\CM7\cm7_firmware.elf  (3,452,340 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\selftest-adc\CM4\cm4_firmware.elf  (2,186,008 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865\02_firmware_projects\prj_04_adc_dma_bm_eth\build\selftest-adc\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865\02_firmware_projects\prj_04_adc_dma_bm_eth\build\selftest-adc\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 89.90 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.236
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 21.89 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.956
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.075
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+  --- Monitor Full Console Log (Control prj_04_selftest-adc) ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) - Rev 04fb865 ===
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[net] starting TCP/IP stack
+[net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[net] mac=02:00:00:00:00:01 phy_addr=0
+[phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[phy] partner advertised:
+[net] udp echo listening on port 7
+[adc_srv] listening on UDP port 5001
+[cm7_dcache_test] PASS: 32B alignment=1, dma_dcache_verified=1 (BM: dirty=39321->2048, LL: dirty=34952->2048)
+[m4_adc_test] ADC:B=1 L=1 Rg=1 U=1 C=1 V=1 T=1 Rs=1 O=1 A=1 Vd=3300
+[ipc] m7=1 m4=0  (CPU2 starting)
+[phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[net] link up: 100 Mbps full duplex
+[ipc] m7=4 m4=20  (CPU2 alive)
+[m4_adc_test] HW T2 BM:1 LL:1 r8=7/7 v16=24329 v8=95/95
+[ipc] m7=9 m4=40  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_adc_test] HW T3 BM:1 ht=488.0 tc=487.0 err=0 ovr=0 hovr=0
+[ipc] m7=13 m4=60  (CPU2 alive)
+[m4_adc_test] HW T3 LL:1 ht=488.0 tc=488.0 err=0 ovr=0 hovr=0
+[ipc] m7=17 m4=80  (CPU2 alive)
+[m4_adc_test] HW T3b BM:1 LL:1 vref=24340/24367 ts=12603/12627
+[ipc] m7=21 m4=100  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_adc_test] HW T4 BM:1 LL:1 ovr=2482/2481 dma=0/0
+[ipc] m7=25 m4=120  (CPU2 alive)
+[m4_adc_test] HW T6 BM:1 LL:1 rej=1/1 ok=1/1 adc2=1/1
+[ipc] m7=29 m4=140  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=1 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0 acl_drop=0
+[m4_adc_test] HW G5 BM_LL:1 match=1 diff=0
+[ipc] m7=33 m4=160  (CPU2 alive)
+[m4_adc_test] HW RESULT PASS mask=2047/2047
+[ipc] m7=37 m4=180  (CPU2 alive)
+  --- End Monitor Log (Control prj_04_selftest-adc) ---
+
+=======================================================
+  [T8] Running migrated prj_03_selftest on target...
+=======================================================
+
+  [T8] Starting background monitor before flash (Migrated prj_03_selftest) [G-S5 exception]...
+--- Flashing selftest from prj_03_adc_dma_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\tools\flash.py --preset=selftest --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : selftest
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\selftest\CM7\cm7_firmware.elf  (3,457,176 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\selftest\CM4\cm4_firmware.elf  (2,441,500 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\selftest\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\selftest\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 88.59 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.206
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 31.49 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.998
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.114
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+WARNING: build\selftest\CM7\cm7_firmware.elf is older than the newest source file.
+  Build first:  cmake --build --preset selftest
+
+  --- Monitor Full Console Log (Migrated prj_03_selftest) ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[net] starting TCP/IP stack
+[net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[net] mac=02:00:00:00:00:01 phy_addr=0
+[phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[phy] partner advertised:
+[net] udp echo listening on port 7
+[adc_srv] listening on UDP port 5001
+[cm7_dcache_test] PASS: 32B alignment=1, dma_dcache_verified=1 (dirty_cpu=39321, stats_dma=2048)
+[m4_adc_test] HAL:I=1 C=1 U=1 J=1 V=1 T=1 R=1 O=1 A=1 Vd=3302
+[ipc] m7=1 m4=0  (CPU2 starting)
+[phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[net] link up: 100 Mbps full duplex
+[m4_adc_test] HW T2 HAL:1 r8=7 v16=24337 v12=1521 v8=95
+[ipc] m7=5 m4=20  (CPU2 alive)
+[m4_adc_test] HW T3 HAL:1 ht=488.0 tc=487.0 err=0 ovr=0 hovr=0
+[ipc] m7=9 m4=40  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[m4_adc_test] HW T3b HAL:1 vref=24330 ts=12595 halves=31
+[ipc] m7=13 m4=60  (CPU2 alive)
+[m4_adc_test] HW T4 HAL:1 ovr=2480 dma=0
+[ipc] m7=17 m4=80  (CPU2 alive)
+[m4_adc_test] HW T6 HAL:1 rej=1 ok=1 adc2=1 boost=1 need=1
+[ipc] m7=21 m4=100  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[m4_adc_test] HW RESULT PASS mask=31/31
+[ipc] m7=25 m4=120  (CPU2 alive)
+  --- End Monitor Log (Migrated prj_03_selftest) ---
+
+=======================================================
+  [T8] Running control prj_03_selftest on target from stm32h755_control_04fb865...
+=======================================================
+
+  [T8] Starting background monitor before flash (Control prj_03_selftest) [G-S5 exception]...
+--- Flashing selftest from prj_03_adc_dma_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865\02_firmware_projects\prj_03_adc_dma_eth\tools\flash.py --preset=selftest --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : selftest
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\selftest\CM7\cm7_firmware.elf  (3,453,416 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\selftest\CM4\cm4_firmware.elf  (2,359,672 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865\02_firmware_projects\prj_03_adc_dma_eth\build\selftest\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865\02_firmware_projects\prj_03_adc_dma_eth\build\selftest\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 88.61 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.232
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 29.38 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.986
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.108
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+  --- Monitor Full Console Log (Control prj_03_selftest) ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+
+=== STM32H755ZI dual-core Ethernet / lwIP - CPU1 (Cortex-M7) ===
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[net] starting TCP/IP stack
+[net] interface up, ip=192.168.1.150 netmask=255.255.255.0 gw=192.168.1.1
+[net] mac=02:00:00:00:00:01 phy_addr=0
+[phy] bcr=1000 bsr=7809 anar=01E1 anlpar=0001 physcsr=0040
+[phy] partner advertised:
+[net] udp echo listening on port 7
+[adc_srv] listening on UDP port 5001
+[cm7_dcache_test] PASS: 32B alignment=1, dma_dcache_verified=1 (dirty_cpu=39321, stats_dma=2048)
+[m4_adc_test] HAL:I=1 C=1 U=1 J=1 V=1 T=1 R=1 O=1 A=1 Vd=3302
+[ipc] m7=1 m4=0  (CPU2 starting)
+[phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[net] link up: 100 Mbps full duplex
+[m4_adc_test] HW T2 HAL:1 r8=7 v16=24332 v12=1521 v8=95
+[ipc] m7=5 m4=20  (CPU2 alive)
+[m4_adc_test] HW T3 HAL:1 ht=488.0 tc=487.0 err=0 ovr=0 hovr=0
+[ipc] m7=9 m4=40  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[m4_adc_test] HW T3b HAL:1 vref=24342 ts=12589 halves=31
+[ipc] m7=13 m4=60  (CPU2 alive)
+[m4_adc_test] HW T4 HAL:1 ovr=2479 dma=0
+[ipc] m7=17 m4=80  (CPU2 alive)
+[m4_adc_test] HW T6 HAL:1 rej=1 ok=1 adc2=1 boost=1 need=1
+[ipc] m7=21 m4=100  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[m4_adc_test] HW RESULT PASS mask=31/31
+[ipc] m7=25 m4=120  (CPU2 alive)
+  --- End Monitor Log (Control prj_03_selftest) ---
+
+  [G-S1] Restoring board to production prj_03 debug image...
+--- Flashing debug from prj_03_adc_dma_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\tools\flash.py --preset=debug --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : debug
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,324,940 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (2,388,912 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 87.74 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.214
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 22.57 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.955
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.083
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+
+--- Results for T8 ---
+  [PASS] T8_gs1_pin_safety_precheck: Verify G-S1 pin safety rules before flashing hardware selftest images
+         Detail: G-S1 pin safety verified manually per IMPLEMENTATION_PLAN.md specification: TIM3/TIM7 operate entirely internal (TRGO to ADC / TIM7 DMA request 70), ADC analog on PB1, USART2 DMA T3 on PD5/PD6 (dedicated jumper cable); zero conflict with protected bench lines (AD2 PE2-PE15/PA8, J1 PA5/PA6/PB4/PB5, I2C PB8/PB9, PF14/PF15).
+  [PASS] T8_migrated_prj_04_selftest_exact_verdicts: Migrated prj_04_selftest produces required exact verdict lines and zero FAIL lines
+         Detail: Banner seen: True, Matched: 2/2, Has FAIL line: False
+  [PASS] T8_control_prj_04_selftest_exact_verdicts: Control prj_04_selftest produces required exact verdict lines and zero FAIL lines
+         Detail: Banner seen: True, Matched: 2/2, Has FAIL line: False
+  [PASS] T8_equivalence_prj_04_selftest: Equivalence: migrated and control prj_04_selftest both PASS with exact required verdicts
+         Detail: Migrated=True, Control=True
+  [PASS] T8_migrated_prj_04_selftest-adc_exact_verdicts: Migrated prj_04_selftest-adc produces required exact verdict lines and zero FAIL lines
+         Detail: Banner seen: True, Matched: 1/1, Has FAIL line: False
+  [PASS] T8_control_prj_04_selftest-adc_exact_verdicts: Control prj_04_selftest-adc produces required exact verdict lines and zero FAIL lines
+         Detail: Banner seen: True, Matched: 1/1, Has FAIL line: False
+  [PASS] T8_equivalence_prj_04_selftest-adc: Equivalence: migrated and control prj_04_selftest-adc both PASS with exact required verdicts
+         Detail: Migrated=True, Control=True
+  [PASS] T8_migrated_prj_03_selftest_exact_verdicts: Migrated prj_03_selftest produces required exact verdict lines and zero FAIL lines
+         Detail: Banner seen: True, Matched: 1/1, Has FAIL line: False
+  [PASS] T8_control_prj_03_selftest_exact_verdicts: Control prj_03_selftest produces required exact verdict lines and zero FAIL lines
+         Detail: Banner seen: True, Matched: 1/1, Has FAIL line: False
+  [PASS] T8_equivalence_prj_03_selftest: Equivalence: migrated and control prj_03_selftest both PASS with exact required verdicts
+         Detail: Migrated=True, Control=True
+  [PASS] T8_board_restoration_prj_03_debug_verified: Restore board to prj_03 debug image after selftests
+         Detail: Restoration flash verified successfully
+Verdict T8: PASS
+
+================================================================================
+OVERALL SUMMARY: ALL TESTS PASSED
+================================================================================

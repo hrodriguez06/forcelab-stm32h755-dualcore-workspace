@@ -95,3 +95,67 @@ La parte de la placa sigue siendo segura.
 - **Por qué no pasa:** por N1, que es un error mío del plan e impide cualquier flasheo; por la equivalencia de T4, que falta; y por M1, M3 y M5.
 - **El firmware sigue siendo correcto:** mi evidencia independiente de la primera ronda vale, porque `1b01e9a` solo cambia comentarios en producción y el manejo de errores en los selftests.
 - **Siguiente ronda:** corregir N1, B1–B3, M1–M3, M5, m2, k1 y k2, y repetir T1, T2 y T7 sin placa.
+
+## F1, corrección 2 (`1caa7c3`, herramienta en `1f8876b`)
+
+Entrega: `bc7dfdd..1caa7c3` (`2936c1e` firmware, `1f8876b` herramienta, `57744b5` capturas, `1caa7c3` informe).
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| Revisión del firmware (`2936c1e`) | **k1 cerrado:** `Tim3_Prepare` habilita el reloj antes de `TIM_BM_Stop` en los dos proyectos. **k2 cerrado:** las citas de TIM3 son RM0399 §41 (§41.4.2 para TIMx_CR2) |
+| Revisión de la herramienta | Un subagente la revisó línea a línea; lo de abajo lo comprobé yo en el código. Cerrados: N1, B1 (T8: límite propio, banner de CM7, parada ante un fallo real de `flash.py`), B3 (T5), M1 (T2b con CM7 y escrituras vía `Instance`/`__HAL_TIM_*`), M3 y la equivalencia de T4 |
+| Sesión de placa, mía, con la herramienta del implementador | HEAD `1caa7c3`, imágenes recompiladas desde ese commit, SN `0016000C4142501220353451`. Por proyecto (`prj_04` y después `prj_03`): T3 `--flash`, T3 `--control`, T4 `--flash`, T5 `debug` y `release`, T6a `--flash`; al final, T8 desde `prj_04`. Capturas `tim_f4_audit3_*_1caa7c3.txt` en `docs/` de cada proyecto (13), cada una de una sola ejecución, con el flasheo verificado y la ruta de la imagen en la propia captura |
+
+### Resultados en placa
+
+| Prueba | `prj_04` | `prj_03` |
+| --- | --- | --- |
+| T3, migrada | PASS: CR1 0x1, CR2 0x20, SMCR 0, DIER 0, PSC 0, ARR 0x18F; la tabla alterada (ARR 0xFF) falla | PASS, mismos seis valores |
+| T3, control (`stm32h755_control_04fb865`) | PASS, mismos seis valores | PASS, mismos seis valores |
+| T4, 60 s: migrada → control → restauración de la migrada | 505 855,4 frente a 505 842,5 Hz: Δ 0,0025 %. Oráculo de la migrada: 49 923 muestras por latido. `ovr`, `err` y `adc_ovr` a 0 | 505 638,3 frente a 505 476,9 Hz: Δ 0,032 %. Oráculo de la migrada: 50 066 muestras por latido. `ovr` y `err` a 0 |
+| T5, `debug` y `release` | PASS 3/3; `[net]` con `rx_nobuf`, `tx_nobuf`, `dma_err` y `acl_drop` a 0 | PASS 3/3; `rx_nobuf`, `tx_nobuf` y `dma_err` a 0 |
+| T6a, 20 resets por SWD | **FAIL 11/20** (ver abajo) | **FAIL 14/20** (ver abajo) |
+| T8 (`--project prj_04`, cubre los tres selftests) | `selftest`: `[m7_dma_test] OVERALL: PASS (T8-T11, T13)` y `[m4_dma_test] OVERALL=PASS (mask=0xFE/0xFE)`, con `T4_TIM7=PASS (tc=9,ht=10)`, en la migrada y en el control. `selftest-adc`: `HW RESULT PASS mask=2047/2047`, con `HW T4 BM:1 LL:1`, en las dos | `selftest`: `HW RESULT PASS mask=31/31`, con `HW T4 HAL:1`, en la migrada y en el control. La placa queda en `prj_03` `debug`, flasheo verificado |
+
+El banner de cada arranque de T8 dice `Rev 1caa7c3` en la migrada. Las seis imágenes de T8 se flashearon con el monitor ya abierto (excepción de G-S5), y el único reset fue el del flasheo.
+
+### T6a: falla la herramienta, no el firmware
+
+En los 40 ciclos (20 por proyecto):
+- T3 da los seis registros exactos;
+- la tasa está entre 505 580 y 506 077 Hz;
+- `ovr`, `err` y `adc_ovr` valen 0.
+
+Todos los ciclos que fallan, fallan en el oráculo de `m4_hb`:
+- T6a llama a T4 con una ventana de 10,5 s, y en ella `Δm4_hb` vale 106 o 107;
+- un latido es el 0,94 % del cociente, más que la tolerancia de ±0,5 %;
+- con 107 latidos el cociente sale entre 49 635 y 49 678, y en `prj_04`, ciclo 18 (Δt 10,539 s, 106 latidos), sale 50 292.
+
+En los 40 ciclos, 50 000 cae dentro de [Δ`samples`/(Δ`m4_hb`+1), Δ`samples`/(Δ`m4_hb`−1)], que es lo que permite la cuantización.
+
+El veredicto de T6a sigue siendo FAIL y cuenta: la prueba, tal como está, no puede pasar de forma fiable. Las causas son dos:
+- **errata mía del plan:** no decía qué ventana usa T4 dentro de T6a;
+- **la herramienta:** acortó la ventana sin adaptar el oráculo.
+
+La revisión 5 del plan alinea A y B a un incremento de `m4_hb`. Repetiré T6a con la herramienta corregida.
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| R1 | Bloqueante (errata del plan, del auditor, y herramienta) | T6a: oráculo de `m4_hb` sin resolución en una ventana de 10,5 s (arriba) | Plan revisión 5: A y B alineados a un incremento de `m4_hb`, tolerancia de ±0,5 % sin cambios, controles negativos con los datos medidos del ciclo |
+| B2 | Mayor (parcial) | Controles negativos de T4 que no pueden fallar:<br>• el de la tasa compara `rate_ctrl * 1.01` con `rate_ctrl` (siempre un 1 %, l. 1272-1283);<br>• el del oráculo compara el literal 40 000 con el intervalo (l. 1289-1298).<br>Ninguno pasa por la función que decide el veredicto real | Una función de equivalencia y otra de oráculo, usadas por la comprobación real y por los controles negativos con los datos medidos (`rate_mig * 1.01` frente a `rate_ctrl`; Δ`samples` × 0,8 / Δ`m4_hb`) |
+| B4 | Mayor | T4:<br>• la imagen de control solo comprueba contadores, sin oráculo de `m4_hb` ni cordura de la tasa;<br>• sin `--flash`, mide como "migrada" lo que haya en la placa, y después flashea el control y "restaura";<br>• el resultado del flasheo de restauración se ignora (l. 1287) | Oráculo y cordura también en el control; T4 con control flashea siempre la migrada primero; la restauración es un caso que puede fallar |
+| M2 | Mayor (no cerrado) | `T8_gs1_pin_safety_precheck` es un `[PASS]` constante ("verified manually"): no comprueba nada y suma un PASS al veredicto | Quitarlo de los casos; una nota informativa que no cuente |
+| M5 | Mayor (parcial) | El informe afirma cosas sin respaldo:<br>• T8 descarta lo anterior al banner "`CM7 Booting`": el código busca `=== STM32H755` o `(Cortex-M7)`;<br>• T7 dice `prj_01` con "0 advertencias": la herramienta solo mira el código de salida (l. 1526);<br>• el estado de T3–T8 sigue "NO VERIFICADO" sin citar las capturas del auditor | Corregir. Los resultados de placa se citan de mis capturas `tim_f4_audit3_*_1caa7c3.txt` (y de T6a cuando la repita), como medidos por el auditor |
+| m2 | Menor | • `--test all` recompila todo dentro de una sesión de placa;<br>• T5 llama a `monitor.py` sin límite de tiempo propio;<br>• el `--help` describe la revisión 3 del plan: T4 sin equivalencia, "-Werror" en todo y "verified 2/2 cores" en T5 (l. 1-32) | Corregir |
+| k3 | Observación fuera de F4 | En `prj_03`, la respuesta JSON da `"ch": 351272992` (0x14F00020, la constante HAL `ADC_CHANNEL_5`, no el número de canal), en la migrada, en el control y en mis capturas anteriores. No viene de F4 | Tarea aparte; no bloquea F4 |
+
+### Estado
+
+**F1 no pasa todavía.**
+- **El firmware está verificado en placa:** T3, T4, T5 y T8 pasan en los dos proyectos, con el control de `04fb865` en la misma sesión. Los datos de T6a muestran 40 arranques sanos.
+- **Por qué no pasa:** el veredicto de T6a es FAIL (R1), y quedan B2, B4, M2, M5 y m2.
+- **Siguiente ronda:** corregir R1, B2, B4, M2, M5 y m2, y repetir T1, T2 y T7 sin placa. Después repetiré T4 y T6a en los dos proyectos.

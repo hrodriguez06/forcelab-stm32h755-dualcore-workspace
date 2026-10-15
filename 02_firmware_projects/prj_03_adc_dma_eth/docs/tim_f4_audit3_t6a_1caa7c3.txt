@@ -1,0 +1,553 @@
+================================================================================
+STM32H755 TIM F4 Verification Checks for prj_03 (T1 to T8)
+================================================================================
+[host] argv: tools/tim_f4_checks.py --project prj_03 --test t6a --flash --output 02_firmware_projects/prj_03_adc_dma_eth/docs/tim_f4_audit3_t6a_1caa7c3.txt
+[host] timestamp: 2026-10-15 12:03:17
+[host] project: prj_03
+[host] git rev: 1caa7c3 (tree clean)
+[host] ST-LINK SN: 0016000C4142501220353451
+[host] control dir: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_04fb865 (rev 04fb865, clean)
+[host] output capture: 02_firmware_projects\prj_03_adc_dma_eth\docs\tim_f4_audit3_t6a_1caa7c3.txt
+================================================================================
+
+--- Running T6a (20 Repeated Warm Resets over SWD for prj_03) ---
+--- Flashing debug from prj_03_adc_dma_eth (C:\Users\hrodriguez\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\tools\flash.py --preset=debug --sn=0016000C4142501220353451 --yes) ---
+
+Target   : STM32H755ZI / Nucleo-H755ZI-Q
+Backend  : cubeprog  (connect mode UR)
+Preset   : debug
+Probe    : ST-LINK SN 0016000C4142501220353451
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,324,940 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (2,388,912 B)
+
+$ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_03_adc_dma_eth\build\debug\CM4\cm4_firmware.elf -v -rst
+
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+ST-LINK SN  : 0016000C4142501220353451
+ST-LINK FW  : V3J17M11
+Board       : NUCLEO-H755ZI-Q
+Voltage     : 3.27V
+SWD freq    : 8000 KHz
+Connect mode: Under Reset
+Reset mode  : Hardware reset
+Device ID   : 0x450
+Revision ID : Rev V
+Device name : STM32H7xx
+NVM size    : 2 MBytes
+Device type : MCU
+Device CPU  : Cortex-M7/M4
+BL Version  : 0x92
+
+
+
+Opening and parsing file: cm7_firmware.elf
+
+
+Memory Programming ...
+  File          : cm7_firmware.elf
+  Size          : 87.74 KB 
+  Address       : 0x08000000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 0
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:01.221
+
+
+Opening and parsing file: cm4_firmware.elf
+
+
+Memory Programming ...
+  File          : cm4_firmware.elf
+  Size          : 22.57 KB 
+  Address       : 0x08100000
+
+
+Erasing memory corresponding to segment 0:
+Erasing internal memory sector 8
+Download in Progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+File download complete
+Time elapsed during download operation: 00:00:00.961
+
+
+
+Verifying...
+
+
+Read progress:
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+
+Time elapsed during verifying operation: 00:00:00.069
+
+
+Download verified successfully
+
+
+
+MCU Reset
+
+Software reset is performed
+
+Done.
+
+
+  [T6a Cycle 01/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 01] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 4.2 ms, t=17406.2276)]: {"ch": 351272992, "raw": 1079, "avg": 1084, "min": 907, "max": 1352, "mv": 54, "rate": 500000, "seq": 10836, "samples": 5548032, "tc": 5418, "ht": 5418, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.6 ms, t=17416.7312)]: {"ch": 351272992, "raw": 1140, "avg": 1076, "min": 909, "max": 1332, "mv": 54, "rate": 500000, "seq": 21216, "samples": 10862592, "tc": 10608, "ht": 10608, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 01] PASS (T3 and T4 passed)
+
+  [T6a Cycle 02/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 02] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 3.0 ms, t=17427.9738)]: {"ch": 351272992, "raw": 1309, "avg": 1293, "min": 1128, "max": 1481, "mv": 65, "rate": 500000, "seq": 10907, "samples": 5584384, "tc": 5453, "ht": 5454, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.7 ms, t=17438.4771)]: {"ch": 351272992, "raw": 1427, "avg": 1278, "min": 943, "max": 1558, "mv": 64, "rate": 500000, "seq": 21284, "samples": 10897408, "tc": 10642, "ht": 10642, "err": 0, "ovr": 0, "m4_hb": 218}
+  [T6a Cycle 02] FAIL: T3=True, T4=False
+
+  [T6a Cycle 03/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 03] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.9 ms, t=17449.7027)]: {"ch": 351272992, "raw": 1251, "avg": 1283, "min": 1087, "max": 1424, "mv": 64, "rate": 500000, "seq": 10914, "samples": 5587968, "tc": 5457, "ht": 5457, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.6 ms, t=17460.2058)]: {"ch": 351272992, "raw": 1394, "avg": 1322, "min": 996, "max": 1642, "mv": 66, "rate": 500000, "seq": 21293, "samples": 10902016, "tc": 10646, "ht": 10647, "err": 0, "ovr": 0, "m4_hb": 218}
+  [T6a Cycle 03] FAIL: T3=True, T4=False
+
+  [T6a Cycle 04/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 04] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 3.3 ms, t=17471.3806)]: {"ch": 351272992, "raw": 964, "avg": 1063, "min": 908, "max": 1232, "mv": 53, "rate": 500000, "seq": 10857, "samples": 5558784, "tc": 5428, "ht": 5429, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.4 ms, t=17481.8837)]: {"ch": 351272992, "raw": 1039, "avg": 1165, "min": 929, "max": 1380, "mv": 58, "rate": 500000, "seq": 21234, "samples": 10871808, "tc": 10617, "ht": 10617, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 04] PASS (T3 and T4 passed)
+
+  [T6a Cycle 05/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 05] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.6 ms, t=17493.0945)]: {"ch": 351272992, "raw": 1263, "avg": 1290, "min": 1022, "max": 1456, "mv": 64, "rate": 500000, "seq": 10920, "samples": 5591040, "tc": 5460, "ht": 5460, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.8 ms, t=17503.5976)]: {"ch": 351272992, "raw": 1294, "avg": 1283, "min": 1144, "max": 1428, "mv": 64, "rate": 500000, "seq": 21299, "samples": 10905088, "tc": 10649, "ht": 10650, "err": 0, "ovr": 0, "m4_hb": 218}
+  [T6a Cycle 05] FAIL: T3=True, T4=False
+
+  [T6a Cycle 06/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 06] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.7 ms, t=17514.8355)]: {"ch": 351272992, "raw": 1039, "avg": 1159, "min": 919, "max": 1398, "mv": 58, "rate": 500000, "seq": 10897, "samples": 5579264, "tc": 5448, "ht": 5449, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.6 ms, t=17525.3382)]: {"ch": 351272992, "raw": 1071, "avg": 1111, "min": 930, "max": 1373, "mv": 55, "rate": 500000, "seq": 21272, "samples": 10891264, "tc": 10636, "ht": 10636, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 06] PASS (T3 and T4 passed)
+
+  [T6a Cycle 07/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 07] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.7 ms, t=17536.5819)]: {"ch": 351272992, "raw": 904, "avg": 1049, "min": 884, "max": 1248, "mv": 52, "rate": 500000, "seq": 10926, "samples": 5594112, "tc": 5463, "ht": 5463, "err": 0, "ovr": 0, "m4_hb": 112}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.7 ms, t=17547.0849)]: {"ch": 351272992, "raw": 1070, "avg": 1051, "min": 892, "max": 1237, "mv": 52, "rate": 500000, "seq": 21305, "samples": 10908160, "tc": 10652, "ht": 10653, "err": 0, "ovr": 0, "m4_hb": 218}
+  [T6a Cycle 07] PASS (T3 and T4 passed)
+
+  [T6a Cycle 08/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 08] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.7 ms, t=17558.3011)]: {"ch": 351272992, "raw": 1013, "avg": 1141, "min": 891, "max": 1392, "mv": 57, "rate": 500000, "seq": 10895, "samples": 5578240, "tc": 5447, "ht": 5448, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.7 ms, t=17568.8039)]: {"ch": 351272992, "raw": 1113, "avg": 1103, "min": 914, "max": 1376, "mv": 55, "rate": 500000, "seq": 21271, "samples": 10890752, "tc": 10635, "ht": 10636, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 08] PASS (T3 and T4 passed)
+
+  [T6a Cycle 09/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 09] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.7 ms, t=17579.9882)]: {"ch": 351272992, "raw": 1272, "avg": 1278, "min": 997, "max": 1564, "mv": 64, "rate": 500000, "seq": 10845, "samples": 5552640, "tc": 5422, "ht": 5423, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 2.6 ms, t=17590.4917)]: {"ch": 351272992, "raw": 1296, "avg": 1296, "min": 975, "max": 1598, "mv": 65, "rate": 500000, "seq": 21223, "samples": 10866176, "tc": 10611, "ht": 10612, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 09] PASS (T3 and T4 passed)
+
+  [T6a Cycle 10/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 10] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.6 ms, t=17601.6509)]: {"ch": 351272992, "raw": 1011, "avg": 1030, "min": 886, "max": 1173, "mv": 51, "rate": 500000, "seq": 10847, "samples": 5553664, "tc": 5423, "ht": 5424, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.6 ms, t=17612.1535)]: {"ch": 351272992, "raw": 1066, "avg": 1025, "min": 883, "max": 1173, "mv": 51, "rate": 500000, "seq": 21223, "samples": 10866176, "tc": 10611, "ht": 10612, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 10] PASS (T3 and T4 passed)
+
+  [T6a Cycle 11/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 11] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.5 ms, t=17623.2707)]: {"ch": 351272992, "raw": 1008, "avg": 1081, "min": 885, "max": 1371, "mv": 54, "rate": 500000, "seq": 10821, "samples": 5540352, "tc": 5410, "ht": 5411, "err": 0, "ovr": 0, "m4_hb": 110}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.1 ms, t=17633.8152)]: {"ch": 351272992, "raw": 1156, "avg": 1097, "min": 880, "max": 1380, "mv": 55, "rate": 500000, "seq": 21241, "samples": 10875392, "tc": 10620, "ht": 10621, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 11] PASS (T3 and T4 passed)
+
+  [T6a Cycle 12/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 12] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.9 ms, t=17644.8827)]: {"ch": 351272992, "raw": 1348, "avg": 1288, "min": 1019, "max": 1654, "mv": 64, "rate": 500000, "seq": 10798, "samples": 5528576, "tc": 5399, "ht": 5399, "err": 0, "ovr": 0, "m4_hb": 110}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.5 ms, t=17655.3858)]: {"ch": 351272992, "raw": 1215, "avg": 1283, "min": 1023, "max": 1621, "mv": 64, "rate": 500000, "seq": 21179, "samples": 10843648, "tc": 10589, "ht": 10590, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 12] FAIL: T3=True, T4=False
+
+  [T6a Cycle 13/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 13] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 3.4 ms, t=17666.5041)]: {"ch": 351272992, "raw": 1287, "avg": 1273, "min": 1119, "max": 1424, "mv": 64, "rate": 500000, "seq": 10816, "samples": 5537792, "tc": 5408, "ht": 5408, "err": 0, "ovr": 0, "m4_hb": 110}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.4 ms, t=17677.0072)]: {"ch": 351272992, "raw": 1279, "avg": 1283, "min": 1087, "max": 1427, "mv": 64, "rate": 500000, "seq": 21193, "samples": 10850816, "tc": 10596, "ht": 10597, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 13] FAIL: T3=True, T4=False
+
+  [T6a Cycle 14/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 14] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.7 ms, t=17688.1500)]: {"ch": 351272992, "raw": 1265, "avg": 1273, "min": 933, "max": 1566, "mv": 64, "rate": 500000, "seq": 10854, "samples": 5557248, "tc": 5427, "ht": 5427, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.5 ms, t=17698.6532)]: {"ch": 351272992, "raw": 1351, "avg": 1282, "min": 968, "max": 1425, "mv": 64, "rate": 500000, "seq": 21230, "samples": 10869760, "tc": 10615, "ht": 10615, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 14] PASS (T3 and T4 passed)
+
+  [T6a Cycle 15/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 15] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.7 ms, t=17709.8286)]: {"ch": 351272992, "raw": 928, "avg": 1053, "min": 883, "max": 1191, "mv": 53, "rate": 500000, "seq": 10852, "samples": 5556224, "tc": 5426, "ht": 5426, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.4 ms, t=17720.3314)]: {"ch": 351272992, "raw": 1146, "avg": 1050, "min": 891, "max": 1252, "mv": 52, "rate": 500000, "seq": 21227, "samples": 10868224, "tc": 10613, "ht": 10614, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 15] PASS (T3 and T4 passed)
+
+  [T6a Cycle 16/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 16] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.5 ms, t=17731.4620)]: {"ch": 351272992, "raw": 1183, "avg": 1134, "min": 930, "max": 1379, "mv": 57, "rate": 500000, "seq": 10829, "samples": 5544448, "tc": 5414, "ht": 5415, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.4 ms, t=17741.9644)]: {"ch": 351272992, "raw": 1068, "avg": 1173, "min": 895, "max": 1419, "mv": 59, "rate": 500000, "seq": 21205, "samples": 10856960, "tc": 10602, "ht": 10603, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 16] PASS (T3 and T4 passed)
+
+  [T6a Cycle 17/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 17] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.6 ms, t=17753.0816)]: {"ch": 351272992, "raw": 1137, "avg": 1260, "min": 1054, "max": 1392, "mv": 63, "rate": 500000, "seq": 10805, "samples": 5532160, "tc": 5402, "ht": 5403, "err": 0, "ovr": 0, "m4_hb": 110}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.1 ms, t=17763.6152)]: {"ch": 351272992, "raw": 1295, "avg": 1299, "min": 990, "max": 1638, "mv": 65, "rate": 500000, "seq": 21211, "samples": 10860032, "tc": 10605, "ht": 10606, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 17] PASS (T3 and T4 passed)
+
+  [T6a Cycle 18/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 18] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.7 ms, t=17774.8460)]: {"ch": 351272992, "raw": 1247, "avg": 1290, "min": 1135, "max": 1625, "mv": 64, "rate": 500000, "seq": 10886, "samples": 5573632, "tc": 5443, "ht": 5443, "err": 0, "ovr": 0, "m4_hb": 111}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.4 ms, t=17785.3489)]: {"ch": 351272992, "raw": 1407, "avg": 1259, "min": 935, "max": 1571, "mv": 63, "rate": 500000, "seq": 21266, "samples": 10888192, "tc": 10633, "ht": 10633, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 18] PASS (T3 and T4 passed)
+
+  [T6a Cycle 19/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 19] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 3.0 ms, t=17796.4701)]: {"ch": 351272992, "raw": 1032, "avg": 1137, "min": 916, "max": 1402, "mv": 57, "rate": 500000, "seq": 10810, "samples": 5534720, "tc": 5405, "ht": 5405, "err": 0, "ovr": 0, "m4_hb": 110}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.7 ms, t=17806.9738)]: {"ch": 351272992, "raw": 1037, "avg": 1067, "min": 903, "max": 1312, "mv": 53, "rate": 500000, "seq": 21189, "samples": 10848768, "tc": 10594, "ht": 10595, "err": 0, "ovr": 0, "m4_hb": 217}
+  [T6a Cycle 19] FAIL: T3=True, T4=False
+
+  [T6a Cycle 20/20] Resetting target via SWD (-rst)...
+  [T6a Cycle 20] Waiting 10.0s for boot & initialization...
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for prj_03, window=10.5s) ---
+  [T4] Measuring migrated image rate over 10.5s window...
+    [T4 Telemetry A (rtt 2.9 ms, t=17818.0541)]: {"ch": 351272992, "raw": 1355, "avg": 1236, "min": 911, "max": 1388, "mv": 62, "rate": 500000, "seq": 10772, "samples": 5515264, "tc": 5386, "ht": 5386, "err": 0, "ovr": 0, "m4_hb": 110}
+    [T4] Waiting 10.5s measurement window...
+    [T4 Telemetry B (rtt 1.2 ms, t=17828.5568)]: {"ch": 351272992, "raw": 1240, "avg": 1237, "min": 963, "max": 1576, "mv": 62, "rate": 500000, "seq": 21150, "samples": 10828800, "tc": 10575, "ht": 10575, "err": 0, "ovr": 0, "m4_hb": 216}
+  [T6a Cycle 20] PASS (T3 and T4 passed)
+
+--- Results for T6A ---
+  [FAIL] T6a_warm_resets_pass: 20/20 warm resets pass T3 and T4 without lockup or overrun
+         Detail: Passed: 14/20 cycles, Failures: ['Cycle 2: T3=True, T4=False', 'Cycle 3: T3=True, T4=False', 'Cycle 5: T3=True, T4=False', 'Cycle 12: T3=True, T4=False', 'Cycle 13: T3=True, T4=False', 'Cycle 19: T3=True, T4=False']
+Verdict T6A: FAIL
+
+================================================================================
+OVERALL SUMMARY: VERIFICATION FAILED
+================================================================================
