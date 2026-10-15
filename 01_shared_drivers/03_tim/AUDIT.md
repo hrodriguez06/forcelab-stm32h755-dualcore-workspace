@@ -159,3 +159,42 @@ La revisión 5 del plan alinea A y B a un incremento de `m4_hb`. Repetiré T6a c
 - **El firmware está verificado en placa:** T3, T4, T5 y T8 pasan en los dos proyectos, con el control de `04fb865` en la misma sesión. Los datos de T6a muestran 40 arranques sanos.
 - **Por qué no pasa:** el veredicto de T6a es FAIL (R1), y quedan B2, B4, M2, M5 y m2.
 - **Siguiente ronda:** corregir R1, B2, B4, M2, M5 y m2, y repetir T1, T2 y T7 sin placa. Después repetiré T4 y T6a en los dos proyectos.
+
+## F1, corrección 3 (`1893222`, herramienta en `0fa3f5a`)
+
+Entrega: `b034e7c..1893222` (`0fa3f5a` herramienta, `f8b81d3` capturas de T1, T2 y T7, `1893222` informe). Sin cambios de firmware: `git diff 1caa7c3..1893222` sobre `02_firmware_projects` y `01_shared_drivers`, fuera de `docs/` y de los `.md` de `03_tim`, está vacío.
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| Revisión de la herramienta (`0fa3f5a`) | **R1 cerrado:** `measure_udp_aligned_window` toma A y B en el primer cambio de `m4_hb` (respuestas de menos de 5 ms; consulta cada ~12 ms), B al menos 10 s después de A. **B2 cerrado:** `check_rate_equivalence` y `check_board_oracle` deciden el veredicto real y los controles negativos, con los datos medidos (`rate_mig` × 1,01; Δ`samples` × 0,8 y × 1,01). **B4 cerrado:** oráculo y cordura también en el control; con control, T4 flashea siempre la migrada primero; la restauración es un caso que puede fallar. **M2 cerrado:** G-S1 es una nota que no cuenta. **m2:** `--test all` ya no recompila; T5 limita `monitor.py` a 25 s; `--help` describe la revisión 5 |
+| T1, T2 y T7 del implementador | PASS en los dos proyectos, `0fa3f5a`, árbol limpio (`tim_f4_t{1,2,7}_0fa3f5a.txt`) |
+| Sesión de placa, mía, con la herramienta del implementador | HEAD `1893222`, árbol limpio, SN `0016000C4142501220353451`. Por proyecto: T4 `--flash` y T6a `--flash`. Capturas `tim_f4_audit4_*_1893222.txt` (4) |
+
+### Resultados en placa
+
+| Prueba | `prj_04` | `prj_03` |
+| --- | --- | --- |
+| T4, 60 s: migrada → control → restauración | 505 998,3 frente a 506 009,3 Hz: Δ 0,0022 %. Oráculo: 50 019 (migrada) y 49 938 (control) muestras por latido. Contadores a 0 en las dos. Controles negativos rechazados (Δ 0,998 %, 40 015). Restauración verificada | 506 125,3 frente a 505 880,0 Hz: Δ 0,049 %. Oráculo: 50 032 y 50 006. Contadores a 0. Controles negativos rechazados (Δ 1,049 %, 40 025). Restauración verificada |
+| T6a, 20 resets por SWD | **PASS 20/20.** En cada ciclo: T3 con los seis registros exactos (120 lecturas), Δ`m4_hb` = 102, Δt entre 10,076 y 10,097 s, RTT máximo 3,6 ms, oráculo entre 49 970 y 50 081, contadores a 0 | **PASS 20/20.** T3 exacto en los 20 ciclos, Δ`m4_hb` = 102, Δt entre 10,046 y 10,097 s, RTT máximo 2,9 ms, oráculo entre 49 825 y 50 076, contadores a 0 |
+
+Con A y B alineados, el oráculo de T6a queda dentro de ±0,35 % en los 40 ciclos; la tolerancia es ±0,5 %. Ninguna respuesta de las dos sesiones trae `ovr`, `err` ni `adc_ovr` distinto de 0.
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| M5 | Menor (residual) | El informe dice que T6a dio "0/20" en la ronda 3: fueron 11/20 (`prj_04`) y 14/20 (`prj_03`). Repite "0 advertencias" en `prj_01` (T7), que la herramienta no mide (solo el código de salida). Y no cita esta sesión | Corregir en el cierre: las cifras de T6a de la ronda 3, quitar "0 advertencias" o respaldarlo con una captura, y citar `tim_f4_audit4_*_1893222.txt` |
+| m3 | Menor | Tras `--test all`, el resultado del flasheo de restauración de `prj_03` `debug` se ignora | Un caso que pueda fallar, en el cierre |
+
+### Estado
+
+**F1 pasa.**
+- **El firmware queda verificado en placa por el auditor:** T3, T4, T5, T6a y T8 en `prj_04` y `prj_03`, con el control de `04fb865` en la misma sesión (rondas 3 y 4).
+- **La herramienta es correcta** en lo que la placa ejercita.
+- **Quedan dos menores** (M5 residual y m3), que se corrigen en el cierre.
+- **El cierre:**
+  - el README de `03_tim` (§9.5 TRGO → ADC validado y `tim_hal` en CM4, §11) y los README de `prj_03` y `prj_04`;
+  - T6b, arranque en frío con el responsable en el banco;
+  - la hoja de ruta, el borrado de los documentos de proceso, la retirada de `../stm32h755_control_04fb865` y el merge.
