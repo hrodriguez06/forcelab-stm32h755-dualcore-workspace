@@ -1,10 +1,10 @@
 # Informe de implementación de `03_tim` F4 (Migración de TIM3 y TIM7 a `tim_bm` / `tim_hal`)
 
-Oct 15, 2026 · Rama `driver/tim-f4` · Estado: **Cierre de la fase F4 entregado para auditoría**
+Oct 15, 2026 · Rama `driver/tim-f4` · Estado: **Cierre de la fase F4 corregido para auditoría**
 
-Este informe documenta la implementación completa, correcciones tras las cuatro rondas de auditoría, verificación sin placa y cierre documental de la fase F4 del driver `03_tim` en el repositorio STM32H755, conforme a `01_shared_drivers/03_tim/IMPLEMENTATION_PLAN.md` (revisión 5), las directrices de `01_shared_drivers/03_tim/IMPLEMENTER_INSTRUCTIONS.md` y las auditorías registradas en `01_shared_drivers/03_tim/AUDIT.md`.
+Este informe documenta la implementación completa, correcciones tras las cuatro rondas de auditoría, verificación sin placa y cierre documental corregido de la fase F4 del driver `03_tim` en el repositorio STM32H755, conforme a `01_shared_drivers/03_tim/IMPLEMENTATION_PLAN.md` (revisión 5), las directrices de `01_shared_drivers/03_tim/IMPLEMENTER_INSTRUCTIONS.md` y las auditorías registradas en `01_shared_drivers/03_tim/AUDIT.md`.
 
-Conforme a las instrucciones del responsable del banco y las restricciones de rol del implementador (sin acceso físico a hardware), se han completado e integrado todos los hitos de código y herramientas (H1 a H5), se han implementado las correcciones para los hallazgos de auditoría (N1, B1, B2, B3, B4, M1, M2, M3, M5, m2, m3, k1, k2), se han registrado las pruebas sin hardware (T1, T2 y T7 con capturas UTF-8 sobre el commit `0fa3f5a`), se han documentado las integraciones en los README de los proyectos consumidores (`prj_03` y `prj_04`) y del propio driver (`03_tim/README.md`), y se han respaldado todas las afirmaciones de hardware a partir de las capturas oficiales del auditor en las rondas 3 y 4.
+Conforme a las instrucciones del responsable del banco y las restricciones de rol del implementador (sin acceso físico a hardware), se han completado e integrado todos los hitos de código y herramientas (H1 a H5), se han implementado las correcciones para los hallazgos de auditoría (N1, B1, B2, B3, B4, M1, M2, M3, M5, m2, m3, k1, k2, C1, C2, C3, C4, C5), se han registrado las pruebas sin hardware (T1, T2 y T7 con capturas UTF-8 sobre el commit `0fa3f5a`), se han documentado las integraciones en los README de los proyectos consumidores (`prj_03` y `prj_04`) y del propio driver (`03_tim/README.md`), y se han respaldado todas las afirmaciones de hardware a partir de las capturas oficiales del auditor en las rondas 3 y 4.
 
 ---
 
@@ -15,7 +15,8 @@ Conforme a las instrucciones del responsable del banco y las restricciones de ro
 - **Hash de código y herramienta evaluado:** `0fa3f5a`
 - **Hash del commit de evidencias (T1, T2, T7):** `f8b81d3`
 - **Hash del commit de cierre documental y m3:** `9fdc0e7`
-- **Estado de la entrega:** **Cierre de la fase F4 entregado para auditoría**
+- **Hash del commit de corrección de cierre (C1–C5):** `1f403c3`
+- **Estado de la entrega:** **Cierre de la fase F4 corregido para auditoría**
 
 ### Hitos y correcciones completadas
 
@@ -31,6 +32,7 @@ Conforme a las instrucciones del responsable del banco y las restricciones de ro
 | **Herramienta R3 (R1, B2, B4, M2, m2)** | `0fa3f5a` | **Corrección de hallazgos de auditoría (ronda 3):**<br>• **R1 (T6a):** Alineación de muestras A y B al flanco de incremento de `m4_hb` (`measure_udp_aligned_window`), eliminando el error de cuantización de $\pm 1$ latido (~0,94%) en ventanas arbitrarias; controles negativos $ds \times 0,8$ y $ds \times 1,01$ utilizando los datos medidos del ciclo.<br>• **B2:** Funciones compartidas `check_rate_equivalence`, `check_board_oracle` y `check_rate_sanity` evaluando tanto las mediciones nominales como los controles negativos con datos medidos en tiempo real ($rate_{\text{mig}} \times 1,01$ vs $rate_{\text{ctrl}}$, $ds \times 0,8 / dm4\_hb$).<br>• **B4 (T4):** En presencia de control, T4 flashea la imagen migrada primero, evalúa oráculo y sanidad sobre ambas imágenes (migrada y control), y registra el flasheo de restauración como caso de prueba verificado.<br>• **M2:** Conversión del chequeo previo de seguridad de pines G-S1 en una nota informativa sin veredicto constante PASS.<br>• **m2:** `--test all` ejecuta la suite de hardware sin recompilar (`t2a, t2b, t3, t4, t5, t6a`); timeout dedicado de 25,0 s en `subprocess.run` para `monitor.py` en T5; actualización de `--help` y docstring conforme al Plan rev 5. |
 | **Auditoría R4 (F1 pasa)** | `063603c` | Auditor ejecuta en hardware T4 y T6a bajo HEAD `1893222`. Ambas pasan formalmente en `prj_04` y `prj_03`. El auditor emite el veredicto formal de que **F1 pasa**. |
 | **Cierre (m3, docs)** | `9fdc0e7` | **Cierre del implementador:**<br>• `tools/tim_f4_checks.py` (m3): El flasheo de restauración de `prj_03 debug` tras `--test all` se comprueba formalmente como caso de prueba que puede fallar (`ALL_board_restoration_prj_03_debug_verified`).<br>• `01_shared_drivers/03_tim/README.md`: Sección 9.5 (validación en hardware de TIM3 TRGO y `tim_hal` en CM4 citando capturas del auditor), Sección 11 (consumidores `prj_03` y `prj_04`), Sección 13 (fila F4 y comandos `git show` fijando `8901b77^` para F3 y dinámico para F4).<br>• `02_firmware_projects/prj_03_adc_dma_eth/README.md`: Sección 8 documentando integración de `03_tim` (TIM3 TRGO, `tim_hal`, `tim_bm`) y tabla de evidencias de auditoría.<br>• `02_firmware_projects/prj_04_adc_dma_bm_eth/README.md`: Sección 4.D (`tim_bm` TIM3 y TIM7) y Sección 10 (tabla de evidencias de auditoría). |
+| **Corrección de cierre (C1–C5)** | `1f403c3` | **Corrección de hallazgos de auditoría de cierre:**<br>• **C1 (`prj_04/README.md` §10):** Atribución precisa de ejecutores (T1, T2 y T7 por el implementador sin placa; T3–T6a y T8 por el auditor en hardware) e inclusión de la fila T6b como pendiente.<br>• **C2 (`prj_04/README.md` §D y `prj_03/README.md` §8):** Descripción fáctica del código (el contador arranca cuando el ADC y el DMA ya están armados, para que el primer TRGO encuentre el ADC listo) sin afirmaciones no medidas.<br>• **C3 (`03_tim/README.md` §9.5):** Distinción explícita de 500 kHz nominal frente a ~506 kHz medidos en el HSE rápido de la placa.<br>• **C4 (`03_tim/README.md` §9.5):** Recuperación de la cláusula de árboles de reloj, placas y silicio no ejercitados fuera de `prj_01`, `prj_03` y `prj_04`.<br>• **C5 (`03_tim/README.md` §11):** Corrección idiomática de "Cero" a "No" en texto en inglés. |
 
 ---
 
@@ -243,7 +245,14 @@ Al concluir la batería de pruebas en placa, la herramienta `tim_f4_checks.py` e
    La plantilla `prj_01_template_dualcore` bajo el preset `selftest-tim` compila limpiamente con código de salida 0 (build completed successfully), asegurando la integridad de las pruebas de regresión de driver en T7.
 5. **Verificación del flasheo de restauración en `--test all` (m3):**
    En `tools/tim_f4_checks.py`, el paso final de restauración a la imagen `prj_03 debug` tras `--test all` se registra y evalúa formalmente como caso de prueba (`ALL_board_restoration_prj_03_debug_verified`), impidiendo que un fallo de flasheo pase desapercibido en el veredicto general.
+6. **Corrección de hallazgos documentales de auditoría de cierre (C1–C5):**
+   Tras la revisión de auditoría del cierre en `AUDIT.md`, se corrigieron los hallazgos C1 a C5 estrictamente en los README correspondientes en el commit `1f403c3`:
+   - **C1:** En `02_firmware_projects/prj_04_adc_dma_bm_eth/README.md` §10 se atribuyeron explícitamente los ejecutores (T1, T2 y T7 por el implementador sin hardware; T3, T4, T5, T6a y T8 por el auditor en placa) y se incluyó la fila formal para T6b como PENDIENTE.
+   - **C2:** En `02_firmware_projects/prj_04_adc_dma_bm_eth/README.md` §4.D y `02_firmware_projects/prj_03_adc_dma_eth/README.md` §8 se sustituyeron afirmaciones no medidas por la descripción fáctica del funcionamiento del código (el contador arranca cuando el ADC y el DMA ya están armados, de modo que el primer TRGO encuentra el ADC listo).
+   - **C3:** En `01_shared_drivers/03_tim/README.md` §9.5 se distinguió explícitamente "500 kHz nominal (~506 kHz measured on this board's fast HSE)".
+   - **C4:** En `01_shared_drivers/03_tim/README.md` §9.5 se restauró la mención a los árboles de reloj, placas y silicio no ejercitados fuera de `prj_01`, `prj_03` y `prj_04`.
+   - **C5:** En `01_shared_drivers/03_tim/README.md` §11 se corrigió "Cero" por "No" en el texto en inglés.
 
 ---
 
-CIERRE ENTREGADO PARA AUDITORIA 9fdc0e7
+CIERRE CORREGIDO PARA AUDITORIA 1f403c3
