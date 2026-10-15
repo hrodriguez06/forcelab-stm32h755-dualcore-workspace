@@ -29,7 +29,9 @@ Base: `main` en `897bf8d` (la rama `driver/tim-f4` se puso al día el 2026-10-15
 
 **El desarrollador es Antigravity** (autorizado por el responsable el 2026-10-15). No tiene acceso a la placa: todo lo que necesita la H755 (T3–T6, T8) lo ejecuta el auditor, y el implementador entrega las herramientas y las pruebas sin placa (T1, T2, T7).
 
-**Decisiones abiertas del plan y opciones por defecto:**
+**Decisiones del responsable (2026-10-15):** las cuatro, aprobadas: 1, 3 y 4 con su opción por defecto; 2, opción A (selftests en la placa, T8).
+
+**Decisiones del plan:**
 1. **Tier por proyecto:** `tim_bm` en `prj_04` (arquitectura bare-metal); `tim_hal` en `prj_03` (arquitectura HAL). Valida ambos tiers y resuelve §9.5.
 2. **Alcance de los selftests (aprobada por el responsable el 2026-10-15, opción A):** entran tanto el TIM7 de `dma_selftest.c` (T4/T5 de `02_dma`) como los TIM3 de `adc_selftest_hw.c` en ambos proyectos, **y se ejecutan en la placa (T8)**.
 3. **Preservación del ritmo del ADC:** secuencia estricta de arranque (`InitTimeBase` con ARPE = 0 antes de `ConfigMaster`, todo antes de inicializar el ADC; arranque del contador solo tras armar ADC y DMA); T4 mide Δ`Samples`/Δt en al menos 10 s contra 500 kHz × (1 + 1,327 % ± 0,2 %).

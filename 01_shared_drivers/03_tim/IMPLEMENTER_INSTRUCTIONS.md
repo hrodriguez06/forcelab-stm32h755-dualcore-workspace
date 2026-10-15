@@ -150,7 +150,7 @@ Aplica estrictamente las **opciones por defecto** declaradas en el plan (Decisio
 5. **Redacción de `IMPLEMENTATION_REPORT.md`:**
    - Documenta los resultados obtenidos, los valores leídos en cada prueba, las tablas de registros y el estado de la placa al terminar.
 6. **Entrega para auditoría:**
-   - Notifica la finalización de F1 para la revisión independiente del auditor.
+   - Commitea el informe en `driver/tim-f4` con el árbol limpio. La **última línea** de `01_shared_drivers/03_tim/IMPLEMENTATION_REPORT.md` debe ser exactamente `F1 ENTREGADA PARA AUDITORIA <hash del último commit de código o herramienta>`: es la marca que el auditor vigila.
 
 ---
 
