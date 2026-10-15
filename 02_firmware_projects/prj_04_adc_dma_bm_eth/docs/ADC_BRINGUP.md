@@ -300,7 +300,10 @@ the silicon.
 A `ch` field reading nonsense - `351272992` was seen once - is the signature of CPU1 and
 CPU2 disagreeing about `SharedAdcData_t`, which means one core was reflashed and the
 other was not. `shared_memory.h` warns about it in its own header; this is what it looks
-like from the outside. Flash both.
+like from the outside. Flash both. That particular value is 0x14F00020, the HAL encoding
+of `ADC_CHANNEL_5`, which a `prj_03` CPU2 image published in this field until
+`prj_03`'s publisher was fixed to report the channel number, so the core left behind was
+most likely running an old `prj_03` CM4 image. Current `prj_03` builds report `5`.
 
 An old firmware answering a current tool is rejected rather than misread:
 

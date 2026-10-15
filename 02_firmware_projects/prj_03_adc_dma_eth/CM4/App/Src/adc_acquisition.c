@@ -21,6 +21,12 @@
 
 #define ADC_BUFFER_SIZE         1024U   /* 2 x 512 samples (512 per half-buffer) */
 
+/* SharedAdcData_t.channel is the channel NUMBER (5 for PB1, 15 for PA3), the
+   value prj_04 publishes and the host tools expect. BOARD_ADC_CHANNEL is the
+   HAL encoding (ADC_CHANNEL_5 = 0x14F00020), which the JSON reply printed as
+   351272992 and the 16-bit WAVE header truncated to 32. Decode it once here. */
+#define ADC_ACQ_CHANNEL_NUMBER  __HAL_ADC_CHANNEL_TO_DECIMAL_NB(BOARD_ADC_CHANNEL)
+
 /* ADC_Acquisition_Process() copies SHARED_ADC_WAVEFORM_SAMPLES out of ONE half
    of the buffer below, but that constant lives in shared_memory.h - a header
    shared with CPU1 - while ADC_BUFFER_SIZE is local to this file. Nothing in
@@ -163,7 +169,7 @@ bool ADC_Acquisition_Init(void)
 
     /* Initial metadata in shared memory */
     SHARED_LOCK(HSEM_ID_ADC_DATA);
-    g_shared.adc.channel          = BOARD_ADC_CHANNEL;
+    g_shared.adc.channel          = ADC_ACQ_CHANNEL_NUMBER;
     g_shared.adc.sampling_rate_hz = BOARD_ADC_SAMPLING_RATE_HZ;
     g_shared.adc.waveform_seq     = 0U;
     g_shared.adc.waveform_len     = SHARED_ADC_WAVEFORM_SAMPLES;
@@ -200,7 +206,7 @@ void ADC_Acquisition_Process(void)
         g_shared.adc.dma_ht_count       = s_adc_handle.stats.dma_ht_count;
         g_shared.adc.dma_error_count     = s_adc_handle.stats.dma_error_count;
         g_shared.adc.half_overrun_count = s_adc_handle.stats.half_overrun_count;
-        g_shared.adc.channel            = BOARD_ADC_CHANNEL;
+        g_shared.adc.channel            = ADC_ACQ_CHANNEL_NUMBER;
         g_shared.adc.sampling_rate_hz   = BOARD_ADC_SAMPLING_RATE_HZ;
         g_shared.adc.timestamp_ms       = HAL_GetTick();
         g_shared.adc.waveform_seq++;
