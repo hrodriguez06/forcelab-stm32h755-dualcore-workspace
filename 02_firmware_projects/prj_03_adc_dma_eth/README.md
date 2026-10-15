@@ -152,7 +152,7 @@ Cortex-M4 consumes `01_shared_drivers/03_tim` through `stm32h7_driver_tim_hal` (
 
 - **TIM3 as ADC Trigger via TRGO (`CM4/App/Src/adc_acquisition.c`)**:
   - Replaces legacy direct writes and unprotected HAL calls with `TIM_HAL_InitTimeBase` (APB1 timer clock 200 MHz, PSC=0, ARR=399 -> 500 kHz nominal trigger rate, 50 samples per 10 kHz signal period) and `TIM_HAL_ConfigMaster` (MMS = `010` update event on TRGO, RM0399 §41.4.2).
-  - Late counter start uses `TIM_BM_Start(TIM3)` once ADC and DMA circular transfers are fully armed, ensuring zero lost or misaligned early conversion pulses.
+  - Late counter start uses `TIM_BM_Start(TIM3)` once ADC and DMA circular transfers are fully armed, so that the first TRGO finds the ADC ready.
   - Zero raw writes to TIM registers or unprotected `HAL_TIM_*` calls remain in CM4 outside `01_shared_drivers/03_tim/tim_hal.c`.
 - **TIM3 in Hardware Selftests (`CM4/App/Src/adc_selftest_hw.c`)**:
   - `Tim3_Prepare`, `Tim3_Run` and `Tim3_Halt` migrated to `tim_bm` functions (`TIM_BM_EnableClock`, `TIM_BM_InitTimeBase`, `TIM_BM_ConfigMaster`, `TIM_BM_Start`, `TIM_BM_Stop`), enabling clock before stop and verifying `TIM_STATUS_OK` return status.

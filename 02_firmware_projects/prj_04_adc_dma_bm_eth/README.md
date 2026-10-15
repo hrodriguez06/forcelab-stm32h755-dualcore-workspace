@@ -91,7 +91,7 @@ the CM4 image, and update the table rather than leaving it to drift.
 ### D. TIM Bare-Metal Driver (`03_tim/tim_bm.[ch]`, Phase F4)
 - **Clock Enable & Clean Timebase**: `TIM_BM_EnableClock(TIM3)` enables APB1 clock from CM4 (RM0399 §9.7.1). `TIM_BM_InitTimeBase()` configures PSC=0, ARR=399 (period = 400 ticks at 200 MHz timer clock -> 500 kHz nominal trigger rate, 50 samples per 10 kHz signal period), ARPE=0, and edge-aligned up-counting mode with counter stopped.
 - **Master Trigger Output (TRGO)**: `TIM_BM_ConfigMaster()` configures master mode selection to MMS = `010` (Update Event), routing timer updates directly to ADC1 external trigger line (`ADC_BM_TRIG_TIM3_TRGO`, `EXTSEL=4`).
-- **Late Counter Start**: `TIM_BM_Start(TIM3)` is invoked after ADC calibration and DMA circular transfers are fully armed and running, eliminating spurious initial conversions and phase jitter.
+- **Late Counter Start**: `TIM_BM_Start(TIM3)` is invoked after ADC calibration and DMA circular transfers are fully armed, so that the first TRGO finds the ADC ready.
 - **Hardware Selftests (ADC & DMA)**:
   - In `adc_selftest_hw.c`, `Tim3_Prepare`, `Tim3_Run` and `Tim3_Halt` use `tim_bm` functions (`EnableClock`, `InitTimeBase`, `ConfigMaster`, `Start`, `Stop`), enforcing `TIM_STATUS_OK` verification.
   - In `dma_selftest.c`, basic timer TIM7 uses `tim_bm` for time base initialization, update DMA request enablement (`TIM_BM_EnableDmaRequest` for DMAMUX1 request 70), start, stop, and clean deinitialization (`TIM_BM_Deinit`).
@@ -266,18 +266,19 @@ All F1b test procedures were executed and verified against strict criteria:
 
 ## 10. Timer Driver Integration & F4 Validation Evidence (`03_tim`)
 
-All F4 verification tests were executed and validated on hardware by the auditor:
+Verification tests T1, T2, and T7 were executed off-board by the implementer, while hardware tests T3, T4, T5, T6a, and T8 were executed on the bench by the independent auditor. Test T6b remains pending:
 
-| Test | Objective | Status / Key Metrics | Primary Captures |
-| :--- | :--- | :--- | :--- |
-| **T1** | Build Matrix & Presets | PASS: 8/8 matrix clean, `selftest` & `selftest-adc` clean with strict `-Werror` (0 warnings/errors) | [`docs/tim_f4_t1_0fa3f5a.txt`](docs/tim_f4_t1_0fa3f5a.txt) |
-| **T2a** | Linked Symbol Audit | PASS: 4/4 `tim_bm` symbols present in CM4 (`TIM_BM_InitTimeBase`, `TIM_BM_EnableClock`, `TIM_BM_ConfigMaster`, `TIM_BM_Start`); 0/4 on control `04fb865` | [`docs/tim_f4_t2_0fa3f5a.txt`](docs/tim_f4_t2_0fa3f5a.txt) |
-| **T2b** | Preprocessor Regex Scan | PASS: 0 illegal writes across 2282 compilation units (CM7 and CM4); CMSIS autoprueba 20/20 writes, 0/12 reads; control `04fb865` matched 78 legacy writes | [`docs/tim_f4_t2_0fa3f5a.txt`](docs/tim_f4_t2_0fa3f5a.txt) |
-| **T3** | Live SWD Register Inspection | PASS: 32-bit register read bit-by-bit match against RM0399 §41 (`CR1=0x1`, `CR2=0x20`, `SMCR=0`, `DIER=0`, `PSC=0`, `ARR=0x18F`); altered table rejected | [`docs/tim_f4_audit3_t3_1caa7c3.txt`](docs/tim_f4_audit3_t3_1caa7c3.txt), [`docs/tim_f4_audit3_t3_control_1caa7c3.txt`](docs/tim_f4_audit3_t3_control_1caa7c3.txt) |
-| **T4** | ADC Rate & Sequential Equivalence | PASS: 505 998.3 Hz vs 506 009.3 Hz (delta = 0.0022% <= 0.1%); oracle 50 019 (migrated) and 49 938 (control) samples/hb; `ovr`, `err`, `adc_ovr` all 0; restoration verified | [`docs/tim_f4_audit4_t4_1893222.txt`](docs/tim_f4_audit4_t4_1893222.txt) |
-| **T5** | Production Regression (Debug/Release) | PASS: ICMP 4/4, UDP sweep, burst 100/100; `rx_nobuf`, `tx_nobuf`, `dma_err`, `acl_drop` all 0 | [`docs/tim_f4_audit3_t5_debug_1caa7c3.txt`](docs/tim_f4_audit3_t5_debug_1caa7c3.txt), [`docs/tim_f4_audit3_t5_release_1caa7c3.txt`](docs/tim_f4_audit3_t5_release_1caa7c3.txt) |
-| **T6a** | Warm Reset Stability | PASS: 20/20 resets pass T3 and edge-aligned T4 with negative controls; oracle within 49 970..50 081; 0 overruns or errors | [`docs/tim_f4_audit4_t6a_1893222.txt`](docs/tim_f4_audit4_t6a_1893222.txt) |
-| **T7** | Driver Regression & API Freeze | PASS: `prj_01 selftest-tim` compiles cleanly (exit code 0); `git diff main -- 01_shared_drivers/03_tim/*.h` strictly empty | [`docs/tim_f4_t7_0fa3f5a.txt`](docs/tim_f4_t7_0fa3f5a.txt) |
-| **T8** | Hardware Selftests & Control Equivalence | PASS: `[m7_dma_test] OVERALL: PASS`, `[m4_dma_test] OVERALL=PASS (T4_TIM7=PASS)` on `selftest`, `HW RESULT PASS` with `HW T4 BM:1 LL:1` on `selftest-adc`; equivalence with control; restoration verified | [`docs/tim_f4_audit3_t8_1caa7c3.txt`](docs/tim_f4_audit3_t8_1caa7c3.txt) |
+| Test | Executor | Objective | Status / Key Metrics | Primary Captures |
+| :--- | :--- | :--- | :--- | :--- |
+| **T1** | Implementer (no board) | Build Matrix & Presets | PASS: 8/8 matrix clean, `selftest` & `selftest-adc` clean with strict `-Werror` (0 warnings/errors) | [`docs/tim_f4_t1_0fa3f5a.txt`](docs/tim_f4_t1_0fa3f5a.txt) |
+| **T2a** | Implementer (no board) | Linked Symbol Audit | PASS: 4/4 `tim_bm` symbols present in CM4 (`TIM_BM_InitTimeBase`, `TIM_BM_EnableClock`, `TIM_BM_ConfigMaster`, `TIM_BM_Start`); 0/4 on control `04fb865` | [`docs/tim_f4_t2_0fa3f5a.txt`](docs/tim_f4_t2_0fa3f5a.txt) |
+| **T2b** | Implementer (no board) | Preprocessor Regex Scan | PASS: 0 illegal writes across 2282 compilation units (CM7 and CM4); CMSIS autoprueba 20/20 writes, 0/12 reads; control `04fb865` matched 78 legacy writes | [`docs/tim_f4_t2_0fa3f5a.txt`](docs/tim_f4_t2_0fa3f5a.txt) |
+| **T3** | Auditor (hardware) | Live SWD Register Inspection | PASS: 32-bit register read bit-by-bit match against RM0399 §41 (`CR1=0x1`, `CR2=0x20`, `SMCR=0`, `DIER=0`, `PSC=0`, `ARR=0x18F`); altered table rejected | [`docs/tim_f4_audit3_t3_1caa7c3.txt`](docs/tim_f4_audit3_t3_1caa7c3.txt), [`docs/tim_f4_audit3_t3_control_1caa7c3.txt`](docs/tim_f4_audit3_t3_control_1caa7c3.txt) |
+| **T4** | Auditor (hardware) | ADC Rate & Sequential Equivalence | PASS: 505 998.3 Hz vs 506 009.3 Hz (delta = 0.0022% <= 0.1%); oracle 50 019 (migrated) and 49 938 (control) samples/hb; `ovr`, `err`, `adc_ovr` all 0; restoration verified | [`docs/tim_f4_audit4_t4_1893222.txt`](docs/tim_f4_audit4_t4_1893222.txt) |
+| **T5** | Auditor (hardware) | Production Regression (Debug/Release) | PASS: ICMP 4/4, UDP sweep, burst 100/100; `rx_nobuf`, `tx_nobuf`, `dma_err`, `acl_drop` all 0 | [`docs/tim_f4_audit3_t5_debug_1caa7c3.txt`](docs/tim_f4_audit3_t5_debug_1caa7c3.txt), [`docs/tim_f4_audit3_t5_release_1caa7c3.txt`](docs/tim_f4_audit3_t5_release_1caa7c3.txt) |
+| **T6a** | Auditor (hardware) | Warm Reset Stability | PASS: 20/20 resets pass T3 and edge-aligned T4 with negative controls; oracle within 49 970..50 081; 0 overruns or errors | [`docs/tim_f4_audit4_t6a_1893222.txt`](docs/tim_f4_audit4_t6a_1893222.txt) |
+| **T6b** | Bench owner (hardware) | Cold Boot Bench Verification | PENDING: Physical power-cycle verification on the bench by the bench owner during final phase close | Pending final close |
+| **T7** | Implementer (no board) | Driver Regression & API Freeze | PASS: `prj_01 selftest-tim` compiles cleanly (exit code 0); `git diff main -- 01_shared_drivers/03_tim/*.h` strictly empty | [`docs/tim_f4_t7_0fa3f5a.txt`](docs/tim_f4_t7_0fa3f5a.txt) |
+| **T8** | Auditor (hardware) | Hardware Selftests & Control Equivalence | PASS: `[m7_dma_test] OVERALL: PASS`, `[m4_dma_test] OVERALL=PASS (T4_TIM7=PASS)` on `selftest`, `HW RESULT PASS` with `HW T4 BM:1 LL:1` on `selftest-adc`; equivalence with control; restoration verified | [`docs/tim_f4_audit3_t8_1caa7c3.txt`](docs/tim_f4_audit3_t8_1caa7c3.txt) |
 
 

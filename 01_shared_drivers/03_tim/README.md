@@ -475,7 +475,7 @@ Cycles of one cold call, DWT with PRIMASK, TIM2 on CM7 (400 MHz), TIM15 on CM4 (
 ### 9.5 Hardware validation in consumers (F4) and unexercised paths
 
 **Validated on hardware in consumers (phase F4):**
-- **TIM3 TRGO → ADC triggering at 500 kSPS:** Validated on hardware in `prj_04_adc_dma_bm_eth` (`tim_bm`) and `prj_03_adc_dma_eth` (`tim_hal` + `tim_bm`). TIM3 update event triggers ADC1 regular conversions; verified bit-by-bit register match against RM0399 §41 (`CR1=0x1`, `CR2=0x20`, `SMCR=0`, `DIER=0`, `PSC=0`, `ARR=0x18F`), sampling rate ~506 kHz nominal within 0.1% equivalence against control `04fb865`, oracle `dSamples / dm4_hb` within ±0.5% (50,000 ± 250), zero errors/overruns, and 20/20 warm resets over SWD.
+- **TIM3 TRGO → ADC triggering at 500 kSPS:** Validated on hardware in `prj_04_adc_dma_bm_eth` (`tim_bm`) and `prj_03_adc_dma_eth` (`tim_hal` + `tim_bm`). TIM3 update event triggers ADC1 regular conversions; verified bit-by-bit register match against RM0399 §41 (`CR1=0x1`, `CR2=0x20`, `SMCR=0`, `DIER=0`, `PSC=0`, `ARR=0x18F`), sampling rate 500 kHz nominal (~506 kHz measured on this board's fast HSE) within 0.1% equivalence against control `04fb865`, oracle `dSamples / dm4_hb` within ±0.5% (50,000 ± 250), zero errors/overruns, and 20/20 warm resets over SWD.
 - **`tim_hal` on CM4:** Validated on hardware in `prj_03_adc_dma_eth` (`CM4/App/Src/adc_acquisition.c`) via `TIM_HAL_InitTimeBase` and `TIM_HAL_ConfigMaster`, with zero `HAL_TIM_*` calls remaining outside `tim_hal.c`.
 - **TIM3 and TIM7 in selftests:** Validated on hardware in `prj_04` (`adc_selftest_hw.c` TIM3 and `dma_selftest.c` TIM7 update DMA request) and `prj_03` (`adc_selftest_hw.c` TIM3) using `tim_bm`.
 
@@ -491,6 +491,7 @@ Cycles of one cold call, DWT with PRIMASK, TIM2 on CM7 (400 MHz), TIM15 on CM4 (
 - **TRGO → DAC, TRGO2, channels 5–6:** not in `prj_01`, not in the API.
 - **Capture from a pin** on TIM2–5, TIM8, TIM12, TIM15 (only TRC, T10(d)); TIM13, TIM14, TIM16 capture nothing.
 - **PWM on a pin** of TIM2–5, TIM8, TIM12 (no pin on the bench). `OCxREF` by TRGO + gated only for TIM2 and TIM13/14; TIM3, TIM4, TIM5, TIM8 have only their register image (T2).
+- **Any clock tree, board or silicon other than `prj_01`'s, `prj_03`'s and `prj_04`'s on Rev V (except T3).**
 - **LL:** `EnableDmaRequest`, `GenerateEvent`, `SetPeriod`, `SetCompare` only by their refusals; T7, T9, T11, T13, T15, T16 not through LL. **HAL:** `ConfigMaster` and `StopPwm` only in T1/T2 and a by-design case; T3, T7, T10–T13, T15, T16 not through HAL; by-design row 9 from reading only.
 - **Never produced or provoked:** `ERR_VERIFY` in any tier; TIM6 with a writing function (`prj_01`'s tick); ES0445 2.16.2–2.16.4.
 
@@ -569,7 +570,7 @@ on every single-source vector. An ISR on a shared vector must accept an empty ca
   - **TIM3**: in acquisition (`CM4/App/Src/adc_acquisition.c`) for clock enable, time base initialization (PSC=0, ARR=399), master TRGO update event configuration, and late counter start with `TIM_BM_Start(TIM3)`; in selftest ADC (`CM4/App/Src/adc_selftest_hw.c`) via `TIM_BM_InitTimeBase`, `TIM_BM_ConfigMaster`, `TIM_BM_Start`, and `TIM_BM_Stop`.
   - **TIM7**: in selftest DMA (`CM4/App/Src/dma_selftest.c`) for clock enable, time base, update DMA request (`EnableDmaRequest`), start, stop, and deinitialization.
 - `02_firmware_projects/prj_03_adc_dma_eth`: links `stm32h7_driver_tim_hal` in CM4 (`tim_hal` tier + `tim_bm`):
-  - **TIM3**: in acquisition (`CM4/App/Src/adc_acquisition.c`) using `TIM_HAL_InitTimeBase` and `TIM_HAL_ConfigMaster` for time base and TRGO setup, and `TIM_BM_Start(TIM3)` for late start; in selftest ADC (`CM4/App/Src/adc_selftest_hw.c`) using `tim_bm` (`TIM_BM_InitTimeBase`, `TIM_BM_ConfigMaster`, `TIM_BM_Start`, `TIM_BM_Stop`). Cero `HAL_TIM_*` calls remain outside `tim_hal.c`.
+  - **TIM3**: in acquisition (`CM4/App/Src/adc_acquisition.c`) using `TIM_HAL_InitTimeBase` and `TIM_HAL_ConfigMaster` for time base and TRGO setup, and `TIM_BM_Start(TIM3)` for late start; in selftest ADC (`CM4/App/Src/adc_selftest_hw.c`) using `tim_bm` (`TIM_BM_InitTimeBase`, `TIM_BM_ConfigMaster`, `TIM_BM_Start`, `TIM_BM_Stop`). No `HAL_TIM_*` calls remain outside `tim_hal.c`.
 
 ---
 
