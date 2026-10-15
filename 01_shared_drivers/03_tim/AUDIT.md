@@ -238,3 +238,21 @@ Fuera del cierre: el comentario de `prj_03/CM4/App/Inc/adc_acquisition.h` (l. 6 
 ### Estado
 
 **El cierre del implementador no pasa todavía**, por C1 y C2. Siguiente ronda: corregir C1–C5, solo en los README.
+
+## Cierre del implementador, corrección (`9a5a194`, README en `1f403c3`)
+
+Entrega: `32a53ba..9a5a194`, solo README e informe (sin cambios en `tools/` ni en el código de los proyectos).
+
+| ID | Resultado |
+| --- | --- |
+| C1 | Cerrado. `prj_04/README.md` §10 dice quién ejecutó cada prueba: T1, T2 y T7 el implementador, sin placa; T3–T6a y T8 el auditor. Tiene una fila T6b pendiente |
+| C2 | Cerrado. Los dos README dicen ahora que el contador arranca cuando el ADC y el DMA están armados, "so that the first TRGO finds the ADC ready", sin otras promesas |
+| C3 | Cerrado: "500 kHz nominal (~506 kHz measured on this board's fast HSE)" |
+| C4 | Cerrado: vuelve la línea de árboles de reloj, placas y silicio no ejercitados, con `prj_01`, `prj_03` y `prj_04` |
+| C5 | Cerrado: "No `HAL_TIM_*` calls" |
+
+Queda una palabra en español en la fila T2b de `prj_04/README.md` ("autoprueba"). La corrijo yo al anotar el resultado de T6b en esa misma tabla.
+
+**El cierre del implementador pasa.** Lo que falta es del responsable:
+- T6b, con el responsable en el banco;
+- la hoja de ruta, el borrado de los documentos de proceso, la retirada de `../stm32h755_control_04fb865` y el merge.
