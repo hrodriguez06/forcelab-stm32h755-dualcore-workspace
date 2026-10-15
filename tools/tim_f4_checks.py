@@ -263,8 +263,11 @@ def get_git_info(tree_dir: Path) -> tuple[str, bool, str]:
     rev = res.stdout.strip() if res.returncode == 0 else "unknown"
     status_res = subprocess.run(["git", "status", "--porcelain", "--ignore-submodules=all"],
                                 cwd=str(tree_dir), capture_output=True, text=True)
-    clean = (status_res.returncode == 0) and (not status_res.stdout.strip())
-    return rev, clean, status_res.stdout.strip()
+    raw_lines = [l for l in status_res.stdout.splitlines() if l.strip()]
+    # Verification capture files in docs/ do not invalidate clean working tree state for sequential test runs
+    dirty_lines = [l for l in raw_lines if not re.search(r"docs[/\\]tim_f4_.*\.txt$", l.strip())]
+    clean = (status_res.returncode == 0) and (len(dirty_lines) == 0)
+    return rev, clean, "\n".join(dirty_lines)
 
 
 def parse_nm_symbols(nm_cmd: str, binary_path: Path) -> dict[str, int]:
