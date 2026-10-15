@@ -247,7 +247,7 @@ def get_git_info(tree_dir: Path) -> tuple[str, bool, str]:
     res = subprocess.run(["git", "rev-parse", "--short=7", "HEAD"],
                          cwd=str(tree_dir), capture_output=True, text=True)
     rev = res.stdout.strip() if res.returncode == 0 else "unknown"
-    status_res = subprocess.run(["git", "status", "--porcelain", "--ignore-submodules=all"],
+    status_res = subprocess.run(["git", "status", "--porcelain", "--ignore-submodules=all", "-uno"],
                                 cwd=str(tree_dir), capture_output=True, text=True)
     clean = (status_res.returncode == 0) and (not status_res.stdout.strip())
     return rev, clean, status_res.stdout.strip()
@@ -496,7 +496,7 @@ RAW_WRITE_RE = re.compile(
 )
 
 RAW_RCC_TIM_RE = re.compile(
-    r"(?:__HAL_RCC_TIM[37]_CLK_ENABLE\s*\(|APB1LENR\s*(?:=(?!=)|[|&^+\-]=).*?(?:TIM[37]EN|\b0?x?1(?:UL)?\s*<<\s*[15]U?\b|\b0x0*20?\b|\b0x2\b))"
+    r"(?:__HAL_RCC_TIM[37]_CLK_ENABLE\s*\(|APB1LENR\s*(?:=(?!=)|[|&^+\-]=).*?(?:TIM[37]EN|\b0?x?1(?:UL)?\s*<<\s*\(?\s*[15]U?\s*\)?|\b0x0*20?\b|\b0x2\b))"
 )
 
 HAL_TIM_CALL_RE = re.compile(
