@@ -2114,7 +2114,12 @@ def main() -> int:
 
         if args.test == "all":
             print("\n  [G-S1] Restoring board to production prj_03 debug image after --test all...")
-            flash_image(args.sn, REPO_ROOT / PROJECTS_CONFIG["prj_03"]["dir"], preset="debug")
+            rest_ok = flash_image(args.sn, REPO_ROOT / PROJECTS_CONFIG["prj_03"]["dir"], preset="debug")
+            status = "PASS" if rest_ok else "FAIL"
+            print(f"  [{status}] ALL_board_restoration_prj_03_debug_verified: Restore board to prj_03 debug image after --test all")
+            print(f"         Detail: {'Restoration flash verified successfully' if rest_ok else 'Restoration flash failed'}\n")
+            if not rest_ok:
+                all_pass = False
 
         print("================================================================================")
         print(f"OVERALL SUMMARY: {'ALL TESTS PASSED' if all_pass else 'VERIFICATION FAILED'}")

@@ -143,3 +143,24 @@ To prevent inter-core races on shared GPIO configuration registers (`MODER`, `PU
 - **T6b (`docs/gpio_f1c_t6b2_rsr_009e997.txt`, `_swd_`, `_t3_`, `_t5_netcheck_`, `_t5_query_`)**: cold boot on the bench: the owner power-cycled the board and the auditor, with no flash or reset since the power-up, read `RCC_RSR = 0x00FE0000` (power-on), ran an independent SWD read, the tool's T3 and T5: all PASS. A first power cycle (`docs/gpio_f1c_t6b_*_009e997.txt`) was voided by a host network problem.
 - **T7 (`../prj_04_adc_dma_bm_eth/docs/gpio_f1c_t7_e9e98c4.txt`)**: Compatibility check for `prj_04`: 1951 compilation units clean, 0 illegal writes, control in `07db657` reproduces all 20 findings.
 - **Auditor Independent Runs**: SWD (`docs/gpio_f1c_audit_swd_7ba2cf0.txt`), 20 resets (`docs/gpio_f1c_audit_t6a_7ba2cf0.txt`), T2 (`docs/gpio_f1c_audit_t2_7ba2cf0.txt`), T7 (`../prj_04_adc_dma_bm_eth/docs/gpio_f1c_audit_t7_7ba2cf0.txt`), T3 control (`docs/gpio_f1c_audit_t3_control_7ba2cf0.txt`), T3 run (`docs/gpio_f1c_audit_t3_7ba2cf0.txt`), T5 net check (`docs/gpio_f1c_audit_t5_netcheck_7ba2cf0.txt`, `docs/gpio_f1c_audit_t5_query_7ba2cf0.txt`), and audit 2 runs (`docs/gpio_f1c_audit2_t2_7b56d99.txt`, `../prj_04_adc_dma_bm_eth/docs/gpio_f1c_audit2_t7_7b56d99.txt`, `docs/gpio_f1c_audit2_wrongctrl_7b56d99.txt`).
+
+---
+
+## 8. Timer Driver Integration (`03_tim`, Phase F4)
+
+Cortex-M4 consumes `01_shared_drivers/03_tim` through `stm32h7_driver_tim_hal` (tier HAL) and `stm32h7_driver_tim_bm` (tier BM) for ADC conversion triggering and hardware selftests:
+
+- **TIM3 as ADC Trigger via TRGO (`CM4/App/Src/adc_acquisition.c`)**:
+  - Replaces legacy direct writes and unprotected HAL calls with `TIM_HAL_InitTimeBase` (APB1 timer clock 200 MHz, PSC=0, ARR=399 -> 500 kHz nominal trigger rate, 50 samples per 10 kHz signal period) and `TIM_HAL_ConfigMaster` (MMS = `010` update event on TRGO, RM0399 §41.4.2).
+  - Late counter start uses `TIM_BM_Start(TIM3)` once ADC and DMA circular transfers are fully armed, ensuring zero lost or misaligned early conversion pulses.
+  - Zero raw writes to TIM registers or unprotected `HAL_TIM_*` calls remain in CM4 outside `01_shared_drivers/03_tim/tim_hal.c`.
+- **TIM3 in Hardware Selftests (`CM4/App/Src/adc_selftest_hw.c`)**:
+  - `Tim3_Prepare`, `Tim3_Run` and `Tim3_Halt` migrated to `tim_bm` functions (`TIM_BM_EnableClock`, `TIM_BM_InitTimeBase`, `TIM_BM_ConfigMaster`, `TIM_BM_Start`, `TIM_BM_Stop`), enabling clock before stop and verifying `TIM_STATUS_OK` return status.
+
+### F4 Validation Evidence (Auditor Runs in `docs/`)
+
+- **T3 SWD Hotplug Inspection (`docs/tim_f4_audit3_t3_1caa7c3.txt`)**: 32-bit register read matched RM0399 §41 bit-by-bit (`CR1=0x1`, `CR2=0x20`, `SMCR=0`, `DIER=0`, `PSC=0`, `ARR=0x18F`), identical to control `04fb865`.
+- **T4 ADC Sampling Rate & Equivalence (`docs/tim_f4_audit4_t4_1893222.txt`)**: Migrated rate 506 125.3 Hz vs control 505 880.0 Hz (delta = 0.049% <= 0.1%), oracle `dSamples / dm4_hb` = 50 032 (migrated) and 50 006 (control) within [49750, 50250], `ovr` = 0, `err` = 0.
+- **T5 Production Regression (`docs/tim_f4_audit3_t5_debug_1caa7c3.txt`, `_release_`)**: 3/3 checks PASS on debug and release; `rx_nobuf`, `tx_nobuf`, `dma_err` strictly 0.
+- **T6a Warm Resets (`docs/tim_f4_audit4_t6a_1893222.txt`)**: 20/20 PASS with edge-aligned telemetry windows to `m4_hb` increment transitions; oracle within 49 825..50 076 across all cycles; zero overruns or errors.
+- **T8 Hardware Selftests (`docs/tim_f4_audit3_t8_1caa7c3.txt`)**: `HW RESULT PASS mask=31/31` with `HW T4 HAL:1` on migrated and control images, with verified restoration of `prj_03 debug`.
