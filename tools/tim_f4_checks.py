@@ -2,46 +2,52 @@
 """Verification harness for STM32H7 TIM Driver F4 phase (H1-H5, T1-T8).
 
 Supports multi-project verification via mandatory --project {prj_04, prj_03}.
-Automates tests T1 to T8 from IMPLEMENTATION_PLAN.md (revision 3):
-  - T1:  Multi-project CI Matrix (8/8 builds via build_all.ps1 -Clean) and selftest presets:
+Automates tests T1 to T8 from IMPLEMENTATION_PLAN.md (revision 5):
+  - T1:  Multi-project CI Matrix (8/8 builds via build_all.ps1 -Clean -Fresh) and selftest presets:
          prj_04 (selftest, selftest-adc), prj_03 (selftest), prj_01 (selftest-tim).
-         Zero warnings and zero errors (-Werror).
+         Builds compile cleanly (with -Werror in prj_03/prj_04).
   - T2a: Linker symbol audit via arm-none-eabi-nm:
          prj_04 CM4: tim_bm symbols present; absent on control 04fb865.
          prj_03 CM4: tim_hal and tim_bm symbols present; absent on control 04fb865.
   - T2b: Preprocessed code scan (-E) across all compilation units in compile_commands.json:
          Zero raw writes to TIM3/TIM7 registers or manual APB1LENR clock enables in CM4.
+         Scans both CM7 and CM4; explains CM7/Core/Src/main.c:203 as known clock enable.
+         Detects handle Instance writes and __HAL_TIM_* macros.
          In prj_03: zero HAL_TIM_* calls outside tim_hal.c in CM4.
-         Self-test verified across 16 write forms and 10 read/address forms.
-         Negative control on 04fb865 detects the known raw writers by (preset, relative_path, kind)
-         including the two manual RCC enable lines.
-  - T3:  Live SWD hotplug inspection of TIM3 hardware registers:
+         Self-test verified across 20 write forms and 12 read/address forms.
+         Negative control on 04fb865 detects the known raw writers by (preset, relative_path, kind).
+  - T3:  Live SWD hotplug inspection of TIM3 hardware registers (RM0399 §41):
          CR1 (0x40000400), CR2 (0x40000404), SMCR (0x40000408),
          DIER (0x4000040C), PSC (0x40000428), ARR (0x4000042C).
-         Compares bit-by-bit against RM0399 32-bit expected table.
+         Compares bit-by-bit against RM0399 §41 32-bit expected table.
          Negative controls: equivalence on 04fb865, altered table fails.
-  - T4:  ADC sampling rate & OVR verification via UDP queries to port 5001:
-         Direct UDP queries with b"JSON\\n", RTT < 5 ms filter, midpoint timestamps.
+  - T4:  ADC sampling rate & sequential equivalence verification via UDP queries to port 5001:
+         Direct UDP queries with b"JSON\n", RTT < 5 ms filter, midpoint timestamps.
          Measured over 60s window between initial and final valid samples.
          Mandatory keys: samples, m4_hb, err, ovr (and adc_ovr in prj_04).
          Board oracle: dSamples / dm4_hb = 50000 +/- 0.5% ([49750, 50250]).
          Sanity rate: 500 kHz * [1.005, 1.020] = [502500, 510000] Hz.
          OVR == 0, ERR == 0, ADC_OVR == 0 across all packets.
+         Sequential equivalence against control 04fb865: |r_mig - r_ctrl| / r_ctrl <= 0.1%.
+         Oracle and sanity evaluated on both images; verified restoration of migrated image.
+         Negative controls pass through equivalence and oracle functions with measured data.
   - T5:  Production image regression (debug and release):
-         Flashes image (verified 2/2 cores), runs net_check.py (PASS 3/3 checks).
-         Inspects monitor [net] line: rx_nobuf=0, tx_nobuf=0, dma_err=0 (and acl_drop=0 for prj_04).
+         Flashes image (single download verified check), runs net_check.py (PASS 3/3 checks).
+         Inspects monitor [net] line with dedicated timeout: rx_nobuf=0, tx_nobuf=0, dma_err=0 (and acl_drop=0 for prj_04).
   - T6a: Repeated warm resets over SWD: 20 sequential resets (-rst), 10s wait,
-         evaluating T3 and T4 after each reset. Exception handling counts reset failures. Verdict: 20/20 PASS.
+         evaluating T3 and aligned T4 on migrated image. A and B aligned to increment of m4_hb.
+         Negative controls using cycle's measured data. Verdict: 20/20 PASS.
   - T7:  Regression of driver & API freeze:
-         prj_01 selftest-tim preset compiles cleanly.
-         git diff main -- '01_shared_drivers/03_tim/*.h' produces zero output.
+         prj_01 selftest-tim preset compiles cleanly (exit code 0).
+         git diff main -- '01_shared_drivers/03_tim/*.h' produces strictly empty output.
   - T8:  Hardware selftests on board (auditor execution):
-         G-S1 pin safety pre-check verified statically.
-         Starts monitor in background with PYTHONIOENCODING=utf-8:backslashreplace before flash.
-         Flashes prj_04 selftest & selftest-adc, and prj_03 selftest (verified 2/2 cores).
+         G-S1 pin safety verified manually per specification.
+         Starts monitor in background with PYTHONIOENCODING=utf-8:backslashreplace before flash (G-S5 exception).
+         Filters lines prior to CM7 boot banner (=== STM32H755 or (Cortex-M7)).
+         Flashes prj_04 selftest & selftest-adc, and prj_03 selftest.
          Verifies exact verdict lines without any FAIL.
          Full monitor console log printed in output.
-         Restores board to prj_03 debug (verified 2/2 cores).
+         Restores board to prj_03 debug (verified).
 
 Standard library only.
 """
@@ -1084,6 +1090,31 @@ def query_udp_telemetry(host: str, port: int = 5001, timeout_s: float = 0.5, max
         sock.close()
 
 
+def check_rate_equivalence(rate_mig: float, rate_ctrl: float, tolerance: float = 0.001) -> tuple[bool, float]:
+    """Check |rate_mig - rate_ctrl| / rate_ctrl <= tolerance (default 0.1%). (B2)"""
+    if rate_ctrl <= 0:
+        return False, 1.0
+    delta_rel = abs(rate_mig - rate_ctrl) / rate_ctrl
+    return (delta_rel <= tolerance), delta_rel
+
+
+def check_board_oracle(ds: float, dm4_hb: float, target_ratio: float = 50000.0, tolerance_pct: float = 0.005) -> tuple[bool, float]:
+    """Check ds / dm4_hb is within target_ratio * (1 +/- tolerance_pct) = [49750, 50250]. (B2, R1)"""
+    if dm4_hb <= 0:
+        return False, 0.0
+    ratio = ds / dm4_hb
+    min_ratio = target_ratio * (1.0 - tolerance_pct)  # 49750.0
+    max_ratio = target_ratio * (1.0 + tolerance_pct)  # 50250.0
+    return (min_ratio <= ratio <= max_ratio), ratio
+
+
+def check_rate_sanity(rate_hz: float, dt: float, min_dt: float = 10.0, sanity_min: float = 502500.0, sanity_max: float = 510000.0) -> tuple[bool, str]:
+    """Check rate is within sanity window [502500, 510000] Hz and dt >= min_dt."""
+    ok = (sanity_min <= rate_hz <= sanity_max) and (dt >= (min_dt - 0.5))
+    detail = f"Rate={rate_hz:.2f} Hz in [{sanity_min:.1f}, {sanity_max:.1f}], dt={dt:.3f}s"
+    return ok, detail
+
+
 def measure_udp_window(host: str, window_s: float, mandatory_keys: list[str]) -> tuple[bool, str, dict]:
     """Measures UDP telemetry across window_s, returning (ok, detail, metrics_dict)."""
     res_a = query_udp_telemetry(host)
@@ -1122,6 +1153,96 @@ def measure_udp_window(host: str, window_s: float, mandatory_keys: list[str]) ->
     }
 
 
+def measure_udp_aligned_window(host: str, min_wait_s: float, mandatory_keys: list[str], max_align_wait_s: float = 4.0) -> tuple[bool, str, dict]:
+    """Measures UDP telemetry aligning A and B to an increment of m4_hb (R1, plan rev 5).
+    
+    Sample A is taken as the first valid response where m4_hb increments from an initial observation.
+    After at least min_wait_s from A, Sample B is taken as the first valid response where m4_hb increments.
+    Returns (ok, detail, metrics_dict).
+    """
+    # 1. Establish baseline m4_hb for Sample A
+    res_base = query_udp_telemetry(host, timeout_s=0.2, max_attempts=15)
+    if not res_base:
+        return False, "Failed to receive initial UDP response within RTT < 5ms for baseline alignment", {}
+    _, data_base, _ = res_base
+    if "m4_hb" not in data_base:
+        return False, "Mandatory key 'm4_hb' missing from UDP response", {}
+    base_hb = data_base["m4_hb"]
+
+    # Poll until m4_hb increments to capture Sample A at the transition edge
+    t_poll_start = time.perf_counter()
+    res_a = None
+    while (time.perf_counter() - t_poll_start) < max_align_wait_s:
+        res = query_udp_telemetry(host, timeout_s=0.15, max_attempts=2)
+        if res:
+            t_cur, data_cur, rtt_cur = res
+            if data_cur.get("m4_hb") != base_hb:
+                res_a = (t_cur, data_cur, rtt_cur)
+                break
+        time.sleep(0.01)
+
+    if not res_a:
+        return False, f"Timed out waiting for m4_hb to increment from {base_hb} to capture Sample A", {}
+
+    t_a, data_a, rtt_a = res_a
+    missing_a = [k for k in mandatory_keys if k not in data_a]
+    if missing_a:
+        return False, f"Missing mandatory keys in sample A: {missing_a}", {}
+
+    print(f"    [T6a Telemetry A (aligned m4_hb={data_a['m4_hb']}, rtt {rtt_a:.1f} ms, t={t_a:.4f})]: {json.dumps(data_a)}")
+
+    # 2. Wait at least min_wait_s from t_a
+    target_time_b = t_a + min_wait_s
+    sleep_dur = target_time_b - time.perf_counter() - 0.1
+    if sleep_dur > 0:
+        time.sleep(sleep_dur)
+
+    while time.perf_counter() < target_time_b:
+        time.sleep(0.01)
+
+    res_before_b = query_udp_telemetry(host, timeout_s=0.2, max_attempts=15)
+    if not res_before_b:
+        return False, "Failed to receive UDP response before Sample B alignment", {}
+    _, data_before_b, _ = res_before_b
+    pre_b_hb = data_before_b.get("m4_hb")
+
+    # Poll until m4_hb increments to capture Sample B at the transition edge
+    t_poll_b_start = time.perf_counter()
+    res_b = None
+    while (time.perf_counter() - t_poll_b_start) < max_align_wait_s:
+        res = query_udp_telemetry(host, timeout_s=0.15, max_attempts=2)
+        if res:
+            t_cur, data_cur, rtt_cur = res
+            if data_cur.get("m4_hb") != pre_b_hb and (t_cur - t_a) >= min_wait_s:
+                res_b = (t_cur, data_cur, rtt_cur)
+                break
+        time.sleep(0.01)
+
+    if not res_b:
+        return False, f"Timed out waiting for m4_hb to increment from {pre_b_hb} to capture Sample B", {}
+
+    t_b, data_b, rtt_b = res_b
+    missing_b = [k for k in mandatory_keys if k not in data_b]
+    if missing_b:
+        return False, f"Missing mandatory keys in sample B: {missing_b}", {}
+
+    print(f"    [T6a Telemetry B (aligned m4_hb={data_b['m4_hb']}, rtt {rtt_b:.1f} ms, t={t_b:.4f})]: {json.dumps(data_b)}")
+
+    dt = t_b - t_a
+    ds = data_b["samples"] - data_a["samples"]
+    dm4_hb = data_b["m4_hb"] - data_a["m4_hb"]
+    rate_hz = ds / dt if dt > 0 else 0.0
+
+    return True, f"dt={dt:.3f}s, dSamples={ds}, dm4_hb={dm4_hb}, rate={rate_hz:.1f}Hz", {
+        "dt": dt,
+        "ds": ds,
+        "dm4_hb": dm4_hb,
+        "rate_hz": rate_hz,
+        "data_a": data_a,
+        "data_b": data_b,
+    }
+
+
 def run_t4(tools: dict[str, str], sn: str, project_name: str = "prj_04", host: str = DEFAULT_TARGET_IP, do_flash: bool = False, window_s: float = 60.0, control_mode: bool = False, control_dir: Path | None = None) -> dict:
     results = {"pass": True, "cases": []}
     cfg = PROJECTS_CONFIG[project_name]
@@ -1129,16 +1250,16 @@ def run_t4(tools: dict[str, str], sn: str, project_name: str = "prj_04", host: s
     has_acl_drop = cfg["has_acl_drop"]
     print(f"--- Running T4 (ADC Sampling Rate & Sequential Equivalence Verification for {project_name}, window={window_s:.1f}s) ---")
 
-    if control_mode and not do_flash:
-        do_flash = True  # m2: --control requires --flash for image identity
+    has_control = bool(control_dir and control_dir.is_dir())
+    flash_migrated = do_flash or has_control or control_mode  # B4: T4 with control always flashes migrated first
 
     mandatory_keys = ["samples", "m4_hb", "err", "ovr"]
     if has_acl_drop:
         mandatory_keys.append("adc_ovr")
 
-    # Step 1: Flash migrated debug image if requested
+    # Step 1: Flash migrated debug image if requested or control mode is active (B4)
     mig_pdir = REPO_ROOT / pdir_rel
-    if do_flash:
+    if flash_migrated:
         f_ok = flash_image(sn, mig_pdir, preset="debug")
         results["cases"].append({
             "id": "T4_flash_migrated_verified",
@@ -1185,33 +1306,30 @@ def run_t4(tools: dict[str, str], sn: str, project_name: str = "prj_04", host: s
     if not ovr_ok:
         results["pass"] = False
 
-    # Check migrated board oracle
-    samples_per_hb_mig = ds_mig / dm4_hb_mig if dm4_hb_mig > 0 else 0.0
-    oracle_ok = (49750.0 <= samples_per_hb_mig <= 50250.0)
+    # Check migrated board oracle using check_board_oracle (B2)
+    oracle_ok, ratio_mig = check_board_oracle(ds_mig, dm4_hb_mig)
     results["cases"].append({
         "id": "T4_migrated_board_oracle_samples_per_m4_hb",
-        "desc": f"Migrated board oracle: dSamples / dm4_hb ({samples_per_hb_mig:.2f}) in [49750, 50250]",
+        "desc": f"Migrated board oracle: dSamples / dm4_hb ({ratio_mig:.2f}) in [49750, 50250]",
         "pass": oracle_ok,
-        "detail": f"dSamples={ds_mig}, dm4_hb={dm4_hb_mig}, ratio={samples_per_hb_mig:.2f}",
+        "detail": f"dSamples={ds_mig}, dm4_hb={dm4_hb_mig}, ratio={ratio_mig:.2f}",
     })
     if not oracle_ok:
         results["pass"] = False
 
-    # Check migrated rate sanity
-    SANITY_MIN = 502500.0
-    SANITY_MAX = 510000.0
-    sanity_ok = (SANITY_MIN <= rate_mig <= SANITY_MAX) and (dt_mig >= (window_s - 0.5))
+    # Check migrated rate sanity using check_rate_sanity (B2)
+    sanity_ok, sanity_det = check_rate_sanity(rate_mig, dt_mig, min_dt=window_s)
     results["cases"].append({
         "id": "T4_migrated_sampling_rate_sanity_window",
-        "desc": f"Migrated rate ({rate_mig:.1f} Hz) is in [{SANITY_MIN:.1f}, {SANITY_MAX:.1f}] Hz over dt={dt_mig:.2f}s",
+        "desc": f"Migrated rate ({rate_mig:.1f} Hz) in [502500, 510000] Hz over dt={dt_mig:.2f}s",
         "pass": sanity_ok,
-        "detail": f"Rate: {rate_mig:.2f} Hz, dt: {dt_mig:.3f}s",
+        "detail": sanity_det,
     })
     if not sanity_ok:
         results["pass"] = False
 
     # Step 3: Sequential control equivalence check if control_dir is available
-    if control_dir and control_dir.is_dir():
+    if has_control:
         ctrl_pdir = control_dir / pdir_rel
         print(f"\n  [T4] Flashing control image from {ctrl_pdir.name} for sequential equivalence...")
         f_ctrl_ok = flash_image(sn, ctrl_pdir, preset="debug")
@@ -1243,6 +1361,9 @@ def run_t4(tools: dict[str, str], sn: str, project_name: str = "prj_04", host: s
         rate_ctrl = m_ctrl["rate_hz"]
         c_data_a = m_ctrl["data_a"]
         c_data_b = m_ctrl["data_b"]
+        ds_ctrl = m_ctrl["ds"]
+        dm4_hb_ctrl = m_ctrl["dm4_hb"]
+        dt_ctrl = m_ctrl["dt"]
 
         # Control overruns
         c_ovr_ok = (c_data_a["ovr"] == 0 and c_data_b["ovr"] == 0 and c_data_a["err"] == 0 and c_data_b["err"] == 0)
@@ -1257,9 +1378,30 @@ def run_t4(tools: dict[str, str], sn: str, project_name: str = "prj_04", host: s
         if not c_ovr_ok:
             results["pass"] = False
 
-        # Equivalence comparison: |r_mig - r_ctrl| / r_ctrl <= 0.1% (0.001)
-        delta_rate_rel = abs(rate_mig - rate_ctrl) / rate_ctrl if rate_ctrl > 0 else 1.0
-        equiv_pass = (delta_rate_rel <= 0.001)
+        # Control board oracle (B4)
+        c_oracle_ok, ratio_ctrl = check_board_oracle(ds_ctrl, dm4_hb_ctrl)
+        results["cases"].append({
+            "id": "T4_control_board_oracle_samples_per_m4_hb",
+            "desc": f"Control board oracle: dSamples / dm4_hb ({ratio_ctrl:.2f}) in [49750, 50250]",
+            "pass": c_oracle_ok,
+            "detail": f"dSamples={ds_ctrl}, dm4_hb={dm4_hb_ctrl}, ratio={ratio_ctrl:.2f}",
+        })
+        if not c_oracle_ok:
+            results["pass"] = False
+
+        # Control rate sanity (B4)
+        c_sanity_ok, c_sanity_det = check_rate_sanity(rate_ctrl, dt_ctrl, min_dt=window_s)
+        results["cases"].append({
+            "id": "T4_control_sampling_rate_sanity_window",
+            "desc": f"Control rate ({rate_ctrl:.1f} Hz) in [502500, 510000] Hz over dt={dt_ctrl:.2f}s",
+            "pass": c_sanity_ok,
+            "detail": c_sanity_det,
+        })
+        if not c_sanity_ok:
+            results["pass"] = False
+
+        # Equivalence comparison using check_rate_equivalence (B2)
+        equiv_pass, delta_rate_rel = check_rate_equivalence(rate_mig, rate_ctrl)
         results["cases"].append({
             "id": "T4_rate_equivalence_migrated_vs_control",
             "desc": f"Equivalence: |rate_mig ({rate_mig:.1f}) - rate_ctrl ({rate_ctrl:.1f})| / rate_ctrl <= 0.1% (delta={delta_rate_rel*100.0:.4f}%)",
@@ -1269,30 +1411,38 @@ def run_t4(tools: dict[str, str], sn: str, project_name: str = "prj_04", host: s
         if not equiv_pass:
             results["pass"] = False
 
-        # Negative control 1: shifted rate (+1%) evaluated against same equivalence logic MUST FAIL
-        shifted_rate = rate_ctrl * 1.01
-        neg_delta_rel = abs(shifted_rate - rate_ctrl) / rate_ctrl
-        neg_rate_detected = not (neg_delta_rel <= 0.001)
+        # Negative control 1: shifted rate (+1%) evaluated against same equivalence logic MUST FAIL (B2)
+        neg_equiv_pass, neg_delta_rel = check_rate_equivalence(rate_mig * 1.01, rate_ctrl)
+        neg_rate_detected = not neg_equiv_pass
         results["cases"].append({
             "id": "T4_negative_control_shifted_rate_fails",
-            "desc": "Negative control: rate shifted by +1% fails equivalence tolerance <= 0.1%",
+            "desc": "Negative control: rate_mig shifted by +1% fails equivalence tolerance <= 0.1% against rate_ctrl",
             "pass": neg_rate_detected,
-            "detail": f"Shifted delta={neg_delta_rel*100.0:.4f}% correctly rejected",
+            "detail": f"Shifted rate={rate_mig * 1.01:.2f} Hz vs rate_ctrl={rate_ctrl:.2f} Hz (delta={neg_delta_rel*100.0:.4f}%) correctly rejected by check_rate_equivalence",
         })
         if not neg_rate_detected:
             results["pass"] = False
 
-        # Step 4: Restore migrated image on target
+        # Step 4: Restore migrated image on target (B4: restoration is a case that can fail)
         print(f"\n  [T4] Restoring migrated debug image on target...")
-        flash_image(sn, mig_pdir, preset="debug")
+        f_restore_ok = flash_image(sn, mig_pdir, preset="debug")
+        results["cases"].append({
+            "id": "T4_restore_migrated_verified",
+            "desc": f"Restored verified migrated debug image from {mig_pdir.name}",
+            "pass": f_restore_ok,
+            "detail": "Download verified successfully" if f_restore_ok else "Restoration flash verification failed",
+        })
+        if not f_restore_ok:
+            results["pass"] = False
 
-    # Negative control 2: shifted oracle (40000 samples/hb) MUST FAIL
-    neg_oracle_fails = not (49750.0 <= 40000.0 <= 50250.0)
+    # Negative control 2: shifted oracle (ds_mig * 0.8) evaluated against same oracle logic MUST FAIL (B2)
+    neg_oracle_pass, neg_ratio = check_board_oracle(ds_mig * 0.8, dm4_hb_mig)
+    neg_oracle_fails = not neg_oracle_pass
     results["cases"].append({
         "id": "T4_negative_control_shifted_oracle_fails",
-        "desc": "Negative control: shifted ratio (40000 samples/hb) fails board oracle tolerance [49750, 50250]",
+        "desc": "Negative control: dSamples shifted by x0.8 fails board oracle tolerance [49750, 50250]",
         "pass": neg_oracle_fails,
-        "detail": "Shifted ratio 40000 correctly rejected by [49750, 50250] tolerance",
+        "detail": f"Shifted ratio {neg_ratio:.2f} (dSamples*0.8/dm4_hb) correctly rejected by check_board_oracle",
     })
     if not neg_oracle_fails:
         results["pass"] = False
@@ -1352,8 +1502,20 @@ def run_t5(tools: dict[str, str], sn: str, project_name: str = "prj_04", preset:
     cmd_mon = [tools["python"], str(monitor_script), "--sn", sn, "--timeout", "15.0"]
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8:backslashreplace"
-    p_mon = subprocess.run(cmd_mon, capture_output=True, text=True, env=env, encoding="utf-8", errors="backslashreplace")
-    mon_stdout = p_mon.stdout
+    try:
+        p_mon = subprocess.run(
+            cmd_mon,
+            capture_output=True,
+            text=True,
+            env=env,
+            encoding="utf-8",
+            errors="backslashreplace",
+            timeout=25.0,  # Dedicated timeout limit for monitor.py (m2)
+        )
+        mon_stdout = p_mon.stdout
+    except subprocess.TimeoutExpired as e:
+        mon_stdout = e.stdout if isinstance(e.stdout, str) else (e.stdout.decode("utf-8", errors="backslashreplace") if e.stdout else "")
+        print("  [T5 Warning] monitor.py subprocess timed out after 25.0s limit (m2)")
     print(f"  [T5 Monitor Output (15.0s)]:\n{mon_stdout}")
 
     net_lines = [l for l in mon_stdout.splitlines() if "[net]" in l]
@@ -1423,26 +1585,32 @@ def run_t5(tools: dict[str, str], sn: str, project_name: str = "prj_04", preset:
 # T6a: Repeated warm resets over SWD (M4, m2)
 # ==============================================================================
 
-def run_t6a(tools: dict[str, str], sn: str, project_name: str = "prj_04", count: int = 20, wait_s: float = 10.0, do_flash: bool = False) -> dict:
+def run_t6a(tools: dict[str, str], sn: str, project_name: str = "prj_04", count: int = 20, wait_s: float = 10.0, do_flash: bool = False, host: str = DEFAULT_TARGET_IP) -> dict:
     results = {"pass": True, "cases": []}
     cfg = PROJECTS_CONFIG[project_name]
     pdir_rel = cfg["dir"]
+    has_acl_drop = cfg["has_acl_drop"]
     print(f"--- Running T6a ({count} Repeated Warm Resets over SWD for {project_name}) ---")
 
     if do_flash:
         f_ok = flash_image(sn, REPO_ROOT / pdir_rel, preset="debug")
+        results["cases"].append({
+            "id": "T6a_flash_verified",
+            "desc": "Flash debug image before reset cycle",
+            "pass": f_ok,
+            "detail": "Download verified successfully" if f_ok else "Flash verification failed",
+        })
         if not f_ok:
-            results["cases"].append({
-                "id": "T6a_flash_verified",
-                "desc": "Flash debug image before reset cycle",
-                "pass": False,
-                "detail": "Flash verification failed",
-            })
             results["pass"] = False
             return results
+        print("  [T6a] Waiting 4.0s after flash for network link establishment...")
+        time.sleep(4.0)
 
     passes = 0
     failures = []
+    mandatory_keys = ["samples", "m4_hb", "err", "ovr"]
+    if has_acl_drop:
+        mandatory_keys.append("adc_ovr")
 
     for i in range(1, count + 1):
         print(f"\n  [T6a Cycle {i:02d}/{count:02d}] Resetting target via SWD (-rst)...")
@@ -1458,32 +1626,80 @@ def run_t6a(tools: dict[str, str], sn: str, project_name: str = "prj_04", count:
         print(f"  [T6a Cycle {i:02d}] Waiting {wait_s:.1f}s for boot & initialization...")
         time.sleep(wait_s)
 
-        # Run T3 SWD register check
+        # 1. Run T3 SWD register check
         try:
             t3_res = run_t3(tools, sn, project_name, control_mode=False, do_flash=False)
         except Exception as e:
             failures.append(f"Cycle {i}: T3 exception: {e}")
             t3_res = {"pass": False}
 
-        # Run T4 telemetry check (shorter window: 10.5s measured between responses)
+        # 2. Run aligned T4 check on migrated image (R1, plan rev 5)
+        print(f"--- Running T4 Aligned (Telemetry for {project_name}, min_wait=10.0s) ---")
         try:
-            t4_res = run_t4(tools, sn, project_name, do_flash=False, window_s=10.5)
+            ok_m, det_m, m = measure_udp_aligned_window(host, min_wait_s=10.0, mandatory_keys=mandatory_keys)
         except Exception as e:
-            failures.append(f"Cycle {i}: T4 exception: {e}")
-            t4_res = {"pass": False}
+            failures.append(f"Cycle {i}: Telemetry exception: {e}")
+            ok_m = False
+            det_m = str(e)
+            m = {}
 
-        cycle_ok = t3_res["pass"] and t4_res["pass"]
+        if not ok_m:
+            failures.append(f"Cycle {i}: Telemetry measurement failed: {det_m}")
+            print(f"  [T6a Cycle {i:02d}] FAIL: T3={t3_res['pass']}, Telemetry failed ({det_m})")
+            continue
+
+        data_a = m["data_a"]
+        data_b = m["data_b"]
+        ds = m["ds"]
+        dm4_hb = m["dm4_hb"]
+        dt = m["dt"]
+        rate_hz = m["rate_hz"]
+
+        # Check overruns & errors
+        ovr_ok = (data_a["ovr"] == 0 and data_b["ovr"] == 0 and data_a["err"] == 0 and data_b["err"] == 0)
+        if has_acl_drop:
+            ovr_ok = ovr_ok and (data_a["adc_ovr"] == 0 and data_b["adc_ovr"] == 0)
+
+        # Check rate sanity
+        sanity_ok, sanity_det = check_rate_sanity(rate_hz, dt, min_dt=10.0)
+
+        # Check board oracle
+        oracle_ok, ratio = check_board_oracle(ds, dm4_hb)
+
+        # Negative controls using cycle's measured data (R1)
+        neg_low_ok, neg_low_ratio = check_board_oracle(ds * 0.8, dm4_hb)
+        neg_low_rejected = not neg_low_ok
+
+        neg_hi_ok, neg_hi_ratio = check_board_oracle(ds * 1.01, dm4_hb)
+        neg_hi_rejected = not neg_hi_ok
+
+        cycle_t4_ok = ovr_ok and sanity_ok and oracle_ok and neg_low_rejected and neg_hi_rejected
+        cycle_ok = t3_res["pass"] and cycle_t4_ok
+
         if cycle_ok:
             passes += 1
-            print(f"  [T6a Cycle {i:02d}] PASS (T3 and T4 passed)")
+            print(f"  [T6a Cycle {i:02d}/{count:02d}] PASS (T3 passed, rate={rate_hz:.1f}Hz, oracle={ratio:.2f}, neg_ctrls=PASS)")
         else:
-            failures.append(f"Cycle {i}: T3={t3_res['pass']}, T4={t4_res['pass']}")
-            print(f"  [T6a Cycle {i:02d}] FAIL: T3={t3_res['pass']}, T4={t4_res['pass']}")
+            reasons = []
+            if not t3_res["pass"]:
+                reasons.append("T3 failed")
+            if not ovr_ok:
+                reasons.append(f"ovr={data_a['ovr']}/{data_b['ovr']}")
+            if not sanity_ok:
+                reasons.append(f"sanity={rate_hz:.1f}Hz")
+            if not oracle_ok:
+                reasons.append(f"oracle={ratio:.2f}")
+            if not neg_low_rejected:
+                reasons.append(f"neg_low_passed({neg_low_ratio:.2f})")
+            if not neg_hi_rejected:
+                reasons.append(f"neg_hi_passed({neg_hi_ratio:.2f})")
+            failures.append(f"Cycle {i}: {', '.join(reasons)}")
+            print(f"  [T6a Cycle {i:02d}/{count:02d}] FAIL: {', '.join(reasons)}")
 
     total_pass = (passes == count)
     results["cases"].append({
         "id": "T6a_warm_resets_pass",
-        "desc": f"{count}/{count} warm resets pass T3 and T4 without lockup or overrun",
+        "desc": f"{count}/{count} warm resets pass T3 and aligned T4 with negative controls",
         "pass": total_pass,
         "detail": f"Passed: {passes}/{count} cycles" + (f", Failures: {failures}" if failures else ""),
     })
@@ -1567,17 +1783,9 @@ def run_t8(tools: dict[str, str], sn: str, control_dir: Path | None) -> dict:
     results = {"pass": True, "cases": []}
     print("--- Running T8 (Hardware Selftests on Board & Control Equivalence) ---")
 
-    # 1. G-S1 Pin Safety Pre-check
-    g_pass, g_detail = check_gs1_pin_safety()
-    results["cases"].append({
-        "id": "T8_gs1_pin_safety_precheck",
-        "desc": "Verify G-S1 pin safety rules before flashing hardware selftest images",
-        "pass": g_pass,
-        "detail": g_detail,
-    })
-    if not g_pass:
-        results["pass"] = False
-        return results
+    # 1. G-S1 Pin Safety Pre-check (Informative note per plan specification, M2)
+    _, g_detail = check_gs1_pin_safety()
+    print(f"  [G-S1 Note] {g_detail}")
 
     if not (control_dir and control_dir.is_dir()):
         results["cases"].append({
@@ -1785,7 +1993,7 @@ def main() -> int:
     parser.add_argument("--project", choices=["prj_04", "prj_03"], required=True,
                         help="Project to verify (mandatory: prj_04 or prj_03)")
     parser.add_argument("--test", choices=["t1", "t2", "t2a", "t2b", "t3", "t4", "t5", "t6a", "t7", "t8", "all"], default="all",
-                        help="Which test to run (default: all)")
+                        help="Which test to run (t1, t2, t3, t4, t5, t6a, t7, t8, all; 'all' runs t2a-t6a without rebuilding, default: all)")
     parser.add_argument("--preset", choices=["debug", "release"], default="debug",
                         help="Preset for T5 (default: debug)")
     parser.add_argument("--sn", default=DEFAULT_SN, help=f"ST-LINK serial number (default: {DEFAULT_SN})")
@@ -1864,7 +2072,8 @@ def main() -> int:
 
         tests_to_run = []
         if args.test == "all":
-            tests_to_run = ["t1", "t2a", "t2b", "t3", "t4", "t5", "t6a", "t7"]
+            # Hardware session non-rebuilding suite (m2): excludes t1 and t7 builds
+            tests_to_run = ["t2a", "t2b", "t3", "t4", "t5", "t6a"]
         elif args.test == "t2":
             tests_to_run = ["t2a", "t2b"]
         else:
