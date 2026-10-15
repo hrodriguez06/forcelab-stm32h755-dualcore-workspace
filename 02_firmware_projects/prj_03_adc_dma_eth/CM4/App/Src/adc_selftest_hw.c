@@ -142,9 +142,18 @@ static uint32_t Sthw_CcrClockHz(uint32_t ccr)
     return (presc < 12U) ? (STHW_KER_CK_HZ / k_div[presc]) : 0U;
 }
 
-static void Tim3_Prepare(uint32_t rate_hz)
+static bool Tim3_Prepare(uint32_t rate_hz)
 {
-    (void)TIM_BM_EnableClock(TIM3);
+    /* Ensure counter is stopped before configuring timebase (CEN=0 required by tim_bm) */
+    if (TIM_BM_Stop(TIM3) != TIM_BM_OK)
+    {
+        return false;
+    }
+
+    if (TIM_BM_EnableClock(TIM3) != TIM_BM_OK)
+    {
+        return false;
+    }
 
     const TimBm_TimeBaseConfig_t cfg = {
         .tim               = TIM3,
@@ -157,18 +166,27 @@ static void Tim3_Prepare(uint32_t rate_hz)
         .urs_overflow_only = false
     };
 
-    (void)TIM_BM_InitTimeBase(&cfg);
-    (void)TIM_BM_ConfigMaster(TIM3, TIM_BM_MMS_UPDATE, false);
+    if (TIM_BM_InitTimeBase(&cfg) != TIM_BM_OK)
+    {
+        return false;
+    }
+
+    if (TIM_BM_ConfigMaster(TIM3, TIM_BM_MMS_UPDATE, false) != TIM_BM_OK)
+    {
+        return false;
+    }
+
+    return true;
 }
 
-static void Tim3_Run(void)
+static bool Tim3_Run(void)
 {
-    (void)TIM_BM_Start(TIM3);
+    return (TIM_BM_Start(TIM3) == TIM_BM_OK);
 }
 
-static void Tim3_Halt(void)
+static bool Tim3_Halt(void)
 {
-    (void)TIM_BM_Stop(TIM3);
+    return (TIM_BM_Stop(TIM3) == TIM_BM_OK);
 }
 
 /* ============================================================================
@@ -313,50 +331,54 @@ static void Hal_Flow(const Sthw_FlowCfg_t *fc, const AdcHal_ChannelConfig_t *chs
 
     memset(out, 0, sizeof(*out));
     memset(&s_hal, 0, sizeof(s_hal));
-    Tim3_Prepare(fc->rate_hz);
 
-    if (ADC_HAL_InitEx(&s_hal, &cfg) && ADC_HAL_Calibrate(&s_hal) && ADC_HAL_Start_DMA(&s_hal))
+    if (Tim3_Prepare(fc->rate_hz) &&
+        ADC_HAL_InitEx(&s_hal, &cfg) && ADC_HAL_Calibrate(&s_hal) && ADC_HAL_Start_DMA(&s_hal))
     {
-        out->started = true;
-        Tim3_Run();
-
-        bool     dma_stopped = false;
-        uint32_t t0 = HAL_GetTick();
-        for (;;)
+        if (Tim3_Run())
         {
-            Selftest_Heartbeat();
-            uint32_t now = HAL_GetTick() - t0;
-            if (now >= fc->window_ms)
+            out->started = true;
+            bool     dma_stopped = false;
+            uint32_t t0 = HAL_GetTick();
+            for (;;)
             {
-                break;
-            }
-            if ((fc->dma_stop_ms != 0U) && !dma_stopped && (now >= fc->dma_stop_ms))
-            {
-                /* Pull the stream out from under the HAL, as a bus fault or a
-                   stuck consumer would: the ADC keeps converting, nobody reads DR. */
-                ((DMA_Stream_TypeDef *)s_hal.hdma.Instance)->CR &= ~DMA_SxCR_EN;
-                dma_stopped = true;
-            }
-            ADC_HAL_IRQHandler_DMA(&s_hal);
-            if ((fc->adc->ISR & ADC_ISR_OVR) != 0U)
-            {
-                ADC_HAL_IRQHandler_ADC(&s_hal);
-            }
-            uint8_t half = 0U;
-            if (ADC_HAL_GetReadyHalf(&s_hal, &half))
-            {
-                out->halves++;
-                for (uint32_t i = 0U; (i < fc->num_channels) && (i < 2U); i++)
+                Selftest_Heartbeat();
+                uint32_t now = HAL_GetTick() - t0;
+                if (now >= fc->window_ms)
                 {
-                    ADC_HAL_ComputeStatsChannel(&s_hal, half, i, BOARD_ADC_VREF_MV);
-                    out->avg[i] = s_hal.stats.average_raw;
+                    break;
+                }
+                if ((fc->dma_stop_ms != 0U) && !dma_stopped && (now >= fc->dma_stop_ms))
+                {
+                    /* Pull the stream out from under the HAL, as a bus fault or a
+                       stuck consumer would: the ADC keeps converting, nobody reads DR. */
+                    ((DMA_Stream_TypeDef *)s_hal.hdma.Instance)->CR &= ~DMA_SxCR_EN;
+                    dma_stopped = true;
+                }
+                ADC_HAL_IRQHandler_DMA(&s_hal);
+                if ((fc->adc->ISR & ADC_ISR_OVR) != 0U)
+                {
+                    ADC_HAL_IRQHandler_ADC(&s_hal);
+                }
+                uint8_t half = 0U;
+                if (ADC_HAL_GetReadyHalf(&s_hal, &half))
+                {
+                    out->halves++;
+                    for (uint32_t i = 0U; (i < fc->num_channels) && (i < 2U); i++)
+                    {
+                        ADC_HAL_ComputeStatsChannel(&s_hal, half, i, BOARD_ADC_VREF_MV);
+                        out->avg[i] = s_hal.stats.average_raw;
+                    }
                 }
             }
+            out->elapsed_ms = HAL_GetTick() - t0;
         }
-        out->elapsed_ms = HAL_GetTick() - t0;
     }
 
-    Tim3_Halt();
+    if (!Tim3_Halt())
+    {
+        out->started = false;
+    }
 
     out->ht       = s_hal.stats.dma_ht_count;
     out->tc       = s_hal.stats.dma_tc_count;

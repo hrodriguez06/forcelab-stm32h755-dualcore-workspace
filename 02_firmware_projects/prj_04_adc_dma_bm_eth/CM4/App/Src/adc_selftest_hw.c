@@ -130,9 +130,18 @@ static uint32_t Sthw_Rate_x10(uint32_t events, uint32_t ms)
     return (ms == 0U) ? 0U : ((events * 10000U) / ms);
 }
 
-static void Tim3_Prepare(uint32_t rate_hz)
+static bool Tim3_Prepare(uint32_t rate_hz)
 {
-    (void)TIM_BM_EnableClock(TIM3);
+    /* Ensure counter is stopped before configuring timebase (CEN=0 required by tim_bm) */
+    if (TIM_BM_Stop(TIM3) != TIM_BM_OK)
+    {
+        return false;
+    }
+
+    if (TIM_BM_EnableClock(TIM3) != TIM_BM_OK)
+    {
+        return false;
+    }
 
     const TimBm_TimeBaseConfig_t cfg = {
         .tim               = TIM3,
@@ -145,18 +154,27 @@ static void Tim3_Prepare(uint32_t rate_hz)
         .urs_overflow_only = false
     };
 
-    (void)TIM_BM_InitTimeBase(&cfg);
-    (void)TIM_BM_ConfigMaster(TIM3, TIM_BM_MMS_UPDATE, false);
+    if (TIM_BM_InitTimeBase(&cfg) != TIM_BM_OK)
+    {
+        return false;
+    }
+
+    if (TIM_BM_ConfigMaster(TIM3, TIM_BM_MMS_UPDATE, false) != TIM_BM_OK)
+    {
+        return false;
+    }
+
+    return true;
 }
 
-static void Tim3_Run(void)
+static bool Tim3_Run(void)
 {
-    (void)TIM_BM_Start(TIM3);
+    return (TIM_BM_Start(TIM3) == TIM_BM_OK);
 }
 
-static void Tim3_Halt(void)
+static bool Tim3_Halt(void)
 {
-    (void)TIM_BM_Stop(TIM3);
+    return (TIM_BM_Stop(TIM3) == TIM_BM_OK);
 }
 
 static void Sthw_DmaConfig(DmaBm_Config_t *dma, const Sthw_FlowCfg_t *fc)
@@ -380,54 +398,58 @@ static void Bm_Flow(const Sthw_FlowCfg_t *fc, const AdcBm_ChannelConfig_t *chs, 
 
     memset(out, 0, sizeof(*out));
     memset(&s_bm, 0, sizeof(s_bm));
-    Tim3_Prepare(fc->rate_hz);
 
-    if (DMA_BM_InitStream(&dma) && ADC_BM_InitEx(&s_bm, &cfg) &&
+    if (Tim3_Prepare(fc->rate_hz) &&
+        DMA_BM_InitStream(&dma) && ADC_BM_InitEx(&s_bm, &cfg) &&
         ADC_BM_Calibrate(fc->adc) && ADC_BM_Enable(fc->adc))
     {
-        out->started = true;
         DMA_BM_Start(fc->stream);
         ADC_BM_StartConversion(fc->adc);
-        Tim3_Run();
-
-        bool     dma_stopped = false;
-        uint32_t t0 = HAL_GetTick();
-        for (;;)
+        if (Tim3_Run())
         {
-            Selftest_Heartbeat();
-            uint32_t now = HAL_GetTick() - t0;
-            if (now >= fc->window_ms)
+            out->started = true;
+            bool     dma_stopped = false;
+            uint32_t t0 = HAL_GetTick();
+            for (;;)
             {
-                break;
-            }
-            if ((fc->dma_stop_ms != 0U) && !dma_stopped && (now >= fc->dma_stop_ms))
-            {
-                (void)DMA_BM_Stop(fc->stream);
-                dma_stopped = true;
-            }
-            if (DMA_BM_GetFlags(fc->stream) != 0U)
-            {
-                ADC_BM_IRQHandler_DMA(&s_bm, fc->stream);
-            }
-            if ((fc->adc->ISR & ADC_ISR_OVR) != 0U)
-            {
-                ADC_BM_IRQHandler_ADC(&s_bm);
-            }
-            uint8_t half = 0U;
-            if (ADC_BM_GetReadyHalf(&s_bm, &half))
-            {
-                out->halves++;
-                for (uint32_t i = 0U; (i < fc->num_channels) && (i < 2U); i++)
+                Selftest_Heartbeat();
+                uint32_t now = HAL_GetTick() - t0;
+                if (now >= fc->window_ms)
                 {
-                    ADC_BM_ComputeStatsChannel(&s_bm, half, i, BOARD_ADC_VREF_MV);
-                    out->avg[i] = s_bm.stats.average_raw;
+                    break;
+                }
+                if ((fc->dma_stop_ms != 0U) && !dma_stopped && (now >= fc->dma_stop_ms))
+                {
+                    (void)DMA_BM_Stop(fc->stream);
+                    dma_stopped = true;
+                }
+                if (DMA_BM_GetFlags(fc->stream) != 0U)
+                {
+                    ADC_BM_IRQHandler_DMA(&s_bm, fc->stream);
+                }
+                if ((fc->adc->ISR & ADC_ISR_OVR) != 0U)
+                {
+                    ADC_BM_IRQHandler_ADC(&s_bm);
+                }
+                uint8_t half = 0U;
+                if (ADC_BM_GetReadyHalf(&s_bm, &half))
+                {
+                    out->halves++;
+                    for (uint32_t i = 0U; (i < fc->num_channels) && (i < 2U); i++)
+                    {
+                        ADC_BM_ComputeStatsChannel(&s_bm, half, i, BOARD_ADC_VREF_MV);
+                        out->avg[i] = s_bm.stats.average_raw;
+                    }
                 }
             }
+            out->elapsed_ms = HAL_GetTick() - t0;
         }
-        out->elapsed_ms = HAL_GetTick() - t0;
     }
 
-    Tim3_Halt();
+    if (!Tim3_Halt())
+    {
+        out->started = false;
+    }
     (void)ADC_BM_StopConversion(fc->adc);
     (void)DMA_BM_Stop(fc->stream);
     (void)DMA_BM_DeinitStream(fc->stream);
@@ -468,54 +490,58 @@ static void Ll_Flow(const Sthw_FlowCfg_t *fc, const AdcLl_ChannelConfig_t *chs, 
 
     memset(out, 0, sizeof(*out));
     memset(&s_ll, 0, sizeof(s_ll));
-    Tim3_Prepare(fc->rate_hz);
 
-    if (DMA_BM_InitStream(&dma) && ADC_LL_InitEx(&s_ll, &cfg) &&
+    if (Tim3_Prepare(fc->rate_hz) &&
+        DMA_BM_InitStream(&dma) && ADC_LL_InitEx(&s_ll, &cfg) &&
         ADC_LL_Calibrate(fc->adc) && ADC_LL_Enable(fc->adc))
     {
-        out->started = true;
         DMA_BM_Start(fc->stream);
         ADC_LL_StartConversion(fc->adc);
-        Tim3_Run();
-
-        bool     dma_stopped = false;
-        uint32_t t0 = HAL_GetTick();
-        for (;;)
+        if (Tim3_Run())
         {
-            Selftest_Heartbeat();
-            uint32_t now = HAL_GetTick() - t0;
-            if (now >= fc->window_ms)
+            out->started = true;
+            bool     dma_stopped = false;
+            uint32_t t0 = HAL_GetTick();
+            for (;;)
             {
-                break;
-            }
-            if ((fc->dma_stop_ms != 0U) && !dma_stopped && (now >= fc->dma_stop_ms))
-            {
-                (void)DMA_BM_Stop(fc->stream);
-                dma_stopped = true;
-            }
-            if (DMA_BM_GetFlags(fc->stream) != 0U)
-            {
-                ADC_LL_IRQHandler_DMA(&s_ll, fc->stream);
-            }
-            if ((fc->adc->ISR & ADC_ISR_OVR) != 0U)
-            {
-                ADC_LL_IRQHandler_ADC(&s_ll);
-            }
-            uint8_t half = 0U;
-            if (ADC_LL_GetReadyHalf(&s_ll, &half))
-            {
-                out->halves++;
-                for (uint32_t i = 0U; (i < fc->num_channels) && (i < 2U); i++)
+                Selftest_Heartbeat();
+                uint32_t now = HAL_GetTick() - t0;
+                if (now >= fc->window_ms)
                 {
-                    ADC_LL_ComputeStatsChannel(&s_ll, half, i, BOARD_ADC_VREF_MV);
-                    out->avg[i] = s_ll.stats.average_raw;
+                    break;
+                }
+                if ((fc->dma_stop_ms != 0U) && !dma_stopped && (now >= fc->dma_stop_ms))
+                {
+                    (void)DMA_BM_Stop(fc->stream);
+                    dma_stopped = true;
+                }
+                if (DMA_BM_GetFlags(fc->stream) != 0U)
+                {
+                    ADC_LL_IRQHandler_DMA(&s_ll, fc->stream);
+                }
+                if ((fc->adc->ISR & ADC_ISR_OVR) != 0U)
+                {
+                    ADC_LL_IRQHandler_ADC(&s_ll);
+                }
+                uint8_t half = 0U;
+                if (ADC_LL_GetReadyHalf(&s_ll, &half))
+                {
+                    out->halves++;
+                    for (uint32_t i = 0U; (i < fc->num_channels) && (i < 2U); i++)
+                    {
+                        ADC_LL_ComputeStatsChannel(&s_ll, half, i, BOARD_ADC_VREF_MV);
+                        out->avg[i] = s_ll.stats.average_raw;
+                    }
                 }
             }
+            out->elapsed_ms = HAL_GetTick() - t0;
         }
-        out->elapsed_ms = HAL_GetTick() - t0;
     }
 
-    Tim3_Halt();
+    if (!Tim3_Halt())
+    {
+        out->started = false;
+    }
     (void)ADC_LL_StopConversion(fc->adc);
     (void)DMA_BM_Stop(fc->stream);
     (void)DMA_BM_DeinitStream(fc->stream);
