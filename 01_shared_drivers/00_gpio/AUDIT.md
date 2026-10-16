@@ -282,3 +282,37 @@ Solo cambian la herramienta sin placa y el informe.
 - los resets de producción.
 
 Están pendientes de que el responsable decida sobre la compuerta de T9 en PF14.
+
+## Corridas de cierre de F1 (`85b4325`, plan revisión 3)
+
+Imágenes compiladas por mí siguiendo §6.2 del informe, desde `85b4325` con el árbol limpio. `selftest-gpio` y `release` de `prj_01` se configuraron con `--fresh` y se compilaron con `--clean-first`, con 0 avisos, y los dos flasheos dieron \"Download verified successfully\". Capturas en `prj_01/docs/`:
+
+| Corrida | Captura | Resultado |
+| --- | --- | --- |
+| Banco 1 | `gpio_f2_close_selftest_85b4325_1.txt` | `FW VERDICT=PASS failures=0`; host 62/63. **La única línea FAIL es `CHECK T9 gate PF14`** (1,05 frente a 1,35 ns), que no cuenta según la revisión 3 (decisión C del responsable). PF15 pasa (1,60/1,03) |
+| Banco 2 | `gpio_f2_close_selftest_85b4325_2.txt` | **63/63, `FW VERDICT=PASS`, `HOST VERDICT=PASS`**; T9 en PF14 pasa (1,82/1,43) |
+| Resets de producción | `gpio_f2_close_warm_resets_85b4325.txt` | `release` de `prj_01`: **20/20** resets llegan a \"(CPU2 alive)\", con la identidad de los dos núcleos (`85b4325`) en cada uno |
+
+**F2 en las dos corridas:**
+- **T11:** las tres cuentas exactas.
+- **T12:** cada núcleo solo sus líneas, con el aislamiento.
+- **T13:** CM7 0,10/0,10/0,22 µs y CM4 0,15/0,16/0,24 µs sobre 200 flancos.
+- **T14:** (a)–(d) con sus controles.
+- **T17(b):** `READY` tras 76 493 y 76 385 ciclos, con la sección retenida 138 y 155 ciclos.
+
+En las dos corridas, la identidad R4-a es la de `85b4325`.
+
+### Estado
+
+**F1 pasa.**
+- El driver, el selftest, el host y la herramienta sin placa quedan auditados.
+- El auditor hizo las corridas en la placa con las imágenes del HEAD.
+- La compuerta de T9 en PF14 queda fuera del cierre por decisión del responsable (revisión 3).
+
+**Siguiente, el cierre:**
+- **Implementador:** el README de `00_gpio`: §2 con la API nueva; §9 con las pruebas, las capturas y las medidas; §9.5; §10, que debe decir que T9 en PF14 no se resuelve en este banco y anotar los menores aceptados de la herramienta; §11; §13.3 como hecho; §15.
+- **Responsable:**
+  - la hoja de ruta;
+  - el borrado de los documentos de proceso;
+  - la retirada de `../stm32h755_control_3df160a`;
+  - el merge.

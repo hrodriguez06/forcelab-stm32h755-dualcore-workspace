@@ -1,0 +1,233 @@
+[host] argv: --project 03_firmware_templates/prj_01_template_dualcore --preset release --out 'C:\Users\HRODRI~1\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\a435ba69-f99a-4dc8-9231-6c64b1c6d99b\scratchpad\gpio_f2_close_warm_resets_85b4325.txt' --title '00_gpio F2 close: production warm resets'
+[host] options: project=C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\03_firmware_templates\prj_01_template_dualcore preset=release count=20
+================================================================================
+prj_01_template_dualcore release at 85b4325, build id 4a036898df066354: 20 warm resets
+00_gpio F2 close: production warm resets
+Host checkout: 85b4325; build id of build/release: 4a036898df066354 (host_build_id of tools/gpio_hw_check.py)
+Each reset must print '[sys] build' and '[sys] cpu2 build' with this rev and id.
+[host] tree clean
+Target: NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK V3)
+Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst
+================================================================================
+
+--- WARM RESET 1/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 2/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 3/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 4/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 5/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 6/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 7/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 8/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 9/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 10/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 11/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 12/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 13/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 14/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 15/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 16/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 17/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 18/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 19/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+--- WARM RESET 20/20 ---
+=== STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[sys] build rev=85b4325 id=4a036898df066354
+[sys] sysclk=400000000 Hz hclk=200000000 Hz
+[sys] silicon revision id=0x2003
+[ipc] shared block at 0x38008000, magic=0x48375353
+[ipc] CPU2 boot handshake: enabled (HSEM 0)
+[sys] cpu2 build rev=85b4325 id=4a036898df066354
+[ipc] m7=1 m4=1  (CPU2 alive)
+[check] cpu1 rev=85b4325 id=4a036898df066354, cpu2 rev=85b4325 id=4a036898df066354, host rev=85b4325 id=4a036898df066354 -> PASS
+
+RESULT: 20/20 resets reached '(CPU2 alive)'; identity PASS in every reset
