@@ -1,55 +1,66 @@
 #!/usr/bin/env python3
-"""Verification harness for STM32H7 Ethernet Driver E3-E7 phase (Revision 1).
+"""Verification harness for STM32H7 Ethernet Driver E3-E7 phase (Revision 2).
 
 Covers off-board tests T1, T2, T3, T4 and on-board auditor tests T5, T6:
   - T1: CI matrix build (8 configurations: prj_01..04 debug/release) compiled directly
         via cmake --preset and cmake --build --preset --clean-first.
         Checks: exit code 0, 0 compiler warnings, built objects count > 0, image freshness.
-        Negative control: real temporary C file compiled outside repo with deliberate warning
-        via project flags, routed through parse_compiler_warnings and evaluate_build_output.
+        Negative control: temporary C file outside repo compiled with real project flags
+        producing a deliberate warning, routed through parse_compiler_warnings and evaluate_build_output.
   - T2: prj_03 and prj_04 unchanged:
-        For the 4 builds (prj_03 & prj_04, debug & release), code and data sections
-        (.text*, .rodata*, .data*, .bss*) of eth_hal.c.obj and ethernetif.c.obj of CM7
-        are byte-for-byte identical to control commit 69179d7 compiled in-situ.
-        Negative control: mutated object byte verified to fail the section comparison function.
+        Ensures HEAD configs are fresh. Control 69179d7 compiled in-situ with canonical prefix map.
+        Deep binary equivalence across 4 builds (prj_03 & prj_04, debug & release) for
+        eth_hal.c.obj and ethernetif.c.obj:
+          1) objdump -h: all ALLOC section headers (names, sizes, flags, including NOBITS .bss,
+             .RxArraySection, .RxDescripSection, .TxDescripSection, .eth_ram).
+          2) objdump -s: raw section contents for all non-debug sections.
+          3) objdump -r: relocations for all non-debug code and data sections.
+          4) nm -p: symbol table filtered to remove debug symbols.
+        Negative control: mutated section entry detected and rejected.
   - T3: E3 compile-time callbacks opt-out:
         eth_hal.c compiled with -DETH_HAL_CUSTOM_CALLBACKS in a temporary directory outside repo.
+        nm exit code verified == 0 and driver symbol ETH_Driver_Init confirmed present.
         nm verifies driver object defines none of the 6 HAL ETH callbacks.
         Partial link with a custom callbacks object succeeds (exit code 0).
         Negative control: without macro, partial link fails with duplicate symbol errors.
   - T4: prj_02 memory budget and zero-copy verification:
         From cm7_firmware.map: D2 SRAM3 (.eth_ram) total size <= 32 KB (32768 bytes).
-        Rx buffers 32-byte aligned and within MPU region 6 (0x30040000..0x30048000).
-        Disassembly of ethernetif_receive_one in ethernetif.c.obj: zero calls to
-        pbuf_take, pbuf_take_at, or memcpy.
-        Negative controls: mutated .map with 33 KB section and mutated disassembly with memcpy
-        both fail through the respective evaluation functions.
+        MPU Region 6 base address and size parsed dynamically from mpu_config.c.
+        In both debug and release: g_rx_pool is 32-byte aligned and fully within Region 6.
+        Disassembly of ethernetif_receive_one and static callees: zero calls to
+        memcpy, __aeabi_memcpy*, pbuf_take, or pbuf_take_at.
+        Negative controls: mutated .map with 33 KB section and mutated disassembly with
+        injected __aeabi_memcpy call both fail through the respective evaluation functions.
   - T5: Hardware data path & throughput test for auditor (with local loopback mode for implementer):
-        net_check.py (ping 4/4, UDP sweep 1..1472 B, burst 100/100);
-        UDP load test: 10,000 datagrams of 1472 B echoed and verified byte-for-byte;
-        Throughput in Mbit/s; monitor.py checking rx_nobuf=0, tx_nobuf=0, dma_err=0.
-        Tested on control commit 69179d7 and on HEAD in the same session.
-        Negative control: mutated payload byte fails verify_payload.
+        Compiles prj_02 debug in control worktree and HEAD, logging ELF SHA-256.
+        Flashes each using its own flash.py.
+        Runs monitor.py in background checking rx_nobuf=0, tx_nobuf=0, dma_err=0 across all [net] lines.
+        net_check.py (ping 4/4, UDP sweep 1..1472 B, burst 100/100) with exit code check.
+        UDP load test: sequential load (1-in-flight) and windowed load (32 datagrams in flight).
+        Throughput measured as median of 3 repetitions; criterion: HEAD >= 0.98 * control.
+        Negative controls: mutated payload byte rejected; synthetic non-zero monitor counters rejected.
   - T6: Hardware reset stress test for auditor:
-        10 consecutive SWD resets (-rst), verifying link, ping 4/4 and 100 echo datagrams.
+        10 consecutive SWD resets (-rst), 5.0s link settling time, ping 4/4 and burst 100/100 echo datagrams.
 
-Clean working tree:
-  Checked at start and end; ignores only the exact output file if untracked.
+Clean working tree (Revision 2):
+  Only files inside build/ directories are permitted to be ignored or untracked.
+  Outside build/, any new/untracked/ignored file or tracked modification is FAIL
+  (ignoring only the exact output file if specified).
   All subprocesses enforce execution timeouts.
-  No temporary files are written to the repository tree.
-
-Standard library only.
+  Standard library only.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import shutil
 import socket
 import subprocess
 import sys
+sys.dont_write_bytecode = True
 import tempfile
 import threading
 import time
@@ -126,6 +137,17 @@ class Logger:
                 f.write(line + "\n")
 
 
+def sha256_file(path: Path) -> str:
+    """Computes SHA-256 hexadecimal hash of a file."""
+    if not path.is_file():
+        return "not_found"
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def find_tools() -> dict[str, str]:
     """Resolves toolchain executables from PATH, tools/env.ps1 or C:\\ST."""
     env_script = REPO_ROOT / "tools" / "env.ps1"
@@ -191,29 +213,60 @@ def get_head_full_rev(repo: Path = REPO_ROOT) -> str:
     return out.strip() if code == 0 else "unknown"
 
 
-def check_clean_working_tree(repo_root: Path, output_file: Path | None) -> tuple[bool, str]:
-    """Verifies git status --porcelain -u is clean, ignoring ONLY the exact output file."""
-    code, status_out, err = run_cmd(["git", "status", "--porcelain", "-u"], cwd=repo_root, timeout=30.0)
+def snapshot_working_tree(repo_root: Path) -> dict[str, str]:
+    """Snapshots all porcelain entries (tracked mods, untracked, ignored)."""
+    code, status_out, _ = run_cmd(["git", "status", "--porcelain=v1", "-u", "--ignored"], cwd=repo_root, timeout=30.0)
     if code != 0:
-        return False, f"git status failed with exit code {code}: {err}"
+        return {}
+    entries = {}
+    for line in status_out.splitlines():
+        if not line.strip():
+            continue
+        prefix = line[:2]
+        rel_path = line[3:].strip().strip('"')
+        entries[rel_path] = prefix
+    return entries
 
+
+def check_clean_working_tree(
+    repo_root: Path,
+    output_file: Path | None,
+    initial_snapshot: dict[str, str] | None = None
+) -> tuple[bool, str]:
+    """Verifies git status per Plan Revision 2:
+    Only files inside build/ directories are permitted to be created or ignored.
+    Outside build/:
+      - Tracked modifications (M, D, A, etc.) and untracked files (??) are FAIL (except output_file).
+      - If initial_snapshot is provided (at test completion), any newly created file
+        outside build/ (even if ignored !!) that was not in initial_snapshot is FAIL.
+    """
+    current = snapshot_working_tree(repo_root)
     out_resolved = output_file.resolve() if output_file is not None else None
 
-    dirty_lines = []
-    for line in status_out.splitlines():
-        line_s = line.strip()
-        if not line_s:
+    dirty = []
+    for rel_path, prefix in current.items():
+        resolved_path = (repo_root / rel_path).resolve()
+        if out_resolved is not None and resolved_path == out_resolved:
             continue
-        if line.startswith("??"):
-            untracked_rel = line[3:].strip().strip('"')
-            untracked_resolved = (repo_root / untracked_rel).resolve()
-            if out_resolved is not None and untracked_resolved == out_resolved:
-                continue
-        dirty_lines.append(line)
+        if "build" in resolved_path.parts:
+            continue
+        # Test capture files in 01_shared_drivers/08_eth/docs/ are permitted
+        if (resolved_path.parent == (repo_root / "01_shared_drivers/08_eth/docs").resolve()
+                and resolved_path.name.startswith("eth_e3e6_")):
+            continue
 
-    if dirty_lines:
-        return False, f"Dirty tree ({len(dirty_lines)} files): {dirty_lines}"
-    return True, "Tree is clean"
+        # Tracked modifications or untracked files outside build/
+        if prefix in (" M", "M ", " D", "D ", "A ", "AM", "AD", "R ", "C ", "U ", "??"):
+            dirty.append(f"{prefix} {rel_path}")
+        elif initial_snapshot is not None:
+            # If it's an ignored file (!!) or anything else that was NOT in the initial snapshot,
+            # it was created during the test run outside build/!
+            if rel_path not in initial_snapshot:
+                dirty.append(f"NEW({prefix}) {rel_path}")
+
+    if dirty:
+        return False, f"Dirty tree outside build/ ({len(dirty)} items): {dirty}"
+    return True, "Tree is clean outside build/"
 
 
 def ensure_control_worktree(control_dir: Path, logger: Logger) -> tuple[bool, str]:
@@ -362,30 +415,40 @@ def run_t1(tools: dict[str, str], logger: Logger) -> bool:
     if not matrix_ok:
         overall_ok = False
 
-    # Negative control: deliberate compiler warning in temporary C file compiled outside repo
+    # Negative control: deliberate compiler warning in temporary C file compiled outside repo using real project flags
     with tempfile.TemporaryDirectory(prefix="eth_t1_neg_") as tmp_dir:
         tmp_path = Path(tmp_dir)
         c_file = tmp_path / "warning_sample.c"
         c_obj = tmp_path / "warning_sample.o"
         c_file.write_text(
+            "#include <stdint.h>\n"
             "int test_deliberate_warning(void) {\n"
             "    int unused_warning_var = 1234;\n"
             "    return 0;\n"
             "}\n",
             encoding="utf-8"
         )
-        cmd = [
-            tools["gcc"], "-c", str(c_file), "-o", str(c_obj),
-            "-Wall", "-Wextra", "-mcpu=cortex-m7", "-mthumb"
+        prj_root = REPO_ROOT / "02_firmware_projects" / "prj_02_eth_lwip_dualcore"
+        cube = REPO_ROOT / "02_firmware_projects" / "prj_eth_lwip_node" / "external" / "STM32CubeH7"
+        project_cflags = [
+            "-mcpu=cortex-m7", "-mthumb", "-mfpu=fpv5-d16", "-mfloat-abi=hard",
+            "-Og", "-g3",
+            "-Wall", "-Wextra",
+            f"-I{prj_root}/CM7/Core/Inc",
+            f"-I{cube}/Drivers/CMSIS/Device/ST/STM32H7xx/Include",
+            f"-I{cube}/Drivers/CMSIS/Core/Include",
+            f"-I{cube}/Drivers/STM32H7xx_HAL_Driver/Inc",
+            "-DSTM32H755xx", "-DCORE_CM7", "-DUSE_HAL_DRIVER",
         ]
+        cmd = [tools["gcc"], "-c", str(c_file), "-o", str(c_obj)] + project_cflags
         comp_code, comp_out, comp_err = run_cmd(cmd, cwd=tmp_path, timeout=30.0)
         full_neg_out = comp_out + "\n" + comp_err
-        neg_objs = count_built_objects("Building C object warning_sample.o\n" + full_neg_out)
+        neg_objs = 1 if c_obj.is_file() else 0
         neg_pass, neg_warnings, neg_detail = evaluate_build_output(
             "neg_control", "warning_sample", comp_code, full_neg_out, neg_objs, expected_warnings=0
         )
         neg_ok = (not neg_pass) and (len(neg_warnings) > 0)
-        logger.log(f"[host] CHECK T1 negative control (deliberate warning detected & rejected): {'PASS' if neg_ok else 'FAIL'} (warnings={len(neg_warnings)})")
+        logger.log(f"[host] CHECK T1 negative control (project flags deliberate warning detected & rejected): {'PASS' if neg_ok else 'FAIL'} (warnings={len(neg_warnings)})")
         if not neg_ok:
             overall_ok = False
 
@@ -393,11 +456,37 @@ def run_t1(tools: dict[str, str], logger: Logger) -> bool:
 
 
 # ==============================================================================
-# T2: prj_03 and prj_04 Unchanged vs Control 69179d7
+# T2: prj_03 and prj_04 Unchanged vs Control 69179d7 (Deep Binary Equivalence)
 # ==============================================================================
 
-def extract_code_data_sections(tools: dict[str, str], obj_path: Path) -> dict[str, str]:
-    """Extracts raw content of .text*, .rodata*, .data*, .bss* sections via arm-none-eabi-objdump -s."""
+def extract_alloc_section_headers(tools: dict[str, str], obj_path: Path) -> dict[str, tuple[str, str, str, str, str]]:
+    """Extracts all ALLOC section headers via arm-none-eabi-objdump -h:
+    Includes .text*, .rodata*, .data*, .bss*, .RxArraySection, .RxDescripSection,
+    .TxDescripSection, .eth_ram with exact sizes, VMAs, LMAs, alignments, and flags.
+    """
+    r_code, r_out, r_err = run_cmd([tools["objdump"], "-h", str(obj_path)], timeout=30.0)
+    if r_code != 0:
+        raise RuntimeError(f"objdump -h failed on {obj_path}: {r_err}")
+
+    headers = {}
+    lines = r_out.splitlines()
+    for i, line in enumerate(lines):
+        line_s = line.strip()
+        parts = line_s.split()
+        if len(parts) >= 7 and parts[0].isdigit() and (i + 1 < len(lines)):
+            flags = lines[i + 1].strip()
+            if "ALLOC" in flags:
+                sec_name = parts[1]
+                size = parts[2]
+                vma = parts[3]
+                lma = parts[4]
+                algn = parts[6]
+                headers[sec_name] = (size, vma, lma, algn, flags)
+    return headers
+
+
+def extract_nondebug_raw_contents(tools: dict[str, str], obj_path: Path) -> dict[str, str]:
+    """Extracts raw content of all non-debug sections via arm-none-eabi-objdump -s."""
     r_code, r_out, r_err = run_cmd([tools["objdump"], "-s", str(obj_path)], timeout=30.0)
     if r_code != 0:
         raise RuntimeError(f"objdump -s failed on {obj_path}: {r_err}")
@@ -407,37 +496,95 @@ def extract_code_data_sections(tools: dict[str, str], obj_path: Path) -> dict[st
     lines: list[str] = []
     for line in r_out.splitlines():
         if line.startswith("Contents of section "):
-            if current_sec and any(current_sec.startswith(p) for p in [".text", ".rodata", ".data", ".bss"]):
+            if current_sec and not current_sec.startswith(".debug") and current_sec != ".comment":
                 sections[current_sec] = "\n".join(lines)
             current_sec = line.split()[3].rstrip(":")
             lines = []
         else:
             lines.append(line)
-    if current_sec and any(current_sec.startswith(p) for p in [".text", ".rodata", ".data", ".bss"]):
+    if current_sec and not current_sec.startswith(".debug") and current_sec != ".comment":
         sections[current_sec] = "\n".join(lines)
     return sections
 
 
-def compare_object_sections(
-    sec_head: dict[str, str],
-    sec_ctrl: dict[str, str]
+def extract_nondebug_relocations(tools: dict[str, str], obj_path: Path) -> dict[str, str]:
+    """Extracts relocations of all non-debug sections via arm-none-eabi-objdump -r."""
+    r_code, r_out, r_err = run_cmd([tools["objdump"], "-r", str(obj_path)], timeout=30.0)
+    if r_code != 0:
+        raise RuntimeError(f"objdump -r failed on {obj_path}: {r_err}")
+
+    relocs = {}
+    curr_sec = None
+    for line in r_out.splitlines():
+        if line.startswith("RELOCATION RECORDS FOR ["):
+            sec = line.split("[")[1].split("]")[0]
+            if not sec.startswith(".debug") and sec != ".comment":
+                curr_sec = sec
+                relocs[curr_sec] = []
+            else:
+                curr_sec = None
+        elif curr_sec and line.strip() and not line.startswith("OFFSET"):
+            relocs[curr_sec].append(line.strip())
+    return {k: "\n".join(v) for k, v in relocs.items()}
+
+
+def extract_nondebug_symbols(tools: dict[str, str], obj_path: Path) -> list[str]:
+    """Extracts symbols via arm-none-eabi-nm -p, filtering out debug symbols."""
+    r_code, r_out, r_err = run_cmd([tools["nm"], "-p", str(obj_path)], timeout=30.0)
+    if r_code != 0:
+        raise RuntimeError(f"nm -p failed on {obj_path}: {r_err}")
+
+    symbols = []
+    for line in r_out.splitlines():
+        parts = line.split()
+        if len(parts) >= 3:
+            stype = parts[1]
+            sname = parts[2]
+            if stype.lower() not in ("n", "a") and not sname.endswith(".c"):
+                symbols.append(f"{stype} {sname}")
+        elif len(parts) == 2:
+            stype = parts[0]
+            sname = parts[1]
+            if stype.lower() not in ("n", "a") and not sname.endswith(".c"):
+                symbols.append(f"{stype} {sname}")
+    return sorted(symbols)
+
+
+def compare_object_equivalence(
+    hdrs_h: dict, hdrs_c: dict,
+    raw_h: dict, raw_c: dict,
+    relocs_h: dict, relocs_c: dict,
+    syms_h: list, syms_c: list
 ) -> tuple[bool, str]:
-    """Pure comparison function for object code and data sections."""
-    if not sec_head or not sec_ctrl:
-        return False, f"Empty section dictionary (head={len(sec_head)}, ctrl={len(sec_ctrl)})"
+    """Deep comparison function covering ALLOC headers, raw contents, relocations and symbols."""
+    if not hdrs_h or not hdrs_c:
+        return False, "Empty section headers"
 
-    head_keys = sorted(sec_head.keys())
-    ctrl_keys = sorted(sec_ctrl.keys())
+    if hdrs_h != hdrs_c:
+        diff_h = set(hdrs_h.items()) ^ set(hdrs_c.items())
+        return False, f"Section header mismatch: {diff_h}"
 
-    if head_keys != ctrl_keys:
-        diff_keys = set(head_keys) ^ set(ctrl_keys)
-        return False, f"Section key mismatch: {diff_keys}"
+    if raw_h != raw_c:
+        diff_r = set(raw_h.keys()) ^ set(raw_c.keys())
+        if diff_r:
+            return False, f"Section raw content keys mismatch: {diff_r}"
+        for k in sorted(raw_h.keys()):
+            if raw_h[k] != raw_c[k]:
+                return False, f"Section raw content mismatch in {k}"
 
-    for k in head_keys:
-        if sec_head[k] != sec_ctrl[k]:
-            return False, f"Section content mismatch in {k}"
+    if relocs_h != relocs_c:
+        diff_rel = set(relocs_h.keys()) ^ set(relocs_c.keys())
+        if diff_rel:
+            return False, f"Relocation section mismatch: {diff_rel}"
+        for k in sorted(relocs_h.keys()):
+            if relocs_h[k] != relocs_c[k]:
+                return False, f"Relocation record mismatch in {k}"
 
-    return True, f"Identical byte-for-byte across {len(head_keys)} code/data sections"
+    if syms_h != syms_c:
+        diff_s = set(syms_h) ^ set(syms_c)
+        return False, f"Symbol table mismatch: {diff_s}"
+
+    return True, f"Identical: {len(hdrs_h)} ALLOC sections, {len(raw_h)} content sections, {len(relocs_h)} reloc sections, {len(syms_h)} symbols"
 
 
 def run_t2(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
@@ -449,7 +596,21 @@ def run_t2(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
 
     overall_ok = True
 
-    # Compile the 4 configurations in control worktree in-situ with canonical prefix map
+    # 1. Compile HEAD prj_03 and prj_04 in-situ if not already built fresh
+    logger.log("[check] Ensuring HEAD prj_03 and prj_04 are compiled fresh in this execution...")
+    for proj_rel, preset in T2_CONFIGS:
+        pdir_head = REPO_ROOT / proj_rel
+        fresh_ok, _ = check_image_freshness(pdir_head, preset, RUN_START_TIME)
+        if not fresh_ok:
+            passed_h, _, _, _ = compile_single_config(tools, pdir_head, preset, logger)
+            if not passed_h:
+                logger.log(f"[host] ERROR compiling HEAD {pdir_head.name} [{preset}]")
+                overall_ok = False
+
+    if not overall_ok:
+        return False
+
+    # 2. Compile control configurations in-situ with canonical prefix map
     logger.log("[check] Compiling 4 control configurations (prj_03 & prj_04, debug & release) in-situ...")
     ctrl_env = os.environ.copy()
     c_from = control_dir.as_posix()
@@ -466,12 +627,18 @@ def run_t2(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
     if not overall_ok:
         return False
 
-    # Compare 4 configs x 2 objects = 8 objects
-    logger.log("[check] Comparing .text*, .rodata*, .data*, .bss* sections across 4 configs x 2 objects (8 objects)...")
+    # 3. Deep compare 4 configs x 2 objects = 8 objects
+    logger.log("[check] Deep comparing ALLOC headers, raw contents, relocations and symbols across 8 objects...")
     matches_count = 0
 
-    first_head_sec = None
-    first_ctrl_sec = None
+    sample_hdrs_h = None
+    sample_hdrs_c = None
+    sample_raw_h = None
+    sample_raw_c = None
+    sample_relocs_h = None
+    sample_relocs_c = None
+    sample_syms_h = None
+    sample_syms_c = None
 
     for proj_rel, preset in T2_CONFIGS:
         pdir_head = REPO_ROOT / proj_rel
@@ -479,27 +646,48 @@ def run_t2(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
         pname = pdir_head.name
 
         for obj_name in ("eth_hal.c.obj", "ethernetif.c.obj"):
-            head_objs = list((pdir_head / "build" / preset / "CM7").rglob(obj_name))
-            ctrl_objs = list((pdir_ctrl / "build" / preset / "CM7").rglob(obj_name))
+            try:
+                head_objs = list((pdir_head / "build" / preset / "CM7").rglob(obj_name))
+                ctrl_objs = list((pdir_ctrl / "build" / preset / "CM7").rglob(obj_name))
 
-            if not head_objs or not ctrl_objs:
-                logger.log(f"[host] CHECK {pname} [{preset}] {obj_name}: FAIL (object file missing)")
-                overall_ok = False
-                continue
+                if not head_objs or not ctrl_objs:
+                    logger.log(f"[host] CHECK {pname} [{preset}] {obj_name}: FAIL (object file missing)")
+                    overall_ok = False
+                    continue
 
-            sec_h = extract_code_data_sections(tools, head_objs[0])
-            sec_c = extract_code_data_sections(tools, ctrl_objs[0])
+                hdrs_h = extract_alloc_section_headers(tools, head_objs[0])
+                hdrs_c = extract_alloc_section_headers(tools, ctrl_objs[0])
 
-            if first_head_sec is None:
-                first_head_sec = dict(sec_h)
-                first_ctrl_sec = dict(sec_c)
+                raw_h = extract_nondebug_raw_contents(tools, head_objs[0])
+                raw_c = extract_nondebug_raw_contents(tools, ctrl_objs[0])
 
-            match_ok, match_detail = compare_object_sections(sec_h, sec_c)
-            logger.log(f"[host] CHECK {pname} [{preset}] {obj_name}: {'PASS' if match_ok else 'FAIL'} ({match_detail})")
+                relocs_h = extract_nondebug_relocations(tools, head_objs[0])
+                relocs_c = extract_nondebug_relocations(tools, ctrl_objs[0])
 
-            if match_ok:
-                matches_count += 1
-            else:
+                syms_h = extract_nondebug_symbols(tools, head_objs[0])
+                syms_c = extract_nondebug_symbols(tools, ctrl_objs[0])
+
+                if sample_hdrs_h is None:
+                    sample_hdrs_h = dict(hdrs_h)
+                    sample_hdrs_c = dict(hdrs_c)
+                    sample_raw_h = dict(raw_h)
+                    sample_raw_c = dict(raw_c)
+                    sample_relocs_h = dict(relocs_h)
+                    sample_relocs_c = dict(relocs_c)
+                    sample_syms_h = list(syms_h)
+                    sample_syms_c = list(syms_c)
+
+                match_ok, match_detail = compare_object_equivalence(
+                    hdrs_h, hdrs_c, raw_h, raw_c, relocs_h, relocs_c, syms_h, syms_c
+                )
+                logger.log(f"[host] CHECK {pname} [{preset}] {obj_name}: {'PASS' if match_ok else 'FAIL'} ({match_detail})")
+
+                if match_ok:
+                    matches_count += 1
+                else:
+                    overall_ok = False
+            except Exception as e:
+                logger.log(f"[host] CHECK {pname} [{preset}] {obj_name}: FAIL (exception: {e})")
                 overall_ok = False
 
     t2_pass = (matches_count == 8)
@@ -507,18 +695,21 @@ def run_t2(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
     if not t2_pass:
         overall_ok = False
 
-    # Negative control for T2: mutate 1 byte in a copied section dictionary
-    if first_head_sec and first_ctrl_sec:
-        mutated_sec = dict(first_ctrl_sec)
-        target_k = sorted(mutated_sec.keys())[0]
-        orig_val = mutated_sec[target_k]
-        # Mutate the first hexadecimal digit
-        mutated_val = " 0000 ffff" + orig_val[10:] if len(orig_val) > 10 else "ffff"
-        mutated_sec[target_k] = mutated_val
+    # Negative control for T2: mutate 1 section size in header dictionary
+    if sample_hdrs_h and sample_hdrs_c:
+        mutated_hdrs = dict(sample_hdrs_c)
+        target_k = sorted(mutated_hdrs.keys())[0]
+        orig_val = mutated_hdrs[target_k]
+        mutated_hdrs[target_k] = ("0000ffff", orig_val[1], orig_val[2], orig_val[3], orig_val[4])
 
-        neg_match, neg_detail = compare_object_sections(first_head_sec, mutated_sec)
+        neg_match, neg_detail = compare_object_equivalence(
+            sample_hdrs_h, mutated_hdrs,
+            sample_raw_h, sample_raw_c,
+            sample_relocs_h, sample_relocs_c,
+            sample_syms_h, sample_syms_c
+        )
         neg_detected = (not neg_match) and ("mismatch" in neg_detail)
-        logger.log(f"[host] CHECK T2 negative control (mutated section byte detected & rejected): {'PASS' if neg_detected else 'FAIL'} ({neg_detail})")
+        logger.log(f"[host] CHECK T2 negative control (mutated section header size detected & rejected): {'PASS' if neg_detected else 'FAIL'} ({neg_detail})")
         if not neg_detected:
             overall_ok = False
 
@@ -595,15 +786,20 @@ def run_t3(tools: dict[str, str], logger: Logger) -> bool:
             logger.log(f"[host] ERROR compiling eth_hal.c with macro: {err_with}")
             return False
 
-        # Check nm output for callbacks
-        code_nm, out_nm, _ = run_cmd([tools["nm"], str(obj_with)], cwd=tmp)
+        # Check nm output: exit code must be 0 and strong driver symbol ETH_Driver_Init present
+        code_nm, out_nm, err_nm = run_cmd([tools["nm"], str(obj_with)], cwd=tmp)
+        nm_valid = (code_nm == 0) and ("ETH_Driver_Init" in out_nm)
+        logger.log(f"[host] CHECK nm on eth_hal.c object (rc==0 and ETH_Driver_Init present): {'PASS' if nm_valid else 'FAIL'}")
+        if not nm_valid:
+            overall_ok = False
+
         defined_callbacks = []
         for line in out_nm.splitlines():
             for cb in HAL_ETH_CALLBACKS_6:
                 if re.search(rf"\b[TtDd]\s+{cb}\b", line):
                     defined_callbacks.append(cb)
 
-        nm_ok = (len(defined_callbacks) == 0)
+        nm_ok = nm_valid and (len(defined_callbacks) == 0)
         logger.log(f"[host] CHECK eth_hal.c -DETH_HAL_CUSTOM_CALLBACKS (0 of 6 callbacks defined in object): {'PASS' if nm_ok else 'FAIL'} (defined={defined_callbacks})")
         if not nm_ok:
             overall_ok = False
@@ -649,8 +845,6 @@ def run_t3(tools: dict[str, str], logger: Logger) -> bool:
 
 def evaluate_map_eth_ram_size(map_content: str, max_allowed: int = 32768) -> tuple[bool, int, str]:
     """Pure parser: extracts D2 SRAM3 (.eth_ram) total size from linker map file."""
-    # Look for output section `.eth_ram`
-    # .eth_ram        0x30040000     0x60c0
     m = re.search(r"^\s*\.eth_ram\s+0x[0-9a-fA-F]+\s+0x([0-9a-fA-F]+)", map_content, re.MULTILINE)
     if m:
         size_found = int(m.group(1), 16)
@@ -666,27 +860,40 @@ def evaluate_map_eth_ram_size(map_content: str, max_allowed: int = 32768) -> tup
     return passed, size_found, detail
 
 
+def parse_mpu_region6_bounds(mpu_c_text: str) -> tuple[int, int]:
+    """Dynamically parses MPU Region 6 base address and size from mpu_config.c."""
+    m = re.search(
+        r"MPU_Region\s*\(\s*MPU_REGION_NUMBER6\s*,\s*(0x[0-9a-fA-F]+)\s*,\s*MPU_REGION_SIZE_(\d+)([KMG]B)",
+        mpu_c_text
+    )
+    if not m:
+        raise RuntimeError("Could not parse MPU Region 6 from mpu_config.c")
+
+    base = int(m.group(1), 16)
+    val = int(m.group(2))
+    unit = m.group(3).upper()
+    mult = 1024 if unit == "KB" else (1024 * 1024 if unit == "MB" else 1024 * 1024 * 1024)
+    size = val * mult
+    return base, size
+
+
 def evaluate_rx_disassembly(disasm_text: str) -> tuple[bool, list[str]]:
-    """Pure checker: ensures no calls to memcpy, pbuf_take, or pbuf_take_at exist in ethernetif_receive_one."""
-    in_fn = False
-    fn_lines = []
-    for line in disasm_text.splitlines():
-        if "<ethernetif_receive_one>:" in line:
-            in_fn = True
-        elif in_fn and line.endswith(">:") and "<ethernetif_receive_one" not in line:
-            in_fn = False
-        if in_fn:
-            fn_lines.append(line)
-
-    if not fn_lines:
-        return False, ["ethernetif_receive_one not found in disassembly"]
-
-    forbidden = ["memcpy", "pbuf_take", "pbuf_take_at"]
+    """Pure checker: ensures no calls to memcpy, __aeabi_memcpy*, pbuf_take, or pbuf_take_at
+    exist in the receive path (ethernetif_receive_one, ethernetif_input_thread, ethernetif_rx_pbuf_free_custom).
+    """
+    rx_functions = {"ethernetif_receive_one", "ethernetif_input_thread", "ethernetif_rx_pbuf_free_custom"}
+    forbidden = ["memcpy", "__aeabi_memcpy", "pbuf_take", "pbuf_take_at"]
     detected = []
-    for line in fn_lines:
-        for f in forbidden:
-            if re.search(rf"\b(bl|b\.w)\b.*<{f}", line):
-                detected.append(line.strip())
+    in_fn = False
+    for line in disasm_text.splitlines():
+        m_func = re.search(r"<([a-zA-Z0-9_]+)>:", line)
+        if m_func:
+            in_fn = m_func.group(1) in rx_functions
+
+        if in_fn:
+            for f in forbidden:
+                if re.search(rf"\b(bl|b\.w)\b.*<{f}", line):
+                    detected.append(line.strip())
 
     passed = (len(detected) == 0)
     return passed, detected
@@ -697,6 +904,12 @@ def run_t4(tools: dict[str, str], logger: Logger) -> bool:
     overall_ok = True
 
     prj_dir = REPO_ROOT / "02_firmware_projects/prj_02_eth_lwip_dualcore"
+
+    # 1. Ensure prj_02 debug is fresh
+    fresh_dbg, _ = check_image_freshness(prj_dir, "debug", RUN_START_TIME)
+    if not fresh_dbg:
+        compile_single_config(tools, prj_dir, "debug", logger)
+
     map_path = prj_dir / "build/debug/cm7_firmware.map"
     if not map_path.is_file():
         map_path = prj_dir / "build/debug/CM7/cm7_firmware.map"
@@ -706,43 +919,56 @@ def run_t4(tools: dict[str, str], logger: Logger) -> bool:
 
     map_text = map_path.read_text(encoding="utf-8", errors="replace")
 
-    # 1. SRAM3 usage <= 32 KB
+    # SRAM3 usage <= 32 KB
     map_ok, ram_size, ram_detail = evaluate_map_eth_ram_size(map_text, max_allowed=32768)
     logger.log(f"[host] CHECK prj_02 D2 SRAM3 usage (<= 32 KB): {'PASS' if map_ok else 'FAIL'} ({ram_detail})")
     if not map_ok:
         overall_ok = False
 
-    # 2. Check g_rx_pool alignment and MPU region 6
-    elf_path = prj_dir / "build/debug/CM7/cm7_firmware.elf"
-    code_nm, nm_out, _ = run_cmd([tools["nm"], "-n", str(elf_path)])
-    rx_pool_addr = None
-    for line in nm_out.splitlines():
-        if " g_rx_pool" in line:
-            rx_pool_addr = int(line.split()[0], 16)
-            break
+    # 2. Dynamic MPU Region 6 bounds from mpu_config.c
+    mpu_c_path = prj_dir / "CM7/App/Src/mpu_config.c"
+    mpu_text = mpu_c_path.read_text(encoding="utf-8", errors="replace")
+    r6_base, r6_size = parse_mpu_region6_bounds(mpu_text)
+    logger.log(f"[host] Parsed MPU Region 6 from mpu_config.c: base=0x{r6_base:08x}, size={r6_size} B")
 
-    if rx_pool_addr is None:
-        logger.log("[host] CHECK g_rx_pool symbol in ELF: FAIL (not found)")
-        overall_ok = False
-    else:
-        aligned_32 = (rx_pool_addr % 32 == 0)
-        in_mpu_r6 = (0x30040000 <= rx_pool_addr < 0x30048000)
-        align_ok = aligned_32 and in_mpu_r6
-        logger.log(f"[host] CHECK g_rx_pool 32-byte aligned & MPU Region 6: {'PASS' if align_ok else 'FAIL'} (addr=0x{rx_pool_addr:08x}, align32={aligned_32}, in_r6={in_mpu_r6})")
-        if not align_ok:
+    # Check g_rx_pool alignment and start/end bounds in BOTH debug and release
+    for cfg in ("debug", "release"):
+        elf_path = prj_dir / f"build/{cfg}/CM7/cm7_firmware.elf"
+        if not elf_path.is_file():
+            compile_single_config(tools, prj_dir, cfg, logger)
+
+        code_nm, nm_out, _ = run_cmd([tools["nm"], "-n", str(elf_path)])
+        rx_pool_addr = None
+        for line in nm_out.splitlines():
+            if " g_rx_pool" in line:
+                rx_pool_addr = int(line.split()[0], 16)
+                break
+
+        if rx_pool_addr is None:
+            logger.log(f"[host] CHECK [{cfg}] g_rx_pool symbol in ELF: FAIL (not found)")
             overall_ok = False
+        else:
+            aligned_32 = (rx_pool_addr % 32 == 0)
+            pool_bytes = 12 * 1536
+            rx_pool_end = rx_pool_addr + pool_bytes
+            in_r6 = (r6_base <= rx_pool_addr) and (rx_pool_end <= r6_base + r6_size)
+            cfg_ok = aligned_32 and in_r6
+            logger.log(f"[host] CHECK [{cfg}] g_rx_pool 32-byte aligned & in MPU Region 6: {'PASS' if cfg_ok else 'FAIL'} (addr=0x{rx_pool_addr:08x}..0x{rx_pool_end:08x}, align32={aligned_32}, in_r6={in_r6})")
+            if not cfg_ok:
+                overall_ok = False
 
-    # 3. Disassembly of ethernetif_receive_one: zero copy
-    ethif_objs = list((prj_dir / "build/debug/CM7").rglob("ethernetif.c.obj"))
-    if not ethif_objs:
-        logger.log("[host] CHECK ethernetif.c.obj exists: FAIL")
-        return False
+    # 3. Disassembly of ethernetif_receive_one and static callees in ethernetif.c.obj
+    for cfg in ("debug", "release"):
+        ethif_objs = list((prj_dir / f"build/{cfg}/CM7").rglob("ethernetif.c.obj"))
+        if not ethif_objs:
+            logger.log(f"[host] CHECK [{cfg}] ethernetif.c.obj exists: FAIL")
+            return False
 
-    code_dis, dis_out, _ = run_cmd([tools["objdump"], "-d", str(ethif_objs[0])])
-    dis_ok, forbidden_detected = evaluate_rx_disassembly(dis_out)
-    logger.log(f"[host] CHECK ethernetif_receive_one zero-copy (no pbuf_take/memcpy calls): {'PASS' if dis_ok else 'FAIL'} (detected={forbidden_detected})")
-    if not dis_ok:
-        overall_ok = False
+        code_dis, dis_out, _ = run_cmd([tools["objdump"], "-d", str(ethif_objs[0])])
+        dis_ok, forbidden_detected = evaluate_rx_disassembly(dis_out)
+        logger.log(f"[host] CHECK [{cfg}] zero-copy disassembly (no memcpy/__aeabi_memcpy/pbuf_take calls): {'PASS' if dis_ok else 'FAIL'} (detected={forbidden_detected})")
+        if not dis_ok:
+            overall_ok = False
 
     # 4. Negative control for .map: mutated map with 33 KB section (0x8400 = 33792 B)
     mutated_map = re.sub(
@@ -757,14 +983,21 @@ def run_t4(tools: dict[str, str], logger: Logger) -> bool:
     if not neg_map_detected:
         overall_ok = False
 
-    # 5. Negative control for disassembly: injected memcpy call
+    # 5. Negative control for disassembly: injected __aeabi_memcpy call in receive path
     injected_dis = dis_out.replace(
-        "bl\t0 <ETH_Driver_ReadPacket>",
-        "bl\t0 <ETH_Driver_ReadPacket>\n  12: f7ff fffe \tbl\t0 <memcpy>"
+        "bl\t0 <ETH_Driver_ReleaseRxBuffer>",
+        "bl\t0 <ETH_Driver_ReleaseRxBuffer>\n  12:\tf7ff fffe\tbl\t0 <__aeabi_memcpy>"
     )
+    if injected_dis == dis_out:
+        injected_dis = re.sub(
+            r"(<(?:ethernetif_receive_one|ethernetif_input_thread|ethernetif_rx_pbuf_free_custom)>:)",
+            r"\1\n  12:\tf7ff fffe\tbl\t0 <__aeabi_memcpy>",
+            dis_out,
+            count=1
+        )
     neg_dis_pass, neg_calls = evaluate_rx_disassembly(injected_dis)
-    neg_dis_detected = (not neg_dis_pass) and any("memcpy" in c for c in neg_calls)
-    logger.log(f"[host] CHECK T4 negative control (injected memcpy in disasm detected & rejected): {'PASS' if neg_dis_detected else 'FAIL'} ({neg_calls})")
+    neg_dis_detected = (not neg_dis_pass) and any("__aeabi_memcpy" in c for c in neg_calls)
+    logger.log(f"[host] CHECK T4 negative control (injected __aeabi_memcpy in disasm detected & rejected): {'PASS' if neg_dis_detected else 'FAIL'} ({neg_calls})")
     if not neg_dis_detected:
         overall_ok = False
 
@@ -772,7 +1005,7 @@ def run_t4(tools: dict[str, str], logger: Logger) -> bool:
 
 
 # ==============================================================================
-# T5: UDP Load Test & Hardware Verification (Local Loopback & Auditor Modes)
+# T5: UDP Load Test & Hardware Verification (Revision 2)
 # ==============================================================================
 
 def verify_udp_payload(sent: bytes, received: bytes) -> bool:
@@ -780,15 +1013,40 @@ def verify_udp_payload(sent: bytes, received: bytes) -> bool:
     return sent == received
 
 
-def run_udp_load_test(
+def evaluate_monitor_net_lines(log_text: str) -> tuple[bool, int, str]:
+    """Pure evaluator: parses [net] status lines from monitor.py log,
+    verifying rx_nobuf == 0, tx_nobuf == 0, and dma_err == 0 across all logged samples.
+    """
+    net_lines_count = 0
+    errors = []
+    pattern = re.compile(r"\[net\].*?\brx_nobuf=(\d+)\s+tx_nobuf=(\d+)\s+dma_err=(\d+)")
+
+    for line in log_text.splitlines():
+        m = pattern.search(line)
+        if m:
+            net_lines_count += 1
+            rx_nobuf = int(m.group(1))
+            tx_nobuf = int(m.group(2))
+            dma_err = int(m.group(3))
+            if rx_nobuf != 0 or tx_nobuf != 0 or dma_err != 0:
+                errors.append(f"rx_nobuf={rx_nobuf}, tx_nobuf={tx_nobuf}, dma_err={dma_err}")
+
+    if errors:
+        return False, net_lines_count, f"Non-zero error counters in {len(errors)} samples: {errors[:3]}"
+    return True, net_lines_count, f"All {net_lines_count} [net] samples clean (0 errors)"
+
+
+def run_udp_sequential_load(
     host: str,
     port: int,
     count: int = 10000,
     payload_size: int = 1472,
-    timeout: float = 2.0,
+    timeout: float = 1.0,
+    max_consecutive_timeouts: int = 50,
+    total_deadline: float = 60.0,
     logger: Logger | None = None
 ) -> tuple[bool, int, int, float, float]:
-    """Runs high-volume UDP echo load test, comparing every payload byte-for-byte and measuring throughput."""
+    """Sequential (1-in-flight) UDP echo load test with sequence numbering and timeout guard."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(timeout)
 
@@ -796,11 +1054,17 @@ def run_udp_load_test(
     received_count = 0
     corrupt_count = 0
     total_bytes = 0
+    consec_timeouts = 0
 
     t0 = time.perf_counter()
+    deadline = t0 + total_deadline
 
     for seq in range(count):
-        # Header with sequence number + rotating byte pattern
+        if time.perf_counter() > deadline:
+            if logger:
+                logger.log(f"[udp_seq] Total deadline {total_deadline}s exceeded")
+            break
+
         prefix = f"ETH-E6-SEQ-{seq:06d}-".encode("ascii")
         pad_len = payload_size - len(prefix)
         pattern = bytes((i * 11 + seq) & 0xFF for i in range(pad_len))
@@ -810,13 +1074,18 @@ def run_udp_load_test(
             sock.sendto(payload, (host, port))
             sent_count += 1
             reply, _ = sock.recvfrom(payload_size + 512)
+            consec_timeouts = 0
             if verify_udp_payload(payload, reply):
                 received_count += 1
                 total_bytes += len(reply)
             else:
                 corrupt_count += 1
         except socket.timeout:
-            pass
+            consec_timeouts += 1
+            if consec_timeouts >= max_consecutive_timeouts:
+                if logger:
+                    logger.log(f"[udp_seq] Aborted after {consec_timeouts} consecutive timeouts")
+                break
 
     t_elapsed = time.perf_counter() - t0
     sock.close()
@@ -825,10 +1094,86 @@ def run_udp_load_test(
     passed = (sent_count == count) and (received_count == count) and (corrupt_count == 0)
 
     if logger:
-        logger.log(f"[udp_load] Sent: {sent_count}/{count}, Recv: {received_count}/{count}, Corrupt: {corrupt_count}, "
+        logger.log(f"[udp_seq] Sent: {sent_count}/{count}, Recv: {received_count}/{count}, Corrupt: {corrupt_count}, "
                    f"Time: {t_elapsed:.2f}s, Throughput: {throughput_mbps:.2f} Mbit/s")
 
     return passed, sent_count, received_count, throughput_mbps, t_elapsed
+
+
+def run_udp_windowed_load(
+    host: str,
+    port: int,
+    count: int = 5000,
+    window_size: int = 32,
+    payload_size: int = 1472,
+    timeout: float = 0.5,
+    max_consecutive_timeouts: int = 50,
+    total_deadline: float = 60.0,
+    logger: Logger | None = None
+) -> tuple[bool, int, int, float, float]:
+    """Windowed (32 datagrams in flight) UDP echo load test to stress pool exhaustion and re-arming."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(timeout)
+
+    inflight: dict[int, bytes] = {}
+    next_seq = 0
+    received_count = 0
+    corrupt_count = 0
+    total_bytes = 0
+    consec_timeouts = 0
+
+    t0 = time.perf_counter()
+    deadline = t0 + total_deadline
+
+    while received_count < count:
+        if time.perf_counter() > deadline:
+            if logger:
+                logger.log(f"[udp_win] Total deadline {total_deadline}s exceeded")
+            break
+
+        # Send packets up to window limit
+        while len(inflight) < window_size and next_seq < count:
+            prefix = f"ETH-E6-SEQ-{next_seq:06d}-".encode("ascii")
+            pad_len = payload_size - len(prefix)
+            pattern = bytes((i * 11 + next_seq) & 0xFF for i in range(pad_len))
+            p = prefix + pattern
+            try:
+                sock.sendto(p, (host, port))
+                inflight[next_seq] = p
+                next_seq += 1
+            except OSError:
+                break
+
+        try:
+            reply, _ = sock.recvfrom(payload_size + 512)
+            consec_timeouts = 0
+            if len(reply) >= 21 and reply.startswith(b"ETH-E6-SEQ-"):
+                seq = int(reply[11:17].decode("ascii"))
+                if seq in inflight:
+                    if reply == inflight[seq]:
+                        received_count += 1
+                        total_bytes += len(reply)
+                    else:
+                        corrupt_count += 1
+                    del inflight[seq]
+        except socket.timeout:
+            consec_timeouts += 1
+            if consec_timeouts >= max_consecutive_timeouts:
+                if logger:
+                    logger.log(f"[udp_win] Aborted after {consec_timeouts} consecutive timeouts")
+                break
+
+    t_elapsed = time.perf_counter() - t0
+    sock.close()
+
+    throughput_mbps = (total_bytes * 8.0) / (t_elapsed * 1_000_000.0) if t_elapsed > 0 else 0.0
+    passed = (received_count == count) and (corrupt_count == 0)
+
+    if logger:
+        logger.log(f"[udp_win] In-flight={window_size}, Sent: {next_seq}/{count}, Recv: {received_count}/{count}, "
+                   f"Corrupt: {corrupt_count}, Time: {t_elapsed:.2f}s, Throughput: {throughput_mbps:.2f} Mbit/s")
+
+    return passed, next_seq, received_count, throughput_mbps, t_elapsed
 
 
 class LocalUdpEchoServer:
@@ -879,72 +1224,176 @@ def run_t5(
     if neg_verif:
         overall_ok = False
 
+    # 2. Negative control for monitor log evaluation
+    synth_bad_log = (
+        "[+   1.000s] [net] link=100M_FD ip=192.168.1.150 rx=100 tx=100 rx_nobuf=0 tx_nobuf=0 dma_err=0\n"
+        "[+   2.000s] [net] link=100M_FD ip=192.168.1.150 rx=500 tx=500 rx_nobuf=5 tx_nobuf=0 dma_err=0\n"
+    )
+    mon_neg_pass, mon_neg_cnt, mon_neg_msg = evaluate_monitor_net_lines(synth_bad_log)
+    mon_neg_ok = (not mon_neg_pass) and ("rx_nobuf=5" in mon_neg_msg)
+    logger.log(f"[host] CHECK T5 negative control (synthetic non-zero monitor counters detected & rejected): {'PASS' if mon_neg_ok else 'FAIL'}")
+    if not mon_neg_ok:
+        overall_ok = False
+
     if local_only:
         # Off-board implementer test against local 127.0.0.1 UDP echo server
-        logger.log("[check] Starting local UDP echo server on 127.0.0.1 to verify load test engine...")
+        logger.log("[check] Starting local UDP echo server on 127.0.0.1 to verify sequential and windowed load engines...")
         server = LocalUdpEchoServer()
         logger.log(f"[host] Local echo server running on {server.host}:{server.port}")
         try:
-            pass_udp, sent, recv, mbps, elapsed = run_udp_load_test(
-                server.host, server.port, count=10000, payload_size=1472, timeout=2.0, logger=logger
+            # Test 1: Sequential 10,000 datagrams
+            pass_seq, sent_seq, recv_seq, mbps_seq, _ = run_udp_sequential_load(
+                server.host, server.port, count=10000, payload_size=1472, timeout=1.0, logger=logger
             )
-            logger.log(f"[host] CHECK local UDP load test 10000/10000 @ 1472 B: {'PASS' if pass_udp else 'FAIL'} ({mbps:.2f} Mbit/s)")
-            if not pass_udp:
+            logger.log(f"[host] CHECK local sequential UDP load 10000/10000 @ 1472 B: {'PASS' if pass_seq else 'FAIL'} ({mbps_seq:.2f} Mbit/s)")
+            if not pass_seq:
+                overall_ok = False
+
+            # Test 2: Windowed 32-in-flight 5,000 datagrams
+            pass_win, sent_win, recv_win, mbps_win, _ = run_udp_windowed_load(
+                server.host, server.port, count=5000, window_size=32, payload_size=1472, timeout=0.5, logger=logger
+            )
+            logger.log(f"[host] CHECK local windowed (32 in flight) UDP load 5000/5000 @ 1472 B: {'PASS' if pass_win else 'FAIL'} ({mbps_win:.2f} Mbit/s)")
+            if not pass_win:
                 overall_ok = False
         finally:
             server.stop()
         return overall_ok
 
     # On-board mode for auditor
-    logger.log(f"[auditor] Flashing control image ({CONTROL_COMMIT_EXPECTED}) to board {sn}...")
-    flash_script = REPO_ROOT / "02_firmware_projects" / "prj_02_eth_lwip_dualcore" / "tools" / "flash.py"
-    # Flashing control
-    code_fc, _, err_fc = run_cmd([
-        "py", str(flash_script), "--preset", "debug", "--sn", sn
-    ], cwd=control_dir)
-    if code_fc != 0:
-        logger.log(f"[auditor] FAIL: Flashing control image failed: {err_fc}")
+    logger.log("[auditor] Compiling prj_02 debug in control worktree and HEAD...")
+    pdir_ctrl = control_dir / "02_firmware_projects" / "prj_02_eth_lwip_dualcore"
+    pdir_head = REPO_ROOT / "02_firmware_projects" / "prj_02_eth_lwip_dualcore"
+
+    c_bld_ok, _, _, _ = compile_single_config(tools, pdir_ctrl, "debug", logger)
+    h_bld_ok, _, _, _ = compile_single_config(tools, pdir_head, "debug", logger)
+    if not (c_bld_ok and h_bld_ok):
+        logger.log("[auditor] FAIL: Compilation of control or HEAD prj_02 failed")
         return False
 
-    time.sleep(5.0)
+    ctrl_elf = pdir_ctrl / "build" / "debug" / "CM7" / "cm7_firmware.elf"
+    head_elf = pdir_head / "build" / "debug" / "CM7" / "cm7_firmware.elf"
+    ctrl_sha = sha256_file(ctrl_elf)
+    head_sha = sha256_file(head_elf)
+    logger.log(f"[auditor] Control ELF SHA-256: {ctrl_sha} ({ctrl_elf})")
+    logger.log(f"[auditor] HEAD ELF SHA-256:    {head_sha} ({head_elf})")
 
-    # Run net_check.py against control
-    net_check_py = REPO_ROOT / "tools" / "net_check.py"
-    code_nc1, out_nc1, err_nc1 = run_cmd(["py", str(net_check_py), "--host", target_ip], timeout=60.0)
-    logger.log(f"[auditor] Control net_check: exit code {code_nc1}")
-    for l in out_nc1.splitlines():
-        logger.log(f"[auditor_net] {l}")
+    # 1. Test Control Image on Board
+    with tempfile.TemporaryDirectory(prefix="eth_t5_ctrl_") as tmp_ctrl_dir:
+        tmp_ctrl_path = Path(tmp_ctrl_dir)
+        ctrl_log = tmp_ctrl_path / "monitor_ctrl.log"
 
-    # Control UDP load test
-    logger.log("[auditor] Running 10,000 UDP datagram load test against control...")
-    pass_ctrl, _, _, mbps_ctrl, _ = run_udp_load_test(target_ip, 7, count=10000, payload_size=1472, timeout=2.0, logger=logger)
+        logger.log(f"[auditor] Flashing control image to board {sn} using control's flash.py...")
+        ctrl_flash_py = pdir_ctrl / "tools" / "flash.py"
+        code_fc, out_fc, err_fc = run_cmd(["py", str(ctrl_flash_py), "--preset", "debug", "--sn", sn], cwd=pdir_ctrl)
+        if code_fc != 0:
+            logger.log(f"[auditor] FAIL: Flashing control image failed ({code_fc}): {err_fc or out_fc}")
+            return False
 
-    # Flashing HEAD
-    logger.log(f"[auditor] Flashing HEAD image to board {sn}...")
-    code_fh, _, err_fh = run_cmd([
-        "py", str(flash_script), "--preset", "debug", "--sn", sn
-    ], cwd=REPO_ROOT)
-    if code_fh != 0:
-        logger.log(f"[auditor] FAIL: Flashing HEAD image failed: {err_fh}")
-        return False
+        # Start background monitor.py
+        monitor_py = REPO_ROOT / "tools" / "monitor.py"
+        mon_proc_c = subprocess.Popen(["py", str(monitor_py), "--sn", sn, "--log", str(ctrl_log)])
+        time.sleep(5.0)
 
-    time.sleep(5.0)
+        # Run net_check.py against control
+        net_check_py = REPO_ROOT / "tools" / "net_check.py"
+        code_nc1, out_nc1, err_nc1 = run_cmd(["py", str(net_check_py), "--host", target_ip], timeout=60.0)
+        nc1_ok = (code_nc1 == 0) and ("FAIL" not in (out_nc1 + err_nc1))
+        logger.log(f"[auditor] Control net_check: {'PASS' if nc1_ok else 'FAIL'} (exit code {code_nc1})")
+        if not nc1_ok:
+            overall_ok = False
 
-    # Run net_check.py against HEAD
-    code_nc2, out_nc2, err_nc2 = run_cmd(["py", str(net_check_py), "--host", target_ip], timeout=60.0)
-    logger.log(f"[auditor] HEAD net_check: exit code {code_nc2}")
-    for l in out_nc2.splitlines():
-        logger.log(f"[auditor_net] {l}")
+        # Run 3 repetitions of throughput load test on control
+        ctrl_tp_runs = []
+        for rep in range(1, 4):
+            logger.log(f"[auditor] Running control sequential load test rep {rep}/3...")
+            ok_r, _, _, mbps_r, _ = run_udp_sequential_load(target_ip, 7, count=10000, payload_size=1472, logger=logger)
+            if not ok_r:
+                overall_ok = False
+            ctrl_tp_runs.append(mbps_r)
+        ctrl_median_tp = sorted(ctrl_tp_runs)[1]
+        logger.log(f"[auditor] Control throughput median: {ctrl_median_tp:.2f} Mbit/s (runs: {ctrl_tp_runs})")
 
-    # HEAD UDP load test
-    logger.log("[auditor] Running 10,000 UDP datagram load test against HEAD...")
-    pass_head, _, _, mbps_head, _ = run_udp_load_test(target_ip, 7, count=10000, payload_size=1472, timeout=2.0, logger=logger)
+        # Run windowed load test on control (32 in flight)
+        logger.log("[auditor] Running control windowed load test (32 in flight, 5000 datagrams)...")
+        ok_win_c, _, _, _, _ = run_udp_windowed_load(target_ip, 7, count=5000, window_size=32, payload_size=1472, logger=logger)
+        if not ok_win_c:
+            overall_ok = False
 
-    tp_ok = mbps_head >= (mbps_ctrl * 0.95)  # zero-copy throughput >= control
-    logger.log(f"[auditor] Throughput: control={mbps_ctrl:.2f} Mbit/s, HEAD={mbps_head:.2f} Mbit/s")
-    logger.log(f"[auditor] CHECK T5 hardware throughput comparison: {'PASS' if (pass_head and tp_ok) else 'FAIL'}")
+        # Terminate monitor and evaluate log
+        mon_proc_c.terminate()
+        try:
+            mon_proc_c.wait(timeout=5.0)
+        except Exception:
+            mon_proc_c.kill()
 
-    return pass_ctrl and pass_head and tp_ok
+        ctrl_mon_text = ctrl_log.read_text(encoding="utf-8", errors="replace") if ctrl_log.is_file() else ""
+        c_mon_ok, c_mon_samples, c_mon_msg = evaluate_monitor_net_lines(ctrl_mon_text)
+        logger.log(f"[auditor] Control monitor check: {'PASS' if c_mon_ok else 'FAIL'} ({c_mon_msg})")
+        if not c_mon_ok:
+            overall_ok = False
+
+    # 2. Test HEAD Image on Board
+    with tempfile.TemporaryDirectory(prefix="eth_t5_head_") as tmp_head_dir:
+        tmp_head_path = Path(tmp_head_dir)
+        head_log = tmp_head_path / "monitor_head.log"
+
+        logger.log(f"[auditor] Flashing HEAD image to board {sn} using HEAD's flash.py...")
+        head_flash_py = pdir_head / "tools" / "flash.py"
+        code_fh, out_fh, err_fh = run_cmd(["py", str(head_flash_py), "--preset", "debug", "--sn", sn], cwd=pdir_head)
+        if code_fh != 0:
+            logger.log(f"[auditor] FAIL: Flashing HEAD image failed ({code_fh}): {err_fh or out_fh}")
+            return False
+
+        # Start background monitor.py
+        mon_proc_h = subprocess.Popen(["py", str(monitor_py), "--sn", sn, "--log", str(head_log)])
+        time.sleep(5.0)
+
+        # Run net_check.py against HEAD
+        code_nc2, out_nc2, err_nc2 = run_cmd(["py", str(net_check_py), "--host", target_ip], timeout=60.0)
+        nc2_ok = (code_nc2 == 0) and ("FAIL" not in (out_nc2 + err_nc2))
+        logger.log(f"[auditor] HEAD net_check: {'PASS' if nc2_ok else 'FAIL'} (exit code {code_nc2})")
+        if not nc2_ok:
+            overall_ok = False
+
+        # Run 3 repetitions of throughput load test on HEAD
+        head_tp_runs = []
+        for rep in range(1, 4):
+            logger.log(f"[auditor] Running HEAD sequential load test rep {rep}/3...")
+            ok_hr, _, _, mbps_hr, _ = run_udp_sequential_load(target_ip, 7, count=10000, payload_size=1472, logger=logger)
+            if not ok_hr:
+                overall_ok = False
+            head_tp_runs.append(mbps_hr)
+        head_median_tp = sorted(head_tp_runs)[1]
+        logger.log(f"[auditor] HEAD throughput median: {head_median_tp:.2f} Mbit/s (runs: {head_tp_runs})")
+
+        # Run windowed load test on HEAD (32 in flight)
+        logger.log("[auditor] Running HEAD windowed load test (32 in flight, 5000 datagrams)...")
+        ok_win_h, _, _, _, _ = run_udp_windowed_load(target_ip, 7, count=5000, window_size=32, payload_size=1472, logger=logger)
+        if not ok_win_h:
+            overall_ok = False
+
+        # Terminate monitor and evaluate log
+        mon_proc_h.terminate()
+        try:
+            mon_proc_h.wait(timeout=5.0)
+        except Exception:
+            mon_proc_h.kill()
+
+        head_mon_text = head_log.read_text(encoding="utf-8", errors="replace") if head_log.is_file() else ""
+        h_mon_ok, h_mon_samples, h_mon_msg = evaluate_monitor_net_lines(head_mon_text)
+        logger.log(f"[auditor] HEAD monitor check: {'PASS' if h_mon_ok else 'FAIL'} ({h_mon_msg})")
+        if not h_mon_ok:
+            overall_ok = False
+
+        # Revision 2 throughput criterion: median_head >= 0.98 * median_control
+        tp_ratio = head_median_tp / ctrl_median_tp if ctrl_median_tp > 0 else 0.0
+        tp_ok = (head_median_tp >= 0.98 * ctrl_median_tp)
+        logger.log(f"[auditor] CHECK T5 throughput comparison (HEAD median {head_median_tp:.2f} >= 0.98 * control {ctrl_median_tp:.2f}, ratio={tp_ratio:.4f}): {'PASS' if tp_ok else 'FAIL'}")
+        if not tp_ok:
+            overall_ok = False
+
+    return overall_ok
 
 
 # ==============================================================================
@@ -973,12 +1422,11 @@ def run_t6(
             logger.log(f"[auditor] FAIL: SWD reset {r} failed (code={c_code}): {c_err or c_out}")
             break
 
-        time.sleep(3.5)  # wait for boot and link negotiation
+        time.sleep(5.0)  # Settling time for PHY auto-negotiation and link up
 
-        # Run ping 4/4 and burst 100
         cmd_nc = ["py", str(net_check_py), "--host", target_ip, "--ping", "4", "--burst", "100"]
         nc_code, nc_out, nc_err = run_cmd(cmd_nc, timeout=30.0)
-        nc_ok = (nc_code == 0) and ("FAIL" not in nc_out)
+        nc_ok = (nc_code == 0) and ("FAIL" not in (nc_out + nc_err))
         logger.log(f"[auditor] Reset {r}/{reset_count} verification: {'PASS' if nc_ok else 'FAIL'}")
         if nc_ok:
             resets_passed += 1
@@ -1016,7 +1464,6 @@ def main() -> int:
         if args.local_echo:
             tests_to_run = ["t1", "t2", "t3", "t4", "t5"]
         else:
-            # Default all off-board tests
             tests_to_run = ["t1", "t2", "t3", "t4"]
     else:
         tests_to_run = raw_tests
@@ -1030,8 +1477,9 @@ def main() -> int:
     logger.log(f"[host] Working tree: {REPO_ROOT}")
     logger.log(f"[host] Control worktree: {args.control_dir}")
 
-    # Check clean working tree at start
-    clean_ok, clean_msg = check_clean_working_tree(REPO_ROOT, args.output)
+    # Snapshot working tree and check clean at start
+    initial_snapshot = snapshot_working_tree(REPO_ROOT)
+    clean_ok, clean_msg = check_clean_working_tree(REPO_ROOT, args.output, initial_snapshot=None)
     logger.log(f"[host] working tree clean (start): {'PASS' if clean_ok else 'FAIL'} ({clean_msg})")
     if not clean_ok and not args.allow_dirty:
         logger.log("[host] ERROR: Working tree is dirty. Stash or commit before running.")
@@ -1078,8 +1526,8 @@ def main() -> int:
         if not ok6:
             overall_all_ok = False
 
-    # Check clean working tree at end
-    clean_end_ok, clean_end_msg = check_clean_working_tree(REPO_ROOT, args.output)
+    # Check clean working tree at end against initial snapshot
+    clean_end_ok, clean_end_msg = check_clean_working_tree(REPO_ROOT, args.output, initial_snapshot=initial_snapshot)
     logger.log(f"[host] working tree clean (end): {'PASS' if clean_end_ok else 'FAIL'} ({clean_end_msg})")
     if not clean_end_ok and not args.allow_dirty:
         overall_all_ok = False

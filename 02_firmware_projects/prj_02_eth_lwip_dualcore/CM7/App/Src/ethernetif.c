@@ -16,10 +16,10 @@
   *
   *          Data path
   *          ---------
-  *          Frames are copied between pbufs and the driver's .eth_ram buffers.
-  *          That keeps every DMA-visible byte inside the non-cacheable D2
-  *          SRAM3 window and keeps every pbuf in fast DTCM, at the cost of one
-  *          memcpy per frame in each direction.
+  *          Reception is zero-copy in prj_02 (E6): frames are delivered as custom
+  *          pbufs referencing the driver's non-cacheable D2 SRAM3 DMA buffers
+  *          directly without copying. Transmission copies from pbufs to the
+  *          driver's Tx DMA buffers.
   *
   *          Concurrency
   *          -----------
@@ -56,6 +56,12 @@
 
 #include <string.h>
 
+static SemaphoreHandle_t              s_rx_semaphore;
+static SemaphoreHandle_t              s_tx_semaphore;
+static volatile uint8_t               s_mac_started;
+/* Written by the link thread, read by any task that wants to log it. */
+static volatile lan8742_link_state_t  s_link_state = LAN8742_LINK_DOWN;
+
 #if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
 struct rx_custom_pbuf
 {
@@ -69,7 +75,13 @@ static void ethernetif_rx_pbuf_free_custom(struct pbuf *p)
 {
     struct rx_custom_pbuf *cp = (struct rx_custom_pbuf *)p;
 
-    ETH_Driver_ReleaseRxBuffer(cp->dma_buffer);
+    if (ETH_Driver_ReleaseRxBuffer(cp->dma_buffer) != 0U)
+    {
+        if (s_rx_semaphore != NULL)
+        {
+            (void)xSemaphoreGive(s_rx_semaphore);
+        }
+    }
     LWIP_MEMPOOL_FREE(RX_POOL, cp);
 }
 #endif
@@ -93,12 +105,6 @@ u32_t sys_now(void)
 {
     return (u32_t)xTaskGetTickCount();
 }
-
-static SemaphoreHandle_t              s_rx_semaphore;
-static SemaphoreHandle_t              s_tx_semaphore;
-static volatile uint8_t               s_mac_started;
-/* Written by the link thread, read by any task that wants to log it. */
-static volatile lan8742_link_state_t  s_link_state = LAN8742_LINK_DOWN;
 
 /* ==========================================================================
  * Driver notifications. These run in the ETH interrupt (priority 6, which is
@@ -181,8 +187,9 @@ static int ethernetif_receive_one(struct netif *netif)
             }
             while (segment != NULL)
             {
-                ETH_Driver_ReleaseRxBuffer(segment->payload);
-                segment = segment->next;
+                eth_rx_segment_t *next_seg = segment->next;
+                (void)ETH_Driver_ReleaseRxBuffer(segment->payload);
+                segment = next_seg;
             }
             break;
         }
@@ -201,8 +208,9 @@ static int ethernetif_receive_one(struct netif *netif)
             }
             while (segment != NULL)
             {
-                ETH_Driver_ReleaseRxBuffer(segment->payload);
-                segment = segment->next;
+                eth_rx_segment_t *next_seg = segment->next;
+                (void)ETH_Driver_ReleaseRxBuffer(segment->payload);
+                segment = next_seg;
             }
             break;
         }
@@ -281,6 +289,15 @@ static void ethernetif_input_thread(void *argument)
 
     for (;;)
     {
+#if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
+        /* In zero-copy mode, wait on s_rx_semaphore with a periodic 10 ms fallback timeout
+           to guarantee that descriptors left un-armed during pool starvation are refilled
+           even if an interrupt was missed. */
+        (void)xSemaphoreTake(s_rx_semaphore, pdMS_TO_TICKS(10U));
+        while (ethernetif_receive_one(netif) != 0)
+        {
+        }
+#else
         if (xSemaphoreTake(s_rx_semaphore, portMAX_DELAY) == pdTRUE)
         {
             /* One interrupt can cover several descriptors, and more frames can
@@ -289,6 +306,7 @@ static void ethernetif_input_thread(void *argument)
             {
             }
         }
+#endif
     }
 }
 

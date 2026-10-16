@@ -173,8 +173,10 @@ void ETH_Driver_ReleasePacket(eth_rx_segment_t *packet);
 /**
   * @brief  Returns a single Rx buffer back to the driver pool by its payload pointer.
   * @param  buffer  Pointer to the buffer payload within g_rx_pool (e.g. p->payload in zero-copy).
+  * @retval Non-zero if an Rx descriptor allocation failure was pending and requires
+  *         re-arming via ETH_Driver_ReadPacket() from the input thread; 0 otherwise.
   */
-void ETH_Driver_ReleaseRxBuffer(void *buffer);
+uint32_t ETH_Driver_ReleaseRxBuffer(void *buffer);
 #endif
 
 /* ---- Diagnostics ------------------------------------------------------- */

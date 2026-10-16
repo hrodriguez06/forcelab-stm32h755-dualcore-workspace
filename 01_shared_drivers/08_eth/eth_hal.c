@@ -185,6 +185,9 @@ static lan8742_t               g_phy;
 static uint8_t                 g_mac_addr[6];
 static eth_driver_callbacks_t  g_callbacks;
 static eth_driver_stats_t      g_stats;
+#if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
+static volatile uint32_t       g_rx_rearm_pending;
+#endif
 
 /* Re-entrant critical section: usable from thread context, from an ISR and
  * from inside a FreeRTOS critical section, because it restores the previous
@@ -734,9 +737,10 @@ void ETH_Driver_ReleasePacket(eth_rx_segment_t *packet)
 }
 
 #if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
-void ETH_Driver_ReleaseRxBuffer(void *buffer)
+uint32_t ETH_Driver_ReleaseRxBuffer(void *buffer)
 {
     int32_t index = eth_rx_index_of((const uint8_t *)buffer);
+    uint32_t needs_rearm = 0U;
 
     if (index >= 0)
     {
@@ -744,8 +748,15 @@ void ETH_Driver_ReleaseRxBuffer(void *buffer)
         g_rx_slots[index].segment.next   = NULL;
         g_rx_slots[index].segment.length = 0U;
         g_rx_slots[index].in_use         = 0U;
+        if (g_rx_rearm_pending != 0U)
+        {
+            needs_rearm = 1U;
+            g_rx_rearm_pending = 0U;
+        }
         eth_unlock(primask);
     }
+
+    return needs_rearm;
 }
 #endif
 
@@ -781,6 +792,12 @@ void HAL_ETH_RxAllocateCallback(uint8_t **buff)
             break;
         }
     }
+#if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
+    if (*buff == NULL)
+    {
+        g_rx_rearm_pending = 1U;
+    }
+#endif
     eth_unlock(primask);
 
     if (*buff == NULL)
