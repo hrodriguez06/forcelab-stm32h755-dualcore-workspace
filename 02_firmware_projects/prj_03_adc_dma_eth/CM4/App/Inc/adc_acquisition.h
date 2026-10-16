@@ -4,7 +4,7 @@
   * @brief   ADC1 + DMA1 continuous acquisition management on Cortex-M4.
   *
   *          Coordinates TIM3 500 kHz TRGO hardware trigger, ADC1 16-bit
-  *          sampling on PA3, circular DMA into SRAM2 (512 samples),
+  *          sampling on PB1, circular DMA into SRAM2 (512 samples),
   *          and statistics calculation & publication to shared memory
   *          (SRAM4) under HSEM 4.
   ******************************************************************************
@@ -21,7 +21,7 @@ extern "C" {
 #endif
 
 /**
-  * @brief  Initializes GPIO PA3, TIM3 (500 kHz TRGO), and ADC1+DMA1 driver.
+  * @brief  Initializes GPIO PB1, TIM3 (500 kHz TRGO), and ADC1+DMA1 driver.
   * @return true if initialized successfully, false otherwise.
   */
 bool ADC_Acquisition_Init(void);
