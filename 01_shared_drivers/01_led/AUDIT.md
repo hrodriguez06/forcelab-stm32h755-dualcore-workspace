@@ -40,3 +40,41 @@ Auditor: Claude (Claude Code), para Hector Rodriguez · Rama: `driver/led-l1l2` 
   - por mí sin placa: T1–T3 y los avisos de `prj_01`/`prj_02`;
   - en la placa: T4 en los cuatro proyectos.
 - Siguiente ronda: B1, M1, M2, m1–m7, m8 en `prj_02`–`prj_04` y m9. Repetir T1–T3 sin placa.
+
+## F1, corrección (`af836ea`, herramienta en `411673b`)
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| Comentarios de `prj_02`–`prj_04` (m8) | Correctos: ahora dicen que una máscara o una macro que falta da `#error`. Una máscara de `_BIT` (por ejemplo `0x4000`) cae en el rango `> 15U` |
+| T1–T3, ejecutadas por mí | `led_l1l2_audit_t1t3_af836ea.txt`: HEAD `af836ea`, **`OVERALL VERDICT: PASS`**.<br>• Los 8 configs se compilan ahora directamente con `--clean-first`, con los avisos contados en su salida real: 0 en todos, con 271/315/323/321 objetos.<br>• Los 9 presets de selftest, con 0 avisos.<br>• T2: 4 + 16, ahora sin escribir en el árbol; `git status --ignored` no muestra ningún `.su` nuevo.<br>• T3: PASS |
+| Revisión de la herramienta | Un subagente con pruebas sobre copias. Resultados abajo. T4 sigue siendo segura |
+
+### Estado de los hallazgos
+
+| ID | Estado |
+| --- | --- |
+| B1 | **Parcial:**<br>• el camino real ya cuenta los avisos de la salida de cada compilación, y una salida vacía da FAIL;<br>• el control negativo (l. 426-447) es una cadena fija pasada a `evaluate_build_output`, con `built_objects=10` y `led_obj_found=True` escritos a mano: no pasa por `run_cmd` ni por la captura real (MA2) |
+| M1 | Cerrado (el `.su` va al directorio temporal). La comprobación final del árbol no mira los archivos ignorados (l. 184) |
+| M2 | **Parcial:**<br>• la revisión solo se comprueba en `prj_01` (por `fw_build_id.h`) y en `prj_04` (en la ELF);<br>• en `prj_02` y `prj_03` solo se mira la fecha, pero la función devuelve `rev=<HEAD>` (l. 338-344), y la captura muestra `rev=af836ea` sin haberlo comprobado (MA1);<br>• sus ELF no embeben la revisión |
+| m1 | No cerrado para el control (l. 257) |
+| m2 | Parcial: la salida del configure no se mira cuando pasa, y `led_bm.c.obj` vale con el log **o** el disco (l. 372) |
+| m3, m5, m6, m7 | Cerrados |
+| m4 | Parcial: la sección se trunca a 24 B (l. 667), así que 28 B o datos de más pasan |
+| m9 | **Parcial:**<br>• las 6 citas de funciones de la herramienta están mal (por ejemplo `evaluate_build_output` es l. 284-305, no 262-280);<br>• **afirmaciones falsas:**<br>&nbsp;&nbsp;– la revisión de `prj_01` "y ELF" (l. 40);<br>&nbsp;&nbsp;– FW_GIT_REV comprobado en todas (l. 106);<br>&nbsp;&nbsp;– `git status --ignored` comprobado por la herramienta (l. 124);<br>&nbsp;&nbsp;– log "y" disco (l. 29);<br>&nbsp;&nbsp;– "exactamente 24 bytes" (l. 44);<br>• enlaces `file:///c:/` |
+
+**Menores nuevos:**
+- el `git status` del control se lee pero no se comprueba (l. 221-223);
+- `rstrip(\"-dirty\")` quita un conjunto de caracteres, no un sufijo (l. 334);
+- `code=0` está fijo en el log (l. 399, 420).
+
+### Estado
+
+**F1 no pasa todavía.**
+- **El producto está verificado por mí, dos veces:**
+  - T1–T3 en `736948f` y en `af836ea`;
+  - los avisos reales;
+  - T4 en la placa.
+- **Lo que queda:** MA1 y MA2 de la herramienta, las citas y afirmaciones del informe (m9) y los menores.
+- **Para esta fase, que es pequeña, el alcance de la siguiente ronda queda cerrado:** si MA1, MA2 y m9 quedan bien, F1 pasa, y los menores que queden se anotan en el README.
