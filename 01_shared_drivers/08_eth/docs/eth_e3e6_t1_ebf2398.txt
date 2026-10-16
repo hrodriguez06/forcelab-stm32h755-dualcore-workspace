@@ -1,0 +1,23 @@
+[+   0.001s] [host] argv: tools/eth_e3e6_checks.py --test t1 -o 01_shared_drivers/08_eth/docs/eth_e3e6_t1_ebf2398.txt
+[+   0.001s] [host] options: test=t1 output=01_shared_drivers\08_eth\docs\eth_e3e6_t1_ebf2398.txt control_dir=C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7 allow_dirty=False sn=0016000C4142501220353451 target_ip=192.168.1.150 local_echo=False
+[+   0.050s] [host] HEAD: ebf2398d81ea926f56ebd97c03a3e66fad86e794
+[+   0.050s] [host] Working tree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+[+   0.051s] [host] Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7
+[+   4.622s] [host] working tree clean (start): PASS (Tree is clean outside build/)
+[+   5.198s] [host] Compiler: C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.EXE
+[+   5.198s] [host] Objdump:  C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-objdump.exe
+[+   5.199s] [host] CMake:    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cmake.win32_1.1.200.202605190741\tools\bin\cmake.EXE
+[+   5.199s] === Running T1 Checks (Build Matrix 8/8) ===
+[+   5.199s] [check] Compiling 8 matrix configurations directly via cmake --clean-first...
+[+  30.117s] [host] CHECK matrix prj_01_template_dualcore [debug]: PASS (code=0, objs=271, warnings=0, image=fresh (mtime=1792194268))
+[+  46.990s] [host] CHECK matrix prj_01_template_dualcore [release]: PASS (code=0, objs=271, warnings=0, image=fresh (mtime=1792194285))
+[+  77.567s] [host] CHECK matrix prj_02_eth_lwip_dualcore [debug]: PASS (code=0, objs=315, warnings=0, image=fresh (mtime=1792194316))
+[+ 100.840s] [host] CHECK matrix prj_02_eth_lwip_dualcore [release]: PASS (code=0, objs=315, warnings=0, image=fresh (mtime=1792194339))
+[+ 134.758s] [host] CHECK matrix prj_03_adc_dma_eth [debug]: PASS (code=0, objs=323, warnings=0, image=fresh (mtime=1792194373))
+[+ 160.071s] [host] CHECK matrix prj_03_adc_dma_eth [release]: PASS (code=0, objs=323, warnings=0, image=fresh (mtime=1792194398))
+[+ 191.870s] [host] CHECK matrix prj_04_adc_dma_bm_eth [debug]: PASS (code=0, objs=321, warnings=0, image=fresh (mtime=1792194430))
+[+ 216.713s] [host] CHECK matrix prj_04_adc_dma_bm_eth [release]: PASS (code=0, objs=321, warnings=0, image=fresh (mtime=1792194454))
+[+ 216.714s] [host] CHECK T1 matrix 8/8 (clean-first, 0 warnings): PASS (8/8 passed)
+[+ 216.836s] [host] CHECK T1 negative control (project flags deliberate warning detected & rejected): PASS (warnings=1)
+[+ 220.736s] [host] working tree clean (end): PASS (Tree is clean outside build/)
+[+ 220.736s] OVERALL VERDICT: PASS
