@@ -206,3 +206,47 @@ Iguales a los de `6b7f10a`:
 - **Lo que queda, en la herramienta sin placa:** R1 (tamaños de símbolos y mutaciones en el árbol) y N1 (cobertura de `rf` y líneas inyectadas).
 - **También queda:** el informe (R4) y los menores.
 - **El banco:** la compuerta de T9 en PF14 vuelve a fallar. El banco reconectado da ahora 0,9–1,4 ns de separación frente a los 1,8–2,3 ns de las corridas de F1. Es una prueba de F1 y no de F2, pero bloquea las dos corridas completas del cierre. Lo decide el responsable.
+
+## F1, corrección 3 (`36aab61`, código en `fdf7200`)
+
+Entrega: `379cc3b..36aab61`:
+- `fdf7200` selftest, host y herramienta;
+- `6a584dc` capturas;
+- `36aab61` informe.
+
+**Firmware:** en `gpio_selftest.c` solo cambian comentarios (l. 56-59), así que el estado de la placa es el de `c90f2b5`.
+
+**Host:**
+- el mock devuelve códigos y recorre los caminos de error de DWF, de aborto y de buffer;
+- `arm()` falla si se piden más muestras que el buffer;
+- `RuntimeError` acaba en `HOST VERDICT`;
+- la consola usa `backslashreplace`.
+
+Lo revisé yo. No hay salidas nuevas y `tools/ad2.py` sigue sin cambios.
+
+### Estado
+
+| ID | Estado |
+| --- | --- |
+| R1 | **Cerrado:**<br>• una línea de `nm` de tres campos para `GPIO_BM_*` lanza error (`gpio_f2_checks.py:524-526`);<br>• el control cambia el tamaño de un símbolo real y falla por `compare_symbols` (l. 610-631);<br>• se comprueban los códigos de salida de `nm`;<br>• los controles de cabecera y de handler corren en `TemporaryDirectory()` (l. 311, 403) |
+| R2, R3 | Cerrados (l. 227-231; l. 116-119, probado en un repo temporal) |
+| R5 | **Parcial:** el control de `*/ int legacy;` y el `finally` están arreglados, pero la procedencia de las ELF del control se comprueba con `b\"3df160a\" in data` (l. 160-162). Todas las apariciones son la ruta `stm32h755_control_3df160a` de la información de depuración (44 de 44 y 45 de 45 en dos ELF), así que cualquier ELF compilada en esa carpeta, de cualquier commit, pasa |
+| N1 | **Parcial:**<br>• **ya funciona:** el extractor AST cubre `r`, `f`, `rf` y `fr` (29 de 29 llamadas); renombrar `CM7 count=` o `FW VERDICT=` en el firmware, o volver a la expresión de T17 de la primera ronda, da FAIL;<br>• **el hueco:** un marcador que no sea `step_name` ni `tier` se expande a cero patrones y cuenta como casado (l. 693-704, 763-772). Probado: una expresión `{self.label} NO SUCH LINE ANYWHERE` da 30/30 PASS;<br>• `tier` sigue siendo una lista a mano (l. 652), aunque el host tiene `TIERS` |
+| R4 | **Parcial:**<br>• el comando de los resets ya funciona, y 24 citas comprobadas son correctas;<br>• **siguen mal** las citas del informe en l. 51, 57, 59, 73, 74 y 88 (por ejemplo, funciones `_measure_t11_subtest`/`_measure_t12_subtest` que no existen; la real es `pulse_train_measured`, `gpio_hw_check.py:907`);<br>• **afirmaciones falsas:** que `parse_nm_symbols` rechaza tamaño 0, que `verify_header_diff` usa `strip_c_comments`, y \"sin listas manuales\";<br>• **en §6.2 falta compilar:** el host exige que `Rev` sea igual a HEAD |
+| N4, N5 | Cerrados |
+
+**Menores:**
+- `main()` no recoge los `ValueError`/`RuntimeError` de l. 579, 608 y 625 (acaba en traza, aunque con salida distinta de 0);
+- el control de handlers de producción no mira el código de salida de `nm` (l. 443);
+- las cabeceras se listan desde el árbol actual (l. 301);
+- `*ptr = 0;` borrado cuenta como comentario (l. 285-289);
+- `compare_symbols` no ve un cambio de tipo (T→W).
+
+### Estado
+
+**F1 no pasa todavía.** Quedan tres huecos que pueden dar un PASS falso:
+- la procedencia del control (R5);
+- el marcador desconocido de N1;
+- el informe (R4).
+
+El firmware y el host de F2 siguen verificados en la placa. Las dos corridas completas del cierre se harán con el HEAD final, cuando el responsable decida sobre T9 en PF14.
