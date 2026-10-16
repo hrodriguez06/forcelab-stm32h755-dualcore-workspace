@@ -1,0 +1,68 @@
+[+   0.001s] [host] argv: tools/gpio_f2_checks.py --test all --output 'C:\Users\HRODRI~1\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\a435ba69-f99a-4dc8-9231-6c64b1c6d99b\scratchpad\gpio_f2_checks_auditor_6999210.txt'
+[+   0.001s] [host] options: test=all output=C:\Users\HRODRI~1\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\a435ba69-f99a-4dc8-9231-6c64b1c6d99b\scratchpad\gpio_f2_checks_auditor_6999210.txt control_dir=C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_3df160a allow_dirty=False
+[+   0.060s] [host] HEAD: 69992109b1818f8267829616f974b8ff2b88c185
+[+   0.061s] [host] Working tree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+[+   0.062s] [host] Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_3df160a
+[+   0.564s] [host] working tree clean: PASS (Tree is clean)
+[+   0.773s] [check] Compiling 16 control images via build_all.ps1 -Clean in C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_3df160a...
+[+ 224.345s] [build_all_control] Finished in 223.6s, exit code 0
+[+ 224.347s] [build_all_control] All 8 builds PASSED successfully.
+[+ 224.347s] [host] CHECK control build_all 16/16 (-Clean): PASS
+[+ 224.349s] [host] control worktree (3df160a): PASS (Control commit 3df160a clean, 16/16 ELFs freshly compiled)
+[+ 225.766s] [host] STM32CubeH7 submodule commit: PASS (STM32CubeH7 submodule commit 8ec3113 (heads/master))
+[+ 226.451s] === Running T1 Checks (Build Matrix & Selftests) ====
+[+ 226.452s] [check] Checking 8/8 matrix build via build_all.ps1 -Clean...
+[+ 426.851s] [build_all] Finished in 200.4s, exit code 0
+[+ 426.851s] [build_all] All 8 builds PASSED successfully.
+[+ 426.852s] [host] CHECK build_all 8/8 (-Clean): PASS
+[+ 426.852s] [check] Checking selftest-gpio compilation in prj_01 and prj_04 (--fresh and --clean-first)...
+[+ 450.725s] [host] CHECK prj_01_template_dualcore selftest-gpio build: PASS (code=0, objects_built=278, warnings=0)
+[+ 480.110s] [host] CHECK prj_04_adc_dma_bm_eth selftest-gpio build: PASS (code=0, objects_built=323, warnings=0)
+[+ 480.111s] [host] CHECK warning counter negative control (synthetic warning flagged): PASS
+[+ 480.111s] [host] T1 VERDICT: PASS
+[+ 480.112s] === Running T18 Checks (Regression Without Board) ===
+[+ 480.112s] [check] Checking all header files in 01_shared_drivers/00_gpio/ against control 3df160a...
+[+ 480.227s] [host] CHECK header freeze gpio_bm.h (only adds): PASS (Diff contains only additions)
+[+ 480.283s] [host] CHECK header freeze gpio_hal.h (only adds): PASS (Diff contains only additions)
+[+ 480.352s] [host] CHECK header freeze gpio_ll.h (only adds): PASS (Diff contains only additions)
+[+ 480.457s] [host] CHECK header negative control (signature mutation flagged against 3df160a): PASS (Removed or modified lines detected (1))
+[+ 480.458s] [host] CHECK comment-with-code removal negative control (R5): PASS
+[+ 480.459s] [check] Checking for EXTI handlers in 01_shared_drivers/00_gpio/...
+[+ 480.465s] [host] CHECK no EXTI handlers in 00_gpio: PASS ([])
+[+ 480.536s] [host] CHECK driver handler negative control (temp .c file detected): PASS
+[+ 480.537s] [check] Checking that all 16 production ELFs have 0 EXTI handlers...
+[+ 480.998s] [host] CHECK 16 production ELFs zero EXTI handlers: PASS
+[+ 481.029s] [host] CHECK selftest-gpio positive control (2 EXTI handlers present): PASS
+[+ 481.076s] [host] CHECK production ELF negative control (mutated nm text flagged by parse_production_handlers): PASS
+[+ 481.076s] [check] Checking driver state .data=0 and .bss=8 via .map files of selftest-gpio...
+[+ 481.089s] [host] CHECK driver state CM7 from .map: data=0 B (exp 0), bss=8 B (exp 8) -> PASS
+[+ 481.099s] [host] CHECK driver state CM4 from .map: data=0 B (exp 0), bss=8 B (exp 8) -> PASS
+[+ 481.112s] [host] CHECK driver size negative control (mutated map text data=4 B flagged by verify_driver_sizes): PASS
+[+ 481.114s] [check] Comparing production GPIO_BM_* symbols against control worktree at C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_3df160a...
+[+ 481.170s] [host] CHECK prj_01 debug CM7 symbols (9 syms): PASS
+[+ 481.217s] [host] CHECK prj_01 debug CM4 symbols (1 syms): PASS
+[+ 481.265s] [host] CHECK prj_01 release CM7 symbols (8 syms): PASS
+[+ 481.318s] [host] CHECK prj_01 release CM4 symbols (1 syms): PASS
+[+ 481.384s] [host] CHECK prj_02 debug CM7 symbols (8 syms): PASS
+[+ 481.435s] [host] CHECK prj_02 debug CM4 symbols (0 syms): PASS
+[+ 481.492s] [host] CHECK prj_02 release CM7 symbols (7 syms): PASS
+[+ 481.536s] [host] CHECK prj_02 release CM4 symbols (0 syms): PASS
+[+ 481.595s] [host] CHECK prj_03 debug CM7 symbols (9 syms): PASS
+[+ 481.642s] [host] CHECK prj_03 debug CM4 symbols (6 syms): PASS
+[+ 481.701s] [host] CHECK prj_03 release CM7 symbols (8 syms): PASS
+[+ 481.744s] [host] CHECK prj_03 release CM4 symbols (6 syms): PASS
+[+ 481.802s] [host] CHECK prj_04 debug CM7 symbols (9 syms): PASS
+[+ 481.852s] [host] CHECK prj_04 debug CM4 symbols (6 syms): PASS
+[+ 481.918s] [host] CHECK prj_04 release CM7 symbols (8 syms): PASS
+[+ 481.974s] [host] CHECK prj_04 release CM4 symbols (6 syms): PASS
+[+ 481.975s] [host] CHECK production real symbol size mutation negative control (GPIO_BM_CheckConfig): PASS
+[+ 481.976s] [host] CHECK production extra symbol negative control (+GPIO_BM_ExtiConfig): PASS
+[+ 481.976s] [host] CHECK production symbol type change negative control (GPIO_BM_CheckConfig T->W): PASS
+[+ 481.977s] [check] Cross-checking host expect() regex patterns against firmware source format strings...
+[+ 482.082s] [host] CHECK host-firmware expect patterns (29/29 matched): PASS
+[+ 482.115s] [host] CHECK expect crosscheck negative control 1 (mutated CM7 count= rejected): PASS
+[+ 482.152s] [host] CHECK expect crosscheck negative control 2 (mutated FW VERDICT= rejected): PASS
+[+ 482.174s] [host] CHECK expect crosscheck negative control 3 (mutated host pattern rejected): PASS
+[+ 482.174s] [host] CHECK expect crosscheck negative control 4 (unexpandable placeholder rejected): PASS
+[+ 482.176s] [host] T18 VERDICT: PASS
+[+ 482.176s] OVERALL VERDICT: PASS

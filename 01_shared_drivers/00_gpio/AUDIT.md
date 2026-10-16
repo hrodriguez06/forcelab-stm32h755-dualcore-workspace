@@ -263,3 +263,22 @@ Solo cambian la herramienta sin placa y el informe.
 | R4 | **Parcial:**<br>• las seis citas que estaban mal ya están bien, y el resto también salvo l. 89 (`gpio_hw_check.py:1566-1570` es el aborto de N4; N5 está en l. 1557-1562);<br>• **§6.2 no se puede ejecutar:** compila desde la raíz, donde no hay `CMakePresets.json`; no carga `env.ps1`; la imagen de producción se compila sin configurar; los nombres de archivo dicen `b1b6342`, pero la imagen dará `Rev` del HEAD;<br>• **afirmaciones falsas:** \"las 16 ELF embeben la revisión\" (l. 158, y en l. 14 y 80); \"sin listas manuales\" (l. 75; hay listas en l. 820-827 y una línea `STEP` a mano en l. 855-857); y que las sentencias que empiezan por `*` nunca cuentan como comentario (l. 21) |
 
 **Estado:** F1 no pasa. Queda R5 (bloqueante) y R4. Para R5, lo más simple que se puede demostrar es compilar el control dentro de la propia ejecución, comprobando antes que el worktree está en `3df160a` y limpio. La procedencia sale entonces de la ejecución, no del contenido de las ELF.
+
+## F1, corrección 5 (`6999210`, herramienta en `39868eb`)
+
+Solo cambian la herramienta sin placa y el informe.
+
+| Comprobación | Resultado |
+| --- | --- |
+| La herramienta, ejecutada por mí | `gpio_f2_audit_checks_6999210.txt` (`prj_01/docs/`): HEAD `6999210`, árbol limpio. **`OVERALL VERDICT: PASS`.**<br>• El control se compila dentro de la ejecución (`build_all.ps1 -Clean` en el worktree `3df160a` limpio: 16/16 en 224 s), y los símbolos se comparan contra esas ELF recién hechas.<br>• `build_all -Clean` 8/8; `selftest-gpio` de `prj_01` (278 objetos) y de `prj_04` (323), con 0 avisos.<br>• Las tres cabeceras solo añaden.<br>• `.data = 0` y `.bss = 8 B` en CM7 y CM4, desde el `.map`.<br>• Las 16 imágenes de producción, iguales en símbolos, tamaños y tipos, y sin handlers EXTI.<br>• 29/29 expresiones del host casan con el firmware.<br>• Los once controles negativos fallan como deben.<br>Al terminar, los dos árboles están limpios |
+| R5 | **Cerrado:** la procedencia sale de la compilación dentro de la ejecución, tras comprobar `3df160a` y el árbol limpio |
+| R4 | **Cerrado:**<br>• §6.2 se puede ejecutar tal cual: `env.ps1`, el proyecto, `--fresh`, `--clean-first`, el flasheo, las dos corridas, `release` y los resets con los argumentos reales;<br>• la cita de l. 89 y las afirmaciones falsas, corregidas;<br>• queda un detalle: los nombres de las capturas de §6.2 dicen `39868eb`, pero la imagen dará la revisión del HEAD. Las capturas de cierre las nombro yo |
+| Menores restantes | Aceptados y anotados para el README:<br>• se escapan algunas líneas borradas que empiezan por `*` con espacio (`* ptr = 0;`);<br>• si `ls-tree` falla, las cabeceras se listan desde el árbol actual;<br>• una `expect()` con argumento no literal solo la para un `assert`.<br>Ninguno afecta a esta entrega: el diff de cabeceras solo tiene añadidos |
+
+**Estado:** la parte sin placa de F1 pasa, y el firmware y el host de F2 pasaron en la placa en `6b7f10a` y en `c90f2b5`. Desde entonces solo han cambiado comentarios del firmware y la robustez del host.
+
+**F1 pasará cuando estén hechas, con las imágenes del HEAD final:**
+- las dos corridas completas del banco;
+- los resets de producción.
+
+Están pendientes de que el responsable decida sobre la compuerta de T9 en PF14.
