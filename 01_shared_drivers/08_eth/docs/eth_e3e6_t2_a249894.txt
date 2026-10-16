@@ -1,0 +1,25 @@
+[+   0.001s] [host] argv: tools/eth_e3e6_checks.py --test t2 -o 01_shared_drivers/08_eth/docs/eth_e3e6_t2_a249894.txt
+[+   0.002s] [host] options: test=t2 output=01_shared_drivers\08_eth\docs\eth_e3e6_t2_a249894.txt control_dir=C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7 allow_dirty=False sn=0016000C4142501220353451 target_ip=192.168.1.150 local_echo=False
+[+   0.056s] [host] HEAD: 6c365f6f6be77e13aade3968233df340da39fc22
+[+   0.056s] [host] Working tree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+[+   0.057s] [host] Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7
+[+   0.413s] [host] working tree clean (start): PASS (Tree is clean)
+[+   0.989s] [host] Compiler: C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.EXE
+[+   0.990s] [host] Objdump:  C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-objdump.exe
+[+   0.990s] [host] CMake:    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cmake.win32_1.1.200.202605190741\tools\bin\cmake.EXE
+[+   0.991s] === Running T2 Checks (prj_03 & prj_04 Unchanged vs Control 69179d7) ===
+[+   1.139s] [host] Control worktree setup: PASS (Control worktree at 69179d7 ready)
+[+   1.140s] [check] Compiling 4 control configurations (prj_03 & prj_04, debug & release) in-situ...
+[+ 143.772s] [check] Comparing .text*, .rodata*, .data*, .bss* sections across 4 configs x 2 objects (8 objects)...
+[+ 144.682s] [host] CHECK prj_03_adc_dma_eth [debug] eth_hal.c.obj: PASS (Identical byte-for-byte across 31 code/data sections)
+[+ 145.638s] [host] CHECK prj_03_adc_dma_eth [debug] ethernetif.c.obj: PASS (Identical byte-for-byte across 22 code/data sections)
+[+ 145.711s] [host] CHECK prj_03_adc_dma_eth [release] eth_hal.c.obj: PASS (Identical byte-for-byte across 27 code/data sections)
+[+ 145.784s] [host] CHECK prj_03_adc_dma_eth [release] ethernetif.c.obj: PASS (Identical byte-for-byte across 15 code/data sections)
+[+ 146.690s] [host] CHECK prj_04_adc_dma_bm_eth [debug] eth_hal.c.obj: PASS (Identical byte-for-byte across 31 code/data sections)
+[+ 147.618s] [host] CHECK prj_04_adc_dma_bm_eth [debug] ethernetif.c.obj: PASS (Identical byte-for-byte across 22 code/data sections)
+[+ 147.687s] [host] CHECK prj_04_adc_dma_bm_eth [release] eth_hal.c.obj: PASS (Identical byte-for-byte across 27 code/data sections)
+[+ 147.769s] [host] CHECK prj_04_adc_dma_bm_eth [release] ethernetif.c.obj: PASS (Identical byte-for-byte across 15 code/data sections)
+[+ 147.769s] [host] CHECK T2 all 8 objects identical to control: PASS (8/8 passed)
+[+ 147.770s] [host] CHECK T2 negative control (mutated section byte detected & rejected): PASS (Section content mismatch in .rodata.s_rmii_pins)
+[+ 148.137s] [host] working tree clean (end): PASS (Tree is clean)
+[+ 148.138s] OVERALL VERDICT: PASS
