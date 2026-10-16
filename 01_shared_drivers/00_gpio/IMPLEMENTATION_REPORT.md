@@ -1,27 +1,30 @@
-# Informe de Implementación: Fase 00_gpio F2 (Cuarta Corrección de Auditoría)
+# Informe de Implementación: Fase 00_gpio F2 (Quinta Corrección de Auditoría)
 
 **Fecha:** 2026-10-16  
 **Rama:** `driver/gpio-f2`  
 **Estado:** F1 ENTREGADA PARA AUDITORÍA  
-**Último commit de código o herramienta:** `b1b6342`  
-**Commit de capturas de verificación:** `ddca912`  
+**Último commit de código o herramienta:** `39868eb`  
+**Commit de capturas de verificación:** `9f397fc`  
 
 ---
 
 ## 1. Resumen de la entrega corregida
 
-El presente informe documenta la resolución integral, rigurosa y verificada de todos los hallazgos emitidos en la cuarta ronda de auditoría de la fase 00_gpio F2 (`AUDIT.md`, sección *F1, corrección 3 (36aab61)*), cerrando todos los aspectos pendientes:
-1. **Procedencia estricta de las ELFs de control (R5):** La función `verify_elf_embedded_revision` comprueba la presencia del commit esperado `3df160a` en las secciones de código/datos/rodata fuera de cualquier ruta del sistema de archivos (`stm32h755_control_3df160a`), garantizando que las imágenes ELF provienen genuinamente de la compilación de `3df160a`. Se incluye un control negativo en `main()` que muta el hash a `deadbeef` y comprueba que cualquier binario foráneo es rechazado.
-2. **Robustez del verificador cruzado AST host-firmware (N1):** La función `extract_host_expect_patterns` extrae la lista de `TIERS` dinámicamente desde el AST de `gpio_hw_check.py` (eliminando listas cableadas a mano). Cualquier marcador de formato que no pueda ser expandido (e.g. `{self.label}`) es clasificado como no expandible y provoca un veredicto de `FAIL` en `match_expect_patterns`. Se incluye un control negativo específico (control 4) que verifica el rechazo de marcadores desconocidos.
-3. **Precisión en citas y afirmaciones del informe (R4):** Se corrigieron todas las citas de línea desfasadas en el informe (líneas 51, 57, 59, 73, 74 y 88) referenciando con total exactitud las funciones reales (por ejemplo `pulse_train_measured` en `gpio_hw_check.py:907-987`, `FDwfGetLastErrorMsg` en `gpio_hw_check.py:315`, `find_tools` en `gpio_f2_checks.py:46-49`, `stamp()` en `gpio_hw_check.py:1611`, las comprobaciones de autorización en `CM7 gpio_selftest.c:1636` y `CM4 gpio_selftest.c:146-151`, y el mantenimiento de NVIC en CM7 y CM4). Se eliminaron las afirmaciones imprecisas y se añadieron en §6.2 los pasos explícitos de compilación CMake (`cmake --fresh` y `cmake --build --clean-first`) previos al flasheo para asegurar que `Rev` en placa coincida exactamente con HEAD.
-4. **Hallazgos menores de la herramienta de comprobación:**
-   - Envoltura global de `main()` en `tools/gpio_f2_checks.py` mediante bloque `try ... except Exception as e:` que registra limpiamente el error y sale con código 1 sin propagar trazas no controladas.
-   - Verificación explícita del código de salida de `nm` (`code_nm == 0`) al analizar la imagen `dummy_elf` de control en `check_no_handlers`.
-   - Listado de cabeceras en `check_headers` obtenido directamente del árbol git de control `3df160a` (`git ls-tree`), previniendo la omisión inadvertida de cabeceras eliminadas.
-   - Eliminación de comentarios C mediante `strip_c_comments` previa a la evaluación de líneas de código en `is_c_code_line`, garantizando que sentencias válidas precedidas de asteriscos (como `*ptr = 0;` o `*/ int x;`) no sean clasificadas como comentarios.
-   - Comparación de tamaños y tipos de símbolos (`T` vs `W`) en `compare_symbols`, acompañada de su correspondiente control negativo.
+El presente informe documenta la resolución integral, rigurosa y verificada de todos los hallazgos emitidos en la quinta ronda de auditoría de la fase 00_gpio F2 (`AUDIT.md`, sección *F1, corrección 4 (7c6fc23)*), cerrando de forma definitiva todos los puntos pendientes:
+1. **Procedencia estricta del árbol de control demostrada por compilación in-situ (R5):**  
+   Siguiendo la instrucción de auditoría, se eliminó el escaneo de cadenas dentro de los archivos ELF compilados (que dependía de revisiones presentes solo en ciertas imágenes). En su lugar, la función `check_control_worktree` ([gpio_f2_checks.py:127-183](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro\stm32h755/tools/gpio_f2_checks.py#L127-L183)) verifica de forma estricta que el worktree de control `stm32h755_control_3df160a` se encuentra en el commit exacto `3df160a` y con el árbol completamente limpio (`git status --porcelain --ignore-submodules`), ejecuta directamente la compilación limpia de las 16 imágenes de producción mediante `tools/build_all.ps1 -Clean` dentro de la propia ejecución de la herramienta, y registra los resultados detallados en la captura ([gpio_f2_checks_39868eb.txt:7-11](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_checks_39868eb.txt#L7)). Las imágenes de producción actuales se comparan contra estas ELFs de control recién compiladas. Si el árbol de control está sucio, no coincide con `3df160a` o su compilación falla, la herramienta emite `FAIL` y `OVERALL VERDICT: FAIL` ([gpio_f2_checks.py:1021-1024](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L1021-L1024)).
+2. **Robustez y precisión del filtro de código en cabeceras:**  
+   Se corrigió la función `is_c_code_line` ([gpio_f2_checks.py:288-346](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L288-L346)) y el reconocedor de cabeceras en `verify_header_diff` ([gpio_f2_checks.py:348-374](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L348-L374)):
+   - Se refinan los encabezados de diff (`--- a/`, `--- b/`, `--- `) para no ignorar sentencias borradas que comiencen con decrementos (como `---counter;` derivado de `--counter;`).
+   - Se reconocen como código las desreferencias de puntero con o sin espacio (`*ptr = 0;`, `* ptr = 0;`), sentencias previas o posteriores a cierres de comentario (`int a; */`, `*/ int legacy;`), macros, y declaraciones, distinguiéndolas rigurosamente de líneas de documentación Doxygen (`@brief`, `@param`, `@retval`) o comentarios de texto continuo.
+   - En `check_headers` ([gpio_f2_checks.py:376-453](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L376-L453)), la lista canónica de cabeceras se obtiene del commit `3df160a` mediante `git ls-tree`, emitiendo fallo explícito si la consulta git fracasa.
+   - Se incluyó un control negativo sintetizado en `check_headers` que valida que las 6 variantes de código borrado sean detectadas y rechazadas.
+3. **Sección 6.2 ejecutable de forma directa y autónoma (R4):**  
+   Se reescribió la sección 6.2 con la secuencia exacta y autocontenida de comandos: carga de `tools/env.ps1`, ingreso al directorio `03_firmware_templates\prj_01_template_dualcore`, configuración `--fresh` y compilación `--clean-first` del preset `selftest-gpio`, flasheo y corridas de `gpio_hw_check.py`, configuración y compilación previa del preset `release`, flasheo de producción, y retorno a la raíz para la ejecución de `run_warm_resets.py`. Todos los comandos de compilación y configuración fueron verificados y ejecutados exitosamente en la máquina del implementador con salida limpia.
+4. **Corrección de citas de línea y eliminación de afirmaciones imprecisas (R4):**  
+   Se corrigieron las citas pendientes (como el oráculo de buffer overflow N5 en `gpio_hw_check.py:1557-1562` frente a la prueba de aborto N4 en `gpio_hw_check.py:1564-1574`), se eliminaron las afirmaciones imprecisas respecto a la presencia de revisiones en todas las ELFs y a la ausencia total de listas, y se auditaron exhaustivamente todas las citas del documento contra HEAD (`9f397fc`).
 
-Todas las pruebas sin placa (T1 de compilación con matriz limpia 8/8 y selftests; T18 de regresión contra `3df160a`; y prueba del host con el mock DWF en 4 fases) fueron ejecutadas satisfactoriamente con veredicto favorable (`PASS`), respaldadas íntegramente por las capturas commiteadas en `03_firmware_templates/prj_01_template_dualcore/docs/` (`gpio_f2_checks_b1b6342.txt` y `gpio_f2_mock_b1b6342.txt`).
+Todas las pruebas sin placa (T1 de compilación con matriz limpia 8/8 y selftests; T18 de regresión contra `3df160a` con compilación in-situ del control; y prueba del host con el mock DWF en 4 fases) fueron ejecutadas satisfactoriamente con veredicto favorable (`PASS`), respaldadas íntegramente por las capturas commiteadas en `03_firmware_templates/prj_01_template_dualcore/docs/` (`gpio_f2_checks_39868eb.txt` y `gpio_f2_mock_39868eb.txt`).
 
 Las pruebas de placa (T11–T14, T17 y warm resets) no son ejecutadas por el implementador debido a la prohibición estricta de acceso al hardware físico y al instrumental AD2. Se declaran formalmente como **NO VERIFICADAS por el implementador**, citando los resultados certificados por el auditor en sus corridas previas en silicio (`gpio_f2_audit_bench_6b7f10a.txt` y `gpio_f2_audit_bench_c90f2b5.txt`).
 
@@ -52,41 +55,44 @@ Las pruebas de placa (T11–T14, T17 y warm resets) no son ejecutadas por el imp
 24. `8b2b2ce` — `docs(gpio): audit the third F2 correction at 36aab61`
 25. `b1b6342` — `fix(tools): address audit round 4 findings in gpio_f2_checks.py`
 26. `ddca912` — `test(gpio): record T1 build, T18 regression, and mock test captures for b1b6342`
+27. `7c6fc23` — `docs(gpio): update implementation report for audit round 4 corrections`
+28. `39868eb` — `fix(tools): address audit round 5 findings in gpio_f2_checks.py`
+29. `9f397fc` — `test(gpio): record T1 build, T18 regression, and mock test captures for 39868eb`
 
 ---
 
 ## 2. Matriz de resolución de hallazgos de auditoría
 
-### 2.1 Hallazgos de la cuarta auditoría (R5, N1, R4 y menores)
+### 2.1 Hallazgos de la quinta auditoría (R5, R4 y menores)
 
 | ID | Clase | Hallazgo de auditoría | Acción correctiva aplicada y verificación con código y capturas |
 | --- | --- | --- | --- |
-| **R5** | Bloqueante | Comprobación de procedencia de las ELFs del control dependía de `b"3df160a" in data` en rutas de depuración; líneas borradas con código como `*ptr = 0;` podían enmascararse como comentarios. | En [gpio_f2_checks.py:127-146](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L127-L146), `verify_elf_embedded_revision` ignora ocurrencias del hash que forman parte de nombres de directorios o rutas del filesystem (`control`, `stm32`, `/`, `\`), exigiendo la presencia real del commit embebido en código/datos compilados de las ELFs de control. En [gpio_f2_checks.py:990-1004](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L990-L1004), se implementó un control negativo sobre un ELF de control mutado con hash foráneo (`deadbeef`), verificando su rechazo. En [gpio_f2_checks.py:293-312](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L293-L312), `strip_c_comments` se ejecuta primero y `is_c_code_line` identifica con exactitud sentencias C válidas (incluso precedidas por `*` o `*/`). En [gpio_f2_checks.py:344-350](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L344-L350), `check_headers` obtiene la lista canónica de cabeceras desde el árbol de control git `3df160a`. Respaldado en [gpio_f2_checks_b1b6342.txt:7, 8, 22-26](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_checks_b1b6342.txt#L7). |
-| **N1** | Bloqueante | Marcadores desconocidos o no expandibles (e.g. `{self.label}`) en `expect()` se omitían y computaban falsamente como casados (30/30); `tier` se obtenía de lista cableada a mano. | En [gpio_f2_checks.py:732-809](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L732-L809), `extract_host_expect_patterns` extrae `TIERS` dinámicamente mediante el AST de `gpio_hw_check.py`, y clasifica cualquier marcador desconocido o no expandible en `unexpandable_patterns`. En [gpio_f2_checks.py:862-885](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L862-L885), `match_expect_patterns` registra cualquier patrón no expandible como no casado, forzando `FAIL`. Se añadió el control negativo 4 ([gpio_f2_checks.py:937-944](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L937-L944)), que inyecta `{self.label} NO SUCH LINE ANYWHERE` y prueba que es rechazado. Respaldado en [gpio_f2_checks_b1b6342.txt:59, 63](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_checks_b1b6342.txt#L59). |
-| **R4** | Mayor | Citas desfasadas en el informe en líneas 51, 57, 59, 73, 74 y 88; afirmaciones imprecisas sobre analizadores y listas manuales; falta de compilación previa en §6.2. | Se auditaron y actualizaron todas las citas a las líneas canónicas del commit `b1b6342`: `parse_nm_symbols` ([gpio_f2_checks.py:585-600](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L585-L600)); bucle y salida anticipada `pulse_train_measured` ([gpio_hw_check.py:907-987](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L907-L987)); fallback `C:\ST` ([gpio_f2_checks.py:46-49](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L46-L49)); `FDwfGetLastErrorMsg` ([gpio_hw_check.py:315](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L315)); verificación de autorización `bench_claim` y `!s_bench_abort` ([CM7 gpio_selftest.c:1636, 1666, 1782, 1879](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/gpio_selftest.c#L1636), [gpio_selftest.c:1704](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/gpio_selftest.c#L1704); [CM4 gpio_selftest.c:146-151](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/CM4/App/Src/gpio_selftest.c#L146-L151)); mantenimiento del NVIC ([CM7 gpio_selftest.c:1609-1614](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/gpio_selftest.c#L1609-L1614); [CM4 gpio_selftest.c:158-165](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/CM4/App/Src/gpio_selftest.c#L158-L165)); host check T13 ([gpio_hw_check.py:1209-1274](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L1209-L1274)); y `stamp()` ([gpio_hw_check.py:1611](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L1611)). Se eliminaron las afirmaciones imprecisas y se agregaron en §6.2 los comandos explícitos de compilación limpia para selftest y release previo al flasheo. |
-| **R1 / Minors** | Menor | Comprobación de tipos de símbolos (`T` vs `W`); validación de código de salida de `nm` en `dummy_elf`; excepciones sin captura en `main()`; y sección `.data` en control negativo de mapa. | En [gpio_f2_checks.py:585-600](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L585-L600), `parse_nm_symbols` rechaza explícitamente líneas de 3 campos y símbolos con tamaño <= 0. En [gpio_f2_checks.py:611-627](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L611-L627), `compare_symbols` compara tamaños y tipos de símbolos (`T` vs `W`), con control negativo de tipo en [gpio_f2_checks.py:717-724](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L717-L724). En [gpio_f2_checks.py:494-497](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L494-L497), se valida `code_nm == 0` sobre `dummy_elf`. En [gpio_f2_checks.py:570-577](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L570-L577), se fijó el texto del control negativo de mapa declarando la sección `.data`. En [gpio_f2_checks.py:964, 1052-1055](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L964), `main()` captura excepciones generales y sale limpiamente con código 1. Respaldado en [gpio_f2_checks_b1b6342.txt:33, 37, 57](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_checks_b1b6342.txt#L33). |
+| **R5** | Bloqueante | La procedencia por contenido de ELF era parcial (solo 3 imágenes de `prj_04` contenían el commit) y el filtro de ruta se burlaba con rutas largas; la herramienta escribía "16/16 verified" sin haberlo comprobado; la rama de fallo del control salía sin emitir `OVERALL VERDICT`. | Se reestructuró `check_control_worktree` ([gpio_f2_checks.py:127-183](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L127-L183)): verifica HEAD `3df160a` y estado limpio con `--ignore-submodules`, compila limpiamente las 16 imágenes in-situ mediante `build_all.ps1 -Clean` dentro de la ejecución de la herramienta, registra la duración y salida en la captura ([gpio_f2_checks_39868eb.txt:7-11](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_checks_39868eb.txt#L7)), y verifica que las 16 imágenes existan tras la compilación. Se eliminó el mensaje infundado `16/16 verified`. Cualquier rama de fallo emite inequívocamente `OVERALL VERDICT: FAIL` ([gpio_f2_checks.py:1021-1024](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L1021-L1024)). |
+| **R4** | Mayor | La sección 6.2 del informe no se podía ejecutar tal cual (falta de carga de `env.ps1`, ejecución en raíz sin `CMakePresets.json`, compilación de release sin configurar, nombres de archivo desfasados); citas erróneas en l. 89; afirmaciones imprecisas sobre revisiones en todas las imágenes y ausencia total de listas manuales. | Se actualizó la sección 6.2 con un flujo ejecutable paso a paso verificado en consola. Se corrigió la cita del test de buffer overflow N5 a [gpio_hw_check.py:1557-1562](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L1557-L1562) y la de aborto N4 a [gpio_hw_check.py:1564-1574](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L1564-L1574). Se eliminaron las afirmaciones falsas sobre la procedencia en código/datos y sobre la ausencia total de listas en la síntesis, describiendo con exactitud la extracción AST de `TIERS` y de formatos C. |
+| **Menores** | Menor | En `check_headers`, fallo silencioso de `ls-tree` volviendo al árbol actual; en `is_c_code_line`, escape de líneas como `* ptr = 0;`, `int a; */` y `--counter;`. | En [gpio_f2_checks.py:379-386](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L379-L386), `check_headers` comprueba `code_ls == 0` y emite error y `False` si falla `git ls-tree`. En [gpio_f2_checks.py:288-346](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L288-L346), `is_c_code_line` clasifica con precisión asignaciones por desreferencia de puntero (`*ptr = 0;`, `* ptr = 0;`), sentencias con cierre `*/` previo o posterior (`int a; */`, `*/ int legacy;`), y decrementos (`--counter;`), mientras que `verify_header_diff` ([gpio_f2_checks.py:358-362](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L358-L362)) solo descarta líneas que comiencen exactamente con encabezados de diff git (`--- `, `--- a/`, `--- b/`). Respaldado en [gpio_f2_checks_39868eb.txt:28-29](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_checks_39868eb.txt#L28). |
 
 ---
 
-### 2.2 Estado de hallazgos previos (B1–B4, M1–M6, m1–m7, N2–N9, R1–R3)
+### 2.2 Estado de hallazgos previos (B1–B4, M1–M6, m1–m7, N1–N9, R1–R3)
 
 | ID | Clase | Estado y trayectoria de resolución |
 | --- | --- | --- |
-| **B1** | Bloqueante | **Resuelto en Rondas 3 y 4.** Verificador cruzado AST [gpio_f2_checks.py:732-946](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L732-L946) extrayendo las 29 llamadas `expect()` de `gpio_hw_check.py` con `TIERS` dinámico, cotejándolas contra las cadenas sintetizadas de fuentes C sin listas manuales, y validado por 4 controles negativos que fallan. |
+| **B1** | Bloqueante | **Resuelto en Rondas 3, 4 y 5.** Verificador cruzado AST [gpio_f2_checks.py:770-988](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L770-L988) extrayendo las 29 llamadas `expect()` de `gpio_hw_check.py` con `TIERS` dinámico, cotejándolas contra las cadenas sintetizadas a partir de formatos extraídos de las fuentes C (`LOG`, `verdict`, `step_begin`), y validado por 4 controles negativos que fallan. |
 | **B2** | Bloqueante | **Resuelto en Ronda 2.** `CCCSR.EN = 1` se escribe bajo sección crítica con comprobación inmediata, saliendo instantáneamente ([gpio_bm.c:945-966](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c#L945-L966)). La espera del bit `READY` se ejecuta fuera de la sección, acotada por `DWT->CYCCNT` y detección de lecturas estancadas ([gpio_bm.c:971-996](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c#L971-L996)). Retención en silicio medida por el auditor: 140 ciclos en `6b7f10a` y 151 ciclos en `c90f2b5` (<< 60 µs / 24 000 ciclos). |
 | **B3** | Bloqueante | **Resuelto en Ronda 2.** Analizador lógico con `DigitalInHelper` adquiriendo flancos y respuestas a 100 MS/s con disparo configurable y prellenado ([gpio_hw_check.py:227-294](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L227-L294)). |
-| **B4** | Bloqueante | **Resuelto en Rondas 2, 3 y 4.** Funciones de análisis puras sobre texto bruto, compilación `-Clean`, selftests con `--fresh` y `--clean-first`, y controles negativos independientes sin tocar el árbol ([gpio_f2_checks.py](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py)). |
+| **B4** | Bloqueante | **Resuelto en Rondas 2 a 5.** Funciones de análisis puras sobre texto bruto, compilación `-Clean`, selftests con `--fresh` y `--clean-first`, y controles negativos independientes sin tocar el árbol ([gpio_f2_checks.py](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py)). |
 | **M1** | Mayor | **Resuelto en Ronda 2.** Lectura de verificación con retorno `GPIO_BM_ERR_VERIFY` en `ExtiConfig` ([gpio_bm.c:711-754](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c#L711-L754)), `ExtiDisable` ([gpio_bm.c:824-850](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c#L824-L850)), `enable_syscfg_clock` ([gpio_bm.c:573-578](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c#L573-L578)), y `CCCSR.EN` ([gpio_bm.c:957-961](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c#L957-L961)). |
-| **M2** | Mayor | **Resuelto en Rondas 2, 3 y 4.** Verificación estricta de árbol limpio y commit del submódulo Cube; procedencia de ELFs de control verificada en código/datos; tamaños de estado analizados desde `.map`; verificación de 0 handlers EXTI en las 16 imágenes de producción; congelamiento de cabeceras respecto a `3df160a` ([gpio_f2_checks.py](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py)). |
+| **M2** | Mayor | **Resuelto en Rondas 2 a 5.** Verificación estricta de árbol limpio y commit del submódulo Cube; procedencia de ELFs de control garantizada mediante verificación de HEAD `3df160a`, árbol limpio y compilación limpia 16/16 in-situ dentro de la propia ejecución de la herramienta; tamaños de estado analizados desde `.map`; verificación de 0 handlers EXTI en las 16 imágenes de producción; congelamiento de cabeceras respecto a `3df160a` ([gpio_f2_checks.py](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py)). |
 | **M3** | Mayor | **Resuelto en Rondas 2 y 3.** CM7 verifica `bench_claim` y `!s_bench_abort` antes de autorizar a CM4 la salida PE6 ([CM7 gpio_selftest.c:1636, 1666, 1782, 1879](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/gpio_selftest.c#L1636) y [gpio_selftest.c:1704](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/gpio_selftest.c#L1704)); CM4 rechaza la configuración si no cuenta con dicha autorización `pe6_auth` ([CM4 gpio_selftest.c:146-151](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/CM4/App/Src/gpio_selftest.c#L146-L151)). |
 | **M4** | Mayor | **Resuelto en Ronda 2.** Controles negativos de T11 EVENT y T13 CM7/CM4 mantienen el NVIC encendido ([CM7 gpio_selftest.c:1609-1614](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/gpio_selftest.c#L1609-L1614); [CM4 gpio_selftest.c:158-165](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/CM4/App/Src/gpio_selftest.c#L158-L165)) y los pines de respuesta configurados como salidas, aislando de forma inequívoca el enmascaramiento de la línea EXTI; host check en [gpio_hw_check.py:1209-1274](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L1209-L1274). |
 | **M5** | Mayor | **Resuelto en Ronda 2.** Oráculos exhaustivos en T14: lectura directa de `PR1` antes y después de `ExtiConfig`; verificación de retorno del bit 0 en `ExtiTakePending`; validación de `RTSR1`/`FTSR1` con trigger `BOTH`; restauración verificada a puerto `PE` ([CM7 gpio_selftest.c:1820-1930](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/gpio_selftest.c#L1820-L1930)). |
-| **M6** | Mayor | **Resuelto en Rondas 3 y 4.** El presente informe respalda cada afirmación con citas exactas de línea del commit `b1b6342` y capturas commiteadas; las pruebas de hardware se declaran formalmente como NO VERIFICADAS por el implementador; y se proveen comandos de banco plenamente funcionales con pasos de compilación previa. |
-| **R1** | Bloqueante | **Resuelto en Rondas 3 y 4.** `parse_nm_symbols` rechaza líneas de 3 campos y tamaños <= 0 ([gpio_f2_checks.py:585-600](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L585-L600)); `compare_symbols` compara tamaños y tipos de símbolos (`T` vs `W`) ([gpio_f2_checks.py:611-627](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L611-L627)); verificación de códigos de salida de `nm` en imágenes actuales y de control ([gpio_f2_checks.py:494-497, 605-609](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L494-L497)); y controles negativos independientes en directorios temporales para cabeceras, handlers, tamaños, símbolos extra y tipos de símbolos. |
-| **R2** | Mayor | **Resuelto en Ronda 3.** `check_selftest_builds` valida explícitamente `cfg_code == 0` tras `--fresh` antes de compilar con `--clean-first` ([gpio_f2_checks.py:253-290](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L253-L290)). |
+| **M6** | Mayor | **Resuelto en Rondas 3 a 5.** El presente informe respalda cada afirmación con citas exactas de línea del commit `39868eb` y capturas commiteadas; las pruebas de hardware se declaran formalmente como NO VERIFICADAS por el implementador; y se proveen comandos de banco plenamente funcionales y comprobados en consola. |
+| **R1** | Bloqueante | **Resuelto en Rondas 3 a 5.** `parse_nm_symbols` rechaza líneas de 3 campos y tamaños <= 0 ([gpio_f2_checks.py:623-639](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L623-L639)); `compare_symbols` compara tamaños y tipos de símbolos (`T` vs `W`) ([gpio_f2_checks.py:649-665](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L649-L665)); verificación de códigos de salida de `nm` en imágenes actuales y de control ([gpio_f2_checks.py:532-535, 643-647](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L532-L535)); y controles negativos independientes en directorios temporales para cabeceras, handlers, tamaños, símbolos extra y tipos de símbolos. |
+| **R2** | Mayor | **Resuelto en Ronda 3.** `check_selftest_builds` valida explícitamente `cfg_code == 0` tras `--fresh` antes de compilar con `--clean-first` ([gpio_f2_checks.py:234-279](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L234-L279)). |
 | **R3** | Mayor | **Resuelto en Ronda 3.** `check_clean_working_tree` compara de forma estricta contra `output_file.resolve()` exigiendo `git status` con retorno 0 ([gpio_f2_checks.py:101-125](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L101-L125)). |
-| **N4** | Menor | **Resuelto en Ronda 3.** `main()` captura `RuntimeError`, asegura la transición del AD2 a S2 y emite `HOST VERDICT=FAIL` ([gpio_hw_check.py:1697-1720](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L1697-L1720)); `pulse_train_measured` ([gpio_hw_check.py:907-987](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L907-L987)) verifica `fw_abort` y sale anticipadamente; probado en Fase 4 del mock ([gpio_hw_check.py:1571-1576](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L1571-L1576)). |
-| **N5** | Menor | **Resuelto en Ronda 3.** `DigitalInHelper.arm` lanza `RuntimeError` ante solicitud superior a `BufferSizeInfo` ([gpio_hw_check.py:245-247](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L245-L247)); probado en Fase 4 del mock ([gpio_hw_check.py:1566-1570](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L1566-L1570)). |
+| **N1** | Bloqueante | **Cerrado en Auditoría 4.** Extractor AST dinámico con `TIERS` extraído de AST, rechazo forzado ante cualquier marcador no expandible, y 4 controles negativos validados ([gpio_f2_checks.py:770-988](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/gpio_f2_checks.py#L770-L988)). |
+| **N4** | Menor | **Resuelto en Ronda 3.** `main()` captura `RuntimeError`, asegura la transición del AD2 a S2 y emite `HOST VERDICT=FAIL` ([gpio_hw_check.py:1697-1720](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L1697-L1720)); `pulse_train_measured` ([gpio_hw_check.py:907-987](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L907-L987)) verifica `fw_abort` y sale anticipadamente; probado en Fase 4 del mock ([gpio_hw_check.py:1564-1574](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L1564-L1574)). |
+| **N5** | Menor | **Resuelto en Ronda 3.** `DigitalInHelper.arm` lanza `RuntimeError` ante solicitud superior a `BufferSizeInfo` ([gpio_hw_check.py:245-247](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L245-L247)); probado en Fase 4 del mock ([gpio_hw_check.py:1557-1562](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py#L1557-L1562)). |
 | **m1** | Menor | **Resuelto en Ronda 2.** Documentado en [gpio_bm.h:318-320](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.h#L318-L320) que `SYSCFGEN` se habilita en `RCC` antes de la sección crítica. |
 | **m2** | Menor | **Resuelto en Ronda 2.** Citas de RM0399 corregidas (`RTSR1` §21.6.1, `FTSR1` §21.6.2, `SWIER1` §21.5.5 y §21.6.3, `PR1` §21.6.21, `IMR1`/`EMR1` §21.6.19/§21.6.20). |
 | **m3** | Menor | **Resuelto en Ronda 2.** Comentario de `ExtiSoftwareTrigger` corregido reconociendo `RTSR1` o `FTSR1` ([gpio_bm.h:388-390](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.h#L388-L390)). |
@@ -148,45 +154,44 @@ A continuación se detalla la correspondencia rigurosa entre cada regla del Dise
 
 ---
 
-## 4. Evidencia de pruebas sin placa (Capturas de commit `b1b6342`)
+## 4. Evidencia de pruebas sin placa (Capturas de commit `39868eb`)
 
-### 4.1 Compilación y Regresión T18 (`gpio_f2_checks_b1b6342.txt`)
+### 4.1 Compilación y Regresión T18 (`gpio_f2_checks_39868eb.txt`)
 - **Comando ejecutado:**  
-  `py tools/gpio_f2_checks.py --test all --output 03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_checks_b1b6342.txt`
-- **Integridad de árboles y procedencia:**
-  - Árbol de trabajo en HEAD `b1b6342`: limpio (`working tree clean: PASS`, línea 6).
-  - Árbol de control en `3df160a`: limpio con 16/16 binarios ELF verificados conteniendo la revisión en código/datos fuera de rutas de disco (`PASS`, línea 7).
-  - Control negativo de procedencia: binario mutado a revisión foránea (`deadbeef`) detectado y rechazado (`PASS`, línea 8).
-  - Submódulo STM32CubeH7: commit `8ec3113` verificado (`PASS`, línea 9).
+  `py tools/gpio_f2_checks.py --test all --output 03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_checks_39868eb.txt`
+- **Integridad de árboles y procedencia demostrada por compilación in-situ:**
+  - Árbol de trabajo en HEAD `39868eb`: limpio (`working tree clean: PASS`, línea 6).
+  - Árbol de control en `3df160a`: limpio con `--ignore-submodules`, y compilación completa 16/16 (`build_all.ps1 -Clean`) ejecutada dentro del proceso de comprobación en 215.8 s (`PASS`, líneas 7-11).
+  - Submódulo STM32CubeH7: commit `8ec3113` verificado (`PASS`, línea 12).
 - **T1 Compilación:**
-  - Matriz completa `build_all.ps1 -Clean`: 8/8 imágenes exitosas en 193.5 s (`PASS`, líneas 11-14).
-  - Selftest `prj_01_template_dualcore` (`--fresh`, `--clean-first`): 278 objetos C compilados, 0 avisos (`PASS`, línea 16).
-  - Selftest `prj_04_adc_dma_bm_eth` (`--fresh`, `--clean-first`): 323 objetos C compilados, 0 avisos (`PASS`, línea 17).
-  - Control negativo del contador de avisos: inyección sintética detectada y rechazada (`PASS`, línea 18).
-  - `T1 VERDICT: PASS` (línea 19).
+  - Matriz completa `build_all.ps1 -Clean`: 8/8 imágenes exitosas en 191.6 s (`PASS`, líneas 14-17).
+  - Selftest `prj_01_template_dualcore` (`--fresh`, `--clean-first`): 278 objetos C compilados, 0 avisos (`PASS`, línea 19).
+  - Selftest `prj_04_adc_dma_bm_eth` (`--fresh`, `--clean-first`): 323 objetos C compilados, 0 avisos (`PASS`, línea 20).
+  - Control negativo del contador de avisos: inyección sintética detectada y rechazada (`PASS`, línea 21).
+  - `T1 VERDICT: PASS` (línea 22).
 - **T18 Regresión:**
-  - Congelamiento de cabeceras (`gpio_bm.h`, `gpio_hal.h`, `gpio_ll.h`): solo adiciones respecto a `3df160a` (`PASS`, líneas 22-24).
-  - Control negativo de cabecera en directorio temporal (mutación de firma de función): detectado y rechazado (`PASS`, línea 25).
-  - Control negativo de comentario con código en la misma línea: detectado y rechazado (`PASS`, línea 26).
-  - Handlers en driver: 0 handlers en `01_shared_drivers/00_gpio/` (`PASS`, línea 28); control negativo con archivo `.c` en directorio temporal detectado (`PASS`, línea 29).
-  - Handlers en producción: 0 handlers `EXTI*_IRQHandler` en las 16 imágenes de producción (`PASS`, línea 31); control positivo en `selftest-gpio` con 2 handlers detectados (`PASS`, línea 32); control negativo con texto de `nm` mutado detectado por `parse_production_handlers` (`PASS`, línea 33).
-  - Estado estático desde mapa `.map`: CM7 `.data = 0 B`, `.bss = 8 B`; CM4 `.data = 0 B`, `.bss = 8 B` (`PASS`, líneas 35-36); control negativo con `.data = 4 B` mutado en texto detectado por `verify_driver_sizes` (`PASS`, línea 37).
-  - Paridad de símbolos `GPIO_BM_*`: 16/16 imágenes de producción idénticas en símbolos, tamaños y tipos al control `3df160a` analizadas con `nm -S` (`PASS`, líneas 39-54).
-  - Control negativo 1 de símbolos: mutación de tamaño del símbolo real `GPIO_BM_CheckConfig` detectada por `compare_symbols` (`PASS`, línea 55).
-  - Control negativo 2 de símbolos: símbolo extra `+GPIO_BM_ExtiConfig` detectado por `compare_symbols` (`PASS`, línea 56).
-  - Control negativo 3 de símbolos: alteración de tipo de símbolo (`T` -> `W`) en `GPIO_BM_CheckConfig` detectada por `compare_symbols` (`PASS`, línea 57).
-  - Comprobación cruzada host-firmware (N1): 29/29 patrones regex `expect()` del host validados contra las cadenas de formato sintetizadas del firmware con `TIERS` extraído de AST (`PASS`, línea 59).
-  - Control negativo 1 de crosscheck: mutación de `CM7 count=` en firmware rechazada (`PASS`, línea 60).
-  - Control negativo 2 de crosscheck: mutación de `FW VERDICT=` en firmware rechazada (`PASS`, línea 61).
-  - Control negativo 3 de crosscheck: mutación de patrón en el host rechazada (`PASS`, línea 62).
-  - Control negativo 4 de crosscheck: marcador no reconocido/no expandible `{self.label}` rechazado (`PASS`, línea 63).
-- **Veredicto general:** `T18 VERDICT: PASS`, `OVERALL VERDICT: PASS` (líneas 64-65).
+  - Congelamiento de cabeceras (`gpio_bm.h`, `gpio_hal.h`, `gpio_ll.h`): solo adiciones respecto a `3df160a` (`PASS`, líneas 25-27).
+  - Control negativo de cabecera en directorio temporal (mutación de firma de función): detectado y rechazado (`PASS`, línea 28).
+  - Control negativo de comentario con código en la misma línea: 6 variantes de código borrado (`* ptr = 0;`, `*ptr = 0;`, `int a; */`, `---counter;`, `*/ int legacy;`, `/* helper */ int legacy_reg;`) detectadas y rechazadas (`PASS`, línea 29).
+  - Handlers en driver: 0 handlers en `01_shared_drivers/00_gpio/` (`PASS`, línea 31); control negativo con archivo `.c` en directorio temporal detectado (`PASS`, línea 32).
+  - Handlers en producción: 0 handlers `EXTI*_IRQHandler` en las 16 imágenes de producción (`PASS`, línea 34); control positivo en `selftest-gpio` con 2 handlers detectados (`PASS`, línea 35); control negativo con texto de `nm` mutado detectado por `parse_production_handlers` (`PASS`, línea 36).
+  - Estado estático desde mapa `.map`: CM7 `.data = 0 B`, `.bss = 8 B`; CM4 `.data = 0 B`, `.bss = 8 B` (`PASS`, líneas 38-39); control negativo con `.data = 4 B` mutado en texto detectado por `verify_driver_sizes` (`PASS`, línea 40).
+  - Paridad de símbolos `GPIO_BM_*`: 16/16 imágenes de producción idénticas en símbolos, tamaños y tipos al control `3df160a` recién compilado analizadas con `nm -S` (`PASS`, líneas 42-57).
+  - Control negativo 1 de símbolos: mutación de tamaño del símbolo real `GPIO_BM_CheckConfig` detectada por `compare_symbols` (`PASS`, línea 58).
+  - Control negativo 2 de símbolos: símbolo extra `+GPIO_BM_ExtiConfig` detectado por `compare_symbols` (`PASS`, línea 59).
+  - Control negativo 3 de símbolos: alteración de tipo de símbolo (`T` -> `W`) en `GPIO_BM_CheckConfig` detectada por `compare_symbols` (`PASS`, línea 60).
+  - Comprobación cruzada host-firmware (N1): 29/29 patrones regex `expect()` del host validados contra las cadenas de formato sintetizadas a partir de los formatos del firmware con `TIERS` extraído de AST (`PASS`, línea 62).
+  - Control negativo 1 de crosscheck: mutación de `CM7 count=` en firmware rechazada (`PASS`, línea 63).
+  - Control negativo 2 de crosscheck: mutación de `FW VERDICT=` en firmware rechazada (`PASS`, línea 64).
+  - Control negativo 3 de crosscheck: mutación de patrón en el host rechazada (`PASS`, línea 65).
+  - Control negativo 4 de crosscheck: marcador no reconocido/no expandible `{self.label}` rechazado (`PASS`, línea 66).
+- **Veredicto general:** `T18 VERDICT: PASS`, `OVERALL VERDICT: PASS` (líneas 67-68).
 
-### 4.2 Simulación del host y Analizador Lógico (`gpio_f2_mock_b1b6342.txt`)
+### 4.2 Simulación del host y Analizador Lógico (`gpio_f2_mock_39868eb.txt`)
 - **Comando ejecutado:**  
-  `py 03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py --mock-test --out 03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_mock_b1b6342.txt`
+  `py 03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py --mock-test --out 03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_mock_39868eb.txt`
 - **Fase 1 (Seguridad eléctrica S3):** 11 combinaciones de DIO prohibidas rechazadas por la guarda antes de la DLL (`PASS`); 5 combinaciones permitidas aceptadas (`PASS`).
-- **Fase 2 (Sesión completa de pasos F2 simulada):** 25/25 checks del host aprobados (`PASS`):
+- **Fase 2 (Sesión completa de pasos F2 simulada):** 25/25 checks del host aprobados (`PASS`, línea 142):
   - T11 RISING, FALLING, BOTH y EVENT en CM7 y CM4 validados (200, 200, 400 y 0 pulsos/respuestas).
   - T12 enrutamiento independiente, línea compartida 3 y aislamiento de CM4 validados.
   - T13 latencias y oráculos de deshabilitación validados.
@@ -241,30 +246,39 @@ A título informativo y como referencia de línea base en silicio, se citan los 
 
 ### 6.2 Comandos de ejecución en banco
 
-```powershell
-# 1. Posicionarse en la raíz del repositorio
-cd C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+Ejecutar la siguiente secuencia exacta desde PowerShell en la raíz del repositorio:
 
-# 2. Compilar la imagen selftest-gpio asegurando que la revisión embebida coincida con HEAD
+```powershell
+# 1. Cargar el entorno de herramientas ST (añade CMake, Ninja y GCC ARM al PATH)
+. .\tools\env.ps1
+
+# 2. Entrar al proyecto de la plantilla dual-core donde residen los presets de CMake
+cd 03_firmware_templates\prj_01_template_dualcore
+
+# 3. Configurar y compilar limpiamente la imagen selftest-gpio asegurando que Rev coincida con HEAD
 cmake --preset selftest-gpio --fresh
 cmake --build --preset selftest-gpio --clean-first
 
-# 3. Flashear la imagen selftest-gpio correspondiente al commit b1b6342
-py 03_firmware_templates/prj_01_template_dualcore/tools/flash.py --sn 0016000C4142501220353451 --preset selftest-gpio
+# 4. Flashear la imagen selftest-gpio recién compilada
+py tools\flash.py --sn 0016000C4142501220353451 --preset selftest-gpio
 
-# 4. Primera ejecución completa del banco de pruebas (T0 a T17)
-py 03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py --preset selftest-gpio --out 03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_selftest_b1b6342_1.txt
+# 5. Primera ejecución completa del banco de pruebas (T0 a T17)
+py tools\gpio_hw_check.py --preset selftest-gpio --out docs\gpio_f2_selftest_39868eb_1.txt
 
-# 5. Segunda ejecución completa del banco (verificación de repetibilidad)
-py 03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py --preset selftest-gpio --out 03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_selftest_b1b6342_2.txt
+# 6. Segunda ejecución completa del banco (verificación de repetibilidad)
+py tools\gpio_hw_check.py --preset selftest-gpio --out docs\gpio_f2_selftest_39868eb_2.txt
 
-# 6. Compilar la imagen de producción release
-cmake --build 03_firmware_templates/prj_01_template_dualcore/build/release --clean-first
+# 7. Configurar y compilar limpiamente la imagen de producción release
+cmake --preset release --fresh
+cmake --build --preset release --clean-first
 
-# 7. Flashear la imagen de producción release
-py 03_firmware_templates/prj_01_template_dualcore/tools/flash.py --sn 0016000C4142501220353451 --preset release
+# 8. Flashear la imagen de producción release recién compilada
+py tools\flash.py --sn 0016000C4142501220353451 --preset release
 
-# 8. Ejecutar los 20 warm resets consecutivos de producción con el proyecto completo
+# 9. Regresar a la raíz del repositorio para la ejecución de los warm resets
+cd ..\..
+
+# 10. Ejecutar los 20 warm resets consecutivos de producción con el proyecto completo
 py tools/run_warm_resets.py --project 03_firmware_templates/prj_01_template_dualcore --preset release --out 03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_warm_resets.txt --title "Warm resets"
 ```
 
@@ -290,4 +304,4 @@ py tools/run_warm_resets.py --project 03_firmware_templates/prj_01_template_dual
 
 ---
 
-F1 CORREGIDA 4 PARA AUDITORIA b1b6342
+F1 CORREGIDA 5 PARA AUDITORIA 39868eb
