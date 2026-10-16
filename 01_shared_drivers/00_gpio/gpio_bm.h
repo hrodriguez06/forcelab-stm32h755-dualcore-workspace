@@ -16,6 +16,10 @@
 #include <stdbool.h>
 #include "stm32h7xx.h"
 
+#if defined(DUAL_CORE) && !defined(CORE_CM4) && !defined(CORE_CM7)
+#error "DUAL_CORE requires either CORE_CM4 or CORE_CM7 to be defined"
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -311,12 +315,19 @@ GpioBm_Status_t GPIO_BM_CheckConfig(const GpioBm_PinConfig_t *cfg);
  *
  *         Configures only the calling core's interrupt and event masks (IMR1/EMR1
  *         for CPU1, C2IMR1/C2EMR1 for CPU2).
+ *         Enables the calling core's RCC APB4ENR.SYSCFGEN bit before taking the lock
+ *         (banked per core), so SYSCFGEN remains enabled even if an error is returned.
+ *         Note: RTSR1 and FTSR1 are shared between cores. A core configuring an
+ *         already-routed shared line may modify the edge trigger (RTSR1/FTSR1) even
+ *         if the other core currently has the line unmasked.
+ *
  *         Order of operations inside section:
- *           1. SYSCFG_EXTICR routing (RM0399 13.3.2)
- *           2. EXTI_RTSR1 / EXTI_FTSR1 triggers (RM0399 21.5.1, 21.5.2)
- *           3. Clears this core's pending bit in PR1 (C2PR1 for CM4)
+ *           1. SYSCFG_EXTICR routing (RM0399 §13.3.2, §13.6.2)
+ *           2. EXTI_RTSR1 / EXTI_FTSR1 triggers (RM0399 §21.6.1, §21.6.2)
+ *           3. Clears this core's pending bit in PR1 (C2PR1 for CM4) (RM0399 §21.6.21)
  *           4. Sets requested interrupt/event mask bit in IMR1/EMR1 (C2IMR1/C2EMR1)
- *              and clears unrequested bits.
+ *              and clears unrequested bits (RM0399 §21.6.19, §21.6.20).
+ *           5. Read-back verification of written registers inside the section (C12).
  *
  * @param  port       GPIO port base address (GPIOA..GPIOK).
  * @param  pin_idx    Pin/line index (0..15).
@@ -324,12 +335,13 @@ GpioBm_Status_t GPIO_BM_CheckConfig(const GpioBm_PinConfig_t *cfg);
  *                    GPIO_BM_EXTI_FALLING (2), or GPIO_BM_EXTI_BOTH (3).
  * @param  interrupt  Enable interrupt generation for the calling core.
  * @param  event      Enable event generation for the calling core.
- * @retval GPIO_BM_OK           Configuration applied successfully.
+ * @retval GPIO_BM_OK           Configuration applied and verified successfully.
  * @retval GPIO_BM_ERR_PARAM    Invalid port, pin_idx > 15, trigger not 1..3,
  *                              or both interrupt and event are false.
  * @retval GPIO_BM_ERR_CONFLICT Line is already routed to another port and has
  *                              any mask bit active in either core.
  * @retval GPIO_BM_ERR_BUSY     Cross-core lock not acquired within timeout.
+ * @retval GPIO_BM_ERR_VERIFY   Register write failed read-back verification.
  */
 GpioBm_Status_t GPIO_BM_ExtiConfig(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t trigger,
                                    bool interrupt, bool event);
@@ -340,13 +352,19 @@ GpioBm_Status_t GPIO_BM_ExtiConfig(GPIO_TypeDef *port, uint32_t pin_idx, uint32_
  *         Clears this core's interrupt/event masks and pending bit. If the
  *         other core's masks for this line are also zero, clears the triggers
  *         (RTSR1/FTSR1) and resets the SYSCFG_EXTICR routing for this line.
+ *         Enables the calling core's RCC APB4ENR.SYSCFGEN bit before taking the lock.
+ *         Note: Once a line is completely disabled (both cores' masks cleared),
+ *         its EXTICR routing is reset to 0 (GPIOA). A subsequent call to
+ *         GPIO_BM_ExtiDisable with the original non-GPIOA port will return
+ *         GPIO_BM_ERR_CONFLICT because the line is no longer routed to that port.
  *
  * @param  port     GPIO port base address (GPIOA..GPIOK).
  * @param  pin_idx  Pin/line index (0..15).
- * @retval GPIO_BM_OK           Line disabled for this core.
+ * @retval GPIO_BM_OK           Line disabled for this core and verified.
  * @retval GPIO_BM_ERR_PARAM    Invalid port or pin_idx > 15.
  * @retval GPIO_BM_ERR_CONFLICT Line is currently routed to another port in EXTICR.
  * @retval GPIO_BM_ERR_BUSY     Cross-core lock not acquired within timeout.
+ * @retval GPIO_BM_ERR_VERIFY   Register write failed read-back verification.
  */
 GpioBm_Status_t GPIO_BM_ExtiDisable(GPIO_TypeDef *port, uint32_t pin_idx);
 
@@ -354,8 +372,8 @@ GpioBm_Status_t GPIO_BM_ExtiDisable(GPIO_TypeDef *port, uint32_t pin_idx);
  * @brief  Reads and clears the pending status of specified EXTI lines (0..15).
  *
  *         Reads the calling core's PR1 (or C2PR1), masks with (line_mask & 0xFFFF),
- *         clears the pending bits via write-1-to-clear without RMW, executes __DSB(),
- *         and returns the captured pending bits.
+ *         clears the pending bits via write-1-to-clear without RMW (RM0399 §21.6.21),
+ *         executes __DSB(), and returns the captured pending bits.
  *         Can be called from ISR context (does NOT enter a critical section or take locks).
  *
  * @param  line_mask  Bitmask of lines to check and acknowledge (bits 0..15).
@@ -366,10 +384,10 @@ uint32_t        GPIO_BM_ExtiTakePending(uint32_t line_mask);
 /**
  * @brief  Triggers a software interrupt/event on an EXTI line (0..15).
  *
- *         Writes (1 << pin_idx) to EXTI_SWIER1 inside a section.
- *         RM0399 21.5.3: Hardware only asserts the interrupt if the line's
- *         trigger (RTSR1) and calling core mask (IMR1/C2IMR1) allow it; this
- *         function does not verify those prerequisites.
+ *         Writes (1 << pin_idx) to EXTI_SWIER1 inside a section (RM0399 §21.6.3).
+ *         RM0399 §21.5.5: Hardware only asserts the interrupt if the line's
+ *         trigger (RTSR1 or FTSR1) and calling core mask (IMR1/C2IMR1) allow it;
+ *         this function does not verify those prerequisites.
  *
  * @param  pin_idx  Line index (0..15).
  * @retval GPIO_BM_OK           Software trigger request written to SWIER1.
@@ -391,8 +409,11 @@ IRQn_Type       GPIO_BM_ExtiGetIRQn(uint32_t pin_idx);
  * @brief  Enables the I/O compensation cell and waits for it to become ready.
  *
  *         Requires CSI clock ready (RCC_CR.CSIRDY == 1). Sets SYSCFG_CCCSR.EN
- *         inside the section and waits up to max_cycles of DWT->CYCCNT for
+ *         inside the section (RM0399 §12.3.11, §13.3.7, §13.6.5), verifies read-back,
+ *         exits the section immediately to keep cross-core hold time < 60 us (Plan Rev 2),
+ *         and waits outside the section up to max_cycles of DWT->CYCCNT for
  *         SYSCFG_CCCSR.READY == 1.
+ *         Enables calling core's RCC APB4ENR.SYSCFGEN bit before taking the lock.
  *         Never writes RCC_CR, SYSCFG_CCCSR.HSLV, SYSCFG_CCCSR.CS, nor SYSCFG_CCCR.
  *         If DWT->CYCCNT does not advance or timeout expires before READY is asserted,
  *         returns GPIO_BM_ERR_NOT_READY and leaves CCCSR.EN = 1.
@@ -403,6 +424,7 @@ IRQn_Type       GPIO_BM_ExtiGetIRQn(uint32_t pin_idx);
  * @retval GPIO_BM_ERR_NOT_READY CSI clock not ready (RCC_CR.CSIRDY == 0),
  *                              DWT->CYCCNT not advancing, or timeout before READY.
  * @retval GPIO_BM_ERR_BUSY     Cross-core lock not acquired within timeout.
+ * @retval GPIO_BM_ERR_VERIFY   CCCSR.EN write failed read-back verification.
  */
 GpioBm_Status_t GPIO_BM_EnableCompensationCell(uint32_t max_cycles);
 
