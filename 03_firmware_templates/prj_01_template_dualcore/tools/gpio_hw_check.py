@@ -70,10 +70,10 @@ BENCH_VERSION = 1
 
 # ---- Wiring (README "Bench") -------------------------------------------------
 DIO_BUS = 0x00FF        # DIO0..7  <- PE8..PE15
-DIO_PE3 = 1 << 8        # EXTI3 line, AD2 only (not driven in this bench)
-DIO_PE5 = 1 << 9        # T8 line, MCU only
-DIO_PE4 = 1 << 10       # EXTI4 line, AD2 only (not driven in this bench)
-DIO_PE6 = 1 << 11       # MCU only, unused
+DIO_PE3 = 1 << 8        # EXTI3 line, AD2 only; driven statically by AD2 in T11/T12
+DIO_PE5 = 1 << 9        # T8/T11/T12 CM7 response pin, MCU only
+DIO_PE4 = 1 << 10       # EXTI4 line, AD2 only; driven statically by AD2 in T11/T12
+DIO_PE6 = 1 << 11       # T11/T12 CM4 response pin, MCU only
 DIO_REQ = 1 << 12       # HOST_REQ -> PE2
 DIO_ACK = 1 << 13       # MCU_ACK  <- PE7
 DIO_PA8 = 1 << 14       # MCO1     <- PA8
@@ -243,7 +243,9 @@ class DigitalInHelper:
         max_size = ctypes.c_int()
         _check_dwf(dwf.FDwfDigitalInReset(hdwf), dwf)
         _check_dwf(dwf.FDwfDigitalInBufferSizeInfo(hdwf, ctypes.byref(max_size)), dwf)
-        n = min(samples, max_size.value) if max_size.value > 0 else samples
+        if max_size.value > 0 and samples > max_size.value:
+            raise RuntimeError(f"Requested {samples} samples exceeds AD2 hardware buffer size {max_size.value}")
+        n = samples
         _check_dwf(dwf.FDwfDigitalInDividerSet(hdwf, ctypes.c_uint(div)), dwf)
         _check_dwf(dwf.FDwfDigitalInSampleFormatSet(hdwf, ctypes.c_int(16)), dwf)
         _check_dwf(dwf.FDwfDigitalInBufferSizeSet(hdwf, ctypes.c_int(n)), dwf)
@@ -310,59 +312,75 @@ class _MockDwf:
         self.current_step = step_name
         self.step_subtest = 0
 
+    def FDwfGetLastErrorMsg(self, buf):                # noqa: N802
+        msg = getattr(self, "_last_error", b"Mock DWF error")
+        ctypes.memmove(buf, msg, min(len(msg) + 1, 512))
+        return 1
+
     def FDwfDigitalIOOutputEnableSet(self, h, mask):   # noqa: N802
         self.oe_calls.append(int(mask.value))
         self._oe = int(mask.value)
+        return 1
 
     def FDwfDigitalIOOutputEnableGet(self, h, ref):    # noqa: N802
         ref._obj.value = self._oe
+        return 1
 
     def FDwfDigitalIOReset(self, h):                   # noqa: N802
         self._oe = 0
         self._output_val = 0
+        return 1
 
     def FDwfDigitalIOConfigure(self, h):               # noqa: N802
-        pass
+        return 1
 
     def FDwfDigitalIOOutputSet(self, h, val):          # noqa: N802
         self._output_val = int(val.value)
+        return 1
 
     def FDwfDigitalIOInputStatus(self, h, ref):        # noqa: N802
         # In handshake, MCU responds to HOST_REQ: if HOST_REQ high, MCU_ACK drops; if low, MCU_ACK rises.
         ack = 0 if (self._output_val & DIO_REQ) else DIO_ACK
         ref._obj.value = ack
+        return 1
 
     def FDwfDigitalInReset(self, h):                   # noqa: N802
         self.la_armed = False
+        return 1
 
     def FDwfDigitalInBufferSizeInfo(self, h, ref):     # noqa: N802
         ref._obj.value = 16384
+        return 1
 
     def FDwfDigitalInDividerSet(self, h, div):         # noqa: N802
-        pass
+        return 1
 
     def FDwfDigitalInSampleFormatSet(self, h, fmt):    # noqa: N802
-        pass
+        return 1
 
     def FDwfDigitalInBufferSizeSet(self, h, n):        # noqa: N802
         self.la_samples = int(n.value)
+        return 1
 
     def FDwfDigitalInTriggerSourceSet(self, h, src):   # noqa: N802
-        pass
+        return 1
 
     def FDwfDigitalInTriggerSet(self, h, low, hi, rise, fall):  # noqa: N802
         self.la_trigger_mask_rise = int(rise.value)
         self.la_trigger_mask_fall = int(fall.value)
         self.la_trigger_mask = self.la_trigger_mask_rise | self.la_trigger_mask_fall
+        return 1
 
     def FDwfDigitalInTriggerPositionSet(self, h, pos):  # noqa: N802
-        pass
+        return 1
 
     def FDwfDigitalInConfigure(self, h, rearm, start):  # noqa: N802
         self.la_armed = bool(start.value)
+        return 1
 
     def FDwfDigitalInStatus(self, h, read_data, ref):   # noqa: N802
         ref._obj.value = 2  # DwfStateDone
+        return 1
 
     def FDwfDigitalInStatusData(self, h, buf, nbytes):  # noqa: N802
         n_samples = nbytes.value // 2
@@ -408,6 +426,7 @@ class _MockDwf:
                                 samples[i] |= (1 << resp_bit)
         for i in range(min(n_samples, len(samples))):
             buf[i] = samples[i] & 0xFFFF
+        return 1
 
 
 class MockAD2:
@@ -559,7 +578,7 @@ class Console:
             buf.extend(chunk)
             while b"\n" in buf:
                 raw, buf = buf.split(b"\n", 1)
-                line = raw.decode("utf-8", errors="replace").rstrip("\r")
+                line = raw.decode("utf-8", errors="backslashreplace").rstrip("\r")
                 self._sink(line)
                 if "[gpio] ABORT" in line:
                     self.fw_abort = line
@@ -1525,7 +1544,37 @@ def run_mock_test(log: Callable[[str], None]) -> bool:
     log(f"[mock] Negative control: firmware undercount (199 vs 200) correctly flagged as FAIL: "
         f"{'PASS' if neg_detected else 'FAIL'}")
 
-    all_passed = guard_ok and f2_all_ok and neg_detected
+    log("[mock] === Phase 4: DWF Error and N4/N5 Safety Path Tests ===")
+    dwf_err_dwf = _MockDwf()
+    dwf_err_dwf._last_error = b"Simulated DWF hardware communication failure"
+    check_dwf_ok = False
+    try:
+        _check_dwf(0, dwf_err_dwf)
+    except RuntimeError as e:
+        check_dwf_ok = "Simulated DWF hardware communication failure" in str(e)
+    log(f"[mock] _check_dwf error detection: {'PASS' if check_dwf_ok else 'FAIL'}")
+
+    buf_overflow_ok = False
+    try:
+        DigitalInHelper.arm(dwf_err_dwf, 100e6, samples=20000)
+    except RuntimeError as e:
+        buf_overflow_ok = "exceeds AD2 hardware buffer size" in str(e)
+    log(f"[mock] Buffer size overflow check (N5): {'PASS' if buf_overflow_ok else 'FAIL'}")
+
+    abort_dwf = _MockDwf()
+    abort_ad2 = MockAD2(abort_dwf)
+    abort_con = MockConsole([], log, dwf=abort_dwf)
+    abort_con.fw_abort = "[gpio] ABORT: test abort triggered"
+    abort_session = Session(abort_ad2, abort_con, log)
+    abort_session.step_idx = [s[0] for s in STEPS].index("T11_CM7_RISING")
+    abort_session.set_oe(DIO_REQ)
+    s_edges, _, _ = abort_session.pulse_train_measured(DIO_PE3, resp_dio=9, count=200, mode="RISING")
+    n4_early_exit = (s_edges == 0)
+    log(f"[mock] N4 fw_abort early exit in edge loops: {'PASS' if n4_early_exit else 'FAIL'}")
+
+    n4_n5_ok = check_dwf_ok and buf_overflow_ok and n4_early_exit
+
+    all_passed = guard_ok and f2_all_ok and neg_detected and n4_n5_ok
     log(f"[host] OVERALL MOCK VERDICT: {'PASS' if all_passed else 'FAIL'}")
     log(f"HOST VERDICT={'PASS' if all_passed else 'FAIL'}")
     return all_passed
@@ -1645,14 +1694,14 @@ def main() -> int:
                 session.run()
                 m = con.expect(r"\[gpio\] FW VERDICT=(\w+)", 120.0)
                 verdict_fw = m.group(1)
-            except (BenchAbort, AD2SafetyViolation, subprocess.CalledProcessError) as e:
+            except (BenchAbort, AD2SafetyViolation, subprocess.CalledProcessError, RuntimeError) as e:
                 abort = str(e)
                 ad2.set_safe_state()
                 stamp(f"[ad2] ABORT: {abort}; AD2 back in S2 (OE=0x{ad2.get_oe():04X})")
                 try:
                     m = con.expect(r"\[gpio\] FW VERDICT=(\w+)", 60.0)
                     verdict_fw = m.group(1)
-                except BenchAbort:
+                except (BenchAbort, RuntimeError):
                     pass
             finally:
                 ad2.set_safe_state()

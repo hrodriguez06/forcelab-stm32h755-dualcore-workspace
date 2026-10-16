@@ -10,6 +10,7 @@ Standard library only.
 from __future__ import annotations
 
 import argparse
+import ast
 import os
 import re
 import shlex
@@ -41,9 +42,10 @@ def find_tools() -> dict[str, str]:
             resolved_path = out.strip().splitlines()[-1]
             os.environ["PATH"] = resolved_path + os.pathsep + os.environ.get("PATH", "")
 
-    # Add ST tools/bin to PATH as fallback
-    for p in Path(r"C:\ST").glob("**/tools/bin"):
-        os.environ["PATH"] = str(p) + os.pathsep + os.environ.get("PATH", "")
+    # Only if arm-none-eabi-gcc is not found on PATH, search C:\ST as fallback (minor)
+    if not shutil.which("arm-none-eabi-gcc"):
+        for p in Path(r"C:\ST").glob("**/tools/bin"):
+            os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + str(p)
 
     tools = {}
     gcc_path = shutil.which("arm-none-eabi-gcc")
@@ -103,12 +105,7 @@ def check_clean_working_tree(repo_root: Path, output_file: Path | None) -> tuple
     if code != 0:
         return False, f"git status failed with exit code {code}: {err}"
 
-    out_rel = None
-    if output_file is not None:
-        try:
-            out_rel = str(output_file.resolve().relative_to(repo_root.resolve())).replace("\\", "/")
-        except Exception:
-            out_rel = str(output_file).replace("\\", "/")
+    out_resolved = output_file.resolve() if output_file is not None else None
 
     dirty_lines = []
     for line in status_out.splitlines():
@@ -116,8 +113,9 @@ def check_clean_working_tree(repo_root: Path, output_file: Path | None) -> tuple
         if not line_s:
             continue
         if line.startswith("??"):
-            untracked_path = line[3:].strip().strip('"').replace("\\", "/")
-            if out_rel is not None and (untracked_path == out_rel or untracked_path.endswith(out_rel)):
+            untracked_rel = line[3:].strip().strip('"')
+            untracked_resolved = (repo_root / untracked_rel).resolve()
+            if out_resolved is not None and untracked_resolved == out_resolved:
                 continue
         dirty_lines.append(line)
 
@@ -127,7 +125,7 @@ def check_clean_working_tree(repo_root: Path, output_file: Path | None) -> tuple
 
 
 def check_control_worktree(control_dir: Path) -> tuple[bool, str]:
-    """Verifies control worktree is clean, at expected commit, and has all 16 ELFs (R5)."""
+    """Verifies control worktree is clean, at expected commit, and has all 16 ELFs built from 3df160a (R5)."""
     if not control_dir.is_dir():
         return False, f"Control worktree directory not found: {control_dir}"
 
@@ -151,16 +149,23 @@ def check_control_worktree(control_dir: Path) -> tuple[bool, str]:
         "02_firmware_projects/prj_04_adc_dma_bm_eth",
     ]
     missing = []
+    invalid_commit = []
     for p in projects:
         for preset in ("debug", "release"):
             for core in ("CM7", "CM4"):
                 elf = control_dir / p / "build" / preset / core / f"{core.lower()}_firmware.elf"
                 if not elf.is_file():
                     missing.append(str(elf.relative_to(control_dir)))
+                else:
+                    data = elf.read_bytes()
+                    if b"3df160a" not in data:
+                        invalid_commit.append(str(elf.relative_to(control_dir)))
 
     if missing:
         return False, f"Missing {len(missing)} control ELFs: {missing}"
-    return True, f"Control commit {ctrl_rev} clean, 16/16 ELFs verified"
+    if invalid_commit:
+        return False, f"Control ELFs not built from {CONTROL_COMMIT_EXPECTED}: {invalid_commit}"
+    return True, f"Control commit {ctrl_rev} clean, 16/16 ELFs verified (built from {CONTROL_COMMIT_EXPECTED})"
 
 
 def check_cube_submodule(repo_root: Path) -> tuple[bool, str]:
@@ -218,12 +223,17 @@ def check_selftest_builds(logger: Logger, tools: dict[str, str]) -> bool:
     ok = True
     for proj_rel in ("03_firmware_templates/prj_01_template_dualcore", "02_firmware_projects/prj_04_adc_dma_bm_eth"):
         proj_dir = REPO_ROOT / proj_rel
-        # R2: --fresh configuration followed by --clean-first build
-        run_cmd([tools["cmake"], "--preset", "selftest-gpio", "--fresh"], cwd=proj_dir)
+        # R2: check exit code of cmake configure with --fresh
+        cfg_code, cfg_out, cfg_err = run_cmd([tools["cmake"], "--preset", "selftest-gpio", "--fresh"], cwd=proj_dir)
+        if cfg_code != 0:
+            logger.log(f"[host] ERROR: cmake --preset selftest-gpio --fresh failed on {proj_dir.name} (code={cfg_code}): {cfg_err}")
+            ok = False
+            continue
+
+        # R2: build with --clean-first
         code, out, err = run_cmd([tools["cmake"], "--build", "--preset", "selftest-gpio", "--clean-first"], cwd=proj_dir)
         full_out = out + "\n" + err
 
-        # R2: Count all warnings and count actual built C objects
         warnings = parse_compiler_warnings(full_out)
         objects_built = count_built_objects(full_out)
 
@@ -265,10 +275,19 @@ def verify_header_diff(header_path: Path, ref_commit: str,
             continue
         if line.startswith("-"):
             content = line[1:].strip()
-            # R5: Strip C comments. If remaining text has code tokens, flag as removal
+            # R5: Strip full inline C comments
             clean = re.sub(r"/\*.*?\*/", "", content)
             clean = re.sub(r"//.*", "", clean).strip()
-            if clean and not clean.startswith("*"):
+            # Handle block comment continuation or termination
+            code_part = clean
+            if code_part.startswith("*/"):
+                code_part = code_part[2:].strip()
+            elif code_part.startswith("*"):
+                if "*/" in code_part:
+                    code_part = code_part.split("*/", 1)[1].strip()
+                else:
+                    code_part = ""  # purely comment body line
+            if code_part:
                 illegal_removals.append(line)
 
     if illegal_removals:
@@ -288,32 +307,45 @@ def check_headers(logger: Logger) -> bool:
         if not passed:
             all_ok = False
 
-    # Negative control (R1, R5): Mutate header signature in place against 3df160a, verify diff flags it, then restore
-    bm_header = driver_dir / "gpio_bm.h"
-    original_text = bm_header.read_text(encoding="utf-8")
-    mutated_text = original_text.replace(
-        "bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port);",
-        "int GPIO_BM_EnablePortClock(GPIO_TypeDef *port, int extra_param);"
-    )
-    neg_detected = False
-    neg_msg = ""
-    try:
-        bm_header.write_text(mutated_text, encoding="utf-8")
-        neg_passed, neg_msg, neg_removals = verify_header_diff(bm_header, CONTROL_COMMIT_EXPECTED)
+    # Negative control 1 (R1, R5): Use a temporary directory outside the repo tree!
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        bm_copy = tmp_path / "gpio_bm.h"
+        ctrl_copy = tmp_path / "gpio_bm_ctrl.h"
+
+        code_cat, ctrl_text, _ = run_cmd(["git", "show", f"{CONTROL_COMMIT_EXPECTED}:01_shared_drivers/00_gpio/gpio_bm.h"], cwd=REPO_ROOT)
+        if code_cat != 0:
+            raise RuntimeError("Failed to fetch control gpio_bm.h from git")
+        ctrl_copy.write_text(ctrl_text, encoding="utf-8")
+
+        # Mutate function signature
+        mutated_text = ctrl_text.replace(
+            "bool GPIO_BM_EnablePortClock(GPIO_TypeDef *port);",
+            "int GPIO_BM_EnablePortClock(GPIO_TypeDef *port, int extra_param);"
+        )
+        bm_copy.write_text(mutated_text, encoding="utf-8")
+
+        # Generate diff outside repo working tree
+        _, mut_diff, _ = run_cmd(["git", "diff", "--no-index", str(ctrl_copy), str(bm_copy)])
+        neg_passed, neg_msg, neg_removals = verify_header_diff(bm_copy, CONTROL_COMMIT_EXPECTED, diff_override=mut_diff)
         neg_detected = (not neg_passed) and any("GPIO_BM_EnablePortClock" in r for r in neg_removals)
-    finally:
-        bm_header.write_text(original_text, encoding="utf-8")
 
     logger.log(f"[host] CHECK header negative control (signature mutation flagged against {CONTROL_COMMIT_EXPECTED}): "
                f"{'PASS' if neg_detected else 'FAIL'} ({neg_msg})")
 
-    # Additional negative control for R5 multi-line comment: line with /* comment */ int x; removed
-    fake_diff = "-    /* helper */ int legacy_reg;\n+    int new_reg;"
-    neg_comment_passed, _, neg_c_removals = verify_header_diff(bm_header, CONTROL_COMMIT_EXPECTED, diff_override=fake_diff)
-    neg_comment_detected = (not neg_comment_passed) and len(neg_c_removals) == 1
-    logger.log(f"[host] CHECK comment-with-code removal negative control (R5): {'PASS' if neg_comment_detected else 'FAIL'}")
+    # Additional negative control for R5: line with /* comment */ int x; or */ int x; removed
+    fake_diff_1 = "-    /* helper */ int legacy_reg;\n+    int new_reg;"
+    neg_comment_passed1, _, neg_c_removals1 = verify_header_diff(driver_dir / "gpio_bm.h", CONTROL_COMMIT_EXPECTED, diff_override=fake_diff_1)
+    neg_comment_detected1 = (not neg_comment_passed1) and len(neg_c_removals1) == 1
 
-    return all_ok and neg_detected and neg_comment_detected
+    fake_diff_2 = "-    */ int legacy_code;\n+    int new_code;"
+    neg_comment_passed2, _, neg_c_removals2 = verify_header_diff(driver_dir / "gpio_bm.h", CONTROL_COMMIT_EXPECTED, diff_override=fake_diff_2)
+    neg_comment_detected2 = (not neg_comment_passed2) and len(neg_c_removals2) == 1
+
+    neg_comments_ok = neg_comment_detected1 and neg_comment_detected2
+    logger.log(f"[host] CHECK comment-with-code removal negative control (R5): {'PASS' if neg_comments_ok else 'FAIL'}")
+
+    return all_ok and neg_detected and neg_comments_ok
 
 
 # ---------------------------------------------------------------------------
@@ -367,15 +399,15 @@ def check_no_handlers(logger: Logger, tools: dict[str, str]) -> bool:
     driver_ok, driver_matches = verify_no_driver_handlers(driver_dir)
     logger.log(f"[host] CHECK no EXTI handlers in 00_gpio: {'PASS' if driver_ok else 'FAIL'}")
 
-    # Negative control for driver handlers: inject temp .c file in driver_dir (R1)
-    temp_driver_c = driver_dir / "temp_dummy_exti_test.c"
-    try:
-        temp_driver_c.write_text("void EXTI0_IRQHandler(void) {}\n", encoding="utf-8")
-        neg_d_ok, neg_d_matches = verify_no_driver_handlers(driver_dir)
+    # Negative control for driver handlers: create temp directory OUTSIDE the repository tree (R1)
+    with tempfile.TemporaryDirectory() as tmp_driver_dir:
+        tmp_d = Path(tmp_driver_dir)
+        for f in driver_dir.glob("*.[ch]"):
+            shutil.copy2(f, tmp_d / f.name)
+        (tmp_d / "temp_dummy_exti_test.c").write_text("void EXTI0_IRQHandler(void) {}\n", encoding="utf-8")
+        neg_d_ok, neg_d_matches = verify_no_driver_handlers(tmp_d)
         neg_driver_detected = (not neg_d_ok) and any("EXTI0_IRQHandler" in m for m in neg_d_matches)
-    finally:
-        if temp_driver_c.exists():
-            temp_driver_c.unlink()
+
     logger.log(f"[host] CHECK driver handler negative control (temp .c file detected): "
                f"{'PASS' if neg_driver_detected else 'FAIL'}")
 
@@ -479,7 +511,8 @@ def check_driver_sizes(logger: Logger) -> bool:
 # ---------------------------------------------------------------------------
 
 def parse_nm_symbols(nm_text: str) -> dict[str, tuple[int, str]]:
-    """Pure function: parses nm -S --defined-only output for GPIO_BM_* symbols (R1)."""
+    """Pure function: parses nm -S --defined-only output for GPIO_BM_* symbols (R1).
+    Fails on malformed 3-field lines missing size to prevent false empty comparisons."""
     syms = {}
     for line in nm_text.splitlines():
         parts = line.split()
@@ -489,9 +522,8 @@ def parse_nm_symbols(nm_text: str) -> dict[str, tuple[int, str]]:
             name = parts[3]
             syms[name] = (size, sym_type)
         elif len(parts) >= 3 and parts[2].startswith("GPIO_BM_"):
-            sym_type = parts[1]
-            name = parts[2]
-            syms[name] = (0, sym_type)
+            # R1: nm -S output must provide size. A 3-field line means size is missing!
+            raise ValueError(f"Malformed nm -S line (missing size for symbol {parts[2]}): {line}")
     return syms
 
 
@@ -506,7 +538,7 @@ def get_gpio_bm_symbols(nm_path: str, elf_path: Path) -> dict[str, tuple[int, st
 
 def compare_symbols(curr_syms: dict[str, tuple[int, str]],
                     ctrl_syms: dict[str, tuple[int, str]]) -> tuple[bool, list[str]]:
-    """Pure comparator between production ELF symbols and control symbols."""
+    """Pure comparator between production ELF symbols and control symbols (R1)."""
     diff_syms = []
     for sym, (sz, st) in curr_syms.items():
         if sym not in ctrl_syms:
@@ -529,8 +561,11 @@ def check_production_symbols(logger: Logger, tools: dict[str, str], control_dir:
     ]
     all_ok = True
     total_images_checked = 0
+    total_symbols_compared = 0
     sample_nm_out = ""
     sample_ctrl_syms: dict[str, tuple[int, str]] = {}
+    sample_sym_name = ""
+    sample_sym_size = 0
 
     for proj_id, proj_rel in projects:
         for preset in ("debug", "release"):
@@ -539,13 +574,21 @@ def check_production_symbols(logger: Logger, tools: dict[str, str], control_dir:
                 curr_elf = REPO_ROOT / proj_rel / elf_rel
                 ctrl_elf = control_dir / proj_rel / elf_rel
 
-                _, curr_out, _ = run_cmd([tools["nm"], "-S", "--defined-only", str(curr_elf)])
+                code_curr, curr_out, err_curr = run_cmd([tools["nm"], "-S", "--defined-only", str(curr_elf)])
+                if code_curr != 0:
+                    raise RuntimeError(f"nm failed on {curr_elf}: code {code_curr}, err: {err_curr}")
+
                 curr_syms = parse_nm_symbols(curr_out)
                 ctrl_syms = get_gpio_bm_symbols(tools["nm"], ctrl_elf)
 
                 if not sample_nm_out and curr_syms:
                     sample_nm_out = curr_out
                     sample_ctrl_syms = ctrl_syms
+                    for s_name, (s_sz, _) in curr_syms.items():
+                        if s_sz > 0:
+                            sample_sym_name = s_name
+                            sample_sym_size = s_sz
+                            break
 
                 match, diffs = compare_symbols(curr_syms, ctrl_syms)
                 logger.log(f"[host] CHECK {proj_id} {preset} {core} symbols ({len(curr_syms)} syms): "
@@ -553,108 +596,233 @@ def check_production_symbols(logger: Logger, tools: dict[str, str], control_dir:
                 if not match:
                     all_ok = False
                 total_images_checked += 1
+                total_symbols_compared += len(curr_syms)
 
-    # Negative control: inject extra symbol into real nm output text, parse and compare (R1)
+    # R1: The symbol comparison cannot be empty across production images!
+    if total_symbols_compared == 0:
+        logger.log("[host] ERROR: Total symbols compared across all production images is 0!")
+        all_ok = False
+
+    # Negative control 1 (R1): Alter the size of a REAL symbol in nm output
+    if not sample_sym_name or sample_sym_size == 0:
+        raise RuntimeError("No suitable sample symbol with non-zero size found for negative control")
+
+    mutated_size_nm_lines = []
+    found_and_mutated = False
+    for line in sample_nm_out.splitlines():
+        parts = line.split()
+        if len(parts) >= 4 and parts[3] == sample_sym_name:
+            orig_size = int(parts[1], 16)
+            mutated_size = orig_size + 16
+            mutated_size_hex = f"{mutated_size:08x}"
+            mutated_line = f"{parts[0]} {mutated_size_hex} {parts[2]} {parts[3]}"
+            mutated_size_nm_lines.append(mutated_line)
+            found_and_mutated = True
+        else:
+            mutated_size_nm_lines.append(line)
+
+    if not found_and_mutated:
+        raise RuntimeError(f"Failed to find {sample_sym_name} in sample_nm_out to mutate size")
+
+    mutated_size_syms = parse_nm_symbols("\n".join(mutated_size_nm_lines))
+    neg_size_match, neg_size_diffs = compare_symbols(mutated_size_syms, sample_ctrl_syms)
+    neg_size_detected = (not neg_size_match) and any(f"{sample_sym_name}(size curr=" in d for d in neg_size_diffs)
+    logger.log(f"[host] CHECK production real symbol size mutation negative control ({sample_sym_name}): "
+               f"{'PASS' if neg_size_detected else 'FAIL'}")
+
+    # Negative control 2 (R1): Add extra symbol into real nm output text
     mutated_nm_out = sample_nm_out + "\n08005000 00000080 T GPIO_BM_ExtiConfig\n"
     mutated_syms = parse_nm_symbols(mutated_nm_out)
     neg_match, neg_diffs = compare_symbols(mutated_syms, sample_ctrl_syms)
-    neg_detected = (not neg_match) and ("+GPIO_BM_ExtiConfig" in neg_diffs)
-    logger.log(f"[host] CHECK production symbols negative control (mutated nm output flagged by compare_symbols): "
-               f"{'PASS' if neg_detected else 'FAIL'}")
+    neg_extra_detected = (not neg_match) and ("+GPIO_BM_ExtiConfig" in neg_diffs)
+    logger.log(f"[host] CHECK production extra symbol negative control (+GPIO_BM_ExtiConfig): "
+               f"{'PASS' if neg_extra_detected else 'FAIL'}")
 
-    return all_ok and neg_detected and (total_images_checked == 16)
+    return all_ok and neg_size_detected and neg_extra_detected and (total_images_checked == 16)
 
 
 # ---------------------------------------------------------------------------
 # Check 7: Host-firmware expect regex cross-check (N1, B1)
 # ---------------------------------------------------------------------------
 
+def extract_host_expect_patterns(host_path: Path) -> tuple[list[str], list[tuple[int, str, list[str]]], list[tuple[int, str]], int]:
+    """Pure AST extractor of expect patterns from host script (N1)."""
+    tree = ast.parse(host_path.read_text(encoding="utf-8"), filename=str(host_path))
+    steps_table = []
+    tiers = ["BM", "LL", "HAL"]
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "STEPS":
+                    steps_table = [elt.elts[0].value for elt in node.value.elts if isinstance(elt, ast.Tuple)]
+
+    expect_calls = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "expect":
+                v = node.func.value
+                is_con = (isinstance(v, ast.Name) and v.id == "con") or \
+                         (isinstance(v, ast.Attribute) and v.attr == "con")
+                if is_con:
+                    expect_calls.append(node)
+
+    extracted_patterns = []
+    for node in expect_calls:
+        arg0 = node.args[0]
+        line_no = node.lineno
+        if isinstance(arg0, ast.Constant):
+            extracted_patterns.append((line_no, arg0.value, []))
+        elif isinstance(arg0, ast.JoinedStr):
+            parts = []
+            vars_used = []
+            for part in arg0.values:
+                if isinstance(part, ast.Constant):
+                    parts.append(part.value)
+                elif isinstance(part, ast.FormattedValue):
+                    var_name = ast.unparse(part.value)
+                    parts.append(f"{{{var_name}}}")
+                    vars_used.append(var_name)
+            extracted_patterns.append((line_no, "".join(parts), vars_used))
+
+    expanded_patterns = []
+    for line_no, pat, vars_used in extracted_patterns:
+        if not vars_used:
+            expanded_patterns.append((line_no, pat))
+        else:
+            curr_pats = [pat]
+            for v in vars_used:
+                next_pats = []
+                for p in curr_pats:
+                    if v == "step_name":
+                        for s in steps_table:
+                            next_pats.append(p.replace("{step_name}", s))
+                    elif v == "tier":
+                        for t in tiers:
+                            next_pats.append(p.replace("{tier}", t))
+                curr_pats = next_pats
+            for p in curr_pats:
+                expanded_patterns.append((line_no, p))
+
+    return steps_table, extracted_patterns, expanded_patterns, len(expect_calls)
+
+
+def synthesize_fw_lines_from_sources(fw_sources: str, steps_table: list[str]) -> set[str]:
+    """Extracts format strings directly from firmware sources and synthesizes valid output lines without manual injection (N1)."""
+    c_logs = re.findall(r'LOG\s*\(\s*"([^"]+)"', fw_sources)
+    c_verdicts = re.findall(r'verdict\s*\([^,]+,\s*"([^"]+)"', fw_sources)
+    c_step_begins = re.findall(r'step_begin\s*\(\s*"([^"]+)"', fw_sources)
+
+    synthesized_lines = set()
+    subst_variants = [
+        {"%s": "dummy", "%lu": "200", "%u": "1", "%ld": "0", "0x%08lX": "0x00000008", "0x%02lX": "0x00", "0x%04lX": "0x0000", "%lx": "1234"},
+        {"%s": "dummy", "%lu": "0", "%u": "0", "%ld": "0", "0x%08lX": "0x00000000", "0x%02lX": "0x00", "0x%04lX": "0x0000", "%lx": "0"},
+        {"%s": "dummy", "%lu": "400", "%u": "1", "%ld": "0", "0x%08lX": "0x00000003", "0x%02lX": "0x00", "0x%04lX": "0x0000", "%lx": "abcd"},
+        {"%s": "dummy", "%lu": "100", "%u": "1", "%ld": "0", "0x%08lX": "0x00000101", "0x%02lX": "0x00", "0x%04lX": "0x0000", "%lx": "9f658d5aed47dff7"},
+    ]
+
+    for fmt in c_logs:
+        s_candidates = steps_table + ["PASS", "FAIL", "rev_1", "build_id_1", "(CPU2 not ready)"]
+        if "%s" in fmt:
+            for s_cand in s_candidates:
+                for variant in subst_variants:
+                    line = fmt.replace("%s", s_cand)
+                    for k, val in variant.items():
+                        if k != "%s":
+                            line = line.replace(k, val)
+                    synthesized_lines.add(f"[gpio] {line}")
+        else:
+            for variant in subst_variants:
+                line = fmt
+                for k, val in variant.items():
+                    line = line.replace(k, val)
+                synthesized_lines.add(f"[gpio] {line}")
+
+    for fmt in c_verdicts:
+        s_candidates = steps_table + ["PASS", "FAIL"]
+        for s_cand in s_candidates:
+            for variant in subst_variants:
+                line = fmt.replace("%s", s_cand)
+                for k, val in variant.items():
+                    if k != "%s":
+                        line = line.replace(k, val)
+                synthesized_lines.add(f"[gpio] {line} -> PASS")
+                synthesized_lines.add(f"[gpio] {line} -> FAIL")
+
+    for sb in c_step_begins:
+        synthesized_lines.add(f"[gpio] STEP {sb} bus=NONE v=1")
+    for step in steps_table:
+        synthesized_lines.add(f"[gpio] STEP {step} bus=NONE v=1")
+
+    return synthesized_lines
+
+
+def match_expect_patterns(extracted_patterns, expanded_patterns, synthesized_lines) -> tuple[bool, int, list[tuple[int, str]]]:
+    unmatched = []
+    matched = 0
+    for line_no, pat, vars_used in extracted_patterns:
+        exp_versions = [p for ln, p in expanded_patterns if ln == line_no]
+        all_exp_matched = True
+        for p in exp_versions:
+            rx = re.compile(p)
+            if not any(rx.search(s) for s in synthesized_lines):
+                all_exp_matched = False
+                unmatched.append((line_no, p))
+                break
+        if all_exp_matched:
+            matched += 1
+    return (len(unmatched) == 0), matched, unmatched
+
+
 def check_host_firmware_expect_crosscheck(logger: Logger) -> bool:
-    """Verifies that all host expect patterns match the firmware format strings (N1, B1)."""
+    """Verifies that all host expect patterns match firmware format strings (N1, B1)."""
     logger.log("[check] Cross-checking host expect() regex patterns against firmware source format strings...")
     host_py = REPO_ROOT / "03_firmware_templates/prj_01_template_dualcore/tools/gpio_hw_check.py"
     fw_c = REPO_ROOT / "03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/gpio_selftest.c"
     fw_common = REPO_ROOT / "03_firmware_templates/prj_01_template_dualcore/Common/Src/gpio_selftest_common.c"
 
-    host_text = host_py.read_text(encoding="utf-8")
-    fw_text = fw_c.read_text(encoding="utf-8") + "\n" + fw_common.read_text(encoding="utf-8")
+    steps_table, extracted_patterns, expanded_patterns, total_calls = extract_host_expect_patterns(host_py)
+    if len(extracted_patterns) != total_calls:
+        logger.log(f"[host] ERROR: Extracted patterns count ({len(extracted_patterns)}) != con.expect calls ({total_calls})")
+        return False
 
-    # Extract all con.expect(r"...", ...) patterns from host
-    expect_patterns = re.findall(r"con\.expect\(\s*r?([\"'])(.*?)\1", host_text)
-    raw_patterns = [p[1] for p in expect_patterns]
+    real_fw_text = fw_c.read_text(encoding="utf-8") + "\n" + fw_common.read_text(encoding="utf-8")
+    real_synth_lines = synthesize_fw_lines_from_sources(real_fw_text, steps_table)
 
-    synthesized_fw_lines = set()
-    names_to_try = [
-        "T4_BM", "T4_LL", "T4_HAL", "T8_BM", "T8_LL", "T8_HAL",
-        "T10_BM", "T10_LL", "T10_HAL", "T11_CM7_RISING", "T11_CM7_FALLING",
-        "T11_CM7_BOTH", "T11_CM7_EVENT", "T11_CM4_RISING", "T11_CM4_FALLING",
-        "T11_CM4_BOTH", "T11_CM4_EVENT"
-    ]
-    for m in re.finditer(r'LOG\(\s*"([^"]+)"', fw_text):
-        fmt = m.group(1)
-        for nm in names_to_try:
-            s = fmt.replace("%s", nm)
-            s = s.replace("%lu", "200").replace("%u", "1").replace("%ld", "0")
-            s = s.replace("0x%08lX", "0x00000008").replace("0x%02lX", "0x00").replace("0x%04lX", "0x0000")
-            synthesized_fw_lines.add(f"[gpio] {s}")
-            s2 = fmt.replace("%s", nm)
-            s2 = s2.replace("%lu", "0").replace("%u", "0").replace("%ld", "0")
-            s2 = s2.replace("0x%08lX", "0x00000000").replace("0x%02lX", "0x00").replace("0x%04lX", "0x0000")
-            synthesized_fw_lines.add(f"[gpio] {s2}")
-            s3 = fmt.replace("%s", nm)
-            s3 = s3.replace("%lu", "400").replace("%u", "1").replace("%ld", "0")
-            s3 = s3.replace("0x%08lX", "0x00000003").replace("0x%02lX", "0x00").replace("0x%04lX", "0x0000")
-            synthesized_fw_lines.add(f"[gpio] {s3}")
-
-    for m in re.finditer(r'verdict\([^,]+,\s*"([^"]+)"', fw_text):
-        fmt = m.group(1)
-        for nm in names_to_try:
-            s = fmt.replace("%s", nm)
-            s_pass = s.replace("%lu", "200").replace("%u", "1") + " -> PASS"
-            s_fail = s.replace("%lu", "200").replace("%u", "1") + " -> FAIL"
-            synthesized_fw_lines.add(f"[gpio] {s_pass}")
-            synthesized_fw_lines.add(f"[gpio] {s_fail}")
-            s_pass0 = s.replace("%lu", "0").replace("%u", "0") + " -> PASS"
-            synthesized_fw_lines.add(f"[gpio] {s_pass0}")
-
-    for m in re.finditer(r'step_begin\(\s*"([^"]+)"', fw_text):
-        synthesized_fw_lines.add(f"[gpio] STEP {m.group(1)} bus=NONE v=1")
-
-    # Banner lines
-    synthesized_fw_lines.add("[gpio] CM7 Rev 6b7f10a")
-    synthesized_fw_lines.add("[gpio] CM7 Build id 9f658d5aed47dff7")
-    synthesized_fw_lines.add("[gpio] CM4 Rev 6b7f10a")
-    synthesized_fw_lines.add("[gpio] CM4 Build id 9f658d5aed47dff7")
-    synthesized_fw_lines.add("[gpio] GPIO_BENCH v1 idle")
-    synthesized_fw_lines.add("[gpio] FW VERDICT=PASS failures=0")
-
-    matched_count = 0
-    unmatched = []
-    for pat in raw_patterns:
-        try:
-            rx = re.compile(pat)
-        except re.error as e:
-            unmatched.append(f"{pat} (regex error: {e})")
-            continue
-
-        if any(rx.search(line) for line in synthesized_fw_lines):
-            matched_count += 1
-        else:
-            unmatched.append(pat)
-
-    all_matched = (len(unmatched) == 0) and (matched_count > 0)
-    logger.log(f"[host] CHECK host-firmware expect patterns ({matched_count}/{len(raw_patterns)} matched): "
+    all_matched, matched_count, unmatched = match_expect_patterns(extracted_patterns, expanded_patterns, real_synth_lines)
+    logger.log(f"[host] CHECK host-firmware expect patterns ({matched_count}/{len(extracted_patterns)} matched): "
                f"{'PASS' if all_matched else 'FAIL'}" + (f" [unmatched: {unmatched}]" if unmatched else ""))
 
-    # Negative control: intentionally discordant pattern (the old B1 bug)
-    neg_discordant = r"\[gpio\] T17 compensation cell ready with CSI and refused without -> (PASS|FAIL)"
-    rx_neg = re.compile(neg_discordant)
-    neg_matched = any(rx_neg.search(line) for line in synthesized_fw_lines)
-    neg_cross_detected = not neg_matched
-    logger.log(f"[host] CHECK expect crosscheck negative control (discordant T17 string rejected): "
-               f"{'PASS' if neg_cross_detected else 'FAIL'}")
+    # Negative control 1 (N1): Mutate real 'CM7 count=' in temporary copy of firmware
+    mutated_fw_1 = real_fw_text.replace("CM7 count=", "CM7 counts=")
+    mut_synth_1 = synthesize_fw_lines_from_sources(mutated_fw_1, steps_table)
+    neg_1_ok, _, _ = match_expect_patterns(extracted_patterns, expanded_patterns, mut_synth_1)
+    neg_cm7_count_detected = not neg_1_ok
+    logger.log(f"[host] CHECK expect crosscheck negative control 1 (mutated CM7 count= rejected): "
+               f"{'PASS' if neg_cm7_count_detected else 'FAIL'}")
 
-    return all_matched and neg_cross_detected
+    # Negative control 2 (N1): Mutate real 'FW VERDICT=' in temporary copy of firmware
+    mutated_fw_2 = real_fw_text.replace("FW VERDICT=", "FIRMWARE VERDICT=")
+    mut_synth_2 = synthesize_fw_lines_from_sources(mutated_fw_2, steps_table)
+    neg_2_ok, _, _ = match_expect_patterns(extracted_patterns, expanded_patterns, mut_synth_2)
+    neg_verdict_detected = not neg_2_ok
+    logger.log(f"[host] CHECK expect crosscheck negative control 2 (mutated FW VERDICT= rejected): "
+               f"{'PASS' if neg_verdict_detected else 'FAIL'}")
+
+    # Negative control 3 (N1): Mutate a real extracted expect pattern in a temporary list
+    mut_extracted = [
+        (ln, pat.replace("dual-core EXTI routing", "dualcore routing"), vu) if "dual-core" in pat else (ln, pat, vu)
+        for ln, pat, vu in extracted_patterns
+    ]
+    mut_expanded = [
+        (ln, pat.replace("dual-core EXTI routing", "dualcore routing"))
+        for ln, pat in expanded_patterns
+    ]
+    neg_3_ok, _, _ = match_expect_patterns(mut_extracted, mut_expanded, real_synth_lines)
+    neg_host_pat_detected = not neg_3_ok
+    logger.log(f"[host] CHECK expect crosscheck negative control 3 (mutated host pattern rejected): "
+               f"{'PASS' if neg_host_pat_detected else 'FAIL'}")
+
+    return all_matched and neg_cm7_count_detected and neg_verdict_detected and neg_host_pat_detected
 
 
 # ---------------------------------------------------------------------------
@@ -673,81 +841,77 @@ def main() -> int:
     logger.log(f"[host] argv: {shlex.join(sys.argv)}")
     logger.log(f"[host] options: test={args.test} output={args.output} control_dir={args.control_dir} allow_dirty={args.allow_dirty}")
 
-    try:
-        # Check git HEAD
-        code_head, head_rev, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT)
-        logger.log(f"[host] HEAD: {head_rev.strip()}")
-        logger.log(f"[host] Working tree: {REPO_ROOT}")
-        logger.log(f"[host] Control worktree: {args.control_dir}")
+    # Check git HEAD
+    code_head, head_rev, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT)
+    logger.log(f"[host] HEAD: {head_rev.strip()}")
+    logger.log(f"[host] Working tree: {REPO_ROOT}")
+    logger.log(f"[host] Control worktree: {args.control_dir}")
 
-        # R3: Verify working tree clean
-        tree_clean, tree_msg = check_clean_working_tree(REPO_ROOT, args.output)
-        logger.log(f"[host] working tree clean: {'PASS' if tree_clean else 'DIRTY'} ({tree_msg})")
-        if not tree_clean:
-            if not args.allow_dirty:
-                logger.log("[host] ERROR: Working tree is dirty. Aborting.")
-                logger.log("OVERALL VERDICT: FAIL")
-                return 1
-            # R5: --allow-dirty cannot end in PASS for audit certification
-            logger.log("[host] WARNING: --allow-dirty specified on dirty tree. Audit certification requires clean tree.")
-
-        # R5: Check control worktree
-        ctrl_clean, ctrl_msg = check_control_worktree(args.control_dir)
-        logger.log(f"[host] control worktree ({CONTROL_COMMIT_EXPECTED}): {'PASS' if ctrl_clean else 'FAIL'} ({ctrl_msg})")
-        if not ctrl_clean:
-            logger.log(f"[host] ERROR: Control worktree verification failed: {ctrl_msg}")
+    # R3: Verify working tree clean
+    tree_clean, tree_msg = check_clean_working_tree(REPO_ROOT, args.output)
+    logger.log(f"[host] working tree clean: {'PASS' if tree_clean else 'DIRTY'} ({tree_msg})")
+    if not tree_clean:
+        if not args.allow_dirty:
+            logger.log("[host] ERROR: Working tree is dirty. Aborting.")
             logger.log("OVERALL VERDICT: FAIL")
             return 1
+        # R5: --allow-dirty cannot end in PASS for audit certification
+        logger.log("[host] WARNING: --allow-dirty specified on dirty tree. Audit certification requires clean tree.")
 
-        # R5: Check STM32CubeH7 submodule
-        cube_ok, cube_msg = check_cube_submodule(REPO_ROOT)
-        logger.log(f"[host] STM32CubeH7 submodule commit: {'PASS' if cube_ok else 'FAIL'} ({cube_msg})")
-        if not cube_ok:
-            logger.log(f"[host] ERROR: Submodule check failed: {cube_msg}")
-            logger.log("OVERALL VERDICT: FAIL")
-            return 1
+    # R5: Check control worktree
+    ctrl_clean, ctrl_msg = check_control_worktree(args.control_dir)
+    logger.log(f"[host] control worktree ({CONTROL_COMMIT_EXPECTED}): {'PASS' if ctrl_clean else 'FAIL'} ({ctrl_msg})")
+    if not ctrl_clean:
+        logger.log(f"[host] ERROR: Control worktree verification failed: {ctrl_msg}")
+        logger.log("OVERALL VERDICT: FAIL")
+        return 1
 
-        tools = find_tools()
-        overall_ok = True if tree_clean else False
+    # R5: Check STM32CubeH7 submodule
+    cube_ok, cube_msg = check_cube_submodule(REPO_ROOT)
+    logger.log(f"[host] STM32CubeH7 submodule commit: {'PASS' if cube_ok else 'FAIL'} ({cube_msg})")
+    if not cube_ok:
+        logger.log(f"[host] ERROR: Submodule check failed: {cube_msg}")
+        logger.log("OVERALL VERDICT: FAIL")
+        return 1
 
-        if args.test in ("t1", "all"):
-            logger.log("=== Running T1 Checks (Build Matrix & Selftests) ====")
-            t1_matrix = check_matrix_build(logger)
-            t1_selftests = check_selftest_builds(logger, tools)
-            t1_ok = t1_matrix and t1_selftests
-            logger.log(f"[host] T1 VERDICT: {'PASS' if t1_ok else 'FAIL'}")
-            if not t1_ok:
-                overall_ok = False
+    tools = find_tools()
+    overall_ok = True if tree_clean else False
 
-        if args.test in ("t18", "all"):
-            logger.log("=== Running T18 Checks (Regression Without Board) ===")
-            if args.test == "all":
-                c_matrix = t1_matrix
-                c_selftests = t1_selftests
-            else:
-                c_matrix = check_matrix_build(logger)
-                c_selftests = check_selftest_builds(logger, tools)
-
-            c_headers = check_headers(logger)
-            c_nohandlers = check_no_handlers(logger, tools)
-            c_sizes = check_driver_sizes(logger)
-            c_symbols = check_production_symbols(logger, tools, args.control_dir)
-            c_cross = check_host_firmware_expect_crosscheck(logger)
-
-            t18_ok = c_matrix and c_selftests and c_headers and c_nohandlers and c_sizes and c_symbols and c_cross
-            logger.log(f"[host] T18 VERDICT: {'PASS' if t18_ok else 'FAIL'}")
-            if not t18_ok:
-                overall_ok = False
-
-        if not tree_clean:
-            logger.log("[host] FAIL: overall verdict cannot be PASS because working tree was dirty (--allow-dirty)")
+    if args.test in ("t1", "all"):
+        logger.log("=== Running T1 Checks (Build Matrix & Selftests) ====")
+        t1_matrix = check_matrix_build(logger)
+        t1_selftests = check_selftest_builds(logger, tools)
+        t1_ok = t1_matrix and t1_selftests
+        logger.log(f"[host] T1 VERDICT: {'PASS' if t1_ok else 'FAIL'}")
+        if not t1_ok:
             overall_ok = False
 
-        logger.log(f"OVERALL VERDICT: {'PASS' if overall_ok else 'FAIL'}")
-        return 0 if overall_ok else 1
-    finally:
-        # Guarantee no temp files or changes left behind
-        pass
+    if args.test in ("t18", "all"):
+        logger.log("=== Running T18 Checks (Regression Without Board) ===")
+        if args.test == "all":
+            c_matrix = t1_matrix
+            c_selftests = t1_selftests
+        else:
+            c_matrix = check_matrix_build(logger)
+            c_selftests = check_selftest_builds(logger, tools)
+
+        c_headers = check_headers(logger)
+        c_nohandlers = check_no_handlers(logger, tools)
+        c_sizes = check_driver_sizes(logger)
+        c_symbols = check_production_symbols(logger, tools, args.control_dir)
+        c_cross = check_host_firmware_expect_crosscheck(logger)
+
+        t18_ok = c_matrix and c_selftests and c_headers and c_nohandlers and c_sizes and c_symbols and c_cross
+        logger.log(f"[host] T18 VERDICT: {'PASS' if t18_ok else 'FAIL'}")
+        if not t18_ok:
+            overall_ok = False
+
+    if not tree_clean:
+        logger.log("[host] FAIL: overall verdict cannot be PASS because working tree was dirty (--allow-dirty)")
+        overall_ok = False
+
+    logger.log(f"OVERALL VERDICT: {'PASS' if overall_ok else 'FAIL'}")
+    return 0 if overall_ok else 1
 
 
 if __name__ == "__main__":

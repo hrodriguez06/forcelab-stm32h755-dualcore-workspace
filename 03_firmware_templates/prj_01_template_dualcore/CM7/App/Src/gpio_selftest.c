@@ -53,10 +53,10 @@
 
 /* ---- Bench wiring (README "Bench") ---------------------------------------------- */
 #define PE_REQ              2U        /* HOST_REQ, AD2 -> MCU (DIO12)  */
-#define PE_EXTI3            3U        /* DIO8,  AD2 only, unused here  */
-#define PE_EXTI4            4U        /* DIO10, AD2 only, unused here  */
-#define PE_T8               5U        /* DIO9,  MCU only               */
-#define PE_SPARE6           6U        /* DIO11, MCU only, unused here  */
+#define PE_EXTI3            3U        /* DIO8,  AD2 only, driven by AD2 in T11/T12 */
+#define PE_EXTI4            4U        /* DIO10, AD2 only, driven by AD2 in T11/T12 */
+#define PE_T8               5U        /* DIO9,  MCU only, CM7 response pin        */
+#define PE_SPARE6           6U        /* DIO11, MCU only, CM4 response pin        */
 #define PE_ACK              7U        /* MCU_ACK, MCU -> AD2 (DIO13)   */
 #define BUS_SHIFT           8U        /* PE8..PE15 = DIO0..DIO7        */
 #define BUS_MASK            0xFF00UL
