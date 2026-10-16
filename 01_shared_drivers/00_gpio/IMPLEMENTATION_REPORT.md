@@ -142,4 +142,4 @@ py tools/run_warm_resets.py --project prj_01 --preset release
 
 ---
 
-F1 ENTREGADA PARA AUDITORIA bc7e64d
+F1 CORREGIDA PARA AUDITORIA bc7e64d
