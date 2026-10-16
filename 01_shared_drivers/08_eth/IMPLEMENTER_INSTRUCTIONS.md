@@ -69,7 +69,7 @@ Si algo de este documento choca con el plan, manda el plan, salvo las prohibicio
   - la carga UDP la mide el host: datagramas enviados, recibidos y comparados byte a byte, y Mbit/s;
   - T6 usa `STM32_Programmer_CLI -c port=SWD sn=… mode=HOTPLUG -rst`;
   - nada más contra la placa.
-- **Decisiones:** las que apruebe el responsable. Por defecto, 1A, 2A, 3A y 4.
+- **Decisiones:** el responsable aprobó las cuatro el 2026-10-16: 1A, 2A, 3A y 4. Aplícalas.
 
 ---
 

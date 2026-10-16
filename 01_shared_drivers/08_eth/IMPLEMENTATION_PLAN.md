@@ -15,7 +15,9 @@ Resuelve los cuatro pendientes de `08_eth/README.md` §10.
 
 Una fase (F1) y un cierre. Base y control: `main` en `69179d7`. Reglas para el implementador en [`IMPLEMENTER_INSTRUCTIONS.md`](IMPLEMENTER_INSTRUCTIONS.md).
 
-**Decisiones del plan** (pendientes del responsable; ver [Decisiones abiertas](#decisiones-abiertas)):
+**Decisiones del responsable (2026-10-16): aprobadas las cuatro, con la opción A en 1–3.**
+
+**Decisiones del plan** (ver [Decisiones abiertas](#decisiones-abiertas)):
 1. Alcance: E6 (cero-copia de recepción) y E3, solo código; E4 y E7, solo documentación.
 2. E6 solo en recepción; la transmisión sigue copiando.
 3. Proyecto de placa: `prj_02`.
