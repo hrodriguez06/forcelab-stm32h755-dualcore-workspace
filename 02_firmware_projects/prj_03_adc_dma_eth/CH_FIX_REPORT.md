@@ -115,3 +115,15 @@ Por especificacion de la tarea (agente implementador sin acceso a hardware):
   3. Comprobar que en `adc_dashboard.py` la etiqueta PB1/PA3 (`lat.ch === 5`) se active correctamente con la telemetria en vivo.
 
 CH FIX ENTREGADO PARA AUDITORIA 87040a0
+
+
+---
+
+## 4. Correccion Post-Auditoria: Pin de Entrada Analogica PB1 (e966cb6)
+
+- **Resultado de Auditoria en Placa**: Pasa 10/10 en hardware (captura `02_firmware_projects/prj_03_adc_dma_eth/docs/ch_fix_audit_board_764e8c6.txt`, commit `4b3e1b1`).
+- **Ajuste de Comentarios**: En `02_firmware_projects/prj_03_adc_dma_eth/CM4/App/Inc/adc_acquisition.h` (lineas 7 y 24), se corrigio la referencia obsoleta a `PA3` reemplazandola por `PB1` (ADC12_INP5, Canal 5, pin Arduino A3), en conformidad con `board_def.h` (linea 100).
+- **Verificacion de Comentarios**: Se verifico exhaustivamente que no queda ningun `PA3` falso en los comentarios de `02_firmware_projects/prj_03_adc_dma_eth/CM4/App`.
+- **Compilacion**: Preset `debug` de `prj_03` compila limpiamente con 0 avisos (codigo de salida 0).
+
+CH FIX CORREGIDO PARA AUDITORIA e966cb6
