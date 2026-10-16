@@ -149,7 +149,7 @@ Verification covers four tiers (T1–T3 off-board and T4 on hardware):
   - Compares the 6 32-bit words across all 8 current builds against the UM2408 board oracle:
     `['0x58020400', '0x0', '0x58021000', '0x1', '0x58020400', '0xe']` (PB0, PE1, PB14).
   - Compiles control worktree at baseline commit `9dc6896` in-situ with `build_all.ps1 -Clean` (requiring `pass_count >= 8`), verifying that current binaries match the control bit-for-bit.
-  - Negative control: mutates an extracted byte and verifies that [`parse_and_verify_led_config`](../../tools/led_l1l2_checks.py#L672-L704) rejects it while validating exact 24-byte section size without truncation.
+  - Negative control: mutates an extracted byte and verifies that [`parse_and_verify_led_config`](../../tools/led_l1l2_checks.py#L671-L703) rejects it while validating exact 24-byte section size without truncation.
 
 - **T4: Hardware Board Verification (`run_t4`, Auditor only):**
   - Flashes `debug` images using `tools/flash.py` with `STM32_Programmer_CLI -v`.
@@ -177,7 +177,7 @@ Verification covers four tiers (T1–T3 off-board and T4 on hardware):
 
 | Milestone | Commits |
 | :--- | :--- |
-| Initial documentation and limitations catalog | `6687a7d` |
+| Initial documentation and limitations catalog | `04fb865` |
 | Decision approval and plan for mandatory pin macros (L1/L2) | `c926c77`, `901e6b4` |
 | Implementation of mandatory `#error` and `_BIT` switch (H1, H2) | `4c15fba` |
 | Verification harness `tools/led_l1l2_checks.py` (H3) | `2e6a15d` |
@@ -202,12 +202,10 @@ git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/01_led/IM
 git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/01_led/AUDIT.md)^:01_shared_drivers/01_led/AUDIT.md
 ```
 
-### Accepted Tool Minors
+### Accepted Tool Limitations
 
-As cataloged in `AUDIT.md`:
-- **m1:** In-situ compilation of baseline `9dc6896` via `build_all.ps1 -Clean` verifies `pass_count >= 8`.
-- **m2:** Direct configuration and compilation checks configure return code, compiler output, and verifies `led_bm.c.obj` in build log and on disk.
-- **m4:** Pure parsing function [`parse_and_verify_led_config`](../../tools/led_l1l2_checks.py#L672-L704) validates exact 24-byte section length without slice truncation.
-- **m6:** Working tree cleanliness check ignores only the exact specified output file path.
-- **m7:** Subprocesses execute with explicit timeouts and SWD reads log hexadecimal values.
-- **MA1:** For `prj_02` and `prj_03` (which do not embed git revision in ELF), provenance is established by clean working tree before/after execution and fresh in-execution build.
+What `tools/led_l1l2_checks.py` still does not check, accepted at the close (`AUDIT.md`):
+- **Configure output:** only `CMake Error` fails a configure. `CMake Warning` lines are not counted.
+- **Image freshness:** an image counts as built in the run by its modification time (no older than the run start minus 5 s). An ELF written by another process during the run would pass.
+- **Revision of `prj_02` and `prj_03`:** these images embed no revision. Their provenance is the clean tree at the start and at the end and the build inside the run. The capture says so in its own words (`rev no embebida`).
+- **Ignored files:** the final clean-tree check does not look at ignored files (`git status --ignored`).

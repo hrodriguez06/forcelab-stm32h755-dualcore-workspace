@@ -107,3 +107,19 @@ La revisé yo, porque la ronda tenía el alcance cerrado.
 - el comentario de `prj_01` (`board_def.h:50-53`), aprobado por el responsable el 2026-10-16;
 - `01_led/README.md` (§3 contrato sin valores por defecto, §4, §5 sin L1/L2 y con L5 parcial, §6 historia, validación con las capturas del auditor);
 - después, la hoja de ruta, el borrado de los documentos de proceso y el merge.
+
+## Cierre del implementador (`1bc32d6`, código en `824d989`)
+
+- **MA1, cerrado:** la inyección de `CMAKE_C_FLAGS` y su lectura en `CMakeCache.txt` desaparecen. Para `prj_02`/`prj_03` la herramienta escribe que la revisión no está embebida y cuál es su procedencia, sin darla por comprobada (`led_l1l2_checks.py:357`). El mensaje quedó en español: copió el mío. Lo dejo así para que la captura `led_l1l2_checks_824d989.txt`, que lo contiene, siga casando con el código.
+- **Comentario de `prj_01`:** `board_def.h:50-53`, ahora igual que en `prj_02`–`prj_04`.
+- **README:** el contrato, los consumidores, las limitaciones, la validación con las capturas y la historia, comprobados contra el código y las capturas. Corregí yo tres cosas:
+  - el commit inexistente `6687a7d` pasa a `04fb865`;
+  - la cita `#L672-L704` pasa a `#L671-L703`;
+  - la sección "Accepted Tool Minors", que listaba cosas ya arregladas, pasa a "Accepted Tool Limitations" con lo que de verdad queda: avisos del configure, frescura por fecha, revisión de `prj_02`/`prj_03` y ficheros ignorados.
+- **Capturas:** en `docs/` quedan mis tres capturas y la final del implementador (`824d989`, `OVERALL VERDICT: PASS`). Las superadas se leen desde su commit.
+
+**El cierre del implementador pasa.** Queda lo del responsable:
+- la hoja de ruta;
+- el borrado de los documentos de proceso;
+- la retirada de `../stm32h755_control_9dc6896`;
+- el merge.
