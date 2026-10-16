@@ -1,0 +1,76 @@
+[+   0.001s] [host] argv: tools/led_l1l2_checks.py --test t1,t2,t3 --output 'C:\Users\HRODRI~1\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\a435ba69-f99a-4dc8-9231-6c64b1c6d99b\scratchpad\led_l1l2_auditor_736948f.txt'
+[+   0.002s] [host] options: test=t1,t2,t3 output=C:\Users\HRODRI~1\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\a435ba69-f99a-4dc8-9231-6c64b1c6d99b\scratchpad\led_l1l2_auditor_736948f.txt control_dir=C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_9dc6896 allow_dirty=False sn=0016000C4142501220353451
+[+   0.053s] [host] HEAD: 736948fb118caea0190a64cf54252de034cc78cf
+[+   0.054s] [host] Working tree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+[+   0.055s] [host] Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_9dc6896
+[+   0.435s] [host] working tree clean: PASS (Tree is clean)
+[+   1.091s] [host] Compiler: C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.EXE
+[+   1.092s] [host] Objdump:  C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-objdump.exe
+[+   1.093s] [host] CMake:    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cmake.win32_1.1.200.202605190741\tools\bin\cmake.EXE
+[+   1.094s] === Running T1 Checks (Build Matrix 8/8 & Selftest Presets) ===
+[+   1.094s] [check] Running build_all.ps1 -Clean across 8 configurations...
+[+ 226.921s] [build_all] Finished in 225.8s, exit code 0, warnings=0
+[+ 226.921s] [build_all] All 8 builds PASSED successfully.
+[+ 226.922s] [host] CHECK T1 build_all 8/8 (-Clean, 0 warnings): PASS
+[+ 226.922s] [check] Checking selftest presets linking led_bm (--fresh and --clean-first)...
+[+ 255.666s] [host] CHECK prj_01_template_dualcore [selftest-gpio]: PASS (code=0, objs=278, warnings=0)
+[+ 286.473s] [host] CHECK prj_01_template_dualcore [selftest-tim]: PASS (code=0, objs=281, warnings=0)
+[+ 316.111s] [host] CHECK prj_01_template_dualcore [selftest-spi]: PASS (code=0, objs=283, warnings=0)
+[+ 346.589s] [host] CHECK prj_01_template_dualcore [selftest-i2c]: PASS (code=0, objs=283, warnings=0)
+[+ 384.762s] [host] CHECK prj_04_adc_dma_bm_eth [selftest]: PASS (code=0, objs=327, warnings=0)
+[+ 421.097s] [host] CHECK prj_04_adc_dma_bm_eth [selftest-adc]: PASS (code=0, objs=326, warnings=0)
+[+ 457.356s] [host] CHECK prj_04_adc_dma_bm_eth [selftest-uart]: PASS (code=0, objs=324, warnings=0)
+[+ 493.679s] [host] CHECK prj_04_adc_dma_bm_eth [selftest-hsem]: PASS (code=0, objs=326, warnings=0)
+[+ 529.203s] [host] CHECK prj_04_adc_dma_bm_eth [selftest-gpio]: PASS (code=0, objs=323, warnings=0)
+[+ 529.216s] [host] CHECK warning counter negative control (synthetic warning flagged): PASS
+[+ 529.219s] [host] T1 VERDICT: PASS
+[+ 529.220s] === Running T2 Checks (Compile-time #error & Range Validations) ===
+[+ 529.502s] [host] CHECK T2 prj_01_template_dualcore positive control: PASS (exit=0)
+[+ 529.800s] [host] CHECK T2 prj_01_template_dualcore mut1 (no red bit): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:39:2: error: #error "BOARD_LED_RED_BIT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"')
+[+ 530.111s] [host] CHECK T2 prj_01_template_dualcore mut2 (no green port): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:16:2: error: #error "BOARD_LED_GREEN_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"')
+[+ 530.471s] [host] CHECK T2 prj_01_template_dualcore mut3 (_PIN not _BIT): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:19:2: error: #error "BOARD_LED_GREEN_BIT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"')
+[+ 530.758s] [host] CHECK T2 prj_01_template_dualcore mut4 (yellow bit 16U): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:32:2: error: #error "BOARD_LED_YELLOW_BIT must be in range 0..15"')
+[+ 531.054s] [host] CHECK T2 prj_02_eth_lwip_dualcore positive control: PASS (exit=0)
+[+ 531.381s] [host] CHECK T2 prj_02_eth_lwip_dualcore mut1 (no red bit): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:39:2: error: #error "BOARD_LED_RED_BIT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"')
+[+ 531.719s] [host] CHECK T2 prj_02_eth_lwip_dualcore mut2 (no green port): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:16:2: error: #error "BOARD_LED_GREEN_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"')
+[+ 532.114s] [host] CHECK T2 prj_02_eth_lwip_dualcore mut3 (_PIN not _BIT): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:19:2: error: #error "BOARD_LED_GREEN_BIT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"')
+[+ 532.419s] [host] CHECK T2 prj_02_eth_lwip_dualcore mut4 (yellow bit 16U): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:32:2: error: #error "BOARD_LED_YELLOW_BIT must be in range 0..15"')
+[+ 532.784s] [host] CHECK T2 prj_03_adc_dma_eth positive control: PASS (exit=0)
+[+ 533.124s] [host] CHECK T2 prj_03_adc_dma_eth mut1 (no red bit): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:39:2: error: #error "BOARD_LED_RED_BIT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"')
+[+ 533.532s] [host] CHECK T2 prj_03_adc_dma_eth mut2 (no green port): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:16:2: error: #error "BOARD_LED_GREEN_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"')
+[+ 533.993s] [host] CHECK T2 prj_03_adc_dma_eth mut3 (_PIN not _BIT): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:19:2: error: #error "BOARD_LED_GREEN_BIT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"')
+[+ 534.280s] [host] CHECK T2 prj_03_adc_dma_eth mut4 (yellow bit 16U): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:32:2: error: #error "BOARD_LED_YELLOW_BIT must be in range 0..15"')
+[+ 534.607s] [host] CHECK T2 prj_04_adc_dma_bm_eth positive control: PASS (exit=0)
+[+ 534.933s] [host] CHECK T2 prj_04_adc_dma_bm_eth mut1 (no red bit): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:39:2: error: #error "BOARD_LED_RED_BIT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"')
+[+ 535.255s] [host] CHECK T2 prj_04_adc_dma_bm_eth mut2 (no green port): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:16:2: error: #error "BOARD_LED_GREEN_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"')
+[+ 535.675s] [host] CHECK T2 prj_04_adc_dma_bm_eth mut3 (_PIN not _BIT): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:19:2: error: #error "BOARD_LED_GREEN_BIT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"')
+[+ 535.952s] [host] CHECK T2 prj_04_adc_dma_bm_eth mut4 (yellow bit 16U): PASS (exit=1, msg='C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\01_shared_drivers\01_led\led_bm.c:32:2: error: #error "BOARD_LED_YELLOW_BIT must be in range 0..15"')
+[+ 535.976s] [host] T2 cases: 20/20 passed
+[+ 535.976s] [host] T2 VERDICT: PASS
+[+ 535.977s] === Running T3 Checks (Binary g_led_config vs UM2408 Oracle & 9dc6896 Control) ===
+[+ 536.149s] [host] control worktree verification: PASS (Control worktree at 9dc6896 ready)
+[+ 536.149s] [check] Compiling control images via build_all.ps1 -Clean in C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_9dc6896...
+[+ 790.469s] [build_all_control] Finished in 254.3s, exit code 0
+[+ 790.470s] [build_all_control] All 8 builds PASSED successfully.
+[+ 790.471s] [host] CHECK control build_all 8/8 (-Clean): PASS
+[+ 790.471s] [check] Inspecting g_led_config across 8 current builds...
+[+ 790.502s] [host] CHECK current prj_01_template_dualcore_debug vs UM2408: PASS (words=['0x58020400', '0x0', '0x58021000', '0x1', '0x58020400', '0xe'])
+[+ 790.532s] [host] CHECK current prj_01_template_dualcore_release vs UM2408: PASS (words=['0x58020400', '0x0', '0x58021000', '0x1', '0x58020400', '0xe'])
+[+ 790.565s] [host] CHECK current prj_02_eth_lwip_dualcore_debug vs UM2408: PASS (words=['0x58020400', '0x0', '0x58021000', '0x1', '0x58020400', '0xe'])
+[+ 790.602s] [host] CHECK current prj_02_eth_lwip_dualcore_release vs UM2408: PASS (words=['0x58020400', '0x0', '0x58021000', '0x1', '0x58020400', '0xe'])
+[+ 790.635s] [host] CHECK current prj_03_adc_dma_eth_debug vs UM2408: PASS (words=['0x58020400', '0x0', '0x58021000', '0x1', '0x58020400', '0xe'])
+[+ 790.663s] [host] CHECK current prj_03_adc_dma_eth_release vs UM2408: PASS (words=['0x58020400', '0x0', '0x58021000', '0x1', '0x58020400', '0xe'])
+[+ 790.691s] [host] CHECK current prj_04_adc_dma_bm_eth_debug vs UM2408: PASS (words=['0x58020400', '0x0', '0x58021000', '0x1', '0x58020400', '0xe'])
+[+ 790.719s] [host] CHECK current prj_04_adc_dma_bm_eth_release vs UM2408: PASS (words=['0x58020400', '0x0', '0x58021000', '0x1', '0x58020400', '0xe'])
+[+ 790.719s] [check] Inspecting g_led_config across 8 control builds (9dc6896)...
+[+ 790.743s] [host] CHECK control prj_01_template_dualcore_debug vs Oracle: PASS, matches current: PASS
+[+ 790.768s] [host] CHECK control prj_01_template_dualcore_release vs Oracle: PASS, matches current: PASS
+[+ 790.794s] [host] CHECK control prj_02_eth_lwip_dualcore_debug vs Oracle: PASS, matches current: PASS
+[+ 790.819s] [host] CHECK control prj_02_eth_lwip_dualcore_release vs Oracle: PASS, matches current: PASS
+[+ 790.847s] [host] CHECK control prj_03_adc_dma_eth_debug vs Oracle: PASS, matches current: PASS
+[+ 790.873s] [host] CHECK control prj_03_adc_dma_eth_release vs Oracle: PASS, matches current: PASS
+[+ 790.914s] [host] CHECK control prj_04_adc_dma_bm_eth_debug vs Oracle: PASS, matches current: PASS
+[+ 790.940s] [host] CHECK control prj_04_adc_dma_bm_eth_release vs Oracle: PASS, matches current: PASS
+[+ 790.943s] [host] CHECK T3 negative control (mutated objdump byte rejected): PASS (words=['0x58020400', '0x0', '0x58021000', '0x1', '0x58020400', '0xf'])
+[+ 790.945s] [host] T3 VERDICT: PASS
+[+ 790.945s] OVERALL VERDICT: PASS
