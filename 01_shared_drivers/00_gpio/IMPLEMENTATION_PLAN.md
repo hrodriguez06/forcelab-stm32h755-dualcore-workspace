@@ -1,6 +1,6 @@
 # Plan de implementación de `00_gpio` F2: EXTI 0–15 y celda de compensación
 
-Oct 15, 2026 · @Hector · revisión 2 (Oct 16, 2026)
+Oct 15, 2026 · @Hector · revisión 3 (Oct 16, 2026)
 
 Añade a `gpio_bm` las líneas EXTI 0–15 del núcleo que llama y la celda de compensación de I/O, con el contrato que fijó el plan original de GPIO y que guarda `00_gpio/README.md` §13.3. Se valida en `prj_01_template_dualcore`, preset `selftest-gpio`, con el banco del AD2 de F1 sin recablear.
 
@@ -11,6 +11,11 @@ Una sola fase de implementación (F1 de este plan) y un cierre. La fase pasa una
 Base y control: `main` en `3df160a` (cierre de `03_tim` F4). El código de `00_gpio` no cambia desde F1c.
 
 **El desarrollador es Antigravity** (autorizado por el responsable el 2026-10-15). No tiene acceso a la placa ni al AD2: todo lo que los necesita (T11–T14, T17 y las dos ejecuciones completas del banco) lo ejecuta el auditor con las herramientas del implementador. El implementador entrega el firmware, las herramientas y las pruebas sin placa (T1 de compilación, T18).
+
+**Revisión 3 (2026-10-16), decisión del responsable (opción C): la compuerta de T9 en PF14 no cuenta en las corridas de cierre de F2.**
+- **Por qué:** desde que se recableó el banco, la separación t<sub>r</sub>(LOW) − t<sub>r</sub>(VERY_HIGH) en PF14 va de 0,9 a 1,4 ns (antes, de 1,8 a 2,3 ns), y la compuerta falló en 5 de 7 corridas. Es una prueba analógica de F1 que el AD2 apenas resuelve (README §10), no de F2.
+- **Criterio de las corridas de cierre:** pasan todas las comprobaciones del host y `FW VERDICT=PASS`, salvo `CHECK T9 gate PF14`, que se mide, se imprime y queda en la captura. Si esa es la única línea FAIL, `HOST VERDICT=FAIL` se acepta para F2. La compuerta de PF15 sí cuenta.
+- **En el cierre**, README §10 dice que T9 en PF14 no se resuelve en este banco.
 
 **Revisión 2 (2026-10-16), tras la auditoría de F1 (`AUDIT.md`): dos erratas del auditor en el Diseño 2.**
 - **Regla 9:** "pone `CCCSR.EN` en la sección y espera `READY`" dejaba la espera dentro de la sección, con PRIMASK y el lock entre núcleos tomados durante `max_cycles`. Eso rompe el límite de 60 µs del hook (README §3.1). `EN` se pone en la sección y `READY` se espera **fuera** de ella. Además, en la placa la celda tardó más de 50 000 ciclos en dar `READY` tras volver a encender CSI, así que T17 mide ese tiempo y usa un límite holgado.

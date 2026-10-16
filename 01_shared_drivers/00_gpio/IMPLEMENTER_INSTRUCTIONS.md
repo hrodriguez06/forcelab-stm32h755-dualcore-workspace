@@ -2,7 +2,7 @@
 
 Oct 15, 2026 · @Hector
 
-Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta:
+Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 3) de esta carpeta:
 - las funciones EXTI y de la celda de compensación en `gpio_bm`;
 - sus pruebas en el `selftest-gpio` de `prj_01` y en su herramienta de banco;
 - la herramienta sin placa `tools/gpio_f2_checks.py`.
