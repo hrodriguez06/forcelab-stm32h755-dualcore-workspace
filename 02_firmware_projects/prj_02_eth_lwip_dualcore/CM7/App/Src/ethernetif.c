@@ -44,6 +44,7 @@
 
 #include "lwip/opt.h"
 #include "lwip/pbuf.h"
+#include "lwip/memp.h"
 #include "lwip/stats.h"
 #include "lwip/tcpip.h"
 #include "lwip/sys.h"
@@ -54,6 +55,24 @@
 #include "semphr.h"
 
 #include <string.h>
+
+#if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
+struct rx_custom_pbuf
+{
+    struct pbuf_custom custom;
+    void              *dma_buffer;
+};
+
+LWIP_MEMPOOL_DECLARE(RX_POOL, ETH_DRIVER_RX_BUFFER_COUNT, sizeof(struct rx_custom_pbuf), "Zero-copy RX PBUF pool");
+
+static void ethernetif_rx_pbuf_free_custom(struct pbuf *p)
+{
+    struct rx_custom_pbuf *cp = (struct rx_custom_pbuf *)p;
+
+    ETH_Driver_ReleaseRxBuffer(cp->dma_buffer);
+    LWIP_MEMPOOL_FREE(RX_POOL, cp);
+}
+#endif
 
 /* Interface name reported by lwIP: "st0", "st1", ... */
 #define IFNAME0                         's'
@@ -134,15 +153,86 @@ static int ethernetif_receive_one(struct netif *netif)
 {
     eth_rx_segment_t *packet  = NULL;
     eth_rx_segment_t *segment;
+#if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
+    struct pbuf      *p_head = NULL;
+    struct rx_custom_pbuf *cp;
+    struct pbuf      *p;
+#else
     struct pbuf      *p;
     uint16_t          total   = 0U;
     uint16_t          offset  = 0U;
+#endif
 
     if (ETH_Driver_ReadPacket(&packet) != ETH_DRIVER_OK)
     {
         return 0;
     }
 
+#if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
+    for (segment = packet; segment != NULL; segment = segment->next)
+    {
+        cp = (struct rx_custom_pbuf *)LWIP_MEMPOOL_ALLOC(RX_POOL);
+        if (cp == NULL)
+        {
+            if (p_head != NULL)
+            {
+                pbuf_free(p_head);
+                p_head = NULL;
+            }
+            while (segment != NULL)
+            {
+                ETH_Driver_ReleaseRxBuffer(segment->payload);
+                segment = segment->next;
+            }
+            break;
+        }
+
+        cp->custom.custom_free_function = ethernetif_rx_pbuf_free_custom;
+        cp->dma_buffer = segment->payload;
+        p = pbuf_alloced_custom(PBUF_RAW, segment->length, PBUF_REF,
+                                &cp->custom, segment->payload, ETH_DRIVER_BUFFER_SIZE);
+        if (p == NULL)
+        {
+            LWIP_MEMPOOL_FREE(RX_POOL, cp);
+            if (p_head != NULL)
+            {
+                pbuf_free(p_head);
+                p_head = NULL;
+            }
+            while (segment != NULL)
+            {
+                ETH_Driver_ReleaseRxBuffer(segment->payload);
+                segment = segment->next;
+            }
+            break;
+        }
+
+        if (p_head == NULL)
+        {
+            p_head = p;
+        }
+        else
+        {
+            pbuf_cat(p_head, p);
+        }
+    }
+
+    if (p_head == NULL)
+    {
+        LINK_STATS_INC(link.memerr);
+        LINK_STATS_INC(link.drop);
+        return 1;   /* the ring did hold a frame, so keep draining */
+    }
+
+    LINK_STATS_INC(link.recv);
+
+    if (netif->input(p_head, netif) != ERR_OK)
+    {
+        pbuf_free(p_head);
+    }
+
+    return 1;
+#else
     for (segment = packet; segment != NULL; segment = segment->next)
     {
         total = (uint16_t)(total + segment->length);
@@ -182,6 +272,7 @@ static int ethernetif_receive_one(struct netif *netif)
     }
 
     return 1;
+#endif
 }
 
 static void ethernetif_input_thread(void *argument)
@@ -404,6 +495,10 @@ static err_t low_level_init(struct netif *netif)
     {
         return ERR_MEM;
     }
+
+#if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
+    LWIP_MEMPOOL_INIT(RX_POOL);
+#endif
 
     /* Install the notifications before the MAC can raise an interrupt. */
     ETH_Driver_SetEventCallbacks(&s_driver_callbacks);

@@ -733,6 +733,22 @@ void ETH_Driver_ReleasePacket(eth_rx_segment_t *packet)
     }
 }
 
+#if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
+void ETH_Driver_ReleaseRxBuffer(void *buffer)
+{
+    int32_t index = eth_rx_index_of((const uint8_t *)buffer);
+
+    if (index >= 0)
+    {
+        uint32_t primask = eth_lock();
+        g_rx_slots[index].segment.next   = NULL;
+        g_rx_slots[index].segment.length = 0U;
+        g_rx_slots[index].in_use         = 0U;
+        eth_unlock(primask);
+    }
+}
+#endif
+
 /* ==========================================================================
  * HAL buffer-management hooks.
  *

@@ -45,7 +45,9 @@ extern "C" {
  * maximum tagged Ethernet frame, so a frame never spans two descriptors.
  */
 #define ETH_DRIVER_BUFFER_SIZE              1536U
+#ifndef ETH_DRIVER_RX_BUFFER_COUNT
 #define ETH_DRIVER_RX_BUFFER_COUNT             8U
+#endif
 #define ETH_DRIVER_TX_BUFFER_COUNT             4U
 
 /** Maximum payload this driver will transmit in one frame. */
@@ -166,6 +168,14 @@ eth_driver_status_t ETH_Driver_ReadPacket(eth_rx_segment_t **packet);
 
 /** @brief  Returns a whole segment chain to the Rx pool. */
 void ETH_Driver_ReleasePacket(eth_rx_segment_t *packet);
+
+#if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
+/**
+  * @brief  Returns a single Rx buffer back to the driver pool by its payload pointer.
+  * @param  buffer  Pointer to the buffer payload within g_rx_pool (e.g. p->payload in zero-copy).
+  */
+void ETH_Driver_ReleaseRxBuffer(void *buffer);
+#endif
 
 /* ---- Diagnostics ------------------------------------------------------- */
 
