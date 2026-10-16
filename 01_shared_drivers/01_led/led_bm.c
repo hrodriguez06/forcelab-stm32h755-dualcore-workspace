@@ -10,30 +10,36 @@
 #include "stm32h7xx.h"
 #include <stddef.h>
 
-#if __has_include("board_def.h")
 #include "board_def.h"
-#endif
 
-/* Fallback default board pin definitions (Nucleo-H755ZI-Q) if board_def.h does not supply them */
 #ifndef BOARD_LED_GREEN_PORT
-#define BOARD_LED_GREEN_PORT    GPIOB
+#error "BOARD_LED_GREEN_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
 #endif
 #ifndef BOARD_LED_GREEN_BIT
-#define BOARD_LED_GREEN_BIT     0U
+#error "BOARD_LED_GREEN_BIT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
+#endif
+#if (BOARD_LED_GREEN_BIT) > 15U
+#error "BOARD_LED_GREEN_BIT must be in range 0..15"
 #endif
 
 #ifndef BOARD_LED_YELLOW_PORT
-#define BOARD_LED_YELLOW_PORT   GPIOE
+#error "BOARD_LED_YELLOW_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
 #endif
 #ifndef BOARD_LED_YELLOW_BIT
-#define BOARD_LED_YELLOW_BIT    1U
+#error "BOARD_LED_YELLOW_BIT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
+#endif
+#if (BOARD_LED_YELLOW_BIT) > 15U
+#error "BOARD_LED_YELLOW_BIT must be in range 0..15"
 #endif
 
 #ifndef BOARD_LED_RED_PORT
-#define BOARD_LED_RED_PORT      GPIOB
+#error "BOARD_LED_RED_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
 #endif
 #ifndef BOARD_LED_RED_BIT
-#define BOARD_LED_RED_BIT       14U
+#error "BOARD_LED_RED_BIT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"
+#endif
+#if (BOARD_LED_RED_BIT) > 15U
+#error "BOARD_LED_RED_BIT must be in range 0..15"
 #endif
 
 static led_driver_config_t g_led_config = {
