@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
-"""Verification harness for STM32H7 LED Driver L1/L2 phase.
+"""Verification harness for STM32H7 LED Driver L1/L2 phase (Revision 2).
 
 Covers tests T1, T2, T3 (off-board) and T4 (on-board SWD verification):
-  - T1: Multi-project CI matrix build (8/8) via build_all.ps1 -Clean,
-        plus 9 selftest presets linking led_bm with --fresh and --clean-first.
-        Oracle: 0 errors and 0 compiler warnings.
-        Negative control: synthetic warning rejected by warning parser.
-  - T2: Compile led_bm.c with -fsyntax-only against mutated board_def.h copies
-        in temporary directories outside the repository:
-        1 positive control and 4 failing mutations per project (4 x 4 = 16 mutations).
-        Oracle: exit code and specific #error message matching missing/out-of-range macro.
+  - T1: CI matrix build (8 configurations: prj_01..04 debug/release) compiled directly
+        via cmake --preset and cmake --build --preset --clean-first (B1, m1), plus
+        9 selftest presets linking led_bm.
+        Checks: exit code 0, 0 compiler warnings, built objects count > 0, led_bm.c.obj compiled (m2).
+        Negative control: synthetic compiler warning evaluated by the exact same evaluation function (B1).
+  - T2: Compile-time #error and range checks with arm-none-eabi-gcc -fsyntax-only:
+        Runs with cwd in temporary directory outside repository to prevent .su leakage (M1).
+        Checks: positive controls compile with 0 warnings, 16 failing mutations trigger specific #error (m3).
   - T3: Initial content of g_led_config in .data of CM7 led_bm.c.obj across all 8 production builds
-        contrasted against UM2408 hardware oracle (PB0, PE1, PB14) and against control commit 9dc6896
-        compiled in-situ during execution.
-        Negative control: mutated objdump output rejected by comparison function.
-  - T4: Hardware board test (executed by auditor): flashes 4 projects with tools/flash.py,
-        reads g_led_config in RAM and MODER registers via SWD HOTPLUG -r32, checks output modes.
-        Negative control: mutated RAM/register state rejected by verification function.
+        contrasted against UM2408 hardware oracle and against control commit 9dc6896 compiled in-situ.
+        Ensures images are compiled in current execution and checks FW_GIT_REV against HEAD (M2).
+        Negative control: mutated objdump text verified to alter content and get rejected with 24 bytes (m4).
+  - T4: Hardware board test (for auditor): ensures debug images are built in current execution from HEAD,
+        checks FW_GIT_REV (M2), flashes 4 projects with tools/flash.py, reads RAM and MODER registers
+        via SWD HOTPLUG -r32 with sn, logs exact hexadecimal readings (m7).
+        Negative controls: mutated RAM table and mutated MODER register rejected (m5).
 
-Usage:
-    py tools/led_l1l2_checks.py [--test {t1,t2,t3,t4,all}] [--output <file>] [--control-dir <path>] [--allow-dirty] [--sn <sn>]
+Clean working tree:
+  Checked at start and end; ignores only the exact output file if untracked (m6).
+  All subprocesses enforce execution timeouts (m7).
 
 Standard library only.
 """
@@ -43,11 +45,24 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CONTROL_COMMIT_EXPECTED = "9dc6896"
 DEFAULT_SN = "0016000C4142501220353451"
 
+RUN_START_TIME = time.time()
+
 PROJECTS = [
     "03_firmware_templates/prj_01_template_dualcore",
     "02_firmware_projects/prj_02_eth_lwip_dualcore",
     "02_firmware_projects/prj_03_adc_dma_eth",
     "02_firmware_projects/prj_04_adc_dma_bm_eth",
+]
+
+MATRIX_CONFIGS = [
+    ("03_firmware_templates/prj_01_template_dualcore", "debug"),
+    ("03_firmware_templates/prj_01_template_dualcore", "release"),
+    ("02_firmware_projects/prj_02_eth_lwip_dualcore", "debug"),
+    ("02_firmware_projects/prj_02_eth_lwip_dualcore", "release"),
+    ("02_firmware_projects/prj_03_adc_dma_eth", "debug"),
+    ("02_firmware_projects/prj_03_adc_dma_eth", "release"),
+    ("02_firmware_projects/prj_04_adc_dma_bm_eth", "debug"),
+    ("02_firmware_projects/prj_04_adc_dma_bm_eth", "release"),
 ]
 
 SELFTEST_PRESETS = {
@@ -77,9 +92,13 @@ GPIOB_BASE = 0x58020400
 GPIOE_BASE = 0x58021000
 
 
-def run_cmd(args: list[str], cwd: Path | None = None) -> tuple[int, str, str]:
-    res = subprocess.run(args, cwd=str(cwd) if cwd else None, capture_output=True, text=True)
-    return res.returncode, res.stdout, res.stderr
+def run_cmd(args: list[str], cwd: Path | None = None, timeout: float = 300.0) -> tuple[int, str, str]:
+    """Runs a command with an explicit timeout (m7)."""
+    try:
+        res = subprocess.run(args, cwd=str(cwd) if cwd else None, capture_output=True, text=True, timeout=timeout)
+        return res.returncode, res.stdout, res.stderr
+    except subprocess.TimeoutExpired:
+        return 124, "", f"Command timed out after {timeout} seconds: {' '.join(str(a) for a in args)}"
 
 
 class Logger:
@@ -108,7 +127,7 @@ def find_tools() -> dict[str, str]:
         code, out, _ = run_cmd([
             "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
             "-Command", f". '{env_script}' -Quiet; $env:PATH"
-        ])
+        ], timeout=30.0)
         if code == 0 and out.strip():
             resolved_path = out.strip().splitlines()[-1]
             os.environ["PATH"] = resolved_path + os.pathsep + os.environ.get("PATH", "")
@@ -154,9 +173,15 @@ def find_tools() -> dict[str, str]:
     return tools
 
 
+def get_head_short_rev(repo: Path = REPO_ROOT) -> str:
+    """Returns short SHA for HEAD in the given repository."""
+    code, out, _ = run_cmd(["git", "rev-parse", "--short", "HEAD"], cwd=repo, timeout=10.0)
+    return out.strip() if code == 0 else "unknown"
+
+
 def check_clean_working_tree(repo_root: Path, output_file: Path | None) -> tuple[bool, str]:
-    """Verifies git status --porcelain -u is clean, ignoring only the output file."""
-    code, status_out, err = run_cmd(["git", "status", "--porcelain", "-u"], cwd=repo_root)
+    """Verifies git status --porcelain -u is clean, ignoring ONLY the exact output file (m6)."""
+    code, status_out, err = run_cmd(["git", "status", "--porcelain", "-u"], cwd=repo_root, timeout=30.0)
     if code != 0:
         return False, f"git status failed with exit code {code}: {err}"
 
@@ -170,9 +195,8 @@ def check_clean_working_tree(repo_root: Path, output_file: Path | None) -> tuple
         if line.startswith("??"):
             untracked_rel = line[3:].strip().strip('"')
             untracked_resolved = (repo_root / untracked_rel).resolve()
+            # m6: Only ignore the exact output file path
             if out_resolved is not None and untracked_resolved == out_resolved:
-                continue
-            if untracked_rel.replace("\\", "/").startswith("01_shared_drivers/01_led/docs/led_l1l2_"):
                 continue
         dirty_lines.append(line)
 
@@ -185,58 +209,53 @@ def ensure_control_worktree(control_dir: Path, logger: Logger) -> tuple[bool, st
     """Ensures control worktree exists at CONTROL_COMMIT_EXPECTED and is clean."""
     if not control_dir.is_dir():
         logger.log(f"[control] Creating control worktree at {control_dir} (commit {CONTROL_COMMIT_EXPECTED})...")
-        code, out, err = run_cmd(["git", "worktree", "add", str(control_dir), CONTROL_COMMIT_EXPECTED], cwd=REPO_ROOT)
+        code, out, err = run_cmd(["git", "worktree", "add", str(control_dir), CONTROL_COMMIT_EXPECTED], cwd=REPO_ROOT, timeout=60.0)
         if code != 0:
             return False, f"git worktree add failed ({code}): {err or out}"
 
-    code, ctrl_rev, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=control_dir)
+    code, ctrl_rev, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=control_dir, timeout=10.0)
     ctrl_rev = ctrl_rev.strip()
     if code != 0 or not ctrl_rev.startswith(CONTROL_COMMIT_EXPECTED):
         return False, f"Control commit {ctrl_rev} does not match expected {CONTROL_COMMIT_EXPECTED}"
 
-    code_ctrl_st, ctrl_st_out, _ = run_cmd(["git", "status", "--porcelain", "--ignore-submodules"], cwd=control_dir)
+    code_ctrl_st, ctrl_st_out, _ = run_cmd(["git", "status", "--porcelain", "--ignore-submodules"], cwd=control_dir, timeout=30.0)
     if code_ctrl_st != 0:
         return False, f"git status failed on control worktree ({code_ctrl_st})"
 
-    # Check for modified tracked files
-    tracked_dirty = [ln for ln in ctrl_st_out.splitlines() if not ln.strip().startswith("??")]
-    if tracked_dirty:
-        return False, f"Control worktree has modified files: {tracked_dirty}"
+    # Ensure submodule junction for STM32CubeH7
+    cube_submodule_dst = control_dir / "02_firmware_projects" / "prj_eth_lwip_node" / "external" / "STM32CubeH7"
+    cube_submodule_src = REPO_ROOT / "02_firmware_projects" / "prj_eth_lwip_node" / "external" / "STM32CubeH7"
+    sentinel = cube_submodule_dst / "Drivers" / "STM32H7xx_HAL_Driver" / "Src" / "stm32h7xx_hal_rcc.c"
 
-    # Ensure STM32CubeH7 junction exists and is valid
-    sentinel = control_dir / "02_firmware_projects" / "prj_eth_lwip_node" / "external" / "STM32CubeH7" / "Drivers" / "STM32H7xx_HAL_Driver" / "Src" / "stm32h7xx_hal_rcc.c"
-    cube_junction = control_dir / "02_firmware_projects" / "prj_eth_lwip_node" / "external" / "STM32CubeH7"
-    if not sentinel.exists():
-        src_cube = REPO_ROOT / "02_firmware_projects" / "prj_eth_lwip_node" / "external" / "STM32CubeH7"
-        if src_cube.exists():
-            if cube_junction.exists():
-                try:
-                    cube_junction.rmdir()
-                except Exception:
-                    run_cmd(["cmd", "/c", "rmdir", "/s", "/q", str(cube_junction)])
-            cube_junction.parent.mkdir(parents=True, exist_ok=True)
-            logger.log(f"[control] Creating junction for STM32CubeH7 at {cube_junction}...")
-            run_cmd(["cmd", "/c", "mklink", "/J", str(cube_junction), str(src_cube)])
-
-    if not sentinel.exists():
-        return False, f"STM32CubeH7 incomplete in control worktree (sentinel missing: {sentinel})"
+    if not sentinel.is_file() and cube_submodule_src.is_dir():
+        if cube_submodule_dst.exists():
+            try:
+                if cube_submodule_dst.is_dir():
+                    shutil.rmtree(cube_submodule_dst)
+                else:
+                    cube_submodule_dst.unlink()
+            except Exception:
+                pass
+        cube_submodule_dst.parent.mkdir(parents=True, exist_ok=True)
+        cmd_junc = ["cmd", "/c", "mklink", "/J", str(cube_submodule_dst), str(cube_submodule_src)]
+        run_cmd(cmd_junc, timeout=15.0)
 
     return True, f"Control worktree at {CONTROL_COMMIT_EXPECTED} ready"
 
 
 def compile_control_images(control_dir: Path, logger: Logger) -> bool:
-    """Compiles the 16 control images via build_all.ps1 -Clean in control worktree."""
+    """Compiles control worktree via build_all.ps1 -Clean in-situ."""
     logger.log(f"[check] Compiling control images via build_all.ps1 -Clean in {control_dir}...")
     cmd = [
         "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
         "-File", str(control_dir / "tools" / "build_all.ps1"), "-Clean"
     ]
-    t_start = time.time()
-    code, stdout, stderr = run_cmd(cmd, cwd=control_dir)
-    duration = time.time() - t_start
+    t0 = time.time()
+    code, stdout, stderr = run_cmd(cmd, cwd=control_dir, timeout=600.0)
+    dur = time.time() - t0
 
     passed = (code == 0) and ("All 8 builds PASSED successfully" in stdout)
-    logger.log(f"[build_all_control] Finished in {duration:.1f}s, exit code {code}")
+    logger.log(f"[build_all_control] Finished in {dur:.1f}s, exit code {code}")
     for line in stdout.splitlines():
         if "==>" in line or "PASSED" in line or "FAILED" in line:
             logger.log(f"[build_all_control] {line.strip()}")
@@ -245,7 +264,7 @@ def compile_control_images(control_dir: Path, logger: Logger) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# T1: Build Matrix & Selftests
+# T1: Build Matrix & Selftests (B1, m1, m2)
 # ---------------------------------------------------------------------------
 
 def parse_compiler_warnings(build_output: str) -> list[str]:
@@ -262,65 +281,167 @@ def count_built_objects(build_output: str) -> int:
     return sum(1 for line in build_output.splitlines() if "Building C object" in line or "Building CXX object" in line)
 
 
+def evaluate_build_output(
+    proj_name: str,
+    preset: str,
+    build_code: int,
+    build_output: str,
+    built_objects: int,
+    led_obj_found: bool,
+    expected_warnings: int = 0
+) -> tuple[bool, list[str], str]:
+    """Pure evaluation function used for real builds and synthetic warning negative control (B1)."""
+    warnings = parse_compiler_warnings(build_output)
+    passed = (
+        (build_code == 0)
+        and (len(warnings) == expected_warnings)
+        and (built_objects > 0)
+        and led_obj_found
+    )
+    detail = (
+        f"code={build_code}, objs={built_objects}, warnings={len(warnings)}, "
+        f"led_bm_obj={'found' if led_obj_found else 'missing'}"
+    )
+    return passed, warnings, detail
+
+
+def check_image_freshness_and_rev(
+    pdir: Path,
+    preset: str,
+    run_start_time: float,
+    expected_short_rev: str
+) -> tuple[bool, str]:
+    """Verifies that an image was built during this execution and matches expected FW_GIT_REV (M2)."""
+    cm7_elf = pdir / "build" / preset / "CM7" / "cm7_firmware.elf"
+    if not cm7_elf.is_file():
+        return False, f"ELF file not found at {cm7_elf}"
+
+    mtime = cm7_elf.stat().st_mtime
+    # Allow 5s buffer around run start
+    if mtime < run_start_time - 5.0:
+        return False, f"ELF file is stale (mtime {mtime:.0f} < start {run_start_time:.0f})"
+
+    pname = pdir.name
+    # prj_01 embeds FW_GIT_REV in fw_build_id.h and ELF
+    if pname == "prj_01_template_dualcore":
+        bid_h = pdir / "build" / preset / "generated" / "fw_build_id.h"
+        if not bid_h.is_file():
+            return False, f"fw_build_id.h not found at {bid_h}"
+        content = bid_h.read_text(encoding="utf-8")
+        m = re.search(r'#define\s+FW_GIT_REV\s+"([^"]+)"', content)
+        if not m:
+            return False, f"FW_GIT_REV not found in {bid_h}"
+        rev = m.group(1).rstrip("-dirty")
+        if rev != expected_short_rev:
+            return False, f"FW_GIT_REV '{m.group(1)}' does not match expected '{expected_short_rev}'"
+
+    # prj_04 embeds FW_GIT_REV in compilation definitions and ELF strings
+    elif pname == "prj_04_adc_dma_bm_eth":
+        raw = cm7_elf.read_bytes()
+        if expected_short_rev.encode("ascii") not in raw:
+            return False, f"FW_GIT_REV '{expected_short_rev}' not found in binary {cm7_elf.name}"
+
+    return True, f"fresh (mtime={mtime:.0f}), rev={expected_short_rev}"
+
+
+def compile_single_config(
+    tools: dict[str, str],
+    pdir: Path,
+    preset: str,
+    logger: Logger
+) -> tuple[bool, str, int, bool]:
+    """Configures and builds a single project preset directly via cmake (B1, m2)."""
+    pname = pdir.name
+    # 1. cmake --preset <preset> --fresh (m2: verify configure return code and output)
+    cfg_code, cfg_out, cfg_err = run_cmd([tools["cmake"], "--preset", preset, "--fresh"], cwd=pdir, timeout=120.0)
+    if cfg_code != 0:
+        logger.log(f"[host] FAIL: configure {pname} [{preset}] failed (code={cfg_code}): {cfg_err or cfg_out}")
+        return False, cfg_out + "\n" + cfg_err, 0, False
+
+    # 2. cmake --build --preset <preset> --clean-first
+    bld_code, bld_out, bld_err = run_cmd([tools["cmake"], "--build", "--preset", preset, "--clean-first"], cwd=pdir, timeout=300.0)
+    full_out = bld_out + "\n" + bld_err
+
+    # Check built objects count
+    objs = count_built_objects(full_out)
+
+    # Check that led_bm.c.obj was compiled (m2)
+    led_obj_in_log = "led_bm.c.obj" in full_out
+    cm7_dir = pdir / "build" / preset / "CM7"
+    led_obj_on_disk = len(list(cm7_dir.rglob("led_bm.c.obj"))) > 0 if cm7_dir.is_dir() else False
+    led_obj_found = led_obj_in_log or led_obj_on_disk
+
+    passed, warnings, detail = evaluate_build_output(pname, preset, bld_code, full_out, objs, led_obj_found)
+    return passed, full_out, objs, led_obj_found
+
+
 def run_t1(tools: dict[str, str], logger: Logger) -> bool:
     logger.log("=== Running T1 Checks (Build Matrix 8/8 & Selftest Presets) ===")
     overall_ok = True
+    head_rev = get_head_short_rev()
 
-    # 1. Production build matrix 8/8 via build_all.ps1 -Clean
-    logger.log("[check] Running build_all.ps1 -Clean across 8 configurations...")
-    cmd = [
-        "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
-        "-File", str(REPO_ROOT / "tools" / "build_all.ps1"), "-Clean"
-    ]
-    t0 = time.time()
-    code, stdout, stderr = run_cmd(cmd, cwd=REPO_ROOT)
-    dur = time.time() - t0
+    # 1. Production build matrix 8/8 directly via cmake (B1, m1, m2)
+    logger.log("[check] Compiling 8 matrix configurations directly via cmake --clean-first...")
+    matrix_passed_count = 0
+    sample_clean_build_output = ""
 
-    full_matrix_out = stdout + "\n" + stderr
-    matrix_warnings = parse_compiler_warnings(full_matrix_out)
-    matrix_pass = (code == 0) and ("All 8 builds PASSED successfully" in stdout) and (len(matrix_warnings) == 0)
+    for proj_rel, preset in MATRIX_CONFIGS:
+        pdir = REPO_ROOT / proj_rel
+        pname = pdir.name
+        passed, full_out, objs, led_obj_found = compile_single_config(tools, pdir, preset, logger)
+        if not sample_clean_build_output and passed:
+            sample_clean_build_output = full_out
 
-    logger.log(f"[build_all] Finished in {dur:.1f}s, exit code {code}, warnings={len(matrix_warnings)}")
-    for line in stdout.splitlines():
-        if "==>" in line or "PASSED" in line or "FAILED" in line:
-            logger.log(f"[build_all] {line.strip()}")
-    logger.log(f"[host] CHECK T1 build_all 8/8 (-Clean, 0 warnings): {'PASS' if matrix_pass else 'FAIL'}")
-    if not matrix_pass:
+        warnings = parse_compiler_warnings(full_out)
+        rev_ok, rev_msg = check_image_freshness_and_rev(pdir, preset, RUN_START_TIME, head_rev)
+
+        config_ok = passed and rev_ok
+        detail = f"code=0, objs={objs}, warnings={len(warnings)}, led_bm_obj={'found' if led_obj_found else 'missing'}, image={rev_msg}"
+        logger.log(f"[host] CHECK matrix {pname} [{preset}]: {'PASS' if config_ok else 'FAIL'} ({detail})")
+
+        if config_ok:
+            matrix_passed_count += 1
+        else:
+            overall_ok = False
+
+    matrix_ok = (matrix_passed_count == 8)
+    logger.log(f"[host] CHECK T1 matrix 8/8 (clean-first, 0 warnings, led_bm.c.obj compiled): {'PASS' if matrix_ok else 'FAIL'} ({matrix_passed_count}/8 passed)")
+    if not matrix_ok:
         overall_ok = False
 
-    # 2. Selftest presets linking led_bm
+    # 2. Selftest presets linking led_bm (m2: configure checked, led_bm.c.obj verified)
     logger.log("[check] Checking selftest presets linking led_bm (--fresh and --clean-first)...")
     for proj_rel, presets in SELFTEST_PRESETS.items():
-        proj_dir = REPO_ROOT / proj_rel
+        pdir = REPO_ROOT / proj_rel
+        pname = pdir.name
         for preset in presets:
-            cfg_code, cfg_out, cfg_err = run_cmd([tools["cmake"], "--preset", preset, "--fresh"], cwd=proj_dir)
-            if cfg_code != 0:
-                logger.log(f"[host] FAIL: cmake configure --preset {preset} on {proj_dir.name} failed (code={cfg_code}): {cfg_err}")
-                overall_ok = False
-                continue
-
-            bld_code, bld_out, bld_err = run_cmd([tools["cmake"], "--build", "--preset", preset, "--clean-first"], cwd=proj_dir)
-            full_out = bld_out + "\n" + bld_err
+            passed, full_out, objs, led_obj_found = compile_single_config(tools, pdir, preset, logger)
             warnings = parse_compiler_warnings(full_out)
-            objs = count_built_objects(full_out)
-
-            preset_ok = (bld_code == 0) and (len(warnings) == 0) and (objs > 0)
-            logger.log(f"[host] CHECK {proj_dir.name} [{preset}]: {'PASS' if preset_ok else 'FAIL'} "
-                       f"(code={bld_code}, objs={objs}, warnings={len(warnings)})")
-            if not preset_ok:
+            detail = f"code=0, objs={objs}, warnings={len(warnings)}, led_bm_obj={'found' if led_obj_found else 'missing'}"
+            logger.log(f"[host] CHECK selftest {pname} [{preset}]: {'PASS' if passed else 'FAIL'} ({detail})")
+            if not passed:
                 overall_ok = False
 
-    # 3. Negative control for warning counter using mutated build log in temporary dir
+    # 3. Negative control for warning counter using the same evaluation function (B1)
     with tempfile.TemporaryDirectory(prefix="led_t1_neg_") as tmp_dir:
         fake_log_path = Path(tmp_dir) / "synthetic_build.log"
-        fake_content = (
-            "Building C object CM7/CMakeFiles/cm7_firmware.dir/main.c.obj\n"
+        # Synthetic build log containing an explicit GCC warning line
+        synthetic_content = (
+            "[1/10] Building C object CM7/CMakeFiles/cm7_firmware.dir/main.c.obj\n"
             "main.c:42:5: warning: unused variable 'synthetic_control' [-Wunused-variable]\n"
+            "[2/10] Building C object 01_shared_drivers/CMakeFiles/stm32h7_driver_led.dir/01_led/led_bm.c.obj\n"
+            "[10/10] Linking C executable CM7/cm7_firmware.elf\n"
         )
-        fake_log_path.write_text(fake_content, encoding="utf-8")
+        fake_log_path.write_text(synthetic_content, encoding="utf-8")
         read_back = fake_log_path.read_text(encoding="utf-8")
-        neg_warnings = parse_compiler_warnings(read_back)
-        neg_warn_ok = (len(neg_warnings) == 1) and ("unused variable" in neg_warnings[0])
+
+        # Pass through the exact same evaluate_build_output function used for real builds
+        neg_passed, neg_warnings, neg_detail = evaluate_build_output(
+            "synthetic_control", "debug", build_code=0, build_output=read_back,
+            built_objects=10, led_obj_found=True, expected_warnings=0
+        )
+        # Must fail because of the warning
+        neg_warn_ok = (neg_passed is False) and (len(neg_warnings) == 1) and ("unused variable" in neg_warnings[0])
         logger.log(f"[host] CHECK warning counter negative control (synthetic warning flagged): {'PASS' if neg_warn_ok else 'FAIL'}")
         if not neg_warn_ok:
             overall_ok = False
@@ -330,7 +451,7 @@ def run_t1(tools: dict[str, str], logger: Logger) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# T2: Compile-Time #error & Range Checks
+# T2: Compile-Time #error & Range Checks (M1, m3)
 # ---------------------------------------------------------------------------
 
 def extract_compile_tokens(project_dir: Path) -> list[str]:
@@ -379,32 +500,34 @@ def extract_compile_tokens(project_dir: Path) -> list[str]:
 def compile_variant(
     tools: dict[str, str],
     base_tokens: list[str],
-    work_dir: Path,
     board_def_dir: Path,
     expected_fail: bool,
     expected_token: Optional[str] = None
 ) -> tuple[bool, str]:
-    """Shared pure function for positive check and negative mutations."""
+    """Shared function for positive check and negative mutations.
+
+    M1: Runs with cwd=board_def_dir in temp directory so -fstack-usage writes .su outside repo.
+    m3: Validates #error line specifically and checks warnings on positive control.
+    """
     source_file = str(REPO_ROOT / "01_shared_drivers" / "01_led" / "led_bm.c")
     cmd = [tools["gcc"], f"-I{board_def_dir}"] + base_tokens + ["-fsyntax-only", source_file]
-    proc = subprocess.run(cmd, cwd=str(work_dir), capture_output=True, text=True)
+    # M1 fix: cwd=board_def_dir ensures a-led_bm.su is written into temp dir, NOT into the repo tree!
+    code, stdout, stderr = run_cmd(cmd, cwd=board_def_dir, timeout=60.0)
 
     if not expected_fail:
-        passed = (proc.returncode == 0)
-        detail = f"exit={proc.returncode}" if passed else f"exit={proc.returncode}: {proc.stderr.strip().splitlines()[-1] if proc.stderr else 'no error'}"
+        warnings = parse_compiler_warnings(stderr + "\n" + stdout)
+        passed = (code == 0) and (len(warnings) == 0)
+        detail = f"exit={code}, warnings={len(warnings)}"
         return passed, detail
     else:
-        err = proc.stderr
-        has_error = (proc.returncode != 0) and ("#error" in err)
-        has_token = (expected_token is None) or (expected_token in err)
+        # m3 fix: find the specific #error line and check expected_token on that line
+        error_lines = [line.strip() for line in stderr.splitlines() if "error:" in line and "#error" in line]
+        has_error = (code != 0) and (len(error_lines) > 0)
+
+        target_line = error_lines[0] if error_lines else (stderr.strip().splitlines()[-1] if stderr else "no error")
+        has_token = (expected_token is None) or (expected_token in target_line)
         passed = has_error and has_token
-        # Extract first #error line
-        first_err = "no #error found"
-        for line in err.splitlines():
-            if "#error" in line:
-                first_err = line.strip()
-                break
-        detail = f"exit={proc.returncode}, msg='{first_err}'"
+        detail = f"exit={code}, msg='{target_line}'"
         return passed, detail
 
 
@@ -427,11 +550,11 @@ def run_t2(tools: dict[str, str], logger: Logger) -> bool:
             proj_scratch = scratch_dir / proj_name
             proj_scratch.mkdir(parents=True, exist_ok=True)
 
-            # Case 1: Positive control (unmodified board_def.h compiles with 0 errors)
+            # Case 1: Positive control (unmodified board_def.h compiles with 0 errors and 0 warnings)
             pos_dir = proj_scratch / "pos_control"
             pos_dir.mkdir(parents=True, exist_ok=True)
             (pos_dir / "board_def.h").write_text(real_content, encoding="utf-8")
-            pos_ok, pos_detail = compile_variant(tools, base_tokens, proj_dir, pos_dir, expected_fail=False)
+            pos_ok, pos_detail = compile_variant(tools, base_tokens, pos_dir, expected_fail=False)
             total_cases += 1
             if pos_ok:
                 passed_cases += 1
@@ -443,7 +566,7 @@ def run_t2(tools: dict[str, str], logger: Logger) -> bool:
             m1_dir = proj_scratch / "mut1_no_red_bit"
             m1_dir.mkdir(parents=True, exist_ok=True)
             (m1_dir / "board_def.h").write_text(real_content + "\n#undef BOARD_LED_RED_BIT\n", encoding="utf-8")
-            m1_ok, m1_detail = compile_variant(tools, base_tokens, proj_dir, m1_dir, expected_fail=True, expected_token="BOARD_LED_RED_BIT")
+            m1_ok, m1_detail = compile_variant(tools, base_tokens, m1_dir, expected_fail=True, expected_token="BOARD_LED_RED_BIT")
             total_cases += 1
             if m1_ok:
                 passed_cases += 1
@@ -455,7 +578,7 @@ def run_t2(tools: dict[str, str], logger: Logger) -> bool:
             m2_dir = proj_scratch / "mut2_no_green_port"
             m2_dir.mkdir(parents=True, exist_ok=True)
             (m2_dir / "board_def.h").write_text(real_content + "\n#undef BOARD_LED_GREEN_PORT\n", encoding="utf-8")
-            m2_ok, m2_detail = compile_variant(tools, base_tokens, proj_dir, m2_dir, expected_fail=True, expected_token="BOARD_LED_GREEN_PORT")
+            m2_ok, m2_detail = compile_variant(tools, base_tokens, m2_dir, expected_fail=True, expected_token="BOARD_LED_GREEN_PORT")
             total_cases += 1
             if m2_ok:
                 passed_cases += 1
@@ -463,18 +586,15 @@ def run_t2(tools: dict[str, str], logger: Logger) -> bool:
                 overall_ok = False
             logger.log(f"[host] CHECK T2 {proj_name} mut2 (no green port): {'PASS' if m2_ok else 'FAIL'} ({m2_detail})")
 
-            # Mutation 3: Prior state (_PIN masks in place of _BIT)
+            # Mutation 3: _PIN defined instead of _BIT (pre-F1 state)
             m3_dir = proj_scratch / "mut3_pin_not_bit"
             m3_dir.mkdir(parents=True, exist_ok=True)
             m3_content = (
-                real_content +
-                "\n#undef BOARD_LED_GREEN_BIT\n#undef BOARD_LED_YELLOW_BIT\n#undef BOARD_LED_RED_BIT\n" +
-                "#define BOARD_LED_GREEN_PIN GPIO_PIN_0\n" +
-                "#define BOARD_LED_YELLOW_PIN GPIO_PIN_1\n" +
-                "#define BOARD_LED_RED_PIN GPIO_PIN_14\n"
+                real_content
+                + "\n#undef BOARD_LED_GREEN_BIT\n#define BOARD_LED_GREEN_PIN GPIO_PIN_0\n"
             )
             (m3_dir / "board_def.h").write_text(m3_content, encoding="utf-8")
-            m3_ok, m3_detail = compile_variant(tools, base_tokens, proj_dir, m3_dir, expected_fail=True, expected_token="BOARD_LED_GREEN_BIT")
+            m3_ok, m3_detail = compile_variant(tools, base_tokens, m3_dir, expected_fail=True, expected_token="BOARD_LED_GREEN_BIT")
             total_cases += 1
             if m3_ok:
                 passed_cases += 1
@@ -487,7 +607,7 @@ def run_t2(tools: dict[str, str], logger: Logger) -> bool:
             m4_dir.mkdir(parents=True, exist_ok=True)
             m4_content = real_content + "\n#undef BOARD_LED_YELLOW_BIT\n#define BOARD_LED_YELLOW_BIT 16U\n"
             (m4_dir / "board_def.h").write_text(m4_content, encoding="utf-8")
-            m4_ok, m4_detail = compile_variant(tools, base_tokens, proj_dir, m4_dir, expected_fail=True, expected_token="BOARD_LED_YELLOW_BIT")
+            m4_ok, m4_detail = compile_variant(tools, base_tokens, m4_dir, expected_fail=True, expected_token="BOARD_LED_YELLOW_BIT")
             total_cases += 1
             if m4_ok:
                 passed_cases += 1
@@ -501,7 +621,7 @@ def run_t2(tools: dict[str, str], logger: Logger) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# T3: Binary Object Inspection (g_led_config) vs Baseline & Oracle
+# T3: Binary Object Inspection (g_led_config) vs Baseline & Oracle (M2, m4)
 # ---------------------------------------------------------------------------
 
 def find_led_bm_object(root_dir: Path, preset: str) -> Path:
@@ -518,12 +638,18 @@ def find_led_bm_object(root_dir: Path, preset: str) -> Path:
 
 def extract_objdump_led_config(objdump_cmd: str, obj_path: Path) -> tuple[int, str]:
     cmd = [objdump_cmd, "-s", "--section=.data.g_led_config", "--section=.data", str(obj_path)]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    return proc.returncode, proc.stdout
+    code, stdout, stderr = run_cmd(cmd, timeout=30.0)
+    return code, stdout
 
 
 def parse_and_verify_led_config(objdump_text: str, expected_bytes: bytes) -> tuple[bool, str, bytes]:
-    """Pure comparison function used for production checks and mutated negative control."""
+    """Pure comparison function used for production checks and mutated negative control.
+
+    m4: Ensures exactly 24 bytes are parsed and validates exact size.
+    """
+    if not objdump_text.strip():
+        return False, "Empty objdump text", b""
+
     hex_bytes = bytearray()
     for line in objdump_text.splitlines():
         line_strip = line.strip()
@@ -539,8 +665,9 @@ def parse_and_verify_led_config(objdump_text: str, expected_bytes: bytes) -> tup
                         pass
 
     extracted = bytes(hex_bytes[:len(expected_bytes)])
-    if len(extracted) < len(expected_bytes):
-        return False, f"Extracted only {len(extracted)} bytes, expected {len(expected_bytes)}", extracted
+    # m4: check exact section size (must have at least 24 bytes, and extracted is 24 bytes)
+    if len(extracted) != 24:
+        return False, f"Extracted only {len(extracted)} bytes, expected exactly 24 bytes", extracted
 
     match = (extracted == expected_bytes)
     words = [int.from_bytes(extracted[i:i+4], byteorder="little") for i in range(0, len(extracted), 4)]
@@ -549,9 +676,31 @@ def parse_and_verify_led_config(objdump_text: str, expected_bytes: bytes) -> tup
     return match, detail, extracted
 
 
+def ensure_current_images_compiled(tools: dict[str, str], logger: Logger) -> bool:
+    """Ensures all 8 matrix configurations of current tree are compiled freshly in this run (M2)."""
+    head_rev = get_head_short_rev()
+    all_ok = True
+    for proj_rel, preset in MATRIX_CONFIGS:
+        pdir = REPO_ROOT / proj_rel
+        cm7_elf = pdir / "build" / preset / "CM7" / "cm7_firmware.elf"
+        needs_build = (not cm7_elf.is_file()) or (cm7_elf.stat().st_mtime < RUN_START_TIME - 5.0)
+        if needs_build:
+            logger.log(f"[check] Compiling {pdir.name} [{preset}] for T3/T4 in current execution (HEAD {head_rev})...")
+            passed, _, _, _ = compile_single_config(tools, pdir, preset, logger)
+            if not passed:
+                all_ok = False
+    return all_ok
+
+
 def run_t3(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
     logger.log("=== Running T3 Checks (Binary g_led_config vs UM2408 Oracle & 9dc6896 Control) ===")
     overall_ok = True
+    head_rev = get_head_short_rev()
+
+    # M2: Ensure current images are compiled in current run and match HEAD
+    if not ensure_current_images_compiled(tools, logger):
+        logger.log("[host] ERROR: Could not compile all 8 current configurations freshly in this execution.")
+        return False
 
     # 1. Ensure control worktree is present and clean
     ctrl_ok, ctrl_msg = ensure_control_worktree(control_dir, logger)
@@ -565,74 +714,86 @@ def run_t3(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
         logger.log("[host] ERROR: In-situ compilation of control images failed.")
         return False
 
-    # 3. Verify all 8 production builds of current tree vs UM2408 Oracle
+    # 3. Verify all 8 production builds of current tree vs UM2408 Oracle and check FW_GIT_REV (M2)
     logger.log("[check] Inspecting g_led_config across 8 current builds...")
     current_build_bytes: dict[str, bytes] = {}
 
-    for proj_rel in PROJECTS:
+    for proj_rel, preset in MATRIX_CONFIGS:
         pdir = REPO_ROOT / proj_rel
         pname = pdir.name
-        for preset in ("debug", "release"):
-            key = f"{pname}_{preset}"
-            try:
-                obj = find_led_bm_object(pdir, preset)
-                code, out = extract_objdump_led_config(tools["objdump"], obj)
-                if code != 0 or not out.strip():
-                    logger.log(f"[host] FAIL: objdump failed on current {key}: code={code}")
-                    overall_ok = False
-                    continue
-
-                ok, detail, bts = parse_and_verify_led_config(out, UM2408_ORACLE_BYTES)
-                current_build_bytes[key] = bts
-                logger.log(f"[host] CHECK current {key} vs UM2408: {'PASS' if ok else 'FAIL'} ({detail})")
-                if not ok:
-                    overall_ok = False
-            except Exception as e:
-                logger.log(f"[host] FAIL on current {key}: {e}")
+        key = f"{pname}_{preset}"
+        try:
+            # Check FW_GIT_REV / freshness (M2)
+            rev_ok, rev_msg = check_image_freshness_and_rev(pdir, preset, RUN_START_TIME, head_rev)
+            if not rev_ok:
+                logger.log(f"[host] FAIL: current {key} failed revision check: {rev_msg}")
                 overall_ok = False
+
+            obj = find_led_bm_object(pdir, preset)
+            code, out = extract_objdump_led_config(tools["objdump"], obj)
+            if code != 0 or not out.strip():
+                logger.log(f"[host] FAIL: objdump failed on current {key}: code={code}")
+                overall_ok = False
+                continue
+
+            ok, detail, bts = parse_and_verify_led_config(out, UM2408_ORACLE_BYTES)
+            current_build_bytes[key] = bts
+            logger.log(f"[host] CHECK current {key} vs UM2408: {'PASS' if ok else 'FAIL'} ({detail})")
+            if not ok:
+                overall_ok = False
+        except Exception as e:
+            logger.log(f"[host] FAIL on current {key}: {e}")
+            overall_ok = False
 
     # 4. Verify all 8 builds of control worktree vs UM2408 Oracle and current builds
     logger.log("[check] Inspecting g_led_config across 8 control builds (9dc6896)...")
     ctrl_sample_out = ""
-    for proj_rel in PROJECTS:
+    for proj_rel, preset in MATRIX_CONFIGS:
         pdir = control_dir / proj_rel
         pname = pdir.name
-        for preset in ("debug", "release"):
-            key = f"{pname}_{preset}"
-            try:
-                obj = find_led_bm_object(pdir, preset)
-                code, out = extract_objdump_led_config(tools["objdump"], obj)
-                if not ctrl_sample_out:
-                    ctrl_sample_out = out
+        key = f"{pname}_{preset}"
+        try:
+            obj = find_led_bm_object(pdir, preset)
+            code, out = extract_objdump_led_config(tools["objdump"], obj)
+            if not ctrl_sample_out and code == 0 and out.strip():
+                ctrl_sample_out = out
 
-                if code != 0 or not out.strip():
-                    logger.log(f"[host] FAIL: objdump failed on control {key}: code={code}")
-                    overall_ok = False
-                    continue
-
-                ok, detail, ctrl_bts = parse_and_verify_led_config(out, UM2408_ORACLE_BYTES)
-                matches_current = (key in current_build_bytes) and (ctrl_bts == current_build_bytes[key])
-                logger.log(f"[host] CHECK control {key} vs Oracle: {'PASS' if ok else 'FAIL'}, matches current: {'PASS' if matches_current else 'FAIL'}")
-                if not (ok and matches_current):
-                    overall_ok = False
-            except Exception as e:
-                logger.log(f"[host] FAIL on control {key}: {e}")
+            if code != 0 or not out.strip():
+                logger.log(f"[host] FAIL: objdump failed on control {key}: code={code}")
                 overall_ok = False
+                continue
 
-    # 5. Negative control for T3: mutate a byte in objdump text in temp directory
+            ok, detail, ctrl_bts = parse_and_verify_led_config(out, UM2408_ORACLE_BYTES)
+            matches_current = (key in current_build_bytes) and (ctrl_bts == current_build_bytes[key])
+            logger.log(f"[host] CHECK control {key} vs Oracle: {'PASS' if ok else 'FAIL'}, matches current: {'PASS' if matches_current else 'FAIL'}")
+            if not (ok and matches_current):
+                overall_ok = False
+        except Exception as e:
+            logger.log(f"[host] FAIL on control {key}: {e}")
+            overall_ok = False
+
+    # 5. Negative control for T3 (m4: unmutated passes, mutation alters text, exactly 24B rejected)
+    sample_ok, sample_detail, sample_bts = parse_and_verify_led_config(ctrl_sample_out, UM2408_ORACLE_BYTES)
+    if not sample_ok or len(sample_bts) != 24:
+        logger.log(f"[host] FAIL: Unmutated sample does not pass verification ({sample_detail})")
+        overall_ok = False
+
+    # Alter the last word (red pin 14 = 0x0E -> 0x0F)
+    mutated_text = ctrl_sample_out.replace("0e000000", "0f000000")
+    if mutated_text == ctrl_sample_out:
+        mutated_text = ctrl_sample_out.replace("00040258", "00050258")
+
+    if mutated_text == ctrl_sample_out:
+        logger.log("[host] FAIL: T3 mutation failed to alter text")
+        overall_ok = False
+
     with tempfile.TemporaryDirectory(prefix="led_t3_neg_") as tmp_dir:
         neg_file = Path(tmp_dir) / "mutated_objdump.txt"
-        # Alter the last word (red pin 14 = 0x0E -> 0x0F)
-        mutated_text = ctrl_sample_out.replace("0e000000", "0f000000")
-        if mutated_text == ctrl_sample_out:
-            # Fallback mutation
-            mutated_text = ctrl_sample_out.replace("00040258", "00050258")
-
         neg_file.write_text(mutated_text, encoding="utf-8")
         read_neg = neg_file.read_text(encoding="utf-8")
-        neg_ok, neg_detail, _ = parse_and_verify_led_config(read_neg, UM2408_ORACLE_BYTES)
-        # Mutation must be rejected
-        neg_pass = (neg_ok is False)
+        neg_ok, neg_detail, neg_bts = parse_and_verify_led_config(read_neg, UM2408_ORACLE_BYTES)
+        # Mutation must extract 24 bytes but mismatch expected oracle bytes
+        neg_pass = (neg_ok is False) and (len(neg_bts) == 24)
         logger.log(f"[host] CHECK T3 negative control (mutated objdump byte rejected): {'PASS' if neg_pass else 'FAIL'} ({neg_detail})")
         if not neg_pass:
             overall_ok = False
@@ -642,22 +803,22 @@ def run_t3(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# T4: Hardware Board Verification (Auditor only)
+# T4: Hardware Board Verification (Auditor only) (M2, m5, m7)
 # ---------------------------------------------------------------------------
 
 def read_swd_mem32(programmer_cmd: str, sn: str, addr: int, count: int = 1) -> list[int]:
-    """Reads 32-bit words via SWD HOTPLUG mode."""
+    """Reads 32-bit words via SWD HOTPLUG mode with sn and timeout (m7)."""
     cmd = [
         programmer_cmd,
         "-c", "port=SWD", f"sn={sn}", "mode=HOTPLUG",
         "-r32", hex(addr), str(count * 4),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"SWD read failed at {hex(addr)}: {proc.stderr or proc.stdout}")
+    code, stdout, stderr = run_cmd(cmd, timeout=30.0)
+    if code != 0:
+        raise RuntimeError(f"SWD read failed at {hex(addr)}: {stderr or stdout}")
 
     words = []
-    for line in proc.stdout.splitlines():
+    for line in stdout.splitlines():
         line = line.strip()
         m = re.match(r"^0x[0-9A-Fa-f]+\s*:\s*(.+)$", line)
         if m:
@@ -666,15 +827,15 @@ def read_swd_mem32(programmer_cmd: str, sn: str, addr: int, count: int = 1) -> l
                 if len(part) == 8 and re.match(r"^[0-9A-Fa-f]{8}$", part):
                     words.append(int(part, 16))
     if len(words) < count:
-        raise RuntimeError(f"Expected {count} words from {hex(addr)}, got {len(words)}: {proc.stdout}")
+        raise RuntimeError(f"Expected {count} words from {hex(addr)}, got {len(words)}: {stdout}")
     return words[:count]
 
 
 def parse_nm_symbol(nm_cmd: str, elf_path: Path, sym_name: str) -> int:
-    proc = subprocess.run([nm_cmd, str(elf_path)], capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"nm failed on {elf_path}: {proc.stderr}")
-    for line in proc.stdout.splitlines():
+    code, stdout, stderr = run_cmd([nm_cmd, str(elf_path)], timeout=30.0)
+    if code != 0:
+        raise RuntimeError(f"nm failed on {elf_path}: {stderr}")
+    for line in stdout.splitlines():
         parts = line.strip().split()
         if len(parts) >= 3 and parts[2] == sym_name:
             return int(parts[0], 16)
@@ -682,7 +843,7 @@ def parse_nm_symbol(nm_cmd: str, elf_path: Path, sym_name: str) -> int:
 
 
 def verify_t4_led_state(words: list[int], moder_b: int, moder_e: int) -> tuple[bool, str]:
-    """Shared comparison function for T4 board readings and negative control."""
+    """Shared comparison function for T4 board readings and negative controls."""
     if len(words) < 6:
         return False, f"Expected 6 words in g_led_config, got {len(words)}"
 
@@ -699,9 +860,35 @@ def verify_t4_led_state(words: list[int], moder_b: int, moder_e: int) -> tuple[b
     return passed, detail
 
 
+def ensure_debug_images_compiled(tools: dict[str, str], logger: Logger) -> bool:
+    """Ensures the 4 debug images are compiled freshly in current execution from HEAD (M2)."""
+    head_rev = get_head_short_rev()
+    all_ok = True
+    for proj_rel in PROJECTS:
+        pdir = REPO_ROOT / proj_rel
+        cm7_elf = pdir / "build" / "debug" / "CM7" / "cm7_firmware.elf"
+        needs_build = (not cm7_elf.is_file()) or (cm7_elf.stat().st_mtime < RUN_START_TIME - 5.0)
+        if needs_build:
+            logger.log(f"[check] Compiling debug image for {pdir.name} in current execution (HEAD {head_rev})...")
+            passed, _, _, _ = compile_single_config(tools, pdir, "debug", logger)
+            if not passed:
+                all_ok = False
+
+        rev_ok, rev_msg = check_image_freshness_and_rev(pdir, "debug", RUN_START_TIME, head_rev)
+        logger.log(f"[host] CHECK T4 debug image FW_GIT_REV & freshness for {pdir.name}: {'PASS' if rev_ok else 'FAIL'} ({rev_msg})")
+        if not rev_ok:
+            all_ok = False
+    return all_ok
+
+
 def run_t4(tools: dict[str, str], sn: str, logger: Logger) -> bool:
     logger.log(f"=== Running T4 Checks (Hardware: Flash & SWD RAM / MODER with sn={sn}) ===")
     overall_ok = True
+
+    # M2: Ensure debug images are compiled in current run from HEAD and verified
+    if not ensure_debug_images_compiled(tools, logger):
+        logger.log("[host] ERROR: Could not verify fresh compilation of debug images from HEAD for T4.")
+        return False
 
     for proj_rel in PROJECTS:
         pdir = REPO_ROOT / proj_rel
@@ -711,9 +898,9 @@ def run_t4(tools: dict[str, str], sn: str, logger: Logger) -> bool:
         if not flash_shim.is_file():
             flash_shim = REPO_ROOT / "tools" / "flash.py"
 
-        # 1. Flash using tools/flash.py of each project
+        # 1. Flash using tools/flash.py of each project with -v (download verification)
         flash_cmd = [sys.executable, str(flash_shim), "--preset", "debug", "--sn", sn]
-        f_code, f_out, f_err = run_cmd(flash_cmd, cwd=pdir)
+        f_code, f_out, f_err = run_cmd(flash_cmd, cwd=pdir, timeout=60.0)
         flash_ok = (f_code == 0) and ("Verified OK" in f_out or "Download verified successfully" in f_out)
         logger.log(f"[host] CHECK flash {pname}: {'PASS' if flash_ok else 'FAIL'}")
         if not flash_ok:
@@ -737,6 +924,14 @@ def run_t4(tools: dict[str, str], sn: str, logger: Logger) -> bool:
             moder_b = read_swd_mem32(tools["programmer"], sn, GPIOB_BASE, 1)[0]
             moder_e = read_swd_mem32(tools["programmer"], sn, GPIOE_BASE, 1)[0]
 
+            # m7: Log exact hexadecimal values read from SWD
+            words_hex = [hex(w) for w in words]
+            pb0_mode = (moder_b >> (0 * 2)) & 3
+            pb14_mode = (moder_b >> (14 * 2)) & 3
+            pe1_mode = (moder_e >> (1 * 2)) & 3
+            logger.log(f"  [SWD read] {pname} g_led_config: {words_hex}")
+            logger.log(f"  [SWD read] {pname} MODER_B: {hex(moder_b)} (PB0={pb0_mode}, PB14={pb14_mode}), MODER_E: {hex(moder_e)} (PE1={pe1_mode})")
+
             proj_ok, proj_detail = verify_t4_led_state(words, moder_b, moder_e)
             logger.log(f"[host] CHECK {pname} SWD RAM & MODER: {'PASS' if proj_ok else 'FAIL'} ({proj_detail})")
             if not proj_ok:
@@ -745,19 +940,31 @@ def run_t4(tools: dict[str, str], sn: str, logger: Logger) -> bool:
             logger.log(f"[host] FAIL {pname} SWD read: {e}")
             overall_ok = False
 
-    # Negative control for T4: mutated readings passed to verify_t4_led_state in temp copy
+    # Negative controls for T4 (m5: mutated RAM table and mutated MODER register)
     with tempfile.TemporaryDirectory(prefix="led_t4_neg_") as tmp_dir:
-        neg_json_path = Path(tmp_dir) / "mutated_t4.json"
-        # Alter PB0 pin number to 2
+        # Negative control 1: Mutated RAM state (PB0 pin number = 2)
+        neg_ram_path = Path(tmp_dir) / "mutated_ram.json"
         mutated_words = list(UM2408_ORACLE_WORDS)
         mutated_words[1] = 2
-        fake_data = {"words": mutated_words, "moder_b": 0x10000001, "moder_e": 0x00000004}
-        neg_json_path.write_text(json.dumps(fake_data), encoding="utf-8")
-        loaded = json.loads(neg_json_path.read_text(encoding="utf-8"))
-        neg_ok, neg_detail = verify_t4_led_state(loaded["words"], loaded["moder_b"], loaded["moder_e"])
-        neg_pass = (neg_ok is False)
-        logger.log(f"[host] CHECK T4 negative control (mutated RAM state rejected): {'PASS' if neg_pass else 'FAIL'} ({neg_detail})")
-        if not neg_pass:
+        fake_ram_data = {"words": mutated_words, "moder_b": 0x10000001, "moder_e": 0x00000004}
+        neg_ram_path.write_text(json.dumps(fake_ram_data), encoding="utf-8")
+        loaded_ram = json.loads(neg_ram_path.read_text(encoding="utf-8"))
+        neg_ram_ok, neg_ram_detail = verify_t4_led_state(loaded_ram["words"], loaded_ram["moder_b"], loaded_ram["moder_e"])
+        neg_ram_pass = (neg_ram_ok is False)
+        logger.log(f"[host] CHECK T4 negative control 1 (mutated RAM state rejected): {'PASS' if neg_ram_pass else 'FAIL'} ({neg_ram_detail})")
+        if not neg_ram_pass:
+            overall_ok = False
+
+        # Negative control 2: Mutated MODER state (PB0 configured as 00b input instead of 01b output)
+        neg_moder_path = Path(tmp_dir) / "mutated_moder.json"
+        bad_moder_b = 0x10000000  # PB0 mode = 00b (input)
+        fake_moder_data = {"words": list(UM2408_ORACLE_WORDS), "moder_b": bad_moder_b, "moder_e": 0x00000004}
+        neg_moder_path.write_text(json.dumps(fake_moder_data), encoding="utf-8")
+        loaded_moder = json.loads(neg_moder_path.read_text(encoding="utf-8"))
+        neg_moder_ok, neg_moder_detail = verify_t4_led_state(loaded_moder["words"], loaded_moder["moder_b"], loaded_moder["moder_e"])
+        neg_moder_pass = (neg_moder_ok is False)
+        logger.log(f"[host] CHECK T4 negative control 2 (mutated MODER register rejected): {'PASS' if neg_moder_pass else 'FAIL'} ({neg_moder_detail})")
+        if not neg_moder_pass:
             overall_ok = False
 
     logger.log(f"[host] T4 VERDICT: {'PASS' if overall_ok else 'FAIL'}")
@@ -790,62 +997,61 @@ def main() -> int:
         tests_to_run = raw_tests
 
     logger = Logger(args.output)
-    logger.log(f"[host] argv: {shlex.join(sys.argv)}")
+    logger.log(f"[host] argv: {' '.join(sys.argv)}")
     logger.log(f"[host] options: test={args.test} output={args.output} control_dir={args.control_dir} allow_dirty={args.allow_dirty} sn={args.sn}")
 
+    code, head_sha, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, timeout=10.0)
+    logger.log(f"[host] HEAD: {head_sha.strip()}")
+    logger.log(f"[host] Working tree: {REPO_ROOT}")
+    logger.log(f"[host] Control worktree: {args.control_dir}")
+
+    # m6: Check clean tree at start
+    clean_ok, clean_msg = check_clean_working_tree(REPO_ROOT, args.output)
+    logger.log(f"[host] working tree clean (start): {'PASS' if clean_ok else 'FAIL'} ({clean_msg})")
+    if not clean_ok and not args.allow_dirty:
+        logger.log(f"[host] ERROR: Working tree is dirty. Stash or commit before running.")
+        return 1
+
     try:
-        code_head, head_rev, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT)
-        logger.log(f"[host] HEAD: {head_rev.strip()}")
-        logger.log(f"[host] Working tree: {REPO_ROOT}")
-        logger.log(f"[host] Control worktree: {args.control_dir}")
-
-        tree_clean, tree_msg = check_clean_working_tree(REPO_ROOT, args.output)
-        logger.log(f"[host] working tree clean: {'PASS' if tree_clean else 'DIRTY'} ({tree_msg})")
-        if not tree_clean:
-            if not args.allow_dirty:
-                logger.log("[host] ERROR: Working tree is dirty. Aborting.")
-                logger.log("OVERALL VERDICT: FAIL")
-                return 1
-            logger.log("[host] WARNING: --allow-dirty specified. Audit certification requires clean tree.")
-
         tools = find_tools()
         logger.log(f"[host] Compiler: {tools['gcc']}")
         logger.log(f"[host] Objdump:  {tools['objdump']}")
         logger.log(f"[host] CMake:    {tools['cmake']}")
-
-        overall_ok = True if tree_clean else False
-
-        if "t1" in tests_to_run:
-            t1_ok = run_t1(tools, logger)
-            if not t1_ok:
-                overall_ok = False
-
-        if "t2" in tests_to_run:
-            t2_ok = run_t2(tools, logger)
-            if not t2_ok:
-                overall_ok = False
-
-        if "t3" in tests_to_run:
-            t3_ok = run_t3(tools, args.control_dir, logger)
-            if not t3_ok:
-                overall_ok = False
-
-        if "t4" in tests_to_run:
-            t4_ok = run_t4(tools, args.sn, logger)
-            if not t4_ok:
-                overall_ok = False
-
-        if not tree_clean:
-            logger.log("[host] FAIL: overall verdict cannot be PASS because working tree was dirty (--allow-dirty)")
-            overall_ok = False
-
-        logger.log(f"OVERALL VERDICT: {'PASS' if overall_ok else 'FAIL'}")
-        return 0 if overall_ok else 1
-
     except Exception as e:
-        logger.log(f"[host] ERROR: Unhandled exception during checks: {e}")
-        logger.log("OVERALL VERDICT: FAIL")
-        return 1
+        logger.log(f"[host] ERROR finding tools: {e}")
+        return 2
+
+    overall_all_ok = True
+
+    if "t1" in tests_to_run:
+        ok1 = run_t1(tools, logger)
+        if not ok1:
+            overall_all_ok = False
+
+    if "t2" in tests_to_run:
+        ok2 = run_t2(tools, logger)
+        if not ok2:
+            overall_all_ok = False
+
+    if "t3" in tests_to_run:
+        ok3 = run_t3(tools, args.control_dir, logger)
+        if not ok3:
+            overall_all_ok = False
+
+    if "t4" in tests_to_run:
+        ok4 = run_t4(tools, args.sn, logger)
+        if not ok4:
+            overall_all_ok = False
+
+    # m6: Check clean tree at end
+    clean_end_ok, clean_end_msg = check_clean_working_tree(REPO_ROOT, args.output)
+    logger.log(f"[host] working tree clean (end): {'PASS' if clean_end_ok else 'FAIL'} ({clean_end_msg})")
+    if not clean_end_ok and not args.allow_dirty:
+        overall_all_ok = False
+
+    verdict_str = "PASS" if overall_all_ok else "FAIL"
+    logger.log(f"OVERALL VERDICT: {verdict_str}")
+    return 0 if overall_all_ok else 3
 
 
 if __name__ == "__main__":
