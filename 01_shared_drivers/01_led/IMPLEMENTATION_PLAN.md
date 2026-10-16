@@ -14,7 +14,9 @@ Una fase de implementación (F1) y un cierre. Base y control: `main` en `9dc6896
 
 **El desarrollador es Antigravity.** No tiene acceso a la placa: la prueba en la placa (T4) la ejecuta el auditor con su herramienta.
 
-**Decisiones del plan** (pendientes del responsable; ver [Decisiones abiertas](#decisiones-abiertas)):
+**Decisiones del responsable (2026-10-16): aprobadas las tres, con la opción A en 1 y 2.**
+
+**Decisiones del plan** (ver [Decisiones abiertas](#decisiones-abiertas)):
 1. Alcance: L1, L2 y la comprobación de rango de `_BIT` (L5 en `board_def.h`). L3, L4 y la comprobación de `pin_num` en `LED_Init_Config()` quedan fuera.
 2. Prueba en la placa: lectura por SWD, sin AD2.
 3. Documentos de proceso: se borran al cierre.

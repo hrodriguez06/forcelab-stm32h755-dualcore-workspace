@@ -57,7 +57,7 @@ Implementas y pruebas sin placa. No auditas:
   - cada control negativo pasa por la misma función que la comprobación real, con una entrada mutada temporal;
   - un error de herramienta, un archivo que falta o una salida vacía es FAIL, nunca PASS;
   - **T4:** flashea con el `tools/flash.py` de cada proyecto y `--sn 0016000C4142501220353451`, espera el arranque y lee por SWD solo con `mode=HOTPLUG` y `-r32`. Nunca escribe registros.
-- **Decisiones:** las que apruebe el responsable en el plan. Por defecto, 1A, 2A y 3.
+- **Decisiones:** el responsable aprobó las tres el 2026-10-16: 1A, 2A y 3. Aplícalas.
 
 ---
 
