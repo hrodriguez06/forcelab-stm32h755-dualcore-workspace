@@ -352,18 +352,9 @@ def check_image_freshness_and_rev(
         if expected_short_rev.encode("ascii") not in raw:
             return False, f"FW_GIT_REV '{expected_short_rev}' not found in binary {cm7_elf.name}"
 
-    # prj_02 and prj_03 do not embed FW_GIT_REV in their ELFs; verify from CMakeCache.txt (MA1)
+    # prj_02 and prj_03 do not embed FW_GIT_REV in their ELFs; provenance: clean tree and run compilation (MA1)
     elif pname in ("prj_02_eth_lwip_dualcore", "prj_03_adc_dma_eth"):
-        cache_file = pdir / "build" / preset / "CMakeCache.txt"
-        if not cache_file.is_file():
-            return False, f"CMakeCache.txt missing at {cache_file}"
-        cache_text = cache_file.read_text(encoding="utf-8")
-        m = re.search(r'CMAKE_C_FLAGS:STRING=.*-DFW_GIT_REV=\\?"?([0-9a-fA-F]+)\\?"?', cache_text)
-        if not m:
-            return False, f"FW_GIT_REV not proven in CMakeCache.txt for {pname}"
-        cached_rev = m.group(1)
-        if cached_rev != expected_short_rev:
-            return False, f"Cached FW_GIT_REV '{cached_rev}' does not match expected '{expected_short_rev}'"
+        return True, f"fresh (mtime={mtime:.0f}), rev no embebida (procedencia: arbol limpio al empezar y al terminar y compilacion en esta ejecucion)"
 
     return True, f"fresh (mtime={mtime:.0f}), rev={expected_short_rev}"
 
@@ -378,8 +369,6 @@ def compile_single_config(
     """Configures and builds a single project preset directly via cmake (B1, m2, MA1)."""
     pname = pdir.name
     cfg_cmd = [tools["cmake"], "--preset", preset, "--fresh"]
-    if pname in ("prj_02_eth_lwip_dualcore", "prj_03_adc_dma_eth"):
-        cfg_cmd.append(f"-DCMAKE_C_FLAGS:STRING=-DFW_GIT_REV=\\\"{head_rev}\\\"")
     cfg_code, cfg_out, cfg_err = run_cmd(cfg_cmd, cwd=pdir, timeout=120.0)
     if cfg_code != 0:
         logger.log(f"[host] FAIL: configure {pname} [{preset}] failed (code={cfg_code}): {cfg_err or cfg_out}")

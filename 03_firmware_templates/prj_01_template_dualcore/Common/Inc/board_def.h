@@ -48,9 +48,9 @@ extern "C" {
 
 /* ---- User LEDs (status reporting for the bring-up) --------------------- */
 /* Bit NUMBERS, not GPIO_PIN_x masks: 01_shared_drivers/01_led/led_bm.c is a
- * _bm driver and shifts these directly into MODER, BSRR and ODR. It reads
- * BOARD_LED_<x>_BIT; a mask here would be silently ignored in favour of the
- * driver's own Nucleo defaults, and moving an LED would change nothing. */
+ * _bm driver and shifts these directly into MODER, BSRR and ODR. It requires
+ * BOARD_LED_<x>_BIT (0..15); a GPIO_PIN_x mask or missing macro causes a
+ * compile-time #error. */
 #define BOARD_LED_GREEN_PORT                  GPIOB   /* LD1 - PB0  */
 #define BOARD_LED_GREEN_BIT                      0U
 #define BOARD_LED_YELLOW_PORT                 GPIOE   /* LD2 - PE1  */
