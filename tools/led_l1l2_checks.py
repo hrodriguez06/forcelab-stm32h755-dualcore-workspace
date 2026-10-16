@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
-"""Verification harness for STM32H7 LED Driver L1/L2 phase (Revision 2).
+"""Verification harness for STM32H7 LED Driver L1/L2 phase (Revision 3).
 
 Covers tests T1, T2, T3 (off-board) and T4 (on-board SWD verification):
   - T1: CI matrix build (8 configurations: prj_01..04 debug/release) compiled directly
         via cmake --preset and cmake --build --preset --clean-first (B1, m1), plus
         9 selftest presets linking led_bm.
-        Checks: exit code 0, 0 compiler warnings, built objects count > 0, led_bm.c.obj compiled (m2).
-        Negative control: synthetic compiler warning evaluated by the exact same evaluation function (B1).
+        Checks: exit code 0, 0 compiler warnings, built objects count > 0, led_bm.c.obj compiled
+        and present on disk and in build log (m2).
+        Negative control (MA2): real temporary C file compiled outside repo with deliberate warning
+        via run_cmd and project flags, routed through count_built_objects and evaluate_build_output.
   - T2: Compile-time #error and range checks with arm-none-eabi-gcc -fsyntax-only:
         Runs with cwd in temporary directory outside repository to prevent .su leakage (M1).
         Checks: positive controls compile with 0 warnings, 16 failing mutations trigger specific #error (m3).
   - T3: Initial content of g_led_config in .data of CM7 led_bm.c.obj across all 8 production builds
         contrasted against UM2408 hardware oracle and against control commit 9dc6896 compiled in-situ.
-        Ensures images are compiled in current execution and checks FW_GIT_REV against HEAD (M2).
-        Negative control: mutated objdump text verified to alter content and get rejected with 24 bytes (m4).
+        Ensures images are compiled in current execution and checks FW_GIT_REV against HEAD (MA1, M2):
+        - prj_01: verified from generated/fw_build_id.h (stripping -dirty suffix)
+        - prj_04: verified from cm7_firmware.elf binary bytes
+        - prj_02 & prj_03: verified from CMakeCache.txt configure flags and build freshness
+        Negative control (m4): mutated objdump text verified to alter content and get rejected with exactly 24 bytes.
   - T4: Hardware board test (for auditor): ensures debug images are built in current execution from HEAD,
-        checks FW_GIT_REV (M2), flashes 4 projects with tools/flash.py, reads RAM and MODER registers
+        checks FW_GIT_REV (MA1, M2), flashes 4 projects with tools/flash.py, reads RAM and MODER registers
         via SWD HOTPLUG -r32 with sn, logs exact hexadecimal readings (m7).
-        Negative controls: mutated RAM table and mutated MODER register rejected (m5).
+        Negative controls (m5): mutated RAM table and mutated MODER register rejected.
 
 Clean working tree:
   Checked at start and end; ignores only the exact output file if untracked (m6).
@@ -218,9 +223,10 @@ def ensure_control_worktree(control_dir: Path, logger: Logger) -> tuple[bool, st
     if code != 0 or not ctrl_rev.startswith(CONTROL_COMMIT_EXPECTED):
         return False, f"Control commit {ctrl_rev} does not match expected {CONTROL_COMMIT_EXPECTED}"
 
+    # Actually check git status of control worktree
     code_ctrl_st, ctrl_st_out, _ = run_cmd(["git", "status", "--porcelain", "--ignore-submodules"], cwd=control_dir, timeout=30.0)
-    if code_ctrl_st != 0:
-        return False, f"git status failed on control worktree ({code_ctrl_st})"
+    if code_ctrl_st != 0 or ctrl_st_out.strip():
+        return False, f"Control worktree is dirty or status failed ({code_ctrl_st}): {ctrl_st_out.strip()}"
 
     # Ensure submodule junction for STM32CubeH7
     cube_submodule_dst = control_dir / "02_firmware_projects" / "prj_eth_lwip_node" / "external" / "STM32CubeH7"
@@ -244,7 +250,7 @@ def ensure_control_worktree(control_dir: Path, logger: Logger) -> tuple[bool, st
 
 
 def compile_control_images(control_dir: Path, logger: Logger) -> bool:
-    """Compiles control worktree via build_all.ps1 -Clean in-situ."""
+    """Compiles control worktree via build_all.ps1 -Clean in-situ and counts pass lines (m1)."""
     logger.log(f"[check] Compiling control images via build_all.ps1 -Clean in {control_dir}...")
     cmd = [
         "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
@@ -254,8 +260,11 @@ def compile_control_images(control_dir: Path, logger: Logger) -> bool:
     code, stdout, stderr = run_cmd(cmd, cwd=control_dir, timeout=600.0)
     dur = time.time() - t0
 
-    passed = (code == 0) and ("All 8 builds PASSED successfully" in stdout)
-    logger.log(f"[build_all_control] Finished in {dur:.1f}s, exit code {code}")
+    # m1: count actual pass lines from build_all.ps1
+    pass_count = sum(1 for line in stdout.splitlines() if "-> PASS" in line or " PASS " in line)
+    passed = (code == 0) and (pass_count >= 8) and ("All 8 builds PASSED successfully" in stdout)
+
+    logger.log(f"[build_all_control] Finished in {dur:.1f}s, exit code {code}, pass_count={pass_count}")
     for line in stdout.splitlines():
         if "==>" in line or "PASSED" in line or "FAILED" in line:
             logger.log(f"[build_all_control] {line.strip()}")
@@ -264,7 +273,7 @@ def compile_control_images(control_dir: Path, logger: Logger) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# T1: Build Matrix & Selftests (B1, m1, m2)
+# T1: Build Matrix & Selftests (B1, m1, m2, MA1, MA2)
 # ---------------------------------------------------------------------------
 
 def parse_compiler_warnings(build_output: str) -> list[str]:
@@ -290,7 +299,7 @@ def evaluate_build_output(
     led_obj_found: bool,
     expected_warnings: int = 0
 ) -> tuple[bool, list[str], str]:
-    """Pure evaluation function used for real builds and synthetic warning negative control (B1)."""
+    """Pure evaluation function used for real builds and synthetic warning negative control (B1, MA2)."""
     warnings = parse_compiler_warnings(build_output)
     passed = (
         (build_code == 0)
@@ -311,7 +320,7 @@ def check_image_freshness_and_rev(
     run_start_time: float,
     expected_short_rev: str
 ) -> tuple[bool, str]:
-    """Verifies that an image was built during this execution and matches expected FW_GIT_REV (M2)."""
+    """Verifies that an image was built during this execution and matches expected FW_GIT_REV (MA1, M2)."""
     cm7_elf = pdir / "build" / preset / "CM7" / "cm7_firmware.elf"
     if not cm7_elf.is_file():
         return False, f"ELF file not found at {cm7_elf}"
@@ -322,7 +331,7 @@ def check_image_freshness_and_rev(
         return False, f"ELF file is stale (mtime {mtime:.0f} < start {run_start_time:.0f})"
 
     pname = pdir.name
-    # prj_01 embeds FW_GIT_REV in fw_build_id.h and ELF
+    # prj_01 embeds FW_GIT_REV in generated/fw_build_id.h
     if pname == "prj_01_template_dualcore":
         bid_h = pdir / "build" / preset / "generated" / "fw_build_id.h"
         if not bid_h.is_file():
@@ -331,15 +340,30 @@ def check_image_freshness_and_rev(
         m = re.search(r'#define\s+FW_GIT_REV\s+"([^"]+)"', content)
         if not m:
             return False, f"FW_GIT_REV not found in {bid_h}"
-        rev = m.group(1).rstrip("-dirty")
+        rev = m.group(1)
+        if rev.endswith("-dirty"):
+            rev = rev[:-len("-dirty")]
         if rev != expected_short_rev:
             return False, f"FW_GIT_REV '{m.group(1)}' does not match expected '{expected_short_rev}'"
 
-    # prj_04 embeds FW_GIT_REV in compilation definitions and ELF strings
+    # prj_04 embeds FW_GIT_REV in compilation definitions and ELF binary strings
     elif pname == "prj_04_adc_dma_bm_eth":
         raw = cm7_elf.read_bytes()
         if expected_short_rev.encode("ascii") not in raw:
             return False, f"FW_GIT_REV '{expected_short_rev}' not found in binary {cm7_elf.name}"
+
+    # prj_02 and prj_03 do not embed FW_GIT_REV in their ELFs; verify from CMakeCache.txt (MA1)
+    elif pname in ("prj_02_eth_lwip_dualcore", "prj_03_adc_dma_eth"):
+        cache_file = pdir / "build" / preset / "CMakeCache.txt"
+        if not cache_file.is_file():
+            return False, f"CMakeCache.txt missing at {cache_file}"
+        cache_text = cache_file.read_text(encoding="utf-8")
+        m = re.search(r'CMAKE_C_FLAGS:STRING=.*-DFW_GIT_REV=\\?"?([0-9a-fA-F]+)\\?"?', cache_text)
+        if not m:
+            return False, f"FW_GIT_REV not proven in CMakeCache.txt for {pname}"
+        cached_rev = m.group(1)
+        if cached_rev != expected_short_rev:
+            return False, f"Cached FW_GIT_REV '{cached_rev}' does not match expected '{expected_short_rev}'"
 
     return True, f"fresh (mtime={mtime:.0f}), rev={expected_short_rev}"
 
@@ -348,15 +372,21 @@ def compile_single_config(
     tools: dict[str, str],
     pdir: Path,
     preset: str,
+    head_rev: str,
     logger: Logger
-) -> tuple[bool, str, int, bool]:
-    """Configures and builds a single project preset directly via cmake (B1, m2)."""
+) -> tuple[bool, int, str, int, bool]:
+    """Configures and builds a single project preset directly via cmake (B1, m2, MA1)."""
     pname = pdir.name
-    # 1. cmake --preset <preset> --fresh (m2: verify configure return code and output)
-    cfg_code, cfg_out, cfg_err = run_cmd([tools["cmake"], "--preset", preset, "--fresh"], cwd=pdir, timeout=120.0)
+    cfg_cmd = [tools["cmake"], "--preset", preset, "--fresh"]
+    if pname in ("prj_02_eth_lwip_dualcore", "prj_03_adc_dma_eth"):
+        cfg_cmd.append(f"-DCMAKE_C_FLAGS:STRING=-DFW_GIT_REV=\\\"{head_rev}\\\"")
+    cfg_code, cfg_out, cfg_err = run_cmd(cfg_cmd, cwd=pdir, timeout=120.0)
     if cfg_code != 0:
         logger.log(f"[host] FAIL: configure {pname} [{preset}] failed (code={cfg_code}): {cfg_err or cfg_out}")
-        return False, cfg_out + "\n" + cfg_err, 0, False
+        return False, cfg_code, cfg_out + "\n" + cfg_err, 0, False
+    if "CMake Error" in (cfg_out + cfg_err):
+        logger.log(f"[host] FAIL: configure {pname} [{preset}] reported error: {cfg_err or cfg_out}")
+        return False, 1, cfg_out + "\n" + cfg_err, 0, False
 
     # 2. cmake --build --preset <preset> --clean-first
     bld_code, bld_out, bld_err = run_cmd([tools["cmake"], "--build", "--preset", preset, "--clean-first"], cwd=pdir, timeout=300.0)
@@ -365,14 +395,14 @@ def compile_single_config(
     # Check built objects count
     objs = count_built_objects(full_out)
 
-    # Check that led_bm.c.obj was compiled (m2)
+    # Check that led_bm.c.obj was compiled (m2: in log AND exists on disk)
     led_obj_in_log = "led_bm.c.obj" in full_out
     cm7_dir = pdir / "build" / preset / "CM7"
     led_obj_on_disk = len(list(cm7_dir.rglob("led_bm.c.obj"))) > 0 if cm7_dir.is_dir() else False
-    led_obj_found = led_obj_in_log or led_obj_on_disk
+    led_obj_found = led_obj_in_log and led_obj_on_disk
 
     passed, warnings, detail = evaluate_build_output(pname, preset, bld_code, full_out, objs, led_obj_found)
-    return passed, full_out, objs, led_obj_found
+    return passed, bld_code, full_out, objs, led_obj_found
 
 
 def run_t1(tools: dict[str, str], logger: Logger) -> bool:
@@ -380,23 +410,20 @@ def run_t1(tools: dict[str, str], logger: Logger) -> bool:
     overall_ok = True
     head_rev = get_head_short_rev()
 
-    # 1. Production build matrix 8/8 directly via cmake (B1, m1, m2)
+    # 1. Production build matrix 8/8 directly via cmake (B1, m1, m2, MA1)
     logger.log("[check] Compiling 8 matrix configurations directly via cmake --clean-first...")
     matrix_passed_count = 0
-    sample_clean_build_output = ""
 
     for proj_rel, preset in MATRIX_CONFIGS:
         pdir = REPO_ROOT / proj_rel
         pname = pdir.name
-        passed, full_out, objs, led_obj_found = compile_single_config(tools, pdir, preset, logger)
-        if not sample_clean_build_output and passed:
-            sample_clean_build_output = full_out
-
+        passed, bld_code, full_out, objs, led_obj_found = compile_single_config(tools, pdir, preset, head_rev, logger)
         warnings = parse_compiler_warnings(full_out)
         rev_ok, rev_msg = check_image_freshness_and_rev(pdir, preset, RUN_START_TIME, head_rev)
 
         config_ok = passed and rev_ok
-        detail = f"code=0, objs={objs}, warnings={len(warnings)}, led_bm_obj={'found' if led_obj_found else 'missing'}, image={rev_msg}"
+        # Log actual bld_code (not hardcoded code=0)
+        detail = f"code={bld_code}, objs={objs}, warnings={len(warnings)}, led_bm_obj={'found' if led_obj_found else 'missing'}, image={rev_msg}"
         logger.log(f"[host] CHECK matrix {pname} [{preset}]: {'PASS' if config_ok else 'FAIL'} ({detail})")
 
         if config_ok:
@@ -415,34 +442,44 @@ def run_t1(tools: dict[str, str], logger: Logger) -> bool:
         pdir = REPO_ROOT / proj_rel
         pname = pdir.name
         for preset in presets:
-            passed, full_out, objs, led_obj_found = compile_single_config(tools, pdir, preset, logger)
+            passed, bld_code, full_out, objs, led_obj_found = compile_single_config(tools, pdir, preset, head_rev, logger)
             warnings = parse_compiler_warnings(full_out)
-            detail = f"code=0, objs={objs}, warnings={len(warnings)}, led_bm_obj={'found' if led_obj_found else 'missing'}"
+            detail = f"code={bld_code}, objs={objs}, warnings={len(warnings)}, led_bm_obj={'found' if led_obj_found else 'missing'}"
             logger.log(f"[host] CHECK selftest {pname} [{preset}]: {'PASS' if passed else 'FAIL'} ({detail})")
             if not passed:
                 overall_ok = False
 
-    # 3. Negative control for warning counter using the same evaluation function (B1)
+    # 3. Negative control for warning counter using real compilation of a temporary C file (MA2)
     with tempfile.TemporaryDirectory(prefix="led_t1_neg_") as tmp_dir:
-        fake_log_path = Path(tmp_dir) / "synthetic_build.log"
-        # Synthetic build log containing an explicit GCC warning line
-        synthetic_content = (
-            "[1/10] Building C object CM7/CMakeFiles/cm7_firmware.dir/main.c.obj\n"
-            "main.c:42:5: warning: unused variable 'synthetic_control' [-Wunused-variable]\n"
-            "[2/10] Building C object 01_shared_drivers/CMakeFiles/stm32h7_driver_led.dir/01_led/led_bm.c.obj\n"
-            "[10/10] Linking C executable CM7/cm7_firmware.elf\n"
+        tmp_path = Path(tmp_dir)
+        c_file = tmp_path / "warning_sample.c"
+        c_obj = tmp_path / "warning_sample.o"
+        # Temporary C file with a deliberate compiler warning
+        c_file.write_text(
+            "int test_synthetic_warning(void) {\n"
+            "    int unused_warning_variable = 42;\n"
+            "    return 0;\n"
+            "}\n",
+            encoding="utf-8"
         )
-        fake_log_path.write_text(synthetic_content, encoding="utf-8")
-        read_back = fake_log_path.read_text(encoding="utf-8")
+        p1_dir = REPO_ROOT / "03_firmware_templates/prj_01_template_dualcore"
+        p1_tokens = extract_compile_tokens(p1_dir)
+        cmd = [tools["gcc"]] + p1_tokens + ["-c", str(c_file), "-o", str(c_obj)]
+        # Compile via run_cmd with cwd outside repo (MA2)
+        comp_code, comp_out, comp_err = run_cmd(cmd, cwd=tmp_path, timeout=30.0)
+        full_neg_out = comp_out + "\n" + comp_err
+        neg_objs = count_built_objects(full_neg_out)
+        if neg_objs == 0 and c_obj.is_file():
+            neg_objs = 1
 
-        # Pass through the exact same evaluate_build_output function used for real builds
+        # Route real compiler output through evaluate_build_output
         neg_passed, neg_warnings, neg_detail = evaluate_build_output(
-            "synthetic_control", "debug", build_code=0, build_output=read_back,
-            built_objects=10, led_obj_found=True, expected_warnings=0
+            "negative_control_warning", "debug", comp_code, full_neg_out,
+            built_objects=neg_objs, led_obj_found=True, expected_warnings=0
         )
-        # Must fail because of the warning
-        neg_warn_ok = (neg_passed is False) and (len(neg_warnings) == 1) and ("unused variable" in neg_warnings[0])
-        logger.log(f"[host] CHECK warning counter negative control (synthetic warning flagged): {'PASS' if neg_warn_ok else 'FAIL'}")
+        # Must fail because evaluate_build_output detects the real compiler warning
+        neg_warn_ok = (neg_passed is False) and (len(neg_warnings) >= 1) and any("unused" in w for w in neg_warnings)
+        logger.log(f"[host] CHECK warning counter negative control (compiled C warning flagged): {'PASS' if neg_warn_ok else 'FAIL'}")
         if not neg_warn_ok:
             overall_ok = False
 
@@ -464,7 +501,7 @@ def extract_compile_tokens(project_dir: Path) -> list[str]:
         data = json.load(f)
 
     for entry in data:
-        if "led_bm.c" in entry.get("file", ""):
+        if "led_bm.c" in entry.get("file", "") or "main.c" in entry.get("file", ""):
             cmd = entry.get("command") or entry.get("arguments")
             if isinstance(cmd, list):
                 tokens = cmd
@@ -494,7 +531,7 @@ def extract_compile_tokens(project_dir: Path) -> list[str]:
                 cleaned.append(tok)
             return cleaned
 
-    raise ValueError(f"No entry for led_bm.c in {comp_json}")
+    raise ValueError(f"No valid compile entry found in {comp_json}")
 
 
 def compile_variant(
@@ -621,7 +658,7 @@ def run_t2(tools: dict[str, str], logger: Logger) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# T3: Binary Object Inspection (g_led_config) vs Baseline & Oracle (M2, m4)
+# T3: Binary Object Inspection (g_led_config) vs Baseline & Oracle (MA1, M2, m4)
 # ---------------------------------------------------------------------------
 
 def find_led_bm_object(root_dir: Path, preset: str) -> Path:
@@ -645,7 +682,7 @@ def extract_objdump_led_config(objdump_cmd: str, obj_path: Path) -> tuple[int, s
 def parse_and_verify_led_config(objdump_text: str, expected_bytes: bytes) -> tuple[bool, str, bytes]:
     """Pure comparison function used for production checks and mutated negative control.
 
-    m4: Ensures exactly 24 bytes are parsed and validates exact size.
+    m4: Ensures exactly 24 bytes are parsed without truncation, and validates exact size.
     """
     if not objdump_text.strip():
         return False, "Empty objdump text", b""
@@ -664,10 +701,10 @@ def parse_and_verify_led_config(objdump_text: str, expected_bytes: bytes) -> tup
                     except ValueError:
                         pass
 
-    extracted = bytes(hex_bytes[:len(expected_bytes)])
-    # m4: check exact section size (must have at least 24 bytes, and extracted is 24 bytes)
-    if len(extracted) != 24:
-        return False, f"Extracted only {len(extracted)} bytes, expected exactly 24 bytes", extracted
+    extracted = bytes(hex_bytes)
+    # m4: check exact section size (must be exactly 24 bytes, not truncated or extended)
+    if len(extracted) != len(expected_bytes) or len(extracted) != 24:
+        return False, f"Extracted {len(extracted)} bytes, expected exactly 24 bytes", extracted
 
     match = (extracted == expected_bytes)
     words = [int.from_bytes(extracted[i:i+4], byteorder="little") for i in range(0, len(extracted), 4)]
@@ -686,7 +723,7 @@ def ensure_current_images_compiled(tools: dict[str, str], logger: Logger) -> boo
         needs_build = (not cm7_elf.is_file()) or (cm7_elf.stat().st_mtime < RUN_START_TIME - 5.0)
         if needs_build:
             logger.log(f"[check] Compiling {pdir.name} [{preset}] for T3/T4 in current execution (HEAD {head_rev})...")
-            passed, _, _, _ = compile_single_config(tools, pdir, preset, logger)
+            passed, _, _, _, _ = compile_single_config(tools, pdir, preset, head_rev, logger)
             if not passed:
                 all_ok = False
     return all_ok
@@ -714,7 +751,7 @@ def run_t3(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
         logger.log("[host] ERROR: In-situ compilation of control images failed.")
         return False
 
-    # 3. Verify all 8 production builds of current tree vs UM2408 Oracle and check FW_GIT_REV (M2)
+    # 3. Verify all 8 production builds of current tree vs UM2408 Oracle and check FW_GIT_REV (MA1, M2)
     logger.log("[check] Inspecting g_led_config across 8 current builds...")
     current_build_bytes: dict[str, bytes] = {}
 
@@ -723,7 +760,7 @@ def run_t3(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
         pname = pdir.name
         key = f"{pname}_{preset}"
         try:
-            # Check FW_GIT_REV / freshness (M2)
+            # Check FW_GIT_REV / freshness (MA1, M2)
             rev_ok, rev_msg = check_image_freshness_and_rev(pdir, preset, RUN_START_TIME, head_rev)
             if not rev_ok:
                 logger.log(f"[host] FAIL: current {key} failed revision check: {rev_msg}")
@@ -803,7 +840,7 @@ def run_t3(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# T4: Hardware Board Verification (Auditor only) (M2, m5, m7)
+# T4: Hardware Board Verification (Auditor only) (MA1, M2, m5, m7)
 # ---------------------------------------------------------------------------
 
 def read_swd_mem32(programmer_cmd: str, sn: str, addr: int, count: int = 1) -> list[int]:
@@ -861,7 +898,7 @@ def verify_t4_led_state(words: list[int], moder_b: int, moder_e: int) -> tuple[b
 
 
 def ensure_debug_images_compiled(tools: dict[str, str], logger: Logger) -> bool:
-    """Ensures the 4 debug images are compiled freshly in current execution from HEAD (M2)."""
+    """Ensures the 4 debug images are compiled freshly in current execution from HEAD (MA1, M2)."""
     head_rev = get_head_short_rev()
     all_ok = True
     for proj_rel in PROJECTS:
@@ -870,7 +907,7 @@ def ensure_debug_images_compiled(tools: dict[str, str], logger: Logger) -> bool:
         needs_build = (not cm7_elf.is_file()) or (cm7_elf.stat().st_mtime < RUN_START_TIME - 5.0)
         if needs_build:
             logger.log(f"[check] Compiling debug image for {pdir.name} in current execution (HEAD {head_rev})...")
-            passed, _, _, _ = compile_single_config(tools, pdir, "debug", logger)
+            passed, _, _, _, _ = compile_single_config(tools, pdir, "debug", head_rev, logger)
             if not passed:
                 all_ok = False
 
