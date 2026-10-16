@@ -1,0 +1,90 @@
+=== 03_tim F4 T6b, cold boot of prj_03: auditor's run with no flash, reset or halt since the owner's power-up ===
+Date: 2026-10-15T14:22:15-06:00  HEAD: ddc937e  tree: clean  SN: 0016000C4142501220353451
+  [PASS] tree_clean: git status --porcelain empty
+
+--- 1. RCC_RSR, PWR_CR3, RCC_CR (mode=HOTPLUG, no halt) ---
+  RCC_RSR 0x580244D0 = 0x01FE0000  flags: C1RSTF C2RSTF D1RSTF D2RSTF BORRSTF PINRSTF PORRSTF SFT1RSTF
+  PWR_CR3 0x5802480C = 0x00010044
+  RCC_CR  0x58024400 = 0x0F07C1A5
+  [FAIL] power_on_reset: PORRSTF=1; software/watchdog/low-power flags set: ['SFT1RSTF'] (an SWD or NVIC reset would set SFTxRSTF)
+
+--- 2. Image in flash against build/debug (SP and reset vector of each bank) ---
+  [PASS] identity_CM7: flash 0x08000000: SP=0x20020000 reset=0x080007A5; ELF 02_firmware_projects/prj_03_adc_dma_eth/build/debug/CM7/cm7_firmware.elf: _estack=0x20020000 Reset_Handler|1=0x080007A5
+  [PASS] identity_CM4: flash 0x08100000: SP=0x30040000 reset=0x08100399; ELF 02_firmware_projects/prj_03_adc_dma_eth/build/debug/CM4/cm4_firmware.elf: _estack=0x30040000 Reset_Handler|1=0x08100399
+
+--- 3. T3 (tim_f4_checks.run_t3, do_flash=False) ---
+--- Running T3 (Live SWD Hotplug Inspection of TIM3 for prj_03, control_mode=False) ---
+  [SWD origin] TIM3_CR1: 0x40000400 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x0)
+       Value: 0x1 (expected: 0x1)
+  [SWD origin] TIM3_CR2: 0x40000404 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x4)
+       Value: 0x20 (expected: 0x20)
+  [SWD origin] TIM3_SMCR: 0x40000408 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x8)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_DIER: 0x4000040c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0xc)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_PSC: 0x40000428 (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x28)
+       Value: 0x0 (expected: 0x0)
+  [SWD origin] TIM3_ARR: 0x4000042c (RM0399 §41: D2_APB1PERIPH_BASE 0x40000000 + 0x0400 + 0x2c)
+       Value: 0x18f (expected: 0x18f)
+    case T3_tim3_registers_match_rm0399: PASS All 6 registers matched ({'CR1': 1, 'CR2': 32, 'SMCR': 0, 'DIER': 0, 'PSC': 0, 'ARR': 399})
+    case T3_negative_control_altered_table_fails: PASS Correctly caught mismatch against altered ARR (actual=0x18f)
+  [PASS] T3: TIM3 registers against the RM0399 table
+
+--- 4. T4 on the cold-booted image: 60 s UDP window (tim_f4_checks.measure_udp_window) ---
+    [T4 Telemetry A (rtt 1.6 ms, t=25732.1166)]: {"ch": 351272992, "raw": 1051, "avg": 1075, "min": 894, "max": 1357, "mv": 54, "rate": 500000, "seq": 4037721, "samples": 2067313152, "tc": 2018860, "ht": 2018861, "err": 0, "ovr": 0, "m4_hb": 41346}
+    [T4] Waiting 60.0s measurement window...
+    [T4 Telemetry B (rtt 3.6 ms, t=25792.1197)]: {"ch": 351272992, "raw": 1159, "avg": 1078, "min": 893, "max": 1391, "mv": 54, "rate": 500000, "seq": 4097100, "samples": 2097715200, "tc": 2048550, "ht": 2048550, "err": 0, "ovr": 0, "m4_hb": 41954}
+  [PASS] T4_window: dt=60.003s, dSamples=30402048, dm4_hb=608, rate=506674.4Hz
+  [PASS] T4_counters_zero: err=0/0; ovr=0/0
+  [PASS] T4_oracle: dSamples/dm4_hb = 30402048/608 = 50003.37 in [49750, 50250]
+  [PASS] T4_sanity: Rate=506674.42 Hz in [502500.0, 510000.0], dt=60.003s
+  [PASS] T4_negative_control: dSamples x 0.8 -> 40002.69 rejected by the same oracle
+  m4_hb at A = 41346 (100 ms ticks since CM4 started: the boot is 4135 s old)
+
+--- 5. T5: monitor.py (30 s) and net_check.py at the same time ---
+  --- net_check.py ---
+Board    : 192.168.1.150 (prj_03_adc_dma_eth)
+UDP echo : port 7
+
+  OK    ICMP  4/4 replies
+  OK    UDP     1 B  rtt= 1.69 ms
+  OK    UDP    25 B  rtt= 1.15 ms
+  OK    UDP   512 B  rtt= 1.74 ms
+  OK    UDP  1024 B  rtt= 1.89 ms
+  OK    UDP  1472 B  rtt= 1.80 ms
+  OK    burst  100/100 returned  (0.1 s)
+
+PASS  3/3 checks
+Now confirm the board agrees: rx_nobuf, tx_nobuf and dma_err
+should all still read 0 in  py tools/monitor.py --timeout 15
+
+  --- monitor.py ---
+Connected to COM4 at 115200 8N1. Ctrl-C to stop.
+
+[ipc] m7=8392 m4=41960  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=306 tx=20 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=8396 m4=41980  (CPU2 alive)
+[ipc] m7=8400 m4=42000  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=307 tx=21 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=8404 m4=42020  (CPU2 alive)
+[ipc] m7=8408 m4=42040  (CPU2 alive)
+[ipc] m7=8412 m4=42060  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=416 tx=130 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=8416 m4=42080  (CPU2 alive)
+[ipc] m7=8420 m4=42100  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=416 tx=130 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=8424 m4=42120  (CPU2 alive)
+[ipc] m7=8428 m4=42140  (CPU2 alive)
+[ipc] m7=8432 m4=42160  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=416 tx=130 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=8436 m4=42180  (CPU2 alive)
+[ipc] m7=8440 m4=42200  (CPU2 alive)
+[net] link=100 Mbps full duplex ip=192.168.1.150 rx=416 tx=130 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[ipc] m7=8444 m4=42220  (CPU2 alive)
+[ipc] m7=8448 m4=42240  (CPU2 alive)
+[ipc] m7=8452 m4=42260  (CPU2 alive)
+
+  [PASS] T5_net_check: exit 0
+  [PASS] T5_net_counters: [net] link=100 Mbps full duplex ip=192.168.1.150 rx=416 tx=130 rx_nobuf=0 tx_nobuf=0 dma_err=0
+
+Verdict T6b (prj_03): FAIL (11/12 gates)
