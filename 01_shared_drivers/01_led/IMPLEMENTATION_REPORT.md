@@ -1,7 +1,7 @@
-# Reporte de Implementación: Fase F1 de `01_led` (L1/L2) — Revisión 2
+# Reporte de Implementación: Fase F1 de `01_led` (L1/L2) — Revisión 3
 
 Oct 16, 2026 · Agente Implementador (Antigravity)
-Rama: `driver/led-l1l2` · Base / Control: `9dc6896` · Auditoría previa: `3c2176c` (`736948f`) · Commit de código/herramienta: `411673b`
+Rama: `driver/led-l1l2` · Base / Control: `9dc6896` · Auditoría previa: `1f63515` (`af836ea`) · Commit de código/herramienta: `b9fbaad`
 
 ---
 
@@ -19,56 +19,49 @@ El objetivo de la fase F1 es resolver las limitaciones L1 y L2 del driver compar
 
 ---
 
-## 2. Correcciones de Auditoría Aplicadas (B1, M1, M2, m1–m8)
+## 2. Correcciones de Auditoría Aplicadas (Rondas 1 y 2)
 
-En respuesta a los hallazgos documentados en [`AUDIT.md`](AUDIT.md), se aplicaron y commitearon en [`411673b`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/led_l1l2_checks.py) las siguientes correcciones:
+En respuesta a las auditorías documentadas en [`AUDIT.md`](AUDIT.md), se aplicaron y commitearon en [`b9fbaad`](../../tools/led_l1l2_checks.py) las correcciones requeridas:
 
-1. **B1 y m1, m2 (Bloqueante & Menores):**
-   - Se eliminó la invocación opaca de `build_all.ps1 -Clean` para el recuento de avisos de la matriz en T1.
-   - Las 8 configuraciones de producción se compilan directamente mediante `cmake --preset <p> --fresh` y `cmake --build --preset <p> --clean-first`.
-   - Se valida el código de retorno y la salida de configure (m2), se capturan todas las líneas de aviso reales del compilador, se comprueba que se hayan generado objetos (`objs > 0`) y se valida que `led_bm.c.obj` se haya compilado y esté presente en disco (m2).
-   - El control negativo de avisos pasa por la misma función pura de evaluación [`evaluate_build_output`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/led_l1l2_checks.py#L262-L280) utilizada en las compilaciones reales, verificando que un aviso sintético genera `FAIL`.
-   - Se contabilizan e informan individualmente las 8 compilaciones exitosas (m1).
+1. **MA1 & M2 (Revisión y Frescura en T1, T3 y T4):**
+   - Para `prj_01`, la herramienta verifica la revisión en [`build/<preset>/generated/fw_build_id.h`](../../03_firmware_templates/prj_01_template_dualcore) y la frescura del binario ELF ([`check_image_freshness_and_rev`](../../tools/led_l1l2_checks.py#L317-L369)).
+   - Para `prj_04`, la revisión se comprueba dentro de la tabla de cadenas del binario ELF CM7 y se verifica la frescura del archivo.
+   - Para `prj_02` y `prj_03` (cuyos ELF no embeben `FW_GIT_REV`), la herramienta inyecta la macro en el configure via `-DCMAKE_C_FLAGS:STRING=-DFW_GIT_REV=\"<head_rev>\"`, verifica que la bandera quede registrada de forma determinista en `CMakeCache.txt`, y valida la frescura del ELF CM7 frente a la hora de inicio de la ejecución ([`check_image_freshness_and_rev`](../../tools/led_l1l2_checks.py#L355-L367)).
 
-2. **M1 y m3 (Mayor & Menor):**
-   - En T2, la función [`compile_variant`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/led_l1l2_checks.py#L463-L494) ejecuta GCC con `cwd=board_def_dir` en el directorio temporal fuera del repositorio (`tempfile.TemporaryDirectory`). De este modo, `-fstack-usage` deposita los archivos auxiliares `a-led_bm.su` fuera del árbol de trabajo, garantizando que el árbol permanece limpio sin archivos ignorados residuales.
-   - En mutaciones negativas, se valida que el texto esperado aparezca específicamente en la línea diagnóstica del `#error`.
-   - En los controles positivos, se verifica que la compilación produzca 0 avisos.
+2. **MA2 & B1 (Captura de Avisos y Control Negativo Real):**
+   - Las 8 configuraciones de producción y los 9 presets de selftest se compilan directamente mediante `cmake --preset <p> --fresh` y `cmake --build --preset <p> --clean-first` ([`compile_single_config`](../../tools/led_l1l2_checks.py#L371-L406)).
+   - El control negativo de avisos compila un archivo C temporal (`warning_sample.c`) fuera del repositorio con flags reales del proyecto vía `run_cmd`, contando los objetos generados con [`count_built_objects`](../../tools/led_l1l2_checks.py#L288-L290) y enrutando la salida completa por [`evaluate_build_output`](../../tools/led_l1l2_checks.py#L293-L315) para verificar que el compilador emite un aviso real que es detectado y rechazado ([`run_t1`](../../tools/led_l1l2_checks.py#L452-L485)).
 
-3. **M2 (Mayor):**
-   - En T3 y T4, la herramienta verifica que las imágenes provengan de la ejecución actual y de `HEAD`:
-     - Función [`check_image_freshness_and_rev`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/led_l1l2_checks.py#L283-L317): valida que la marca de tiempo del binario CM7 sea reciente (posterior al inicio de la corrida) y que `FW_GIT_REV` coincida con el SHA corto de `HEAD` (para `prj_01` en `fw_build_id.h` y ELF; para `prj_04` en el binario ELF).
-     - Si se invoca `--test t3` o `--test t4` de forma aislada, la herramienta compila limpiamente las imágenes necesarias antes de proceder.
+3. **M1 & m3 (Aislamiento de T2 y Archivos Auxiliares):**
+   - En T2, [`compile_variant`](../../tools/led_l1l2_checks.py#L537-L569) ejecuta GCC con `cwd=board_def_dir` en un directorio temporal fuera del repositorio (`tempfile.TemporaryDirectory`). Los archivos `.su` generados por `-fstack-usage` se depositan fuera del árbol de trabajo.
+   - En las mutaciones negativas se busca el texto esperado específicamente en la línea diagnóstica del `#error`.
+   - En los controles positivos se comprueba código de retorno 0 y 0 avisos.
 
-4. **m4 (Menor):**
-   - En T3, la función [`parse_and_verify_led_config`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/led_l1l2_checks.py#L607-L635) valida que la sección extraída mida exactamente 24 bytes (no se acepta entrada vacía).
-   - En el control negativo de T3, se comprueba primero que la muestra original pasa, se verifica que la mutación altera el texto, y se comprueba que la entrada mutada es rechazada con una longitud de exactamente 24 bytes.
+4. **m1 & m2 (Comprobación Rigurosa de Compilaciones):**
+   - En [`compile_control_images`](../../tools/led_l1l2_checks.py#L252-L273), se verifica que el código de retorno sea 0, que el recuento de líneas `-> PASS` o `PASS` sea al menos 8 (`pass_count >= 8`), y que figure el mensaje de éxito global.
+   - En [`compile_single_config`](../../tools/led_l1l2_checks.py#L371-L406), se comprueba el código de retorno y la ausencia de errores en configure, se contabilizan los objetos generados (`objs > 0`), y se exige que `led_bm.c.obj` esté presente tanto en la salida de compilación como en el disco (`led_obj_in_log and led_obj_on_disk`).
+   - Se registra el código real de compilación `code={bld_code}` en lugar de un valor fijo ([`run_t1`](../../tools/led_l1l2_checks.py#L425-L427)).
 
-5. **m5 (Menor):**
-   - En T4, se añadieron dos controles negativos independientes:
-     - Control 1: Tabla RAM mutada (número de pin alterado) rechazada.
-     - Control 2: Registro `MODER` mutado (PB0 configurado como entrada `00b` en lugar de salida `01b`) rechazado.
+5. **m4 (Validación de Tamaño Exacto de 24 Bytes sin Truncamiento):**
+   - En [`parse_and_verify_led_config`](../../tools/led_l1l2_checks.py#L682-L714), se extraen todos los bytes de la sección sin truncar (`extracted = bytes(hex_bytes)`), exigiendo que `len(extracted) == len(expected_bytes) == 24`. Si la sección tiene un tamaño distinto a 24 bytes, falla explícitamente.
 
-6. **m6 (Menor):**
-   - La función [`check_clean_working_tree`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/led_l1l2_checks.py#L177-L200) ignora exclusivamente la ruta exacta del archivo de salida proporcionado por el usuario (`?? <ruta_exacta>`).
-   - Se ejecuta y verifica el árbol limpio tanto al inicio como al finalizar la ejecución del script.
+6. **m5 (Controles Negativos de Hardware en T4):**
+   - En [`run_t4`](../../tools/led_l1l2_checks.py#L921-L1004), se evalúan controles negativos independientes: mutación de la tabla `g_led_config` en RAM y mutación del registro `MODER` (PB0 como entrada `00b`).
 
-7. **m7 (Menor):**
-   - Todos los subprocesos en [`run_cmd`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/led_l1l2_checks.py#L79-L86) imponen límites de tiempo explícitos (`timeout`).
-   - En T4, se registra en el log el valor hexadecimal exacto de las palabras leídas de `g_led_config` y de los registros `MODER_B` y `MODER_E`.
-
-8. **m8 (Menor):**
-   - Se actualizaron los comentarios de advertencia arquitectónica en los tres `board_def.h` para reflejar que el uso de una máscara o la ausencia de la macro genera un `#error` en tiempo de compilación.
-   - El archivo `prj_01` se mantuvo intacto sin modificaciones.
+7. **m6 & m7 (Higiene de Árbol y Robustez):**
+   - [`check_clean_working_tree`](../../tools/led_l1l2_checks.py#L187-L211) valida `git status --porcelain -u` al inicio y al final, ignorando exclusivamente la ruta exacta del archivo de salida.
+   - En [`ensure_control_worktree`](../../tools/led_l1l2_checks.py#L213-L250), se valida explícitamente `git status` del worktree de control.
+   - En [`check_image_freshness_and_rev`](../../tools/led_l1l2_checks.py#L344-L345), la eliminación del sufijo `-dirty` utiliza `endswith("-dirty")` y rebanado exacto `[:-len("-dirty")]`.
+   - Todos los subprocesos en [`run_cmd`](../../tools/led_l1l2_checks.py#L100-L107) operan con `timeout` explícito.
 
 ---
 
 ## 3. Verificación de Código contra HEAD (`archivo:línea`)
 
-Todos los archivos modificados fueron verificados rigurosamente contra `HEAD` en commit [`411673b`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/led_l1l2_checks.py):
+Todos los archivos modificados fueron verificados contra `HEAD` (`b9fbaad`):
 
 ### 3.1 Driver compartido: `01_shared_drivers/01_led/led_bm.c`
-Archivo: [`01_shared_drivers/01_led/led_bm.c`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/01_led/led_bm.c)
+Archivo: [`01_shared_drivers/01_led/led_bm.c`](led_bm.c)
 - **Línea 13:** Inclusión incondicional de `board_def.h` (`#include "board_def.h"`).
 - **Líneas 15–23:** Validaciones de preprocesador para `LED_GREEN` (LD1):
   - Líneas 15–17: `#ifndef BOARD_LED_GREEN_PORT` → `#error "BOARD_LED_GREEN_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"`
@@ -85,32 +78,31 @@ Archivo: [`01_shared_drivers/01_led/led_bm.c`](file:///c:/Users/hrodriguez/Docum
 - **Líneas 45–51:** Definición estática de `g_led_config` con las macros de `board_def.h`.
 
 ### 3.2 Definiciones de placa: `Common/Inc/board_def.h`
-- [`02_firmware_projects/prj_02_eth_lwip_dualcore/Common/Inc/board_def.h#L69-L79`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/02_firmware_projects/prj_02_eth_lwip_dualcore/Common/Inc/board_def.h#L69-L79): Bloque de LEDs con números de bit 0U, 1U, 14U y comentario actualizado indicando `#error` en compilación.
-- [`02_firmware_projects/prj_03_adc_dma_eth/Common/Inc/board_def.h#L69-L79`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/02_firmware_projects/prj_03_adc_dma_eth/Common/Inc/board_def.h#L69-L79): Bloque de LEDs idéntico.
-- [`02_firmware_projects/prj_04_adc_dma_bm_eth/Common/Inc/board_def.h#L69-L79`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/02_firmware_projects/prj_04_adc_dma_bm_eth/Common/Inc/board_def.h#L69-L79): Bloque de LEDs idéntico.
-- [`03_firmware_templates/prj_01_template_dualcore/Common/Inc/board_def.h#L49-L60`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/Common/Inc/board_def.h#L49-L60): Conservado intacto sin modificaciones.
+- [`02_firmware_projects/prj_02_eth_lwip_dualcore/Common/Inc/board_def.h#L69-L80`](../../02_firmware_projects/prj_02_eth_lwip_dualcore/Common/Inc/board_def.h#L69-L80): Bloque de LEDs con números de bit 0U, 1U, 14U y comentario indicando `#error` en compilación.
+- [`02_firmware_projects/prj_03_adc_dma_eth/Common/Inc/board_def.h#L69-L80`](../../02_firmware_projects/prj_03_adc_dma_eth/Common/Inc/board_def.h#L69-L80): Bloque de LEDs idéntico.
+- [`02_firmware_projects/prj_04_adc_dma_bm_eth/Common/Inc/board_def.h#L69-L80`](../../02_firmware_projects/prj_04_adc_dma_bm_eth/Common/Inc/board_def.h#L69-L80): Bloque de LEDs idéntico.
+- [`03_firmware_templates/prj_01_template_dualcore/Common/Inc/board_def.h#L49-L60`](../../03_firmware_templates/prj_01_template_dualcore/Common/Inc/board_def.h#L49-L60): Conservado intacto sin modificaciones.
 
 ---
 
 ## 4. Resultados de las Pruebas sin Placa (T1, T2, T3)
 
-La captura completa y secuencial de la corrida con el arnés corregido está archivada y commiteada en:
-[`01_shared_drivers/01_led/docs/led_l1l2_checks_411673b.txt`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/01_led/docs/led_l1l2_checks_411673b.txt) (commit `afe8ee8`).
+La captura completa y secuencial de la corrida con el arnés corregido sobre árbol limpio está archivada y commiteada en:
+[`01_shared_drivers/01_led/docs/led_l1l2_checks_b9fbaad.txt`](docs/led_l1l2_checks_b9fbaad.txt) (commit `2d221e8`).
 
 ### 4.1 T1: Compilación limpia de matriz y presets selftest
 - **8 Configuraciones de matriz de producción (compiladas directamente con `cmake --clean-first`):**
-  - `prj_01_template_dualcore` (debug: 271 objetos, 0 avisos; release: 271 objetos, 0 avisos)
-  - `prj_02_eth_lwip_dualcore` (debug: 315 objetos, 0 avisos; release: 315 objetos, 0 avisos)
-  - `prj_03_adc_dma_eth` (debug: 323 objetos, 0 avisos; release: 323 objetos, 0 avisos)
-  - `prj_04_adc_dma_bm_eth` (debug: 321 objetos, 0 avisos; release: 321 objetos, 0 avisos)
-  - Verificación de imagen: Todas las imágenes confirmadas como frescas de la corrida y con `FW_GIT_REV` verificado (`411673b`).
-  - Resultado: 8/8 `PASS` (0 avisos, `led_bm.c.obj` verificado en log y disco).
+  - `prj_01_template_dualcore` (debug: 271 objetos, 0 avisos; release: 271 objetos, 0 avisos; rev=`b9fbaad` en `fw_build_id.h`)
+  - `prj_02_eth_lwip_dualcore` (debug: 315 objetos, 0 avisos; release: 315 objetos, 0 avisos; rev=`b9fbaad` en `CMakeCache.txt`)
+  - `prj_03_adc_dma_eth` (debug: 323 objetos, 0 avisos; release: 323 objetos, 0 avisos; rev=`b9fbaad` en `CMakeCache.txt`)
+  - `prj_04_adc_dma_bm_eth` (debug: 321 objetos, 0 avisos; release: 321 objetos, 0 avisos; rev=`b9fbaad` en ELF)
+  - Resultado: 8/8 `PASS` (0 avisos, `led_bm.c.obj` verificado en log y disco, imágenes frescas).
 - **Presets de selftest que enlazan `led_bm` (con `--fresh` y `--clean-first`):**
   - `prj_01`: `selftest-gpio` (278 objs, 0 w), `selftest-tim` (281 objs, 0 w), `selftest-spi` (283 objs, 0 w), `selftest-i2c` (283 objs, 0 w).
   - `prj_04`: `selftest` (327 objs, 0 w), `selftest-adc` (326 objs, 0 w), `selftest-uart` (324 objs, 0 w), `selftest-hsem` (326 objs, 0 w), `selftest-gpio` (323 objs, 0 w).
   - Resultado: 9/9 `PASS` (0 avisos, `led_bm.c.obj` verificado).
-- **Control negativo de contador de avisos:**
-  - Evaluado a través de [`evaluate_build_output`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/tools/led_l1l2_checks.py#L262-L280), detectando el aviso sintético inyectado y marcando fallo con éxito (`PASS`).
+- **Control negativo de contador de avisos (MA2):**
+  - Compilación real de `warning_sample.c` en directorio temporal vía `run_cmd` con flags del proyecto; evaluado por [`evaluate_build_output`](../../tools/led_l1l2_checks.py#L293-L315), detectando el aviso del compilador y marcando fallo esperado con éxito (`PASS`).
 - **Veredicto T1:** `PASS`.
 
 ### 4.2 T2: Comprobación de preprocesador y `#error` en directorio temporal
@@ -121,14 +113,14 @@ Compilación con `arm-none-eabi-gcc -fsyntax-only` ejecutada con `cwd` en direct
   2. Sin `BOARD_LED_GREEN_PORT`: Falla con `#error "BOARD_LED_GREEN_PORT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"` en línea 16.
   3. `_PIN` en vez de `_BIT`: Falla con `#error "BOARD_LED_GREEN_BIT must be defined in board_def.h (Rule 1: no hardcoded hardware in shared drivers)"` en línea 19.
   4. `BOARD_LED_YELLOW_BIT 16U`: Falla con `#error "BOARD_LED_YELLOW_BIT must be in range 0..15"` en línea 32.
-- **Resultado:** 20/20 casos comprobados con éxito. `git status --ignored` constató que no se crearon archivos `.su` residuales.
+- **Resultado:** 20/20 casos comprobados con éxito. La comprobación manual con `git status --ignored` constata que no se crearon archivos `.su` residuales en el árbol.
 - **Veredicto T2:** `PASS`.
 
 ### 4.3 T3: Comparación binaria de `g_led_config`
 Extracción mediante `arm-none-eabi-objdump -s` de los 24 bytes de `g_led_config` del objeto CM7 `led_bm.c.obj`:
 - **8 Builds actuales:** Coincidencia exacta con el oráculo UM2408 (`words=['0x58020400', '0x0', '0x58021000', '0x1', '0x58020400', '0xe']`).
-- **Control `9dc6896` compilado in-situ:** Los 8 builds del árbol de control compilaron limpiamente en 249.9s y coinciden al 100% con el oráculo UM2408 y con los binarios actuales.
-- **Control negativo de T3:** Verificación de muestra original exitosa, confirmación de alteración de texto, y rechazo de la entrada mutada validando tamaño exacto de 24 bytes (`PASS`).
+- **Control `9dc6896` compilado in-situ:** Los 8 builds del árbol de control compilaron limpiamente en 270.9s (pass_count=24) y coinciden al 100% con el oráculo UM2408 y con los binarios actuales.
+- **Control negativo de T3:** Verificación de muestra original exitosa, confirmación de alteración de texto, y rechazo de la entrada mutada validando tamaño exacto de 24 bytes sin truncamiento (`PASS`).
 - **Veredicto T3:** `PASS`.
 
 ---
@@ -138,8 +130,8 @@ Extracción mediante `arm-none-eabi-objdump -s` de los 24 bytes de `g_led_config
 De acuerdo con el rol asignado, el agente implementador no tiene acceso físico a la placa y no ejecutó comandos de hardware. La verificación en hardware real Nucleo-144 STM32H755ZI-Q fue ejecutada y certificada directamente por el auditor (@Claude para Hector Rodriguez):
 
 ### Capturas oficiales del auditor en el repositorio:
-- Captura T1–T3 del auditor: [`01_shared_drivers/01_led/docs/led_l1l2_audit_t1t3_736948f.txt`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/01_led/docs/led_l1l2_audit_t1t3_736948f.txt) (`OVERALL VERDICT: PASS`).
-- Captura T4 en la placa por el auditor: [`01_shared_drivers/01_led/docs/led_l1l2_audit_t4_736948f.txt`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/01_led/docs/led_l1l2_audit_t4_736948f.txt) (`OVERALL VERDICT: PASS`).
+- Captura T1–T3 del auditor: [`01_shared_drivers/01_led/docs/led_l1l2_audit_t1t3_736948f.txt`](docs/led_l1l2_audit_t1t3_736948f.txt) (`OVERALL VERDICT: PASS`).
+- Captura T4 en la placa por el auditor: [`01_shared_drivers/01_led/docs/led_l1l2_audit_t4_736948f.txt`](docs/led_l1l2_audit_t4_736948f.txt) (`OVERALL VERDICT: PASS`).
   - Flasheo de imágenes `debug` con verificación de descarga (`-v`) en los 4 proyectos (`PASS`).
   - Lectura SWD en `mode=HOTPLUG` con `sn=0016000C4142501220353451`:
     - `g_led_config` en RAM verificado contra la tabla UM2408 en los 4 proyectos (`words_match=True`).
@@ -153,19 +145,19 @@ py tools/led_l1l2_checks.py --test t4 --output 01_shared_drivers/01_led/docs/led
 *(Utiliza por defecto `sn=0016000C4142501220353451`; si se usa otro programador, especificar con `--sn <numero_serie>`)*.
 
 El arnés T4 actualizado:
-1. Asegura la compilación limpia de las imágenes `debug` desde `HEAD` en la propia ejecución y verifica su `FW_GIT_REV`.
+1. Asegura la compilación limpia de las imágenes `debug` desde `HEAD` en la propia ejecución y verifica su `FW_GIT_REV` y frescura ([`ensure_debug_images_compiled`](../../tools/led_l1l2_checks.py#L900-L919)).
 2. Flashea con `tools/flash.py` de cada proyecto mediante `STM32_Programmer_CLI -v`.
-3. Efectúa lecturas no intrusivas `-r32` en `mode=HOTPLUG` con `sn=` sin detener el microcontrolador ni escribir registros.
-4. Registra los valores hexadecimales exactos leídos en el log (m7).
-5. Evalúa controles negativos independientes tanto para la tabla en RAM como para el registro `MODER` (m5).
+3. Efectúa lecturas no intrusivas `-r32` en `mode=HOTPLUG` con `sn=` sin detener el microcontrolador ni escribir registros ([`read_swd_mem32`](../../tools/led_l1l2_checks.py#L846-L869)).
+4. Registra los valores hexadecimales exactos leídos en el log.
+5. Evalúa controles negativos independientes tanto para la tabla en RAM como para el registro `MODER` ([`verify_t4_led_state`](../../tools/led_l1l2_checks.py#L882-L898)).
 
 ---
 
 ## 6. Elementos no Verificados por el Implementador
 
 - **T4 no fue ejecutada por el implementador:** En estricto cumplimiento de las instrucciones de rol, no se ejecutó ningún comando contra la placa (`flash.py`, `STM32_Programmer_CLI`, `monitor.py`).
-- Las mediciones de T4 que sustentan la certificación física del driver corresponden a las registradas por el auditor en [`01_shared_drivers/01_led/docs/led_l1l2_audit_t4_736948f.txt`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/01_led/docs/led_l1l2_audit_t4_736948f.txt).
+- Las mediciones de T4 que sustentan la certificación física del driver corresponden a las registradas por el auditor en [`01_shared_drivers/01_led/docs/led_l1l2_audit_t4_736948f.txt`](docs/led_l1l2_audit_t4_736948f.txt).
 
 ---
 
-F1 CORREGIDA PARA AUDITORIA 411673b
+F1 CORREGIDA 2 PARA AUDITORIA b9fbaad
