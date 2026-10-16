@@ -72,7 +72,7 @@ Nada más (`git diff 3df160a --stat`).
 
 ### 3.2 Decisiones
 
-Aplica las opciones que el responsable apruebe en el plan. Si no hay otra indicación, las opciones por defecto: 1A, 2A, 3A y 4.
+El responsable aprobó las cuatro el 2026-10-15: 1A, 2A, 3A y 4. Aplícalas.
 
 ### 3.3 Entorno
 

@@ -12,7 +12,9 @@ Base y control: `main` en `3df160a` (cierre de `03_tim` F4). El código de `00_g
 
 **El desarrollador es Antigravity** (autorizado por el responsable el 2026-10-15). No tiene acceso a la placa ni al AD2: todo lo que los necesita (T11–T14, T17 y las dos ejecuciones completas del banco) lo ejecuta el auditor con las herramientas del implementador. El implementador entrega el firmware, las herramientas y las pruebas sin placa (T1 de compilación, T18).
 
-**Decisiones del plan** (pendientes de aprobación del responsable; ver [Decisiones abiertas](#decisiones-abiertas)):
+**Decisiones del responsable (2026-10-15): aprobadas las cuatro, con la opción A en 1–3.** Banco verificado antes de la fase: `gpio_f2_bench_baseline_4f94c0f.txt` en `prj_01/docs/` (38/38, `FW VERDICT=PASS`).
+
+**Decisiones del plan** (ver [Decisiones abiertas](#decisiones-abiertas)):
 1. Implementador Antigravity; banco y AD2, solo el auditor.
 2. Pulsos en DIO8/DIO10 con escrituras estáticas del AD2, sin tocar la guarda S11 del generador de patrones.
 3. Celda de compensación: API y T17; los proyectos siguen con `HAL_EnableCompensationCell()`.
