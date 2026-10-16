@@ -353,3 +353,26 @@ Revisé el README contra las capturas, `gpio_bm.h`/`gpio_bm.c`, el selftest y la
 | C9 | Menor | **Redacción y comandos:**<br>• \"Audit closed\" y \"F1 audit passed at `0c6c079`\" (1346, 1428) son ambiguos, porque F1 es también una fase de GPIO;<br>• \"0,9–1,4 ns, 5 de 7\" (909) debe citar el plan, revisión 3;<br>• el comando `# F2` de la última eliminación (1458) imprime hoy el AUDIT de F1c | \"La auditoría de la fase de F2 pasó en `0c6c079`\"; citar el plan; \"válido tras el commit que borra los documentos de F2\" |
 
 **Estado: el cierre del implementador no pasa todavía.** Son correcciones de texto: C1–C5 (mayores) y C6–C9.
+
+## Cierre del implementador, corrección (`827200f`, README en `3cd9278`)
+
+C1–C9 corregidos. Lo comprobé contra las capturas:
+- **T9 de la corrida 2:** PF14 1,82 > 1,43 y PF15 2,18 > 1,09 ns, en las tres líneas;
+- **`c90f2b5`:** 1,17 frente a 1,34 ns;
+- **las filas de `cbd68a9` y `c90f2b5`:** con `FW VERDICT=FAIL` y `HOST VERDICT=FAIL`, sin \"every one passed\";
+- **§9.3.2:** `6c0e792` para las filas antiguas y el commit entre paréntesis para las de F2;
+- **los resets:** el alcance real, `release` en `85b4325` y `debug`/`release` en F1;
+- **el texto:**
+  - un solo bloque de Flash;
+  - ni \"paridad\" ni enlaces `file:///`;
+  - 13 controles negativos;
+  - los estados de §2.2 con `SYSCFGEN`;
+  - la salvedad de la regla 10.
+
+El implementador copió tres frases en español de mi columna Acción (README l. 1338, 1420, 1450). Las traduje yo al inglés del README; el error fue mío, por escribirlas en español.
+
+**El cierre del implementador pasa.** Lo que falta es del responsable:
+- la hoja de ruta;
+- el borrado de los documentos de proceso;
+- la retirada de `../stm32h755_control_3df160a`;
+- el merge.

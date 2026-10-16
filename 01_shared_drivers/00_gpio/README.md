@@ -1335,7 +1335,7 @@ Enforced rules:
 - Zero EXTI handlers in driver, zero handlers in production ELFs (C14); static state unchanged (`.data = 0 B`, `.bss = 8 B`).
 
 Validated in `prj_01_template_dualcore` `selftest-gpio` on bench (T11–T14 on PE3/PE4, T17 on compensation cell)
-and in regression via `tools/gpio_f2_checks.py` (T18). La auditoría de la fase de F2 pasó en `0c6c079`.
+and in regression via `tools/gpio_f2_checks.py` (T18). The F2 phase audit passed at `0c6c079`.
 
 ---
 
@@ -1417,7 +1417,7 @@ Before changing it:
 | Re-audit 5 and merge verdict; 53 superseded captures removed from `docs/` (§9.3.2 keeps their results) | `6c0e792`, the commit after it |
 | F1b in `prj_04` (G1/G13 closed), `uart_hal` MSP migrated; F1 audit passed at `7687e91`; bench cold boot T6b passed at `74c9119` | `9051a6a` … `7cc456d`, `492d156`, `74c9119` |
 | F1c in `prj_03` (G1 closed across all projects), tools extended; F1 audit passed with conditions at `a20e27c`; close audit passed at `009e997`; cold boot T6b passed at `51efd1e` | `90a866f` … `e9e98c4`, `02b1a7f`, `51efd1e` |
-| F2: EXTI 0–15 and compensation cell in `gpio_bm`; T11–T14, T17 on bench; T18 regression; la auditoría de la fase de F2 pasó en `0c6c079` | `4f94c0f` … `0c6c079` |
+| F2: EXTI 0–15 and compensation cell in `gpio_bm`; T11–T14, T17 on bench; T18 regression; F2 phase audit passed at `0c6c079` | `4f94c0f` … `0c6c079` |
 
 The implementation plan, the implementer's instructions, the F0 correction and
 F1a instructions, the implementation report and the audit record were removed
@@ -1447,7 +1447,7 @@ F1b, F1c and F2 process documents (`IMPLEMENTATION_PLAN.md`, `IMPLEMENTER_INSTRU
 removes them, which is the latest deletion of each path; F1c's (plan revision 1) are pinned at `7b91177^`; F1b's (plan revision 3) at `e6cb75e^`:
 
 ```bash
-git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/00_gpio/AUDIT.md)^:01_shared_drivers/00_gpio/AUDIT.md   # F2 (válido tras el commit que borra los documentos de F2)
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/00_gpio/AUDIT.md)^:01_shared_drivers/00_gpio/AUDIT.md   # F2 (valid after the commit that removes the F2 documents)
 git show 7b91177^:01_shared_drivers/00_gpio/AUDIT.md                                                                           # F1c
 git show e6cb75e^:01_shared_drivers/00_gpio/AUDIT.md                                                                           # F1b
 # and the same for IMPLEMENTATION_PLAN.md, IMPLEMENTER_INSTRUCTIONS.md and IMPLEMENTATION_REPORT.md
