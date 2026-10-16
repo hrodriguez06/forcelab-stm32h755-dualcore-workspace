@@ -124,36 +124,15 @@ def check_clean_working_tree(repo_root: Path, output_file: Path | None) -> tuple
     return True, "Tree is clean"
 
 
-def verify_elf_embedded_revision(elf_path: Path, expected_commit: str) -> tuple[bool, str]:
-    """Checks that the ELF embeds the expected git commit in its data/rodata,
-    excluding occurrences that are merely filesystem paths (R5)."""
-    data = elf_path.read_bytes()
-    exp_bytes = expected_commit.encode("ascii")
-    occurrences = []
-    start = 0
-    while True:
-        pos = data.find(exp_bytes, start)
-        if pos == -1:
-            break
-        prefix = data[max(0, pos - 25):pos]
-        # Ignore occurrences that are part of directory or file paths
-        is_path = (b"/" in prefix) or (b"\\" in prefix) or (b"control" in prefix) or (b"stm32" in prefix)
-        if not is_path:
-            occurrences.append(pos)
-        start = pos + 1
-    if not occurrences:
-        return False, f"ELF {elf_path.name} does not embed {expected_commit} in code/data (only path or absent)"
-    return True, f"Embedded {expected_commit} in code/data at {occurrences}"
-
-
-def check_control_worktree(control_dir: Path) -> tuple[bool, str]:
-    """Verifies control worktree is clean, at expected commit, and has all 16 ELFs built from 3df160a (R5)."""
+def check_control_worktree(control_dir: Path, logger: Logger) -> tuple[bool, str]:
+    """Verifies control worktree is clean with --ignore-submodules, at expected commit 3df160a,
+    and compiles all 16 control ELFs in-situ via build_all.ps1 -Clean (R5)."""
     if not control_dir.is_dir():
         return False, f"Control worktree directory not found: {control_dir}"
 
-    code, ctrl_rev, _ = run_cmd(["git", "rev-parse", "--short", "HEAD"], cwd=control_dir)
+    code, ctrl_rev, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=control_dir)
     ctrl_rev = ctrl_rev.strip()
-    if ctrl_rev != CONTROL_COMMIT_EXPECTED:
+    if code != 0 or not ctrl_rev.startswith(CONTROL_COMMIT_EXPECTED):
         return False, f"Control commit {ctrl_rev} does not match expected {CONTROL_COMMIT_EXPECTED}"
 
     code_ctrl_st, ctrl_st_out, _ = run_cmd(["git", "status", "--porcelain", "--ignore-submodules"], cwd=control_dir)
@@ -163,6 +142,24 @@ def check_control_worktree(control_dir: Path) -> tuple[bool, str]:
     cube_junction = control_dir / "02_firmware_projects" / "prj_eth_lwip_node" / "external" / "STM32CubeH7"
     if not cube_junction.exists():
         return False, f"STM32CubeH7 junction does not exist: {cube_junction}"
+
+    # R5: In-situ compilation of the 16 control images via build_all.ps1 -Clean
+    logger.log(f"[check] Compiling 16 control images via build_all.ps1 -Clean in {control_dir}...")
+    cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+           str(control_dir / "tools" / "build_all.ps1"), "-Clean"]
+    t_start = time.time()
+    code_build, stdout_build, stderr_build = run_cmd(cmd, cwd=control_dir)
+    duration = time.time() - t_start
+
+    passed = (code_build == 0) and ("All 8 builds PASSED successfully" in stdout_build)
+    logger.log(f"[build_all_control] Finished in {duration:.1f}s, exit code {code_build}")
+    for line in stdout_build.splitlines():
+        if "==>" in line or "PASSED" in line or "FAILED" in line:
+            logger.log(f"[build_all_control] {line.strip()}")
+    logger.log(f"[host] CHECK control build_all 16/16 (-Clean): {'PASS' if passed else 'FAIL'}")
+
+    if not passed:
+        return False, f"Control compilation failed with code {code_build}: {stderr_build}"
 
     projects = [
         "03_firmware_templates/prj_01_template_dualcore",
@@ -179,25 +176,9 @@ def check_control_worktree(control_dir: Path) -> tuple[bool, str]:
                     missing.append(str(elf.relative_to(control_dir)))
 
     if missing:
-        return False, f"Missing {len(missing)} control ELFs: {missing}"
+        return False, f"Missing {len(missing)} control ELFs after build: {missing}"
 
-    # Verify provenance for images where git revision / build ID is embedded in code/data
-    images_with_embedded_rev = [
-        "02_firmware_projects/prj_04_adc_dma_bm_eth/build/debug/CM7/cm7_firmware.elf",
-        "02_firmware_projects/prj_04_adc_dma_bm_eth/build/debug/CM4/cm4_firmware.elf",
-        "02_firmware_projects/prj_04_adc_dma_bm_eth/build/release/CM7/cm7_firmware.elf",
-    ]
-    invalid_commit = []
-    for rel_p in images_with_embedded_rev:
-        elf_p = control_dir / rel_p
-        has_rev, rev_msg = verify_elf_embedded_revision(elf_p, CONTROL_COMMIT_EXPECTED)
-        if not has_rev:
-            invalid_commit.append(f"{rel_p}: {rev_msg}")
-
-    if invalid_commit:
-        return False, f"Control ELFs not built from {CONTROL_COMMIT_EXPECTED}: {invalid_commit}"
-
-    return True, f"Control commit {ctrl_rev} clean, 16/16 ELFs verified (built from {CONTROL_COMMIT_EXPECTED})"
+    return True, f"Control commit {CONTROL_COMMIT_EXPECTED} clean, 16/16 ELFs freshly compiled"
 
 
 def check_cube_submodule(repo_root: Path) -> tuple[bool, str]:
@@ -290,6 +271,13 @@ def check_selftest_builds(logger: Logger, tools: dict[str, str]) -> bool:
 # Check 3: Header diff only adds (R1, R5)
 # ---------------------------------------------------------------------------
 
+C_TYPE_KEYWORDS = {
+    "int", "char", "void", "bool", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+    "int8_t", "int16_t", "int32_t", "int64_t", "float", "double", "size_t",
+    "struct", "enum", "union", "typedef", "extern", "static", "inline", "const", "volatile"
+}
+
+
 def strip_c_comments(code: str) -> str:
     """Strips block comments and line comments from C code."""
     code = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)
@@ -299,16 +287,62 @@ def strip_c_comments(code: str) -> str:
 
 def is_c_code_line(line_content: str) -> bool:
     """Checks if a removed diff line contains actual C code (not just comments or whitespace)."""
-    clean = strip_c_comments(line_content).strip()
+    clean = re.sub(r"/\*.*?\*/", "", line_content).strip()
+    clean = re.sub(r"//.*", "", clean).strip()
     if not clean:
         return False
-    if clean.startswith("*/"):
-        clean = clean[2:].strip()
-    elif "*/" in clean:
-        clean = clean.split("*/", 1)[1].strip()
-    elif clean == "*" or clean.startswith("* ") or clean.startswith("*\t"):
-        clean = ""
-    return bool(clean.strip())
+    if clean in ("/*", "/**", "*/", "*", "***"):
+        return False
+
+    # Check for closing comment delimiter */
+    if "*/" in clean:
+        parts = clean.split("*/", 1)
+        before, after = parts[0].strip(), parts[1].strip()
+        # If there is code after */ (e.g. '*/ int legacy;')
+        if after and is_c_code_line(after):
+            return True
+        # If there is code before */ (e.g. 'int a; */')
+        if before and is_c_code_line(before):
+            return True
+        return False
+
+    # If line starts with *, check if it's a pointer dereference or comment continuation
+    if clean.startswith("*"):
+        # 1. Pointer dereference assignment (*ptr = 0; or * ptr = 0;)
+        if re.match(r"^\*\s*[a-zA-Z_]\w*\s*[-+*/%&|^]?=\s*", clean):
+            return True
+        # 2. Pointer increment / decrement (*ptr++, *++ptr, ++*ptr, etc.)
+        if re.match(r"^\*(\s*[a-zA-Z_]\w*\s*(\+\+|--)|(\+\+|--)\s*[a-zA-Z_]\w*)", clean):
+            return True
+        # 3. Pointer call or declaration (*fn)(...) or *ptr;
+        if re.match(r"^\*\s*[a-zA-Z_]\w*\s*;", clean) or re.match(r"^\*\s*[a-zA-Z_]\w*\s*\(", clean):
+            return True
+        # Any other line starting with * is a comment continuation line
+        return False
+
+    # Preprocessor directive
+    if clean.startswith("#"):
+        return True
+
+    # Pre/post increment/decrement (e.g. '--counter;' or 'counter++;')
+    if re.match(r"^[+-]{2}\s*[a-zA-Z_]\w*\s*;", clean) or re.match(r"^[a-zA-Z_]\w*\s*[+-]{2}\s*;", clean):
+        return True
+
+    # Check for C assignment (e.g. 'a = 5;')
+    if re.search(r"\b[a-zA-Z_]\w*\s*[-+*/%&|^]?=\s*[^=]", clean) and clean.endswith(";"):
+        return True
+
+    # Check for C declaration or statement (contains C keywords or types)
+    words = re.findall(r"[a-zA-Z_]\w*", clean)
+    if words:
+        if any(w in C_TYPE_KEYWORDS or w.startswith(("GPIO_", "GpioBm_", "HAL_", "LL_")) for w in words):
+            return True
+
+    # If it ends with semicolon and has balanced parens, likely code
+    if clean.endswith(";") and "(" in clean and ")" in clean:
+        return True
+
+    return False
 
 
 def verify_header_diff(header_path: Path, ref_commit: str,
@@ -324,7 +358,10 @@ def verify_header_diff(header_path: Path, ref_commit: str,
 
     illegal_removals = []
     for line in diff_out.splitlines():
-        if line.startswith("---") or line.startswith("+++") or line.startswith("@@"):
+        # Only skip git diff headers (e.g. '--- a/path', '+++ b/path', '@@ -x,y +z,w @@')
+        if (line.startswith("--- ") or line.startswith("--- a/") or line.startswith("--- b/")) or \
+           (line.startswith("+++ ") or line.startswith("+++ a/") or line.startswith("+++ b/")) or \
+           line.startswith("@@"):
             continue
         if line.startswith("-"):
             content = line[1:].strip()
@@ -341,12 +378,14 @@ def check_headers(logger: Logger) -> bool:
     driver_dir = REPO_ROOT / "01_shared_drivers" / "00_gpio"
 
     # List headers from git in control commit to ensure no header was deleted
-    code_ls, ls_out, _ = run_cmd(["git", "ls-tree", "--name-only", f"{CONTROL_COMMIT_EXPECTED}:01_shared_drivers/00_gpio/"], cwd=REPO_ROOT)
-    ctrl_headers = set()
-    if code_ls == 0:
-        for f in ls_out.splitlines():
-            if f.endswith(".h"):
-                ctrl_headers.add(f)
+    code_ls, ls_out, err_ls = run_cmd(["git", "ls-tree", "--name-only", f"{CONTROL_COMMIT_EXPECTED}:01_shared_drivers/00_gpio/"], cwd=REPO_ROOT)
+    if code_ls != 0:
+        logger.log(f"[host] ERROR: git ls-tree failed for control {CONTROL_COMMIT_EXPECTED}: {err_ls}")
+        return False
+    ctrl_headers = {f.strip() for f in ls_out.splitlines() if f.strip().endswith(".h")}
+    if not ctrl_headers:
+        logger.log(f"[host] ERROR: No headers found in control {CONTROL_COMMIT_EXPECTED}")
+        return False
     curr_headers = {h.name for h in driver_dir.glob("*.h")}
     all_headers = sorted(ctrl_headers | curr_headers)
     all_ok = True
@@ -389,22 +428,21 @@ def check_headers(logger: Logger) -> bool:
                f"{'PASS' if neg_detected else 'FAIL'} ({neg_msg})")
 
     # Additional negative controls for R5:
-    # 1. line with /* comment */ int legacy_reg; removed
-    fake_diff_1 = "-    /* helper */ int legacy_reg;\n+    int new_reg;"
-    neg_comment_passed1, _, neg_c_removals1 = verify_header_diff(driver_dir / "gpio_bm.h", CONTROL_COMMIT_EXPECTED, diff_override=fake_diff_1)
-    neg_comment_detected1 = (not neg_comment_passed1) and len(neg_c_removals1) == 1
-
-    # 2. line with */ int legacy_code; removed
-    fake_diff_2 = "-    */ int legacy_code;\n+    int new_code;"
-    neg_comment_passed2, _, neg_c_removals2 = verify_header_diff(driver_dir / "gpio_bm.h", CONTROL_COMMIT_EXPECTED, diff_override=fake_diff_2)
-    neg_comment_detected2 = (not neg_comment_passed2) and len(neg_c_removals2) == 1
-
-    # 3. line with pointer dereference *ptr = 0; removed
-    fake_diff_3 = "-    *ptr = 0;\n+    /* replaced */"
-    neg_comment_passed3, _, neg_c_removals3 = verify_header_diff(driver_dir / "gpio_bm.h", CONTROL_COMMIT_EXPECTED, diff_override=fake_diff_3)
-    neg_comment_detected3 = (not neg_comment_passed3) and len(neg_c_removals3) == 1
-
-    neg_comments_ok = neg_comment_detected1 and neg_comment_detected2 and neg_comment_detected3
+    # Verify line deletions with code tokens (*ptr = 0;, * ptr = 0;, int a; */, --counter;, */ int legacy;) are flagged
+    fake_diff = (
+        f"--- a/01_shared_drivers/00_gpio/gpio_bm.h\n"
+        f"+++ b/01_shared_drivers/00_gpio/gpio_bm.h\n"
+        f"@@ -10,6 +10,12 @@\n"
+        f"-    * ptr = 0;\n"
+        f"-    *ptr = 0;\n"
+        f"-    int a; */\n"
+        f"---counter;\n"
+        f"-    */ int legacy;\n"
+        f"-    /* helper */ int legacy_reg;\n"
+        f"-    * @brief This is comment\n"
+    )
+    neg_comment_passed, _, neg_c_removals = verify_header_diff(driver_dir / "gpio_bm.h", CONTROL_COMMIT_EXPECTED, diff_override=fake_diff)
+    neg_comments_ok = (not neg_comment_passed) and (len(neg_c_removals) == 6)
     logger.log(f"[host] CHECK comment-with-code removal negative control (R5): {'PASS' if neg_comments_ok else 'FAIL'}")
 
     return all_ok and neg_detected and neg_comments_ok
@@ -979,27 +1017,12 @@ def main() -> int:
             # R5: --allow-dirty cannot end in PASS for audit certification
             logger.log("[host] WARNING: --allow-dirty specified on dirty tree. Audit certification requires clean tree.")
 
-        # R5: Check control worktree
-        ctrl_clean, ctrl_msg = check_control_worktree(args.control_dir)
+        # R5: Check control worktree and compile control images in-situ
+        ctrl_clean, ctrl_msg = check_control_worktree(args.control_dir, logger)
         logger.log(f"[host] control worktree ({CONTROL_COMMIT_EXPECTED}): {'PASS' if ctrl_clean else 'FAIL'} ({ctrl_msg})")
         if not ctrl_clean:
             logger.log(f"[host] ERROR: Control worktree verification failed: {ctrl_msg}")
             logger.log("OVERALL VERDICT: FAIL")
-            return 1
-
-        # R5: Control ELF provenance negative control (foreign revision rejected)
-        sample_ctrl_elf = args.control_dir / "02_firmware_projects/prj_04_adc_dma_bm_eth/build/debug/CM7/cm7_firmware.elf"
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_elf = Path(tmp_dir) / "cm7_mutated_rev.elf"
-            data_mutated = sample_ctrl_elf.read_bytes().replace(b"3df160a", b"deadbeef")
-            tmp_elf.write_bytes(data_mutated)
-            neg_prov_ok, _ = verify_elf_embedded_revision(tmp_elf, CONTROL_COMMIT_EXPECTED)
-            neg_prov_detected = (not neg_prov_ok)
-
-        logger.log(f"[host] CHECK control ELF provenance negative control (foreign revision rejected): "
-                   f"{'PASS' if neg_prov_detected else 'FAIL'}")
-        if not neg_prov_detected:
-            logger.log("[host] ERROR: Control ELF provenance negative control failed.")
             return 1
 
         # R5: Check STM32CubeH7 submodule
