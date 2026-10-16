@@ -1,6 +1,6 @@
 # Plan de implementación de `00_gpio` F2: EXTI 0–15 y celda de compensación
 
-Oct 15, 2026 · @Hector · revisión 1
+Oct 15, 2026 · @Hector · revisión 2 (Oct 16, 2026)
 
 Añade a `gpio_bm` las líneas EXTI 0–15 del núcleo que llama y la celda de compensación de I/O, con el contrato que fijó el plan original de GPIO y que guarda `00_gpio/README.md` §13.3. Se valida en `prj_01_template_dualcore`, preset `selftest-gpio`, con el banco del AD2 de F1 sin recablear.
 
@@ -11,6 +11,10 @@ Una sola fase de implementación (F1 de este plan) y un cierre. La fase pasa una
 Base y control: `main` en `3df160a` (cierre de `03_tim` F4). El código de `00_gpio` no cambia desde F1c.
 
 **El desarrollador es Antigravity** (autorizado por el responsable el 2026-10-15). No tiene acceso a la placa ni al AD2: todo lo que los necesita (T11–T14, T17 y las dos ejecuciones completas del banco) lo ejecuta el auditor con las herramientas del implementador. El implementador entrega el firmware, las herramientas y las pruebas sin placa (T1 de compilación, T18).
+
+**Revisión 2 (2026-10-16), tras la auditoría de F1 (`AUDIT.md`): dos erratas del auditor en el Diseño 2.**
+- **Regla 9:** "pone `CCCSR.EN` en la sección y espera `READY`" dejaba la espera dentro de la sección, con PRIMASK y el lock entre núcleos tomados durante `max_cycles`. Eso rompe el límite de 60 µs del hook (README §3.1). `EN` se pone en la sección y `READY` se espera **fuera** de ella. Además, en la placa la celda tardó más de 50 000 ciclos en dar `READY` tras volver a encender CSI, así que T17 mide ese tiempo y usa un límite holgado.
+- **Regla 8:** `SWIER1` dispara si la línea tiene `RTSR1` **o** `FTSR1` (RM0399 §21.5.5), no solo `RTSR1`.
 
 **Decisiones del responsable (2026-10-15): aprobadas las cuatro, con la opción A en 1–3.** Banco verificado antes de la fase: `gpio_f2_bench_baseline_4f94c0f.txt` en `prj_01/docs/` (38/38, `FW VERDICT=PASS`).
 
@@ -130,10 +134,10 @@ Las firmas son las de README §13.3, sin cambios.
    3. hace `__DSB()` y devuelve los bits.
 
    Se puede llamar desde una ISR: no entra en la sección.
-8. **`ExtiSoftwareTrigger`** escribe `1 << pin_idx` en `SWIER1` dentro de la sección. Solo dispara si `RTSR1` y la máscara del núcleo lo permiten (RM0399 cap. 21), y la función no lo comprueba: lo dice el comentario.
+8. **`ExtiSoftwareTrigger`** escribe `1 << pin_idx` en `SWIER1` dentro de la sección. Solo dispara si la línea tiene `RTSR1` o `FTSR1` y la máscara del núcleo lo permite (RM0399 §21.5.5), y la función no lo comprueba: lo dice el comentario.
 9. **`EnableCompensationCell(max_cycles)`:**
    - Si `RCC_CR.CSIRDY = 0`, devuelve `ERR_NOT_READY` sin escribir.
-   - Si no, pone `CCCSR.EN` en la sección y espera `READY` durante `max_cycles` ciclos de `DWT->CYCCNT`.
+   - Si no, pone `CCCSR.EN` en la sección, **sale de la sección** y espera `READY` (solo lectura) durante `max_cycles` ciclos de `DWT->CYCCNT`.
    - Si `CYCCNT` no avanza o se agota el tiempo, devuelve `ERR_NOT_READY` y deja `EN = 1`; el comentario lo dice.
    - Nunca escribe `RCC_CR`, `HSLV`, `CS` ni `CCCR`.
 10. **Sin handlers (C14)** y **sin estado nuevo en RAM (C7)**: `.data = 0` y `.bss` igual (8 B).
