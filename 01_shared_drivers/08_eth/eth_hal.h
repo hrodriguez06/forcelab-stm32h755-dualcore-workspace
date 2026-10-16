@@ -230,6 +230,16 @@ void ETH_HAL_MspInit_User(ETH_HandleTypeDef *heth);
   */
 void ETH_HAL_MspDeInit_User(ETH_HandleTypeDef *heth);
 
+/* ---- Custom Callbacks Hook --------------------------------------------- */
+/**
+  * @note   Define ETH_HAL_CUSTOM_CALLBACKS at compile time to suppress definition
+  *         of the six HAL ETH callbacks (HAL_ETH_RxAllocateCallback,
+  *         HAL_ETH_RxLinkCallback, HAL_ETH_TxFreeCallback, HAL_ETH_RxCpltCallback,
+  *         HAL_ETH_TxCpltCallback, HAL_ETH_ErrorCallback) in eth_hal.c, allowing
+  *         the consuming project to provide its own HAL callbacks without duplicate
+  *         symbol errors.
+  */
+
 #ifdef __cplusplus
 }
 #endif
