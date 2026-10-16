@@ -316,3 +316,40 @@ En las dos corridas, la identidad R4-a es la de `85b4325`.
   - el borrado de los documentos de proceso;
   - la retirada de `../stm32h755_control_3df160a`;
   - el merge.
+
+## Cierre del implementador (`25ac173`, README en `980735d`)
+
+Revisé el README contra las capturas, `gpio_bm.h`/`gpio_bm.c`, el selftest y la historia.
+
+**Correcto:**
+- **Firmas y macros de §2:** coinciden con `gpio_bm.h:308-311, 346-429`.
+- **Cifras de las pruebas:** coinciden con las capturas.
+  - T1: 78/32/35.
+  - T11–T14: todas las cuentas y estados.
+  - T13: 0,10/0,10/0,22 y 0,15/0,16/0,24 µs.
+  - T17: 76 493 y 76 385 ciclos, con la sección retenida 138 y 155 ciclos.
+  - Host: 62/63 (solo T9 PF14) y 63/63.
+  - Resets: 20/20. Línea base: 38/38. Mock: 25/25.
+  - T18: coincide con `gpio_f2_audit_checks_6999210.txt`.
+- **§9.3.2:** cada una de las 13 capturas borradas se lee con `git show` desde su commit.
+- **§15:**
+  - los comandos de F1c (`7b91177^`) y F1b (`e6cb75e^`) funcionan;
+  - la forma de la última eliminación es correcta (la misma de `03_tim` imprime su AUDIT).
+- **Capturas que se conservan:** las 7 pedidas.
+- **T6b:** el README no afirma ninguna prueba en frío para F2.
+
+### Hallazgos
+
+| ID | Clase | Hallazgo | Acción |
+| --- | --- | --- | --- |
+| C1 | Mayor | Los valores de T9 de la corrida 2 están mal:<br>• PF15 aparece como \"1,82 > 1,43\", que es el de PF14 (README:646, 912), y como \"2,11 > 1,15\" (783);<br>• la captura `_2.txt:1507-1508` da PF14 1,82 > 1,43 y PF15 2,18 > 1,09 | Corregir las tres |
+| C2 | Mayor | `c90f2b5`: \"1,27 frente a 1,40 ns\" (README:808); la captura da 1,17 frente a 1,34 | Corregir |
+| C3 | Mayor | \"Every one of them passed.\" (README:791) es falso para las capturas superadas:<br>• `cbd68a9` acabó con `FW VERDICT=FAIL failures=3` y aborto por T17;<br>• `c90f2b5`, con `HOST VERDICT=FAIL`.<br>La fila 806 atribuye mal el fallo | Reescribir la frase y la fila |
+| C4 | Mayor | La introducción de §9.3.2 dice `git show <commit>:` sin decir qué commit, y las filas antiguas se leen en `6c0e792` | \"`6c0e792` para las filas de arriba; el commit entre paréntesis para las de F2\" |
+| C5 | Mayor | La fila de los resets (README:658) da a entender `debug` y `release` y los contadores por SWD. En `85b4325` solo se hizo `release` (20/20, id `4a036898df066354`) | Decir exactamente lo que se corrió |
+| C6 | Menor | **Texto:**<br>• el bloque de Flash está duplicado palabra por palabra (691-700 = 702-711), con tamaños de antes de F2 (`gpio_bm` 1718 B) sin decir de cuándo son;<br>• \"paridad\" en español (689);<br>• siete enlaces absolutos `file:///c:/Users/...` (190-209, 632), uno con barra invertida;<br>• \"11 negative controls\" (655), cuando son 13 | Corregir |
+| C7 | Menor | **Estados en §2.2:**<br>• `ExtiConfig`, `ExtiDisable` y `EnableCompensationCell` también devuelven `ERR_VERIFY` si falla la lectura de vuelta de `SYSCFGEN` (`gpio_bm.c:603-606, 774-777, 939-942`);<br>• `ExtiSoftwareTrigger` no verifica;<br>• `EnableCompensationCell` da OK con `READY = 1`, no \"on verified write\" | Corregir |
+| C8 | Menor | La regla 10 de §4 omite la salvedad de la cabecera (`gpio_bm.h:320-322`): `ExtiConfig` sobre una línea del mismo puerto reescribe `RTSR1`/`FTSR1` aunque el otro núcleo la tenga desenmascarada | Añadirla |
+| C9 | Menor | **Redacción y comandos:**<br>• \"Audit closed\" y \"F1 audit passed at `0c6c079`\" (1346, 1428) son ambiguos, porque F1 es también una fase de GPIO;<br>• \"0,9–1,4 ns, 5 de 7\" (909) debe citar el plan, revisión 3;<br>• el comando `# F2` de la última eliminación (1458) imprime hoy el AUDIT de F1c | \"La auditoría de la fase de F2 pasó en `0c6c079`\"; citar el plan; \"válido tras el commit que borra los documentos de F2\" |
+
+**Estado: el cierre del implementador no pasa todavía.** Son correcciones de texto: C1–C5 (mayores) y C6–C9.
