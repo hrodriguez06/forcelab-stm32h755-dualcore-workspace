@@ -149,3 +149,60 @@ La marca (`bc7e64d`) es el último commit de código o herramienta.
 **F1 no pasa todavía, pero el firmware está verificado en la placa:** 63/63, con las tres cuentas de T11/T12, T13 sobre 200 flancos, T14 con `PR1` leído y T17 con `READY` y la sección medidos.
 - **Por qué no pasa:** queda la herramienta sin placa (R1–R3), el informe (R4) y el mecanismo de B1 (N1).
 - **Siguiente ronda:** R1–R5 y N1–N9, y repetir T1 de compilación, T18 y el mock sin placa. Después, las dos corridas completas del cierre y los resets de producción.
+
+## F1, corrección 2 (`c90f2b5`, código en `a5127df`)
+
+Entrega: `755614a..c90f2b5`:
+- `a5127df` driver, selftest, host y herramienta;
+- `667c206` capturas;
+- `c90f2b5` informe.
+
+La marca (`a5127df`) es correcta.
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| Revisión del código | Dos revisiones en paralelo (firmware y host con la seguridad; herramienta e informe), con pruebas de las funciones puras sobre copias temporales |
+| Compilación | `build_all.ps1 -Clean`: 8/8. `selftest-gpio` de `prj_01` y `prj_04` con `--fresh` y `--clean-first`: 0 avisos |
+| Producción (T18, mía) | Las 16 imágenes siguen con los mismos `GPIO_BM_*` que `3df160a` y sin handlers EXTI |
+| Seguridad eléctrica | Sin cambios respecto a la ronda anterior; el ayudante de DigitalIn solo llama a `FDwfDigitalIn*` (y a `FDwfGetLastErrorMsg`), con los códigos de retorno comprobados. Apta |
+| Corrida en la placa | `gpio_f2_audit_bench_c90f2b5.txt`: imagen `c90f2b5`, identidad R4-a, árbol limpio. **`FW VERDICT=PASS failures=0`; host 62/63: solo falla la compuerta de T9 en PF14** (1,17 frente a 1,34 ns) |
+
+### Resultados de F2 en la placa (`c90f2b5`)
+
+Iguales a los de `6b7f10a`:
+- **T11:** las tres cuentas exactas (200/200/400, solo evento 0/200/0) en los dos núcleos.
+- **T12:** 200/200, compartida 200/200 y el aislamiento con 0.
+- **T13:** sobre 200 flancos, CM7 0,10/0,10/0,22 µs y CM4 0,15/0,16/0,25 µs.
+- **T14:** (a)–(d) con todos sus controles.
+- **T17(b):** `READY` tras 76 545 ciclos, con la sección retenida 151 ciclos.
+- **Tiempos:** el `pre()` más lento duró 2,05 s.
+
+### Estado de los hallazgos
+
+| ID | Estado |
+| --- | --- |
+| R1 | **Parcial:**<br>• tamaños desde el `.map` y handlers en producción: cerrados, por el analizador real;<br>• símbolos: `parse_nm_symbols` pone tamaño 0 a las líneas de tres campos (`gpio_f2_checks.py:491-494`), y con `nm` así en los dos lados `compare_symbols` da `(True, [])`; el control (l. 558) solo prueba un nombre de más, no un tamaño, y el código de salida de `nm` de la imagen actual se ignora (l. 542);<br>• los controles de cabecera y de handler escriben en el árbol: mutan `gpio_bm.h` (l. 293-305) y crean `temp_dummy_exti_test.c` en `00_gpio/` (l. 371-378) |
+| R2 | Cerrado (falta comprobar el código de salida del configure, l. 222) |
+| R3 | Cerrado (la comparación de la ruta usa `endswith`, l. 120) |
+| R4 | **Parcial:**<br>• **el comando de los resets no funciona:** `--project prj_01` (informe l. 231), cuando debe ser `03_firmware_templates/prj_01_template_dualcore`;<br>• **todas las citas de línea de la herramienta están mal** (por ejemplo `parse_map_sizes` en 425, no 276), y las de B1 apuntan a otro código;<br>• **afirmaciones falsas:** R3 (una expresión que no existe), R5 (\"copia temporal\", cuando muta en sitio), el caso de comentario multilínea, \"26 expresiones de todos los pasos F2\" (son 16 de 18), y M6 y B1 dados por cerrados |
+| R5 | **Parcial:**<br>• una línea `*/ int legacy;` borrada pasa como \"solo añade\" (l. 271);<br>• no se comprueba que las ELF del control salgan de `3df160a`;<br>• `finally: pass` (l. 748-750) |
+| N1 | **Parcial:**<br>• el extractor (l. 583) solo admite el prefijo `r`, así que se salta las tres expresiones `rf\"...\"`, dos de ellas las cuentas de T11 (`gpio_hw_check.py:1032, 1067`): cubre 16 de las 18 de F2;<br>• los nombres de marcador vienen de una lista a mano (l. 587-592), y el banner y el veredicto se inyectan a mano (l. 624-629);<br>• sobre copias temporales, cambiar `CM7 count=` o `FW VERDICT=` en el firmware no hizo fallar la comprobación |
+| N2, N3, N6–N9 | Cerrados |
+| N4 | Casi cerrado: un error de DWF lanza `RuntimeError` (l. 224), que el `except` de l. 1648 no recoge. El hardware pasa a S2 por el `finally`, pero la captura acaba sin `HOST VERDICT` |
+| N5 | Casi cerrado: 1150 muestras tras el disparo (11,5 µs), pero `arm()` recorta en silencio a `BufferSizeInfo` (l. 246) |
+
+**Menores nuevos:**
+- el mock no recorre los caminos de N4 ni `_check_dwf`;
+- hay comentarios desfasados (`gpio_hw_check.py:73, 75`; CM7 l. 56-59);
+- `find_tools` antepone al PATH todo `C:\ST\**\tools\bin` después de `env.ps1` (l. 45-46);
+- el lector de consola usa `errors=\"replace\"`; debe ser `\"backslashreplace\"`.
+
+### Estado
+
+**F1 no pasa todavía.**
+- **El firmware y el host de F2 están verificados en la placa en dos versiones seguidas** (`6b7f10a` y `c90f2b5`).
+- **Lo que queda, en la herramienta sin placa:** R1 (tamaños de símbolos y mutaciones en el árbol) y N1 (cobertura de `rf` y líneas inyectadas).
+- **También queda:** el informe (R4) y los menores.
+- **El banco:** la compuerta de T9 en PF14 vuelve a fallar. El banco reconectado da ahora 0,9–1,4 ns de separación frente a los 1,8–2,3 ns de las corridas de F1. Es una prueba de F1 y no de F2, pero bloquea las dos corridas completas del cierre. Lo decide el responsable.
