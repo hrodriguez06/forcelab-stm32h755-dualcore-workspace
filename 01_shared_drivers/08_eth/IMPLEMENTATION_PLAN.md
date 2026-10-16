@@ -1,6 +1,6 @@
 # Plan de implementación de `08_eth` E3–E7: cero-copia de recepción y callbacks desactivables
 
-Oct 16, 2026 · @Hector · revisión 1
+Oct 16, 2026 · @Hector · revisión 2
 
 Resuelve los cuatro pendientes de `08_eth/README.md` §10.
 
@@ -14,6 +14,10 @@ Resuelve los cuatro pendientes de `08_eth/README.md` §10.
 - **El auditor** revisa el diff, ejecuta la herramienta sin placa una vez y hace **una sola sesión de placa** en `prj_02`, con la imagen nueva y la de control en la misma sesión.
 
 Una fase (F1) y un cierre. Base y control: `main` en `69179d7`. Reglas para el implementador en [`IMPLEMENTER_INSTRUCTIONS.md`](IMPLEMENTER_INSTRUCTIONS.md).
+
+**Revisión 2 (2026-10-16), tras la auditoría de F1:**
+- **T5:** la carga "una a una" no puede vaciar el pool. Además de esa carga, hay una con 32 datagramas en vuelo. El criterio de throughput es la mediana de 3 repeticiones de cada imagen: la nueva ≥ 0,98 × el control, para absorber el ruido del PC.
+- **Árbol limpio:** la herramienta puede escribir en `build/` de los proyectos (es su salida de compilación, ignorada); fuera de `build/` no puede crear nada, ni ignorado.
 
 **Decisiones del responsable (2026-10-16): aprobadas las cuatro, con la opción A en 1–3.**
 

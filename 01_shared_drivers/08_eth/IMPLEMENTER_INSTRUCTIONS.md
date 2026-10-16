@@ -2,7 +2,7 @@
 
 Oct 16, 2026 · @Hector
 
-Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 1) de esta carpeta:
+Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta:
 - el cero-copia de recepción en `prj_02` (E6);
 - `ETH_HAL_CUSTOM_CALLBACKS` (E3);
 - la herramienta `tools/eth_e3e6_checks.py`.
