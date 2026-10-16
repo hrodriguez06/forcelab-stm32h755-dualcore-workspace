@@ -5,11 +5,10 @@ LD2 yellow, LD3 red). It exists to say something useful when nothing else can:
 before `MPU_Config()` and the caches, before `HAL_Init()` and the clock tree, and
 from a fault handler. It uses no HAL and makes no assumption about clocks.
 
-Status: in use by every dual-core project of the repo since their bring-up. It
-has no recorded hardware test of its own and no audit. The LEDs are checked by
-eye, never in a capture (`prj_02_eth_lwip_dualcore/README.md` §6, "Not covered
-here"). Its known limitations, two of which break catalog rules, are in
-[section 5](#5-known-limitations).
+Status: in use by every dual-core project of the repo since their bring-up.
+Phase F1 closed limitations L1 and L2 (mandatory compile-time macros via `#error`),
+partially closed L5 (compile-time range checks on `board_def.h` macros), and completed
+validation across all projects on host (T1–T3) and hardware Nucleo-144 board (T4).
 
 ---
 
@@ -66,18 +65,19 @@ project's README.
 
 ## 3. Project contract
 
-`led_bm.c` includes `board_def.h` if it exists (`__has_include`) and reads:
+`led_bm.c` unconditionally includes `board_def.h` ([`led_bm.c:13`](led_bm.c#L13)) and requires all six macros to be defined:
 
-| Macro | Meaning | Default if missing |
-| :--- | :--- | :--- |
-| `BOARD_LED_GREEN_PORT`, `BOARD_LED_GREEN_BIT` | LD1 | `GPIOB`, `0U` |
-| `BOARD_LED_YELLOW_PORT`, `BOARD_LED_YELLOW_BIT` | LD2 | `GPIOE`, `1U` |
-| `BOARD_LED_RED_PORT`, `BOARD_LED_RED_BIT` | LD3 | `GPIOB`, `14U` |
+| Macro | Meaning | Allowed range | If missing / out of range |
+| :--- | :--- | :--- | :--- |
+| `BOARD_LED_GREEN_PORT`, `BOARD_LED_GREEN_BIT` | LD1 (green) | Port pointer, bit index `0U..15U` | Compile-time `#error` ([`led_bm.c:15-23`](led_bm.c#L15-L23)) |
+| `BOARD_LED_YELLOW_PORT`, `BOARD_LED_YELLOW_BIT` | LD2 (yellow) | Port pointer, bit index `0U..15U` | Compile-time `#error` ([`led_bm.c:25-33`](led_bm.c#L25-L33)) |
+| `BOARD_LED_RED_PORT`, `BOARD_LED_RED_BIT` | LD3 (red) | Port pointer, bit index `0U..15U` | Compile-time `#error` ([`led_bm.c:35-43`](led_bm.c#L35-L43)) |
 
-**`_BIT` is a bit number (0-15), not a `GPIO_PIN_x` mask.** The driver shifts it
-directly into `MODER` and `BSRR`. A macro with another name (for example
-`BOARD_LED_GREEN_PIN GPIO_PIN_0`) is not read: the default is used instead,
-silently (section 5, L1).
+There are **no default hardware pins** in `led_bm.c` (Rule 1 of `01_shared_drivers/README.md`: never hardcode hardware pins in shared drivers).
+
+**`_BIT` is a bit number (0..15), not a `GPIO_PIN_x` mask.** The driver shifts it
+directly into `MODER`, `BSRR` and `ODR`. Defining a mask (such as `GPIO_PIN_0 = 0x0001U`)
+instead of a bit number or specifying a bit index `> 15U` triggers a compile-time `#error`.
 
 A project that wants other pins without `board_def.h` passes its own table to
 `LED_Init_Config()`.
@@ -100,11 +100,15 @@ configuring pins of the same port:
 
 ## 4. Consumers
 
-| Consumer | Uses |
-| :--- | :--- |
-| `prj_01_template_dualcore` | `LED_Init`, `LED_BootStage`, `LED_PanicRed`, `LED_Toggle`, all on CPU1; defines the `_BIT` macros |
-| `prj_02_eth_lwip_dualcore`, `prj_03_adc_dma_eth`, `prj_04_adc_dma_bm_eth` | The same plus `LED_Set`, all on CPU1; their `board_def.h` define `BOARD_LED_*_PIN` masks, which the driver ignores (L1) |
-| `prj_eth_lwip_node` | Its own private copy in `Custom_Drivers/01_led/`, not this driver |
+All dual-core firmware projects define the required `_BIT` macros (PB0 green, PE1 yellow, PB14 red) in their respective `Common/Inc/board_def.h`:
+
+| Consumer | Uses | Board Definition |
+| :--- | :--- | :--- |
+| `prj_01_template_dualcore` | `LED_Init`, `LED_BootStage`, `LED_PanicRed`, `LED_Toggle`, all on CPU1 | [`prj_01_template_dualcore/.../board_def.h:54-59`](../../03_firmware_templates/prj_01_template_dualcore/Common/Inc/board_def.h#L54-L59) |
+| `prj_02_eth_lwip_dualcore` | The same plus `LED_Set`, all on CPU1 | [`prj_02_eth_lwip_dualcore/.../board_def.h:74-79`](../../02_firmware_projects/prj_02_eth_lwip_dualcore/Common/Inc/board_def.h#L74-L79) |
+| `prj_03_adc_dma_eth` | The same plus `LED_Set`, all on CPU1 | [`prj_03_adc_dma_eth/.../board_def.h:74-79`](../../02_firmware_projects/prj_03_adc_dma_eth/Common/Inc/board_def.h#L74-L79) |
+| `prj_04_adc_dma_bm_eth` | The same plus `LED_Set`, all on CPU1 | [`prj_04_adc_dma_bm_eth/.../board_def.h:74-79`](../../02_firmware_projects/prj_04_adc_dma_bm_eth/Common/Inc/board_def.h#L74-L79) |
+| `prj_eth_lwip_node` | Its own private copy in `Custom_Drivers/01_led/`, not this driver | N/A |
 
 ---
 
@@ -112,21 +116,98 @@ configuring pins of the same port:
 
 | # | Limitation | Consequence |
 | :--- | :--- | :--- |
-| L1 | **The pin macros of `prj_02`, `prj_03` and `prj_04` are not read.** They define `BOARD_LED_<x>_PIN` (masks); the driver reads `BOARD_LED_<x>_BIT` and falls back to its defaults. Only `prj_01` defines `_BIT` | Today the defaults are the same pins (PB0, PE1, PB14), so nothing shows. Moving an LED in those projects' `board_def.h` would change nothing, with no warning |
-| L2 | **Default pins in the driver** (`#ifndef … #define`), against rule 1 of `01_shared_drivers/README.md` | This is what makes L1 silent. `08_eth` had the same pattern (its E1) and replaced it with an `#error` per missing macro |
 | L3 | **`MODER` is written outside `gpio_bm`** (section 3.1) | Safe only under the contract of section 3.1 |
 | L4 | **`LED_Toggle()` is not atomic** (`ODR` read, then `BSRR`) | Two contexts toggling the same LED can both read the same state |
-| L5 | **`pin_num` is not checked** in `LED_Init_Config()` | A value above 15 shifts outside `MODER`'s 32 bits |
-| L6 | **No recorded hardware test and no audit** | The LEDs work by observation in every project; nothing captures it |
+| L5 | **`pin_num` range check is partial** | Closed for `board_def.h` via compile-time checks (`#if (BOARD_LED_<x>_BIT) > 15U` → `#error`). Remains open at runtime for custom tables passed directly to `LED_Init_Config(cfg)` (values > 15 shift outside `MODER`'s 32 bits) |
+| L6 | **Hardware verification scope** | Phase F1 completed formal T1–T3 off-board and T4 on-board verification for basic configuration, boot codes and MODER modes. Dynamic blinking under FreeRTOS load is checked by observation in each project |
 
-Closing L1 and L2 means changing the driver (an `#error` per missing `_PORT`/`_BIT`,
-as `08_eth` E1) and the three `board_def.h` at the same time, so that no project
-stops building. Not done.
+*Note: Limitations L1 (masks in `board_def.h`) and L2 (default pins in driver) were completely closed in Phase F1.*
 
 ---
 
-## 6. History
+## 6. Validation
+
+The driver is validated using the dedicated verification tool [`tools/led_l1l2_checks.py`](../../tools/led_l1l2_checks.py).
+Verification covers four tiers (T1–T3 off-board and T4 on hardware):
+
+### 6.1 Test Suites
+
+- **T1: Build Matrix & Selftests (`run_t1`):**
+  - Compiles all 8 production configurations (`debug` and `release` for the 4 projects) directly via `cmake --fresh` and `cmake --build --clean-first`.
+  - Verifies code 0, 0 compiler warnings, `objs > 0`, and confirms that `led_bm.c.obj` was compiled in the log and is present on disk.
+  - Verifies the 9 selftest presets linking `led_bm` (`selftest-gpio`, `selftest-tim`, `selftest-spi`, `selftest-i2c` in `prj_01`; `selftest`, `selftest-adc`, `selftest-uart`, `selftest-hsem`, `selftest-gpio` in `prj_04`) with 0 warnings.
+  - Negative control: compiles a synthetic C file with an intentional unused-variable warning outside the repository using project flags via `run_cmd` and verifies that [`evaluate_build_output`](../../tools/led_l1l2_checks.py#L293-L315) detects the warning and fails.
+  - Image provenance: verified via `FW_GIT_REV` in `fw_build_id.h` (`prj_01`), in the ELF string table (`prj_04`), and via clean repository working tree and in-execution build freshness (`prj_02`, `prj_03`).
+
+- **T2: Preprocessor `#error` and Range Validation (`run_t2`):**
+  - Compiles in a clean temporary directory outside the repository so `-fstack-usage` does not leave `.su` files in the source tree.
+  - 4 positive controls: unmodified `board_def.h` compiles with 0 warnings and exit code 0.
+  - 16 negative mutations (4 per project): missing `_BIT`, missing `_PORT`, `_PIN` mask instead of `_BIT`, and bit `16U > 15U`; all verified to fail with exit code 1 matching the specific `#error` line.
+
+- **T3: Binary Inspection vs UM2408 Oracle & Control (`run_t3`):**
+  - Extracts 24 bytes of `g_led_config` from CM7 `led_bm.c.obj` using `arm-none-eabi-objdump -s`.
+  - Compares the 6 32-bit words across all 8 current builds against the UM2408 board oracle:
+    `['0x58020400', '0x0', '0x58021000', '0x1', '0x58020400', '0xe']` (PB0, PE1, PB14).
+  - Compiles control worktree at baseline commit `9dc6896` in-situ with `build_all.ps1 -Clean` (requiring `pass_count >= 8`), verifying that current binaries match the control bit-for-bit.
+  - Negative control: mutates an extracted byte and verifies that [`parse_and_verify_led_config`](../../tools/led_l1l2_checks.py#L672-L704) rejects it while validating exact 24-byte section size without truncation.
+
+- **T4: Hardware Board Verification (`run_t4`, Auditor only):**
+  - Flashes `debug` images using `tools/flash.py` with `STM32_Programmer_CLI -v`.
+  - Non-intrusive SWD reads (`mode=HOTPLUG`, `-r32`, with explicit `sn=`) of `g_led_config` in RAM and GPIO registers (`MODER_B` and `MODER_E`).
+  - Verifies `g_led_config` matches the UM2408 table and verifies PB0, PB14, and PE1 are configured as outputs (`01b`).
+  - Negative controls: rejects mutated table words and rejects mutated `MODER` (PB0 input `00b`).
+
+### 6.2 Captures Supporting this Driver
+
+| Capture file | Target / Scope | Executed by | Commit recorded | Result |
+| :--- | :--- | :--- | :--- | :--- |
+| [`docs/led_l1l2_audit_t1t3_736948f.txt`](docs/led_l1l2_audit_t1t3_736948f.txt) | Off-board T1–T3 (Matrix 8/8, Selftest 9/9, T2 20/20, T3 Oracle & 9dc6896) | Auditor (@Claude) | `3c2176c` | `OVERALL VERDICT: PASS` |
+| [`docs/led_l1l2_audit_t4_736948f.txt`](docs/led_l1l2_audit_t4_736948f.txt) | Hardware T4 on Nucleo-144 board (hotplug RAM table, MODER outputs, flash `-v`) | Auditor (@Claude) | `3c2176c` | `OVERALL VERDICT: PASS` |
+| [`docs/led_l1l2_audit_t1t3_af836ea.txt`](docs/led_l1l2_audit_t1t3_af836ea.txt) | Off-board T1–T3 (Matrix clean-first, 0 warnings, fresh images) | Auditor (@Claude) | `1f63515` | `OVERALL VERDICT: PASS` |
+| [`docs/led_l1l2_checks_824d989.txt`](docs/led_l1l2_checks_824d989.txt) | Off-board T1–T3 final closure run (clean tree, MA1 provenance, exact 24 B) | Implementer | `02c7c6c` | `OVERALL VERDICT: PASS` |
+
+*Superseded intermediate implementer captures were pruned from `docs/` to keep only authoritative captures; their history remains accessible in git:*
+- `led_l1l2_checks_2e6a15d.txt`: recorded in commit `78aee90` (`git show 78aee90:01_shared_drivers/01_led/docs/led_l1l2_checks_2e6a15d.txt`)
+- `led_l1l2_checks_411673b.txt`: recorded in commit `afe8ee8` (`git show afe8ee8:01_shared_drivers/01_led/docs/led_l1l2_checks_411673b.txt`)
+- `led_l1l2_checks_b9fbaad.txt`: recorded in commit `2d221e8` (`git show 2d221e8:01_shared_drivers/01_led/docs/led_l1l2_checks_b9fbaad.txt`)
+
+---
+
+## 7. History
 
 | Milestone | Commits |
 | :--- | :--- |
-| README written from the code (no code change) | the commit that adds this file |
+| Initial documentation and limitations catalog | `6687a7d` |
+| Decision approval and plan for mandatory pin macros (L1/L2) | `c926c77`, `901e6b4` |
+| Implementation of mandatory `#error` and `_BIT` switch (H1, H2) | `4c15fba` |
+| Verification harness `tools/led_l1l2_checks.py` (H3) | `2e6a15d` |
+| Initial implementation report and off-board capture (H4) | `78aee90`, `736948f` |
+| First audit: product passes on board; findings B1, M1, M2, m1–m9 | `3c2176c` |
+| First audit corrections in tool and `board_def.h` comments | `411673b`, `afe8ee8`, `af836ea` |
+| Second audit: MA1, MA2, m9 findings | `1f63515` |
+| Second audit corrections (warning C compilation, exact 24 B, report) | `b9fbaad`, `2d221e8`, `9546db3` |
+| Second audit approval with MA1 condition for close | `c5ce471` |
+| Close: MA1 clean tree provenance, `prj_01` comment aligned, final capture | `824d989`, `02c7c6c` |
+
+### Process Documents History
+
+The process documents (`IMPLEMENTATION_PLAN.md`, `IMPLEMENTER_INSTRUCTIONS.md`,
+`IMPLEMENTATION_REPORT.md`, `AUDIT.md`) guide the implementation and audit rounds
+and are archived in git history upon closure. They can be inspected using:
+
+```bash
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/01_led/IMPLEMENTATION_PLAN.md)^:01_shared_drivers/01_led/IMPLEMENTATION_PLAN.md
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/01_led/IMPLEMENTER_INSTRUCTIONS.md)^:01_shared_drivers/01_led/IMPLEMENTER_INSTRUCTIONS.md
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/01_led/IMPLEMENTATION_REPORT.md)^:01_shared_drivers/01_led/IMPLEMENTATION_REPORT.md
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/01_led/AUDIT.md)^:01_shared_drivers/01_led/AUDIT.md
+```
+
+### Accepted Tool Minors
+
+As cataloged in `AUDIT.md`:
+- **m1:** In-situ compilation of baseline `9dc6896` via `build_all.ps1 -Clean` verifies `pass_count >= 8`.
+- **m2:** Direct configuration and compilation checks configure return code, compiler output, and verifies `led_bm.c.obj` in build log and on disk.
+- **m4:** Pure parsing function [`parse_and_verify_led_config`](../../tools/led_l1l2_checks.py#L672-L704) validates exact 24-byte section length without slice truncation.
+- **m6:** Working tree cleanliness check ignores only the exact specified output file path.
+- **m7:** Subprocesses execute with explicit timeouts and SWD reads log hexadecimal values.
+- **MA1:** For `prj_02` and `prj_03` (which do not embed git revision in ELF), provenance is established by clean working tree before/after execution and fresh in-execution build.
