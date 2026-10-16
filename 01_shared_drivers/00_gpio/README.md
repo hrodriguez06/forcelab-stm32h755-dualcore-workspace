@@ -187,31 +187,31 @@ IRQn_Type       GPIO_BM_ExtiGetIRQn(uint32_t pin_idx);
 GpioBm_Status_t GPIO_BM_EnableCompensationCell(uint32_t max_cycles);
 ```
 
-- **`GPIO_BM_ExtiConfig`** ([gpio_bm.h:346](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.h#L346), [gpio_bm.c:580](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c#L580)): Configures EXTI lines 0–15 and `SYSCFG_EXTICR` routing for the calling core (`IMR1`/`EMR1` for CM7, `C2IMR1`/`C2EMR1` for CM4). Enables calling core's `RCC_APB4ENR.SYSCFGEN` before taking the lock (banked per core). Inside section: writes `EXTICR`, updates shared `RTSR1`/`FTSR1` triggers according to `trigger` (`GPIO_BM_EXTI_RISING`, `FALLING`, `BOTH`), clears calling core's pending bit in `PR1`/`C2PR1`, writes calling core's interrupt/event masks in `IMR1`/`EMR1`, and verifies written registers. Does not configure pin mode (caller configures input via `GPIO_BM_ConfigInput`) or touch NVIC.
+- **`GPIO_BM_ExtiConfig`** ([gpio_bm.h:346](gpio_bm.h#L346), [gpio_bm.c:580](gpio_bm.c#L580)): Configures EXTI lines 0–15 and `SYSCFG_EXTICR` routing for the calling core (`IMR1`/`EMR1` for CM7, `C2IMR1`/`C2EMR1` for CM4). Enables calling core's `RCC_APB4ENR.SYSCFGEN` before taking the lock (banked per core). Inside section: writes `EXTICR`, updates shared `RTSR1`/`FTSR1` triggers according to `trigger` (`GPIO_BM_EXTI_RISING`, `FALLING`, `BOTH`), clears calling core's pending bit in `PR1`/`C2PR1`, writes calling core's interrupt/event masks in `IMR1`/`EMR1`, and verifies written registers. Does not configure pin mode (caller configures input via `GPIO_BM_ConfigInput`) or touch NVIC.
   - Returns `GPIO_BM_OK` on verified write;
   - `GPIO_BM_ERR_PARAM` if invalid port, `pin_idx > 15`, `trigger` not in 1..3, or neither `interrupt` nor `event` is true;
   - `GPIO_BM_ERR_CONFLICT` if line is already routed to another port in `EXTICR` and either core has an active interrupt/event mask on it;
   - `GPIO_BM_ERR_BUSY` if cross-core lock timeout expires;
-  - `GPIO_BM_ERR_VERIFY` if read-back verification fails.
-- **`GPIO_BM_ExtiDisable`** ([gpio_bm.h:369](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.h#L369), [gpio_bm.c:760](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c#L760)): Disables EXTI line 0–15 for the calling core. Inside section: clears calling core's `IMR1`/`EMR1` masks and `PR1`/`C2PR1` pending bit. If and only if the other core's masks for this line are also zero, it clears `RTSR1`/`FTSR1` triggers and resets `SYSCFG_EXTICR` for this line to 0000 (GPIOA).
+  - `GPIO_BM_ERR_VERIFY` if read-back verification fails for written registers or `RCC_APB4ENR.SYSCFGEN`.
+- **`GPIO_BM_ExtiDisable`** ([gpio_bm.h:369](gpio_bm.h#L369), [gpio_bm.c:760](gpio_bm.c#L760)): Disables EXTI line 0–15 for the calling core. Inside section: clears calling core's `IMR1`/`EMR1` masks and `PR1`/`C2PR1` pending bit. If and only if the other core's masks for this line are also zero, it clears `RTSR1`/`FTSR1` triggers and resets `SYSCFG_EXTICR` for this line to 0000 (GPIOA).
   - Returns `GPIO_BM_OK` on verified write;
   - `GPIO_BM_ERR_PARAM` if invalid port or `pin_idx > 15`;
   - `GPIO_BM_ERR_CONFLICT` if line is currently routed to another port in `EXTICR` (or was already completely disabled and reset to GPIOA);
   - `GPIO_BM_ERR_BUSY` if cross-core lock timeout expires;
-  - `GPIO_BM_ERR_VERIFY` if read-back verification fails.
-- **`GPIO_BM_ExtiTakePending`** ([gpio_bm.h:382](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.h#L382), [gpio_bm.c:856](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c#L856)): Reads calling core's `PR1` (CM7) or `C2PR1` (CM4), masks with `line_mask & 0xFFFF`, clears the pending bits by writing ones to clear without RMW (RM0399 §21.6.21), executes `__DSB()`, and returns the captured pending mask. Enters no critical section, takes no lock, and does not alter PRIMASK; safe to call directly from ISRs.
-- **`GPIO_BM_ExtiSoftwareTrigger`** ([gpio_bm.h:397](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.h#L397), [gpio_bm.c:875](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c#L875)): Writes `1 << pin_idx` to `EXTI_SWIER1` inside the section under lock (RM0399 §21.6.3). Note: hardware only asserts the interrupt if the line's trigger (`RTSR1` or `FTSR1`) and calling core mask (`IMR1`/`C2IMR1`) allow it (RM0399 §21.5.5).
-  - Returns `GPIO_BM_OK` on verified write;
+  - `GPIO_BM_ERR_VERIFY` if read-back verification fails for written registers or `RCC_APB4ENR.SYSCFGEN`.
+- **`GPIO_BM_ExtiTakePending`** ([gpio_bm.h:382](gpio_bm.h#L382), [gpio_bm.c:856](gpio_bm.c#L856)): Reads calling core's `PR1` (CM7) or `C2PR1` (CM4), masks with `line_mask & 0xFFFF`, clears the pending bits by writing ones to clear without RMW (RM0399 §21.6.21), executes `__DSB()`, and returns the captured pending mask. Enters no critical section, takes no lock, and does not alter PRIMASK; safe to call directly from ISRs.
+- **`GPIO_BM_ExtiSoftwareTrigger`** ([gpio_bm.h:397](gpio_bm.h#L397), [gpio_bm.c:875](gpio_bm.c#L875)): Writes `1 << pin_idx` to `EXTI_SWIER1` inside the section under lock (RM0399 §21.6.3). Note: hardware only asserts the interrupt if the line's trigger (`RTSR1` or `FTSR1`) and calling core mask (`IMR1`/`C2IMR1`) allow it (RM0399 §21.5.5).
+  - Returns `GPIO_BM_OK` on successful write (does not perform read-back verification);
   - `GPIO_BM_ERR_PARAM` if `pin_idx > 15`;
   - `GPIO_BM_ERR_BUSY` if cross-core lock timeout expires.
-- **`GPIO_BM_ExtiGetIRQn`** ([gpio_bm.h:406](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.h#L406), [gpio_bm.c:900](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c#L900)): Maps line index 0..15 to CMSIS vector `IRQn_Type` (`EXTI0_IRQn`..`EXTI4_IRQn`, `EXTI9_5_IRQn` for 5..9, `EXTI15_10_IRQn` for 10..15).
+- **`GPIO_BM_ExtiGetIRQn`** ([gpio_bm.h:406](gpio_bm.h#L406), [gpio_bm.c:900](gpio_bm.c#L900)): Maps line index 0..15 to CMSIS vector `IRQn_Type` (`EXTI0_IRQn`..`EXTI4_IRQn`, `EXTI9_5_IRQn` for 5..9, `EXTI15_10_IRQn` for 10..15).
   - Returns CMSIS `IRQn_Type`, or `GPIO_BM_EXTI_IRQN_INVALID` (`(IRQn_Type)(-128)`) if `pin_idx > 15`. Takes no lock, pure mapping.
-- **`GPIO_BM_EnableCompensationCell`** ([gpio_bm.h:429](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.h#L429), [gpio_bm.c:925](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/00_gpio/gpio_bm.c#L925)): Enables I/O compensation cell and waits for `SYSCFG_CCCSR.READY == 1` (RM0399 §12.3.11, §13.3.7, §13.6.5). Requires CSI clock ready (`RCC_CR.CSIRDY == 1`). Enables calling core's `RCC_APB4ENR.SYSCFGEN`. Inside section: sets `CCCSR.EN = 1` and verifies read-back. Immediately exits section (holding lock for only ~138–155 cycles), and waits outside section up to `max_cycles` of `DWT->CYCCNT` for `READY == 1`. Never writes `RCC_CR`, `SYSCFG_CCCSR.HSLV`, `SYSCFG_CCCSR.CS`, or `SYSCFG_CCCR`. If timeout expires or `CYCCNT` does not advance, returns `ERR_NOT_READY` and leaves `CCCSR.EN = 1`.
-  - Returns `GPIO_BM_OK` on verified write;
+- **`GPIO_BM_EnableCompensationCell`** ([gpio_bm.h:429](gpio_bm.h#L429), [gpio_bm.c:925](gpio_bm.c#L925)): Enables I/O compensation cell and waits for `SYSCFG_CCCSR.READY == 1` (RM0399 §12.3.11, §13.3.7, §13.6.5). Requires CSI clock ready (`RCC_CR.CSIRDY == 1`). Enables calling core's `RCC_APB4ENR.SYSCFGEN`. Inside section: sets `CCCSR.EN = 1` and verifies read-back. Immediately exits section (holding lock for only ~138–155 cycles), and waits outside section up to `max_cycles` of `DWT->CYCCNT` for `READY == 1`. Never writes `RCC_CR`, `SYSCFG_CCCSR.HSLV`, `SYSCFG_CCCSR.CS`, or `SYSCFG_CCCR`. If timeout expires or `CYCCNT` does not advance, returns `ERR_NOT_READY` and leaves `CCCSR.EN = 1`.
+  - Returns `GPIO_BM_OK` when `READY == 1` is asserted;
   - `GPIO_BM_ERR_PARAM` if `max_cycles == 0`;
   - `GPIO_BM_ERR_NOT_READY` if CSI clock not ready (`RCC_CR.CSIRDY == 0`), `DWT->CYCCNT` not advancing, or timeout before `READY`;
   - `GPIO_BM_ERR_BUSY` if cross-core lock timeout expires;
-  - `GPIO_BM_ERR_VERIFY` if `CCCSR.EN` write failed read-back.
+  - `GPIO_BM_ERR_VERIFY` if `RCC_APB4ENR.SYSCFGEN` or `CCCSR.EN` write failed read-back.
 
 Constants are the register field values: `GPIO_BM_MODE_INPUT/OUTPUT/AF/ANALOG`
 (0..3), `GPIO_BM_OTYPE_PP/OD`, `GPIO_BM_PULL_NONE/UP/DOWN` (0..2) and
@@ -379,10 +379,12 @@ CPU2 configures no pin in production.
    `EXTI->FTSR1`, `EXTI->SWIER1`, `SYSCFG->EXTICR1..4`, and `SYSCFG->CCCSR` are shared
    between cores; all reads and writes to verify conflict, modify triggers, or route
    pins occur strictly inside `SectionEnter` / `SectionExit`.
-10. **EXTI conflict detection.** `ExtiConfig` returns `ERR_CONFLICT` if `SYSCFG->EXTICR`
-    routes the line to a different port and any core has an active mask (`IMR1`,
+10. **EXTI conflict detection and shared trigger caveat.** `ExtiConfig` returns `ERR_CONFLICT`
+    if `SYSCFG->EXTICR` routes the line to a different port and any core has an active mask (`IMR1`,
     `EMR1`, `C2IMR1`, `C2EMR1`) on that line. `ExtiDisable` returns `ERR_CONFLICT` if
-    the line is routed to a different port in `EXTICR`.
+    the line is routed to a different port in `EXTICR`. *Caveat (`gpio_bm.h:320-322`):* `ExtiConfig`
+    over a line already routed to the same port rewrites `RTSR1`/`FTSR1` triggers even if the other
+    core currently has that line unmasked.
 11. **EXTI write order and deinit honesty.**
     - `ExtiConfig` executes inside the section: 1. `SYSCFG->EXTICR` routing; 2. `RTSR1`/`FTSR1`
       trigger configuration; 3. Clear calling core's pending bit in `PR1`/`C2PR1`; 4. Set
@@ -629,7 +631,7 @@ Independent auditor check of T18 and build matrix (`gpio_f2_audit_checks_6999210
 
 | Test | What it proves | Negative control | Result |
 | :--- | :--- | :--- | :--- |
-| T1 | Refusals of each tier on both cores: exact status; snapshot of every clocked port and both `RCC_AHB4ENR` banks unchanged. Includes a batch with a bad third entry and a mask with PA0 next to PA13. Extended in F2 ([gpio_selftest_common.c:335-377](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro\stm32h755/03_firmware_templates/prj_01_template_dualcore/Common/Src/gpio_selftest_common.c#L335-L377)): `ExtiConfig` (pin 16, trigger 0/4, neither int nor evt, invalid port), `ExtiDisable` (pin 16, invalid port), `ExtiSoftwareTrigger(16)`, `EnableCompensationCell(0)`, and `ExtiGetIRQn(0..16)` against hand-written CMSIS vector table and `INVALID` for 16 | A valid call of the same tier changes the snapshot; F2: valid `ExtiConfig` on unused PF9 changes snapshot | 78 BM (45 F1 + 33 F2) / 32 LL / 35 HAL refusals per core, 0 failures. Identical in both runs at `85b4325` |
+| T1 | Refusals of each tier on both cores: exact status; snapshot of every clocked port and both `RCC_AHB4ENR` banks unchanged. Includes a batch with a bad third entry and a mask with PA0 next to PA13. Extended in F2 ([gpio_selftest_common.c:335-377](../../03_firmware_templates/prj_01_template_dualcore/Common/Src/gpio_selftest_common.c#L335-L377)): `ExtiConfig` (pin 16, trigger 0/4, neither int nor evt, invalid port), `ExtiDisable` (pin 16, invalid port), `ExtiSoftwareTrigger(16)`, `EnableCompensationCell(0)`, and `ExtiGetIRQn(0..16)` against hand-written CMSIS vector table and `INVALID` for 16 | A valid call of the same tier changes the snapshot; F2: valid `ExtiConfig` on unused PF9 changes snapshot | 78 BM (45 F1 + 33 F2) / 32 LL / 35 HAL refusals per core, 0 failures. Identical in both runs at `85b4325` |
 | T2 | 1440 configurations per tier (PF6–PF11, 4 modes × 2 types × 4 speeds × 3 pulls × AF 0/7/15), from a state with every field different, match the RM0399 field table; BM and LL also match raw `HAL_GPIO_Init`; `ODR` = initial level; BM/LL `ReadConfig` = registers; legacy calls give the `ca569b6` bits | A deliberately altered expected image is detected | 0 differences in 4320 configurations per core (1440 per tier) and in 2880 comparisons with raw `HAL_GPIO_Init`; 288 analog+pull refusals per tier; G7 shown on raw HAL 6/6 |
 | TB | A refusing hook: 16 calls × PRIMASK 0/1 all return busy, nothing written, PRIMASK restored, `lock()` called once, nesting counter back to 0. Nesting: one lock for an outer section. **A4**: `SetSharedLock` to a second hook and to `NULL` inside an open section, PRIMASK 0/1: the exit releases the hook that was taken, the new hook is never released without a lock, and the next section uses the new hook (32 checks) | The same hook allowing writes; A4: swapped *before* the section, the call is locked and released on the second hook only (`swap_control=1`) | 274 checks, 0 failures, 32/32 busy, `swap_control=1`, both cores. Mutation M-A4 (exit releases the installed hook): 6 failures on each core |
 | T15 seed | A seed per run from the RNG (HSI48, `DRDY` without `SECS`/`CECS`, bounded waits; a failure is a FAIL). T15 starts at a fixed 40 ms after the RNG read begins | Two runs, two seeds; the start line prints the time used and fails above 30 ms | Seeds `0xB22CE424` / `0x77167D53`; 10 265 µs of 40 ms used in both |
@@ -643,7 +645,7 @@ Independent auditor check of T18 and build matrix (`gpio_f2_audit_checks_6999210
 | T5 | Pull resistances set by each tier; the scope load R<sub>IN</sub> is measured, not assumed | PF14 no pull < 0.1 V; PF15 no pull > 2.9 V; V<sub>DD</sub> agrees on both channels within 50 mV | R<sub>PU</sub> 39.2–39.4 kΩ, R<sub>PD</sub> 42.6–42.7 kΩ (30–50 kΩ, DS12923 table 59); R<sub>IN</sub> 1050.0 / 1047.0 kΩ |
 | T6 | Open-drain of each tier: PF15 as an I2C line (22 kΩ to 3V3), PF14 released | PF14 push-pull high: 3.304 V | PF15 OD low 0.028 V, released 3.235–3.236 V; PF14 released 0.082–0.088 V |
 | T8 | Input → output on PE5 through each tier: A, B one transition; C, D (stale `ODR`) none | Naive order (`MODER`, 1 µs, `BSRR`): a pulse | A=1 B=1 C=0 D=0 on all tiers; control 2 transitions |
-| T9 | t<sub>r</sub> 10–90 % per `OSPEEDR`, 40 edges per speed and pin, 4 interleaved rounds (BM, LL, HAL, BM), Lanczos reconstruction (errata E9) | Pins in input: no edge in 0.5 s | Gate t<sub>r</sub>(LOW) − t<sub>r</sub>(VERY_HIGH) > 5σ: PF14 2.31 > 1.35 ns and 1.79 > 1.29 ns (at `7456494`); PF15 2.41 > 0.77 ns and 2.85 > 0.85 ns. At `85b4325`: PF15 1.60 > 1.03 ns (run 1), 1.82 > 1.43 ns (run 2); PF14 excluded from F2 closing by plan revision 3 (Option C) |
+| T9 | t<sub>r</sub> 10–90 % per `OSPEEDR`, 40 edges per speed and pin, 4 interleaved rounds (BM, LL, HAL, BM), Lanczos reconstruction (errata E9) | Pins in input: no edge in 0.5 s | Gate t<sub>r</sub>(LOW) − t<sub>r</sub>(VERY_HIGH) > 5σ: PF14 2.31 > 1.35 ns and 1.79 > 1.29 ns (at `7456494`); PF15 2.41 > 0.77 ns and 2.85 > 0.85 ns. At `85b4325`: PF15 1.60 > 1.03 ns (run 1), 2.18 > 1.09 ns (run 2); PF14 excluded from F2 closing by plan revision 3 (Option C) |
 | T10 | PA8 in AF0 through each tier outputs MCO1 = HSE/2 | PA8 in AF1: 0 edges | 4.061–4.063 MHz (4 MHz ± 2 %); `RCC_CFGR` restored |
 | T11 | EXTI triggers (RISING, FALLING, BOTH, EVENT) on PE3 (CM7, line 3, DIO8 in, DIO9 out) and PE4 (CM4, line 4, DIO10 in, DIO11 out); N = 200 pulses sent by AD2 for each mode | EVENT mode (`interrupt = false, event = true`): 200 pulses sent by AD2, 0 ISR entries and 0 response pulses on LA | RISING = 200, FALLING = 200, BOTH = 400, EVENT = 0 in all three independent counts (AD2 sent, firmware ISR count in SRAM4, AD2 LA responses), both cores, both runs at `85b4325` |
 | T12 | Independent routing and shared lines: PE3 only on CM7, PE4 only on CM4; line 3 shared on both cores simultaneously; `ExtiDisable` of line 3 on CM4 | `ExtiDisable` of line 3 on CM4 isolates CM4 (count 0, DIO11 0) while CM7 still counts 200 (DIO9 200) | Independent routing: CM7=200, CM4=200; shared line 3: CM7=200, CM4=200; isolation: CM7=200, CM4=0. Identical in both runs at `85b4325` |
@@ -652,10 +654,10 @@ Independent auditor check of T18 and build matrix (`gpio_f2_audit_checks_6999210
 | T16 | Locked pins refuse every tier (config, deinit, legacy) with `MODER` unchanged; a locked port gets more pins from each tier; LL on GPIOJ, HAL on GPIOK | PF6, then PF3, stay free and configurable | `LCKR` `0x00010180` → `0x000101F0`; GPIOJ/GPIOK `0x00010003` |
 | T16 A1 | GPIOK unclocked in both banks, PK5 locked next to PK0/PK1 (`LCKR = 0x00010023`), PK3 in analog. (C, R1) `GPIO_BM_IsPortClocked` false; BM and LL `ReadConfig` of PK3 → `GPIO_BM_ERR_NO_CLOCK`, with their 0xA5-filled structs unchanged byte for byte. (A) `GPIO_HAL_Init(PK3\|PK5)` → `HAL_ERROR`, `MODER` and `LCKR` unchanged, and the port clocked after the call (reset `MODER` = `0xFFFFFFFF` = the unclocked read). (B) PK3 alone → `HAL_OK`, PK3 an output. The unclocked read is printed: the code before A1 fails (A) if it reads 0 and (B) if it reads all ones. Oracle of `IsPortClocked`: a raw read of both RCC banks | (C) control, clocked after (A): `IsPortClocked` true, both `ReadConfig` OK, PK3 analog and no pull. Mutation M-A1 (no clock before the `LCKR` check): (B) `HAL_ERROR`, PK3 not written. Mutation M-R1 (no clock check in BM `ReadConfig`, at `fa44386`): (C) fails, BM returns OK and overwrites its sentinel | Unclocked `LCKR` reads `0xFFFFFFFF`, `IsLocked` PK3 = PK5 = 1; (A), (B) and (C) pass; M-R1: the only failure of its run. At `8b8919a` the step still required a 0 read and failed on that premise only |
 | T17 | I/O compensation cell in CM7. Saves/restores `RCC_CR.CSION` and `CCCSR`.<br>(a) Without CSI (`CSION = 0`, `CSIRDY = 0`): `EnableCompensationCell` returns `ERR_NOT_READY` and leaves `CCCSR` unchanged.<br>(b) With CSI: returns `OK`, `READY = 1`. Prints cycles to READY and section hold time | Without CSI, manual `CCCSR.EN = 1` leaves `READY = 0` (RM0399 §13.3.7) | (a) `st = 7` (`ERR_NOT_READY`), snapshot equal; control `ready_zero = 1`.<br>(b) Run 1: `st = 0`, 76 493 cycles to `READY`, section hold 138 cycles. Run 2: `st = 0`, 76 385 cycles to `READY`, section hold 155 cycles. Restored `CSION = 1`, `CCCSR = 0x00000101`. PASS in both runs at `85b4325` |
-| T18 | Regression without board (`tools/gpio_f2_checks.py`):<br>• In-situ build of 16 control images (`build_all.ps1 -Clean`) in `3df160a` worktree;<br>• `build_all.ps1 -Clean` 8/8;<br>• `selftest-gpio` of `prj_01` (278 objs) and `prj_04` (323 objs) with 0 warnings;<br>• `git diff 3df160a -- '01_shared_drivers/00_gpio/*.h'` only adds;<br>• 0 EXTI handlers in `00_gpio/`;<br>• 0 EXTI handlers in 16 production ELFs;<br>• `.data = 0 B`, `.bss = 8 B` from `.map` (CM7 and CM4);<br>• 16 production ELFs match `3df160a` control in symbols, sizes, and types;<br>• 29/29 expect crosscheck patterns match firmware | 11 negative controls:<br>• Warning counter;<br>• Header signature mutation;<br>• Comment-with-code removal (6 variants);<br>• Driver handler in temp `.c`;<br>• Production handlers mutated text;<br>• `.map` mutated data = 4 B;<br>• Production real symbol size mutation;<br>• Extra symbol;<br>• Symbol type mutation;<br>• 4 crosscheck negative controls | `OVERALL VERDICT: PASS` in `gpio_f2_audit_checks_6999210.txt` (auditor run) and `gpio_f2_checks_39868eb.txt` (implementer run) |
+| T18 | Regression without board (`tools/gpio_f2_checks.py`):<br>• In-situ build of 16 control images (`build_all.ps1 -Clean`) in `3df160a` worktree;<br>• `build_all.ps1 -Clean` 8/8;<br>• `selftest-gpio` of `prj_01` (278 objs) and `prj_04` (323 objs) with 0 warnings;<br>• `git diff 3df160a -- '01_shared_drivers/00_gpio/*.h'` only adds;<br>• 0 EXTI handlers in `00_gpio/`;<br>• 0 EXTI handlers in 16 production ELFs;<br>• `.data = 0 B`, `.bss = 8 B` from `.map` (CM7 and CM4);<br>• 16 production ELFs match `3df160a` control in symbols, sizes, and types;<br>• 29/29 expect crosscheck patterns match firmware | 13 negative controls:<br>• Warning counter;<br>• Header signature mutation;<br>• Comment-with-code removal (6 variants);<br>• Driver handler in temp `.c`;<br>• Production handlers mutated text;<br>• `.map` mutated data = 4 B;<br>• Production real symbol size mutation;<br>• Extra symbol;<br>• Symbol type mutation;<br>• 4 crosscheck negative controls | `OVERALL VERDICT: PASS` in `gpio_f2_audit_checks_6999210.txt` (auditor run) and `gpio_f2_checks_39868eb.txt` (implementer run) |
 | Build id (R3-a, R3-b) | The image is the one this checkout and `build/selftest-gpio` build: the host computes the id of `generated/fw_build_id.h` (its payload starts with the full `HEAD`), CM7 and CM4 print theirs, and the `Rev` of CM7 without `-dirty` must equal the host's `HEAD`, all before S8. Oracle: the id recomputed with `git`, `printf` and `sha256sum` | (1) An image built with `-DGST_RACE_SEED` against a build dir back to clean flags (at `663ae65`). (2) An edit after `cmake --preset`, built without reconfiguring (at `663ae65`). (3) The image of `HEAD~1` (`a97973c`) run from `HEAD`, with and without `--allow-dirty` | `991971a381ccb862` on host, CM7 and CM4 in both runs, equal to the recomputed id; (1) aborted, `3c889d2e7e66805d` against `dbcf810508d80301`; (2) `663ae65-dirty`, `f37405fc05564ac0`; (3) aborted by R3-b before S8 both times, `OE=0x0000` throughout |
 | `--allow-dirty` (R4-a, at `b45120e`) | Under `--allow-dirty` the two cores are still one build of the host's commit: the same `Rev`, the same id (never `unknown`), and base = `HEAD` for each, all before S8. The flag waives only a `-dirty` `Rev` and a host id that differs from the image's | (5) CM7 of `b45120e` with CM4 of `674e8ad` (`HEAD~1`), `--allow-dirty`. Positive control: a comment edited in `Common/`, both cores flashed, `--allow-dirty` | (5) aborted before S8 by R4-a, naming `cm7=b45120e` and `cm4=674e8ad`; `options: allow_dirty=True`; `OE=0x0000` throughout. Positive: both cores `b45120e-dirty`, id `b19f7cef96d5086e`, S8 passed, PASS |
-| Production warm resets | 20 warm resets of `debug` and `release` with the 60 µs limit (`run_warm_resets.py --project --preset`): each reset must show CPU1 and CPU2 with the host's `rev` and id; lock-fail counters by SWD. Repeated for F2 close at `85b4325` (`gpio_f2_close_warm_resets_85b4325.txt`) | (4) `release` flashed, checked against `--preset debug`: fails at reset 1. Without the new options the tool keeps its old output | 20/20 "CPU2 alive" and identity PASS in each (`b761febaca21c7b7` debug, `8c71cc7386c89b16` release, both `7456494`); at `85b4325`: 20/20 PASS (`4a036898df066354`); (4) identity FAIL at reset 1, exit 1; `m7/m4_gpio_lock_fail_count` = 0 |
+| Production warm resets | 20 warm resets with the 60 µs limit (`run_warm_resets.py --project --preset`): each reset must show CPU1 and CPU2 with the host's `rev` and id. In F1 (at `7456494`), tested across `debug` and `release` with SWD lock-fail counters; for F2 closing (at `85b4325`, `gpio_f2_close_warm_resets_85b4325.txt`), executed on `prj_01_template_dualcore` `release` preset | (4) `release` flashed, checked against `--preset debug`: fails at reset 1. Without the new options the tool keeps its old output | 20/20 "CPU2 alive" and identity PASS in each (`b761febaca21c7b7` debug, `8c71cc7386c89b16` release, both at `7456494`; `m7/m4_gpio_lock_fail_count` = 0); at `85b4325` (release only): 20/20 PASS, id `4a036898df066354`; (4) negative control at `7456494`: identity FAIL at reset 1, exit 1 |
 
 ### 9.2 Measurements (B1)
 
@@ -686,21 +688,10 @@ cycles (11.9×): see section 10. The first value of the limit, 20 µs, left only
   - Critical section hold time to write `CCCSR.EN`: **138 cycles** in run 1 and **155 cycles** in run 2 (~0.35–0.39 µs, requirement < 60 µs = 24 000 cycles).
 - **Driver state and symbols (T18, `6999210` and `39868eb`):**
   - Static driver state: `.data = 0 B`, `.bss = 8 B` on both CM7 and CM4 (`gpio_f2_audit_checks_6999210.txt:38-39`).
-  - Production symbol paridad: 16/16 production images match the control commit `3df160a` in symbols, sizes, and types (`gpio_f2_audit_checks_6999210.txt:42-57`). No EXTI symbols or handlers are linked into production images.
+  - Production symbol parity: 16/16 production images match the control commit `3df160a` in symbols, sizes, and types (`gpio_f2_audit_checks_6999210.txt:42-57`). No EXTI symbols or handlers are linked into production images.
 
 Flash (`.text` + `.rodata`, from the `.map`, "Discarded input sections"
-excluded):
-- `prj_01` release (production): `gpio_bm` 92 B on CM7 and 20 B on CM4.
-- `prj_01` images (`build_all`, `text` / `bss`), `1ff10c8` → `7456494` (R3-c:
-  the build line of CPU1, CPU2's identity, `g_shared` 0xA0 → 0xD0 bytes):
-  debug CM7 28 928 → 29 144 / 55 604 → 55 668, CM4 3 320 → 3 456 /
-  12 496 → 12 560; release CM7 27 980 → 28 228 / 55 608 → 55 672, CM4
-  3 004 → 3 112 / 12 496 → 12 560. The other projects are unchanged.
-- Selftest image (debug, `-Og`): `gpio_bm` 1718 B, `gpio_ll` 1258/1268 B,
-  `gpio_hal` 926/928 B (CM7/CM4).
-
-Flash (`.text` + `.rodata`, from the `.map`, "Discarded input sections"
-excluded):
+excluded; baseline measurements from F1 at `7456494`, prior to F2):
 - `prj_01` release (production): `gpio_bm` 92 B on CM7 and 20 B on CM4.
 - `prj_01` images (`build_all`, `text` / `bss`), `1ff10c8` → `7456494` (R3-c:
   the build line of CPU1, CPU2's identity, `g_shared` 0xA0 → 0xD0 bytes):
@@ -780,17 +771,17 @@ capture identifies its image only by `Rev` and the host's tree:
 | **F2 validation and regression evidence** | |
 | `gpio_f2_bench_baseline_4f94c0f.txt` | Pre-F2 bench baseline at `4f94c0f`: 38/38 checks pass, `FW VERDICT=PASS`, `HOST VERDICT=PASS` |
 | `gpio_f2_close_selftest_85b4325_1.txt` | Closing run 1 at `85b4325`: `FW VERDICT=PASS failures=0`; 62/63 host checks pass; only line FAIL is `CHECK T9 gate PF14` (1.05 vs 1.35 ns), excluded from closing verdict by plan revision 3 (Option C); PF15 gate passes (1.60 > 1.03 ns) |
-| `gpio_f2_close_selftest_85b4325_2.txt` | Closing run 2 at `85b4325`: 63/63 host checks pass, `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`; both T9 gates pass (PF14 1.82 > 1.43 ns, PF15 2.11 > 1.15 ns) |
+| `gpio_f2_close_selftest_85b4325_2.txt` | Closing run 2 at `85b4325`: 63/63 host checks pass, `FW VERDICT=PASS failures=0`, `HOST VERDICT=PASS`; both T9 gates pass (PF14 1.82 > 1.43 ns, PF15 2.18 > 1.09 ns) |
 | `gpio_f2_close_warm_resets_85b4325.txt` | Production regression: 20/20 warm resets reaching `(CPU2 alive)`, both cores reporting rev `85b4325` and id `4a036898df066354` in every reset |
-| `gpio_f2_audit_checks_6999210.txt` | Auditor's run of `tools/gpio_f2_checks.py` at `6999210`: control rebuilt from `3df160a` in-situ (16/16 in 224 s), 8/8 matrix build, 2 selftests (0 warnings), 16 production ELFs match symbols/types/sizes, 0 EXTI handlers in driver and production, `.data = 0 B`, `.bss = 8 B`, 29/29 expect patterns match, 11 negative controls pass (`OVERALL VERDICT: PASS`) |
+| `gpio_f2_audit_checks_6999210.txt` | Auditor's run of `tools/gpio_f2_checks.py` at `6999210`: control rebuilt from `3df160a` in-situ (16/16 in 224 s), 8/8 matrix build, 2 selftests (0 warnings), 16 production ELFs match symbols/types/sizes, 0 EXTI handlers in driver and production, `.data = 0 B`, `.bss = 8 B`, 29/29 expect patterns match, 13 negative controls pass (`OVERALL VERDICT: PASS`) |
 | `gpio_f2_checks_39868eb.txt` | Implementer's run of `tools/gpio_f2_checks.py` at tool commit `39868eb`: `OVERALL VERDICT: PASS` |
 | `gpio_f2_mock_39868eb.txt` | Implementer's host simulation and mock tests (`gpio_hw_check.py --mock-test`): 25/25 checks pass, firmware undercount flagged, DWF error, N5 overflow, N4 fw_abort verified (`OVERALL MOCK VERDICT: PASS`) |
 
 #### 9.3.2 Captures removed from the tree
 
-Every one of them passed. They stay in git history; read one with
+The F1 captures passed in their respective revisions; intermediate F2 diagnostic and calibration runs are recorded below with their exact verdicts. They stay in git history; read one with
 `git show <commit>:03_firmware_templates/prj_01_template_dualcore/docs/<file>`
-and list them with
+(`6c0e792` for the rows above; the commit in parentheses for the F2 rows below) and list them with
 `git ls-tree --name-only <commit> 03_firmware_templates/prj_01_template_dualcore/docs/`.
 
 | Revision | What it validated | Result | Files |
@@ -803,9 +794,9 @@ and list them with
 | `1ff10c8` | R2-a, R2-b (60 µs), R3-a | 2 runs PASS, seeds `0xDA4D6E4C` / `0xD1629B52`, `c_raw_both` 58 972 / 59 031; B1 hold CM4 991, 12.10×; warm resets 20/20 ×2, counters 0; `build_all` 8/8 | `gpio_selftest_1ff10c8*`, `*_1ff10c8.txt` |
 | `780dddd` | The first `gpio_ll`-without-section mutation | Superseded by M-R2 at `fa44386` (§9.3.1) | `gpio_dev_mutation_ll_no_section_780dddd-dirty.txt` |
 | `7456494` | `run_warm_resets.py` without options, before R4-b | 20/20; superseded by the `b45120e` capture | `gpio_warm_resets_compat_no_options_7456494.txt` |
-| `cbd68a9` (at `696b5be`) | Auditor bench diagnostic in round 1 | 53/54 checks passed; uncovered compensation cell timeout when polling READY in section; motivated plan revision 2 | `gpio_f2_audit_diag_cbd68a9.txt` |
+| `cbd68a9` (at `696b5be`) | Auditor bench diagnostic in round 1 | FW VERDICT=FAIL (failures=3), HOST VERDICT=FAIL (53/54 checks); host timed out on mismatched T17 string (B1), T17(b) returned ERR_NOT_READY after 50 946 cycles polling READY inside critical section; motivated plan revision 2 | `gpio_f2_audit_diag_cbd68a9.txt` |
 | `6b7f10a` (at `755614a`) | Auditor board run 1 (round 1 corrections) | 63/63 checks passed, `FW VERDICT=PASS`, `HOST VERDICT=PASS` | `gpio_f2_audit_bench_6b7f10a.txt` |
-| `c90f2b5` (at `379cc3b`) | Auditor board run 2 (round 2 corrections) | 62/63 passed, `FW VERDICT=PASS`; only failed T9 gate on PF14 (1.27 vs 1.40 ns) due to AD2 bandwidth on rewired bench; motivated plan revision 3 (Option C) | `gpio_f2_audit_bench_c90f2b5.txt` |
+| `c90f2b5` (at `379cc3b`) | Auditor board run 2 (round 2 corrections) | FW VERDICT=PASS failures=0, HOST VERDICT=FAIL (62/63 checks); only failed T9 gate on PF14 (1.17 vs 1.34 ns) due to AD2 bandwidth on rewired bench; motivated plan revision 3 (Option C) | `gpio_f2_audit_bench_c90f2b5.txt` |
 | `ed4f31c` (at `55e9119`) | Initial F2 no-board implementation submission | Matrix build, selftests, initial checks and mock tests | `gpio_f2_checks_ed4f31c.txt`, `gpio_f2_mock_ed4f31c.txt` |
 | `bc7e64d` (at `25add1f`) | Round 1 audit corrections (no board) | Checks and mock test; superseded by subsequent rounds | `gpio_f2_checks_bc7e64d.txt`, `gpio_f2_mock_bc7e64d.txt` |
 | `a5127df` (at `667c206`) | Round 2 audit corrections (no board) | Checks and mock test; superseded by subsequent rounds | `gpio_f2_checks_a5127df.txt`, `gpio_f2_mock_a5127df.txt` |
@@ -906,10 +897,11 @@ cmake --preset selftest-gpio -DCMAKE_C_FLAGS=
   lists the writers.
 - **T9 gate on PF14 does not resolve on this bench setup and does not count for F2 closing (Plan Revision 3, Decision C).**
   Following bench rewiring, the rise-time separation $t_r(\text{LOW}) - t_r(\text{VERY\_HIGH})$ on PF14 narrowed from
-  1.8–2.3 ns to 0.9–1.4 ns, causing the 5σ gate (1.35 ns) to fail in 5 of 7 runs due to AD2 analog bandwidth limitations
-  (~30 MHz). At 30 MHz of bandwidth, the AD2 cannot reliably resolve MEDIUM, HIGH and VERY_HIGH from each other
-  (12.7–13.3 ns on PF14, 14.4–14.9 ns on PF15). By decision of the project owner, this analog check from F1 is excluded
-  from F2 closing verdicts; the gate on PF15 continues to count and pass (1.60 > 1.03 ns in run 1; 1.82 > 1.43 ns in run 2).
+  1.8–2.3 ns to 0.9–1.4 ns, causing the 5σ gate (1.35 ns) to fail in 5 of 7 runs as documented in Plan Revision 3
+  (Observation of Bench / Decision C), due to AD2 analog bandwidth limitations (~30 MHz). At 30 MHz of bandwidth,
+  the AD2 cannot reliably resolve MEDIUM, HIGH and VERY_HIGH from each other (12.7–13.3 ns on PF14, 14.4–14.9 ns on PF15).
+  By decision of the project owner, this analog check from F1 is excluded from F2 closing verdicts; the gate on PF15
+  continues to count and pass (1.60 > 1.03 ns in run 1; 2.18 > 1.09 ns in run 2).
 - **I/O compensation cell ready time after CSI:** After enabling CSI (`RCC_CR.CSION = 1`), the compensation cell
   requires ~76 400 cycles (~191 µs at 400 MHz) before `SYSCFG_CCCSR.READY` asserts (measured 76 493 cycles in closing
   run 1, 76 385 cycles in closing run 2). To satisfy the 60 µs cross-core lock budget, `GPIO_BM_EnableCompensationCell`
@@ -1343,7 +1335,7 @@ Enforced rules:
 - Zero EXTI handlers in driver, zero handlers in production ELFs (C14); static state unchanged (`.data = 0 B`, `.bss = 8 B`).
 
 Validated in `prj_01_template_dualcore` `selftest-gpio` on bench (T11–T14 on PE3/PE4, T17 on compensation cell)
-and in regression via `tools/gpio_f2_checks.py` (T18). Audit closed at `0c6c079`.
+and in regression via `tools/gpio_f2_checks.py` (T18). La auditoría de la fase de F2 pasó en `0c6c079`.
 
 ---
 
@@ -1425,7 +1417,7 @@ Before changing it:
 | Re-audit 5 and merge verdict; 53 superseded captures removed from `docs/` (§9.3.2 keeps their results) | `6c0e792`, the commit after it |
 | F1b in `prj_04` (G1/G13 closed), `uart_hal` MSP migrated; F1 audit passed at `7687e91`; bench cold boot T6b passed at `74c9119` | `9051a6a` … `7cc456d`, `492d156`, `74c9119` |
 | F1c in `prj_03` (G1 closed across all projects), tools extended; F1 audit passed with conditions at `a20e27c`; close audit passed at `009e997`; cold boot T6b passed at `51efd1e` | `90a866f` … `e9e98c4`, `02b1a7f`, `51efd1e` |
-| F2: EXTI 0–15 and compensation cell in `gpio_bm`; T11–T14, T17 on bench; T18 regression; F1 audit passed at `0c6c079` | `4f94c0f` … `0c6c079` |
+| F2: EXTI 0–15 and compensation cell in `gpio_bm`; T11–T14, T17 on bench; T18 regression; la auditoría de la fase de F2 pasó en `0c6c079` | `4f94c0f` … `0c6c079` |
 
 The implementation plan, the implementer's instructions, the F0 correction and
 F1a instructions, the implementation report and the audit record were removed
@@ -1455,7 +1447,7 @@ F1b, F1c and F2 process documents (`IMPLEMENTATION_PLAN.md`, `IMPLEMENTER_INSTRU
 removes them, which is the latest deletion of each path; F1c's (plan revision 1) are pinned at `7b91177^`; F1b's (plan revision 3) at `e6cb75e^`:
 
 ```bash
-git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/00_gpio/AUDIT.md)^:01_shared_drivers/00_gpio/AUDIT.md   # F2
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/00_gpio/AUDIT.md)^:01_shared_drivers/00_gpio/AUDIT.md   # F2 (válido tras el commit que borra los documentos de F2)
 git show 7b91177^:01_shared_drivers/00_gpio/AUDIT.md                                                                           # F1c
 git show e6cb75e^:01_shared_drivers/00_gpio/AUDIT.md                                                                           # F1b
 # and the same for IMPLEMENTATION_PLAN.md, IMPLEMENTER_INSTRUCTIONS.md and IMPLEMENTATION_REPORT.md
