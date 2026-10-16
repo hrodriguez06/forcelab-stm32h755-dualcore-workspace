@@ -1,0 +1,40 @@
+[+   0.000s] gpio_f2_checks.py starting: test=all
+[+   0.000s] Working tree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+[+   0.000s] Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_3df160a
+[+   0.369s] [host] working tree clean: PASS
+[+   0.425s] [host] control commit 3df160a (expected 3df160a): PASS
+[+   0.701s] === Running T1 Checks (Build Matrix & Selftests) ====
+[+   0.701s] [check] Checking 8/8 matrix build via build_all.ps1...
+[+  73.309s] [host] CHECK build_all 8/8: PASS
+[+  73.309s] [check] Checking selftest-gpio compilation in prj_01 and prj_04 (0 warnings)...
+[+  76.376s] [host] CHECK prj_01_template_dualcore selftest-gpio build: PASS (code=0, warnings=0)
+[+  76.442s] [host] CHECK prj_04_adc_dma_bm_eth selftest-gpio build: PASS (code=0, warnings=0)
+[+  76.442s] [host] T1 VERDICT: PASS
+[+  76.442s] === Running T18 Checks (Regression Without Board) ===
+[+  76.515s] [host] CHECK header freeze (only adds): PASS (Diff only adds declarations)
+[+  76.575s] [host] CHECK header negative control (signature removal detected): PASS
+[+  76.580s] [host] CHECK no EXTI handlers in 00_gpio: PASS
+[+  76.580s] [host] CHECK no EXTI handlers negative control: PASS
+[+  76.609s] [host] CHECK driver state CM7 gpio_bm.o: text=2558 data=0 bss=8 -> PASS
+[+  76.630s] [host] CHECK driver state CM4 gpio_bm.o: text=2546 data=0 bss=8 -> PASS
+[+  76.630s] [host] CHECK driver state negative control (data=4, bss=12 flagged): PASS
+[+  76.630s] [check] Comparing production GPIO_BM_* symbols against control at C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_3df160a...
+[+  76.679s] [host] CHECK prj_01 debug CM7 symbols (9 syms): PASS
+[+  76.719s] [host] CHECK prj_01 debug CM4 symbols (1 syms): PASS
+[+  76.763s] [host] CHECK prj_01 release CM7 symbols (8 syms): PASS
+[+  76.809s] [host] CHECK prj_01 release CM4 symbols (1 syms): PASS
+[+  76.861s] [host] CHECK prj_02 debug CM7 symbols (8 syms): PASS
+[+  76.907s] [host] CHECK prj_02 debug CM4 symbols (0 syms): PASS
+[+  76.956s] [host] CHECK prj_02 release CM7 symbols (7 syms): PASS
+[+  77.000s] [host] CHECK prj_02 release CM4 symbols (0 syms): PASS
+[+  77.054s] [host] CHECK prj_03 debug CM7 symbols (9 syms): PASS
+[+  77.102s] [host] CHECK prj_03 debug CM4 symbols (6 syms): PASS
+[+  77.149s] [host] CHECK prj_03 release CM7 symbols (8 syms): PASS
+[+  77.200s] [host] CHECK prj_03 release CM4 symbols (6 syms): PASS
+[+  77.263s] [host] CHECK prj_04 debug CM7 symbols (9 syms): PASS
+[+  77.312s] [host] CHECK prj_04 debug CM4 symbols (6 syms): PASS
+[+  77.365s] [host] CHECK prj_04 release CM7 symbols (8 syms): PASS
+[+  77.412s] [host] CHECK prj_04 release CM4 symbols (6 syms): PASS
+[+  77.412s] [host] CHECK production symbols negative control (extra GPIO_BM_Exti* flagged): PASS
+[+  77.412s] [host] T18 VERDICT: PASS
+[+  77.412s] OVERALL VERDICT: PASS
