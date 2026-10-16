@@ -1,10 +1,11 @@
-# Informe de Implementación: Fase 00_gpio F2 (Quinta Corrección de Auditoría)
+# Informe de Implementación: Fase 00_gpio F2 (Cierre del Implementador)
 
 **Fecha:** 2026-10-16  
 **Rama:** `driver/gpio-f2`  
-**Estado:** F1 ENTREGADA PARA AUDITORÍA  
+**Estado:** CIERRE ENTREGADO PARA AUDITORÍA  
 **Último commit de código o herramienta:** `39868eb`  
 **Commit de capturas de verificación:** `9f397fc`  
+**Commit de documentación y poda:** `980735d`  
 
 ---
 
@@ -304,4 +305,32 @@ py tools/run_warm_resets.py --project 03_firmware_templates/prj_01_template_dual
 
 ---
 
-F1 CORREGIDA 5 PARA AUDITORIA 39868eb
+## 8. Cierre de Fase F2 (Implementador)
+
+El implementador ha completado todas las actividades requeridas para el cierre de la fase 00_gpio F2:
+
+1. **Actualización completa de la documentación en `01_shared_drivers/00_gpio/README.md`:**
+   - **§2 (Interfaz pública):** Documentadas las 6 funciones nuevas (`GPIO_BM_ExtiConfigLine`, `GPIO_BM_ExtiDeinitLine`, `GPIO_BM_ExtiTakePending`, `GPIO_BM_ExtiTriggerSw`, `GPIO_BM_CompCellEnable`, `GPIO_BM_CompCellGetStatus`), los códigos de estado `GPIO_BM_ERR_CONFLICT` (6) y `GPIO_BM_ERR_NOT_READY` (7), y las constantes/macros auxiliares (`GPIO_BM_EXTI_TRIGGER_*`, `GPIO_BM_EXTI_IRQN_INVALID`, `GPIO_BM_COMP_CELL_READY_TIMEOUT_CYCLES`).
+   - **§3 (Integración en el contrato multi-core del proyecto):** Detallado el uso del cerrojo compartido HSEM 5 para la protección atómica de registros compartidos de EXTI y SYSCFG (`EXTICR`, `RTSR1`, `FTSR1`, `SWIER1`, `CCCSR.EN`), la bancarización por hardware de `SYSCFGEN` en `RCC->APB4ENR`, y la seguridad de `ExtiTakePending` para invocación directa desde ISRs sin tomar cerrojos.
+   - **§4 (Reglas de diseño):** Incorporadas las reglas 8 a 13 del driver (núcleo llamador y registros core, protección de registros compartidos dentro de la sección, detección y rechazo de conflictos, orden atómico y deinit honesto respetando al otro núcleo, seguridad de ISR en `ExtiTakePending`, y espera acotada de celda de compensación fuera de la sección).
+   - **§9 (Estrategia de prueba y validación):** Incorporados los procedimientos, oráculos, controles negativos y resultados cuantitativos de las pruebas T1 (ampliado con validaciones cruzadas y controles negativos), T11 (conteo de flancos y respuestas), T12 (enrutamiento independiente y compartido), T13 (latencias de respuesta medidas con LA: CM7 0.10–0.22 µs, CM4 0.15–0.24 µs), T14 (características EXTI y oráculos), T17 (celda de compensación: tiempo a READY ~76 400 ciclos, retención en sección crítica 138–155 ciclos), T18 (regresión contra `3df160a` y congelamiento de cabeceras/símbolos), y la corrida de 20 warm resets consecutivos en producción. En §9.5 se documenta la lista formal de elementos no ejercitados en F2 (líneas EXTI 16–87, eventos de wakeup/interrupción hacia CPU, HSLV/CS/CCCR).
+   - **§10 (Limitaciones conocidas):** Retirada la indicación de que EXTI no estaba implementado; documentado el comportamiento de la compuerta T9 en PF14 excluida del cierre por decisión del Plan Rev 3 (Opción C); documentado el tiempo de estabilización de la celda de compensación (~76 400 ciclos tras CSI); y registradas las limitaciones aceptadas de `gpio_f2_checks.py`.
+   - **§11 (Consumidores del driver):** Actualizada la tabla de consumidores reflejando el uso de EXTI y celda de compensación en `prj_01_template_dualcore` (`selftest-gpio`).
+   - **§13.3 (Historial de cambios):** Marcada la fase F2 como implementada y resumida la entrega.
+   - **§15 (Trazabilidad y proceso):** Incorporada la fila de la fase F2 (`4f94c0f … 0c6c079` / cierre), anclados los documentos de proceso de F1c al commit `7b91177^`, y referenciados los documentos de proceso de F2 mediante su forma de borrado `$(git log -1 --format=%h --diff-filter=D -- ...)^`.
+
+2. **Poda de capturas según Regla 7 de Sección 14:**
+   - Se eliminaron las 13 capturas intermedias superadas de `03_firmware_templates/prj_01_template_dualcore/docs/` (`gpio_f2_audit_bench_6b7f10a.txt`, `gpio_f2_audit_bench_c90f2b5.txt`, `gpio_f2_audit_diag_cbd68a9.txt`, y los 10 pares de checks/mock de `ed4f31c`, `bc7e64d`, `a5127df`, `fdf7200`, `b1b6342`).
+   - Se conservan exactamente las 7 capturas de respaldo canónicas:
+     1. `gpio_f2_bench_baseline_4f94c0f.txt` (línea base pre-F2, 38/38 checks PASS).
+     2. `gpio_f2_close_selftest_85b4325_1.txt` (primera corrida de cierre en placa, FW PASS, 62/63 checks).
+     3. `gpio_f2_close_selftest_85b4325_2.txt` (segunda corrida de cierre en placa, FW PASS, HOST PASS, 63/63 checks).
+     4. `gpio_f2_close_warm_resets_85b4325.txt` (20/20 warm resets consecutivos en producción).
+     5. `gpio_f2_audit_checks_6999210.txt` (corrida de auditoría de herramientas sin placa, PASS).
+     6. `gpio_f2_checks_39868eb.txt` (corrida de implementador de herramientas sin placa, PASS).
+     7. `gpio_f2_mock_39868eb.txt` (corrida de implementador de mock DWF, PASS).
+   - Los resultados cuantitativos y hashes de commit de las 13 capturas superadas quedaron registrados detalladamente en §9.3.2 de `01_shared_drivers/00_gpio/README.md`.
+
+---
+
+CIERRE ENTREGADO PARA AUDITORIA 980735d
