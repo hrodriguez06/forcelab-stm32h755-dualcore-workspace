@@ -1,11 +1,12 @@
-# Informe de Implementación: Fase 00_gpio F2 (Cierre del Implementador)
+# Informe de Implementación: Fase 00_gpio F2 (Cierre del Implementador - Corrección)
 
 **Fecha:** 2026-10-16  
 **Rama:** `driver/gpio-f2`  
-**Estado:** CIERRE ENTREGADO PARA AUDITORÍA  
+**Estado:** CIERRE CORREGIDO PARA AUDITORÍA  
 **Último commit de código o herramienta:** `39868eb`  
 **Commit de capturas de verificación:** `9f397fc`  
-**Commit de documentación y poda:** `980735d`  
+**Commit de documentación y poda inicial:** `980735d`  
+**Commit de corrección del cierre (C1–C9):** `3cd9278`  
 
 ---
 
@@ -331,6 +332,30 @@ El implementador ha completado todas las actividades requeridas para el cierre d
      7. `gpio_f2_mock_39868eb.txt` (corrida de implementador de mock DWF, PASS).
    - Los resultados cuantitativos y hashes de commit de las 13 capturas superadas quedaron registrados detalladamente en §9.3.2 de `01_shared_drivers/00_gpio/README.md`.
 
+### 8.1 Corrección de Hallazgos de Auditoría del Cierre (C1–C9 en `3cd9278`)
+
+En respuesta a la auditoría del cierre en `c4e180e` (`AUDIT.md`), se aplicaron las correcciones correspondientes de forma exclusiva en `01_shared_drivers/00_gpio/README.md` (commit `3cd9278`), verificando cada cifra contra las capturas canónicas y fuentes del repositorio:
+- **C1 (Compuerta T9 en PF15, corrida 2):** Corregido el valor de la compuerta de tiempo de subida en PF15 para la corrida 2 a **2.18 > 1.09 ns** en sus tres apariciones (tabla §9.1, tabla §9.3.1 y §10), respaldado por `gpio_f2_close_selftest_85b4325_2.txt:1508`.
+- **C2 (Compuerta T9 en `c90f2b5`):** Corregidos los valores de la compuerta en PF14 a **1.17 frente a 1.34 ns** en §9.3.2, coincidiendo con la captura `gpio_f2_audit_bench_c90f2b5.txt`.
+- **C3 (Veredictos de capturas intermedias):** Reescrita la introducción de §9.3.2 y las filas de la tabla para reflejar la realidad de las corridas superadas: `cbd68a9` con `FW VERDICT=FAIL (failures=3)` y `HOST VERDICT=FAIL (53/54)` debido al timeout del host por desfase de cadena de T17 (B1) y al retorno de `ERR_NOT_READY` de la celda de compensación tras 50 946 ciclos en sección crítica; y `c90f2b5` con `FW VERDICT=PASS` y `HOST VERDICT=FAIL (62/63)` debido al margen analógico de T9 en PF14.
+- **C4 (Procedencia de lectura en git history):** Clarificada la introducción de §9.3.2 indicando expresamente que el commit base para leer las capturas antiguas de F1 es `6c0e792`, mientras que para las de F2 es el commit referenciado entre paréntesis en cada fila.
+- **C5 (Alcance de los warm resets de `85b4325`):** Explicitado en la tabla §9.1 que la corrida de cierre en `85b4325` (`gpio_f2_close_warm_resets_85b4325.txt`) se ejecutó exclusivamente sobre el preset `release` de `prj_01_template_dualcore` (20/20 resets con rev `85b4325` e id `4a036898df066354`), distinguiéndola de las corridas completas de F1 con contadores SWD.
+- **C6 (Saneamiento de texto y formato):**
+  - Eliminado el bloque de texto duplicado de Flash (antiguas líneas 702–711).
+  - Fechado el bloque de Flash restante como línea base proveniente de F1 (`7456494`), previa a la fase F2.
+  - Corregida la errata tipográfica "paridad" a "parity".
+  - Reemplazados los siete enlaces absolutos `file:///` (con y sin contrabarras) por enlaces relativos markdown limpios.
+  - Corregido el recuento total de controles negativos de T18 a 13 tanto en la tabla §9.1 como en la tabla §9.3.1.
+- **C7 (Códigos de retorno en §2.2):**
+  - Documentado el retorno de `GPIO_BM_ERR_VERIFY` ante fallo de lectura de `RCC_APB4ENR.SYSCFGEN` en `ExtiConfig`, `ExtiDisable` y `EnableCompensationCell`.
+  - Documentado que `GPIO_BM_ExtiSoftwareTrigger` retorna `GPIO_BM_OK` tras la escritura sin verificación de lectura (SWIER1 no se verifica por diseño).
+  - Documentado que `GPIO_BM_EnableCompensationCell` retorna `GPIO_BM_OK` al confirmarse `SYSCFG_CCCSR.READY == 1` (no "on verified write").
+- **C8 (Salvedad de la regla 10 de §4):** Añadida la salvedad documentada en `gpio_bm.h:320-322`, especificando que la invocación de `ExtiConfig` sobre una línea ya enrutada al mismo puerto reescribe los disparadores `RTSR1`/`FTSR1` aun si el otro núcleo la mantiene actualmente desenmascarada.
+- **C9 (Redacción y precisión de comandos):**
+  - Desambiguada la redacción en §13.3 y §15 indicando de forma unívoca: *"La auditoría de la fase de F2 pasó en `0c6c079`"*.
+  - Citada explícitamente la Revisión 3 del Plan (Observación del banco / Decisión C) en §10 respecto a la tasa de fallo de 5 de 7 corridas de la compuerta de PF14 en T9.
+  - Anotado el comando git de última eliminación de F2 en §15 con `# F2 (válido tras el commit que borra los documentos de F2)`.
+
 ---
 
-CIERRE ENTREGADO PARA AUDITORIA 980735d
+CIERRE CORREGIDO PARA AUDITORIA 3cd9278
