@@ -1,0 +1,43 @@
+=== prj_03 ADC channel fix: auditor's board check ===
+Date: 2026-10-16T09:57:26-06:00  HEAD: 764e8c6  SN: 0016000C4142501220353451
+  [PASS] tree_clean: clean
+
+--- 1. Flash prj_03 debug (build/debug of this checkout) ---
+  CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,333,592 B)
+  CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (2,398,204 B)
+  Download verified successfully
+  [PASS] flash_verified: exit 0
+
+--- 2. UDP JSON on port 5001 ---
+  JSON (rtt 3.0 ms): {"ch": 5, "raw": 1252, "avg": 1389, "min": 1151, "max": 1620, "mv": 69, "rate": 500000, "seq": 7945, "samples": 4067840, "tc": 3972, "ht": 3973, "err": 0, "ovr": 0, "m4_hb": 81}
+  [PASS] json_ch_is_channel_number: ch=5 (expected 5, was 351272992 before the fix)
+
+--- 3. Text reply (CH label) ---
+  text reply: ADC1_CH5 [PB1 [A3]]: raw=1273, avg=1429 (0.071 V), min=1211, max=1653, rate=500000, seq=7949, samples=4069888, dma_tc=3974, dma_ht=3975, err=0, ovr=0, m4_hb=81
+  [PASS] text_label: label shows channel 5
+
+--- 4. Rate over 60 s (tim_f4_checks.measure_udp_window) ---
+  [PASS] window: dt=60.002s, dSamples=30358528, dm4_hb=607, rate=505957.0Hz
+  [PASS] counters_zero: err=0/0 ovr=0/0
+  [PASS] oracle: 50014.05 samples per m4_hb in [49750, 50250]
+  [PASS] sanity: Rate=505956.96 Hz in [502500.0, 510000.0], dt=60.002s
+  [PASS] ch_unchanged_at_B: ch=5
+
+--- 5. net_check.py ---
+  Board    : 192.168.1.150 (prj_03_adc_dma_eth)
+  UDP echo : port 7
+  
+    OK    ICMP  4/4 replies
+    OK    UDP     1 B  rtt= 1.40 ms
+    OK    UDP    25 B  rtt= 1.61 ms
+    OK    UDP   512 B  rtt= 1.98 ms
+    OK    UDP  1024 B  rtt= 2.60 ms
+    OK    UDP  1472 B  rtt= 1.92 ms
+    OK    burst  100/100 returned  (0.1 s)
+  
+  PASS  3/3 checks
+  Now confirm the board agrees: rx_nobuf, tx_nobuf and dma_err
+  should all still read 0 in  py tools/monitor.py --timeout 15
+  [PASS] net_check: exit 0
+
+Verdict: PASS (10/10 gates)
