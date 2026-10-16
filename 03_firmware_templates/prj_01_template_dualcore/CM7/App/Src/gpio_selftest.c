@@ -1585,18 +1585,11 @@ static void step_t10(GstTier_t t)
  * F2 Steps: EXTI 0-15 and Compensation Cell (T11 - T14, T17)
  * ========================================================================================== */
 
-/* Pull-downs on PE3 and PE4 during F2 steps so lines driven by AD2 do not float (m6) */
+/* Pull-downs on PE3 and PE4 during F2 steps so lines driven by AD2 do not float (m6, N6) */
 static void f2_pins_pd(bool enable)
 {
-    const uint32_t mask = (3UL << (PE_EXTI3 * 2U)) | (3UL << (PE_EXTI4 * 2U));
-    if (enable)
-    {
-        GPIOE->PUPDR = (GPIOE->PUPDR & ~mask) | (2UL << (PE_EXTI3 * 2U)) | (2UL << (PE_EXTI4 * 2U));
-    }
-    else
-    {
-        GPIOE->PUPDR = (GPIOE->PUPDR & ~mask);
-    }
+    pins_input_raw(GPIOE, (1UL << PE_EXTI3) | (1UL << PE_EXTI4),
+                   enable ? GPIO_BM_PULL_DOWN : GPIO_BM_PULL_NONE);
 }
 
 static void step_t11_cm7(const char *name, uint32_t trigger, bool interrupt, bool event, uint32_t expected)
@@ -1667,6 +1660,7 @@ static void step_t12(void)
     {
         return;
     }
+    bool ok = false;
     f2_pins_pd(true);
     /* M3: CM7 verifies claim and !abort before authorizing CM4 to drive PE6 */
     if (s_bench_abort || !bench_claim(GPIOE, 1U << PE_SPARE6))
@@ -1690,6 +1684,10 @@ static void step_t12(void)
     NVIC_ClearPendingIRQ(EXTI3_IRQn);
     NVIC_EnableIRQ(EXTI3_IRQn);
 
+    if (s_bench_abort)
+    {
+        goto cleanup;
+    }
     (void)cm4_send(GST_CMD_F2_CONFIG, 4U | (GPIO_BM_EXTI_RISING << 8U), 2U | GST_F2_AUTH_PE6, true, NULL);
 
     (void)sync0();
@@ -1697,12 +1695,16 @@ static void step_t12(void)
     const uint32_t cm7_c1 = s_cm7_exti3_count;
     const uint32_t cm4_c1 = GST_AREA->m4_exti_count;
     LOG("T12 independent: CM7=%lu (exp 200), CM4=%lu (exp 200)", (unsigned long)cm7_c1, (unsigned long)cm4_c1);
-    bool ok = (cm7_c1 == 200U) && (cm4_c1 == 200U);
+    ok = (cm7_c1 == 200U) && (cm4_c1 == 200U);
 
     /* Subtest 2: Line 3 shared in both cores */
     s_cm7_exti3_count = 0U;
     (void)cm4_send(GST_CMD_F2_COUNT_RESET, 0U, 0U, true, NULL);
     (void)cm4_send(GST_CMD_F2_DISABLE, 4U, 0U, true, NULL);
+    if (s_bench_abort)
+    {
+        goto cleanup;
+    }
     (void)cm4_send(GST_CMD_F2_CONFIG, 3U | (GPIO_BM_EXTI_RISING << 8U), 2U | GST_F2_AUTH_PE6, true, NULL);
 
     (void)sync0();
@@ -1724,6 +1726,7 @@ static void step_t12(void)
     LOG("T12 control disabled CM4: CM7=%lu (exp 200), CM4=%lu (exp 0)", (unsigned long)cm7_c3, (unsigned long)cm4_c3);
     ok = ok && (cm7_c3 == 200U) && (cm4_c3 == 0U);
 
+cleanup:
     /* Cleanup */
     NVIC_DisableIRQ(EXTI3_IRQn);
     NVIC_ClearPendingIRQ(EXTI3_IRQn);
@@ -1997,7 +2000,7 @@ static void step_t17(void)
     const uint32_t hold_cycles = gst_shim_hold_max();
     gst_shim_install(false);
 
-    const bool sec_ok = (hold_cycles < (60U * CYC_PER_US));
+    const bool sec_ok = (hold_cycles >= 1U) && (hold_cycles < (60U * CYC_PER_US));
     const bool b_ok = csi_is_on && (st_csi == GPIO_BM_OK) &&
                       ((SYSCFG->CCCSR & SYSCFG_CCCSR_READY) != 0U) && sec_ok;
     LOG("T17(b) Compensation cell with CSI: st=%lu cycles=%lu sec_hold=%lu CCCSR=0x%08lX (sec_ok=%u)",

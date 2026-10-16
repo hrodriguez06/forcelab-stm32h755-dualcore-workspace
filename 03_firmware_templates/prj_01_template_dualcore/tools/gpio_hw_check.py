@@ -212,6 +212,17 @@ def crc32_of(values) -> int:
     return zlib.crc32(bytes(v & 0xFF for v in values)) & 0xFFFFFFFF
 
 
+def _check_dwf(ret, dwf) -> None:
+    if ret is not None and ret == 0:
+        msg = ctypes.create_string_buffer(512)
+        if hasattr(dwf, "FDwfGetLastErrorMsg"):
+            dwf.FDwfGetLastErrorMsg(msg)
+            err = msg.value.decode("utf-8", errors="replace")
+        else:
+            err = "DWF call failed"
+        raise RuntimeError(f"DWF error: {err}")
+
+
 # ---- DigitalIn helper (supports rising and falling edge triggers without touching ad2.py)
 class DigitalInHelper:
     """Helper for Logic Analyzer captures on AD2, supporting both rising and falling edge triggers."""
@@ -230,27 +241,27 @@ class DigitalInHelper:
 
         div = max(1, int(round(DigitalInHelper.DIGITAL_IN_CLOCK_HZ / rate_hz)))
         max_size = ctypes.c_int()
-        dwf.FDwfDigitalInReset(hdwf)
-        dwf.FDwfDigitalInBufferSizeInfo(hdwf, ctypes.byref(max_size))
+        _check_dwf(dwf.FDwfDigitalInReset(hdwf), dwf)
+        _check_dwf(dwf.FDwfDigitalInBufferSizeInfo(hdwf, ctypes.byref(max_size)), dwf)
         n = min(samples, max_size.value) if max_size.value > 0 else samples
-        dwf.FDwfDigitalInDividerSet(hdwf, ctypes.c_uint(div))
-        dwf.FDwfDigitalInSampleFormatSet(hdwf, ctypes.c_int(16))
-        dwf.FDwfDigitalInBufferSizeSet(hdwf, ctypes.c_int(n))
+        _check_dwf(dwf.FDwfDigitalInDividerSet(hdwf, ctypes.c_uint(div)), dwf)
+        _check_dwf(dwf.FDwfDigitalInSampleFormatSet(hdwf, ctypes.c_int(16)), dwf)
+        _check_dwf(dwf.FDwfDigitalInBufferSizeSet(hdwf, ctypes.c_int(n)), dwf)
 
         if trig_rise_mask or trig_fall_mask:
-            dwf.FDwfDigitalInTriggerSourceSet(hdwf, ctypes.c_ubyte(3))  # trigsrcDetectorDigitalIn
-            dwf.FDwfDigitalInTriggerSet(
+            _check_dwf(dwf.FDwfDigitalInTriggerSourceSet(hdwf, ctypes.c_ubyte(3)), dwf)  # trigsrcDetectorDigitalIn
+            _check_dwf(dwf.FDwfDigitalInTriggerSet(
                 hdwf,
                 ctypes.c_uint(0),
                 ctypes.c_uint(0),
                 ctypes.c_uint(trig_rise_mask & 0xFFFF),
                 ctypes.c_uint(trig_fall_mask & 0xFFFF),
-            )
-            dwf.FDwfDigitalInTriggerPositionSet(hdwf, ctypes.c_uint(max(0, n - prefill)))
+            ), dwf)
+            _check_dwf(dwf.FDwfDigitalInTriggerPositionSet(hdwf, ctypes.c_uint(max(0, n - prefill))), dwf)
         else:
-            dwf.FDwfDigitalInTriggerSourceSet(hdwf, ctypes.c_ubyte(0))  # trigsrcNone
+            _check_dwf(dwf.FDwfDigitalInTriggerSourceSet(hdwf, ctypes.c_ubyte(0)), dwf)  # trigsrcNone
 
-        dwf.FDwfDigitalInConfigure(hdwf, ctypes.c_int(1), ctypes.c_int(1))
+        _check_dwf(dwf.FDwfDigitalInConfigure(hdwf, ctypes.c_int(1), ctypes.c_int(1)), dwf)
         return DigitalInHelper.DIGITAL_IN_CLOCK_HZ / div, n
 
     @staticmethod
@@ -265,16 +276,16 @@ class DigitalInHelper:
         sts = ctypes.c_ubyte()
         t0 = time.monotonic()
         while True:
-            dwf.FDwfDigitalInStatus(hdwf, ctypes.c_int(1), ctypes.byref(sts))
+            _check_dwf(dwf.FDwfDigitalInStatus(hdwf, ctypes.c_int(1), ctypes.byref(sts)), dwf)
             if sts.value == 2:  # DwfStateDone
                 break
             if time.monotonic() - t0 > timeout_s:
-                dwf.FDwfDigitalInConfigure(hdwf, ctypes.c_int(0), ctypes.c_int(0))
+                _check_dwf(dwf.FDwfDigitalInConfigure(hdwf, ctypes.c_int(0), ctypes.c_int(0)), dwf)
                 return None
             time.sleep(0.0005)
 
         buf = (ctypes.c_uint16 * samples)()
-        dwf.FDwfDigitalInStatusData(hdwf, buf, ctypes.c_int(2 * samples))
+        _check_dwf(dwf.FDwfDigitalInStatusData(hdwf, buf, ctypes.c_int(2 * samples)), dwf)
         return [int(v) for v in buf]
 
 
@@ -875,11 +886,11 @@ class Session:
         return count
 
     def pulse_train_measured(self, dio_pin: int, resp_dio: int, count: int,
-                             mode: str = "RISING", collect_latencies: bool = False,
-                             expect_resp: bool = True) -> tuple[int, int, list[float]]:
+                             mode: str = "RISING", collect_latencies: bool = False) -> tuple[int, int, list[float]]:
         """Sends `count` pulses on `dio_pin` (DIO8 or DIO10), arms the Logic Analyzer
-        on each edge at 100 MS/s (512 samples) with 50 prefill samples, verifies host-sent
-        edges and MCU response edges on `resp_dio` (DIO9 for CM7, DIO11 for CM4),
+        on each edge at 100 MS/s (1200 samples) with 50 prefill samples (1150 samples post-trigger,
+        satisfying > 10 us window for T13 per N5), verifies host-sent edges and MCU response
+        edges on `resp_dio` (DIO9 for CM7, DIO11 for CM4), checks for fw_abort and consecutive timeouts (N4),
         and optionally records edge-to-edge latencies."""
         pin_bit = 8 if dio_pin == DIO_PE3 else 10
         resp_bit = resp_dio
@@ -890,14 +901,23 @@ class Session:
         self.ad2.digital_io_write(0, dio_pin)
         time.sleep(0.0005)
 
+        consecutive_timeouts = 0
         for _ in range(count):
+            if getattr(self.con, "fw_abort", None):
+                self.log(f"[host] abort during pulse train: {self.con.fw_abort}")
+                break
+            if consecutive_timeouts >= 5:
+                self.log(f"[host] pulse train aborted after {consecutive_timeouts} consecutive LA timeouts")
+                break
+
             if mode == "RISING":
-                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 512, trig_rise_mask=dio_pin, trig_fall_mask=0, prefill=50)
+                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 1200, trig_rise_mask=dio_pin, trig_fall_mask=0, prefill=50)
                 self.ad2.digital_io_write(dio_pin, dio_pin)
                 samples = DigitalInHelper.read(self.ad2, n, timeout_s=0.2)
                 self.ad2.digital_io_write(0, dio_pin)
                 time.sleep(0.0005)
                 if samples:
+                    consecutive_timeouts = 0
                     r_pin = next((i for i in range(1, len(samples))
                                   if ((samples[i] >> pin_bit) & 1) and not ((samples[i - 1] >> pin_bit) & 1)), None)
                     if r_pin is not None:
@@ -908,14 +928,17 @@ class Session:
                             resp_edges += 1
                             if collect_latencies:
                                 latencies.append((r_resp - r_pin) / rate * 1e6)
+                else:
+                    consecutive_timeouts += 1
             elif mode == "FALLING":
                 self.ad2.digital_io_write(dio_pin, dio_pin)
                 time.sleep(0.0005)
-                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 512, trig_rise_mask=0, trig_fall_mask=dio_pin, prefill=50)
+                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 1200, trig_rise_mask=0, trig_fall_mask=dio_pin, prefill=50)
                 self.ad2.digital_io_write(0, dio_pin)
                 samples = DigitalInHelper.read(self.ad2, n, timeout_s=0.2)
                 time.sleep(0.0005)
                 if samples:
+                    consecutive_timeouts = 0
                     f_pin = next((i for i in range(1, len(samples))
                                   if not ((samples[i] >> pin_bit) & 1) and ((samples[i - 1] >> pin_bit) & 1)), None)
                     if f_pin is not None:
@@ -924,13 +947,16 @@ class Session:
                                        if ((samples[i] >> resp_bit) & 1) and not ((samples[i - 1] >> resp_bit) & 1)), None)
                         if r_resp is not None:
                             resp_edges += 1
+                else:
+                    consecutive_timeouts += 1
             elif mode == "BOTH":
                 # Part 1: Rising edge
-                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 512, trig_rise_mask=dio_pin, trig_fall_mask=0, prefill=50)
+                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 1200, trig_rise_mask=dio_pin, trig_fall_mask=0, prefill=50)
                 self.ad2.digital_io_write(dio_pin, dio_pin)
                 samples = DigitalInHelper.read(self.ad2, n, timeout_s=0.2)
                 time.sleep(0.0005)
                 if samples:
+                    consecutive_timeouts = 0
                     r_pin = next((i for i in range(1, len(samples))
                                   if ((samples[i] >> pin_bit) & 1) and not ((samples[i - 1] >> pin_bit) & 1)), None)
                     if r_pin is not None:
@@ -939,12 +965,15 @@ class Session:
                                        if ((samples[i] >> resp_bit) & 1) and not ((samples[i - 1] >> resp_bit) & 1)), None)
                         if r_resp is not None:
                             resp_edges += 1
+                else:
+                    consecutive_timeouts += 1
                 # Part 2: Falling edge
-                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 512, trig_rise_mask=0, trig_fall_mask=dio_pin, prefill=50)
+                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 1200, trig_rise_mask=0, trig_fall_mask=dio_pin, prefill=50)
                 self.ad2.digital_io_write(0, dio_pin)
                 samples = DigitalInHelper.read(self.ad2, n, timeout_s=0.2)
                 time.sleep(0.0005)
                 if samples:
+                    consecutive_timeouts = 0
                     f_pin = next((i for i in range(1, len(samples))
                                   if not ((samples[i] >> pin_bit) & 1) and ((samples[i - 1] >> pin_bit) & 1)), None)
                     if f_pin is not None:
@@ -953,13 +982,16 @@ class Session:
                                        if ((samples[i] >> resp_bit) & 1) and not ((samples[i - 1] >> resp_bit) & 1)), None)
                         if r_resp is not None:
                             resp_edges += 1
+                else:
+                    consecutive_timeouts += 1
             elif mode == "EVENT":
-                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 512, trig_rise_mask=dio_pin, trig_fall_mask=0, prefill=50)
+                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 1200, trig_rise_mask=dio_pin, trig_fall_mask=0, prefill=50)
                 self.ad2.digital_io_write(dio_pin, dio_pin)
                 samples = DigitalInHelper.read(self.ad2, n, timeout_s=0.2)
                 self.ad2.digital_io_write(0, dio_pin)
                 time.sleep(0.0005)
                 if samples:
+                    consecutive_timeouts = 0
                     r_pin = next((i for i in range(1, len(samples))
                                   if ((samples[i] >> pin_bit) & 1) and not ((samples[i - 1] >> pin_bit) & 1)), None)
                     if r_pin is not None:
@@ -967,6 +999,8 @@ class Session:
                     transitions_resp = la_transitions(samples, resp_bit)
                     if transitions_resp > 0:
                         resp_edges += transitions_resp
+                else:
+                    consecutive_timeouts += 1
 
         self.set_oe(DIO_REQ)
         return sent_edges, resp_edges, latencies
@@ -982,13 +1016,12 @@ class Session:
             mode = "EVENT"
 
         collect_lat = (mode == "RISING")
-        expect_resp = (mode != "EVENT")
         res_box: dict[str, int] = {}
 
         def do_pulses() -> None:
             s_edges, r_edges, lats = self.pulse_train_measured(
                 DIO_PE3, resp_dio=9, count=200, mode=mode,
-                collect_latencies=collect_lat, expect_resp=expect_resp
+                collect_latencies=collect_lat
             )
             res_box["sent"] = s_edges
             res_box["resp"] = r_edges
@@ -1018,13 +1051,12 @@ class Session:
             mode = "EVENT"
 
         collect_lat = (mode == "RISING")
-        expect_resp = (mode != "EVENT")
         res_box: dict[str, int] = {}
 
         def do_pulses() -> None:
             s_edges, r_edges, lats = self.pulse_train_measured(
                 DIO_PE4, resp_dio=11, count=200, mode=mode,
-                collect_latencies=collect_lat, expect_resp=expect_resp
+                collect_latencies=collect_lat
             )
             res_box["sent"] = s_edges
             res_box["resp"] = r_edges
@@ -1071,13 +1103,21 @@ class Session:
             self.set_oe(DIO_REQ | DIO_PE3)
             self.ad2.digital_io_write(0, DIO_PE3)
             time.sleep(0.0005)
+            consecutive_timeouts = 0
             for _ in range(200):
-                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 512, trig_rise_mask=DIO_PE3, prefill=50)
+                if getattr(self.con, "fw_abort", None):
+                    self.log(f"[host] abort during T12 shared: {self.con.fw_abort}")
+                    break
+                if consecutive_timeouts >= 5:
+                    self.log("[host] T12 shared aborted after 5 consecutive LA timeouts")
+                    break
+                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 1200, trig_rise_mask=DIO_PE3, prefill=50)
                 self.ad2.digital_io_write(DIO_PE3, DIO_PE3)
                 samples = DigitalInHelper.read(self.ad2, n, timeout_s=0.2)
                 self.ad2.digital_io_write(0, DIO_PE3)
                 time.sleep(0.0005)
                 if samples:
+                    consecutive_timeouts = 0
                     r8 = next((i for i in range(1, len(samples))
                                if ((samples[i] >> 8) & 1) and not ((samples[i - 1] >> 8) & 1)), None)
                     if r8 is not None:
@@ -1086,6 +1126,8 @@ class Session:
                             r9_cnt += 1
                         if any(((s >> 11) & 1) for s in samples[r8:]):
                             r11_cnt += 1
+                else:
+                    consecutive_timeouts += 1
             self.set_oe(DIO_REQ)
             box2["sent"] = sent
             box2["r9"] = r9_cnt
@@ -1107,13 +1149,21 @@ class Session:
             self.set_oe(DIO_REQ | DIO_PE3)
             self.ad2.digital_io_write(0, DIO_PE3)
             time.sleep(0.0005)
+            consecutive_timeouts = 0
             for _ in range(200):
-                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 512, trig_rise_mask=DIO_PE3, prefill=50)
+                if getattr(self.con, "fw_abort", None):
+                    self.log(f"[host] abort during T12 control: {self.con.fw_abort}")
+                    break
+                if consecutive_timeouts >= 5:
+                    self.log("[host] T12 control aborted after 5 consecutive LA timeouts")
+                    break
+                rate, n = DigitalInHelper.arm(self.ad2, 100e6, 1200, trig_rise_mask=DIO_PE3, prefill=50)
                 self.ad2.digital_io_write(DIO_PE3, DIO_PE3)
                 samples = DigitalInHelper.read(self.ad2, n, timeout_s=0.2)
                 self.ad2.digital_io_write(0, DIO_PE3)
                 time.sleep(0.0005)
                 if samples:
+                    consecutive_timeouts = 0
                     r8 = next((i for i in range(1, len(samples))
                                if ((samples[i] >> 8) & 1) and not ((samples[i - 1] >> 8) & 1)), None)
                     if r8 is not None:
@@ -1122,6 +1172,8 @@ class Session:
                             r9_cnt += 1
                         if any(((s >> 11) & 1) for s in samples[r8:]):
                             r11_cnt += 1
+                else:
+                    consecutive_timeouts += 1
             self.set_oe(DIO_REQ)
             box3["sent"] = sent
             box3["r9"] = r9_cnt
@@ -1157,7 +1209,7 @@ class Session:
         ctrl_box: dict[str, int] = {}
         def measure_ctrl() -> None:
             s_edges, r_edges, _ = self.pulse_train_measured(
-                DIO_PE3, resp_dio=9, count=20, mode="RISING", expect_resp=False
+                DIO_PE3, resp_dio=9, count=20, mode="RISING"
             )
             ctrl_box["sent"] = s_edges
             ctrl_box["resp"] = r_edges
@@ -1190,7 +1242,7 @@ class Session:
         ctrl_box: dict[str, int] = {}
         def measure_ctrl() -> None:
             s_edges, r_edges, _ = self.pulse_train_measured(
-                DIO_PE4, resp_dio=11, count=20, mode="RISING", expect_resp=False
+                DIO_PE4, resp_dio=11, count=20, mode="RISING"
             )
             ctrl_box["sent"] = s_edges
             ctrl_box["resp"] = r_edges
@@ -1421,7 +1473,7 @@ def run_mock_test(log: Callable[[str], None]) -> bool:
         "[gpio] STEP T17 bus=NONE v=1",
         "[gpio] T17(a) Compensation cell without CSI: st=7 photo_equal=1",
         "[gpio] T17(a) Control manual EN=1 without CSI: ready_zero=1",
-        "[gpio] T17(b) Compensation cell with CSI: st=0 cycles=245 CCCSR=0x00000003",
+        "[gpio] T17(b) Compensation cell with CSI: st=0 cycles=245 sec_hold=140 CCCSR=0x00000003 (sec_ok=1)",
         "[gpio] T17 compensation cell without CSI (refused) and with CSI (ready) -> PASS",
         "[gpio] STEP DONE bus=NONE v=1",
         "[gpio] FW VERDICT=PASS failures=0",
@@ -1489,6 +1541,20 @@ def main() -> int:
     ap.add_argument("--mock-test", action="store_true", help="run non-board mock test of F2 steps and S3 guard")
     args = ap.parse_args()
 
+    out = args.out
+    if out is None:
+        rev = git_rev()
+        if args.mock_test:
+            out = PROJECT / "docs" / f"gpio_f2_mock_{rev}.txt"
+        else:
+            out = PROJECT / "docs" / f"gpio_selftest_{rev}.txt"
+            n = 2
+            while out.exists():
+                out = PROJECT / "docs" / f"gpio_selftest_{rev}_{n}.txt"
+                n += 1
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out_file = open(out, "w", encoding="utf-8")
+
     lines: list[str] = []
     t0 = time.monotonic()
     lock = threading.Lock()
@@ -1497,128 +1563,115 @@ def main() -> int:
         entry = f"[+{time.monotonic() - t0:8.3f}s] {text}"
         with lock:
             lines.append(entry)
+            out_file.write(entry + "\n")
+            out_file.flush()
         print(entry, flush=True)
 
-    # R4-b: what the run was asked to do, first. argv as given (shell-quoted),
-    # then the options as argparse resolved them, defaults included.
-    stamp(f"[host] argv: {shlex.join(sys.argv[1:])}")
-    stamp(f"[host] options: allow_dirty={args.allow_dirty} preset={args.preset} no_reset={args.no_reset} mock_test={args.mock_test}")
-    stamp(f"[host] gpio_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}")
+    try:
+        # R4-b: what the run was asked to do, first. argv as given (shell-quoted),
+        # then the options as argparse resolved them, defaults included.
+        stamp(f"[host] argv: {shlex.join(sys.argv[1:])}")
+        stamp(f"[host] options: allow_dirty={args.allow_dirty} preset={args.preset} no_reset={args.no_reset} mock_test={args.mock_test}")
+        stamp(f"[host] gpio_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}")
 
-    if args.mock_test:
-        stamp("[host] running non-board mock test suite for Phase 00_gpio F2")
+        if args.mock_test:
+            stamp("[host] running non-board mock test suite for Phase 00_gpio F2")
+            tree_record(stamp)
+            mock_ok = run_mock_test(stamp)
+            return 0 if mock_ok else 1
+
+        stamp("[host] checklist: GND first, DIO per README table, nothing on W1/W2/V+/V-; WaveForms GUI closed; "
+              "image selftest-gpio flashed with this script stopped")
         tree_record(stamp)
-        mock_ok = run_mock_test(stamp)
-        out = args.out
-        if out is None:
-            rev = git_rev()
-            out = PROJECT / "docs" / f"gpio_f2_mock_{rev}.txt"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        with lock:
-            out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print(f"capture: {out}")
-        return 0 if mock_ok else 1
-    stamp("[host] checklist: GND first, DIO per README table, nothing on W1/W2/V+/V-; WaveForms GUI closed; "
-          "image selftest-gpio flashed with this script stopped")
-    tree_record(stamp)
-    build_id = host_build_id(args.preset)
-    stamp(f"[host] build id of this checkout and build/{args.preset}: {build_id}")
-    guard_ok = t0b_guard_selftest(stamp)
+        build_id = host_build_id(args.preset)
+        stamp(f"[host] build id of this checkout and build/{args.preset}: {build_id}")
+        guard_ok = t0b_guard_selftest(stamp)
 
-    port = args.port or autodetect()
-    if not port:
-        stamp("[host] ERROR: no ST-LINK VCP found")
-        return 2
+        port = args.port or autodetect()
+        if not port:
+            stamp("[host] ERROR: no ST-LINK VCP found")
+            return 2
 
-    verdict_fw = None
-    session: Optional[Session] = None
-    abort: Optional[str] = None
-    revs: dict[str, str] = {}
-    with AD2() as ad2, SerialPort(port, 115200) as ser:
-        stamp(f"[ad2] opened in S2: OE=0x{ad2.get_oe():04X} DIO=0x{ad2.digital_io_read():04X}")
-        con = Console(ser, t0, stamp)
-        try:
-            if not args.no_reset:
-                stamp("[host] reset through SWD (STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst), AD2 in S2")
-                subprocess.run([cube_programmer(), "-c", "port=SWD", "mode=HOTPLUG", "-rst"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-            revs["cm7"] = con.expect(r"\[gpio\] CM7 Rev (\S+)", 20.0).group(1)
-            ids = {"cm7": con.expect(r"\[gpio\] CM7 Build id (\S+)", 10.0).group(1)}
-            revs["cm4"] = con.expect(r"\[gpio\] CM4 Rev (\S+)", 10.0).group(1)
-            ids["cm4"] = con.expect(r"\[gpio\] CM4 Build id (.+?)\s*$", 10.0).group(1)
-            ver = int(con.expect(r"\[gpio\] GPIO_BENCH v(\d+) idle", 10.0).group(1))
-            if ver != BENCH_VERSION:
-                raise BenchAbort(f"S8: firmware protocol v{ver}, host v{BENCH_VERSION}")
-            # R4-a, R3-b: the two cores are one build of this checkout's commit.
-            # --allow-dirty waives none of this.
-            head = git_rev()
-            base = {c: (r[:-len("-dirty")] if r.endswith("-dirty") else r) for c, r in revs.items()}
-            stamp(f"[host] R4-a: cm7 Rev={revs['cm7']} id={ids['cm7']}; cm4 Rev={revs['cm4']} id={ids['cm4']}; "
-                  f"host HEAD={head} id={build_id}")
-            if revs["cm7"] != revs["cm4"]:
-                raise BenchAbort(f"R4-a: cm7 and cm4 come from different trees "
-                                 f"(Rev cm7={revs['cm7']} cm4={revs['cm4']})")
-            if ids["cm7"] != ids["cm4"] or "unknown" in (ids["cm7"], ids["cm4"]):
-                raise BenchAbort(f"R4-a: cm7 and cm4 are not one build "
-                                 f"(id cm7={ids['cm7']} cm4={ids['cm4']})")
-            for core in ("cm7", "cm4"):
-                if head == "unknown" or base[core] != head:
-                    raise BenchAbort(f"R3-b: {core} was built at {base[core]} (Rev {revs[core]}), "
-                                     f"this checkout is at {head}")
-            # What --allow-dirty may waive: a -dirty Rev (R2), and a host id that
-            # differs from the image's (R3-a). "unknown" never matches.
-            dirty = revs["cm7"].endswith("-dirty")
-            if dirty and not args.allow_dirty:
-                raise BenchAbort(f"R2: Rev cm7={revs['cm7']} cm4={revs['cm4']} is not one clean commit")
-            stamp(f"[host] build id host={build_id} cm7={ids['cm7']} cm4={ids['cm4']}")
-            if build_id == "unknown" or ids["cm7"] != build_id:
-                if not args.allow_dirty:
-                    raise BenchAbort(f"R3-a: the image is not the one this checkout builds "
-                                     f"(host={build_id} cm7={ids['cm7']} cm4={ids['cm4']})")
-                stamp("[host] R3-a: build ids differ from the host's; --allow-dirty given, going on")
-            stamp(f"[host] S8: banner v{ver}, Rev cm7={revs['cm7']} cm4={revs['cm4']}")
-            session = Session(ad2, con, stamp)
-            session.set_oe(DIO_REQ)          # HOST_REQ output, low
-            session.req(False)
-            session.run()
-            m = con.expect(r"\[gpio\] FW VERDICT=(\w+)", 120.0)
-            verdict_fw = m.group(1)
-        except (BenchAbort, AD2SafetyViolation, subprocess.CalledProcessError) as e:
-            abort = str(e)
-            ad2.set_safe_state()
-            stamp(f"[ad2] ABORT: {abort}; AD2 back in S2 (OE=0x{ad2.get_oe():04X})")
+        verdict_fw = None
+        session: Optional[Session] = None
+        abort: Optional[str] = None
+        revs: dict[str, str] = {}
+        with AD2() as ad2, SerialPort(port, 115200) as ser:
+            stamp(f"[ad2] opened in S2: OE=0x{ad2.get_oe():04X} DIO=0x{ad2.digital_io_read():04X}")
+            con = Console(ser, t0, stamp)
             try:
-                m = con.expect(r"\[gpio\] FW VERDICT=(\w+)", 60.0)
+                if not args.no_reset:
+                    stamp("[host] reset through SWD (STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst), AD2 in S2")
+                    subprocess.run([cube_programmer(), "-c", "port=SWD", "mode=HOTPLUG", "-rst"],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                revs["cm7"] = con.expect(r"\[gpio\] CM7 Rev (\S+)", 20.0).group(1)
+                ids = {"cm7": con.expect(r"\[gpio\] CM7 Build id (\S+)", 10.0).group(1)}
+                revs["cm4"] = con.expect(r"\[gpio\] CM4 Rev (\S+)", 10.0).group(1)
+                ids["cm4"] = con.expect(r"\[gpio\] CM4 Build id (.+?)\s*$", 10.0).group(1)
+                ver = int(con.expect(r"\[gpio\] GPIO_BENCH v(\d+) idle", 10.0).group(1))
+                if ver != BENCH_VERSION:
+                    raise BenchAbort(f"S8: firmware protocol v{ver}, host v{BENCH_VERSION}")
+                # R4-a, R3-b: the two cores are one build of this checkout's commit.
+                # --allow-dirty waives none of this.
+                head = git_rev()
+                base = {c: (r[:-len("-dirty")] if r.endswith("-dirty") else r) for c, r in revs.items()}
+                stamp(f"[host] R4-a: cm7 Rev={revs['cm7']} id={ids['cm7']}; cm4 Rev={revs['cm4']} id={ids['cm4']}; "
+                      f"host HEAD={head} id={build_id}")
+                if revs["cm7"] != revs["cm4"]:
+                    raise BenchAbort(f"R4-a: cm7 and cm4 come from different trees "
+                                     f"(Rev cm7={revs['cm7']} cm4={revs['cm4']})")
+                if ids["cm7"] != ids["cm4"] or "unknown" in (ids["cm7"], ids["cm4"]):
+                    raise BenchAbort(f"R4-a: cm7 and cm4 are not one build "
+                                     f"(id cm7={ids['cm7']} cm4={ids['cm4']})")
+                for core in ("cm7", "cm4"):
+                    if head == "unknown" or base[core] != head:
+                        raise BenchAbort(f"R3-b: {core} was built at {base[core]} (Rev {revs[core]}), "
+                                         f"this checkout is at {head}")
+                # What --allow-dirty may waive: a -dirty Rev (R2), and a host id that
+                # differs from the image's (R3-a). "unknown" never matches.
+                dirty = revs["cm7"].endswith("-dirty")
+                if dirty and not args.allow_dirty:
+                    raise BenchAbort(f"R2: Rev cm7={revs['cm7']} cm4={revs['cm4']} is not one clean commit")
+                stamp(f"[host] build id host={build_id} cm7={ids['cm7']} cm4={ids['cm4']}")
+                if build_id == "unknown" or ids["cm7"] != build_id:
+                    if not args.allow_dirty:
+                        raise BenchAbort(f"R3-a: the image is not the one this checkout builds "
+                                         f"(host={build_id} cm7={ids['cm7']} cm4={ids['cm4']})")
+                    stamp("[host] R3-a: build ids differ from the host's; --allow-dirty given, going on")
+                stamp(f"[host] S8: banner v{ver}, Rev cm7={revs['cm7']} cm4={revs['cm4']}")
+                session = Session(ad2, con, stamp)
+                session.set_oe(DIO_REQ)          # HOST_REQ output, low
+                session.req(False)
+                session.run()
+                m = con.expect(r"\[gpio\] FW VERDICT=(\w+)", 120.0)
                 verdict_fw = m.group(1)
-            except BenchAbort:
-                pass
-        finally:
-            ad2.set_safe_state()
-            time.sleep(0.3)
-            con.close()
-        stamp(f"[ad2] closing in S2: OE=0x{ad2.get_oe():04X}")
+            except (BenchAbort, AD2SafetyViolation, subprocess.CalledProcessError) as e:
+                abort = str(e)
+                ad2.set_safe_state()
+                stamp(f"[ad2] ABORT: {abort}; AD2 back in S2 (OE=0x{ad2.get_oe():04X})")
+                try:
+                    m = con.expect(r"\[gpio\] FW VERDICT=(\w+)", 60.0)
+                    verdict_fw = m.group(1)
+                except BenchAbort:
+                    pass
+            finally:
+                ad2.set_safe_state()
+                time.sleep(0.3)
+                con.close()
+            stamp(f"[ad2] closing in S2: OE=0x{ad2.get_oe():04X}")
 
-    checks = session.checks if session else []
-    stamp(f"[host] T0B(a) host guard: {'PASS' if guard_ok else 'FAIL'}")
-    for name, ok in checks:
-        stamp(f"[host] CHECK {name}: {'PASS' if ok else 'FAIL'}")
-    all_ok = (guard_ok and abort is None and verdict_fw == "PASS" and bool(checks) and all(ok for _, ok in checks))
-    stamp(f"[host] {sum(1 for _, ok in checks if ok)}/{len(checks)} host checks passed, FW VERDICT={verdict_fw}, "
-          f"abort={abort}")
-    stamp(f"HOST VERDICT={'PASS' if all_ok else 'FAIL'}")
-
-    out = args.out
-    if out is None:
-        rev = revs.get("cm7", "unknown")
-        out = PROJECT / "docs" / f"gpio_selftest_{rev}.txt"
-        n = 2
-        while out.exists():
-            out = PROJECT / "docs" / f"gpio_selftest_{rev}_{n}.txt"
-            n += 1
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with lock:
-        out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"capture: {out}")
+        checks = session.checks if session else []
+        stamp(f"[host] T0B(a) host guard: {'PASS' if guard_ok else 'FAIL'}")
+        for name, ok in checks:
+            stamp(f"[host] CHECK {name}: {'PASS' if ok else 'FAIL'}")
+        all_ok = (guard_ok and abort is None and verdict_fw == "PASS" and bool(checks) and all(ok for _, ok in checks))
+        stamp(f"[host] {sum(1 for _, ok in checks if ok)}/{len(checks)} host checks passed, FW VERDICT={verdict_fw}, "
+              f"abort={abort}")
+        stamp(f"HOST VERDICT={'PASS' if all_ok else 'FAIL'}")
+        return 0 if all_ok else 1
+    finally:
+        out_file.close()
+        print(f"capture: {out}")
     return 0 if all_ok else 1
 
 

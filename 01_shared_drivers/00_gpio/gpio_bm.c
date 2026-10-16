@@ -967,16 +967,29 @@ GpioBm_Status_t GPIO_BM_EnableCompensationCell(uint32_t max_cycles)
 
     /* Wait for READY flag bounded by max_cycles of DWT->CYCCNT.
      * If CYCCNT does not advance or timeout expires, return ERR_NOT_READY
-     * leaving CCCSR.EN = 1. */
-    const uint32_t start = DWT->CYCCNT;
-    uint32_t poll_count = 0U;
+     * leaving CCCSR.EN = 1. Tracks consecutive unchanged readings (N7). */
+    uint32_t prev = DWT->CYCCNT;
+    const uint32_t start = prev;
+    uint32_t unchanged_reads = 0U;
 
     while ((SYSCFG->CCCSR & SYSCFG_CCCSR_READY) == 0UL)
     {
         const uint32_t current = DWT->CYCCNT;
-        poll_count++;
-        if (((uint32_t)(current - start) >= max_cycles) ||
-            ((poll_count >= 100U || poll_count >= max_cycles) && (current == start)))
+        if (current == prev)
+        {
+            unchanged_reads++;
+            if (unchanged_reads >= 100U || unchanged_reads >= max_cycles)
+            {
+                return GPIO_BM_ERR_NOT_READY;
+            }
+        }
+        else
+        {
+            unchanged_reads = 0U;
+            prev = current;
+        }
+
+        if ((uint32_t)(current - start) >= max_cycles)
         {
             return GPIO_BM_ERR_NOT_READY;
         }
