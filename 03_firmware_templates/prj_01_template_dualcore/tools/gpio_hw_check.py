@@ -41,6 +41,7 @@ Standard library only (ctypes); `py`, not `python`.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import math
 import os
@@ -89,6 +90,12 @@ STEPS = [
     ("T8_BM", "NONE"), ("T8_LL", "NONE"), ("T8_HAL", "NONE"), ("T8_CTRL", "NONE"),
     ("T9", "NONE"),
     ("T10_BM", "NONE"), ("T10_LL", "NONE"), ("T10_HAL", "NONE"),
+    ("T11_CM7_RISING", "NONE"), ("T11_CM7_FALLING", "NONE"), ("T11_CM7_BOTH", "NONE"), ("T11_CM7_EVENT", "NONE"),
+    ("T11_CM4_RISING", "NONE"), ("T11_CM4_FALLING", "NONE"), ("T11_CM4_BOTH", "NONE"), ("T11_CM4_EVENT", "NONE"),
+    ("T12", "NONE"),
+    ("T13_CM7", "NONE"), ("T13_CM4", "NONE"),
+    ("T14", "NONE"),
+    ("T17", "NONE"),
     ("DONE", "NONE"),
 ]
 TIERS = ("BM", "LL", "HAL")
@@ -211,6 +218,13 @@ class _MockDwf:
     def __init__(self) -> None:
         self.oe_calls: list[int] = []
         self._oe = 0
+        self._output_val = 0
+        self.la_trigger_mask = 0
+        self.la_samples = 4096
+        self.la_rate = 100e6
+        self.la_armed = False
+        self.mock_disable_response = False
+        self.mock_la_samples: Optional[list[int]] = None
 
     def FDwfDigitalIOOutputEnableSet(self, h, mask):   # noqa: N802
         self.oe_calls.append(int(mask.value))
@@ -221,14 +235,153 @@ class _MockDwf:
 
     def FDwfDigitalIOReset(self, h):                   # noqa: N802
         self._oe = 0
+        self._output_val = 0
 
     def FDwfDigitalIOConfigure(self, h):               # noqa: N802
         pass
 
+    def FDwfDigitalIOOutputSet(self, h, val):          # noqa: N802
+        self._output_val = int(val.value)
+
+    def FDwfDigitalIOInputStatus(self, h, ref):        # noqa: N802
+        # In handshake, MCU responds to HOST_REQ: if HOST_REQ high, MCU_ACK drops; if low, MCU_ACK rises.
+        ack = 0 if (self._output_val & DIO_REQ) else DIO_ACK
+        ref._obj.value = ack
+
+    def FDwfDigitalInReset(self, h):                   # noqa: N802
+        self.la_armed = False
+
+    def FDwfDigitalInBufferSizeInfo(self, h, ref):     # noqa: N802
+        ref._obj.value = 16384
+
+    def FDwfDigitalInDividerSet(self, h, div):         # noqa: N802
+        pass
+
+    def FDwfDigitalInSampleFormatSet(self, h, fmt):    # noqa: N802
+        pass
+
+    def FDwfDigitalInBufferSizeSet(self, h, n):        # noqa: N802
+        self.la_samples = int(n.value)
+
+    def FDwfDigitalInTriggerSourceSet(self, h, src):   # noqa: N802
+        pass
+
+    def FDwfDigitalInTriggerSet(self, h, low, hi, rise, fall):  # noqa: N802
+        self.la_trigger_mask = int(rise.value)
+
+    def FDwfDigitalInTriggerPositionSet(self, h, pos):  # noqa: N802
+        pass
+
+    def FDwfDigitalInConfigure(self, h, rearm, start):  # noqa: N802
+        self.la_armed = bool(start.value)
+
+    def FDwfDigitalInStatus(self, h, read_data, ref):   # noqa: N802
+        ref._obj.value = 2  # DwfStateDone
+
+    def FDwfDigitalInStatusData(self, h, buf, nbytes):  # noqa: N802
+        n_samples = nbytes.value // 2
+        if self.mock_la_samples is not None:
+            samples = self.mock_la_samples
+        else:
+            samples = [0] * n_samples
+            trig_bit = None
+            resp_bit = None
+            if self.la_trigger_mask & DIO_PE3:
+                trig_bit, resp_bit = 8, 9
+            elif self.la_trigger_mask & DIO_PE4:
+                trig_bit, resp_bit = 10, 11
+            if trig_bit is not None:
+                for i in range(100, n_samples):
+                    samples[i] |= (1 << trig_bit)
+                if resp_bit is not None and not self.mock_disable_response:
+                    for i in range(180, min(n_samples, 230)):
+                        samples[i] |= (1 << resp_bit)
+        for i in range(min(n_samples, len(samples))):
+            buf[i] = samples[i] & 0xFFFF
+
+
+class MockAD2:
+    """Mock AD2 wrapper for non-board testing."""
+
+    def __init__(self, mock_dwf: _MockDwf) -> None:
+        self._dwf = mock_dwf
+        self._oe = 0
+        self._out = 0
+        self.mock_disable_response = False
+
+    def __enter__(self) -> "MockAD2":
+        return self
+
+    def __exit__(self, *args) -> None:
+        self.set_safe_state()
+
+    def set_safe_state(self) -> None:
+        self._oe = 0
+        self._out = 0
+        self._dwf.FDwfDigitalIOReset(1)
+
+    def set_oe(self, mask: int, owner: int = GPIO_BENCH_BUS_NONE) -> None:
+        ad2mod.ad2_set_oe(self._dwf, 1, mask, owner)
+        self._oe = mask
+
+    def get_oe(self) -> int:
+        return self._oe
+
+    def digital_io_write(self, val: int, mask: int) -> None:
+        self._out = (self._out & ~mask) | (val & mask)
+        self._dwf.FDwfDigitalIOOutputSet(1, ctypes.c_uint32(self._out))
+
+    def digital_io_read(self) -> int:
+        ref = ctypes.c_uint32()
+        self._dwf.FDwfDigitalIOInputStatus(1, ctypes.byref(ref))
+        return ref.value
+
+    def la_arm(self, rate_hz: float, samples: int, trigger_rise_mask: int = 0,
+               prefill: int = 0) -> tuple[float, int]:
+        self._dwf.la_trigger_mask = trigger_rise_mask
+        self._dwf.la_samples = samples
+        self._dwf.la_rate = rate_hz
+        return rate_hz, samples
+
+    def la_read(self, samples: int, timeout_s: float = 2.0) -> Optional[list[int]]:
+        buf = (ctypes.c_uint16 * samples)()
+        self._dwf.mock_disable_response = getattr(self, "mock_disable_response", False)
+        self._dwf.FDwfDigitalInStatusData(1, buf, ctypes.c_int(2 * samples))
+        return [int(v) for v in buf]
+
+
+class MockConsole:
+    """Mock console that replays pre-configured firmware lines for testing without hardware."""
+
+    def __init__(self, lines: list[str], sink: Callable[[str], None]) -> None:
+        self._sink = sink
+        self._q: "queue.Queue[str]" = queue.Queue()
+        self.fw_abort: Optional[str] = None
+        for line in lines:
+            self._sink(line)
+            if "[gpio] ABORT" in line:
+                self.fw_abort = line
+            self._q.put(line)
+
+    def expect(self, pattern: str, timeout_s: float = 10.0) -> re.Match:
+        rx = re.compile(pattern)
+        while not self._q.empty():
+            line = self._q.get_nowait()
+            m = rx.search(line)
+            if m:
+                return m
+        raise BenchAbort(f"mock console: timeout waiting for /{pattern}/")
+
+    def close(self) -> None:
+        pass
+
 
 def t0b_guard_selftest(log: Callable[[str], None]) -> bool:
-    forbidden = [(1 << 9, "NONE"), (1 << 11, "NONE"), (1 << 13, "NONE"), (1 << 14, "NONE"),
-                 (1 << 15, "NONE"), (DIO_BUS, "NONE"), (DIO_BUS, "MCU"), (DIO_BUS | DIO_REQ, "MCU")]
+    forbidden = [
+        (1 << 9, "NONE"), (1 << 11, "NONE"), (1 << 13, "NONE"), (1 << 14, "NONE"),
+        (1 << 15, "NONE"), (DIO_BUS, "NONE"), (DIO_BUS, "MCU"), (DIO_BUS | DIO_REQ, "MCU"),
+        (DIO_REQ | (1 << 9), "NONE"), (DIO_REQ | (1 << 11), "NONE"), (DIO_PE3 | (1 << 9), "NONE"),
+    ]
     ok = True
     for mask, owner in forbidden:
         m = _MockDwf()
@@ -241,7 +394,15 @@ def t0b_guard_selftest(log: Callable[[str], None]) -> bool:
         ok = ok and good
         log(f"[ad2] T0B(a) ad2_set_oe(0x{mask:04X}, bus={owner}): "
             f"{'refused before the DLL' if good else 'NOT REFUSED'}")
-    for mask, owner in ((DIO_REQ, "NONE"), (DIO_BUS | DIO_REQ, "AD2")):   # the controls
+
+    controls = [
+        (DIO_REQ, "NONE"),
+        (DIO_REQ | DIO_PE3, "NONE"),
+        (DIO_REQ | DIO_PE4, "NONE"),
+        (DIO_REQ | DIO_PE3 | DIO_PE4, "NONE"),
+        (DIO_BUS | DIO_REQ, "AD2"),
+    ]
+    for mask, owner in controls:
         m = _MockDwf()
         ad2mod.ad2_set_oe(m, 1, mask, BUS[owner])
         good = m.oe_calls == [mask]
@@ -585,6 +746,209 @@ class Session:
             fc, rc = res["c"]
             self.check("T10 control", rc < 2, f"PA8 in AF1: {rc} rising edges ({fc / 1e6:.3f} MHz), expected no signal")
 
+    def pulse_train(self, dio_pin: int, count: int, delay_s: float = 0.001) -> int:
+        """Sends `count` pulses on `dio_pin` (DIO8 or DIO10).
+        Static writes with at least delay_s (>= 1 ms) between edges.
+        Part from 0, return to 0, and return OE to DIO_REQ."""
+        self.set_oe(DIO_REQ | dio_pin)
+        self.ad2.digital_io_write(0, dio_pin)
+        time.sleep(delay_s)
+        for _ in range(count):
+            self.ad2.digital_io_write(dio_pin, dio_pin)
+            time.sleep(delay_s)
+            self.ad2.digital_io_write(0, dio_pin)
+            time.sleep(delay_s)
+        self.set_oe(DIO_REQ)
+        return count
+
+    def t11_cm7(self, step_name: str, expected: int) -> None:
+        self.step(step_name)
+        self.sync(pre=lambda: self.pulse_train(DIO_PE3, 200))
+        m = self.con.expect(rf"\[gpio\] {step_name}: CM7 count=(\d+) \(expected (\d+)\)", 15.0)
+        cnt, exp = int(m.group(1)), int(m.group(2))
+        self.check(f"{step_name} isr count", cnt == expected and exp == expected,
+                   f"CM7 count={cnt} (expected {expected}), host delivered 200 pulses on DIO8")
+
+    def t11_cm4(self, step_name: str, expected: int) -> None:
+        self.step(step_name)
+        self.sync(pre=lambda: self.pulse_train(DIO_PE4, 200))
+        m = self.con.expect(rf"\[gpio\] {step_name}: CM4 count=(\d+) \(expected (\d+)\)", 15.0)
+        cnt, exp = int(m.group(1)), int(m.group(2))
+        self.check(f"{step_name} isr count", cnt == expected and exp == expected,
+                   f"CM4 count={cnt} (expected {expected}), host delivered 200 pulses on DIO10")
+
+    def t12(self) -> None:
+        self.step("T12")
+        # Subtest 1: Independent routing (PE3 on CM7, PE4 on CM4)
+        def pulse_both() -> None:
+            self.pulse_train(DIO_PE3, 200)
+            self.pulse_train(DIO_PE4, 200)
+        self.sync(pre=pulse_both)
+        m1 = self.con.expect(r"\[gpio\] T12 independent: CM7=(\d+) \(exp 200\), CM4=(\d+) \(exp 200\)", 15.0)
+        c7_1, c4_1 = int(m1.group(1)), int(m1.group(2))
+        self.check("T12 independent routing", c7_1 == 200 and c4_1 == 200,
+                   f"CM7={c7_1} (exp 200), CM4={c4_1} (exp 200)")
+
+        # Subtest 2: Shared line (PE3 routed to both CM7 and CM4)
+        self.sync(pre=lambda: self.pulse_train(DIO_PE3, 200))
+        m2 = self.con.expect(r"\[gpio\] T12 shared line 3: CM7=(\d+) \(exp 200\), CM4=(\d+) \(exp 200\)", 15.0)
+        c7_2, c4_2 = int(m2.group(1)), int(m2.group(2))
+        self.check("T12 shared line routing", c7_2 == 200 and c4_2 == 200,
+                   f"CM7={c7_2} (exp 200), CM4={c4_2} (exp 200)")
+
+        # Subtest 3: Control (Line 3 disabled in CM4)
+        self.sync(pre=lambda: self.pulse_train(DIO_PE3, 200))
+        m3 = self.con.expect(r"\[gpio\] T12 control disabled CM4: CM7=(\d+) \(exp 200\), CM4=(\d+) \(exp 0\)", 15.0)
+        c7_3, c4_3 = int(m3.group(1)), int(m3.group(2))
+        self.check("T12 isolation control", c7_3 == 200 and c4_3 == 0,
+                   f"CM7={c7_3} (exp 200), CM4={c4_3} (exp 0)")
+
+    def t13_cm7(self) -> None:
+        self.step("T13_CM7")
+        latencies: list[float] = []
+        n_pulses = 20
+
+        def measure_latencies() -> None:
+            self.set_oe(DIO_REQ | DIO_PE3)
+            self.ad2.digital_io_write(0, DIO_PE3)
+            time.sleep(0.001)
+            for _ in range(n_pulses):
+                rate, n = self.ad2.la_arm(100e6, 4096, trigger_rise_mask=DIO_PE3, prefill=100)
+                self.ad2.digital_io_write(DIO_PE3, DIO_PE3)
+                time.sleep(0.001)
+                samples = self.ad2.la_read(n, timeout_s=1.0)
+                self.ad2.digital_io_write(0, DIO_PE3)
+                time.sleep(0.001)
+                if samples:
+                    r8 = next((i for i in range(1, len(samples))
+                               if ((samples[i] >> 8) & 1) and not ((samples[i - 1] >> 8) & 1)), None)
+                    r9 = next((i for i in range(r8 if r8 is not None else 1, len(samples))
+                               if ((samples[i] >> 9) & 1) and not ((samples[i - 1] >> 9) & 1)), None) if r8 is not None else None
+                    if r8 is not None and r9 is not None:
+                        latencies.append((r9 - r8) / rate * 1e6)
+            self.set_oe(DIO_REQ)
+
+        self.sync(pre=measure_latencies)
+        if latencies:
+            lat_sorted = sorted(latencies)
+            l_min = lat_sorted[0]
+            l_p50 = lat_sorted[len(lat_sorted) // 2]
+            l_max = lat_sorted[-1]
+            ok_lat = len(latencies) == n_pulses and l_max <= 10.0
+            self.check("T13_CM7 latency", ok_lat,
+                       f"{len(latencies)}/{n_pulses} edges: min={l_min:.2f} us, p50={l_p50:.2f} us, max={l_max:.2f} us (req <= 10 us)")
+        else:
+            self.check("T13_CM7 latency", False, "no response edges captured on DIO9")
+
+        # Negative control: line disabled
+        ctrl_responses: list[int] = []
+
+        def measure_ctrl() -> None:
+            if hasattr(self.ad2, "mock_disable_response"):
+                self.ad2.mock_disable_response = True
+            self.set_oe(DIO_REQ | DIO_PE3)
+            self.ad2.digital_io_write(0, DIO_PE3)
+            time.sleep(0.001)
+            for _ in range(5):
+                rate, n = self.ad2.la_arm(100e6, 4096, trigger_rise_mask=DIO_PE3, prefill=100)
+                self.ad2.digital_io_write(DIO_PE3, DIO_PE3)
+                time.sleep(0.001)
+                samples = self.ad2.la_read(n, timeout_s=0.5)
+                self.ad2.digital_io_write(0, DIO_PE3)
+                time.sleep(0.001)
+                if samples:
+                    ctrl_responses.append(la_transitions(samples, 9))
+            self.set_oe(DIO_REQ)
+            if hasattr(self.ad2, "mock_disable_response"):
+                self.ad2.mock_disable_response = False
+
+        self.sync(pre=measure_ctrl)
+        ctrl_ok = bool(ctrl_responses) and all(r == 0 for r in ctrl_responses)
+        self.check("T13_CM7 control", ctrl_ok,
+                   f"disabled line: {sum(ctrl_responses)} transitions on DIO9 across {len(ctrl_responses)} pulses (expected 0)")
+        self.con.expect(r"\[gpio\] T13_CM7 latency edges measured by host -> PASS", 10.0)
+
+    def t13_cm4(self) -> None:
+        self.step("T13_CM4")
+        latencies: list[float] = []
+        n_pulses = 20
+
+        def measure_latencies() -> None:
+            self.set_oe(DIO_REQ | DIO_PE4)
+            self.ad2.digital_io_write(0, DIO_PE4)
+            time.sleep(0.001)
+            for _ in range(n_pulses):
+                rate, n = self.ad2.la_arm(100e6, 4096, trigger_rise_mask=DIO_PE4, prefill=100)
+                self.ad2.digital_io_write(DIO_PE4, DIO_PE4)
+                time.sleep(0.001)
+                samples = self.ad2.la_read(n, timeout_s=1.0)
+                self.ad2.digital_io_write(0, DIO_PE4)
+                time.sleep(0.001)
+                if samples:
+                    r10 = next((i for i in range(1, len(samples))
+                                if ((samples[i] >> 10) & 1) and not ((samples[i - 1] >> 10) & 1)), None)
+                    r11 = next((i for i in range(r10 if r10 is not None else 1, len(samples))
+                                if ((samples[i] >> 11) & 1) and not ((samples[i - 1] >> 11) & 1)), None) if r10 is not None else None
+                    if r10 is not None and r11 is not None:
+                        latencies.append((r11 - r10) / rate * 1e6)
+            self.set_oe(DIO_REQ)
+
+        self.sync(pre=measure_latencies)
+        if latencies:
+            lat_sorted = sorted(latencies)
+            l_min = lat_sorted[0]
+            l_p50 = lat_sorted[len(lat_sorted) // 2]
+            l_max = lat_sorted[-1]
+            ok_lat = len(latencies) == n_pulses and l_max <= 10.0
+            self.check("T13_CM4 latency", ok_lat,
+                       f"{len(latencies)}/{n_pulses} edges: min={l_min:.2f} us, p50={l_p50:.2f} us, max={l_max:.2f} us (req <= 10 us)")
+        else:
+            self.check("T13_CM4 latency", False, "no response edges captured on DIO11")
+
+        # Negative control: line disabled
+        ctrl_responses: list[int] = []
+
+        def measure_ctrl() -> None:
+            if hasattr(self.ad2, "mock_disable_response"):
+                self.ad2.mock_disable_response = True
+            self.set_oe(DIO_REQ | DIO_PE4)
+            self.ad2.digital_io_write(0, DIO_PE4)
+            time.sleep(0.001)
+            for _ in range(5):
+                rate, n = self.ad2.la_arm(100e6, 4096, trigger_rise_mask=DIO_PE4, prefill=100)
+                self.ad2.digital_io_write(DIO_PE4, DIO_PE4)
+                time.sleep(0.001)
+                samples = self.ad2.la_read(n, timeout_s=0.5)
+                self.ad2.digital_io_write(0, DIO_PE4)
+                time.sleep(0.001)
+                if samples:
+                    ctrl_responses.append(la_transitions(samples, 11))
+            self.set_oe(DIO_REQ)
+            if hasattr(self.ad2, "mock_disable_response"):
+                self.ad2.mock_disable_response = False
+
+        self.sync(pre=measure_ctrl)
+        ctrl_ok = bool(ctrl_responses) and all(r == 0 for r in ctrl_responses)
+        self.check("T13_CM4 control", ctrl_ok,
+                   f"disabled line: {sum(ctrl_responses)} transitions on DIO11 across {len(ctrl_responses)} pulses (expected 0)")
+        self.con.expect(r"\[gpio\] T13_CM4 latency edges measured by host -> PASS", 10.0)
+
+    def t14(self) -> None:
+        self.step("T14")
+        # Subtest (a) part 1: single pulse to set pending, cleared by ExtiConfig
+        self.sync(pre=lambda: self.pulse_train(DIO_PE3, 1))
+        # Subtest (a) part 2: single pulse to set pending, uncleared control
+        self.sync(pre=lambda: self.pulse_train(DIO_PE3, 1))
+        m = self.con.expect(r"\[gpio\] T14 pending, conflict, deinit rule 6 and software trigger -> (PASS|FAIL)", 15.0)
+        self.check("T14 EXTI features", m.group(1) == "PASS",
+                   "pending clear, conflict detection, deinit rule 6, and software trigger (100 events)")
+
+    def t17(self) -> None:
+        self.step("T17")
+        m = self.con.expect(r"\[gpio\] T17 compensation cell ready with CSI and refused without -> (PASS|FAIL)", 15.0)
+        self.check("T17 compensation cell", m.group(1) == "PASS",
+                   "refused without CSI (ERR_NOT_READY), READY=1 with CSI, CCCSR and CSION restored")
+
     def run(self) -> None:
         self.t0a()
         self.t0b()
@@ -599,6 +963,19 @@ class Session:
         self.t9()
         for t in TIERS:
             self.t10(t)
+        self.t11_cm7("T11_CM7_RISING", 200)
+        self.t11_cm7("T11_CM7_FALLING", 200)
+        self.t11_cm7("T11_CM7_BOTH", 400)
+        self.t11_cm7("T11_CM7_EVENT", 0)
+        self.t11_cm4("T11_CM4_RISING", 200)
+        self.t11_cm4("T11_CM4_FALLING", 200)
+        self.t11_cm4("T11_CM4_BOTH", 400)
+        self.t11_cm4("T11_CM4_EVENT", 0)
+        self.t12()
+        self.t13_cm7()
+        self.t13_cm4()
+        self.t14()
+        self.t17()
         self.step("DONE")
 
 
@@ -671,6 +1048,119 @@ def host_build_id(preset: str, project: pathlib.Path = PROJECT) -> str:
     return hashlib.sha256(payload).hexdigest()[:16]
 
 
+def run_mock_test(log: Callable[[str], None]) -> bool:
+    """Non-board test: verifies S3 guards with _MockDwf and runs all F2 steps (T11..T14, T17)
+    against mock DWF and mock firmware console output, including a negative control with
+    a firmware undercount that the host detects and flags as FAIL."""
+    log("[mock] === Phase 1: S3 Safety Guard Tests ===")
+    guard_ok = t0b_guard_selftest(log)
+    log(f"[mock] T0B(a) host guard overall: {'PASS' if guard_ok else 'FAIL'}")
+
+    log("[mock] === Phase 2: Mock Session of F2 Steps (T11..T14, T17) ===")
+    fw_lines = [
+        "[gpio] STEP T11_CM7_RISING bus=NONE v=1",
+        "[gpio] T11_CM7_RISING: CM7 count=200 (expected 200)",
+        "[gpio] T11_CM7_RISING count exact (200) -> PASS",
+        "[gpio] STEP T11_CM7_FALLING bus=NONE v=1",
+        "[gpio] T11_CM7_FALLING: CM7 count=200 (expected 200)",
+        "[gpio] T11_CM7_FALLING count exact (200) -> PASS",
+        "[gpio] STEP T11_CM7_BOTH bus=NONE v=1",
+        "[gpio] T11_CM7_BOTH: CM7 count=400 (expected 400)",
+        "[gpio] T11_CM7_BOTH count exact (400) -> PASS",
+        "[gpio] STEP T11_CM7_EVENT bus=NONE v=1",
+        "[gpio] T11_CM7_EVENT: CM7 count=0 (expected 0)",
+        "[gpio] T11_CM7_EVENT count exact (0) -> PASS",
+        "[gpio] STEP T11_CM4_RISING bus=NONE v=1",
+        "[gpio] T11_CM4_RISING: CM4 count=200 (expected 200)",
+        "[gpio] T11_CM4_RISING count exact (200) -> PASS",
+        "[gpio] STEP T11_CM4_FALLING bus=NONE v=1",
+        "[gpio] T11_CM4_FALLING: CM4 count=200 (expected 200)",
+        "[gpio] T11_CM4_FALLING count exact (200) -> PASS",
+        "[gpio] STEP T11_CM4_BOTH bus=NONE v=1",
+        "[gpio] T11_CM4_BOTH: CM4 count=400 (expected 400)",
+        "[gpio] T11_CM4_BOTH count exact (400) -> PASS",
+        "[gpio] STEP T11_CM4_EVENT bus=NONE v=1",
+        "[gpio] T11_CM4_EVENT: CM4 count=0 (expected 0)",
+        "[gpio] T11_CM4_EVENT count exact (0) -> PASS",
+        "[gpio] STEP T12 bus=NONE v=1",
+        "[gpio] T12 independent: CM7=200 (exp 200), CM4=200 (exp 200)",
+        "[gpio] T12 shared line 3: CM7=200 (exp 200), CM4=200 (exp 200)",
+        "[gpio] T12 control disabled CM4: CM7=200 (exp 200), CM4=0 (exp 0)",
+        "[gpio] T12 dual-core EXTI routing and isolation -> PASS",
+        "[gpio] STEP T13_CM7 bus=NONE v=1",
+        "[gpio] T13_CM7 latency edges measured by host -> PASS",
+        "[gpio] STEP T13_CM4 bus=NONE v=1",
+        "[gpio] T13_CM4 latency edges measured by host -> PASS",
+        "[gpio] STEP T14 bus=NONE v=1",
+        "[gpio] T14(a) Pending cleared by ExtiConfig: count=0 (exp 0)",
+        "[gpio] T14(a) Control uncleared PR1: count=1 (exp 1)",
+        "[gpio] T14(b) Conflict GPIOD: status=1 photo_equal=1",
+        "[gpio] T14(b) Control free line routes to GPIOD: status=0",
+        "[gpio] T14(c) Deinit rule 6: shared kept=1, last cleared=1",
+        "[gpio] T14(d) ExtiSoftwareTrigger(0): count=100 (exp 100)",
+        "[gpio] T14(d) Control masked line 0: count=0 (exp 0)",
+        "[gpio] T14 pending, conflict, deinit rule 6 and software trigger -> PASS",
+        "[gpio] STEP T17 bus=NONE v=1",
+        "[gpio] T17(a) Compensation cell without CSI: st=3 photo_equal=1",
+        "[gpio] T17(a) Control manual EN=1 without CSI: ready_zero=1",
+        "[gpio] T17(b) Compensation cell with CSI: st=0 cycles=245 CCCSR=0x00000003",
+        "[gpio] T17 compensation cell ready with CSI and refused without -> PASS",
+        "[gpio] STEP DONE bus=NONE v=1",
+        "[gpio] FW VERDICT=PASS failures=0",
+    ]
+
+    mock_dwf = _MockDwf()
+    mock_ad2 = MockAD2(mock_dwf)
+    mock_con = MockConsole(fw_lines, log)
+    session = Session(mock_ad2, mock_con, log)
+    session.step_idx = [s[0] for s in STEPS].index("T11_CM7_RISING")
+    session.set_oe(DIO_REQ)
+
+    session.t11_cm7("T11_CM7_RISING", 200)
+    session.t11_cm7("T11_CM7_FALLING", 200)
+    session.t11_cm7("T11_CM7_BOTH", 400)
+    session.t11_cm7("T11_CM7_EVENT", 0)
+    session.t11_cm4("T11_CM4_RISING", 200)
+    session.t11_cm4("T11_CM4_FALLING", 200)
+    session.t11_cm4("T11_CM4_BOTH", 400)
+    session.t11_cm4("T11_CM4_EVENT", 0)
+    session.t12()
+    session.t13_cm7()
+    session.t13_cm4()
+    session.t14()
+    session.t17()
+    session.step("DONE")
+
+    f2_checks = session.checks
+    for name, ok in f2_checks:
+        log(f"[host] CHECK {name}: {'PASS' if ok else 'FAIL'}")
+    f2_all_ok = bool(f2_checks) and all(ok for _, ok in f2_checks)
+    log(f"[mock] F2 steps overall: {'PASS' if f2_all_ok else 'FAIL'} ({sum(1 for _, ok in f2_checks if ok)}/{len(f2_checks)} checks passed)")
+
+    log("[mock] === Phase 3: Negative Control (Firmware Undercount Detection) ===")
+    neg_lines = [
+        "[gpio] STEP T11_CM7_RISING bus=NONE v=1",
+        "[gpio] T11_CM7_RISING: CM7 count=199 (expected 200)",
+        "[gpio] T11_CM7_RISING count exact (200) -> FAIL",
+    ]
+    neg_dwf = _MockDwf()
+    neg_ad2 = MockAD2(neg_dwf)
+    neg_con = MockConsole(neg_lines, log)
+    neg_session = Session(neg_ad2, neg_con, log)
+    neg_session.step_idx = [s[0] for s in STEPS].index("T11_CM7_RISING")
+    neg_session.set_oe(DIO_REQ)
+    neg_session.t11_cm7("T11_CM7_RISING", 200)
+
+    neg_detected = any(name == "T11_CM7_RISING isr count" and not ok for name, ok in neg_session.checks)
+    log(f"[mock] Negative control: firmware undercount (199 vs 200) correctly flagged as FAIL: "
+        f"{'PASS' if neg_detected else 'FAIL'}")
+
+    all_passed = guard_ok and f2_all_ok and neg_detected
+    log(f"[host] OVERALL MOCK VERDICT: {'PASS' if all_passed else 'FAIL'}")
+    log(f"HOST VERDICT={'PASS' if all_passed else 'FAIL'}")
+    return all_passed
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", help="ST-LINK VCP (default: autodetect)")
@@ -678,6 +1168,7 @@ def main() -> int:
     ap.add_argument("--allow-dirty", action="store_true", help="accept a -dirty Rev (development runs)")
     ap.add_argument("--no-reset", action="store_true", help="do not reset the board; wait for the banner")
     ap.add_argument("--preset", default="selftest-gpio", help="configure preset of the image (build id)")
+    ap.add_argument("--mock-test", action="store_true", help="run non-board mock test of F2 steps and S3 guard")
     args = ap.parse_args()
 
     lines: list[str] = []
@@ -693,8 +1184,22 @@ def main() -> int:
     # R4-b: what the run was asked to do, first. argv as given (shell-quoted),
     # then the options as argparse resolved them, defaults included.
     stamp(f"[host] argv: {shlex.join(sys.argv[1:])}")
-    stamp(f"[host] options: allow_dirty={args.allow_dirty} preset={args.preset} no_reset={args.no_reset}")
+    stamp(f"[host] options: allow_dirty={args.allow_dirty} preset={args.preset} no_reset={args.no_reset} mock_test={args.mock_test}")
     stamp(f"[host] gpio_hw_check.py, host checkout {git_rev()}, protocol v{BENCH_VERSION}")
+
+    if args.mock_test:
+        stamp("[host] running non-board mock test suite for Phase 00_gpio F2")
+        tree_record(stamp)
+        mock_ok = run_mock_test(stamp)
+        out = args.out
+        if out is None:
+            rev = git_rev()
+            out = PROJECT / "docs" / f"gpio_f2_mock_{rev}.txt"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with lock:
+            out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print(f"capture: {out}")
+        return 0 if mock_ok else 1
     stamp("[host] checklist: GND first, DIO per README table, nothing on W1/W2/V+/V-; WaveForms GUI closed; "
           "image selftest-gpio flashed with this script stopped")
     tree_record(stamp)
