@@ -38,7 +38,7 @@ Implementas y pruebas sin placa. No auditas:
 
 | Qué | Por qué |
 | --- | --- |
-| `led_bm.h`, cualquier otro driver, `prj_01` (ya define `_BIT`), `prj_eth_lwip_node` | Fuera de alcance |
+| `led_bm.h`, cualquier otro driver, `prj_eth_lwip_node`; de `prj_01` solo se permite, en el cierre, el comentario de `Common/Inc/board_def.h:50-53` (aprobado por el responsable el 2026-10-16) | Fuera de alcance |
 | Programar, resetear o leer la placa (`flash.py`, `STM32_Programmer_CLI`, `monitor.py`) | No tienes acceso a la placa; T4 la ejecuta el auditor con tu herramienta |
 | Escribir dentro del árbol durante una prueba | Los `board_def.h` mutados de T2 y la salida alterada de T3 van en un directorio temporal fuera del repo |
 | Editar capturas commiteadas, hacer merge, borrar ramas o documentos de proceso | Integridad y papel del responsable |

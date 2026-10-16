@@ -78,3 +78,32 @@ Auditor: Claude (Claude Code), para Hector Rodriguez · Rama: `driver/led-l1l2` 
   - T4 en la placa.
 - **Lo que queda:** MA1 y MA2 de la herramienta, las citas y afirmaciones del informe (m9) y los menores.
 - **Para esta fase, que es pequeña, el alcance de la siguiente ronda queda cerrado:** si MA1, MA2 y m9 quedan bien, F1 pasa, y los menores que queden se anotan en el README.
+
+## F1, corrección 2 (`9546db3`, herramienta en `b9fbaad`)
+
+La revisé yo, porque la ronda tenía el alcance cerrado.
+
+| ID | Estado |
+| --- | --- |
+| MA2 | **Cerrado.** El control negativo compila un `.c` temporal fuera del repo, con un aviso deliberado, usando `run_cmd` y las flags de `prj_01`. Su salida real pasa por `count_built_objects` y `evaluate_build_output` |
+| m9 | **Cerrado.** Las seis citas de funciones casan con HEAD (`evaluate_build_output` l. 293, `compile_variant` 537, `check_image_freshness_and_rev` 317, `parse_and_verify_led_config` 682, `check_clean_working_tree` 187, `run_cmd` 100), y los enlaces son relativos |
+| Menores de una línea | Cerrados:<br>• el sufijo `-dirty`;<br>• `code=` con el código real;<br>• el `git status` del control;<br>• `led_bm.c.obj` en el log **y** en el disco;<br>• la sección de 24 B exactos |
+| MA1 | **No cerrado, pero sin efecto en el producto.** Para `prj_02` y `prj_03` la herramienta añade `-DCMAKE_C_FLAGS:STRING=-DFW_GIT_REV=\"<HEAD>\"` al configurar y después \"lo comprueba\" en `CMakeCache.txt`: lee lo que ella misma escribió. Esos proyectos no usan esa macro y sus flags vienen de `cmake/common_flags.cmake`, así que el binario no cambia. Pero no es una prueba. La procedencia de esas imágenes la dan el árbol limpio al empezar y al terminar y la compilación dentro de la ejecución |
+
+### Estado
+
+**F1 pasa, con una condición para el cierre**, igual que F1c de `00_gpio`.
+- **El producto está verificado por mí:**
+  - T1–T3 en `736948f` y en `af836ea`;
+  - los avisos reales a 0;
+  - T4 en la placa en los cuatro proyectos.
+- **El código** (`led_bm.c` y los `board_def.h`) no ha cambiado desde `4c15fba`, salvo los comentarios de `prj_02`–`prj_04`.
+- **La condición de MA1, en el cierre:**
+  - quitar la inyección de `CMAKE_C_FLAGS`;
+  - escribir la revisión de `prj_02`/`prj_03` como \"no embebida\", con su procedencia (árbol limpio y compilación en la ejecución), sin darla por comprobada.
+
+**El cierre:**
+- MA1;
+- el comentario de `prj_01` (`board_def.h:50-53`), aprobado por el responsable el 2026-10-16;
+- `01_led/README.md` (§3 contrato sin valores por defecto, §4, §5 sin L1/L2 y con L5 parcial, §6 historia, validación con las capturas del auditor);
+- después, la hoja de ruta, el borrado de los documentos de proceso y el merge.
