@@ -1,0 +1,68 @@
+[+   0.001s] [host] argv: tools/gpio_f2_checks.py --test all --output 03_firmware_templates/prj_01_template_dualcore/docs/gpio_f2_checks_39868eb.txt
+[+   0.001s] [host] options: test=all output=03_firmware_templates\prj_01_template_dualcore\docs\gpio_f2_checks_39868eb.txt control_dir=C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_3df160a allow_dirty=False
+[+   0.078s] [host] HEAD: 39868eb948b7fb5df62ce9ab51aba25ce137110c
+[+   0.079s] [host] Working tree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+[+   0.079s] [host] Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_3df160a
+[+   0.470s] [host] working tree clean: PASS (Tree is clean)
+[+   0.662s] [check] Compiling 16 control images via build_all.ps1 -Clean in C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_3df160a...
+[+ 216.454s] [build_all_control] Finished in 215.8s, exit code 0
+[+ 216.455s] [build_all_control] All 8 builds PASSED successfully.
+[+ 216.455s] [host] CHECK control build_all 16/16 (-Clean): PASS
+[+ 216.456s] [host] control worktree (3df160a): PASS (Control commit 3df160a clean, 16/16 ELFs freshly compiled)
+[+ 217.424s] [host] STM32CubeH7 submodule commit: PASS (STM32CubeH7 submodule commit 8ec3113 (heads/master))
+[+ 218.050s] === Running T1 Checks (Build Matrix & Selftests) ====
+[+ 218.051s] [check] Checking 8/8 matrix build via build_all.ps1 -Clean...
+[+ 409.657s] [build_all] Finished in 191.6s, exit code 0
+[+ 409.658s] [build_all] All 8 builds PASSED successfully.
+[+ 409.658s] [host] CHECK build_all 8/8 (-Clean): PASS
+[+ 409.658s] [check] Checking selftest-gpio compilation in prj_01 and prj_04 (--fresh and --clean-first)...
+[+ 433.161s] [host] CHECK prj_01_template_dualcore selftest-gpio build: PASS (code=0, objects_built=278, warnings=0)
+[+ 462.335s] [host] CHECK prj_04_adc_dma_bm_eth selftest-gpio build: PASS (code=0, objects_built=323, warnings=0)
+[+ 462.335s] [host] CHECK warning counter negative control (synthetic warning flagged): PASS
+[+ 462.335s] [host] T1 VERDICT: PASS
+[+ 462.336s] === Running T18 Checks (Regression Without Board) ===
+[+ 462.336s] [check] Checking all header files in 01_shared_drivers/00_gpio/ against control 3df160a...
+[+ 462.440s] [host] CHECK header freeze gpio_bm.h (only adds): PASS (Diff contains only additions)
+[+ 462.504s] [host] CHECK header freeze gpio_hal.h (only adds): PASS (Diff contains only additions)
+[+ 462.561s] [host] CHECK header freeze gpio_ll.h (only adds): PASS (Diff contains only additions)
+[+ 462.683s] [host] CHECK header negative control (signature mutation flagged against 3df160a): PASS (Removed or modified lines detected (1))
+[+ 462.684s] [host] CHECK comment-with-code removal negative control (R5): PASS
+[+ 462.684s] [check] Checking for EXTI handlers in 01_shared_drivers/00_gpio/...
+[+ 462.689s] [host] CHECK no EXTI handlers in 00_gpio: PASS ([])
+[+ 462.773s] [host] CHECK driver handler negative control (temp .c file detected): PASS
+[+ 462.774s] [check] Checking that all 16 production ELFs have 0 EXTI handlers...
+[+ 463.143s] [host] CHECK 16 production ELFs zero EXTI handlers: PASS
+[+ 463.165s] [host] CHECK selftest-gpio positive control (2 EXTI handlers present): PASS
+[+ 463.183s] [host] CHECK production ELF negative control (mutated nm text flagged by parse_production_handlers): PASS
+[+ 463.183s] [check] Checking driver state .data=0 and .bss=8 via .map files of selftest-gpio...
+[+ 463.196s] [host] CHECK driver state CM7 from .map: data=0 B (exp 0), bss=8 B (exp 8) -> PASS
+[+ 463.208s] [host] CHECK driver state CM4 from .map: data=0 B (exp 0), bss=8 B (exp 8) -> PASS
+[+ 463.221s] [host] CHECK driver size negative control (mutated map text data=4 B flagged by verify_driver_sizes): PASS
+[+ 463.222s] [check] Comparing production GPIO_BM_* symbols against control worktree at C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_3df160a...
+[+ 463.274s] [host] CHECK prj_01 debug CM7 symbols (9 syms): PASS
+[+ 463.349s] [host] CHECK prj_01 debug CM4 symbols (1 syms): PASS
+[+ 463.409s] [host] CHECK prj_01 release CM7 symbols (8 syms): PASS
+[+ 463.453s] [host] CHECK prj_01 release CM4 symbols (1 syms): PASS
+[+ 463.532s] [host] CHECK prj_02 debug CM7 symbols (8 syms): PASS
+[+ 463.579s] [host] CHECK prj_02 debug CM4 symbols (0 syms): PASS
+[+ 463.630s] [host] CHECK prj_02 release CM7 symbols (7 syms): PASS
+[+ 463.686s] [host] CHECK prj_02 release CM4 symbols (0 syms): PASS
+[+ 463.740s] [host] CHECK prj_03 debug CM7 symbols (9 syms): PASS
+[+ 463.779s] [host] CHECK prj_03 debug CM4 symbols (6 syms): PASS
+[+ 463.830s] [host] CHECK prj_03 release CM7 symbols (8 syms): PASS
+[+ 463.880s] [host] CHECK prj_03 release CM4 symbols (6 syms): PASS
+[+ 463.932s] [host] CHECK prj_04 debug CM7 symbols (9 syms): PASS
+[+ 463.981s] [host] CHECK prj_04 debug CM4 symbols (6 syms): PASS
+[+ 464.029s] [host] CHECK prj_04 release CM7 symbols (8 syms): PASS
+[+ 464.070s] [host] CHECK prj_04 release CM4 symbols (6 syms): PASS
+[+ 464.071s] [host] CHECK production real symbol size mutation negative control (GPIO_BM_CheckConfig): PASS
+[+ 464.071s] [host] CHECK production extra symbol negative control (+GPIO_BM_ExtiConfig): PASS
+[+ 464.072s] [host] CHECK production symbol type change negative control (GPIO_BM_CheckConfig T->W): PASS
+[+ 464.072s] [check] Cross-checking host expect() regex patterns against firmware source format strings...
+[+ 464.180s] [host] CHECK host-firmware expect patterns (29/29 matched): PASS
+[+ 464.205s] [host] CHECK expect crosscheck negative control 1 (mutated CM7 count= rejected): PASS
+[+ 464.237s] [host] CHECK expect crosscheck negative control 2 (mutated FW VERDICT= rejected): PASS
+[+ 464.256s] [host] CHECK expect crosscheck negative control 3 (mutated host pattern rejected): PASS
+[+ 464.257s] [host] CHECK expect crosscheck negative control 4 (unexpandable placeholder rejected): PASS
+[+ 464.258s] [host] T18 VERDICT: PASS
+[+ 464.259s] OVERALL VERDICT: PASS
