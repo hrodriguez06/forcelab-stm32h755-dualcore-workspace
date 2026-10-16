@@ -12,11 +12,37 @@
   */
 
 #include "gpio_selftest.h"
+#include "gpio_bm.h"
 #include "fw_build_id.h"
 #include "shared_memory.h"
 #include "stm32h7xx_hal.h"
 
 #include <string.h>
+
+#define PE_SPARE6   6U
+
+static volatile uint32_t s_cm4_exti3_count = 0U;
+static volatile uint32_t s_cm4_exti4_count = 0U;
+
+void EXTI3_IRQHandler(void)
+{
+    GPIOE->BSRR = (1UL << PE_SPARE6);
+    const uint32_t pend = (uint32_t)GPIO_BM_ExtiTakePending(1UL << 3U);
+    s_cm4_exti3_count++;
+    GST_AREA->m4_exti_count++;
+    GST_AREA->m4_exti_last_pending = pend;
+    GPIOE->BSRR = (1UL << (PE_SPARE6 + 16U));
+}
+
+void EXTI4_IRQHandler(void)
+{
+    GPIOE->BSRR = (1UL << PE_SPARE6);
+    const uint32_t pend = (uint32_t)GPIO_BM_ExtiTakePending(1UL << 4U);
+    s_cm4_exti4_count++;
+    GST_AREA->m4_exti_count++;
+    GST_AREA->m4_exti_last_pending = pend;
+    GPIOE->BSRR = (1UL << (PE_SPARE6 + 16U));
+}
 
 /* CPU1 sends the next command within seconds; a minute of silence means it
    stopped (a fault, or a bench abort that skipped the DONE). CPU2 then goes on
@@ -115,6 +141,45 @@ void GPIO_Selftest_CM4_Run(void)
             memcpy((void *)&a->m4_race, &res, sizeof(res));
             break;
         }
+        case GST_CMD_F2_CONFIG:
+        {
+            const uint32_t pin = a->arg0 & 0xFFU;
+            const uint32_t trigger = (a->arg0 >> 8U) & 0xFFU;
+            const bool interrupt = ((a->arg1 >> 1U) & 1U) != 0U;
+            const bool event = (a->arg1 & 1U) != 0U;
+            (void)GPIO_BM_ConfigOutput(GPIOE, PE_SPARE6, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 0U);
+            a->m4_exti_status = (uint32_t)GPIO_BM_ExtiConfig(GPIOE, pin, trigger, interrupt, event);
+            if (interrupt)
+            {
+                const IRQn_Type irqn = GPIO_BM_ExtiGetIRQn(pin);
+                if (irqn != GPIO_BM_EXTI_IRQN_INVALID)
+                {
+                    NVIC_SetPriority(irqn, 2U);
+                    NVIC_ClearPendingIRQ(irqn);
+                    NVIC_EnableIRQ(irqn);
+                }
+            }
+            break;
+        }
+        case GST_CMD_F2_DISABLE:
+        {
+            const uint32_t pin = a->arg0 & 0xFFU;
+            const IRQn_Type irqn = GPIO_BM_ExtiGetIRQn(pin);
+            if (irqn != GPIO_BM_EXTI_IRQN_INVALID)
+            {
+                NVIC_DisableIRQ(irqn);
+                NVIC_ClearPendingIRQ(irqn);
+            }
+            a->m4_exti_status = (uint32_t)GPIO_BM_ExtiDisable(GPIOE, pin);
+            (void)GPIO_BM_ConfigInput(GPIOE, PE_SPARE6, GPIO_BM_PULL_NONE);
+            break;
+        }
+        case GST_CMD_F2_COUNT_RESET:
+            a->m4_exti_count = 0U;
+            a->m4_exti_last_pending = 0U;
+            s_cm4_exti3_count = 0U;
+            s_cm4_exti4_count = 0U;
+            break;
         case GST_CMD_DONE:
             __DMB();
             a->ack_seq = last_seq;

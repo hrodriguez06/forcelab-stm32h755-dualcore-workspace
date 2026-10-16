@@ -113,7 +113,11 @@ typedef enum
     GST_CMD_RACE_ARM,       /* arg0 = GstRace_t, arg1 = iterations; waits for go */
     GST_CMD_SHIM_ON,        /* install the counting shim around the production hook */
     GST_CMD_SHIM_OFF,       /* back to the production hook                          */
-    GST_CMD_DONE
+    GST_CMD_DONE,
+    /* F2 commands */
+    GST_CMD_F2_CONFIG,      /* arg0: pin_idx | (trigger << 8), arg1: (interrupt << 1) | event */
+    GST_CMD_F2_DISABLE,     /* arg0: pin_idx */
+    GST_CMD_F2_COUNT_RESET  /* resets m4_exti_count */
 } GstCmd_t;
 
 typedef struct
@@ -152,6 +156,11 @@ typedef struct
     /* R3-a, appended: FW_BUILD_ID of the CPU2 image (generated/fw_build_id.h),
        written with m4_rev before m4_ready. */
     volatile char     m4_build_id[24];
+
+    /* F2 additions, appended so no existing field moves */
+    volatile uint32_t m4_exti_count;
+    volatile uint32_t m4_exti_last_pending;
+    volatile uint32_t m4_exti_status;
 } GstArea_t;
 
 _Static_assert(sizeof(GstArea_t) <= 0x1000U, "GstArea_t no longer fits its 4 KB slot");
@@ -165,6 +174,23 @@ typedef struct
     uint32_t pin, mode, otype, speed, pull, af, level;
     bool     allow_dbg;
 } GstPinReq_t;
+
+#define GST_PORT_COUNT       11U
+
+typedef struct
+{
+    uint32_t rcc[2];                    /* RCC_C1->AHB4ENR, RCC_C2->AHB4ENR */
+    uint32_t reg[GST_PORT_COUNT][8];    /* MODER OTYPER OSPEEDR PUPDR AFRL AFRH ODR LCKR */
+    uint32_t exticr[4];                 /* SYSCFG->EXTICR1..4 */
+    uint32_t rtsr1;                     /* EXTI->RTSR1 */
+    uint32_t ftsr1;                     /* EXTI->FTSR1 */
+    uint32_t imr1[2];                   /* EXTI_D1->IMR1, EXTI_D2->IMR1 */
+    uint32_t emr1[2];                   /* EXTI_D1->EMR1, EXTI_D2->EMR1 */
+    uint32_t cccsr;                     /* SYSCFG->CCCSR */
+} GstPhoto_t;
+
+void gst_photo_take(GstPhoto_t *p);
+bool gst_photo_equal(const GstPhoto_t *a, const GstPhoto_t *b);
 
 #define GST_HAL_ERROR   100U   /* HAL_ERROR in the status space of gst_apply/gst_deinit */
 

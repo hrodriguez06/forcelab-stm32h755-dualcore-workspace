@@ -42,6 +42,9 @@
 
 #define LOG(fmt, ...)       APP_LOG("[gpio] " fmt, ##__VA_ARGS__)
 
+#define photo_take          gst_photo_take
+#define photo_equal         gst_photo_equal
+
 #define BENCH_VERSION       1U
 #define CYC_PER_US          400U
 #define CYC_PER_MS          400000U
@@ -92,10 +95,23 @@ static const Step_t k_steps[] = {
     { "T8_HAL",      BUS_NONE, 0U,             1U << PE_T8,    0U },
     { "T8_CTRL",     BUS_NONE, 0U,             1U << PE_T8,    0U },
     { "T9",          BUS_NONE, 0U,             0U,             (1U << PF_SCOPE1) | (1U << PF_SCOPE2) },
-    { "T10_BM",      BUS_NONE, 1U << PA_MCO,   0U,             0U },
-    { "T10_LL",      BUS_NONE, 1U << PA_MCO,   0U,             0U },
-    { "T10_HAL",     BUS_NONE, 1U << PA_MCO,   0U,             0U },
-    { "DONE",        BUS_NONE, 0U,             0U,             0U },
+    { "T10_BM",          BUS_NONE, 1U << PA_MCO,   0U,                                 0U },
+    { "T10_LL",          BUS_NONE, 1U << PA_MCO,   0U,                                 0U },
+    { "T10_HAL",         BUS_NONE, 1U << PA_MCO,   0U,                                 0U },
+    { "T11_CM7_RISING",  BUS_NONE, 0U,             (1U << PE_T8) | (1U << PE_SPARE6), 0U },
+    { "T11_CM7_FALLING", BUS_NONE, 0U,             (1U << PE_T8) | (1U << PE_SPARE6), 0U },
+    { "T11_CM7_BOTH",    BUS_NONE, 0U,             (1U << PE_T8) | (1U << PE_SPARE6), 0U },
+    { "T11_CM7_EVENT",   BUS_NONE, 0U,             (1U << PE_T8) | (1U << PE_SPARE6), 0U },
+    { "T11_CM4_RISING",  BUS_NONE, 0U,             (1U << PE_T8) | (1U << PE_SPARE6), 0U },
+    { "T11_CM4_FALLING", BUS_NONE, 0U,             (1U << PE_T8) | (1U << PE_SPARE6), 0U },
+    { "T11_CM4_BOTH",    BUS_NONE, 0U,             (1U << PE_T8) | (1U << PE_SPARE6), 0U },
+    { "T11_CM4_EVENT",   BUS_NONE, 0U,             (1U << PE_T8) | (1U << PE_SPARE6), 0U },
+    { "T12",             BUS_NONE, 0U,             (1U << PE_T8) | (1U << PE_SPARE6), 0U },
+    { "T13_CM7",         BUS_NONE, 0U,             (1U << PE_T8) | (1U << PE_SPARE6), 0U },
+    { "T13_CM4",         BUS_NONE, 0U,             (1U << PE_T8) | (1U << PE_SPARE6), 0U },
+    { "T14",             BUS_NONE, 0U,             (1U << PE_T8) | (1U << PE_SPARE6), 0U },
+    { "T17",             BUS_NONE, 0U,             0U,                                 0U },
+    { "DONE",            BUS_NONE, 0U,             0U,                                 0U },
 };
 
 static const Step_t *s_step;          /* NULL between steps: nothing wired may be driven */
@@ -103,6 +119,27 @@ static bool          s_bench_abort;
 static uint32_t      s_fail;          /* firmware-side verdicts that failed */
 static uint32_t      s_mco_saved;     /* RCC_CFGR MCO1 fields before T10     */
 static bool          s_mco_changed;
+
+static volatile uint32_t s_cm7_exti0_count = 0U;
+static volatile uint32_t s_cm7_exti3_count = 0U;
+
+void EXTI0_IRQHandler(void)
+{
+    GPIOE->BSRR = (1UL << PE_T8);
+    const uint32_t pend = (uint32_t)GPIO_BM_ExtiTakePending(1UL << 0U);
+    s_cm7_exti0_count++;
+    (void)pend;
+    GPIOE->BSRR = (1UL << (PE_T8 + 16U));
+}
+
+void EXTI3_IRQHandler(void)
+{
+    GPIOE->BSRR = (1UL << PE_T8);
+    const uint32_t pend = (uint32_t)GPIO_BM_ExtiTakePending(1UL << 3U);
+    s_cm7_exti3_count++;
+    (void)pend;
+    GPIOE->BSRR = (1UL << (PE_T8 + 16U));
+}
 
 static const char *const k_tier_name[GST_TIER_COUNT] = { "BM", "LL", "HAL" };
 
@@ -1541,6 +1578,340 @@ static void step_t10(GstTier_t t)
 }
 
 /* ==========================================================================================
+ * F2 Steps: EXTI 0-15 and Compensation Cell (T11 - T14, T17)
+ * ========================================================================================== */
+
+static void step_t11_cm7(const char *name, uint32_t trigger, bool interrupt, bool event, uint32_t expected)
+{
+    if (!step_begin(name))
+    {
+        return;
+    }
+    if (!bench_cfg(GST_TIER_BM, GPIOE, PE_T8, GPIO_BM_MODE_OUTPUT, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 0U, 0U))
+    {
+        return;
+    }
+    s_cm7_exti3_count = 0U;
+    (void)GPIO_BM_ExtiConfig(GPIOE, 3U, trigger, interrupt, event);
+    if (interrupt)
+    {
+        NVIC_SetPriority(EXTI3_IRQn, 2U);
+        NVIC_ClearPendingIRQ(EXTI3_IRQn);
+        NVIC_EnableIRQ(EXTI3_IRQn);
+    }
+
+    (void)sync0();
+
+    if (interrupt)
+    {
+        NVIC_DisableIRQ(EXTI3_IRQn);
+        NVIC_ClearPendingIRQ(EXTI3_IRQn);
+    }
+    (void)GPIO_BM_ExtiDisable(GPIOE, 3U);
+    pins_input_raw(GPIOE, 1UL << PE_T8, GPIO_BM_PULL_NONE);
+
+    LOG("%s: CM7 count=%lu (expected %lu)", name, (unsigned long)s_cm7_exti3_count, (unsigned long)expected);
+    verdict(!s_bench_abort && (s_cm7_exti3_count == expected), "%s count exact (%lu)", name, (unsigned long)expected);
+    step_end();
+}
+
+static void step_t11_cm4(const char *name, uint32_t trigger, bool interrupt, bool event, uint32_t expected)
+{
+    if (!step_begin(name))
+    {
+        return;
+    }
+    (void)cm4_send(GST_CMD_F2_COUNT_RESET, 0U, 0U, true, NULL);
+    const uint32_t a0 = 4U | (trigger << 8U);
+    const uint32_t a1 = (interrupt ? 2U : 0U) | (event ? 1U : 0U);
+    (void)cm4_send(GST_CMD_F2_CONFIG, a0, a1, true, NULL);
+
+    (void)sync0();
+
+    (void)cm4_send(GST_CMD_F2_DISABLE, 4U, 0U, true, NULL);
+
+    LOG("%s: CM4 count=%lu (expected %lu)", name, (unsigned long)GST_AREA->m4_exti_count, (unsigned long)expected);
+    verdict(!s_bench_abort && (GST_AREA->m4_exti_count == expected), "%s count exact (%lu)", name, (unsigned long)expected);
+    step_end();
+}
+
+static void step_t12(void)
+{
+    if (!step_begin("T12"))
+    {
+        return;
+    }
+    if (!bench_cfg(GST_TIER_BM, GPIOE, PE_T8, GPIO_BM_MODE_OUTPUT, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 0U, 0U))
+    {
+        return;
+    }
+
+    /* Subtest 1: Line 3 in CM7, Line 4 in CM4 */
+    s_cm7_exti3_count = 0U;
+    (void)cm4_send(GST_CMD_F2_COUNT_RESET, 0U, 0U, true, NULL);
+
+    (void)GPIO_BM_ExtiConfig(GPIOE, 3U, GPIO_BM_EXTI_RISING, true, false);
+    NVIC_SetPriority(EXTI3_IRQn, 2U);
+    NVIC_ClearPendingIRQ(EXTI3_IRQn);
+    NVIC_EnableIRQ(EXTI3_IRQn);
+
+    (void)cm4_send(GST_CMD_F2_CONFIG, 4U | (GPIO_BM_EXTI_RISING << 8U), 2U, true, NULL);
+
+    (void)sync0();
+
+    const uint32_t cm7_c1 = s_cm7_exti3_count;
+    const uint32_t cm4_c1 = GST_AREA->m4_exti_count;
+    LOG("T12 independent: CM7=%lu (exp 200), CM4=%lu (exp 200)", (unsigned long)cm7_c1, (unsigned long)cm4_c1);
+    bool ok = (cm7_c1 == 200U) && (cm4_c1 == 200U);
+
+    /* Subtest 2: Line 3 shared in both cores */
+    s_cm7_exti3_count = 0U;
+    (void)cm4_send(GST_CMD_F2_COUNT_RESET, 0U, 0U, true, NULL);
+    (void)cm4_send(GST_CMD_F2_DISABLE, 4U, 0U, true, NULL);
+    (void)cm4_send(GST_CMD_F2_CONFIG, 3U | (GPIO_BM_EXTI_RISING << 8U), 2U, true, NULL);
+
+    (void)sync0();
+
+    const uint32_t cm7_c2 = s_cm7_exti3_count;
+    const uint32_t cm4_c2 = GST_AREA->m4_exti_count;
+    LOG("T12 shared line 3: CM7=%lu (exp 200), CM4=%lu (exp 200)", (unsigned long)cm7_c2, (unsigned long)cm4_c2);
+    ok = ok && (cm7_c2 == 200U) && (cm4_c2 == 200U);
+
+    /* Subtest 3 (Control): ExtiDisable of line 3 in CM4 -> CM4 counts 0, CM7 counts 200 */
+    s_cm7_exti3_count = 0U;
+    (void)cm4_send(GST_CMD_F2_COUNT_RESET, 0U, 0U, true, NULL);
+    (void)cm4_send(GST_CMD_F2_DISABLE, 3U, 0U, true, NULL);
+
+    (void)sync0();
+
+    const uint32_t cm7_c3 = s_cm7_exti3_count;
+    const uint32_t cm4_c3 = GST_AREA->m4_exti_count;
+    LOG("T12 control disabled CM4: CM7=%lu (exp 200), CM4=%lu (exp 0)", (unsigned long)cm7_c3, (unsigned long)cm4_c3);
+    ok = ok && (cm7_c3 == 200U) && (cm4_c3 == 0U);
+
+    /* Cleanup */
+    NVIC_DisableIRQ(EXTI3_IRQn);
+    NVIC_ClearPendingIRQ(EXTI3_IRQn);
+    (void)GPIO_BM_ExtiDisable(GPIOE, 3U);
+    pins_input_raw(GPIOE, 1UL << PE_T8, GPIO_BM_PULL_NONE);
+
+    verdict(!s_bench_abort && ok, "T12 dual-core EXTI routing and isolation");
+    step_end();
+}
+
+static void step_t13_cm7(void)
+{
+    if (!step_begin("T13_CM7"))
+    {
+        return;
+    }
+    if (!bench_cfg(GST_TIER_BM, GPIOE, PE_T8, GPIO_BM_MODE_OUTPUT, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 0U, 0U))
+    {
+        return;
+    }
+    s_cm7_exti3_count = 0U;
+    (void)GPIO_BM_ExtiConfig(GPIOE, 3U, GPIO_BM_EXTI_RISING, true, false);
+    NVIC_SetPriority(EXTI3_IRQn, 2U);
+    NVIC_ClearPendingIRQ(EXTI3_IRQn);
+    NVIC_EnableIRQ(EXTI3_IRQn);
+
+    (void)sync0();
+
+    /* Negative control: line disabled -> no response on DIO9 */
+    NVIC_DisableIRQ(EXTI3_IRQn);
+    (void)GPIO_BM_ExtiDisable(GPIOE, 3U);
+    (void)sync0();
+
+    pins_input_raw(GPIOE, 1UL << PE_T8, GPIO_BM_PULL_NONE);
+    verdict(!s_bench_abort, "T13_CM7 latency edges measured by host");
+    step_end();
+}
+
+static void step_t13_cm4(void)
+{
+    if (!step_begin("T13_CM4"))
+    {
+        return;
+    }
+    (void)cm4_send(GST_CMD_F2_COUNT_RESET, 0U, 0U, true, NULL);
+    (void)cm4_send(GST_CMD_F2_CONFIG, 4U | (GPIO_BM_EXTI_RISING << 8U), 2U, true, NULL);
+
+    (void)sync0();
+
+    /* Negative control: line disabled -> no response on DIO11 */
+    (void)cm4_send(GST_CMD_F2_DISABLE, 4U, 0U, true, NULL);
+    (void)sync0();
+
+    verdict(!s_bench_abort, "T13_CM4 latency edges measured by host");
+    step_end();
+}
+
+static void step_t14(void)
+{
+    if (!step_begin("T14"))
+    {
+        return;
+    }
+    bool all_ok = true;
+
+    /* (a) Pending: line 3 unmasked with NVIC off. Host edge leaves PR1 at 1.
+           ExtiConfig again leaves it at 0. Clear NVIC pending. Turn on NVIC -> 0 ISR.
+           Negative control: without ExtiConfig, turn on NVIC -> 1 ISR. */
+    s_cm7_exti3_count = 0U;
+    (void)GPIO_BM_ExtiConfig(GPIOE, 3U, GPIO_BM_EXTI_RISING, true, false);
+    NVIC_DisableIRQ(EXTI3_IRQn);
+    NVIC_ClearPendingIRQ(EXTI3_IRQn);
+
+    (void)sync0();
+
+    (void)GPIO_BM_ExtiConfig(GPIOE, 3U, GPIO_BM_EXTI_RISING, true, false);
+    NVIC_ClearPendingIRQ(EXTI3_IRQn);
+    NVIC_EnableIRQ(EXTI3_IRQn);
+    delay_ms(2U);
+    NVIC_DisableIRQ(EXTI3_IRQn);
+
+    const bool p1_ok = (s_cm7_exti3_count == 0U);
+    LOG("T14(a) Pending cleared by ExtiConfig: count=%lu (exp 0)", (unsigned long)s_cm7_exti3_count);
+    all_ok = all_ok && p1_ok;
+
+    s_cm7_exti3_count = 0U;
+    (void)sync0();
+    NVIC_ClearPendingIRQ(EXTI3_IRQn);
+    NVIC_EnableIRQ(EXTI3_IRQn);
+    delay_ms(2U);
+    NVIC_DisableIRQ(EXTI3_IRQn);
+    const bool p1_ctrl_ok = (s_cm7_exti3_count == 1U);
+    LOG("T14(a) Control uncleared PR1: count=%lu (exp 1)", (unsigned long)s_cm7_exti3_count);
+    all_ok = all_ok && p1_ctrl_ok;
+    (void)GPIO_BM_ExtiDisable(GPIOE, 3U);
+
+    /* (b) Conflict: with line 3 in PE and unmasked, ExtiConfig(GPIOD, 3) returns ERR_CONFLICT, photo unchanged */
+    (void)GPIO_BM_ExtiConfig(GPIOE, 3U, GPIO_BM_EXTI_RISING, true, false);
+    GstPhoto_t b_conf, a_conf;
+    photo_take(&b_conf);
+    const GpioBm_Status_t st_conf = GPIO_BM_ExtiConfig(GPIOD, 3U, GPIO_BM_EXTI_RISING, true, false);
+    photo_take(&a_conf);
+    const bool conf_ok = (st_conf == GPIO_BM_ERR_CONFLICT) && photo_equal(&b_conf, &a_conf);
+    LOG("T14(b) Conflict GPIOD: status=%lu photo_equal=%u", (unsigned long)st_conf, photo_equal(&b_conf, &a_conf));
+    all_ok = all_ok && conf_ok;
+
+    (void)GPIO_BM_ExtiDisable(GPIOE, 3U);
+    const GpioBm_Status_t st_free = GPIO_BM_ExtiConfig(GPIOD, 3U, GPIO_BM_EXTI_RISING, true, false);
+    const bool free_ok = (st_free == GPIO_BM_OK);
+    LOG("T14(b) Control free line routes to GPIOD: status=%lu", (unsigned long)st_free);
+    all_ok = all_ok && free_ok;
+    (void)GPIO_BM_ExtiDisable(GPIOD, 3U);
+
+    /* (c) Deinit rule 6: ExtiDisable on one core leaves RTSR/FTSR/EXTICR while other has mask, and clears when last */
+    (void)GPIO_BM_ExtiConfig(GPIOE, 3U, GPIO_BM_EXTI_RISING, true, false);
+    (void)cm4_send(GST_CMD_F2_CONFIG, 3U | (GPIO_BM_EXTI_RISING << 8U), 2U, true, NULL);
+    (void)cm4_send(GST_CMD_F2_DISABLE, 3U, 0U, true, NULL);
+    const uint32_t cr_kept = (SYSCFG->EXTICR[0] >> 12U) & 0xFU;
+    const uint32_t rtsr_kept = (EXTI->RTSR1 >> 3U) & 1UL;
+    const bool deinit_kept = (cr_kept == 4U) && (rtsr_kept == 1UL);
+
+    (void)GPIO_BM_ExtiDisable(GPIOE, 3U);
+    const uint32_t cr_cleared = (SYSCFG->EXTICR[0] >> 12U) & 0xFU;
+    const uint32_t rtsr_cleared = (EXTI->RTSR1 >> 3U) & 1UL;
+    const bool deinit_cleared = (cr_cleared == 0U) && (rtsr_cleared == 0UL);
+    LOG("T14(c) Deinit rule 6: shared kept=%u, last cleared=%u", deinit_kept, deinit_cleared);
+    all_ok = all_ok && deinit_kept && deinit_cleared;
+
+    /* (d) ExtiSoftwareTrigger(0) with line 0 in PE: 100 triggers -> 100 ISRs */
+    s_cm7_exti0_count = 0U;
+    (void)GPIO_BM_ExtiConfig(GPIOE, 0U, GPIO_BM_EXTI_RISING, true, false);
+    NVIC_SetPriority(EXTI0_IRQn, 2U);
+    NVIC_ClearPendingIRQ(EXTI0_IRQn);
+    NVIC_EnableIRQ(EXTI0_IRQn);
+
+    for (uint32_t i = 0U; i < 100U; i++)
+    {
+        (void)GPIO_BM_ExtiSoftwareTrigger(0U);
+        delay_cycles(1000U);
+    }
+    NVIC_DisableIRQ(EXTI0_IRQn);
+    const bool sw_ok = (s_cm7_exti0_count == 100U);
+    LOG("T14(d) ExtiSoftwareTrigger(0): count=%lu (exp 100)", (unsigned long)s_cm7_exti0_count);
+    all_ok = all_ok && sw_ok;
+
+    (void)GPIO_BM_ExtiDisable(GPIOE, 0U);
+    s_cm7_exti0_count = 0U;
+    NVIC_EnableIRQ(EXTI0_IRQn);
+    (void)GPIO_BM_ExtiSoftwareTrigger(0U);
+    delay_cycles(1000U);
+    NVIC_DisableIRQ(EXTI0_IRQn);
+    const bool sw_ctrl_ok = (s_cm7_exti0_count == 0U);
+    LOG("T14(d) Control masked line 0: count=%lu (exp 0)", (unsigned long)s_cm7_exti0_count);
+    all_ok = all_ok && sw_ctrl_ok;
+
+    verdict(!s_bench_abort && all_ok, "T14 pending, conflict, deinit rule 6 and software trigger");
+    step_end();
+}
+
+static void step_t17(void)
+{
+    if (!step_begin("T17"))
+    {
+        return;
+    }
+    bool ok = true;
+    const uint32_t cr_saved = RCC->CR & RCC_CR_CSION;
+    const uint32_t cccsr_saved = SYSCFG->CCCSR;
+
+    /* (a) Without CSI: CSION = 0, waiting for CSIRDY = 0, and EN = 0 */
+    RCC->CR &= ~RCC_CR_CSION;
+    uint32_t t0 = DWT->CYCCNT;
+    while ((RCC->CR & RCC_CR_CSIRDY) != 0U)
+    {
+        if ((DWT->CYCCNT - t0) > (100U * CYC_PER_MS)) { break; }
+    }
+    SYSCFG->CCCSR &= ~SYSCFG_CCCSR_EN;
+
+    GstPhoto_t b_cc, a_cc;
+    photo_take(&b_cc);
+    const GpioBm_Status_t st_nocsi = GPIO_BM_EnableCompensationCell(50000U);
+    photo_take(&a_cc);
+    const bool a_ok = (st_nocsi == GPIO_BM_ERR_NOT_READY) && photo_equal(&b_cc, &a_cc);
+    LOG("T17(a) Compensation cell without CSI: st=%lu photo_equal=%u", (unsigned long)st_nocsi, photo_equal(&b_cc, &a_cc));
+    ok = ok && a_ok;
+
+    /* Control for (a): manual EN=1 without CSI leaves READY=0 (RM0399 13.3.7) */
+    SYSCFG->CCCSR |= SYSCFG_CCCSR_EN;
+    delay_cycles(2000U);
+    const bool ready_zero = (SYSCFG->CCCSR & SYSCFG_CCCSR_READY) == 0U;
+    SYSCFG->CCCSR &= ~SYSCFG_CCCSR_EN;
+    LOG("T17(a) Control manual EN=1 without CSI: ready_zero=%u", ready_zero);
+    ok = ok && ready_zero;
+
+    /* (b) With CSI: CSION = 1, wait CSIRDY = 1 */
+    RCC->CR |= RCC_CR_CSION;
+    t0 = DWT->CYCCNT;
+    while ((RCC->CR & RCC_CR_CSIRDY) == 0U)
+    {
+        if ((DWT->CYCCNT - t0) > (100U * CYC_PER_MS)) { break; }
+    }
+    const uint32_t t_start = DWT->CYCCNT;
+    const GpioBm_Status_t st_csi = GPIO_BM_EnableCompensationCell(50000U);
+    const uint32_t cyc_taken = DWT->CYCCNT - t_start;
+    const bool b_ok = (st_csi == GPIO_BM_OK) && ((SYSCFG->CCCSR & SYSCFG_CCCSR_READY) != 0U);
+    LOG("T17(b) Compensation cell with CSI: st=%lu cycles=%lu CCCSR=0x%08lX",
+        (unsigned long)st_csi, (unsigned long)cyc_taken, (unsigned long)SYSCFG->CCCSR);
+    ok = ok && b_ok;
+
+    /* Restore saved state */
+    SYSCFG->CCCSR = cccsr_saved;
+    if (cr_saved == 0U)
+    {
+        RCC->CR &= ~RCC_CR_CSION;
+    }
+    LOG("T17 restored: RCC_CR.CSION=%lu, CCCSR=0x%08lX",
+        (unsigned long)((RCC->CR & RCC_CR_CSION) != 0U), (unsigned long)SYSCFG->CCCSR);
+
+    verdict(!s_bench_abort && ok, "T17 compensation cell without CSI (refused) and with CSI (ready)");
+    step_end();
+}
+
+/* ==========================================================================================
  * T16: LCKR, last (a lock lasts until reset)
  * ========================================================================================== */
 
@@ -1834,6 +2205,26 @@ void GPIO_Selftest_CM7_Run(void)
     {
         step_t10((GstTier_t)t);
     }
+
+    /* F2 Steps */
+    step_t11_cm7("T11_CM7_RISING",  GPIO_BM_EXTI_RISING,  true,  false, 200U);
+    step_t11_cm7("T11_CM7_FALLING", GPIO_BM_EXTI_FALLING, true,  false, 200U);
+    step_t11_cm7("T11_CM7_BOTH",    GPIO_BM_EXTI_BOTH,    true,  false, 400U);
+    step_t11_cm7("T11_CM7_EVENT",   GPIO_BM_EXTI_RISING,  false, true,  0U);
+
+    step_t11_cm4("T11_CM4_RISING",  GPIO_BM_EXTI_RISING,  true,  false, 200U);
+    step_t11_cm4("T11_CM4_FALLING", GPIO_BM_EXTI_FALLING, true,  false, 200U);
+    step_t11_cm4("T11_CM4_BOTH",    GPIO_BM_EXTI_BOTH,    true,  false, 400U);
+    step_t11_cm4("T11_CM4_EVENT",   GPIO_BM_EXTI_RISING,  false, true,  0U);
+
+    step_t12();
+
+    step_t13_cm7();
+    step_t13_cm4();
+
+    step_t14();
+    step_t17();
+
     if (step_begin("DONE"))
     {
         step_end();

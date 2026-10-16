@@ -49,15 +49,7 @@ uint32_t gst_core_index(void)
 #endif
 }
 
-/* ---- Snapshot (oracle of "nothing was written") ------------------------------- */
-
-typedef struct
-{
-    uint32_t rcc[2];                /* RCC_C1->AHB4ENR, RCC_C2->AHB4ENR */
-    uint32_t reg[PORT_COUNT][8];    /* MODER OTYPER OSPEEDR PUPDR AFRL AFRH ODR LCKR */
-} GstPhoto_t;
-
-static void photo_take(GstPhoto_t *p)
+void gst_photo_take(GstPhoto_t *p)
 {
     uint32_t en;
 
@@ -82,12 +74,35 @@ static void photo_take(GstPhoto_t *p)
         p->reg[i][6] = g->ODR;
         p->reg[i][7] = g->LCKR;
     }
+
+#if defined(CORE_CM4)
+    RCC_C2->APB4ENR |= RCC_APB4ENR_SYSCFGEN;
+    (void)RCC_C2->APB4ENR;
+#else
+    RCC->APB4ENR |= RCC_APB4ENR_SYSCFGEN;
+    (void)RCC->APB4ENR;
+#endif
+
+    p->exticr[0] = SYSCFG->EXTICR[0];
+    p->exticr[1] = SYSCFG->EXTICR[1];
+    p->exticr[2] = SYSCFG->EXTICR[2];
+    p->exticr[3] = SYSCFG->EXTICR[3];
+    p->rtsr1     = EXTI->RTSR1;
+    p->ftsr1     = EXTI->FTSR1;
+    p->imr1[0]   = EXTI_D1->IMR1;
+    p->imr1[1]   = EXTI_D2->IMR1;
+    p->emr1[0]   = EXTI_D1->EMR1;
+    p->emr1[1]   = EXTI_D2->EMR1;
+    p->cccsr     = SYSCFG->CCCSR;
 }
 
-static bool photo_equal(const GstPhoto_t *a, const GstPhoto_t *b)
+bool gst_photo_equal(const GstPhoto_t *a, const GstPhoto_t *b)
 {
     return memcmp(a, b, sizeof(*a)) == 0;
 }
+
+#define photo_take gst_photo_take
+#define photo_equal gst_photo_equal
 
 /* ---- Pin fields, read and forced with raw register accesses -------------------- */
 
@@ -306,6 +321,49 @@ static void t1_bm(void)
     T1_ST(GPIO_BM_EnablePortClock(NULL),                                   false);
     T1_ST(GPIO_BM_EnablePortClock(BAD_PORT_MIS),                           false);
     T1_ST(GPIO_BM_EnablePortClock(BAD_PORT_HIGH),                          false);
+
+    /* F2: EXTI 0-15 and compensation cell refusals */
+    T1_ST(GPIO_BM_ExtiConfig(GPIOE, 16U, GPIO_BM_EXTI_RISING, true, false),         GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiConfig(GPIOE, 3U, 0U, true, false),                            GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiConfig(GPIOE, 3U, 4U, true, false),                            GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiConfig(GPIOE, 3U, GPIO_BM_EXTI_RISING, false, false),          GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiConfig(BAD_PORT_MIS, 3U, GPIO_BM_EXTI_RISING, true, false),   GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiConfig(BAD_PORT_HIGH, 3U, GPIO_BM_EXTI_RISING, true, false),  GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiConfig(BAD_PORT_LOW, 3U, GPIO_BM_EXTI_RISING, true, false),   GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiConfig(NULL, 3U, GPIO_BM_EXTI_RISING, true, false),           GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiDisable(GPIOE, 16U),                                           GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiDisable(BAD_PORT_MIS, 3U),                                     GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiDisable(BAD_PORT_HIGH, 3U),                                    GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiDisable(BAD_PORT_LOW, 3U),                                     GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiDisable(NULL, 3U),                                             GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_ExtiSoftwareTrigger(16U),                                          GPIO_BM_ERR_PARAM);
+    T1_ST(GPIO_BM_EnableCompensationCell(0U),                                        GPIO_BM_ERR_PARAM);
+
+    /* Hand-written IRQn table against ExtiGetIRQn(0..16) */
+    static const IRQn_Type k_expected_irqn[17] = {
+        EXTI0_IRQn, EXTI1_IRQn, EXTI2_IRQn, EXTI3_IRQn, EXTI4_IRQn,
+        EXTI9_5_IRQn, EXTI9_5_IRQn, EXTI9_5_IRQn, EXTI9_5_IRQn, EXTI9_5_IRQn,
+        EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn,
+        GPIO_BM_EXTI_IRQN_INVALID
+    };
+    for (uint32_t i = 0U; i <= 16U; i++)
+    {
+        T1_ST(GPIO_BM_ExtiGetIRQn(i), k_expected_irqn[i]);
+    }
+
+    /* F2 Negative control: a valid ExtiConfig on PF9 (unused) DOES change the snapshot */
+    {
+        GstPhoto_t b_exti, a_exti;
+        photo_take(&b_exti);
+        const GpioBm_Status_t ok_st = GPIO_BM_ExtiConfig(GPIOF, 9U, GPIO_BM_EXTI_RISING, true, false);
+        photo_take(&a_exti);
+        s_t1->cases++;
+        if ((ok_st != GPIO_BM_OK) || photo_equal(&b_exti, &a_exti))
+        {
+            s_t1->fail++;
+        }
+        (void)GPIO_BM_ExtiDisable(GPIOF, 9U);
+    }
 }
 
 static void t1_ll(void)
