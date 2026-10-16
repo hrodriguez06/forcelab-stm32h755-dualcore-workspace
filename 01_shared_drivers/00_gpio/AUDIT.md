@@ -250,3 +250,16 @@ Lo revisé yo. No hay salidas nuevas y `tools/ad2.py` sigue sin cambios.
 - el informe (R4).
 
 El firmware y el host de F2 siguen verificados en la placa. Las dos corridas completas del cierre se harán con el HEAD final, cuando el responsable decida sobre T9 en PF14.
+
+## F1, corrección 4 (`7c6fc23`, herramienta en `b1b6342`)
+
+Solo cambian la herramienta sin placa y el informe.
+
+| ID | Estado |
+| --- | --- |
+| N1 | **Cerrado:**<br>• un marcador que no se puede expandir da FAIL (probado con `{self.label}`, `{tier.lower()}` y `{zz}`);<br>• `TIERS` se lee del árbol sintáctico del host (`gpio_f2_checks.py:745`);<br>• el host real da 29/29;<br>• la expresión de T17 de la primera ronda da FAIL |
+| Menores | Cerrados: las excepciones en `main()` (l. 1052-1055); el código de salida de `nm` en el control de producción (l. 494-497); el cambio de tipo en `compare_symbols` (l. 621-622). Casi cerrados: las cabeceras (unión con `ls-tree` del control, que vuelve en silencio al árbol actual si `ls-tree` falla) y las líneas borradas que empiezan por `*` (aún se escapan `* ptr = 0;`, `int a; */` y `--counter;`) |
+| R5 | **No cerrado:**<br>• la procedencia solo se comprueba en 3 imágenes de `prj_04` (l. 185-189), pero la herramienta escribe \"16/16 ELFs verified (built from 3df160a)\" (l. 200, captura l. 7);<br>• las otras 13 no embeben una revisión que sirva: `prj_01` lleva `FW_GIT_REV \"unknown\"`, `prj_02` y `prj_03` no llevan ninguna, y CM4 `debug` de `prj_04` solo la tiene en la información de depuración;<br>• el filtro de la ruta (25 bytes antes, l. 138-140) se burla con una ruta larga, y acepta `3df160a-dirty` y hashes más largos;<br>• la rama de fallo del control (l. 1001-1003) sale sin escribir `OVERALL VERDICT` |
+| R4 | **Parcial:**<br>• las seis citas que estaban mal ya están bien, y el resto también salvo l. 89 (`gpio_hw_check.py:1566-1570` es el aborto de N4; N5 está en l. 1557-1562);<br>• **§6.2 no se puede ejecutar:** compila desde la raíz, donde no hay `CMakePresets.json`; no carga `env.ps1`; la imagen de producción se compila sin configurar; los nombres de archivo dicen `b1b6342`, pero la imagen dará `Rev` del HEAD;<br>• **afirmaciones falsas:** \"las 16 ELF embeben la revisión\" (l. 158, y en l. 14 y 80); \"sin listas manuales\" (l. 75; hay listas en l. 820-827 y una línea `STEP` a mano en l. 855-857); y que las sentencias que empiezan por `*` nunca cuentan como comentario (l. 21) |
+
+**Estado:** F1 no pasa. Queda R5 (bloqueante) y R4. Para R5, lo más simple que se puede demostrar es compilar el control dentro de la propia ejecución, comprobando antes que el worktree está en `3df160a` y limpio. La procedencia sale entonces de la ejecución, no del contenido de las ELF.
