@@ -256,3 +256,32 @@ Queda una palabra en español en la fila T2b de `prj_04/README.md` ("autoprueba"
 **El cierre del implementador pasa.** Lo que falta es del responsable:
 - T6b, con el responsable en el banco;
 - la hoja de ruta, el borrado de los documentos de proceso, la retirada de `../stm32h755_control_04fb865` y el merge.
+
+## T6b, arranque en frío (auditor, con el responsable en el banco)
+
+Script del auditor, sin flasheo, reset ni detención desde el encendido. Lee:
+- `RCC_RSR`, `PWR_CR3` y `RCC_CR` en modo HOTPLUG;
+- la tabla de vectores de cada banco, comparada con `Reset_Handler` y `_estack` de los ELF de `build/debug`.
+
+Después corre T3 con `run_t3` de la herramienta y T4 con 60 s de `measure_udp_window`, `check_board_oracle` y `check_rate_sanity`, más un control negativo con Δ`samples` × 0,8. Por último, T5 con `monitor.py` y `net_check.py` a la vez. Una captura por arranque.
+
+| Proyecto | Captura | Resultado |
+| --- | --- | --- |
+| `prj_03` | `tim_f4_audit_t6b_ddc937e.txt` | **PASS 12/12.** `RCC_RSR = 0x00FE0000`, solo flags de encendido. La primera respuesta de T4 llegó con 162 s desde el arranque. T3 exacto. 506 226,6 Hz, 50 041 muestras por latido, `ovr` y `err` a 0. T5 3/3, `[net]` a 0 |
+| `prj_04` | `tim_f4_audit_t6b_4809609.txt` | **PASS 12/12.** `RCC_RSR = 0x00FE0000`. Arranque de 14 s. T3 exacto. 506 181,7 Hz, 49 975 muestras por latido, `ovr`, `err` y `adc_ovr` a 0. T5 3/3, `[net]` con `acl_drop` a 0 |
+| Control negativo | `tim_f4_audit_t6b_warm_control_ddc937e.txt` | El mismo script sobre un arranque en caliente (tras flasheos): **FAIL** en el flag de reset (`RCC_RSR = 0x01FE0000`, `SFT1RSTF`), 11/12 |
+
+Antes de T6b, el responsable había cargado otro programa. Lo respaldé completo antes de reflashear: `../stm32h755_backups/h755_flash_before_t6b_20261015_202847.bin`, 2 MB, SHA-256 `8f6c0414…c6450a`, 107 761 bytes distintos de `prj_03`.
+
+**Límite de la identidad:**
+- `prj_03` y `prj_04` tienen las mismas tablas de vectores, así que esa comprobación no los distingue.
+- **La identidad la dan:**
+  - el flasheo verificado de `flash.py` justo antes de cada apagado (`prj_03` y luego `prj_04`, desde `build/debug`);
+  - los campos que solo existen en `prj_04`: `adc_ovr` en el JSON y `acl_drop` en `[net]`. Están en la captura de `prj_04` y faltan en la de `prj_03`.
+
+**Estado: T6b pasa en los dos proyectos.**
+- **Ya hecho:** registré el resultado en los README (`03_tim` §9.5, `prj_03` §8, `prj_04` §10) y en la hoja de ruta.
+- **Queda, con aprobación del responsable:**
+  - el borrado de los documentos de proceso;
+  - la retirada de `../stm32h755_control_04fb865`;
+  - el merge.
