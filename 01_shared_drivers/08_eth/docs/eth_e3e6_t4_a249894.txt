@@ -1,0 +1,17 @@
+[+   0.001s] [host] argv: tools/eth_e3e6_checks.py --test t4 -o 01_shared_drivers/08_eth/docs/eth_e3e6_t4_a249894.txt
+[+   0.001s] [host] options: test=t4 output=01_shared_drivers\08_eth\docs\eth_e3e6_t4_a249894.txt control_dir=C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7 allow_dirty=False sn=0016000C4142501220353451 target_ip=192.168.1.150 local_echo=False
+[+   0.056s] [host] HEAD: d8d13bfcb05533bc839df3a3ce51d494e28a062e
+[+   0.056s] [host] Working tree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+[+   0.057s] [host] Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7
+[+   0.444s] [host] working tree clean (start): PASS (Tree is clean)
+[+   1.014s] [host] Compiler: C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.EXE
+[+   1.014s] [host] Objdump:  C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-objdump.exe
+[+   1.015s] [host] CMake:    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cmake.win32_1.1.200.202605190741\tools\bin\cmake.EXE
+[+   1.015s] === Running T4 Checks (prj_02 Memory Budget & Zero-Copy Disassembly) ===
+[+   1.057s] [host] CHECK prj_02 D2 SRAM3 usage (<= 32 KB): PASS (SRAM3 size = 24768 B / 32768 B (75.59%))
+[+   1.079s] [host] CHECK g_rx_pool 32-byte aligned & MPU Region 6: PASS (addr=0x300400c0, align32=True, in_r6=True)
+[+   1.113s] [host] CHECK ethernetif_receive_one zero-copy (no pbuf_take/memcpy calls): PASS (detected=[])
+[+   1.188s] [host] CHECK T4 negative control (.map 33 KB detected & rejected): PASS (SRAM3 size = 33792 B / 32768 B (103.12%))
+[+   1.190s] [host] CHECK T4 negative control (injected memcpy in disasm detected & rejected): PASS (['12: f7ff fffe \tbl\t0 <memcpy>'])
+[+   1.534s] [host] working tree clean (end): PASS (Tree is clean)
+[+   1.535s] OVERALL VERDICT: PASS
