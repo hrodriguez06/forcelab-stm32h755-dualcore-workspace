@@ -143,35 +143,43 @@ void GPIO_Selftest_CM4_Run(void)
         }
         case GST_CMD_F2_CONFIG:
         {
+            const bool pe6_auth = (a->arg1 & GST_F2_AUTH_PE6) != 0U;
+            if (!pe6_auth)
+            {
+                a->m4_exti_status = (uint32_t)GPIO_BM_ERR_PARAM;
+                break;
+            }
             const uint32_t pin = a->arg0 & 0xFFU;
             const uint32_t trigger = (a->arg0 >> 8U) & 0xFFU;
             const bool interrupt = ((a->arg1 >> 1U) & 1U) != 0U;
             const bool event = (a->arg1 & 1U) != 0U;
             (void)GPIO_BM_ConfigOutput(GPIOE, PE_SPARE6, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 0U);
             a->m4_exti_status = (uint32_t)GPIO_BM_ExtiConfig(GPIOE, pin, trigger, interrupt, event);
-            if (interrupt)
+            /* M4: Keep NVIC enabled even for EVENT-only to verify EXTI masking isolates the interrupt */
+            const IRQn_Type irqn = GPIO_BM_ExtiGetIRQn(pin);
+            if (irqn != GPIO_BM_EXTI_IRQN_INVALID)
             {
-                const IRQn_Type irqn = GPIO_BM_ExtiGetIRQn(pin);
-                if (irqn != GPIO_BM_EXTI_IRQN_INVALID)
-                {
-                    NVIC_SetPriority(irqn, 2U);
-                    NVIC_ClearPendingIRQ(irqn);
-                    NVIC_EnableIRQ(irqn);
-                }
+                NVIC_SetPriority(irqn, 2U);
+                NVIC_ClearPendingIRQ(irqn);
+                NVIC_EnableIRQ(irqn);
             }
             break;
         }
         case GST_CMD_F2_DISABLE:
         {
             const uint32_t pin = a->arg0 & 0xFFU;
-            const IRQn_Type irqn = GPIO_BM_ExtiGetIRQn(pin);
-            if (irqn != GPIO_BM_EXTI_IRQN_INVALID)
+            const bool cleanup = (a->arg1 & 1U) != 0U;
+            if (cleanup)
             {
-                NVIC_DisableIRQ(irqn);
-                NVIC_ClearPendingIRQ(irqn);
+                const IRQn_Type irqn = GPIO_BM_ExtiGetIRQn(pin);
+                if (irqn != GPIO_BM_EXTI_IRQN_INVALID)
+                {
+                    NVIC_DisableIRQ(irqn);
+                    NVIC_ClearPendingIRQ(irqn);
+                }
+                (void)GPIO_BM_ConfigInput(GPIOE, PE_SPARE6, GPIO_BM_PULL_NONE);
             }
             a->m4_exti_status = (uint32_t)GPIO_BM_ExtiDisable(GPIOE, pin);
-            (void)GPIO_BM_ConfigInput(GPIOE, PE_SPARE6, GPIO_BM_PULL_NONE);
             break;
         }
         case GST_CMD_F2_COUNT_RESET:

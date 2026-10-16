@@ -121,14 +121,18 @@ static uint32_t      s_mco_saved;     /* RCC_CFGR MCO1 fields before T10     */
 static bool          s_mco_changed;
 
 static volatile uint32_t s_cm7_exti0_count = 0U;
+static volatile uint32_t s_cm7_exti0_pend_ok = 0U;
 static volatile uint32_t s_cm7_exti3_count = 0U;
 
 void EXTI0_IRQHandler(void)
 {
     GPIOE->BSRR = (1UL << PE_T8);
     const uint32_t pend = (uint32_t)GPIO_BM_ExtiTakePending(1UL << 0U);
+    if (pend == (1UL << 0U))
+    {
+        s_cm7_exti0_pend_ok++;
+    }
     s_cm7_exti0_count++;
-    (void)pend;
     GPIOE->BSRR = (1UL << (PE_T8 + 16U));
 }
 
@@ -202,7 +206,7 @@ static void mco_restore(void)
    never touched. Raw writes: the safe state must not depend on the code under
    test. The cross-core lock is asked for, and the writes happen even if it is
    refused, with this core's interrupts masked: safety first, and CPU2 never
-   configures GPIOA, GPIOE or PF14/PF15. */
+   configures GPIOA or PF14/PF15, and configures PE6 only when granted permission by CPU1. */
 static void bench_safe(void)
 {
     GpioBm_Section_t s;
@@ -1581,34 +1585,47 @@ static void step_t10(GstTier_t t)
  * F2 Steps: EXTI 0-15 and Compensation Cell (T11 - T14, T17)
  * ========================================================================================== */
 
+/* Pull-downs on PE3 and PE4 during F2 steps so lines driven by AD2 do not float (m6) */
+static void f2_pins_pd(bool enable)
+{
+    const uint32_t mask = (3UL << (PE_EXTI3 * 2U)) | (3UL << (PE_EXTI4 * 2U));
+    if (enable)
+    {
+        GPIOE->PUPDR = (GPIOE->PUPDR & ~mask) | (2UL << (PE_EXTI3 * 2U)) | (2UL << (PE_EXTI4 * 2U));
+    }
+    else
+    {
+        GPIOE->PUPDR = (GPIOE->PUPDR & ~mask);
+    }
+}
+
 static void step_t11_cm7(const char *name, uint32_t trigger, bool interrupt, bool event, uint32_t expected)
 {
     if (!step_begin(name))
     {
         return;
     }
+    f2_pins_pd(true);
     if (!bench_cfg(GST_TIER_BM, GPIOE, PE_T8, GPIO_BM_MODE_OUTPUT, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 0U, 0U))
     {
+        f2_pins_pd(false);
         return;
     }
     s_cm7_exti3_count = 0U;
     (void)GPIO_BM_ExtiConfig(GPIOE, 3U, trigger, interrupt, event);
-    if (interrupt)
-    {
-        NVIC_SetPriority(EXTI3_IRQn, 2U);
-        NVIC_ClearPendingIRQ(EXTI3_IRQn);
-        NVIC_EnableIRQ(EXTI3_IRQn);
-    }
+    /* M4: Always keep NVIC enabled for EXTI3 so the test isolates that EXTI IMR (not NVIC)
+       prevents interrupt generation in EVENT mode */
+    NVIC_SetPriority(EXTI3_IRQn, 2U);
+    NVIC_ClearPendingIRQ(EXTI3_IRQn);
+    NVIC_EnableIRQ(EXTI3_IRQn);
 
     (void)sync0();
 
-    if (interrupt)
-    {
-        NVIC_DisableIRQ(EXTI3_IRQn);
-        NVIC_ClearPendingIRQ(EXTI3_IRQn);
-    }
+    NVIC_DisableIRQ(EXTI3_IRQn);
+    NVIC_ClearPendingIRQ(EXTI3_IRQn);
     (void)GPIO_BM_ExtiDisable(GPIOE, 3U);
     pins_input_raw(GPIOE, 1UL << PE_T8, GPIO_BM_PULL_NONE);
+    f2_pins_pd(false);
 
     LOG("%s: CM7 count=%lu (expected %lu)", name, (unsigned long)s_cm7_exti3_count, (unsigned long)expected);
     verdict(!s_bench_abort && (s_cm7_exti3_count == expected), "%s count exact (%lu)", name, (unsigned long)expected);
@@ -1621,14 +1638,23 @@ static void step_t11_cm4(const char *name, uint32_t trigger, bool interrupt, boo
     {
         return;
     }
+    f2_pins_pd(true);
+    /* M3: CM7 verifies claim and !abort before authorizing CM4 to drive PE6 */
+    if (s_bench_abort || !bench_claim(GPIOE, 1U << PE_SPARE6))
+    {
+        bench_abort("cannot claim PE6 for CM4");
+        f2_pins_pd(false);
+        return;
+    }
     (void)cm4_send(GST_CMD_F2_COUNT_RESET, 0U, 0U, true, NULL);
     const uint32_t a0 = 4U | (trigger << 8U);
-    const uint32_t a1 = (interrupt ? 2U : 0U) | (event ? 1U : 0U);
+    const uint32_t a1 = (interrupt ? 2U : 0U) | (event ? 1U : 0U) | GST_F2_AUTH_PE6;
     (void)cm4_send(GST_CMD_F2_CONFIG, a0, a1, true, NULL);
 
     (void)sync0();
 
-    (void)cm4_send(GST_CMD_F2_DISABLE, 4U, 0U, true, NULL);
+    (void)cm4_send(GST_CMD_F2_DISABLE, 4U, 1U, true, NULL);
+    f2_pins_pd(false);
 
     LOG("%s: CM4 count=%lu (expected %lu)", name, (unsigned long)GST_AREA->m4_exti_count, (unsigned long)expected);
     verdict(!s_bench_abort && (GST_AREA->m4_exti_count == expected), "%s count exact (%lu)", name, (unsigned long)expected);
@@ -1641,8 +1667,17 @@ static void step_t12(void)
     {
         return;
     }
+    f2_pins_pd(true);
+    /* M3: CM7 verifies claim and !abort before authorizing CM4 to drive PE6 */
+    if (s_bench_abort || !bench_claim(GPIOE, 1U << PE_SPARE6))
+    {
+        bench_abort("cannot claim PE6 for CM4");
+        f2_pins_pd(false);
+        return;
+    }
     if (!bench_cfg(GST_TIER_BM, GPIOE, PE_T8, GPIO_BM_MODE_OUTPUT, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 0U, 0U))
     {
+        f2_pins_pd(false);
         return;
     }
 
@@ -1655,7 +1690,7 @@ static void step_t12(void)
     NVIC_ClearPendingIRQ(EXTI3_IRQn);
     NVIC_EnableIRQ(EXTI3_IRQn);
 
-    (void)cm4_send(GST_CMD_F2_CONFIG, 4U | (GPIO_BM_EXTI_RISING << 8U), 2U, true, NULL);
+    (void)cm4_send(GST_CMD_F2_CONFIG, 4U | (GPIO_BM_EXTI_RISING << 8U), 2U | GST_F2_AUTH_PE6, true, NULL);
 
     (void)sync0();
 
@@ -1668,7 +1703,7 @@ static void step_t12(void)
     s_cm7_exti3_count = 0U;
     (void)cm4_send(GST_CMD_F2_COUNT_RESET, 0U, 0U, true, NULL);
     (void)cm4_send(GST_CMD_F2_DISABLE, 4U, 0U, true, NULL);
-    (void)cm4_send(GST_CMD_F2_CONFIG, 3U | (GPIO_BM_EXTI_RISING << 8U), 2U, true, NULL);
+    (void)cm4_send(GST_CMD_F2_CONFIG, 3U | (GPIO_BM_EXTI_RISING << 8U), 2U | GST_F2_AUTH_PE6, true, NULL);
 
     (void)sync0();
 
@@ -1693,7 +1728,9 @@ static void step_t12(void)
     NVIC_DisableIRQ(EXTI3_IRQn);
     NVIC_ClearPendingIRQ(EXTI3_IRQn);
     (void)GPIO_BM_ExtiDisable(GPIOE, 3U);
+    (void)cm4_send(GST_CMD_F2_DISABLE, 3U, 1U, true, NULL);
     pins_input_raw(GPIOE, 1UL << PE_T8, GPIO_BM_PULL_NONE);
+    f2_pins_pd(false);
 
     verdict(!s_bench_abort && ok, "T12 dual-core EXTI routing and isolation");
     step_end();
@@ -1705,8 +1742,10 @@ static void step_t13_cm7(void)
     {
         return;
     }
+    f2_pins_pd(true);
     if (!bench_cfg(GST_TIER_BM, GPIOE, PE_T8, GPIO_BM_MODE_OUTPUT, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW, GPIO_BM_PULL_NONE, 0U, 0U))
     {
+        f2_pins_pd(false);
         return;
     }
     s_cm7_exti3_count = 0U;
@@ -1717,12 +1756,14 @@ static void step_t13_cm7(void)
 
     (void)sync0();
 
-    /* Negative control: line disabled -> no response on DIO9 */
-    NVIC_DisableIRQ(EXTI3_IRQn);
+    /* M4 Negative control: keep NVIC enabled and PE5 in output; disable only the EXTI line */
     (void)GPIO_BM_ExtiDisable(GPIOE, 3U);
     (void)sync0();
 
+    NVIC_DisableIRQ(EXTI3_IRQn);
+    NVIC_ClearPendingIRQ(EXTI3_IRQn);
     pins_input_raw(GPIOE, 1UL << PE_T8, GPIO_BM_PULL_NONE);
+    f2_pins_pd(false);
     verdict(!s_bench_abort, "T13_CM7 latency edges measured by host");
     step_end();
 }
@@ -1733,14 +1774,26 @@ static void step_t13_cm4(void)
     {
         return;
     }
+    f2_pins_pd(true);
+    /* M3: CM7 verifies claim and !abort before authorizing CM4 to drive PE6 */
+    if (s_bench_abort || !bench_claim(GPIOE, 1U << PE_SPARE6))
+    {
+        bench_abort("cannot claim PE6 for CM4");
+        f2_pins_pd(false);
+        return;
+    }
     (void)cm4_send(GST_CMD_F2_COUNT_RESET, 0U, 0U, true, NULL);
-    (void)cm4_send(GST_CMD_F2_CONFIG, 4U | (GPIO_BM_EXTI_RISING << 8U), 2U, true, NULL);
+    (void)cm4_send(GST_CMD_F2_CONFIG, 4U | (GPIO_BM_EXTI_RISING << 8U), 2U | GST_F2_AUTH_PE6, true, NULL);
 
     (void)sync0();
 
-    /* Negative control: line disabled -> no response on DIO11 */
+    /* M4 Negative control: keep NVIC enabled and PE6 in output (cleanup=0); disable only EXTI line */
     (void)cm4_send(GST_CMD_F2_DISABLE, 4U, 0U, true, NULL);
     (void)sync0();
+
+    /* Final cleanup for CM4 */
+    (void)cm4_send(GST_CMD_F2_DISABLE, 4U, 1U, true, NULL);
+    f2_pins_pd(false);
 
     verdict(!s_bench_abort, "T13_CM4 latency edges measured by host");
     step_end();
@@ -1752,6 +1805,7 @@ static void step_t14(void)
     {
         return;
     }
+    f2_pins_pd(true);
     bool all_ok = true;
 
     /* (a) Pending: line 3 unmasked with NVIC off. Host edge leaves PR1 at 1.
@@ -1764,24 +1818,32 @@ static void step_t14(void)
 
     (void)sync0();
 
+    /* Read PR1 directly before ExtiConfig (M5): host edge set it */
+    const uint32_t pr1_before = EXTI->PR1 & (1UL << 3U);
     (void)GPIO_BM_ExtiConfig(GPIOE, 3U, GPIO_BM_EXTI_RISING, true, false);
+    /* Read PR1 directly after ExtiConfig (M5): ExtiConfig cleared it */
+    const uint32_t pr1_after = EXTI->PR1 & (1UL << 3U);
+
     NVIC_ClearPendingIRQ(EXTI3_IRQn);
     NVIC_EnableIRQ(EXTI3_IRQn);
     delay_ms(2U);
     NVIC_DisableIRQ(EXTI3_IRQn);
 
-    const bool p1_ok = (s_cm7_exti3_count == 0U);
-    LOG("T14(a) Pending cleared by ExtiConfig: count=%lu (exp 0)", (unsigned long)s_cm7_exti3_count);
+    const bool p1_ok = (pr1_before == (1UL << 3U)) && (pr1_after == 0UL) && (s_cm7_exti3_count == 0U);
+    LOG("T14(a) Pending cleared by ExtiConfig: pr1_before=0x%08lX pr1_after=0x%08lX count=%lu (exp 0)",
+        (unsigned long)pr1_before, (unsigned long)pr1_after, (unsigned long)s_cm7_exti3_count);
     all_ok = all_ok && p1_ok;
 
     s_cm7_exti3_count = 0U;
     (void)sync0();
+    const uint32_t pr1_ctrl = EXTI->PR1 & (1UL << 3U);
     NVIC_ClearPendingIRQ(EXTI3_IRQn);
     NVIC_EnableIRQ(EXTI3_IRQn);
     delay_ms(2U);
     NVIC_DisableIRQ(EXTI3_IRQn);
-    const bool p1_ctrl_ok = (s_cm7_exti3_count == 1U);
-    LOG("T14(a) Control uncleared PR1: count=%lu (exp 1)", (unsigned long)s_cm7_exti3_count);
+    const bool p1_ctrl_ok = (pr1_ctrl == (1UL << 3U)) && (s_cm7_exti3_count == 1U);
+    LOG("T14(a) Control uncleared PR1: pr1=0x%08lX count=%lu (exp 1)",
+        (unsigned long)pr1_ctrl, (unsigned long)s_cm7_exti3_count);
     all_ok = all_ok && p1_ctrl_ok;
     (void)GPIO_BM_ExtiDisable(GPIOE, 3U);
 
@@ -1802,23 +1864,48 @@ static void step_t14(void)
     all_ok = all_ok && free_ok;
     (void)GPIO_BM_ExtiDisable(GPIOD, 3U);
 
-    /* (c) Deinit rule 6: ExtiDisable on one core leaves RTSR/FTSR/EXTICR while other has mask, and clears when last */
-    (void)GPIO_BM_ExtiConfig(GPIOE, 3U, GPIO_BM_EXTI_RISING, true, false);
-    (void)cm4_send(GST_CMD_F2_CONFIG, 3U | (GPIO_BM_EXTI_RISING << 8U), 2U, true, NULL);
-    (void)cm4_send(GST_CMD_F2_DISABLE, 3U, 0U, true, NULL);
+    /* M5: Restore routing back to PE after testing GPIOD */
+    const GpioBm_Status_t st_pe_restore = GPIO_BM_ExtiConfig(GPIOE, 3U, GPIO_BM_EXTI_RISING, true, false);
+    (void)GPIO_BM_ExtiDisable(GPIOE, 3U);
+    const bool pe_restored = (st_pe_restore == GPIO_BM_OK);
+    LOG("T14(b) Restore routing back to PE: status=%lu", (unsigned long)st_pe_restore);
+    all_ok = all_ok && pe_restored;
+
+    /* (c) Deinit rule 6: ExtiDisable on one core leaves RTSR/FTSR/EXTICR while other has mask, and clears when last.
+           Uses trigger GPIO_BM_EXTI_BOTH (M5) */
+    if (s_bench_abort || !bench_claim(GPIOE, 1U << PE_SPARE6))
+    {
+        bench_abort("cannot claim PE6 for CM4");
+        f2_pins_pd(false);
+        return;
+    }
+    (void)GPIO_BM_ExtiConfig(GPIOE, 3U, GPIO_BM_EXTI_BOTH, true, false);
+    (void)cm4_send(GST_CMD_F2_CONFIG, 3U | (GPIO_BM_EXTI_BOTH << 8U), 2U | GST_F2_AUTH_PE6, true, NULL);
+    (void)cm4_send(GST_CMD_F2_DISABLE, 3U, 1U, true, NULL);
+
     const uint32_t cr_kept = (SYSCFG->EXTICR[0] >> 12U) & 0xFU;
     const uint32_t rtsr_kept = (EXTI->RTSR1 >> 3U) & 1UL;
-    const bool deinit_kept = (cr_kept == 4U) && (rtsr_kept == 1UL);
+    const uint32_t ftsr_kept = (EXTI->FTSR1 >> 3U) & 1UL;
+    const uint32_t c2imr_kept = (EXTI->C2IMR1 >> 3U) & 1UL;
+    const uint32_t c2emr_kept = (EXTI->C2EMR1 >> 3U) & 1UL;
+    const uint32_t c1imr_kept = (EXTI->IMR1 >> 3U) & 1UL;
+    const bool deinit_kept = (cr_kept == 4U) && (rtsr_kept == 1UL) && (ftsr_kept == 1UL) &&
+                             (c2imr_kept == 0UL) && (c2emr_kept == 0UL) && (c1imr_kept == 1UL);
 
     (void)GPIO_BM_ExtiDisable(GPIOE, 3U);
     const uint32_t cr_cleared = (SYSCFG->EXTICR[0] >> 12U) & 0xFU;
     const uint32_t rtsr_cleared = (EXTI->RTSR1 >> 3U) & 1UL;
-    const bool deinit_cleared = (cr_cleared == 0U) && (rtsr_cleared == 0UL);
-    LOG("T14(c) Deinit rule 6: shared kept=%u, last cleared=%u", deinit_kept, deinit_cleared);
+    const uint32_t ftsr_cleared = (EXTI->FTSR1 >> 3U) & 1UL;
+    const uint32_t c1imr_cleared = (EXTI->IMR1 >> 3U) & 1UL;
+    const bool deinit_cleared = (cr_cleared == 0U) && (rtsr_cleared == 0UL) && (ftsr_cleared == 0UL) && (c1imr_cleared == 0UL);
+    LOG("T14(c) Deinit rule 6 BOTH: shared kept=%u (cr=%lu rtsr=%lu ftsr=%lu), last cleared=%u (cr=%lu rtsr=%lu ftsr=%lu)",
+        deinit_kept, (unsigned long)cr_kept, (unsigned long)rtsr_kept, (unsigned long)ftsr_kept,
+        deinit_cleared, (unsigned long)cr_cleared, (unsigned long)rtsr_cleared, (unsigned long)ftsr_cleared);
     all_ok = all_ok && deinit_kept && deinit_cleared;
 
     /* (d) ExtiSoftwareTrigger(0) with line 0 in PE: 100 triggers -> 100 ISRs */
     s_cm7_exti0_count = 0U;
+    s_cm7_exti0_pend_ok = 0U;
     (void)GPIO_BM_ExtiConfig(GPIOE, 0U, GPIO_BM_EXTI_RISING, true, false);
     NVIC_SetPriority(EXTI0_IRQn, 2U);
     NVIC_ClearPendingIRQ(EXTI0_IRQn);
@@ -1830,8 +1917,9 @@ static void step_t14(void)
         delay_cycles(1000U);
     }
     NVIC_DisableIRQ(EXTI0_IRQn);
-    const bool sw_ok = (s_cm7_exti0_count == 100U);
-    LOG("T14(d) ExtiSoftwareTrigger(0): count=%lu (exp 100)", (unsigned long)s_cm7_exti0_count);
+    const bool sw_ok = (s_cm7_exti0_count == 100U) && (s_cm7_exti0_pend_ok == 100U);
+    LOG("T14(d) ExtiSoftwareTrigger(0): count=%lu (exp 100) pend_ok=%lu (exp 100)",
+        (unsigned long)s_cm7_exti0_count, (unsigned long)s_cm7_exti0_pend_ok);
     all_ok = all_ok && sw_ok;
 
     (void)GPIO_BM_ExtiDisable(GPIOE, 0U);
@@ -1844,6 +1932,7 @@ static void step_t14(void)
     LOG("T14(d) Control masked line 0: count=%lu (exp 0)", (unsigned long)s_cm7_exti0_count);
     all_ok = all_ok && sw_ctrl_ok;
 
+    f2_pins_pd(false);
     verdict(!s_bench_abort && all_ok, "T14 pending, conflict, deinit rule 6 and software trigger");
     step_end();
 }
@@ -1861,17 +1950,22 @@ static void step_t17(void)
     /* (a) Without CSI: CSION = 0, waiting for CSIRDY = 0, and EN = 0 */
     RCC->CR &= ~RCC_CR_CSION;
     uint32_t t0 = DWT->CYCCNT;
+    bool csi_off_timeout = false;
     while ((RCC->CR & RCC_CR_CSIRDY) != 0U)
     {
-        if ((DWT->CYCCNT - t0) > (100U * CYC_PER_MS)) { break; }
+        if ((DWT->CYCCNT - t0) > (100U * CYC_PER_MS)) { csi_off_timeout = true; break; }
     }
+    LOG("T17(a) CSIRDY off wait: timeout=%u CSIRDY=%lu",
+        csi_off_timeout, (unsigned long)((RCC->CR & RCC_CR_CSIRDY) != 0U));
+    const bool csi_is_off = !csi_off_timeout && ((RCC->CR & RCC_CR_CSIRDY) == 0U);
+
     SYSCFG->CCCSR &= ~SYSCFG_CCCSR_EN;
 
     GstPhoto_t b_cc, a_cc;
     photo_take(&b_cc);
     const GpioBm_Status_t st_nocsi = GPIO_BM_EnableCompensationCell(50000U);
     photo_take(&a_cc);
-    const bool a_ok = (st_nocsi == GPIO_BM_ERR_NOT_READY) && photo_equal(&b_cc, &a_cc);
+    const bool a_ok = csi_is_off && (st_nocsi == GPIO_BM_ERR_NOT_READY) && photo_equal(&b_cc, &a_cc);
     LOG("T17(a) Compensation cell without CSI: st=%lu photo_equal=%u", (unsigned long)st_nocsi, photo_equal(&b_cc, &a_cc));
     ok = ok && a_ok;
 
@@ -1886,16 +1980,29 @@ static void step_t17(void)
     /* (b) With CSI: CSION = 1, wait CSIRDY = 1 */
     RCC->CR |= RCC_CR_CSION;
     t0 = DWT->CYCCNT;
+    bool csi_on_timeout = false;
     while ((RCC->CR & RCC_CR_CSIRDY) == 0U)
     {
-        if ((DWT->CYCCNT - t0) > (100U * CYC_PER_MS)) { break; }
+        if ((DWT->CYCCNT - t0) > (100U * CYC_PER_MS)) { csi_on_timeout = true; break; }
     }
+    LOG("T17(b) CSIRDY on wait: timeout=%u CSIRDY=%lu",
+        csi_on_timeout, (unsigned long)((RCC->CR & RCC_CR_CSIRDY) != 0U));
+    const bool csi_is_on = !csi_on_timeout && ((RCC->CR & RCC_CR_CSIRDY) != 0U);
+
+    gst_shim_install(true);
+    gst_shim_hold_reset();
     const uint32_t t_start = DWT->CYCCNT;
-    const GpioBm_Status_t st_csi = GPIO_BM_EnableCompensationCell(50000U);
+    const GpioBm_Status_t st_csi = GPIO_BM_EnableCompensationCell(4000000UL);
     const uint32_t cyc_taken = DWT->CYCCNT - t_start;
-    const bool b_ok = (st_csi == GPIO_BM_OK) && ((SYSCFG->CCCSR & SYSCFG_CCCSR_READY) != 0U);
-    LOG("T17(b) Compensation cell with CSI: st=%lu cycles=%lu CCCSR=0x%08lX",
-        (unsigned long)st_csi, (unsigned long)cyc_taken, (unsigned long)SYSCFG->CCCSR);
+    const uint32_t hold_cycles = gst_shim_hold_max();
+    gst_shim_install(false);
+
+    const bool sec_ok = (hold_cycles < (60U * CYC_PER_US));
+    const bool b_ok = csi_is_on && (st_csi == GPIO_BM_OK) &&
+                      ((SYSCFG->CCCSR & SYSCFG_CCCSR_READY) != 0U) && sec_ok;
+    LOG("T17(b) Compensation cell with CSI: st=%lu cycles=%lu sec_hold=%lu CCCSR=0x%08lX (sec_ok=%u)",
+        (unsigned long)st_csi, (unsigned long)cyc_taken, (unsigned long)hold_cycles,
+        (unsigned long)SYSCFG->CCCSR, sec_ok);
     ok = ok && b_ok;
 
     /* Restore saved state */

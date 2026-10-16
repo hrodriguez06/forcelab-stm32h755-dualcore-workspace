@@ -177,13 +177,19 @@ typedef struct
 
 #define GST_PORT_COUNT       11U
 
+/* F2 authorization flag: passed in arg1 of GST_CMD_F2_CONFIG */
+#define GST_F2_AUTH_PE6      (1U << 2)
+
 typedef struct
 {
     uint32_t rcc[2];                    /* RCC_C1->AHB4ENR, RCC_C2->AHB4ENR */
+    uint32_t apb4enr[2];                /* RCC_C1->APB4ENR, RCC_C2->APB4ENR (m6) */
     uint32_t reg[GST_PORT_COUNT][8];    /* MODER OTYPER OSPEEDR PUPDR AFRL AFRH ODR LCKR */
     uint32_t exticr[4];                 /* SYSCFG->EXTICR1..4 */
     uint32_t rtsr1;                     /* EXTI->RTSR1 */
     uint32_t ftsr1;                     /* EXTI->FTSR1 */
+    uint32_t pr1[2];                    /* EXTI_D1->PR1, EXTI_D2->PR1 (m6) */
+    uint32_t swier1;                    /* EXTI->SWIER1 (m6) */
     uint32_t imr1[2];                   /* EXTI_D1->IMR1, EXTI_D2->IMR1 */
     uint32_t emr1[2];                   /* EXTI_D1->EMR1, EXTI_D2->EMR1 */
     uint32_t cccsr;                     /* SYSCFG->CCCSR */
@@ -210,6 +216,8 @@ void     gst_b1_run(GstB1Result_t *r);
 void     gst_race_prepare(void);                      /* both race pins to state A (CPU1) */
 void     gst_race_run(GstRace_t m, uint32_t iters, GstRaceResult_t *r);
 void     gst_shim_install(bool on);
+uint32_t gst_shim_hold_max(void);
+void     gst_shim_hold_reset(void);
 uint32_t gst_core_index(void);                        /* 0 on CPU1, 1 on CPU2 */
 
 /* Race pins: PF10 for CPU1, PF11 for CPU2 (not wired on the bench). */

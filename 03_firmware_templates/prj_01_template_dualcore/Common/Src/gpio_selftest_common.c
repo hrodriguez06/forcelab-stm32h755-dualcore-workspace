@@ -75,25 +75,35 @@ void gst_photo_take(GstPhoto_t *p)
         p->reg[i][7] = g->LCKR;
     }
 
-#if defined(CORE_CM4)
-    RCC_C2->APB4ENR |= RCC_APB4ENR_SYSCFGEN;
-    (void)RCC_C2->APB4ENR;
-#else
-    RCC->APB4ENR |= RCC_APB4ENR_SYSCFGEN;
-    (void)RCC->APB4ENR;
-#endif
+    p->apb4enr[0] = RCC_C1->APB4ENR;
+    p->apb4enr[1] = RCC_C2->APB4ENR;
 
-    p->exticr[0] = SYSCFG->EXTICR[0];
-    p->exticr[1] = SYSCFG->EXTICR[1];
-    p->exticr[2] = SYSCFG->EXTICR[2];
-    p->exticr[3] = SYSCFG->EXTICR[3];
+    if (((RCC_C1->APB4ENR | RCC_C2->APB4ENR) & RCC_APB4ENR_SYSCFGEN) != 0U)
+    {
+        p->exticr[0] = SYSCFG->EXTICR[0];
+        p->exticr[1] = SYSCFG->EXTICR[1];
+        p->exticr[2] = SYSCFG->EXTICR[2];
+        p->exticr[3] = SYSCFG->EXTICR[3];
+        p->cccsr     = SYSCFG->CCCSR;
+    }
+    else
+    {
+        p->exticr[0] = 0U;
+        p->exticr[1] = 0U;
+        p->exticr[2] = 0U;
+        p->exticr[3] = 0U;
+        p->cccsr     = 0U;
+    }
+
     p->rtsr1     = EXTI->RTSR1;
     p->ftsr1     = EXTI->FTSR1;
+    p->pr1[0]    = EXTI_D1->PR1;
+    p->pr1[1]    = EXTI_D2->PR1;
+    p->swier1    = EXTI->SWIER1;
     p->imr1[0]   = EXTI_D1->IMR1;
     p->imr1[1]   = EXTI_D2->IMR1;
     p->emr1[0]   = EXTI_D1->EMR1;
     p->emr1[1]   = EXTI_D2->EMR1;
-    p->cccsr     = SYSCFG->CCCSR;
 }
 
 bool gst_photo_equal(const GstPhoto_t *a, const GstPhoto_t *b)
@@ -1017,6 +1027,16 @@ void gst_shim_install(bool on)
     {
         Shared_GpioLockInstall();
     }
+}
+
+uint32_t gst_shim_hold_max(void)
+{
+    return s_shim_hold_max;
+}
+
+void gst_shim_hold_reset(void)
+{
+    s_shim_hold_max = 0U;
 }
 
 /* R2: jitter, so each run of one image tests another interleaving. A local
