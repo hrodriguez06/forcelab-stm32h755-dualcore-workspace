@@ -562,3 +562,331 @@ bool GPIO_BM_IsLocked(const GPIO_TypeDef *port, uint32_t pin_idx)
     }
     return pin_locked(port, pin_idx);
 }
+
+/* ==========================================================================
+ * F2 additions: EXTI 0-15 and I/O compensation cell.
+ * ========================================================================== */
+
+/* SYSCFG clock enable in the calling core's RCC bank (RM0399 §9.7.1, §13.3).
+ * APB4ENR is at offset 0xF4, inside the per-core banked register region,
+ * so CPU1 routes to CPU1 bank and CPU2 routes to CPU2 bank. */
+static void enable_syscfg_clock(void)
+{
+    RCC->APB4ENR |= RCC_APB4ENR_SYSCFGEN;
+    volatile uint32_t dummy = RCC->APB4ENR;
+    (void)dummy;
+}
+
+GpioBm_Status_t GPIO_BM_ExtiConfig(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t trigger,
+                                   bool interrupt, bool event)
+{
+    uint32_t port_idx;
+
+    /* Rule 2 (C6): Validate before any peripheral access */
+    if (!port_index(port, &port_idx))
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+    if (pin_idx >= GPIO_BM_PIN_COUNT)
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+    if ((trigger < GPIO_BM_EXTI_RISING) || (trigger > GPIO_BM_EXTI_BOTH))
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+    if (!interrupt && !event)
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+
+    enable_syscfg_clock();
+
+    /* Rule 3 (C10): Shared registers written inside the section */
+    GpioBm_Section_t sec;
+    GpioBm_Status_t st = GPIO_BM_SectionEnter(&sec);
+    if (st != GPIO_BM_OK)
+    {
+        return st;
+    }
+
+    /* Rule 4: Conflict check inside section before writing anything.
+     * EXTICR routes pin_idx across ports (RM0399 §13.3.2). If already routed
+     * to another port and any core has this line unmasked (IMR1/EMR1 or
+     * C2IMR1/C2EMR1), conflict. */
+    const uint32_t cr_idx = pin_idx >> 2U;
+    const uint32_t shift = (pin_idx & 0x3U) * 4U;
+    const uint32_t current_port = (SYSCFG->EXTICR[cr_idx] >> shift) & 0xFUL;
+    const uint32_t line_bit = 1UL << pin_idx;
+
+    if (current_port != port_idx)
+    {
+        const uint32_t any_unmasked = (EXTI->IMR1 | EXTI->EMR1 | EXTI->C2IMR1 | EXTI->C2EMR1) & line_bit;
+        if (any_unmasked != 0UL)
+        {
+            GPIO_BM_SectionExit(&sec);
+            return GPIO_BM_ERR_CONFLICT;
+        }
+    }
+
+    /* Rule 5: Order of ExtiConfig:
+     * 1. EXTICR
+     * 2. RTSR1/FTSR1 according to trigger
+     * 3. Clear this core's PR1
+     * 4. Set this core's IMR1/EMR1 (unrequested bits cleared) */
+
+    /* 1. EXTICR (RM0399 §13.3.2) */
+    uint32_t exticr = SYSCFG->EXTICR[cr_idx];
+    exticr &= ~(0xFUL << shift);
+    exticr |= (port_idx << shift);
+    SYSCFG->EXTICR[cr_idx] = exticr;
+
+    /* 2. RTSR1 / FTSR1 (RM0399 §21.5.1, §21.5.2) */
+    if ((trigger & GPIO_BM_EXTI_RISING) != 0U)
+    {
+        EXTI->RTSR1 |= line_bit;
+    }
+    else
+    {
+        EXTI->RTSR1 &= ~line_bit;
+    }
+
+    if ((trigger & GPIO_BM_EXTI_FALLING) != 0U)
+    {
+        EXTI->FTSR1 |= line_bit;
+    }
+    else
+    {
+        EXTI->FTSR1 &= ~line_bit;
+    }
+
+    /* 3. Clear this core's PR1 (w1c, RM0399 §21.5.6) */
+#if defined(CORE_CM4)
+    EXTI->C2PR1 = line_bit;
+#else
+    EXTI->PR1 = line_bit;
+#endif
+
+    /* 4. Set this core's IMR1 / EMR1 according to interrupt / event (RM0399 §21.5.4, §21.5.5) */
+#if defined(CORE_CM4)
+    if (interrupt)
+    {
+        EXTI->C2IMR1 |= line_bit;
+    }
+    else
+    {
+        EXTI->C2IMR1 &= ~line_bit;
+    }
+    if (event)
+    {
+        EXTI->C2EMR1 |= line_bit;
+    }
+    else
+    {
+        EXTI->C2EMR1 &= ~line_bit;
+    }
+#else
+    if (interrupt)
+    {
+        EXTI->IMR1 |= line_bit;
+    }
+    else
+    {
+        EXTI->IMR1 &= ~line_bit;
+    }
+    if (event)
+    {
+        EXTI->EMR1 |= line_bit;
+    }
+    else
+    {
+        EXTI->EMR1 &= ~line_bit;
+    }
+#endif
+
+    GPIO_BM_SectionExit(&sec);
+    return GPIO_BM_OK;
+}
+
+GpioBm_Status_t GPIO_BM_ExtiDisable(GPIO_TypeDef *port, uint32_t pin_idx)
+{
+    uint32_t port_idx;
+
+    /* Rule 2 (C6): Validate before access */
+    if (!port_index(port, &port_idx))
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+    if (pin_idx >= GPIO_BM_PIN_COUNT)
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+
+    enable_syscfg_clock();
+
+    GpioBm_Section_t sec;
+    GpioBm_Status_t st = GPIO_BM_SectionEnter(&sec);
+    if (st != GPIO_BM_OK)
+    {
+        return st;
+    }
+
+    /* Rule 4: Conflict check. ExtiDisable returns ERR_CONFLICT without writing
+     * if the line is routed to another port. */
+    const uint32_t cr_idx = pin_idx >> 2U;
+    const uint32_t shift = (pin_idx & 0x3U) * 4U;
+    const uint32_t current_port = (SYSCFG->EXTICR[cr_idx] >> shift) & 0xFUL;
+    if (current_port != port_idx)
+    {
+        GPIO_BM_SectionExit(&sec);
+        return GPIO_BM_ERR_CONFLICT;
+    }
+
+    /* Rule 6: ExtiDisable respects the other core.
+     * Clear IMR1/EMR1 and PR1 of this core. */
+    const uint32_t line_bit = 1UL << pin_idx;
+#if defined(CORE_CM4)
+    EXTI->C2IMR1 &= ~line_bit;
+    EXTI->C2EMR1 &= ~line_bit;
+    EXTI->C2PR1 = line_bit;
+    const uint32_t other_masks = (EXTI->IMR1 | EXTI->EMR1) & line_bit;
+#else
+    EXTI->IMR1 &= ~line_bit;
+    EXTI->EMR1 &= ~line_bit;
+    EXTI->PR1 = line_bit;
+    const uint32_t other_masks = (EXTI->C2IMR1 | EXTI->C2EMR1) & line_bit;
+#endif
+
+    /* Only if other core's masks are both zero for this line, clear triggers
+     * and reset EXTICR field to 0000. */
+    if (other_masks == 0UL)
+    {
+        EXTI->RTSR1 &= ~line_bit;
+        EXTI->FTSR1 &= ~line_bit;
+        uint32_t exticr = SYSCFG->EXTICR[cr_idx];
+        exticr &= ~(0xFUL << shift);
+        SYSCFG->EXTICR[cr_idx] = exticr;
+    }
+
+    GPIO_BM_SectionExit(&sec);
+    return GPIO_BM_OK;
+}
+
+uint32_t GPIO_BM_ExtiTakePending(uint32_t line_mask)
+{
+    /* Rule 7: Only lines 0..15. No critical section entered.
+     * Read PR1 of this core, mask, write-1-to-clear without RMW, DSB. (RM0399 §21.5.6) */
+    uint32_t pending;
+    line_mask &= 0xFFFFUL;
+
+#if defined(CORE_CM4)
+    pending = EXTI->C2PR1 & line_mask;
+    EXTI->C2PR1 = pending;
+#else
+    pending = EXTI->PR1 & line_mask;
+    EXTI->PR1 = pending;
+#endif
+
+    __DSB();
+    return pending;
+}
+
+GpioBm_Status_t GPIO_BM_ExtiSoftwareTrigger(uint32_t pin_idx)
+{
+    /* Rule 2 (C6): Validate parameter */
+    if (pin_idx >= GPIO_BM_PIN_COUNT)
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+
+    /* Rule 3 (C10): SWIER1 written inside section */
+    GpioBm_Section_t sec;
+    GpioBm_Status_t st = GPIO_BM_SectionEnter(&sec);
+    if (st != GPIO_BM_OK)
+    {
+        return st;
+    }
+
+    /* Rule 8: Writes (1 << pin_idx) to SWIER1. RM0399 §21.5.3: only asserts
+     * if RTSR1 and the calling core's mask allow it. The function does not
+     * verify those prerequisites. */
+    EXTI->SWIER1 = (1UL << pin_idx);
+
+    GPIO_BM_SectionExit(&sec);
+    return GPIO_BM_OK;
+}
+
+IRQn_Type GPIO_BM_ExtiGetIRQn(uint32_t pin_idx)
+{
+    /* Rule 2 (C6): Valid pin_idx 0..15 maps to CMSIS EXTI IRQn_Type; > 15 returns INVALID */
+    switch (pin_idx)
+    {
+    case 0U: return EXTI0_IRQn;
+    case 1U: return EXTI1_IRQn;
+    case 2U: return EXTI2_IRQn;
+    case 3U: return EXTI3_IRQn;
+    case 4U: return EXTI4_IRQn;
+    case 5U:
+    case 6U:
+    case 7U:
+    case 8U:
+    case 9U: return EXTI9_5_IRQn;
+    case 10U:
+    case 11U:
+    case 12U:
+    case 13U:
+    case 14U:
+    case 15U: return EXTI15_10_IRQn;
+    default: return GPIO_BM_EXTI_IRQN_INVALID;
+    }
+}
+
+GpioBm_Status_t GPIO_BM_EnableCompensationCell(uint32_t max_cycles)
+{
+    /* Rule 2 (C6): Validate parameter */
+    if (max_cycles == 0U)
+    {
+        return GPIO_BM_ERR_PARAM;
+    }
+
+    /* Rule 9: If RCC_CR.CSIRDY == 0, return ERR_NOT_READY without writing anything */
+    if ((RCC->CR & RCC_CR_CSIRDY) == 0UL)
+    {
+        return GPIO_BM_ERR_NOT_READY;
+    }
+
+    enable_syscfg_clock();
+
+    /* Rule 3 (C10): CCCSR written inside the section */
+    GpioBm_Section_t sec;
+    GpioBm_Status_t st = GPIO_BM_SectionEnter(&sec);
+    if (st != GPIO_BM_OK)
+    {
+        return st;
+    }
+
+    /* RM0399 §12.3.11, §13.3.7: Set CCCSR.EN.
+     * Never writes RCC_CR, HSLV, CS, nor CCCR. */
+    SYSCFG->CCCSR |= SYSCFG_CCCSR_EN;
+
+    /* Wait for READY flag bounded by max_cycles of DWT->CYCCNT.
+     * If CYCCNT does not advance or timeout expires, return ERR_NOT_READY
+     * leaving CCCSR.EN = 1. */
+    const uint32_t start = DWT->CYCCNT;
+    uint32_t poll_count = 0U;
+
+    while ((SYSCFG->CCCSR & SYSCFG_CCCSR_READY) == 0UL)
+    {
+        const uint32_t current = DWT->CYCCNT;
+        poll_count++;
+        if (((current - start) >= max_cycles) ||
+            ((poll_count >= 100U || poll_count >= max_cycles) && (current == start)))
+        {
+            GPIO_BM_SectionExit(&sec);
+            return GPIO_BM_ERR_NOT_READY;
+        }
+    }
+
+    GPIO_BM_SectionExit(&sec);
+    return GPIO_BM_OK;
+}

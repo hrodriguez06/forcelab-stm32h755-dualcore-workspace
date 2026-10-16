@@ -297,6 +297,115 @@ bool            GPIO_BM_IsValidPort(const GPIO_TypeDef *port);
   *         GPIO_BM_OK, GPIO_BM_ERR_PARAM or GPIO_BM_ERR_DEBUG_PIN. */
 GpioBm_Status_t GPIO_BM_CheckConfig(const GpioBm_PinConfig_t *cfg);
 
+/* ==========================================================================
+ * F2 additions: EXTI 0-15 and I/O compensation cell.
+ * ========================================================================== */
+
+#define GPIO_BM_EXTI_RISING       1U
+#define GPIO_BM_EXTI_FALLING      2U
+#define GPIO_BM_EXTI_BOTH         3U
+#define GPIO_BM_EXTI_IRQN_INVALID ((IRQn_Type)(-128))
+
+/**
+ * @brief  Configures an EXTI line (0..15) mapped to a GPIO port.
+ *
+ *         Configures only the calling core's interrupt and event masks (IMR1/EMR1
+ *         for CPU1, C2IMR1/C2EMR1 for CPU2).
+ *         Order of operations inside section:
+ *           1. SYSCFG_EXTICR routing (RM0399 13.3.2)
+ *           2. EXTI_RTSR1 / EXTI_FTSR1 triggers (RM0399 21.5.1, 21.5.2)
+ *           3. Clears this core's pending bit in PR1 (C2PR1 for CM4)
+ *           4. Sets requested interrupt/event mask bit in IMR1/EMR1 (C2IMR1/C2EMR1)
+ *              and clears unrequested bits.
+ *
+ * @param  port       GPIO port base address (GPIOA..GPIOK).
+ * @param  pin_idx    Pin/line index (0..15).
+ * @param  trigger    Trigger selection: GPIO_BM_EXTI_RISING (1),
+ *                    GPIO_BM_EXTI_FALLING (2), or GPIO_BM_EXTI_BOTH (3).
+ * @param  interrupt  Enable interrupt generation for the calling core.
+ * @param  event      Enable event generation for the calling core.
+ * @retval GPIO_BM_OK           Configuration applied successfully.
+ * @retval GPIO_BM_ERR_PARAM    Invalid port, pin_idx > 15, trigger not 1..3,
+ *                              or both interrupt and event are false.
+ * @retval GPIO_BM_ERR_CONFLICT Line is already routed to another port and has
+ *                              any mask bit active in either core.
+ * @retval GPIO_BM_ERR_BUSY     Cross-core lock not acquired within timeout.
+ */
+GpioBm_Status_t GPIO_BM_ExtiConfig(GPIO_TypeDef *port, uint32_t pin_idx, uint32_t trigger,
+                                   bool interrupt, bool event);
+
+/**
+ * @brief  Disables an EXTI line (0..15) for the calling core.
+ *
+ *         Clears this core's interrupt/event masks and pending bit. If the
+ *         other core's masks for this line are also zero, clears the triggers
+ *         (RTSR1/FTSR1) and resets the SYSCFG_EXTICR routing for this line.
+ *
+ * @param  port     GPIO port base address (GPIOA..GPIOK).
+ * @param  pin_idx  Pin/line index (0..15).
+ * @retval GPIO_BM_OK           Line disabled for this core.
+ * @retval GPIO_BM_ERR_PARAM    Invalid port or pin_idx > 15.
+ * @retval GPIO_BM_ERR_CONFLICT Line is currently routed to another port in EXTICR.
+ * @retval GPIO_BM_ERR_BUSY     Cross-core lock not acquired within timeout.
+ */
+GpioBm_Status_t GPIO_BM_ExtiDisable(GPIO_TypeDef *port, uint32_t pin_idx);
+
+/**
+ * @brief  Reads and clears the pending status of specified EXTI lines (0..15).
+ *
+ *         Reads the calling core's PR1 (or C2PR1), masks with (line_mask & 0xFFFF),
+ *         clears the pending bits via write-1-to-clear without RMW, executes __DSB(),
+ *         and returns the captured pending bits.
+ *         Can be called from ISR context (does NOT enter a critical section or take locks).
+ *
+ * @param  line_mask  Bitmask of lines to check and acknowledge (bits 0..15).
+ * @retval Bitmask of lines that were pending.
+ */
+uint32_t        GPIO_BM_ExtiTakePending(uint32_t line_mask);
+
+/**
+ * @brief  Triggers a software interrupt/event on an EXTI line (0..15).
+ *
+ *         Writes (1 << pin_idx) to EXTI_SWIER1 inside a section.
+ *         RM0399 21.5.3: Hardware only asserts the interrupt if the line's
+ *         trigger (RTSR1) and calling core mask (IMR1/C2IMR1) allow it; this
+ *         function does not verify those prerequisites.
+ *
+ * @param  pin_idx  Line index (0..15).
+ * @retval GPIO_BM_OK           Software trigger request written to SWIER1.
+ * @retval GPIO_BM_ERR_PARAM    pin_idx > 15.
+ * @retval GPIO_BM_ERR_BUSY     Cross-core lock not acquired within timeout.
+ */
+GpioBm_Status_t GPIO_BM_ExtiSoftwareTrigger(uint32_t pin_idx);
+
+/**
+ * @brief  Maps a GPIO pin/line index (0..15) to its CMSIS IRQn_Type vector.
+ *
+ * @param  pin_idx  Line index (0..15).
+ * @retval CMSIS IRQn_Type (EXTI0_IRQn..EXTI4_IRQn, EXTI9_5_IRQn, EXTI15_10_IRQn),
+ *         or GPIO_BM_EXTI_IRQN_INVALID if pin_idx > 15.
+ */
+IRQn_Type       GPIO_BM_ExtiGetIRQn(uint32_t pin_idx);
+
+/**
+ * @brief  Enables the I/O compensation cell and waits for it to become ready.
+ *
+ *         Requires CSI clock ready (RCC_CR.CSIRDY == 1). Sets SYSCFG_CCCSR.EN
+ *         inside the section and waits up to max_cycles of DWT->CYCCNT for
+ *         SYSCFG_CCCSR.READY == 1.
+ *         Never writes RCC_CR, SYSCFG_CCCSR.HSLV, SYSCFG_CCCSR.CS, nor SYSCFG_CCCR.
+ *         If DWT->CYCCNT does not advance or timeout expires before READY is asserted,
+ *         returns GPIO_BM_ERR_NOT_READY and leaves CCCSR.EN = 1.
+ *
+ * @param  max_cycles  Maximum DWT->CYCCNT cycles to wait for READY. Must be > 0.
+ * @retval GPIO_BM_OK           Compensation cell enabled and ready.
+ * @retval GPIO_BM_ERR_PARAM    max_cycles == 0.
+ * @retval GPIO_BM_ERR_NOT_READY CSI clock not ready (RCC_CR.CSIRDY == 0),
+ *                              DWT->CYCCNT not advancing, or timeout before READY.
+ * @retval GPIO_BM_ERR_BUSY     Cross-core lock not acquired within timeout.
+ */
+GpioBm_Status_t GPIO_BM_EnableCompensationCell(uint32_t max_cycles);
+
 #ifdef __cplusplus
 }
 #endif
