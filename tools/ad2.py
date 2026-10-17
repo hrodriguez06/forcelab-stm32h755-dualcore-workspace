@@ -73,13 +73,67 @@ class AD2SafetyViolation(AD2Error):
     pass
 
 
-def ad2_set_oe(dwf_lib, hdwf: int, mask: int, step_bus_owner: int) -> None:
-    """Guard S3: The ONLY path in the workspace to FDwfDigitalIOOutputEnableSet.
+def _step_declares_dio15_oe(step: Any) -> bool:
+    """Helper for SU1: checks if the current step declares DIO15 as static OE output."""
+    if step is None:
+        return False
+    if isinstance(step, str):
+        return step == "UT0"
+    if hasattr(step, "allows_dio15_oe"):
+        return bool(step.allows_dio15_oe)
+    if hasattr(step, "declares_dio15"):
+        val = step.declares_dio15
+        if isinstance(val, (set, list, tuple)):
+            return any("OE" in str(x) or str(x) == "DIO15" for x in val)
+        return val in (True, "OE", "DIO15", "ALL", "BOTH")
+    if isinstance(step, (list, tuple)) and len(step) >= 3:
+        val = step[2]
+        if isinstance(val, (set, list, tuple)):
+            return any("OE" in str(x) or str(x) == "DIO15" for x in val)
+        return val in (True, "OE", "DIO15", "ALL", "BOTH")
+    if isinstance(step, dict):
+        val = step.get("declares_dio15") or step.get("dio15")
+        if isinstance(val, (set, list, tuple)):
+            return any("OE" in str(x) or str(x) == "DIO15" for x in val)
+        return val in (True, "OE", "DIO15", "ALL", "BOTH")
+    return False
+
+
+def _step_declares_dio15_dout(step: Any) -> bool:
+    """Helper for SU1: checks if the current step declares DIO15 as Digital Out output."""
+    if step is None:
+        return False
+    if isinstance(step, str):
+        return step == "UT5"
+    if hasattr(step, "allows_dio15_dout"):
+        return bool(step.allows_dio15_dout)
+    if hasattr(step, "declares_dio15"):
+        val = step.declares_dio15
+        if isinstance(val, (set, list, tuple)):
+            return any("DOUT" in str(x) or str(x) == "DIO15" for x in val)
+        return val in (True, "DOUT", "DIO15", "ALL", "BOTH")
+    if isinstance(step, (list, tuple)) and len(step) >= 3:
+        val = step[2]
+        if isinstance(val, (set, list, tuple)):
+            return any("DOUT" in str(x) or str(x) == "DIO15" for x in val)
+        return val in (True, "DOUT", "DIO15", "ALL", "BOTH")
+    if isinstance(step, dict):
+        val = step.get("declares_dio15") or step.get("dio15")
+        if isinstance(val, (set, list, tuple)):
+            return any("DOUT" in str(x) or str(x) == "DIO15" for x in val)
+        return val in (True, "DOUT", "DIO15", "ALL", "BOTH")
+    return False
+
+
+def ad2_set_oe(dwf_lib, hdwf: int, mask: int, step_bus_owner: int = GPIO_BENCH_BUS_NONE,
+               current_step: Optional[Any] = None) -> None:
+    """Guard S3 & SU1: The ONLY path in the workspace to FDwfDigitalIOOutputEnableSet (A27).
 
     Validates mask before any peripheral access:
       - Allowed static outputs: DIO8 (EXTI3), DIO10 (EXTI4), DIO12 (HOST_REQ).
       - Bus DIO0..DIO7 allowed ONLY if step_bus_owner == GPIO_BENCH_BUS_AD2.
-      - DIO9, DIO11, DIO13, DIO14, DIO15 are PROHIBITED for AD2 driving.
+      - DIO15 allowed ONLY if current_step declares DIO15 for OE (SU1).
+      - DIO9, DIO11, DIO13, DIO14 (and DIO15 outside declared steps) are PROHIBITED.
 
     If an invalid bit is present, immediately forces safe state S2 (all inputs)
     and raises AD2SafetyViolation BEFORE peripheral access.
@@ -87,6 +141,8 @@ def ad2_set_oe(dwf_lib, hdwf: int, mask: int, step_bus_owner: int) -> None:
     allowed = AD2_ALLOWED_STATIC_OUTPUTS
     if step_bus_owner == GPIO_BENCH_BUS_AD2:
         allowed |= AD2_DIO_BUS_MASK
+    if _step_declares_dio15_oe(current_step):
+        allowed |= AD2_DIO_UART_RX_INJECT
 
     if (mask & ~allowed) != 0:
         # Safety violation: force safe state S2 immediately
@@ -97,9 +153,10 @@ def ad2_set_oe(dwf_lib, hdwf: int, mask: int, step_bus_owner: int) -> None:
             pass
         ad2_dout_safe(dwf_lib, hdwf, strict=False)     # S2 includes Digital Out (S11)
         prohibited = mask & ~allowed
+        step_desc = getattr(current_step, "name", str(current_step[0]) if isinstance(current_step, (list, tuple)) and current_step else str(current_step))
         raise AD2SafetyViolation(
-            f"S3 Guard violation: prohibited bits 0x{prohibited:04X} in OE mask 0x{mask:04X} "
-            f"(allowed: 0x{allowed:04X}, bus_owner={step_bus_owner})"
+            f"S3/SU1 Guard violation: prohibited bits 0x{prohibited:04X} in OE mask 0x{mask:04X} "
+            f"(allowed: 0x{allowed:04X}, bus_owner={step_bus_owner}, step={step_desc})"
         )
 
     # Exactly one call site for FDwfDigitalIOOutputEnableSet in workspace (A27)
@@ -110,38 +167,12 @@ def ad2_set_oe(dwf_lib, hdwf: int, mask: int, step_bus_owner: int) -> None:
     readback = ctypes.c_uint32()
     dwf_lib.FDwfDigitalIOOutputEnableGet(ctypes.c_int(hdwf), ctypes.byref(readback))
     if (readback.value & 0xFFFF) != (mask & 0xFFFF):
-        raise AD2Error(f"OE read-back failed: expected 0x{mask:04X}, got 0x{readback.value:04X}")
-
-
-def ad2_set_uart_oe(dwf_lib, hdwf: int, mask: int, step_name: Optional[str]) -> None:
-    """Guard SU1: Allows DIO15 as output ONLY in steps declared in AD2_UART_INJECT_STEPS.
-
-    Static outputs (HOST_REQ DIO12) are allowed.
-    All other outputs are prohibited.
-    """
-    allowed = AD2_DIO_HOST_REQ
-    if step_name in AD2_UART_INJECT_STEPS:
-        allowed |= AD2_DIO_UART_RX_INJECT
-
-    if (mask & ~allowed) != 0:
         try:
             dwf_lib.FDwfDigitalIOReset(ctypes.c_int(hdwf))
             dwf_lib.FDwfDigitalIOConfigure(ctypes.c_int(hdwf))
         except Exception:
             pass
         ad2_dout_safe(dwf_lib, hdwf, strict=False)
-        prohibited = mask & ~allowed
-        raise AD2SafetyViolation(
-            f"SU1 Guard violation: prohibited bits 0x{prohibited:04X} in OE mask 0x{mask:04X} "
-            f"(allowed: 0x{allowed:04X}, step_name={step_name})"
-        )
-
-    dwf_lib.FDwfDigitalIOOutputEnableSet(ctypes.c_int(hdwf), ctypes.c_uint32(mask & 0xFFFF))
-    dwf_lib.FDwfDigitalIOConfigure(ctypes.c_int(hdwf))
-
-    readback = ctypes.c_uint32()
-    dwf_lib.FDwfDigitalIOOutputEnableGet(ctypes.c_int(hdwf), ctypes.byref(readback))
-    if (readback.value & 0xFFFF) != (mask & 0xFFFF):
         raise AD2Error(f"OE read-back failed: expected 0x{mask:04X}, got 0x{readback.value:04X}")
 
 
@@ -183,15 +214,17 @@ def ad2_dout_safe(dwf_lib, hdwf: int, strict: bool = True) -> None:
         raise AD2Error("S2 Digital Out read-back failed: " + "; ".join(bad))
 
 
-def ad2_set_dout(dwf_lib, hdwf: int, mask: int, step_bus_owner: int,
-                 idle: int = DWF_DOUT_IDLE_ZET, step_name: Optional[str] = None) -> None:
-    """Guard S11: the ONLY path that enables or starts a Digital Out channel.
+def ad2_set_dout(dwf_lib, hdwf: int, mask: int, step_bus_owner: int = GPIO_BENCH_BUS_NONE,
+                 idle: int = DWF_DOUT_IDLE_ZET, step_name: Optional[str] = None,
+                 current_step: Optional[Any] = None) -> None:
+    """Guard S11 & SU1: the ONLY path that enables or starts a Digital Out channel.
 
     mask != 0: drive the channels of `mask` with the pulse configured before
-    (AD2.dout_pulse). Refused, after going to S2 (Digital-IO and Digital Out),
+    (AD2.dout_pulse or AD2.dout_custom). Refused, after going to S2 (Digital-IO and Digital Out),
     with AD2SafetyViolation and BEFORE any enabling call reaches the DLL, when:
-      - `mask` has a bit outside {DIO1, DIO3};
-      - the step is not "bus = AD2";
+      - `mask` has a bit outside {DIO1, DIO3} AND outside DIO15;
+      - `mask` has a bit on DIO1/DIO3 and the step is not "bus = AD2";
+      - `mask` has DIO15 and the step does not declare DIO15 for DOUT (SU1);
       - `idle` is not Zet or Low, or is Low in a step other than
         AD2_DOUT_IDLE_LOW_STEP (`step_name`, the step of the T0b(f) control;
         plan R2-4, finding m1);
@@ -212,10 +245,16 @@ def ad2_set_dout(dwf_lib, hdwf: int, mask: int, step_bus_owner: int,
     """
     h = ctypes.c_int(hdwf)
     reason = None
-    if (mask & ~AD2_DOUT_ALLOWED) != 0:
-        reason = f"prohibited bits 0x{mask & ~AD2_DOUT_ALLOWED:04X} (allowed: 0x{AD2_DOUT_ALLOWED:04X})"
-    elif mask != 0 and step_bus_owner != GPIO_BENCH_BUS_AD2:
-        reason = f"bus_owner={step_bus_owner}, Digital Out needs a 'bus = AD2' step"
+    allowed_dout = AD2_DOUT_ALLOWED
+    if _step_declares_dio15_dout(current_step):
+        allowed_dout |= AD2_DIO_UART_RX_INJECT
+
+    if (mask & ~allowed_dout) != 0:
+        reason = f"prohibited bits 0x{mask & ~allowed_dout:04X} (allowed: 0x{allowed_dout:04X})"
+    elif (mask & AD2_DOUT_ALLOWED) != 0 and step_bus_owner != GPIO_BENCH_BUS_AD2:
+        reason = f"bus_owner={step_bus_owner}, Digital Out on DIO1/DIO3 needs a 'bus = AD2' step"
+    elif (mask & AD2_DIO_UART_RX_INJECT) != 0 and not _step_declares_dio15_dout(current_step):
+        reason = f"Digital Out on DIO15 only allowed in steps declaring DIO15 (SU1)"
     elif mask != 0 and idle not in (DWF_DOUT_IDLE_ZET, DWF_DOUT_IDLE_LOW):
         reason = f"idle={idle} (only Zet, or Low for the T0b(f) control)"
     elif mask != 0 and idle == DWF_DOUT_IDLE_LOW and step_name != AD2_DOUT_IDLE_LOW_STEP:
@@ -233,7 +272,7 @@ def ad2_set_dout(dwf_lib, hdwf: int, mask: int, step_bus_owner: int,
         except Exception:
             pass
         ad2_dout_safe(dwf_lib, hdwf, strict=False)
-        raise AD2SafetyViolation(f"S11 Guard violation: Digital Out mask 0x{mask:04X}: {reason}")
+        raise AD2SafetyViolation(f"S11/SU1 Guard violation: Digital Out mask 0x{mask:04X}: {reason}")
 
     if mask == 0:
         dwf_lib.FDwfDigitalOutConfigure(h, ctypes.c_int(0))
@@ -628,6 +667,7 @@ class AD2:
         self.target_sn = sn
         self._hdwf = ctypes.c_int(0)
         self._output_val = 0
+        self.current_step: Any = None
         if dwf_lib is not None:
             self._dwf = dwf_lib
         else:
@@ -635,6 +675,10 @@ class AD2:
                 self._dwf = ctypes.cdll.dwf
             except Exception as e:
                 raise AD2Error(f"Could not load dwf.dll: {e}") from e
+
+    def set_step(self, step: Any) -> None:
+        """Sets the active bench step for guard context checking (S3, S11, SU1)."""
+        self.current_step = step
 
     @property
     def handle(self) -> int:
@@ -692,13 +736,9 @@ class AD2:
             ad2_set_oe(self._dwf, self._hdwf.value, 0x0000, GPIO_BENCH_BUS_NONE)
             ad2_dout_safe(self._dwf, self._hdwf.value)
 
-    def set_oe(self, mask: int, step_bus_owner: int) -> None:
-        """S3: Set DIO output enable through guarded function."""
-        ad2_set_oe(self._dwf, self._hdwf.value, mask, step_bus_owner)
-
-    def set_uart_oe(self, mask: int, step_name: Optional[str]) -> None:
-        """SU1: Set DIO output enable for UART bench, allowing DIO15 only in UT5."""
-        ad2_set_uart_oe(self._dwf, self._hdwf.value, mask, step_name)
+    def set_oe(self, mask: int, step_bus_owner: int = GPIO_BENCH_BUS_NONE) -> None:
+        """S3 & SU1: Set DIO output enable through guarded function."""
+        ad2_set_oe(self._dwf, self._hdwf.value, mask, step_bus_owner, current_step=self.current_step)
 
     def get_oe(self) -> int:
         """Read back current Output Enable mask from hardware."""
@@ -806,8 +846,12 @@ class AD2:
         internal clock / divider (FDwfDigitalOutTypeInfo, "Custom"). Does not enable the
         channel: only ad2_set_dout() does (S11); only DIO1 and DIO3 can be configured.
         """
-        if not (0 <= channel < AD2_DOUT_CHANNELS) or not ((AD2_DOUT_ALLOWED >> channel) & 1):
-            raise AD2SafetyViolation(f"S11: Digital Out channel {channel} is not DIO1 or DIO3")
+        is_dio15 = (channel == 15)
+        allowed_channel = bool((AD2_DOUT_ALLOWED >> channel) & 1) or (is_dio15 and _step_declares_dio15_dout(self.current_step))
+        if not (0 <= channel < AD2_DOUT_CHANNELS) or not allowed_channel:
+            if is_dio15:
+                raise AD2SafetyViolation(f"SU1: Digital Out on DIO15 is only allowed in steps declaring DIO15 (step={self.current_step})")
+            raise AD2SafetyViolation(f"S11: Digital Out channel {channel} is not DIO1, DIO3, or authorized DIO15")
         nmax = self.dout_data_max(channel)
         if not (1 <= len(bits) <= nmax):
             raise AD2Error(f"Digital Out custom pattern of {len(bits)} bits (buffer {nmax})")
