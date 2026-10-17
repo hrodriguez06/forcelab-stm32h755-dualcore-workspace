@@ -84,3 +84,28 @@ Captura `docs/gpio_close_audit_t1t4_987f310.txt`: HEAD `987f310`, SN `0016000C41
 - el README según el Diseño 3 del plan;
 - en el README, solo las capturas que respaldan una afirmación actual: `gpio_close_t1t3_2f929a4.txt` es de la herramienta con B1–B7 y se borra (regla 7 de §14);
 - §9 y §13.4 citan `gpio_close_audit_t1t4_987f310.txt` para T4.
+
+## Cierre del implementador (`6f0967d`, informe en `271c860`)
+
+**El README cubre todos los puntos del Diseño 3:**
+- el estado;
+- la matriz de §1.1;
+- §9.5, sin el punto obsoleto de `prj_04` y con la celda;
+- §11, con `prj_02` y la celda en `prj_02`–`prj_04`;
+- G6 por diseño, G8 y G12 cerrados;
+- §13 como "Phase records", con §13.4;
+- la fila de §15.
+
+**El ejemplo F** usa las firmas reales de `gpio_hal.h:93` y `gpio_bm.h:346`.
+
+**La captura superada** `gpio_close_t1t3_2f929a4.txt` se borró y figura en §9.3.2.
+
+Las cifras coinciden con las capturas. Corregí cuatro detalles en `6a22331`:
+- la ejecución de T4 fue en `987f310`, no en `f3fc263`;
+- los objetos por preset son 271, 314, 322 y 320, no "320 per preset";
+- "unclocked" pasa a "disabled" (la celda de `prj_01`);
+- `gpio_bm`, en formato de código.
+
+### Estado
+
+**El cierre de `00_gpio` pasa la auditoría.** Quedan los pasos de cierre del responsable.
