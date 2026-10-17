@@ -50,7 +50,7 @@
 #define LOG(fmt, ...)       APP_LOG("[uart] " fmt, ##__VA_ARGS__)
 
 #define CYC_PER_MS          400000U
-#define SYNC_TIMEOUT_CYC    4000000000UL     /* 10 s at 400 MHz */
+#define SYNC_TIMEOUT_CYC    400000000UL      /* 1.0 s at 400 MHz */
 #define CM4_TIMEOUT_MS      10000U
 
 static uint32_t s_step = UST_STEP_NONE;
