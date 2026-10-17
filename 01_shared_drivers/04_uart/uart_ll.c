@@ -150,7 +150,17 @@ static bool UART_LL_SelectPrescaler(uint32_t ker_ck, uint32_t baud, bool is_lpua
                 {
                     continue;
                 }
-                actual = (2U * ker_p) / usartdiv;
+
+                /* RM0399 51.5.5: BRR[2:0] = USARTDIV[3:0] >> 1, BRR[3] = 0, BRR[15:4] = USARTDIV[15:4] */
+                uint32_t brr = (usartdiv & 0xFFF0UL) | ((usartdiv & 0x000FUL) >> 1);
+
+                /* Actual hardware division factor reconstructed from programmed BRR (U5) */
+                uint32_t actual_div = (brr & 0xFFF0UL) | ((brr & 0x0007UL) << 1);
+                if (actual_div == 0U)
+                {
+                    continue;
+                }
+                actual = (2U * ker_p) / actual_div;
             }
             else
             {
