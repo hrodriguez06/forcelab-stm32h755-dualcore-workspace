@@ -1488,12 +1488,13 @@ git show 8310303:01_shared_drivers/00_gpio/REAUDIT_3_INSTRUCTIONS.md
 git show 08627cf:01_shared_drivers/00_gpio/REAUDIT_4_INSTRUCTIONS.md
 ```
 
-F1b, F1c and F2 process documents (`IMPLEMENTATION_PLAN.md`, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md`,
-`AUDIT.md`) were removed after each close. F2's (plan revision 3) are at the parent of the commit that
-removes them, which is the latest deletion of each path; F1c's (plan revision 1) are pinned at `7b91177^`; F1b's (plan revision 3) at `e6cb75e^`:
+F1b, F1c, F2 and close process documents (`IMPLEMENTATION_PLAN.md`, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md`,
+`AUDIT.md`) were removed after each close. The close's (K1–K5, plan revision 1) are at the parent of the commit that
+removes them, which is the latest deletion of each path; F2's (plan revision 3) are pinned at `64cb108^`, F1c's (plan revision 1) at `7b91177^` and F1b's (plan revision 3) at `e6cb75e^`:
 
 ```bash
-git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/00_gpio/AUDIT.md)^:01_shared_drivers/00_gpio/AUDIT.md   # F2 (valid after the commit that removes the F2 documents)
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/00_gpio/AUDIT.md)^:01_shared_drivers/00_gpio/AUDIT.md   # close (K1–K5)
+git show 64cb108^:01_shared_drivers/00_gpio/AUDIT.md                                                                           # F2
 git show 7b91177^:01_shared_drivers/00_gpio/AUDIT.md                                                                           # F1c
 git show e6cb75e^:01_shared_drivers/00_gpio/AUDIT.md                                                                           # F1b
 # and the same for IMPLEMENTATION_PLAN.md, IMPLEMENTER_INSTRUCTIONS.md and IMPLEMENTATION_REPORT.md
