@@ -1,22 +1,34 @@
-# Informe de Implementación - Cierre del Driver 00_gpio (Fase F1)
+# Informe de Implementación - Cierre del Driver 00_gpio (K1–K5)
+
+**Fecha:** 2026-10-17  
+**Rama:** `driver/gpio-close`  
+**Estado:** **CIERRE ENTREGADO PARA AUDITORÍA**  
+**Commit base:** `f066a8e`  
+**Commit de documentación y poda (K3):** `6f0967d`  
+**Commit de auditoría en hardware:** `f3fc263`  
+
+---
 
 ## 1. Resumen
 
-Este informe documenta la ejecución completa y corregida de la fase **F1** para el cierre definitivo del driver `00_gpio`, conforme a las directrices de [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (revisión 1), [IMPLEMENTER_INSTRUCTIONS.md](IMPLEMENTER_INSTRUCTIONS.md) y las observaciones de auditoría recogidas en [AUDIT.md](AUDIT.md).
+Este informe documenta la ejecución completa y cierre definitivo del driver `00_gpio` (hitos K1 a K5), conforme a las directrices de [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (revisión 1), [IMPLEMENTER_INSTRUCTIONS.md](IMPLEMENTER_INSTRUCTIONS.md) y las resoluciones de auditoría en [AUDIT.md](AUDIT.md).
 
-- **Rama de trabajo:** `driver/gpio-close` (base `f066a8e`).
-- **Estado de entrega:** **Entregado para auditoría (F1 corregida)**.
 - **Driver inalterado:** Los archivos fuente y cabeceras de `01_shared_drivers/00_gpio/` (`gpio_bm.c`, `gpio_bm.h`, `gpio_ll.c`, `gpio_ll.h`, `gpio_hal.c`, `gpio_hal.h`) **no han sufrido modificación alguna** respecto a `f066a8e`.
-- **Decisiones aplicadas:** Aprobadas por el responsable:
-  - Decisión 1 (Opción A): EXTI y celda de compensación se mantienen en `gpio_bm`, accesibles desde cualquier tier sin envoltorios redundantes.
-  - Decisión 2 (Opción A): `Error_Handler()` ante timeout de CSI o fallo de la celda de compensación.
-  - Decisión 3 (Opción A): Alcance de T4 en hardware: `prj_02` (debug), `prj_03` (debug), `prj_04` (debug y release), y 5 warm resets por NRST en `prj_04` debug.
-  - Decisión 4: Los documentos de proceso se eliminarán al cierre final.
+- **Decisiones aplicadas:** Aprobadas por el responsable del proyecto:
+  - Decisión 1 (Opción A): EXTI 0–15 y celda de compensación se mantienen en `gpio_bm`, accesibles directamente desde cualquier tier sin envoltorios redundantes en LL o HAL (K2). G6 cerrado por diseño.
+  - Decisión 2 (Opción A): `Error_Handler()` ante timeout de CSI o fallo al habilitar la celda de compensación I/O en arranque.
+  - Decisión 3 (Opción A): Alcance de T4 en hardware: `prj_02` (debug), `prj_03` (debug), `prj_04` (debug y release), y 5 warm resets consecutivos por NRST en `prj_04` debug.
+  - Decisión 4: Los documentos de proceso se conservan hasta el cierre final del responsable.
 
-### Commits realizados
+### Commits de la rama `driver/gpio-close`
 1. `f883944` - `feat(prj02,prj03,prj04): enable the I/O compensation cell through gpio_bm (K1)`
-2. `5826eb2` - `fix(tools): address audit findings B1-B7, M1, m1-m2 in gpio_close_checks.py`
-3. `ed5c5dd` - `test(gpio): record T1-T3 and T4 simulation close runs (no board)`
+2. `2f929a4` - `feat(tools): add gpio_close_checks.py (K4)`
+3. `5826eb2` - `fix(tools): address audit findings B1-B7, M1, m1-m2 in gpio_close_checks.py`
+4. `ed5c5dd` - `test(gpio): record T1-T3 and T4 simulation close runs (no board)`
+5. `ac59a73` - `docs(gpio): update implementation report with audit corrections`
+6. `987f310` - `fix(tools): point the T4 net check at the board's address`
+7. `f3fc263` - `test(gpio): auditor T1-T4 run of the driver close passes on the board`
+8. `6f0967d` - `docs(gpio): document driver close K1-K3 in README (K3)`
 
 ---
 
@@ -87,35 +99,28 @@ La suite de verificación host implementada en `tools/gpio_close_checks.py` fue 
 
 ---
 
-## 4. Prueba en Placa (T4) - Para el Auditor
+## 4. Resultados en Placa (T4) - Auditoría en Hardware
 
-### 4.1 Alcance y Declaración de Estado
-- **Estado:** **NO VERIFICADA SIN PLACA**.
-- **Validación del Implementador:** La herramienta `tools/gpio_close_checks.py` cuenta con modo de simulación y controles negativos sobre respuestas CLI (`--simulate-t4`), los cuales fueron ejecutados y verificados con éxito, generando la captura commiteada [`docs/gpio_close_t4sim_5826eb2.txt`](docs/gpio_close_t4sim_5826eb2.txt) con "SIMULATED" en la cabecera. Asimismo, invocar `--test t4` sin `--sn` aborta de forma segura con código 1 sin tocar el hardware.
+### 4.1 Ejecución del Auditor en Hardware
+- **Captura en placa commiteada:** [`docs/gpio_close_audit_t1t4_987f310.txt`](docs/gpio_close_audit_t1t4_987f310.txt)
+- **Commit auditado:** `987f310` (incorporó corrección de IP de placa `192.168.1.150` para `net_check`)
+- **Placa física:** NUCLEO-H755ZI-Q, ST-LINK SN `0016000C4142501220353451`
+- **Veredicto general:** **`OVERALL VERDICT: PASS`** (55 comprobaciones PASS, 0 FAIL)
 
-### 4.2 Qué hace T4 y qué imprime
-1. **Compilación fresca (B3):** Compila en la ejecución las 4 imágenes requeridas (`prj_02` debug, `prj_03` debug, `prj_04` debug, `prj_04` release) con `--clean-first`, comprueba su frescura temporal y registra el SHA-256 de los ELFs de CM7 y CM4.
-2. **Flasheo verificado (B4):** Invoca el `tools/flash.py` propio de cada proyecto con `cwd` en el proyecto, `--preset <PRESET>` y `--sn <SERIAL>`. La salida completa del programador se vuelca a la captura y el éxito exige código de salida 0 y la cadena `Download verified successfully`.
-3. **Lectura atómica de registros SWD:** Tras cada arranque, ejecuta **una sola llamada SWD en modo `HOTPLUG`** con:
-   ```
-   STM32_Programmer_CLI -c port=SWD sn=<SERIAL> mode=HOTPLUG -r32 0x58000420 4 -r32 0x58024400 4
-   ```
-   para leer atómicamente:
-   - `SYSCFG_CCCSR` (`0x58000420`): comprueba `EN == 1` (bit 0) y `READY == 1` (bit 8).
-   - `RCC_CR` (`0x58024400`): comprueba `CSIRDY == 1` (bit 8, máscara `0x100`).
-4. **Comprobación de red con reintento (B5):** Ejecuta `tools/net_check.py` con un bucle de reintento de hasta 20 s para acomodar la latencia de autonegociación del enlace Ethernet (~3,2 s), registrando cada intento y resultado en la captura.
-5. **Resets NRST (B6):** En `prj_04` debug, ejecuta 5 warm resets consecutivos por hardware mediante `-hardRst`, comprobando el código de salida 0 del comando y registrando `CCCSR`, `RCC_CR` y el resultado de `net_check` en cada reset (Decisión 3).
-6. **Controles negativos en hardware (B7):** El texto real devuelto por el CLI se muta en memoria (`READY = 0` y `EN = 0`) y se evalúa a través de `parse_swd_hotplug_output()` y `evaluate_t4_registers()`, verificando que ambas mutaciones producen FAIL.
+### 4.2 Verificación de Registros y Red en Hardware
 
-### 4.3 Comandos exactos para el Auditor
+| Imagen | SHA-256 del ELF (CM7) | Flasheo CLI | `SYSCFG_CCCSR` (`0x58000420`) | `RCC_CR` (`0x58024400`) | `net_check` |
+| --- | --- | --- | --- | --- | --- |
+| `prj_02` `debug` | `a3c20ca4...` | `Download verified successfully` | `0x00000101` (`EN=1`, `READY=1`) | `0x0307C1A5` (`CSIRDY=1`) | PASS (intento 2, 4/4 ping) |
+| `prj_03` `debug` | `4147775a...` | `Download verified successfully` | `0x00000101` (`EN=1`, `READY=1`) | `0x0F07C1A5` (`CSIRDY=1`, `PLL2`) | PASS (intento 2, 4/4 ping) |
+| `prj_04` `debug` | `6ae5785a...` | `Download verified successfully` | `0x00000101` (`EN=1`, `READY=1`) | `0x0F07C1A5` (`CSIRDY=1`, `PLL2`) | PASS (intento 2, 4/4 ping) |
+| `prj_04` `release` | `77e5dff7...` | `Download verified successfully` | `0x00000101` (`EN=1`, `READY=1`) | `0x0F07C1A5` (`CSIRDY=1`, `PLL2`) | PASS (intento 2, 4/4 ping) |
 
-```powershell
-# Posicionarse en la raíz del repositorio stm32h755 (rama driver/gpio-close)
-cd C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
-
-# Ejecutar T4 completo en hardware con el número de serie de la placa
-py tools/gpio_close_checks.py --test t4 --sn 0016000C4142501220353451 --output 01_shared_drivers/00_gpio/docs/gpio_close_audit_t4_5826eb2.txt
-```
+### 4.3 Resets por NRST y Controles Negativos en Hardware
+- **5 Warm Resets por Hardware en `prj_04` debug (`-hardRst`):** Los 5 resets consecutivos superaron la verificación con código de salida 0, confirmando en cada ciclo `SYSCFG_CCCSR = 0x00000101`, `RCC_CR = 0x0F07C1A5` y `net_check` PASS.
+- **Controles negativos en hardware:** La salida textual real devuelta por `STM32_Programmer_CLI` fue mutada en memoria sustituyendo `READY = 0`, y por separado `EN = 0`. Ambas mutaciones pasaron por `evaluate_t4_registers()` y produjeron veredicto FAIL conforme a diseño.
+- **Comportamiento de red:** En cada arranque físico, el intento 1 de `net_check` registró pérdida parcial de ping (ICMP 3/4) debido al tiempo de estabilización física del enlace Ethernet (~3,2 s), pasando estrictamente en el intento 2 (ICMP 4/4), validando la necesidad del bucle de reintento acotado (B5).
+- **Bits de PLL2:** Los bits 26–27 de `RCC_CR` (`PLL2ON`, `PLL2RDY`) están presentes en `prj_03` y `prj_04` (`0x0F07C1A5`), correspondientes al reloj de muestreo del ADC, mientras que en `prj_02` se mantienen a 0 (`0x0307C1A5`), confirmando fidelidad respecto a los contratos de reloj de cada proyecto.
 
 ---
 
@@ -129,23 +134,50 @@ py tools/gpio_close_checks.py --test t4 --sn 0016000C4142501220353451 --output 0
    - Se configuró `-ffile-prefix-map=<control_dir>=<repo_root>` en la compilación del control para alinear macros `__FILE__`.
    - Se normalizan `FW_GIT_REV` y `FW_BUILD_ID` únicamente en `main.c.obj` y `app_main.c.obj`.
    - En la extracción de símbolos (`extract_nondebug_symbols`), se ignoran símbolos de depuración de tipo `a` y `n` (así como identificadores internos de módulo del compilador `wm4.*` y `wm7.*`), permitiendo comparar con total fidelidad la tabla de símbolos funcionales.
+3. **Dirección IP de la placa en T4 (987f310):**
+   El auditor corrigió la dirección de sondeo UDP en `run_net_check_with_retry()` para apuntar a `192.168.1.150` (`net_config.h` de los proyectos), en lugar de `.50`.
 
 ---
 
-## 6. Checklist de Entrega
+## 6. Cierre de Fase (K3 - Documentación y Poda de Capturas)
 
-- [x] `git status --porcelain -u`: árbol limpio fuera de `build/`.
-- [x] `git diff f066a8e -- 01_shared_drivers/00_gpio/`: 0 cambios en `*.c` y `*.h`.
-- [x] `git diff f066a8e --stat`: únicamente `main.c` de los CM7 de `prj_02`, `prj_03` y `prj_04`, la herramienta `tools/gpio_close_checks.py`, las capturas commiteadas y este informe.
-- [x] `build_all.ps1 -Clean` / `gpio_close_checks.py --test t1`: 8/8 builds superados con 0 errores y 0 warnings mediante compilación directa `--clean-first`.
-- [x] Presets de selftest (`prj_01` selftest-gpio, `prj_03` selftest, `prj_04` selftest-gpio) compilados sin warnings.
+El implementador completó las actividades de documentación y saneamiento requeridas para el cierre del driver:
+
+1. **Actualización completa de `01_shared_drivers/00_gpio/README.md` (Diseño 3):**
+   - **Estado inicial (líneas 28–29):** Actualizado para reflejar que EXTI 0–15 y la celda de compensación están implementados en `gpio_bm` (F2), y que el driver se encuentra completo y cerrado (K1–K5, Oct 2026).
+   - **Matriz de características (§1.1):** Actualizada la fila `EXTI, compensation cell` a `yes` en BM, y `via BM (K2)` en LL y HAL.
+   - **Ejemplos (§7):** Añadido el Ejemplo F mostrando la configuración de un pin mediante `gpio_hal` junto con el enrutamiento y habilitación de su línea EXTI mediante `GPIO_BM_ExtiConfig()`, compilable contra las firmas reales de `gpio_bm.h`.
+   - **Preámbulo y evidencia (§9.1, §9.3.1):** Documentada la ejecución de auditoría en hardware a `f3fc263` (`docs/gpio_close_audit_t1t4_987f310.txt`) y registradas las capturas de verificación del cierre.
+   - **Puntos no ejercitados (§9.5):** Eliminado el primer punto obsoleto sobre `prj_04` sin hook (cerrado en F1b); actualizado el punto de la celda de compensación indicando que `prj_02`, `prj_03` y `prj_04` la inicializan mediante el driver (`GPIO_BM_EnableCompensationCell()`), quedando sin ejercitar únicamente en CM4.
+   - **Consumidores (§11):** Incorporado `prj_02_eth_lwip_dualcore` en la tabla de consumidores; actualizadas las filas de `prj_03` y `prj_04`; actualizado el párrafo posterior reflejando la inicialización en arranque de los tres proyectos de producción.
+   - **Hallazgos (§12.2):** Actualizados G6 como "Closed by design (K2)", G8 como "Closed (F2 + K1)" y G12 como "Closed (F1 + F2)".
+   - **Registros de fases (§13):** Renombrada la sección 13 a "Phase records" e incorporada la subsección §13.4 resumiendo los hitos K1–K5 y la evidencia cuantitativa de las pruebas T1–T4.
+   - **Historial (§15):** Añadida la fila del cierre del driver cubriendo el rango de commits `f883944 … f3fc263`.
+
+2. **Poda de capturas según Regla 7 de Sección 14:**
+   - Se eliminó del repositorio mediante `git rm` la captura superada `01_shared_drivers/00_gpio/docs/gpio_close_t1t3_2f929a4.txt`, generada con la versión preliminar de la herramienta antes de las correcciones B1–B7. Dicha captura queda registrada en la tabla §9.3.2 de capturas retiradas y accesible mediante `git show 2320b0f:01_shared_drivers/00_gpio/docs/gpio_close_t1t3_2f929a4.txt`.
+   - Se conservan exactamente las tres capturas canónicas de respaldo:
+     1. `01_shared_drivers/00_gpio/docs/gpio_close_t1t3_5826eb2.txt` (T1–T3 en host, PASS).
+     2. `01_shared_drivers/00_gpio/docs/gpio_close_t4sim_5826eb2.txt` (T4 simulada, PASS).
+     3. `01_shared_drivers/00_gpio/docs/gpio_close_audit_t1t4_987f310.txt` (T1–T4 en hardware físico, 55/55 PASS).
+
+---
+
+## 7. Checklist de Entrega
+
+- [x] `git status --porcelain -u`: árbol de trabajo limpio.
+- [x] `git diff f066a8e -- 01_shared_drivers/00_gpio/`: 0 modificaciones en archivos `*.c` y `*.h`.
+- [x] `git diff f066a8e --stat`: únicamente los `main.c` de CM7 de `prj_02`, `prj_03`, `prj_04`, la herramienta `tools/gpio_close_checks.py`, la documentación en `00_gpio/README.md`, las capturas canónicas y este informe.
+- [x] `build_all.ps1 -Clean` / `gpio_close_checks.py --test t1`: 8/8 builds completados con 0 errores y 0 warnings.
+- [x] Presets de selftest (`prj_01` selftest-gpio, `prj_03` selftest, `prj_04` selftest-gpio) compilados sin advertencias.
 - [x] Las tres funciones `CompensationCell_Init()` son idénticas byte por byte.
-- [x] `SystemClock_Config()` únicamente retira las tres líneas de HAL y añade el comentario explicativo de `CSIState`.
-- [x] Todos los controles negativos (T1 inyección de flags, T2 símbolos control, T2 mutación de objeto dinámica, T2 mutación de texto, T3 enlace sin BM, T4 registros con READY=0 y EN=0) pasan por las mismas funciones y fallan según lo esperado.
-- [x] Capturas commiteadas: `docs/gpio_close_t1t3_5826eb2.txt` y `docs/gpio_close_t4sim_5826eb2.txt`.
-- [x] Citas de código y registro verificadas contra HEAD (`-r32 ... 4`, `CSIRDY` bit 8 `0x100`, `-hardRst`, enlaces relativos).
+- [x] `SystemClock_Config()` retira exclusivamente las 3 líneas de HAL e incorpora el comentario de `CSIState`.
+- [x] Todos los controles negativos de T1, T2, T3 y T4 pasan por las mismas funciones de evaluación y fallan según lo esperado.
+- [x] Captura de auditoría T1–T4 en hardware físico aprobada con 55/55 checks PASS (`gpio_close_audit_t1t4_987f310.txt`).
+- [x] Captura superada `gpio_close_t1t3_2f929a4.txt` eliminada conforme a la regla 7 de la sección 14.
+- [x] Citas de código, registros y commits verificadas contra `HEAD`.
 - [x] Última línea del informe con el formato exacto requerido.
 
 ---
 
-F1 CORREGIDA PARA AUDITORIA 5826eb2
+CIERRE ENTREGADO PARA AUDITORIA 6f0967d
