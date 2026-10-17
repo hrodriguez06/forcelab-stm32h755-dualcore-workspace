@@ -290,8 +290,8 @@ def run_t1(tools: dict[str, str], logger: Callable[[str], None]) -> bool:
                 neg_bld_code, neg_full, neg_elf_found, expected_warnings=0
             )
 
-            # Strict [-Wconversion] without matching [-Wsign-conversion] (T-n)
-            has_wconversion = any(re.search(r"\[-Wconversion\](?!\S)", w) or ("[-Wconversion]" in w) for w in neg_warnings)
+            # [-Wconversion] / [-Wsign-conversion] enabled by -Wconversion flag (T-m)
+            has_wconversion = any(re.search(r"\[-W(?:sign-)?conversion\]", w) for w in neg_warnings)
             neg_control_ok = (not neg_passed) and (len(neg_warnings) >= 1) and has_wconversion
             logger(f"[host] CHECK T1 negative control (-Wconversion warnings={len(neg_warnings)}, has_flag={has_wconversion}): "
                    f"{'PASS' if neg_control_ok else 'FAIL'}")
