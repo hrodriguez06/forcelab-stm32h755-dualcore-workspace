@@ -45,3 +45,29 @@ Revisé yo el firmware. La herramienta la revisó un subagente; los hallazgos de
 - **El firmware tiene un bloqueante real** (F-B1) y un mayor (F-M1).
 - **La herramienta tiene tres bloqueantes** que darían un T5 falso (B1–B3).
 - **Siguiente ronda:** todo lo anterior. Después, una ejecución mía de T1–T4 y una sola sesión de placa en `prj_02`.
+
+## F1, corrección (`1493792`, código y herramienta en `ebf2398`)
+
+### Qué ejecuté
+
+| Comprobación | Resultado |
+| --- | --- |
+| Firmware, revisado por mí | **F-B1 cerrado:**<br>• `HAL_ETH_RxAllocateCallback` marca `g_rx_rearm_pending` cuando no hay búfer;<br>• `ETH_Driver_ReleaseRxBuffer` devuelve si había un rearme pendiente;<br>• `custom_free_function` hace entonces `xSemaphoreGive`, en el contexto de hilo de lwIP;<br>• el hilo de entrada espera además con un plazo de 10 ms en modo cero-copia;<br>• `ETH_Driver_ReadPacket` llama siempre a `HAL_ETH_ReadData`, que rearma.<br>**F-M1 cerrado:** se guarda `next` antes de liberar. **F-m1 cerrado.**<br>Todo queda detrás de `ETH_HAL_RX_ZERO_COPY` |
+| T1–T4, ejecutadas por mí | `eth_e3e6_audit_t1t4_1493792.txt`: HEAD `1493792`, **`OVERALL VERDICT: PASS`**.<br>• T1: 8/8 con 0 avisos reales; el control con flags del proyecto, rechazado.<br>• T2: los 8 objetos de `prj_03`/`prj_04` idénticos al control, compilado en la ejecución, en secciones ALLOC (con NOBITS), contenidos, relocalizaciones y símbolos.<br>• T3: 0 de 6 callbacks con la macro; sin ella, definición múltiple.<br>• T4: SRAM3 24 768 / 32 768 B; `g_rx_pool` en `0x300400c0..0x300448c0`, alineado y en la región 6, en `debug` y `release`; sin copia en la recepción; controles rechazados |
+| T5/T6 (herramienta), revisión de un subagente | **Segura para la placa, pero todavía no da evidencia válida:** detalle abajo |
+
+### Estado de T5/T6
+
+| ID | Estado |
+| --- | --- |
+| B1 | **Casi cerrado:**<br>• control y HEAD se compilan en la ejecución y se flashean con el `flash.py` de cada árbol (los ELF correctos, comprobado), con el SHA-256 de CM7;<br>• **falta:** comprobar el worktree del control en T5, el SHA-256 de CM4, la salida de `flash.py` en la captura y que las dos imágenes sean distintas |
+| B2 | **Bloqueante:**<br>• `evaluate_monitor_net_lines("")` da PASS, y no se exige ninguna línea `[net]`;<br>• el monitor no usa `PYTHONIOENCODING=utf-8:backslashreplace` (un U+FFFD de un reset lo mata);<br>• se para justo después de la carga, y `[net]` sale cada 5 s, así que puede no ver la muestra posterior;<br>• no se mira `poll()`, y el log no llega a la captura |
+| B3 | Cerrado |
+| M1 | Cerrado (mediana de 3 y 0,98) |
+| M2/M3 | **Parcial:**<br>• un prefijo corrupto en la carga en ventana hace caer la herramienta (`ValueError`, l. 1151) y deja el monitor abierto;<br>• un datagrama perdido no caduca, así que la ventana encoge;<br>• el `SO_RCVBUF` del PC (64 KB) va justo para 32 × 1472 B;<br>• la carga una a una no empareja por secuencia;<br>• no hay plazo total ni `try/finally` para los monitores |
+| T6 | **Parcial:** no confirma qué imagen hay en la placa ni reintenta hasta tener enlace |
+| Seguridad | Correcta:<br>• `flash.py` con `--sn`, sin borrado;<br>• `-rst` con `sn=` en HOTPLUG;<br>• todo unicast a `192.168.1.150:7`;<br>• la ventana limita el ritmo.<br>Pero `--local-echo` no impide que T6 resetee la placa |
+
+### Estado
+
+**F1 no pasa todavía, por la parte de placa de la herramienta.** El firmware y T1–T4 están bien. Siguiente ronda, solo la herramienta de T5/T6 (lo de arriba). Después, la sesión de placa.
