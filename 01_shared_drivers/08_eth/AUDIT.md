@@ -113,3 +113,13 @@ Imágenes compiladas en la ejecución:
 ### Estado
 
 **F1 no pasa.** No es un fallo de la herramienta: es un resultado del producto. Tal como está, E6 es una regresión de `prj_02` bajo ráfaga. La decisión es del responsable.
+
+**Decisión del responsable (2026-10-16):** E6 no se adopta (plan revisión 3).
+
+La siguiente ronda junta la corrección de F1 y el cierre del implementador:
+- quitar el cero-copia;
+- T2 extendida a `prj_02`;
+- T1–T3 sin placa;
+- los README.
+
+Se conservan E3 y el `#ifndef` del tamaño del pool.

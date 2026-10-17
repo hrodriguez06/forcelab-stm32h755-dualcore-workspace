@@ -1,6 +1,6 @@
 # Plan de implementación de `08_eth` E3–E7: cero-copia de recepción y callbacks desactivables
 
-Oct 16, 2026 · @Hector · revisión 2
+Oct 16, 2026 · @Hector · revisión 3
 
 Resuelve los cuatro pendientes de `08_eth/README.md` §10.
 
@@ -14,6 +14,20 @@ Resuelve los cuatro pendientes de `08_eth/README.md` §10.
 - **El auditor** revisa el diff, ejecuta la herramienta sin placa una vez y hace **una sola sesión de placa** en `prj_02`, con la imagen nueva y la de control en la misma sesión.
 
 Una fase (F1) y un cierre. Base y control: `main` en `69179d7`. Reglas para el implementador en [`IMPLEMENTER_INSTRUCTIONS.md`](IMPLEMENTER_INSTRUCTIONS.md).
+
+**Revisión 3 (2026-10-16), decisión del responsable tras la sesión de placa: E6 no se adopta.**
+- **Medidas** (`docs/eth_e3e6_audit_t5t6_1150083.txt`):
+  - con la carga una a una, el cero-copia de recepción rinde igual que la copia (6,19 frente a 6,28 Mbit/s);
+  - con 32 en vuelo pierde 24 de 5000 tramas (`rx_nobuf` = 26) y rinde 32,8 frente a 54,1 Mbit/s;
+  - la copia almacena unas 24 tramas (8 búferes DMA y 16 pbufs), y el cero-copia solo los 12 búferes DMA que caben en SRAM3;
+  - no hay una medida de CPU que muestre ganancia.
+- **Qué cambia:**
+  - se quita el código de cero-copia: `ETH_Driver_ReleaseRxBuffer`, `g_rx_rearm_pending`, la rama de `ethernetif.c`, `LWIP_SUPPORT_CUSTOM_PBUF` y las dos definiciones de `prj_02`;
+  - se conservan E3 (`ETH_HAL_CUSTOM_CALLBACKS`) y el `#ifndef` de `ETH_DRIVER_RX_BUFFER_COUNT`;
+  - `prj_02` vuelve a ser idéntico al control, y T2 lo comprueba también para `prj_02`;
+  - T4 y T5 dejan de ser criterios de cierre: quedan como medidas en el README;
+  - no hace falta otra sesión de placa.
+- **El README** documenta E6 como "medido, no adoptado", con las cifras y la causa, y deja el camino para quien lo retome (un pool más grande, o copia de respaldo cuando quedan pocos búferes).
 
 **Revisión 2 (2026-10-16), tras la auditoría de F1:**
 - **T5:** la carga "una a una" no puede vaciar el pool. Además de esa carga, hay una con 32 datagramas en vuelo. El criterio de throughput es la mediana de 3 repeticiones de cada imagen: la nueva ≥ 0,98 × el control, para absorber el ruido del PC.
