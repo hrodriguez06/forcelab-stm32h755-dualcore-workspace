@@ -182,15 +182,28 @@ HAL_StatusTypeDef UART_HAL_InitEx(UART_HandleTypeDef *huart, const uart_hal_conf
         return HAL_ERROR;
     }
 
-    /* Validate and configure pins before enabling peripheral clock (U6) */
+    /* Phase 1: Pure pin parameter validation before touching any hardware (D2, D3, U6) */
     if (config->tx_pin != NULL)
     {
         if ((config->tx_pin->port == NULL) || (config->tx_pin->pin_idx > 15U) ||
-            !GPIO_BM_IsValidPort(config->tx_pin->port))
+            (config->tx_pin->af > 15U) || !GPIO_BM_IsValidPort(config->tx_pin->port))
         {
             return HAL_ERROR;
         }
+    }
 
+    if (config->rx_pin != NULL)
+    {
+        if ((config->rx_pin->port == NULL) || (config->rx_pin->pin_idx > 15U) ||
+            (config->rx_pin->af > 15U) || !GPIO_BM_IsValidPort(config->rx_pin->port))
+        {
+            return HAL_ERROR;
+        }
+    }
+
+    /* Phase 2: Hardware pin configuration */
+    if (config->tx_pin != NULL)
+    {
         GpioBm_PinConfig_t pin_cfg = {
             .port             = config->tx_pin->port,
             .pin_idx          = config->tx_pin->pin_idx,
@@ -211,12 +224,6 @@ HAL_StatusTypeDef UART_HAL_InitEx(UART_HandleTypeDef *huart, const uart_hal_conf
 
     if (config->rx_pin != NULL)
     {
-        if ((config->rx_pin->port == NULL) || (config->rx_pin->pin_idx > 15U) ||
-            !GPIO_BM_IsValidPort(config->rx_pin->port))
-        {
-            return HAL_ERROR;
-        }
-
         GpioBm_PinConfig_t pin_cfg = {
             .port             = config->rx_pin->port,
             .pin_idx          = config->rx_pin->pin_idx,

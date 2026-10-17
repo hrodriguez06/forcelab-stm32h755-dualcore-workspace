@@ -248,24 +248,23 @@ bool UART_LL_Init(UartLL_Handle_t *h, const UartLL_Config_t *cfg)
         return false;
     }
 
-    /* 1.5 Oversampling validation (LL_USART_OVERSAMPLING_*) */
-    if ((cfg->oversampling != LL_USART_OVERSAMPLING_16) &&
-        (cfg->oversampling != LL_USART_OVERSAMPLING_8))
+    /* 1.5 Oversampling validation (LL_USART_OVERSAMPLING_*)
+     * RM0399 §52.4.4: LPUART only supports 16x oversampling by hardware design;
+     * oversampling is ignored for LPUART (D1), matching BM behavior (uart_bm.c:362). */
+    if (!desc->is_lpuart)
     {
-        return false;
+        if ((cfg->oversampling != LL_USART_OVERSAMPLING_16) &&
+            (cfg->oversampling != LL_USART_OVERSAMPLING_8))
+        {
+            return false;
+        }
     }
 
-    /* RM0399 §52.4.4: LPUART does not support OVER8 */
-    if (desc->is_lpuart && (cfg->oversampling != LL_USART_OVERSAMPLING_16))
-    {
-        return false;
-    }
-
-    /* 1.6 Optional pin parameter validation without touching hardware */
+    /* 1.6 Optional pin parameter validation without touching hardware (D2) */
     if (cfg->tx_pin != NULL)
     {
         if ((cfg->tx_pin->port == NULL) || (cfg->tx_pin->pin_idx > 15U) ||
-            !GPIO_BM_IsValidPort(cfg->tx_pin->port))
+            (cfg->tx_pin->af > 15U) || !GPIO_BM_IsValidPort(cfg->tx_pin->port))
         {
             return false;
         }
@@ -274,7 +273,7 @@ bool UART_LL_Init(UartLL_Handle_t *h, const UartLL_Config_t *cfg)
     if (cfg->rx_pin != NULL)
     {
         if ((cfg->rx_pin->port == NULL) || (cfg->rx_pin->pin_idx > 15U) ||
-            !GPIO_BM_IsValidPort(cfg->rx_pin->port))
+            (cfg->rx_pin->af > 15U) || !GPIO_BM_IsValidPort(cfg->rx_pin->port))
         {
             return false;
         }
