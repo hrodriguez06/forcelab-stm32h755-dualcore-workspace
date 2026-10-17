@@ -1013,26 +1013,47 @@ def verify_udp_payload(sent: bytes, received: bytes) -> bool:
     return sent == received
 
 
-def evaluate_monitor_net_lines(log_text: str) -> tuple[bool, int, str]:
+def evaluate_monitor_net_lines(
+    log_text: str,
+    min_samples: int = 1,
+    min_timestamp_after: float | None = None
+) -> tuple[bool, int, str]:
     """Pure evaluator: parses [net] status lines from monitor.py log,
     verifying rx_nobuf == 0, tx_nobuf == 0, and dma_err == 0 across all logged samples.
+    Requires at least min_samples lines (FAIL if 0 lines found).
     """
     net_lines_count = 0
     errors = []
-    pattern = re.compile(r"\[net\].*?\brx_nobuf=(\d+)\s+tx_nobuf=(\d+)\s+dma_err=(\d+)")
+    timestamps = []
+    pattern = re.compile(r"(?:\[\+\s*([0-9.]+)s\]\s+)?\[net\].*?\brx_nobuf=(\d+)\s+tx_nobuf=(\d+)\s+dma_err=(\d+)")
 
     for line in log_text.splitlines():
         m = pattern.search(line)
         if m:
             net_lines_count += 1
-            rx_nobuf = int(m.group(1))
-            tx_nobuf = int(m.group(2))
-            dma_err = int(m.group(3))
+            ts_str = m.group(1)
+            if ts_str is not None:
+                try:
+                    timestamps.append(float(ts_str))
+                except ValueError:
+                    pass
+            rx_nobuf = int(m.group(2))
+            tx_nobuf = int(m.group(3))
+            dma_err = int(m.group(4))
             if rx_nobuf != 0 or tx_nobuf != 0 or dma_err != 0:
                 errors.append(f"rx_nobuf={rx_nobuf}, tx_nobuf={tx_nobuf}, dma_err={dma_err}")
 
+    if net_lines_count < min_samples:
+        return False, net_lines_count, f"FAIL: No valid [net] status lines found in monitor log (found {net_lines_count}, required >= {min_samples})"
+
+    if min_timestamp_after is not None:
+        has_sample_after = any(ts >= min_timestamp_after for ts in timestamps)
+        if not has_sample_after:
+            latest_ts = max(timestamps) if timestamps else "none"
+            return False, net_lines_count, f"FAIL: No [net] sample logged after test completion (latest ts={latest_ts} < required {min_timestamp_after:.2f})"
+
     if errors:
-        return False, net_lines_count, f"Non-zero error counters in {len(errors)} samples: {errors[:3]}"
+        return False, net_lines_count, f"FAIL: Non-zero error counters in {len(errors)} samples: {errors[:3]}"
     return True, net_lines_count, f"All {net_lines_count} [net] samples clean (0 errors)"
 
 
@@ -1046,8 +1067,12 @@ def run_udp_sequential_load(
     total_deadline: float = 60.0,
     logger: Logger | None = None
 ) -> tuple[bool, int, int, float, float]:
-    """Sequential (1-in-flight) UDP echo load test with sequence numbering and timeout guard."""
+    """Sequential (1-in-flight) UDP echo load test with sequence matching and timeout guard."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+      sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
+    except Exception:
+      pass
     sock.settimeout(timeout)
 
     sent_count = 0
@@ -1073,14 +1098,47 @@ def run_udp_sequential_load(
         try:
             sock.sendto(payload, (host, port))
             sent_count += 1
-            reply, _ = sock.recvfrom(payload_size + 512)
-            consec_timeouts = 0
-            if verify_udp_payload(payload, reply):
-                received_count += 1
-                total_bytes += len(reply)
-            else:
-                corrupt_count += 1
-        except socket.timeout:
+        except OSError:
+            break
+
+        # Receive loop matching response by sequence number, discarding late/stale responses
+        pkt_deadline = time.perf_counter() + timeout
+        matched = False
+        while time.perf_counter() < pkt_deadline:
+            try:
+                rem_t = max(0.01, pkt_deadline - time.perf_counter())
+                sock.settimeout(rem_t)
+                reply, _ = sock.recvfrom(payload_size + 512)
+
+                if len(reply) >= 21 and reply.startswith(b"ETH-E6-SEQ-"):
+                    try:
+                        recv_seq = int(reply[11:17].decode("ascii"))
+                    except (ValueError, UnicodeDecodeError):
+                        corrupt_count += 1
+                        break
+
+                    if recv_seq == seq:
+                        if reply == payload:
+                            received_count += 1
+                            total_bytes += len(reply)
+                            consec_timeouts = 0
+                            matched = True
+                        else:
+                            corrupt_count += 1
+                        break
+                    elif recv_seq < seq:
+                        # Stale response from a previously timed out packet: ignore and continue waiting
+                        continue
+                    else:
+                        corrupt_count += 1
+                        break
+                else:
+                    corrupt_count += 1
+                    break
+            except socket.timeout:
+                break
+
+        if not matched:
             consec_timeouts += 1
             if consec_timeouts >= max_consecutive_timeouts:
                 if logger:
@@ -1106,32 +1164,50 @@ def run_udp_windowed_load(
     count: int = 5000,
     window_size: int = 32,
     payload_size: int = 1472,
-    timeout: float = 0.5,
+    packet_timeout: float = 0.5,
     max_consecutive_timeouts: int = 50,
     total_deadline: float = 60.0,
     logger: Logger | None = None
-) -> tuple[bool, int, int, float, float]:
+) -> tuple[bool, int, int, int, int, float, float]:
     """Windowed (32 datagrams in flight) UDP echo load test to stress pool exhaustion and re-arming."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(timeout)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
+    except Exception:
+        pass
+    sock.settimeout(0.05)
 
-    inflight: dict[int, bytes] = {}
+    inflight: dict[int, tuple[bytes, float]] = {}
     next_seq = 0
     received_count = 0
     corrupt_count = 0
+    lost_count = 0
     total_bytes = 0
     consec_timeouts = 0
 
     t0 = time.perf_counter()
     deadline = t0 + total_deadline
 
-    while received_count < count:
-        if time.perf_counter() > deadline:
+    while (next_seq < count or len(inflight) > 0) and (received_count + corrupt_count + lost_count < count):
+        now = time.perf_counter()
+        if now > deadline:
             if logger:
                 logger.log(f"[udp_win] Total deadline {total_deadline}s exceeded")
             break
 
-        # Send packets up to window limit
+        # Expire in-flight packets that exceeded packet_timeout
+        expired = [s for s, (_, send_t) in inflight.items() if (now - send_t) > packet_timeout]
+        for s in expired:
+            del inflight[s]
+            lost_count += 1
+            consec_timeouts += 1
+
+        if consec_timeouts >= max_consecutive_timeouts:
+            if logger:
+                logger.log(f"[udp_win] Aborted after {consec_timeouts} consecutive timeouts")
+            break
+
+        # Send up to window limit
         while len(inflight) < window_size and next_seq < count:
             prefix = f"ETH-E6-SEQ-{next_seq:06d}-".encode("ascii")
             pad_len = payload_size - len(prefix)
@@ -1139,59 +1215,84 @@ def run_udp_windowed_load(
             p = prefix + pattern
             try:
                 sock.sendto(p, (host, port))
-                inflight[next_seq] = p
+                inflight[next_seq] = (p, time.perf_counter())
                 next_seq += 1
             except OSError:
                 break
 
+        # Receive replies
         try:
             reply, _ = sock.recvfrom(payload_size + 512)
-            consec_timeouts = 0
             if len(reply) >= 21 and reply.startswith(b"ETH-E6-SEQ-"):
-                seq = int(reply[11:17].decode("ascii"))
-                if seq in inflight:
-                    if reply == inflight[seq]:
-                        received_count += 1
-                        total_bytes += len(reply)
-                    else:
-                        corrupt_count += 1
-                    del inflight[seq]
-        except socket.timeout:
-            consec_timeouts += 1
-            if consec_timeouts >= max_consecutive_timeouts:
-                if logger:
-                    logger.log(f"[udp_win] Aborted after {consec_timeouts} consecutive timeouts")
-                break
+                try:
+                    seq = int(reply[11:17].decode("ascii"))
+                    if seq in inflight:
+                        exp_p, _ = inflight[seq]
+                        if reply == exp_p:
+                            received_count += 1
+                            total_bytes += len(reply)
+                            consec_timeouts = 0
+                        else:
+                            corrupt_count += 1
+                        del inflight[seq]
+                except (ValueError, UnicodeDecodeError):
+                    corrupt_count += 1
+            else:
+                corrupt_count += 1
+        except (socket.timeout, BlockingIOError):
+            pass
 
     t_elapsed = time.perf_counter() - t0
     sock.close()
 
     throughput_mbps = (total_bytes * 8.0) / (t_elapsed * 1_000_000.0) if t_elapsed > 0 else 0.0
-    passed = (received_count == count) and (corrupt_count == 0)
+    passed = (received_count == count) and (corrupt_count == 0) and (lost_count == 0)
 
     if logger:
         logger.log(f"[udp_win] In-flight={window_size}, Sent: {next_seq}/{count}, Recv: {received_count}/{count}, "
-                   f"Corrupt: {corrupt_count}, Time: {t_elapsed:.2f}s, Throughput: {throughput_mbps:.2f} Mbit/s")
+                   f"Corrupt: {corrupt_count}, Lost: {lost_count}, Time: {t_elapsed:.2f}s, Throughput: {throughput_mbps:.2f} Mbit/s")
 
-    return passed, next_seq, received_count, throughput_mbps, t_elapsed
+    return passed, next_seq, received_count, corrupt_count, lost_count, throughput_mbps, t_elapsed
 
 
 class LocalUdpEchoServer:
-    def __init__(self, host: str = "127.0.0.1", port: int = 0) -> None:
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 0,
+        corrupt_prefix_interval: int = 0,
+        drop_interval: int = 0
+    ) -> None:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((host, port))
         self.host, self.port = self.sock.getsockname()
         self.running = True
+        self.corrupt_prefix_interval = corrupt_prefix_interval
+        self.drop_interval = drop_interval
+        self.packet_count = 0
         self.thread = threading.Thread(target=self._serve, daemon=True)
         self.thread.start()
 
     def _serve(self) -> None:
         while self.running:
             try:
-                self.sock.settimeout(0.2)
+                self.sock.settimeout(0.1)
                 data, addr = self.sock.recvfrom(4096)
-                if data:
-                    self.sock.sendto(data, addr)
+                if not data:
+                    continue
+
+                self.packet_count += 1
+                if self.drop_interval > 0 and (self.packet_count % self.drop_interval) == 0:
+                    continue
+
+                if self.corrupt_prefix_interval > 0 and (self.packet_count % self.corrupt_prefix_interval) == 0:
+                    mutated = bytearray(data)
+                    if len(mutated) >= 17:
+                        mutated[11:17] = b"BADSEQ"
+                    self.sock.sendto(bytes(mutated), addr)
+                    continue
+
+                self.sock.sendto(data, addr)
             except (socket.timeout, OSError):
                 continue
 
@@ -1202,6 +1303,7 @@ class LocalUdpEchoServer:
         except Exception:
             pass
         self.thread.join(timeout=2.0)
+
 
 
 def run_t5(
@@ -1224,7 +1326,7 @@ def run_t5(
     if neg_verif:
         overall_ok = False
 
-    # 2. Negative control for monitor log evaluation
+    # 2. Negative control for monitor log evaluation (corrupt counters)
     synth_bad_log = (
         "[+   1.000s] [net] link=100M_FD ip=192.168.1.150 rx=100 tx=100 rx_nobuf=0 tx_nobuf=0 dma_err=0\n"
         "[+   2.000s] [net] link=100M_FD ip=192.168.1.150 rx=500 tx=500 rx_nobuf=5 tx_nobuf=0 dma_err=0\n"
@@ -1235,32 +1337,78 @@ def run_t5(
     if not mon_neg_ok:
         overall_ok = False
 
+    # 3. Negative control for monitor log evaluation (empty log rejected)
+    mon_empty_pass, mon_empty_cnt, mon_empty_msg = evaluate_monitor_net_lines("")
+    mon_empty_ok = (not mon_empty_pass) and (mon_empty_cnt == 0)
+    logger.log(f"[host] CHECK T5 negative control (empty monitor log detected & rejected): {'PASS' if mon_empty_ok else 'FAIL'}")
+    if not mon_empty_ok:
+        overall_ok = False
+
     if local_only:
         # Off-board implementer test against local 127.0.0.1 UDP echo server
         logger.log("[check] Starting local UDP echo server on 127.0.0.1 to verify sequential and windowed load engines...")
-        server = LocalUdpEchoServer()
-        logger.log(f"[host] Local echo server running on {server.host}:{server.port}")
+
+        # Sub-test A: Clean echo server (10k sequential + 5k windowed 32-in-flight)
+        server_clean = LocalUdpEchoServer()
+        logger.log(f"[host] Clean local echo server running on {server_clean.host}:{server_clean.port}")
         try:
-            # Test 1: Sequential 10,000 datagrams
             pass_seq, sent_seq, recv_seq, mbps_seq, _ = run_udp_sequential_load(
-                server.host, server.port, count=10000, payload_size=1472, timeout=1.0, logger=logger
+                server_clean.host, server_clean.port, count=10000, payload_size=1472, timeout=1.0, logger=logger
             )
             logger.log(f"[host] CHECK local sequential UDP load 10000/10000 @ 1472 B: {'PASS' if pass_seq else 'FAIL'} ({mbps_seq:.2f} Mbit/s)")
             if not pass_seq:
                 overall_ok = False
 
-            # Test 2: Windowed 32-in-flight 5,000 datagrams
-            pass_win, sent_win, recv_win, mbps_win, _ = run_udp_windowed_load(
-                server.host, server.port, count=5000, window_size=32, payload_size=1472, timeout=0.5, logger=logger
+            pass_win, sent_win, recv_win, corrupt_win, lost_win, mbps_win, _ = run_udp_windowed_load(
+                server_clean.host, server_clean.port, count=5000, window_size=32, payload_size=1472, packet_timeout=0.5, logger=logger
             )
             logger.log(f"[host] CHECK local windowed (32 in flight) UDP load 5000/5000 @ 1472 B: {'PASS' if pass_win else 'FAIL'} ({mbps_win:.2f} Mbit/s)")
             if not pass_win:
                 overall_ok = False
         finally:
-            server.stop()
+            server_clean.stop()
+
+        # Sub-test B: Fault injection - corrupt prefix echo server
+        logger.log("[check] Starting local UDP echo server with corrupt prefix injection...")
+        server_corrupt = LocalUdpEchoServer(corrupt_prefix_interval=25)
+        try:
+            pass_bad, sent_bad, recv_bad, corrupt_bad, lost_bad, mbps_bad, _ = run_udp_windowed_load(
+                server_corrupt.host, server_corrupt.port, count=500, window_size=16, payload_size=1472,
+                packet_timeout=0.2, total_deadline=15.0, logger=logger
+            )
+            corrupt_handled_ok = (not pass_bad) and (corrupt_bad > 0)
+            logger.log(f"[host] CHECK local windowed load with corrupt prefix echo handled safely (corrupt={corrupt_bad}): {'PASS' if corrupt_handled_ok else 'FAIL'}")
+            if not corrupt_handled_ok:
+                overall_ok = False
+        finally:
+            server_corrupt.stop()
+
+        # Sub-test C: Fault injection - packet dropping lossy echo server
+        logger.log("[check] Starting local UDP echo server with packet drop injection...")
+        server_lossy = LocalUdpEchoServer(drop_interval=20)
+        try:
+            pass_drop, sent_drop, recv_drop, corrupt_drop, lost_drop, mbps_drop, _ = run_udp_windowed_load(
+                server_lossy.host, server_lossy.port, count=500, window_size=16, payload_size=1472,
+                packet_timeout=0.1, max_consecutive_timeouts=100, total_deadline=15.0, logger=logger
+            )
+            drop_handled_ok = (not pass_drop) and (lost_drop > 0)
+            logger.log(f"[host] CHECK local windowed load with lossy echo expired in-flight packets correctly (lost={lost_drop}): {'PASS' if drop_handled_ok else 'FAIL'}")
+            if not drop_handled_ok:
+                overall_ok = False
+        finally:
+            server_lossy.stop()
+
         return overall_ok
 
     # On-board mode for auditor
+    t5_start = time.perf_counter()
+    t5_deadline = t5_start + 600.0
+
+    ctrl_ok, ctrl_msg = ensure_control_worktree(control_dir, logger)
+    logger.log(f"[auditor] Control worktree setup: {'PASS' if ctrl_ok else 'FAIL'} ({ctrl_msg})")
+    if not ctrl_ok:
+        return False
+
     logger.log("[auditor] Compiling prj_02 debug in control worktree and HEAD...")
     pdir_ctrl = control_dir / "02_firmware_projects" / "prj_02_eth_lwip_dualcore"
     pdir_head = REPO_ROOT / "02_firmware_projects" / "prj_02_eth_lwip_dualcore"
@@ -1271,12 +1419,31 @@ def run_t5(
         logger.log("[auditor] FAIL: Compilation of control or HEAD prj_02 failed")
         return False
 
-    ctrl_elf = pdir_ctrl / "build" / "debug" / "CM7" / "cm7_firmware.elf"
-    head_elf = pdir_head / "build" / "debug" / "CM7" / "cm7_firmware.elf"
-    ctrl_sha = sha256_file(ctrl_elf)
-    head_sha = sha256_file(head_elf)
-    logger.log(f"[auditor] Control ELF SHA-256: {ctrl_sha} ({ctrl_elf})")
-    logger.log(f"[auditor] HEAD ELF SHA-256:    {head_sha} ({head_elf})")
+    ctrl_cm7_elf = pdir_ctrl / "build" / "debug" / "CM7" / "cm7_firmware.elf"
+    ctrl_cm4_elf = pdir_ctrl / "build" / "debug" / "CM4" / "cm4_firmware.elf"
+    head_cm7_elf = pdir_head / "build" / "debug" / "CM7" / "cm7_firmware.elf"
+    head_cm4_elf = pdir_head / "build" / "debug" / "CM4" / "cm4_firmware.elf"
+
+    ctrl_cm7_sha = sha256_file(ctrl_cm7_elf)
+    ctrl_cm4_sha = sha256_file(ctrl_cm4_elf)
+    head_cm7_sha = sha256_file(head_cm7_elf)
+    head_cm4_sha = sha256_file(head_cm4_elf)
+
+    logger.log(f"[auditor] Control CM7 ELF SHA-256: {ctrl_cm7_sha} ({ctrl_cm7_elf})")
+    logger.log(f"[auditor] Control CM4 ELF SHA-256: {ctrl_cm4_sha} ({ctrl_cm4_elf})")
+    logger.log(f"[auditor] HEAD CM7 ELF SHA-256:    {head_cm7_sha} ({head_cm7_elf})")
+    logger.log(f"[auditor] HEAD CM4 ELF SHA-256:    {head_cm4_sha} ({head_cm4_elf})")
+
+    diff_sha_ok = (ctrl_cm7_sha != head_cm7_sha)
+    logger.log(f"[auditor] CHECK control vs HEAD CM7 images are distinct: {'PASS' if diff_sha_ok else 'FAIL'}")
+    if not diff_sha_ok:
+        overall_ok = False
+
+    net_check_py = REPO_ROOT / "tools" / "net_check.py"
+    monitor_py = REPO_ROOT / "tools" / "monitor.py"
+
+    mon_env = os.environ.copy()
+    mon_env["PYTHONIOENCODING"] = "utf-8:backslashreplace"
 
     # 1. Test Control Image on Board
     with tempfile.TemporaryDirectory(prefix="eth_t5_ctrl_") as tmp_ctrl_dir:
@@ -1286,49 +1453,84 @@ def run_t5(
         logger.log(f"[auditor] Flashing control image to board {sn} using control's flash.py...")
         ctrl_flash_py = pdir_ctrl / "tools" / "flash.py"
         code_fc, out_fc, err_fc = run_cmd(["py", str(ctrl_flash_py), "--preset", "debug", "--sn", sn], cwd=pdir_ctrl)
+        logger.log("[flash_ctrl] --- flash.py control stdout/stderr begin ---")
+        for l in (out_fc + ("\n" + err_fc if err_fc else "")).splitlines():
+            logger.log(f"[flash_ctrl] {l}")
+        logger.log("[flash_ctrl] --- flash.py control stdout/stderr end ---")
         if code_fc != 0:
-            logger.log(f"[auditor] FAIL: Flashing control image failed ({code_fc}): {err_fc or out_fc}")
+            logger.log(f"[auditor] FAIL: Flashing control image failed ({code_fc})")
             return False
 
-        # Start background monitor.py
-        monitor_py = REPO_ROOT / "tools" / "monitor.py"
-        mon_proc_c = subprocess.Popen(["py", str(monitor_py), "--sn", sn, "--log", str(ctrl_log)])
-        time.sleep(5.0)
-
-        # Run net_check.py against control
-        net_check_py = REPO_ROOT / "tools" / "net_check.py"
-        code_nc1, out_nc1, err_nc1 = run_cmd(["py", str(net_check_py), "--host", target_ip], timeout=60.0)
-        nc1_ok = (code_nc1 == 0) and ("FAIL" not in (out_nc1 + err_nc1))
-        logger.log(f"[auditor] Control net_check: {'PASS' if nc1_ok else 'FAIL'} (exit code {code_nc1})")
-        if not nc1_ok:
-            overall_ok = False
-
-        # Run 3 repetitions of throughput load test on control
-        ctrl_tp_runs = []
-        for rep in range(1, 4):
-            logger.log(f"[auditor] Running control sequential load test rep {rep}/3...")
-            ok_r, _, _, mbps_r, _ = run_udp_sequential_load(target_ip, 7, count=10000, payload_size=1472, logger=logger)
-            if not ok_r:
-                overall_ok = False
-            ctrl_tp_runs.append(mbps_r)
-        ctrl_median_tp = sorted(ctrl_tp_runs)[1]
-        logger.log(f"[auditor] Control throughput median: {ctrl_median_tp:.2f} Mbit/s (runs: {ctrl_tp_runs})")
-
-        # Run windowed load test on control (32 in flight)
-        logger.log("[auditor] Running control windowed load test (32 in flight, 5000 datagrams)...")
-        ok_win_c, _, _, _, _ = run_udp_windowed_load(target_ip, 7, count=5000, window_size=32, payload_size=1472, logger=logger)
-        if not ok_win_c:
-            overall_ok = False
-
-        # Terminate monitor and evaluate log
-        mon_proc_c.terminate()
+        # Start background monitor.py with timestamps and robust encoding
+        mon_proc_c = subprocess.Popen(
+            ["py", str(monitor_py), "--sn", sn, "--log", str(ctrl_log), "--timestamps"],
+            env=mon_env
+        )
         try:
-            mon_proc_c.wait(timeout=5.0)
-        except Exception:
-            mon_proc_c.kill()
+            time.sleep(5.0)
+            if mon_proc_c.poll() is not None:
+                logger.log(f"[auditor] FAIL: Control monitor exited unexpectedly ({mon_proc_c.returncode})")
+                overall_ok = False
+
+            # Run net_check.py against control
+            code_nc1, out_nc1, err_nc1 = run_cmd(["py", str(net_check_py), "--host", target_ip], timeout=60.0)
+            nc1_ok = (code_nc1 == 0) and ("FAIL" not in (out_nc1 + err_nc1))
+            logger.log(f"[auditor] Control net_check: {'PASS' if nc1_ok else 'FAIL'} (exit code {code_nc1})")
+            if not nc1_ok:
+                overall_ok = False
+
+            # Run 3 repetitions of throughput load test on control
+            ctrl_tp_runs = []
+            for rep in range(1, 4):
+                if time.perf_counter() > t5_deadline:
+                    logger.log("[auditor] FAIL: T5 deadline exceeded during control load")
+                    return False
+                logger.log(f"[auditor] Running control sequential load test rep {rep}/3...")
+                ok_r, _, _, mbps_r, _ = run_udp_sequential_load(
+                    target_ip, 7, count=10000, payload_size=1472, timeout=1.0, total_deadline=120.0, logger=logger
+                )
+                if not ok_r:
+                    overall_ok = False
+                ctrl_tp_runs.append(mbps_r)
+            ctrl_median_tp = sorted(ctrl_tp_runs)[1]
+            logger.log(f"[auditor] Control throughput median: {ctrl_median_tp:.2f} Mbit/s (runs: {ctrl_tp_runs})")
+
+            # Run windowed load test on control (32 in flight)
+            if time.perf_counter() > t5_deadline:
+                logger.log("[auditor] FAIL: T5 deadline exceeded during control windowed load")
+                return False
+            logger.log("[auditor] Running control windowed load test (32 in flight, 5000 datagrams)...")
+            ok_win_c, _, _, _, _, _, _ = run_udp_windowed_load(
+                target_ip, 7, count=5000, window_size=32, payload_size=1472, packet_timeout=0.5, total_deadline=120.0, logger=logger
+            )
+            if not ok_win_c:
+                overall_ok = False
+
+            # Wait >= 6.0s so periodic 5.0s [net] line is emitted after traffic
+            logger.log("[auditor] Waiting 6.0s for post-traffic [net] monitor sample...")
+            time.sleep(6.0)
+
+            if mon_proc_c.poll() is not None:
+                logger.log(f"[auditor] FAIL: Control monitor died during test (code={mon_proc_c.returncode})")
+                overall_ok = False
+
+        finally:
+            if mon_proc_c.poll() is None:
+                mon_proc_c.terminate()
+                try:
+                    mon_proc_c.wait(timeout=5.0)
+                except Exception:
+                    mon_proc_c.kill()
 
         ctrl_mon_text = ctrl_log.read_text(encoding="utf-8", errors="replace") if ctrl_log.is_file() else ""
-        c_mon_ok, c_mon_samples, c_mon_msg = evaluate_monitor_net_lines(ctrl_mon_text)
+        ctrl_mon_sha = hashlib.sha256(ctrl_mon_text.encode("utf-8")).hexdigest()
+        logger.log(f"[auditor] Control monitor log SHA-256: {ctrl_mon_sha}")
+        logger.log("[monitor_ctrl] --- Control monitor log begin ---")
+        for l in ctrl_mon_text.splitlines():
+            logger.log(f"[monitor_ctrl] {l}")
+        logger.log("[monitor_ctrl] --- Control monitor log end ---")
+
+        c_mon_ok, c_mon_samples, c_mon_msg = evaluate_monitor_net_lines(ctrl_mon_text, min_samples=2)
         logger.log(f"[auditor] Control monitor check: {'PASS' if c_mon_ok else 'FAIL'} ({c_mon_msg})")
         if not c_mon_ok:
             overall_ok = False
@@ -1341,47 +1543,84 @@ def run_t5(
         logger.log(f"[auditor] Flashing HEAD image to board {sn} using HEAD's flash.py...")
         head_flash_py = pdir_head / "tools" / "flash.py"
         code_fh, out_fh, err_fh = run_cmd(["py", str(head_flash_py), "--preset", "debug", "--sn", sn], cwd=pdir_head)
+        logger.log("[flash_head] --- flash.py HEAD stdout/stderr begin ---")
+        for l in (out_fh + ("\n" + err_fh if err_fh else "")).splitlines():
+            logger.log(f"[flash_head] {l}")
+        logger.log("[flash_head] --- flash.py HEAD stdout/stderr end ---")
         if code_fh != 0:
-            logger.log(f"[auditor] FAIL: Flashing HEAD image failed ({code_fh}): {err_fh or out_fh}")
+            logger.log(f"[auditor] FAIL: Flashing HEAD image failed ({code_fh})")
             return False
 
-        # Start background monitor.py
-        mon_proc_h = subprocess.Popen(["py", str(monitor_py), "--sn", sn, "--log", str(head_log)])
-        time.sleep(5.0)
-
-        # Run net_check.py against HEAD
-        code_nc2, out_nc2, err_nc2 = run_cmd(["py", str(net_check_py), "--host", target_ip], timeout=60.0)
-        nc2_ok = (code_nc2 == 0) and ("FAIL" not in (out_nc2 + err_nc2))
-        logger.log(f"[auditor] HEAD net_check: {'PASS' if nc2_ok else 'FAIL'} (exit code {code_nc2})")
-        if not nc2_ok:
-            overall_ok = False
-
-        # Run 3 repetitions of throughput load test on HEAD
-        head_tp_runs = []
-        for rep in range(1, 4):
-            logger.log(f"[auditor] Running HEAD sequential load test rep {rep}/3...")
-            ok_hr, _, _, mbps_hr, _ = run_udp_sequential_load(target_ip, 7, count=10000, payload_size=1472, logger=logger)
-            if not ok_hr:
-                overall_ok = False
-            head_tp_runs.append(mbps_hr)
-        head_median_tp = sorted(head_tp_runs)[1]
-        logger.log(f"[auditor] HEAD throughput median: {head_median_tp:.2f} Mbit/s (runs: {head_tp_runs})")
-
-        # Run windowed load test on HEAD (32 in flight)
-        logger.log("[auditor] Running HEAD windowed load test (32 in flight, 5000 datagrams)...")
-        ok_win_h, _, _, _, _ = run_udp_windowed_load(target_ip, 7, count=5000, window_size=32, payload_size=1472, logger=logger)
-        if not ok_win_h:
-            overall_ok = False
-
-        # Terminate monitor and evaluate log
-        mon_proc_h.terminate()
+        # Start background monitor.py with timestamps and robust encoding
+        mon_proc_h = subprocess.Popen(
+            ["py", str(monitor_py), "--sn", sn, "--log", str(head_log), "--timestamps"],
+            env=mon_env
+        )
         try:
-            mon_proc_h.wait(timeout=5.0)
-        except Exception:
-            mon_proc_h.kill()
+            time.sleep(5.0)
+            if mon_proc_h.poll() is not None:
+                logger.log(f"[auditor] FAIL: HEAD monitor exited unexpectedly ({mon_proc_h.returncode})")
+                overall_ok = False
+
+            # Run net_check.py against HEAD
+            code_nc2, out_nc2, err_nc2 = run_cmd(["py", str(net_check_py), "--host", target_ip], timeout=60.0)
+            nc2_ok = (code_nc2 == 0) and ("FAIL" not in (out_nc2 + err_nc2))
+            logger.log(f"[auditor] HEAD net_check: {'PASS' if nc2_ok else 'FAIL'} (exit code {code_nc2})")
+            if not nc2_ok:
+                overall_ok = False
+
+            # Run 3 repetitions of throughput load test on HEAD
+            head_tp_runs = []
+            for rep in range(1, 4):
+                if time.perf_counter() > t5_deadline:
+                    logger.log("[auditor] FAIL: T5 deadline exceeded during HEAD load")
+                    return False
+                logger.log(f"[auditor] Running HEAD sequential load test rep {rep}/3...")
+                ok_hr, _, _, mbps_hr, _ = run_udp_sequential_load(
+                    target_ip, 7, count=10000, payload_size=1472, timeout=1.0, total_deadline=120.0, logger=logger
+                )
+                if not ok_hr:
+                    overall_ok = False
+                head_tp_runs.append(mbps_hr)
+            head_median_tp = sorted(head_tp_runs)[1]
+            logger.log(f"[auditor] HEAD throughput median: {head_median_tp:.2f} Mbit/s (runs: {head_tp_runs})")
+
+            # Run windowed load test on HEAD (32 in flight)
+            if time.perf_counter() > t5_deadline:
+                logger.log("[auditor] FAIL: T5 deadline exceeded during HEAD windowed load")
+                return False
+            logger.log("[auditor] Running HEAD windowed load test (32 in flight, 5000 datagrams)...")
+            ok_win_h, _, _, _, _, _, _ = run_udp_windowed_load(
+                target_ip, 7, count=5000, window_size=32, payload_size=1472, packet_timeout=0.5, total_deadline=120.0, logger=logger
+            )
+            if not ok_win_h:
+                overall_ok = False
+
+            # Wait >= 6.0s so periodic 5.0s [net] line is emitted after traffic
+            logger.log("[auditor] Waiting 6.0s for post-traffic [net] monitor sample...")
+            time.sleep(6.0)
+
+            if mon_proc_h.poll() is not None:
+                logger.log(f"[auditor] FAIL: HEAD monitor died during test (code={mon_proc_h.returncode})")
+                overall_ok = False
+
+        finally:
+            if mon_proc_h.poll() is None:
+                mon_proc_h.terminate()
+                try:
+                    mon_proc_h.wait(timeout=5.0)
+                except Exception:
+                    mon_proc_h.kill()
 
         head_mon_text = head_log.read_text(encoding="utf-8", errors="replace") if head_log.is_file() else ""
-        h_mon_ok, h_mon_samples, h_mon_msg = evaluate_monitor_net_lines(head_mon_text)
+        head_mon_sha = hashlib.sha256(head_mon_text.encode("utf-8")).hexdigest()
+        logger.log(f"[auditor] HEAD monitor log SHA-256: {head_mon_sha}")
+        logger.log("[monitor_head] --- HEAD monitor log begin ---")
+        for l in head_mon_text.splitlines():
+            logger.log(f"[monitor_head] {l}")
+        logger.log("[monitor_head] --- HEAD monitor log end ---")
+
+        h_mon_ok, h_mon_samples, h_mon_msg = evaluate_monitor_net_lines(head_mon_text, min_samples=2)
         logger.log(f"[auditor] HEAD monitor check: {'PASS' if h_mon_ok else 'FAIL'} ({h_mon_msg})")
         if not h_mon_ok:
             overall_ok = False
@@ -1410,7 +1649,31 @@ def run_t6(
     logger.log(f"=== Running T6 Checks ({reset_count} SWD Resets on Board {sn}) ===")
     programmer = tools["programmer"]
     net_check_py = REPO_ROOT / "tools" / "net_check.py"
+    pdir_head = REPO_ROOT / "02_firmware_projects" / "prj_02_eth_lwip_dualcore"
 
+    # 1. Confirm and flash HEAD debug image before resets, logging SHA-256
+    head_cm7_elf = pdir_head / "build" / "debug" / "CM7" / "cm7_firmware.elf"
+    head_cm4_elf = pdir_head / "build" / "debug" / "CM4" / "cm4_firmware.elf"
+    if not (head_cm7_elf.is_file() and head_cm4_elf.is_file()):
+        bld_ok, _, _, _ = compile_single_config(tools, pdir_head, "debug", logger)
+        if not bld_ok:
+            logger.log("[auditor] FAIL: Compilation of HEAD debug for T6 failed")
+            return False
+
+    logger.log(f"[auditor] T6 pre-reset: Flashing verified HEAD debug image...")
+    logger.log(f"[auditor] T6 HEAD CM7 ELF SHA-256: {sha256_file(head_cm7_elf)}")
+    logger.log(f"[auditor] T6 HEAD CM4 ELF SHA-256: {sha256_file(head_cm4_elf)}")
+    head_flash_py = pdir_head / "tools" / "flash.py"
+    code_f, out_f, err_f = run_cmd(["py", str(head_flash_py), "--preset", "debug", "--sn", sn], cwd=pdir_head)
+    logger.log("[flash_t6] --- flash.py T6 pre-reset stdout/stderr begin ---")
+    for l in (out_f + ("\n" + err_f if err_f else "")).splitlines():
+        logger.log(f"[flash_t6] {l}")
+    logger.log("[flash_t6] --- flash.py T6 pre-reset stdout/stderr end ---")
+    if code_f != 0:
+        logger.log(f"[auditor] FAIL: T6 pre-reset flashing failed ({code_f})")
+        return False
+
+    # 2. Reset stress loop
     resets_passed = 0
     for r in range(1, reset_count + 1):
         logger.log(f"[auditor] Reset {r}/{reset_count}: triggering SWD reset via STM32_Programmer_CLI...")
@@ -1422,7 +1685,22 @@ def run_t6(
             logger.log(f"[auditor] FAIL: SWD reset {r} failed (code={c_code}): {c_err or c_out}")
             break
 
-        time.sleep(5.0)  # Settling time for PHY auto-negotiation and link up
+        # Poll ping until Ethernet link is up and lwIP answers (up to 15s)
+        link_up = False
+        t_wait_start = time.perf_counter()
+        time.sleep(2.0)
+        while (time.perf_counter() - t_wait_start) < 15.0:
+            ping_code, ping_out, _ = run_cmd(["py", str(net_check_py), "--host", target_ip, "--ping", "1"], timeout=3.0)
+            if ping_code == 0 and "FAIL" not in ping_out:
+                link_up = True
+                elapsed_link = time.perf_counter() - t_wait_start
+                logger.log(f"[auditor] Reset {r}/{reset_count}: Ethernet link active after {elapsed_link:.1f}s")
+                break
+            time.sleep(1.0)
+
+        if not link_up:
+            logger.log(f"[auditor] Reset {r}/{reset_count}: FAIL (Ethernet link did not come up within 15s)")
+            break
 
         cmd_nc = ["py", str(net_check_py), "--host", target_ip, "--ping", "4", "--burst", "100"]
         nc_code, nc_out, nc_err = run_cmd(cmd_nc, timeout=30.0)
@@ -1460,11 +1738,14 @@ def main() -> int:
         if t not in valid_tests:
             parser.error(f"Invalid test: '{t}'. Choices: {sorted(valid_tests)}")
 
+    if args.local_echo and "t6" in raw_tests:
+        parser.error("--local-echo cannot be combined with T6 (T6 requires physical hardware reset)")
+
     if "all" in raw_tests:
         if args.local_echo:
             tests_to_run = ["t1", "t2", "t3", "t4", "t5"]
         else:
-            tests_to_run = ["t1", "t2", "t3", "t4"]
+            tests_to_run = ["t1", "t2", "t3", "t4", "t5", "t6"]
     else:
         tests_to_run = raw_tests
 
