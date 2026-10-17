@@ -42,6 +42,9 @@
 #if defined(I2C_DRIVER_SELFTEST)
 #include "i2c_selftest.h"
 #endif
+#if defined(UART_DRIVER_SELFTEST)
+#include "uart_selftest.h"
+#endif
 
 #include <stdbool.h>
 
@@ -58,6 +61,8 @@
 #define STATUS_TASK_STACK_WORDS      1024U   /* the 06_spi selftest runs in this task (D11) */
 #elif defined(I2C_DRIVER_SELFTEST)
 #define STATUS_TASK_STACK_WORDS      1024U   /* the 05_i2c selftest runs in this task */
+#elif defined(UART_DRIVER_SELFTEST)
+#define STATUS_TASK_STACK_WORDS      2048U   /* the 04_uart selftest runs in this task */
 #else
 #define STATUS_TASK_STACK_WORDS      512U
 #endif
@@ -157,6 +162,11 @@ static void Status_Task(void *arg)
 #if defined(I2C_DRIVER_SELFTEST)
     /* Once, before the status loop: 01_shared_drivers/05_i2c. */
     I2C_Selftest_CM7_Run();
+    last = xTaskGetTickCount();
+#endif
+#if defined(UART_DRIVER_SELFTEST)
+    /* Once, before the status loop: 01_shared_drivers/04_uart. */
+    UART_Selftest_CM7_Run();
     last = xTaskGetTickCount();
 #endif
 

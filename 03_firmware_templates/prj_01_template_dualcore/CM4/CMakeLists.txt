@@ -150,6 +150,19 @@ if(I2C_DRIVER_SELFTEST)
     )
 endif()
 
+# 04_uart selftest, CPU2 side: tests BM and LL tiers.
+if(UART_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE UART_DRIVER_SELFTEST=1)
+    target_sources(${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/App/Src/uart_selftest.c
+        ${CMAKE_SOURCE_DIR}/Common/Src/uart_selftest_common.c
+    )
+    target_link_libraries(${TARGET} PRIVATE
+        stm32h7_driver_uart_bm
+        stm32h7_driver_uart_ll
+    )
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"

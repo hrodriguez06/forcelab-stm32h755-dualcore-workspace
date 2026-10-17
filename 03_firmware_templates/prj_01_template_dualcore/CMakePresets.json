@@ -49,6 +49,14 @@
       "binaryDir": "${sourceDir}/build/selftest-i2c",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "I2C_DRIVER_SELFTEST": "ON", "FW_PRESET": "selftest-i2c" }
+    },
+    {
+      "name": "selftest-uart",
+      "displayName": "Dual-Core Debug with the 04_uart selftest (AD2 bench, JU1/JU2)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/selftest-uart",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "UART_DRIVER_SELFTEST": "ON", "FW_PRESET": "selftest-uart" }
     }
   ],
   "buildPresets": [
@@ -57,6 +65,7 @@
     { "name": "selftest-gpio", "configurePreset": "selftest-gpio" },
     { "name": "selftest-tim",  "configurePreset": "selftest-tim"  },
     { "name": "selftest-spi",  "configurePreset": "selftest-spi"  },
-    { "name": "selftest-i2c",  "configurePreset": "selftest-i2c"  }
+    { "name": "selftest-i2c",  "configurePreset": "selftest-i2c"  },
+    { "name": "selftest-uart", "configurePreset": "selftest-uart" }
   ]
 }

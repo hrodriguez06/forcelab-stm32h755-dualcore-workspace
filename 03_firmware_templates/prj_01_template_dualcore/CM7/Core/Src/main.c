@@ -37,6 +37,9 @@
 #if defined(I2C_DRIVER_SELFTEST)
 #include "i2c_selftest.h"
 #endif
+#if defined(UART_DRIVER_SELFTEST)
+#include "uart_selftest.h"
+#endif
 
 static void SystemClock_Config(void);
 static void PeripheralClock_Config(void);
@@ -131,6 +134,10 @@ int main(void)
 #if defined(I2C_DRIVER_SELFTEST)
     /* Same for the 05_i2c selftest block (01_shared_drivers/05_i2c). */
     I2C_Selftest_CM7_PreRelease();
+#endif
+#if defined(UART_DRIVER_SELFTEST)
+    /* Same for the 04_uart selftest block (01_shared_drivers/04_uart). */
+    UART_Selftest_CM7_PreRelease();
 #endif
 
     /* The clock tree is up and shared memory is ready: release CPU2. */
