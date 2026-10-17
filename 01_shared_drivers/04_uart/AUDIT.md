@@ -163,3 +163,72 @@ La captura termina con una tabla: paso, comprobación, resultado real y resultad
 ### Estado
 
 **F1 no pasa.** El driver está bien, salvo D4 y D5. El selftest y el host han avanzado mucho, pero UT3 y UT10 no pueden fallar, NE y RTS/CTS no se ejercitan, y el mock no recorre la sesión real.
+
+## F1, corrección 2 (`43b3a79`, informe en `c42381e`)
+
+**La rama se reescribió el 2026-10-17** (`git rebase --onto 77aabca^ 77aabca`) para sacar `00_docs_stm32h7/HOWTO_INTEGRATE_SHARED_DRIVERS.md`. Es un documento del responsable, que ahora está en la rama `docs/howto-integrate-shared-drivers` (`777e908`). La única diferencia del árbol es ese archivo.
+
+Las capturas llevan en el nombre los hashes anteriores:
+
+| Hash anterior | Hash actual | Commit |
+| --- | --- | --- |
+| `a39abd7` | `f8ef5c2` | fix(uart): fix LPUART1 hang, TakeErrors harvesting… |
+| `48ffc6c` | `641ac26` | docs(uart): update IMPLEMENTATION_REPORT.md… |
+| `d8777e4` | `c8d8628` | docs(uart): audit the F1 correction… |
+| `ef7b581` | `9827978` | Phase F1 audit fixes |
+| `5d55a28` | `5344e64` | tools: match conversion and sign-conversion… |
+| `474f514` | `43b3a79` | tools: permit docs capture files… |
+| `98e5b1d` | `c42381e` | docs(uart): add Phase F1 implementation report… |
+
+### Ejecución del auditor en la placa
+
+Captura `docs/uart_audit_hw_c42381e.txt`, de `prj_01`, en `52fef6e`. **La sesión no llega a UT0:**
+- el firmware imprime `ABORT step=- reason=MCO1 claim refused`: el claim de PA8 se hace fuera de un paso y la regla lo rechaza;
+- CPU2 no responde en 12 s;
+- `CHECK step_timeout_UT0: FAIL`.
+
+**La entrega no se probó en la placa.** El informe dice que siguió una "prohibición expresa", cuando la fila de §2.2 ya daba permiso (`c8d8628`) y el mensaje de la ronda lo pedía.
+
+### Cerrado
+
+| Qué | Dónde |
+| --- | --- |
+| C-B1: UT10 fuera de `prj_01` | Quedan comentarios obsoletos |
+| C-M3: `session` | — |
+| C-M4: una sola instantánea de 11 registros, partiendo de reloj apagado y pines en entrada | — |
+| C-M6: las instantáneas de UT7 y UT9 cuentan | — |
+| C-M10: reset con `sn=` y su salida en la captura | — |
+| D4: RMW dentro de `PRIMASK`, sin `ATOMIC_*` | `uart_ll.c:556-564, 583-588`; falta la cita o la captura |
+| T-N1: todo prefijo salvo `!!` es sucio | — |
+| La fila de `PRESC ≠ 0` y la fila mutada de UT2 | — |
+| `ad2.py` | Sin ramas permisivas; `dout_custom` vuelve a su comportamiento salvo con `single_shot` |
+
+### Abierto o nuevo
+
+| ID | Gravedad | Hallazgo | Qué se pide |
+| --- | --- | --- | --- |
+| E-B1 | Bloqueante | **El claim de MCO1 fuera de un paso aborta la sesión** (CM7 `uart_selftest.c:153-160`, llamado en `:2015` con `UST_STEP_NONE`; `uart_selftest_common.c:70-73`) | Un paso de prólogo declarado para MCO1; la línea de MCO1, solo si sale bien |
+| E-B2 | Bloqueante | **UT3 se desincroniza:** el firmware hace un `sync0()` por fila (15 filas, CM7:869, 947, 1019) y el host uno solo (`uart_hw_check.py:977`) | Un `sync` por fila en el host, con el LA armado por fila |
+| E-B3 | Bloqueante | **El LA de UT3 no tiene disparo:** `la_arm` sin trigger empieza ya y 16 384 muestras a 20 MS/s duran 819 µs, así que terminan antes de que el firmware transmita. Además, el plan pide 100 MS/s | Disparo en el flanco de bajada de DIO15, con pre-trigger; buffer según el `n` que devuelve `la_arm`; 100 MS/s |
+| E-B4 | Bloqueante | **UT5 no inyecta nada:** `dout_custom` solo configura, y nunca se llama a `set_dout` (`:1027`; `ad2.py:819`) | `ad2.set_dout(1 << 15)` por fase, y después parar y reiniciar Digital Out |
+| E-M1 | Mayor | **UT3 no mide el ancho de bit:** cuenta flancos de MCO1 en una ventana de largo supuesto, así que mide la frecuencia de MCO1. Un bit un 2,53 % lento da PASS. La teoría son literales (`f_mco = 4e6`, `baud = 115200`). Solo decodifica 8N1 | El ancho de bit entre flancos reales de la trama, en periodos de MCO1; la teoría, de `PRESC`/`BRR` y de la línea de MCO1 que imprime el firmware; cada fila decodificada con su formato (paridad, bits, paradas) |
+| E-M2 | Mayor | **Siete de los once controles no pueden salir distintos:** UT1, UT4, UT4_CM4, UT5, UT6, UT7 y UT8 evalúan literales (`:926-1063`), y en UT0/UT0_CTRL el control fuerza a `False` una entrada de un AND | El host lee los valores que mide el firmware (máscaras de error, recuentos, `IDR`, códigos devueltos), los evalúa y muta **esos** datos en el control |
+| E-M3 | Mayor | **UT6 no necesita el control de flujo:** nunca hay más de 16 bytes sin leer. La fase sin control de flujo es otra secuencia | Más de 16 + 1 bytes sin leer con RTS/CTS, y la misma secuencia sin control de flujo da ORE; recuento en el LA |
+| E-M4 | Mayor | **NE sigue igual que CLEAN** (`:1018` frente a `:1021`) | Un pulso más corto que un bit; el resultado, impreso tal cual |
+| E-M5 | Mayor | **El mock no reproduce el protocolo real:** número de syncs, el prefijo doble y la ruta de ABORT. Por eso no vio E-B1–E-B4 | Generarlo a partir de `k_ust_steps`, con el número de syncs por paso |
+| E-m | Menor | Detalles sueltos:<br>• las filas de rechazo de UT2 no las juzga el host;<br>• el número de filas se compara con `>= 10`;<br>• `--allow-dirty` se salta el árbol limpio y R3-a;<br>• el árbol limpio solo se mira al empezar;<br>• Digital Out no se reinicia entre pasos;<br>• se ignora la espera de DMA de UT8;<br>• el control positivo de UT1 no hace claim;<br>• ORE con patrones de 12 bits para tramas de 11;<br>• prefijo `[uart] [uart]`;<br>• comentarios de UT10 | Corregir |
+| D5 | Menor | **El cambio de semántica de `TakeErrors` sigue sin declararse** | Una sección de desviaciones |
+| R6 | Mayor | **El informe:**<br>• dice que hubo prohibición de placa;<br>• no menciona las capturas `uart_dev_*`;<br>• falta la sección de desviaciones;<br>• falta la receta del control de UT9;<br>• cita hashes anteriores al rebase;<br>• afirma cosas falsas: UT0 "PD5 en entrada pull-up", UT1 "cada rechazo", UT6 "secuencia idéntica" | Corregir |
+
+### Condición para la siguiente entrega
+
+**No se audita una entrega sin la ejecución del implementador en la placa en el commit entregado:**
+- la captura `prj_01/docs/uart_dev_hw_<hash>.txt`, con `FW VERDICT=PASS`, `HOST VERDICT=PASS` y la tabla de controles;
+- cada control sale de datos medidos en esa misma ejecución;
+- más `uart_dev_warm_resets_<hash>.txt` de la imagen `selftest-uart`.
+
+Si algo del plan no se puede conseguir en el hardware (por ejemplo, NE), la captura lo dice y la entrega lo argumenta. No se marca PASS.
+
+### Estado
+
+**F1 no pasa.** El driver está bien (U1–U6, D1–D4). El selftest y el host no han funcionado en la placa en ninguna de las cuatro entregas.
