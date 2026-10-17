@@ -312,8 +312,11 @@ bool UART_LL_Init(UartLL_Handle_t *h, const UartLL_Config_t *cfg)
 
     USART_TypeDef *u = cfg->instance;
 
-    /* 4. Disable peripheral */
+    /* 2.3 Disable peripheral and reset control registers to known state (U4, RM0399 §51.5.2 / §52.4.2) */
     LL_USART_Disable(u);
+    u->CR1 = 0U;
+    u->CR2 = 0U;
+    u->CR3 = 0U;
 
     /* 5. Set Prescaler and Baudrate via LL static inlines */
     if (desc->is_lpuart)
