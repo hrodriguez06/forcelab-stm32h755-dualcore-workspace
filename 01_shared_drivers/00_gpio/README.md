@@ -25,8 +25,8 @@ Phase F1c extended validation to `prj_03_adc_dma_eth`, closing finding G1 across
 all projects with independent bench validation and audit (F1 audit passed with conditions
 at `a20e27c`, close audit passed at `009e997`, cold boot T6b passed at `51efd1e`; see
 [section 13.2](#132-f1c-in-prj_03-done-in-drivergpio-f1c-closed)).
-Finding G1 is closed in all projects that had it (`prj_04` and `prj_03`). **EXTI and
-the compensation cell (F2) are not implemented.** A code audit on 2026-09-30 (of `cc1ee88`) found
+Finding G1 is closed in all projects that had it (`prj_04` and `prj_03`). **EXTI 0–15 and
+the compensation cell are implemented in gpio_bm (F2); the driver is complete and closed (K1–K5, Oct 2026).** A code audit on 2026-09-30 (of `cc1ee88`) found
 no blocking defect; its findings A1–A7 and their fixes are in
 [section 12](#12-findings). The fixes were then run on the bench, where the
 premise of A1 turned out wrong (an unclocked port reads all ones, not zero), and
@@ -108,7 +108,7 @@ target_link_libraries(cm4_firmware PRIVATE stm32h7_driver_gpio_bm)   # or _ll, _
 | Deinit (analog first), `ReadConfig` | yes | yes | deinit via BM |
 | `LCKR` lock with read-back | yes | yes | yes |
 | Pin operations, one `BSRR` store | `static inline` | `static inline` | `HAL_GPIO_WritePin/TogglePin/ReadPin` |
-| EXTI, compensation cell | no | no | no (EXTI modes refused) |
+| EXTI, compensation cell | yes | via BM (K2) | via BM (K2; EXTI modes refused) |
 
 ---
 
@@ -501,6 +501,30 @@ if (GPIO_BM_SectionEnter(&s) == GPIO_BM_OK)      /* PRIMASK + the cross-core loc
 }
 ```
 
+### F. Pin with EXTI line (`gpio_hal` + `gpio_bm`)
+
+```c
+/* Configure the pin in HAL, and route and enable its EXTI line through BM */
+GPIO_InitTypeDef init = {
+    .Pin = GPIO_PIN_0,
+    .Mode = GPIO_MODE_INPUT,
+    .Pull = GPIO_NOPULL,
+    .Speed = GPIO_SPEED_FREQ_LOW
+};
+if (GPIO_HAL_Init(GPIOA, &init) != HAL_OK) {
+    Error_Handler();
+}
+
+/* Route EXTI0 to GPIOA, rising edge trigger, enable interrupt for calling core */
+if (GPIO_BM_ExtiConfig(GPIOA, 0U, GPIO_BM_EXTI_RISING, true, false) != GPIO_BM_OK) {
+    Error_Handler();
+}
+
+/* Enable NVIC vector for EXTI0 */
+NVIC_SetPriority(GPIO_BM_ExtiGetIRQn(0U), 5U);
+NVIC_EnableIRQ(GPIO_BM_ExtiGetIRQn(0U));
+```
+
 ---
 
 ## 8. Test bench (Analog Discovery 2)
@@ -628,6 +652,8 @@ Production warm resets (`gpio_f2_close_warm_resets_85b4325.txt`): 20/20 with
 identical revision `85b4325` and build id `4a036898df066354` on both cores.
 Independent auditor check of T18 and build matrix (`gpio_f2_audit_checks_6999210.txt`):
 `OVERALL VERDICT: PASS`.
+
+**At `f3fc263` (driver close audit on hardware).** Independent auditor run of `tools/gpio_close_checks.py --test all --sn 0016000C4142501220353451` on target board (`01_shared_drivers/00_gpio/docs/gpio_close_audit_t1t4_987f310.txt`): 55/55 checks PASS, 0 FAIL (`OVERALL VERDICT: PASS`). Validated production compensation cell initialization (K1) on hardware for `prj_02`, `prj_03`, and `prj_04` (`SYSCFG_CCCSR = 0x00000101`, `READY = 1`, `EN = 1`; `RCC_CR.CSIRDY = 1`), ethernet connectivity (`net_check`), and 5/5 warm resets via `-hardRst` in `prj_04` debug.
 
 | Test | What it proves | Negative control | Result |
 | :--- | :--- | :--- | :--- |
@@ -776,6 +802,10 @@ capture identifies its image only by `Rev` and the host's tree:
 | `gpio_f2_audit_checks_6999210.txt` | Auditor's run of `tools/gpio_f2_checks.py` at `6999210`: control rebuilt from `3df160a` in-situ (16/16 in 224 s), 8/8 matrix build, 2 selftests (0 warnings), 16 production ELFs match symbols/types/sizes, 0 EXTI handlers in driver and production, `.data = 0 B`, `.bss = 8 B`, 29/29 expect patterns match, 13 negative controls pass (`OVERALL VERDICT: PASS`) |
 | `gpio_f2_checks_39868eb.txt` | Implementer's run of `tools/gpio_f2_checks.py` at tool commit `39868eb`: `OVERALL VERDICT: PASS` |
 | `gpio_f2_mock_39868eb.txt` | Implementer's host simulation and mock tests (`gpio_hw_check.py --mock-test`): 25/25 checks pass, firmware undercount flagged, DWF error, N5 overflow, N4 fw_abort verified (`OVERALL MOCK VERDICT: PASS`) |
+| **Driver close validation and regression evidence (`01_shared_drivers/00_gpio/docs/`)** | |
+| `gpio_close_audit_t1t4_987f310.txt` | Auditor's run on physical hardware (SN `0016000C4142501220353451`) at `987f310`: T1 (8/8 matrix + 3 selftests, 0 warnings; negative control 224 warnings), T2 (symbols, text identity, 2454 objects matched against `f066a8e`, 3 negative controls rejected), T3 (linkage without unresolved symbols, negative control rejected), T4 (all 4 images flash-verified, CCCSR=0x00000101, CSIRDY=1, net_check PASS with retries, 5/5 warm resets via -hardRst PASS, negative controls rejected); 55/55 checks PASS (`OVERALL VERDICT: PASS`) |
+| `gpio_close_t1t3_5826eb2.txt` | Implementer's host verification of T1–T3 at `5826eb2` (8/8 matrix clean, symbols/objects comparison against `f066a8e`, T3 real API linkage, negative controls rejected) |
+| `gpio_close_t4sim_5826eb2.txt` | Implementer's simulated T4 execution at `5826eb2` with negative controls verified |
 
 #### 9.3.2 Captures removed from the tree
 
@@ -783,9 +813,11 @@ The F1 captures passed in their respective revisions; intermediate F2 diagnostic
 `git show <commit>:03_firmware_templates/prj_01_template_dualcore/docs/<file>`
 (`6c0e792` for the rows above; the commit in parentheses for the F2 rows below) and list them with
 `git ls-tree --name-only <commit> 03_firmware_templates/prj_01_template_dualcore/docs/`.
+Captures removed from `01_shared_drivers/00_gpio/docs/` can be read with `git show <commit>:01_shared_drivers/00_gpio/docs/<file>`.
 
 | Revision | What it validated | Result | Files |
 | :--- | :--- | :--- | :--- |
+| `2f929a4` (at `2320b0f`) | Initial driver close no-board submission (tool prior to audit fixes B1–B7) | T1–T3 passed; superseded by `5826eb2` after tool fixes; removed per §14 rule 7 | `01_shared_drivers/00_gpio/docs/gpio_close_t1t3_2f929a4.txt` |
 | `780dddd`, `2b9bf21` | F1 and the LL/HAL tiers, before the audit (`2b9bf21` changed only the host script) | 4 runs FW/HOST PASS; T15 `c_raw_both` 315 897 in all four (one interleaving per image, before R2); B1 hold CM7 743 / CM4 851 cycles, 11.7× at 50 µs; warm resets 20/20 ×2, counters 0; `build_all` 8/8 | `gpio_selftest_{780dddd,2b9bf21}*`, `*_780dddd.txt` |
 | `0cd803f` | Audit fixes A1–A7, the A1 premise corrected | 2 runs PASS; `c_raw_both` 320 906 in both (one interleaving); B1 hold 801 / 841 cycles, 11.9×; warm resets 20/20 ×2, counters 0; `build_all` 8/8 | `gpio_selftest_0cd803f*`, `*_0cd803f.txt` |
 | `6f3ee2b` | First delivery of R1–R4 (seed, jitter, `ERR_NO_CLOCK`) | 2 runs PASS, seeds `0x925D8873` / `0x0FDA18D5`, `c_raw_both` 58 577 / 59 139; B1 hold CM4 991, 10.09×; warm resets 20/20 ×2, counters 0; `build_all` 8/8; its M-R1 and M-R2 runs are superseded by those at `fa44386` | `*_6f3ee2b*` |
@@ -863,10 +895,6 @@ cmake --preset selftest-gpio -DCMAKE_C_FLAGS=
 
 ### 9.5 Not exercised
 
-- **Other projects on the board.** `prj_02`, `prj_03` and `prj_04` were only
-  compiled (8/8). `prj_04` does not install the hook, so G1/G13 are still open
-  there: CM4 writes PB1 by hand in `adc_acquisition.c`, and the MSPs of `eth_hal`
-  and `uart_hal` call `HAL_GPIO_Init` without the section.
 - **`ERR_VERIFY` from LL and HAL** on a correct build (BM returns it in T15 `h`);
   `LockPins` returning `ERR_VERIFY`.
 - **`ConfigPins` failing at entry *k* > 0** after a successful validation.
@@ -886,8 +914,7 @@ cmake --preset selftest-gpio -DCMAKE_C_FLAGS=
   to confirm 0 interrupts occur, but hardware wake-up from WFE/SEV is not exercised).
 - **Software trigger on lines other than line 0** (`ExtiSoftwareTrigger(0)` is
   exercised in T14(d)).
-- **Compensation cell on CM4** (only CM7 runs T17; `SystemClock_Config` in production
-  templates continues to use `HAL_EnableCompensationCell`).
+- **Compensation cell on CM4** (only CM7 exercises the cell in T17 and in production startup; `prj_02`, `prj_03` and `prj_04` initialize the cell through the driver via `GPIO_BM_EnableCompensationCell()` in CM7 [K1]; compensation cell on CM4 remains unexercised).
 
 ---
 
@@ -984,12 +1011,11 @@ cmake --preset selftest-gpio -DCMAKE_C_FLAGS=
 | `07_adc` (all tiers) | BM | `ConfigAnalog` |
 | `08_eth/eth_hal.c` | BM / HAL | `EnablePortClock`, `GPIO_HAL_Init` and `GPIO_HAL_DeinitPin` since its close (E8/M1, `d4feb24`, `fe572f3`) |
 | `prj_01_template_dualcore` | BM (hook) on both cores; BM (EXTI, compensation cell), LL and HAL in `selftest-gpio` | `Shared_GpioLockInstall()` on both cores; EXTI and compensation cell validated in `selftest-gpio` |
-| `prj_03_adc_dma_eth` | BM (hook) on both cores; BM | `Shared_GpioLockInstall()` on both cores since F1c (`90a866f`); `GPIO_BM_ConfigPin` in CM4 ADC (`ee5e3b3`) |
-| `prj_04_adc_dma_bm_eth` | BM (hook) on both cores; BM / HAL | `Shared_GpioLockInstall()` on both cores since F1b (`9051a6a`); `GPIO_BM_ConfigPin` in CM4 ADC (`53f0f88`); `gpio_bm` in CM4 selftests (`ee2ba23`) |
+| `prj_02_eth_lwip_dualcore` | BM | `GPIO_BM_EnableCompensationCell()` in CM7 `CompensationCell_Init()` during boot (K1) |
+| `prj_03_adc_dma_eth` | BM (hook) on both cores; BM | `Shared_GpioLockInstall()` on both cores since F1c (`90a866f`); `GPIO_BM_ConfigPin` in CM4 ADC (`ee5e3b3`); `GPIO_BM_EnableCompensationCell()` in CM7 `CompensationCell_Init()` (K1) |
+| `prj_04_adc_dma_bm_eth` | BM (hook) on both cores; BM / HAL | `Shared_GpioLockInstall()` on both cores since F1b (`9051a6a`); `GPIO_BM_ConfigPin` in CM4 ADC (`53f0f88`); `gpio_bm` in CM4 selftests (`ee2ba23`); `GPIO_BM_EnableCompensationCell()` in CM7 `CompensationCell_Init()` (K1) |
 
-The new EXTI 0–15 and compensation cell APIs of `gpio_bm` are validated in `prj_01` `selftest-gpio`.
-Production firmware in `prj_01`..`prj_04` continues to use `HAL_EnableCompensationCell()` in system
-clock initialization; the EXTI functions are available for external interrupt and communication drivers.
+The EXTI 0–15 and compensation cell APIs of `gpio_bm` are validated in `prj_01` `selftest-gpio`. Production firmware in `prj_02`, `prj_03` and `prj_04` enables the compensation cell through `GPIO_BM_EnableCompensationCell()` in CM7 startup (`CompensationCell_Init()`, K1); `prj_01` production does not use high-speed I/O interfaces and leaves the cell unclocked. EXTI functions are available from any tier via `gpio_bm` (K2).
 
 ---
 
@@ -1033,13 +1059,13 @@ The audit of the pre-F1 code found these. Their state at this commit:
 | G3 | `pull = 3` programmed `PUPDR = 11` and `speed = 4` became LOW, both returning `true` | Closed (`b52ffec`), T1 |
 | G4 | Misaligned port pointers (`GPIOA + 4`) accepted | Closed (`a204b8a`), T1 |
 | G5 | No output or input API | Closed: `ConfigOutput/Input/Pin` in all tiers, T2–T4 |
-| G6 | No EXTI; `HAL_GPIO_Init` rewrites `EXTICR` blindly and `HAL_GPIO_DeInit` clears the shared `RTSR1/FTSR1` | **Open (F2, §13.2).** The HAL tier refuses EXTI modes and never calls `HAL_GPIO_DeInit` |
+| G6 | No EXTI; `HAL_GPIO_Init` rewrites `EXTICR` blindly and `HAL_GPIO_DeInit` clears the shared `RTSR1/FTSR1` | **Closed by design (K2).** EXTI 0..15 implemented in `gpio_bm` (F2), directly callable from any tier. The HAL tier refuses EXTI modes and never calls `HAL_GPIO_DeInit` |
 | G7 | `HAL_GPIO_Init` analog + `PULLUP` does not write `PUPDR` | Closed in the HAL tier (refused); shown on raw HAL in T2 |
-| G8 | No `LCKR`, deinit, `ReadConfig`, compensation cell | Closed except the compensation cell (F2) |
+| G8 | No `LCKR`, deinit, `ReadConfig`, compensation cell | **Closed** (F2 + K1). LCKR, deinit and ReadConfig implemented in F1; compensation cell implemented in `gpio_bm` (F2) and enabled in production startup (`prj_02`, `prj_03`, `prj_04`) via `GPIO_BM_EnableCompensationCell()` (K1) |
 | G9 | Reconfiguring PA13/PA14 silently kills SWD | Closed: `ERR_DEBUG_PIN` in the new API; the legacy calls still accept them |
 | G10 | Five pin types across consumers; `board_def.h` uses masks, `gpio_bm` indices | `GpioBm_Pin_t`, `GPIO_BM_PIN_MASK/INDEX` exist; no consumer uses `GpioBm_Pin_t` yet, and the existing types are untouched |
 | G11 | Target without tier suffix | Closed in F0: `_gpio_bm` + alias |
-| G12 | Output, OD, pulls, input, lock and the race never exercised in hardware | Closed for F1 (§9); EXTI pending |
+| G12 | Output, OD, pulls, input, lock and the race never exercised in hardware | **Closed** (F1 + F2). Output, OD, pulls, input, lock and the race exercised in hardware in F1 (§9); EXTI 0..15 and compensation cell exercised on hardware in F2 (§9, T11–T17) and close audit (§13.4, T4) |
 | G13 | Writers outside `gpio_bm` on shared ports: `HAL_GPIO_Init` in the `eth_hal`/`uart_hal` MSPs, hand RMW in `prj_04` | **Closed** in `04_uart` (`c8001bf`), `08_eth` (`d4feb24`, `fe572f3`), and `prj_04` (`ee2ba23`, `53f0f88`). Verified by T2a/T2b (`docs/gpio_f1b_t2_7cc456d.txt`, 0 unprotected HAL calls, 0 raw writes across 1951 units, 20 findings in control `07db657`; auditor's run `docs/gpio_f1b_audit3_t2_492d156.txt`), and T7 (`docs/gpio_f1b_t7_7cc456d.txt`). |
 | G14 | `LED_PanicRed` writes `MODER` from a fault handler without the lock | Accepted exception: the fault path is terminal and cannot wait |
 | G15 | `bool` cannot tell "lock busy" from "bad parameter" | Closed: `GpioBm_Status_t` |
@@ -1182,7 +1208,7 @@ Still open, documented and not blocking:
 
 ---
 
-## 13. Open work
+## 13. Phase records
 
 ### 13.1 F1b in `prj_04` (done in `driver/gpio-f1b`, closed)
 
@@ -1337,6 +1363,25 @@ Enforced rules:
 Validated in `prj_01_template_dualcore` `selftest-gpio` on bench (T11–T14 on PE3/PE4, T17 on compensation cell)
 and in regression via `tools/gpio_f2_checks.py` (T18). The F2 phase audit passed at `0c6c079`.
 
+### 13.4 Driver close: production compensation cell migration and close verification (K1–K5, Oct 2026, closed)
+
+The close of `00_gpio` aligned production firmware with the driver's hardware contract and closed all remaining items:
+- **K1 (compensation cell in production):** `prj_02`, `prj_03` and `prj_04` migrated from raw unvalidated `HAL_EnableCompensationCell()` in `SystemClock_Config()` to a dedicated, uniform `CompensationCell_Init()` in CM7 `main.c` calling `GPIO_BM_EnableCompensationCell(2000000UL)` with bounded CSI ready wait (`COMP_CELL_CSI_MAX_CYCLES = 800000UL`), DWT CYCCNT initialization, and `Error_Handler()` on failure (Decision 2).
+- **K2 (EXTI and cell in `gpio_bm` by design):** EXTI 0–15 and the compensation cell are part of `gpio_bm` and callable from any tier without redundant wrappers; verified by linkage test T3. G6 closed by design.
+- **K4 (`tools/gpio_close_checks.py`):** Standalone verification tool executing T1–T3 on host and T4 on hardware.
+
+**Validation evidence:**
+- **T1 (`docs/gpio_close_t1t3_5826eb2.txt`):** 8/8 matrix builds compiled directly (`compile_single_config` with `--clean-first`) with 0 warnings and 0 errors; 3 selftest presets PASS; negative control with `-DCMAKE_C_FLAGS=-Wconversion` in temporary build directory detects 224 warnings and evaluates to FAIL.
+- **T2 (`docs/gpio_close_t1t3_5826eb2.txt`):** CM7 `main.c.obj` in all 3 projects has `GPIO_BM_EnableCompensationCell` undefined (`U`) and 0 references to `HAL_EnableCompensationCell` in object and ELF; `CompensationCell_Init()` text is 100% byte-identical across `prj_02`, `prj_03`, `prj_04` (1674 chars); bidirectional object comparison matches 320 objects per preset; deep binary equivalence verifies 2,454 objects identical to control `f066a8e`; 3 negative controls pass through identical functions and evaluate to FAIL.
+- **T3 (`docs/gpio_close_t1t3_5826eb2.txt`):** Temporary `.c` outside repo includes real `gpio_hal.h` and `gpio_bm.h`, compiles with exact DEFINES, FLAGS and INCLUDES extracted from `build.ninja` for `gpio_hal.c.obj`, and links against `gpio_hal.c.obj` and `gpio_bm.c.obj` with 0 unresolved symbols in full link and partial link (`-r`); negative control without `gpio_bm.c.obj` fails with undefined references to `GPIO_BM_*`.
+- **T4 simulated (`docs/gpio_close_t4sim_5826eb2.txt`):** Full simulated target execution with `SIMULATED` header; negative controls on CLI text (`READY=0`, `EN=0`) evaluate to FAIL.
+- **T1–T4 board audit (`docs/gpio_close_audit_t1t4_987f310.txt`):** Auditor execution on hardware (SN `0016000C4142501220353451`):
+  * T1: 8/8 matrix + 3 selftests PASS with 0 warnings; negative control PASS (224 warnings).
+  * T2: symbols, text identity, and deep binary equivalence (2,454 objects vs `f066a8e`) PASS; 3 negative controls PASS.
+  * T3: full link and partial link PASS; negative control without BM PASS.
+  * T4 on hardware: all 4 targets flash verified (`Download verified successfully`); atomic SWD hotplug reads confirm `SYSCFG_CCCSR = 0x00000101` (`EN = 1`, `READY = 1`) and `RCC_CR = 0x0307C1A5` (`prj_02`) / `0x0F07C1A5` (`prj_03`, `prj_04`) with `CSIRDY = 1`; `net_check` PASS with retry on all targets; 5/5 warm resets via `-hardRst` in `prj_04` debug PASS with registers verified and ping passing; hardware CLI text negative controls (`READY = 0`, `EN = 0`) evaluate to FAIL.
+  * Overall: 55/55 checks PASS, 0 FAIL. `OVERALL VERDICT: PASS`.
+
 ---
 
 ## 14. Changing this driver
@@ -1418,6 +1463,7 @@ Before changing it:
 | F1b in `prj_04` (G1/G13 closed), `uart_hal` MSP migrated; F1 audit passed at `7687e91`; bench cold boot T6b passed at `74c9119` | `9051a6a` … `7cc456d`, `492d156`, `74c9119` |
 | F1c in `prj_03` (G1 closed across all projects), tools extended; F1 audit passed with conditions at `a20e27c`; close audit passed at `009e997`; cold boot T6b passed at `51efd1e` | `90a866f` … `e9e98c4`, `02b1a7f`, `51efd1e` |
 | F2: EXTI 0–15 and compensation cell in `gpio_bm`; T11–T14, T17 on bench; T18 regression; F2 phase audit passed at `0c6c079` | `4f94c0f` … `0c6c079` |
+| Driver close: production compensation cell migration (K1) in `prj_02`, `prj_03`, `prj_04` via `GPIO_BM_EnableCompensationCell`; EXTI & compensation cell confirmed in `gpio_bm` (K2); T1–T3 regression, T4 board audit passed at `f3fc263` | `f883944` … `f3fc263` |
 
 The implementation plan, the implementer's instructions, the F0 correction and
 F1a instructions, the implementation report and the audit record were removed
