@@ -1,0 +1,85 @@
+=================================================================
+ STM32H755 00_gpio Driver Close Verification (K1-K5)
+=================================================================
+argv:             tools/gpio_close_checks.py --test t1,t2,t3 --output 01_shared_drivers/00_gpio/docs/gpio_close_t1t3_5826eb2.txt
+HEAD:             5826eb2c1520968a7c0614c561dd60cf51995feb
+Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_f066a8e (commit f066a8e)
+Tree status (in): PASS (Tree clean outside build/)
+=================================================================
+
+[tools] gcc:        C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.EXE
+[tools] objdump:    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-objdump.exe
+[tools] nm:         C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-nm.exe
+[tools] size:       C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-size.exe
+[tools] cmake:      C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cmake.win32_1.1.200.202605190741\tools\bin\cmake.EXE
+[tools] ninja:      C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.ninja.win32_1.1.200.202606260906\tools\bin\ninja.EXE
+[tools] programmer: C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.EXE
+
+=== Running T1 Checks (Build Matrix 8/8 & Selftests) ===
+[check] Building matrix prj_01_template_dualcore [debug]...
+CHECK t1_matrix_prj_01_template_dualcore_debug: PASS (exit_code=0, warnings=0 (expected 0), objects=271, Freshly built ELFs present)
+[check] Building matrix prj_01_template_dualcore [release]...
+CHECK t1_matrix_prj_01_template_dualcore_release: PASS (exit_code=0, warnings=0 (expected 0), objects=271, Freshly built ELFs present)
+[check] Building matrix prj_02_eth_lwip_dualcore [debug]...
+CHECK t1_matrix_prj_02_eth_lwip_dualcore_debug: PASS (exit_code=0, warnings=0 (expected 0), objects=315, Freshly built ELFs present)
+[check] Building matrix prj_02_eth_lwip_dualcore [release]...
+CHECK t1_matrix_prj_02_eth_lwip_dualcore_release: PASS (exit_code=0, warnings=0 (expected 0), objects=315, Freshly built ELFs present)
+[check] Building matrix prj_03_adc_dma_eth [debug]...
+CHECK t1_matrix_prj_03_adc_dma_eth_debug: PASS (exit_code=0, warnings=0 (expected 0), objects=323, Freshly built ELFs present)
+[check] Building matrix prj_03_adc_dma_eth [release]...
+CHECK t1_matrix_prj_03_adc_dma_eth_release: PASS (exit_code=0, warnings=0 (expected 0), objects=323, Freshly built ELFs present)
+[check] Building matrix prj_04_adc_dma_bm_eth [debug]...
+CHECK t1_matrix_prj_04_adc_dma_bm_eth_debug: PASS (exit_code=0, warnings=0 (expected 0), objects=321, Freshly built ELFs present)
+[check] Building matrix prj_04_adc_dma_bm_eth [release]...
+CHECK t1_matrix_prj_04_adc_dma_bm_eth_release: PASS (exit_code=0, warnings=0 (expected 0), objects=321, Freshly built ELFs present)
+[check] Building prj_01_template_dualcore [selftest-gpio]...
+CHECK t1_selftest_prj_01_template_dualcore_selftest-gpio: PASS (exit_code=0, warnings=0 (expected 0), objects=278, Freshly built ELFs present)
+[check] Building prj_03_adc_dma_eth [selftest]...
+CHECK t1_selftest_prj_03_adc_dma_eth_selftest: PASS (exit_code=0, warnings=0 (expected 0), objects=324, Freshly built ELFs present)
+[check] Building prj_04_adc_dma_bm_eth [selftest-gpio]...
+CHECK t1_selftest_prj_04_adc_dma_bm_eth_selftest-gpio: PASS (exit_code=0, warnings=0 (expected 0), objects=323, Freshly built ELFs present)
+[check] Running T1 negative control (injecting -DCMAKE_C_FLAGS=-Wconversion in temporary build directory)...
+CHECK t1_negative_control_warning: PASS (detected_warnings=224, eval_pass=False)
+
+=== Running T2 Checks (Symbols, Text & Deep Binary Equivalence vs Control f066a8e) ===
+[control] Control worktree setup: PASS (Control worktree ready at f066a8e)
+[control] Building control worktree via build_all.ps1 -Clean (with -ffile-prefix-map)...
+CHECK t2_control_build_all: PASS (exit_code=0)
+CHECK t2_symbols_prj_02_debug_cm7: PASS (gpio_bm_enable_undef=True, hal_enable_in_obj=False, hal_enable_in_elf=False)
+CHECK t2_symbols_prj_02_release_cm7: PASS (gpio_bm_enable_undef=True, hal_enable_in_obj=False, hal_enable_in_elf=False)
+CHECK t2_symbols_prj_03_debug_cm7: PASS (gpio_bm_enable_undef=True, hal_enable_in_obj=False, hal_enable_in_elf=False)
+CHECK t2_symbols_prj_03_release_cm7: PASS (gpio_bm_enable_undef=True, hal_enable_in_obj=False, hal_enable_in_elf=False)
+CHECK t2_symbols_prj_04_debug_cm7: PASS (gpio_bm_enable_undef=True, hal_enable_in_obj=False, hal_enable_in_elf=False)
+CHECK t2_symbols_prj_04_release_cm7: PASS (gpio_bm_enable_undef=True, hal_enable_in_obj=False, hal_enable_in_elf=False)
+CHECK t2_text_identity_compensation_cell: PASS (All 3 implementations are byte-for-byte identical (1674 chars))
+CHECK t2_object_sets_prj_01_debug: PASS (271 objects bidirectional set match)
+CHECK t2_object_sets_prj_01_release: PASS (271 objects bidirectional set match)
+CHECK t2_object_sets_prj_02_debug: PASS (314 objects bidirectional set match)
+CHECK t2_object_sets_prj_02_release: PASS (314 objects bidirectional set match)
+CHECK t2_object_sets_prj_03_debug: PASS (322 objects bidirectional set match)
+CHECK t2_object_sets_prj_03_release: PASS (322 objects bidirectional set match)
+CHECK t2_object_sets_prj_04_debug: PASS (320 objects bidirectional set match)
+CHECK t2_object_sets_prj_04_release: PASS (320 objects bidirectional set match)
+CHECK t2_deep_binary_equivalence: PASS (compared 2454 object files)
+[check] Running T2 negative controls...
+CHECK t2_negative_control_control_symbols: PASS (passed=False, detail=gpio_bm_enable_undef=False, hal_enable_in_obj=True, hal_enable_in_elf=True)
+CHECK t2_negative_control_mutated_object: PASS (Raw section content mismatch in .text.main)
+CHECK t2_negative_control_mutated_text: PASS (Source text 1 differs from source text 0)
+
+=== Running T3 Checks (K2 Linkage against build.ninja libraries) ===
+[check] Resolved objects from C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\build\debug\build.ninja:
+        HAL: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\build\debug\CM7\CMakeFiles\cm7_firmware.dir\d65bf49bd886ea06b32c1ded80c474d7\stm32h755\01_shared_drivers\00_gpio\gpio_hal.c.obj
+        BM:  C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_04_adc_dma_bm_eth\build\debug\CM7\CMakeFiles\cm7_firmware.dir\d65bf49bd886ea06b32c1ded80c474d7\stm32h755\01_shared_drivers\00_gpio\gpio_bm.c.obj
+[check] Extracted build.ninja compilation settings for gpio_hal.c.obj:
+        DEFINES:  -DCMSIS_device_header=\"stm32h7xx.h\" -DCORE_CM7 -DETH_USE_HARDWARE_CHECKSUM=0 -DFW_GIT_REV=\"5826eb2\" -DSTM32H755xx -DUSE_HAL_DRIVER
+        FLAGS:    -g -std=gnu11 -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wall -Wextra -Wshadow -Wdouble-promotion -Wundef -Wno-unused-parameter -Werror -ffunction-sections -fdata-sections -fno-common -fstack-usage -Og -g3
+        INCLUDES: 18 paths
+CHECK t3_link_hal_and_bm: PASS (exit_code=0)
+CHECK t3_partial_link_r_clean: PASS (exit_code=0, unresolved_bm=[])
+CHECK t3_negative_control_link_without_bm: PASS (exit_code=1, undefined references detected)
+
+CHECK tree_clean_end: PASS (Tree clean outside build/)
+
+=================================================================
+OVERALL VERDICT: PASS
+=================================================================
