@@ -1,0 +1,31 @@
+[2026-10-17 12:08:01] [host] argv: tools\uart_checks.py --test all
+[2026-10-17 12:08:01] [host] HEAD: 76eb6d7
+[2026-10-17 12:08:01] [host] clean tree at start: PASS (Tree is clean)
+[2026-10-17 12:08:02] === Running T1: Build Matrix & Selftests ===
+[2026-10-17 12:08:25] [host] CHECK build prj_01_template_dualcore [debug]: PASS (exit=0, warnings=0, elf=found)
+[2026-10-17 12:08:42] [host] CHECK build prj_01_template_dualcore [release]: PASS (exit=0, warnings=0, elf=found)
+[2026-10-17 12:09:12] [host] CHECK build prj_02_eth_lwip_dualcore [debug]: PASS (exit=0, warnings=0, elf=found)
+[2026-10-17 12:09:33] [host] CHECK build prj_02_eth_lwip_dualcore [release]: PASS (exit=0, warnings=0, elf=found)
+[2026-10-17 12:10:03] [host] CHECK build prj_03_adc_dma_eth [debug]: PASS (exit=0, warnings=0, elf=found)
+[2026-10-17 12:10:26] [host] CHECK build prj_03_adc_dma_eth [release]: PASS (exit=0, warnings=0, elf=found)
+[2026-10-17 12:10:55] [host] CHECK build prj_04_adc_dma_bm_eth [debug]: PASS (exit=0, warnings=0, elf=found)
+[2026-10-17 12:11:16] [host] CHECK build prj_04_adc_dma_bm_eth [release]: PASS (exit=0, warnings=0, elf=found)
+[2026-10-17 12:11:43] [host] CHECK build prj_01_template_dualcore [selftest-uart]: PASS (exit=0, warnings=0, elf=found)
+[2026-10-17 12:12:08] [host] CHECK build prj_01_template_dualcore [selftest-gpio]: PASS (exit=0, warnings=0, elf=found)
+[2026-10-17 12:12:39] [host] CHECK build prj_04_adc_dma_bm_eth [selftest-uart]: PASS (exit=0, warnings=0, elf=found)
+[2026-10-17 12:12:39] [host] Running T1 Negative Control: build with -Wconversion outside repo...
+[2026-10-17 12:13:06] [host] CHECK T1 negative control (-Wconversion flagged warnings=224): PASS
+[2026-10-17 12:13:07] === Running T2: Header Diff & Symbol Leak Checks ===
+[2026-10-17 12:13:07] [host] CHECK header diff against b41c4a7 (only adds): PASS (deleted_lines=0)
+[2026-10-17 12:13:07] [host] CHECK header diff negative control (deletion rejected): PASS
+[2026-10-17 12:13:07] [host] CHECK symbols in cm7_firmware.elf (release): PASS (leaked=0)
+[2026-10-17 12:13:07] [host] CHECK symbols in cm4_firmware.elf (release): PASS (leaked=0)
+[2026-10-17 12:13:07] [host] CHECK symbols in cm7_firmware.elf (release): PASS (leaked=0)
+[2026-10-17 12:13:07] [host] CHECK symbols in cm4_firmware.elf (release): PASS (leaked=0)
+[2026-10-17 12:13:07] [host] CHECK symbols in cm7_firmware.elf (release): PASS (leaked=0)
+[2026-10-17 12:13:07] [host] CHECK symbols in cm4_firmware.elf (release): PASS (leaked=0)
+[2026-10-17 12:13:07] [host] CHECK symbols in cm7_firmware.elf (release): PASS (leaked=0)
+[2026-10-17 12:13:07] [host] CHECK symbols in cm4_firmware.elf (release): PASS (leaked=0)
+[2026-10-17 12:13:07] [host] CHECK symbols negative control (leaked symbol caught): PASS
+[2026-10-17 12:13:07] [host] clean tree at end: PASS (Tree is clean)
+[2026-10-17 12:13:07] OVERALL VERDICT: PASS
