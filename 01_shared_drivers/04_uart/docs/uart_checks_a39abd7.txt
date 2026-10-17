@@ -1,0 +1,43 @@
+[2026-10-17 14:09:50] [host] argv: tools/uart_checks.py --test all --output 01_shared_drivers/04_uart/docs/uart_checks_a39abd7.txt
+[2026-10-17 14:09:50] [host] HEAD: a39abd7
+[2026-10-17 14:09:55] [host] clean tree at start: PASS (Tree is clean outside build/)
+[2026-10-17 14:09:55] === Running T1: Build Matrix & Selftests ===
+[2026-10-17 14:10:23] [host] CHECK build prj_01_template_dualcore [debug]: PASS (exit=0, warnings=0, elf=found, objects=276)
+[2026-10-17 14:10:42] [host] CHECK build prj_01_template_dualcore [release]: PASS (exit=0, warnings=0, elf=found, objects=276)
+[2026-10-17 14:11:15] [host] CHECK build prj_02_eth_lwip_dualcore [debug]: PASS (exit=0, warnings=0, elf=found, objects=319)
+[2026-10-17 14:11:39] [host] CHECK build prj_02_eth_lwip_dualcore [release]: PASS (exit=0, warnings=0, elf=found, objects=319)
+[2026-10-17 14:12:15] [host] CHECK build prj_03_adc_dma_eth [debug]: PASS (exit=0, warnings=0, elf=found, objects=327)
+[2026-10-17 14:12:42] [host] CHECK build prj_03_adc_dma_eth [release]: PASS (exit=0, warnings=0, elf=found, objects=327)
+[2026-10-17 14:13:16] [host] CHECK build prj_04_adc_dma_bm_eth [debug]: PASS (exit=0, warnings=0, elf=found, objects=325)
+[2026-10-17 14:13:43] [host] CHECK build prj_04_adc_dma_bm_eth [release]: PASS (exit=0, warnings=0, elf=found, objects=325)
+[2026-10-17 14:14:14] [host] CHECK build prj_01_template_dualcore [selftest-uart]: PASS (exit=0, warnings=0, elf=found, objects=284)
+[2026-10-17 14:14:45] [host] CHECK build prj_01_template_dualcore [selftest-gpio]: PASS (exit=0, warnings=0, elf=found, objects=283)
+[2026-10-17 14:15:21] [host] CHECK build prj_04_adc_dma_bm_eth [selftest-uart]: PASS (exit=0, warnings=0, elf=found, objects=328)
+[2026-10-17 14:15:21] [host] Running T1 Negative Control: build with -Wconversion outside repo...
+[2026-10-17 14:15:51] [host] CHECK T1 negative control (-Wconversion warnings=224, has_flag=True): PASS
+[2026-10-17 14:15:52] === Running T2: Header Diff & Symbol Leak Checks ===
+[2026-10-17 14:15:52] [host] Header pathspec matched 3 files: ['uart_bm.h', 'uart_hal.h', 'uart_ll.h']
+[2026-10-17 14:15:52] [host] CHECK header diff against b41c4a7 (only adds): PASS (deleted_lines=0)
+[2026-10-17 14:15:52] [host] Running T2 Negative Control: mutated header diff with git diff --no-index...
+[2026-10-17 14:15:52] [host] CHECK header diff negative control (git diff --no-index deletion detected=1): PASS
+[2026-10-17 14:15:52] [host] CHECK symbols 03_firmware_templates/prj_01_template_dualcore/build/release/CM7/cm7_firmware.elf: PASS (symbols=447, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 03_firmware_templates/prj_01_template_dualcore/build/release/CM4/cm4_firmware.elf: PASS (symbols=231, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 03_firmware_templates/prj_01_template_dualcore/build/debug/CM7/cm7_firmware.elf: PASS (symbols=482, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 03_firmware_templates/prj_01_template_dualcore/build/debug/CM4/cm4_firmware.elf: PASS (symbols=235, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 02_firmware_projects/prj_02_eth_lwip_dualcore/build/release/CM7/cm7_firmware.elf: PASS (symbols=870, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 02_firmware_projects/prj_02_eth_lwip_dualcore/build/release/CM4/cm4_firmware.elf: PASS (symbols=220, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 02_firmware_projects/prj_02_eth_lwip_dualcore/build/debug/CM7/cm7_firmware.elf: PASS (symbols=968, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 02_firmware_projects/prj_02_eth_lwip_dualcore/build/debug/CM4/cm4_firmware.elf: PASS (symbols=222, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 02_firmware_projects/prj_03_adc_dma_eth/build/release/CM7/cm7_firmware.elf: PASS (symbols=889, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 02_firmware_projects/prj_03_adc_dma_eth/build/release/CM4/cm4_firmware.elf: PASS (symbols=322, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 02_firmware_projects/prj_03_adc_dma_eth/build/debug/CM7/cm7_firmware.elf: PASS (symbols=988, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 02_firmware_projects/prj_03_adc_dma_eth/build/debug/CM4/cm4_firmware.elf: PASS (symbols=348, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 02_firmware_projects/prj_04_adc_dma_bm_eth/build/release/CM7/cm7_firmware.elf: PASS (symbols=898, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 02_firmware_projects/prj_04_adc_dma_bm_eth/build/release/CM4/cm4_firmware.elf: PASS (symbols=287, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 02_firmware_projects/prj_04_adc_dma_bm_eth/build/debug/CM7/cm7_firmware.elf: PASS (symbols=997, leaked=0)
+[2026-10-17 14:15:52] [host] CHECK symbols 02_firmware_projects/prj_04_adc_dma_bm_eth/build/debug/CM4/cm4_firmware.elf: PASS (symbols=305, leaked=0)
+[2026-10-17 14:15:52] [host] Running T2 Positive Control: verifying selftest symbols in selftest-uart ELFs...
+[2026-10-17 14:15:52] [host] CHECK positive control 03_firmware_templates/prj_01_template_dualcore/build/selftest-uart/CM7/cm7_firmware.elf (selftest symbols detected=18): PASS
+[2026-10-17 14:15:52] [host] CHECK positive control 03_firmware_templates/prj_01_template_dualcore/build/selftest-uart/CM4/cm4_firmware.elf (selftest symbols detected=4): PASS
+[2026-10-17 14:15:57] [host] clean tree at end: PASS (Tree is clean outside build/)
+[2026-10-17 14:15:57] OVERALL VERDICT: PASS
