@@ -24,8 +24,10 @@
 #include "app_main.h"
 #include "led_bm.h"
 #include "shared_memory.h"
+#include "gpio_bm.h"
 
 static void SystemClock_Config(void);
+static void CompensationCell_Init(void);
 static void PeripheralClock_Config(void);
 static void ITCM_Init(void);
 
@@ -84,6 +86,7 @@ int main(void)
     HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
 
     SystemClock_Config();
+    CompensationCell_Init();
     PeripheralClock_Config();
     LED_BootStage(LED_BOOT_CLOCKS_DONE);
 
@@ -188,6 +191,7 @@ static void SystemClock_Config(void)
     osc.OscillatorType   = RCC_OSCILLATORTYPE_HSE;
     osc.HSEState         = RCC_HSE_BYPASS;
     osc.HSIState         = RCC_HSI_OFF;
+    /* Field has no effect: OscillatorType only includes HSE; CSI is enabled in CompensationCell_Init(). */
     osc.CSIState         = RCC_CSI_OFF;
     osc.PLL.PLLState     = RCC_PLL_ON;
     osc.PLL.PLLSource    = RCC_PLLSOURCE_HSE;
@@ -220,13 +224,50 @@ static void SystemClock_Config(void)
     {
         Error_Handler();
     }
+}
 
-    /* The I/O compensation cell trims the slew rate of the fast I/O banks. ST
-       recommends it above 100 MHz HCLK for high-speed interfaces, and the
-       50 MHz RMII pins are exactly that case. */
+/* CSI ready timeout: 800,000 cycles (2 ms at 400 MHz sysclk). */
+#define COMP_CELL_CSI_MAX_CYCLES    800000UL
+
+/* Compensation cell ready timeout: 2,000,000 cycles (5 ms at 400 MHz sysclk),
+   providing ~26x margin over the measured ready latency (~76,493 cycles). */
+#define COMP_CELL_MAX_CYCLES        2000000UL
+
+/**
+  * @brief  Initializes and enables the I/O compensation cell.
+  * @note   The I/O compensation cell trims the slew rate of the fast I/O banks. ST
+  *         recommends it above 100 MHz HCLK for high-speed interfaces, and the
+  *         50 MHz RMII pins are exactly that case.
+  *
+  *         The cross-core GPIO lock hook is not installed yet (Shared_GpioLockInstall()
+  *         runs later). Prior to the release of CPU2, only CPU1 configures pins and
+  *         peripherals, so the driver section uses PRIMASK only (README §3.2).
+  */
+static void CompensationCell_Init(void)
+{
+    /* 1. Start DWT cycle counter (same sequence as HSEM_BM_TimebaseStart()) */
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    *((volatile uint32_t *)0xE0001FB0) = 0xC5ACCE55U; /* DWT LAR unlock key */
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
+    /* 2. Enable CSI clock */
     __HAL_RCC_CSI_ENABLE();
-    __HAL_RCC_SYSCFG_CLK_ENABLE();
-    HAL_EnableCompensationCell();
+
+    /* 3. Wait for CSIRDY bounded by DWT->CYCCNT */
+    uint32_t start = DWT->CYCCNT;
+    while (__HAL_RCC_GET_FLAG(RCC_FLAG_CSIRDY) == RESET)
+    {
+        if ((uint32_t)(DWT->CYCCNT - start) >= COMP_CELL_CSI_MAX_CYCLES)
+        {
+            Error_Handler();
+        }
+    }
+
+    /* 4. Enable compensation cell via driver and verify READY */
+    if (GPIO_BM_EnableCompensationCell(COMP_CELL_MAX_CYCLES) != GPIO_BM_OK)
+    {
+        Error_Handler();
+    }
 }
 
 /**
