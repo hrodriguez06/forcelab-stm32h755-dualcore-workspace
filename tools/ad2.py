@@ -37,9 +37,8 @@ AD2_DIO_MCO1_PA8          = (1 << 14)  # DIO14 -> PA8 (Solo MCU) - PROHIBITED
 AD2_ALLOWED_STATIC_OUTPUTS = AD2_DIO_EXTI3_CM7 | AD2_DIO_EXTI4_CM4 | AD2_DIO_HOST_REQ
 
 # ---- SU1: UART RX injection (04_uart selftest, UT5) -------------------------
-# DIO15 -> PD6 (USART2_RX) is an AD2 output ONLY in UT5 steps.
+# DIO15 -> PD6 (USART2_RX) is an AD2 output ONLY in steps declaring DIO15 (SU1).
 AD2_DIO_UART_RX_INJECT     = (1 << 15)  # DIO15 -> PD6
-AD2_UART_INJECT_STEPS      = ("UT5", "UT5_PE", "UT5_FE", "UT5_NE", "UT5_ORE")
 
 # ---- Digital Out (S11) -------------------------------------------------------
 # DIO1 -> PE9 and DIO3 -> PE11 (TIM1_CH1/CH2 capture inputs of 03_tim) are the
@@ -77,25 +76,10 @@ def _step_declares_dio15_oe(step: Any) -> bool:
     """Helper for SU1: checks if the current step declares DIO15 as static OE output."""
     if step is None:
         return False
-    if isinstance(step, str):
-        return step == "UT0"
-    if hasattr(step, "allows_dio15_oe"):
-        return bool(step.allows_dio15_oe)
-    if hasattr(step, "declares_dio15"):
-        val = step.declares_dio15
-        if isinstance(val, (set, list, tuple)):
-            return any("OE" in str(x) or str(x) == "DIO15" for x in val)
-        return val in (True, "OE", "DIO15", "ALL", "BOTH")
-    if isinstance(step, (list, tuple)) and len(step) >= 3:
-        val = step[2]
-        if isinstance(val, (set, list, tuple)):
-            return any("OE" in str(x) or str(x) == "DIO15" for x in val)
-        return val in (True, "OE", "DIO15", "ALL", "BOTH")
-    if isinstance(step, dict):
-        val = step.get("declares_dio15") or step.get("dio15")
-        if isinstance(val, (set, list, tuple)):
-            return any("OE" in str(x) or str(x) == "DIO15" for x in val)
-        return val in (True, "OE", "DIO15", "ALL", "BOTH")
+    if step == "OE" or step == "BOTH":
+        return True
+    if hasattr(step, "dio15"):
+        return getattr(step, "dio15") in ("OE", "BOTH")
     return False
 
 
@@ -103,25 +87,10 @@ def _step_declares_dio15_dout(step: Any) -> bool:
     """Helper for SU1: checks if the current step declares DIO15 as Digital Out output."""
     if step is None:
         return False
-    if isinstance(step, str):
-        return step == "UT5"
-    if hasattr(step, "allows_dio15_dout"):
-        return bool(step.allows_dio15_dout)
-    if hasattr(step, "declares_dio15"):
-        val = step.declares_dio15
-        if isinstance(val, (set, list, tuple)):
-            return any("DOUT" in str(x) or str(x) == "DIO15" for x in val)
-        return val in (True, "DOUT", "DIO15", "ALL", "BOTH")
-    if isinstance(step, (list, tuple)) and len(step) >= 3:
-        val = step[2]
-        if isinstance(val, (set, list, tuple)):
-            return any("DOUT" in str(x) or str(x) == "DIO15" for x in val)
-        return val in (True, "DOUT", "DIO15", "ALL", "BOTH")
-    if isinstance(step, dict):
-        val = step.get("declares_dio15") or step.get("dio15")
-        if isinstance(val, (set, list, tuple)):
-            return any("DOUT" in str(x) or str(x) == "DIO15" for x in val)
-        return val in (True, "DOUT", "DIO15", "ALL", "BOTH")
+    if step == "DOUT" or step == "BOTH":
+        return True
+    if hasattr(step, "dio15"):
+        return getattr(step, "dio15") in ("DOUT", "BOTH")
     return False
 
 
@@ -245,8 +214,6 @@ def ad2_set_dout(dwf_lib, hdwf: int, mask: int, step_bus_owner: int = GPIO_BENCH
     """
     h = ctypes.c_int(hdwf)
     reason = None
-    if current_step is None and step_name is not None:
-        current_step = step_name
     allowed_dout = AD2_DOUT_ALLOWED
     if _step_declares_dio15_dout(current_step):
         allowed_dout |= AD2_DIO_UART_RX_INJECT
@@ -681,6 +648,8 @@ class AD2:
     def set_step(self, step: Any) -> None:
         """Sets the active bench step for guard context checking (S3, S11, SU1)."""
         self.current_step = step
+        if hasattr(self._dwf, "set_step"):
+            self._dwf.set_step(step)
 
     @property
     def handle(self) -> int:
@@ -790,7 +759,7 @@ class AD2:
                  step_name: Optional[str] = None) -> None:
         """S11: start (mask != 0) or stop (mask == 0) Digital Out through the guard."""
         ad2_set_dout(self._dwf, self._hdwf.value, mask, step_bus_owner, idle, step_name,
-                     current_step=self.current_step or step_name)
+                     current_step=self.current_step)
 
     def dout_clock_hz(self) -> float:
         """SDK section 10.2, FDwfDigitalOutInternalClockInfo: the clock the dividers divide."""
@@ -839,7 +808,7 @@ class AD2:
         self._dwf.FDwfDigitalOutDataInfo(self._hdwf, ctypes.c_int(channel), ctypes.byref(n))
         return n.value
 
-    def dout_custom(self, channel: int, divider: int, bits: list[int]) -> float:
+    def dout_custom(self, channel: int, divider: int, bits: list[int], single_shot: bool = False) -> float:
         """Configure a custom bit pattern on one Digital Out channel; returns the sample rate in Hz.
 
         SDK section 10.2: FDwfDigitalOutTypeSet(Custom), FDwfDigitalOutDividerInitSet(0),
@@ -867,9 +836,10 @@ class AD2:
         self._dwf.FDwfDigitalOutDividerInitSet(self._hdwf, ch, ctypes.c_uint(0))
         self._dwf.FDwfDigitalOutDividerSet(self._hdwf, ch, ctypes.c_uint(divider))
         self._dwf.FDwfDigitalOutDataSet(self._hdwf, ch, buf, ctypes.c_uint(len(bits)))
-        self._dwf.FDwfDigitalOutRepeatSet(self._hdwf, ctypes.c_uint(1))
-        duration = len(bits) * divider / self.dout_clock_hz()
-        self._dwf.FDwfDigitalOutRunSet(self._hdwf, ctypes.c_double(duration))
+        if single_shot:
+            self._dwf.FDwfDigitalOutRepeatSet(self._hdwf, ctypes.c_uint(1))
+            duration = len(bits) * divider / self.dout_clock_hz()
+            self._dwf.FDwfDigitalOutRunSet(self._hdwf, ctypes.c_double(duration))
         typ, div = ctypes.c_int(-1), ctypes.c_uint()
         self._dwf.FDwfDigitalOutTypeGet(self._hdwf, ch, ctypes.byref(typ))
         self._dwf.FDwfDigitalOutDividerGet(self._hdwf, ch, ctypes.byref(div))

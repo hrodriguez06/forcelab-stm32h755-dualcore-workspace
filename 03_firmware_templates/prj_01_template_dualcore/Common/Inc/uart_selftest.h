@@ -93,9 +93,12 @@ bool ust_line_rule(uint32_t core, uint32_t step, const GPIO_TypeDef *port, uint3
                    uint32_t mode, uint32_t af, uint32_t otype, uint32_t pull);
 
 /* ---- SRAM4 coordination block ---------------------------------------------- */
-/* RM0399 §2.3.2: D3 Domain SRAM4 is mapped at 0x38000000 (size 64 KB, non-cacheable
- * shared memory accessible by both Cortex-M7 and Cortex-M4 cores).
- * Offset 0xE000 provides a dedicated 4 KB window for selftest inter-core coordination. */
+/* Linker citation (C-m):
+ * 03_firmware_templates/prj_01_template_dualcore/CM7/linker/stm32h755zi_cm7.ld:43 and
+ * CM4/linker/stm32h755zi_cm4.ld:34 define RAM_SHARED: ORIGIN = 0x38008000, LENGTH = 32K
+ * (SRAM4 in D3 domain, non-cacheable shared memory accessible by both Cortex-M7 and M4).
+ * Offset 0x3800E000 (+24 KB) provides a dedicated window for selftest inter-core
+ * coordination without colliding with primary IPC at 0x38008000. */
 #define UST_AREA_ADDR        0x3800E000UL
 #define UST_AREA_MAGIC       0x55535431UL   /* "UST1" */
 
@@ -105,7 +108,6 @@ typedef enum
     UST_CMD_UT4,              /* CM4 executes UT4 LL IRQ loopback */
     UST_CMD_LOCK_ACQUIRE,     /* CM4 acquires cross-core GPIO lock (HSEM 2) */
     UST_CMD_LOCK_RELEASE,     /* CM4 releases cross-core GPIO lock */
-    UST_CMD_UT10,             /* CM4 executes UT10 prj_04 regression */
     UST_CMD_DONE              /* Selftest finished */
 } UstCmd_t;
 
@@ -125,7 +127,6 @@ typedef struct
     volatile uint32_t ack_seq;
 
     volatile uint32_t m4_ut4_ok;
-    volatile uint32_t m4_ut10_ok;
     volatile uint32_t lock_held;
 } UstArea_t;
 

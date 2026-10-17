@@ -212,10 +212,6 @@ void UART_Selftest_CM4_Run(void)
                 }
                 break;
 
-            case UST_CMD_UT10:
-                UST_AREA->m4_ut10_ok = 1U;
-                break;
-
             case UST_CMD_DONE:
             default:
                 UST_AREA->ack_seq = last_seq;

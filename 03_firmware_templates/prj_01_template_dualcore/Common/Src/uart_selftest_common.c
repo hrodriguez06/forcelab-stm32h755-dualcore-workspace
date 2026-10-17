@@ -27,7 +27,6 @@ const UstStep_t k_ust_steps[] = {
     { "UT7",       UST_OWN_CM7,  (1U << UART_PIN_TX) | (1U << UART_PIN_RX), UST_DIO15_NONE },
     { "UT8",       UST_OWN_CM7,  (1U << UART_PIN_TX) | (1U << UART_PIN_RX), UST_DIO15_NONE },
     { "UT9",       UST_OWN_CM7,  (1U << UART_CONSOLE_TX_PIN_IDX) | (1U << UART_CONSOLE_RX_PIN_IDX), UST_DIO15_NONE },
-    { "UT10",      UST_OWN_CM4,  0U,                  UST_DIO15_NONE },
     { "DONE",      UST_OWN_NONE, 0U,                  UST_DIO15_NONE }
 };
 

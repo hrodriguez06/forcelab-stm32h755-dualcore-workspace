@@ -553,8 +553,15 @@ bool UART_LL_EnableRxIrq(UartLL_Handle_t *h, IRQn_Type irqn, uint32_t priority)
 
     USART_TypeDef *u = h->instance;
 
-    LL_USART_EnableIT_RXNE_RXFNE(u);
-    LL_USART_EnableIT_ERROR(u);
+    /* D4: Avoid ATOMIC_SET_BIT (LDREX/STREX) inside LL_USART_EnableIT_*, which
+     * hangs on D3 domain peripherals (such as LPUART1 at 0x58000C00) because D3
+     * bus architecture does not support exclusive access monitors. Use non-exclusive
+     * RMW protected by PRIMASK. */
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    SET_BIT(u->CR1, USART_CR1_RXNEIE_RXFNEIE);
+    SET_BIT(u->CR3, USART_CR3_EIE);
+    __set_PRIMASK(primask);
 
     NVIC_SetPriority(irqn, priority);
     NVIC_EnableIRQ(irqn);
@@ -571,10 +578,14 @@ void UART_LL_DisableRxIrq(UartLL_Handle_t *h, IRQn_Type irqn)
 
     USART_TypeDef *u = h->instance;
 
-    LL_USART_DisableIT_RXNE_RXFNE(u);
-    LL_USART_DisableIT_ERROR(u);
-
     NVIC_DisableIRQ(irqn);
+
+    /* D4: Non-exclusive RMW inside PRIMASK instead of ATOMIC_CLEAR_BIT */
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    CLEAR_BIT(u->CR1, USART_CR1_RXNEIE_RXFNEIE);
+    CLEAR_BIT(u->CR3, USART_CR3_EIE);
+    __set_PRIMASK(primask);
 }
 
 void UART_LL_IrqService(UartLL_Handle_t *h, UartLL_RingBuffer_t *ring)

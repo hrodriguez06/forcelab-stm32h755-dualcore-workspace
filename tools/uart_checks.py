@@ -150,23 +150,12 @@ def check_clean_working_tree(
             continue
         if "build" in resolved_path.parts:
             continue
-        # Permit uart_checks capture in docs/
-        if (resolved_path.parent == (repo_root / "01_shared_drivers" / "04_uart" / "docs").resolve()
-                and resolved_path.name.startswith("uart_checks_")):
-            continue
-        # Permit mock capture in prj_01 docs/
-        if (resolved_path.parent == (repo_root / "03_firmware_templates" / "prj_01_template_dualcore" / "docs").resolve()
-                and resolved_path.name.startswith("uart_mock_")):
-            continue
 
-        # Tracked modifications or untracked files outside build/
-        if prefix in (" M", "M ", " D", "D ", "A ", "AM", "AD", "R ", "C ", "U ", "??"):
+        if prefix != "!!":
             dirty.append(f"{prefix} {rel_path}")
         elif initial_snapshot is not None:
-            # If it's an ignored file (!!) or anything else that was NOT in the initial snapshot,
-            # it was created during the test run outside build/!
             if rel_path not in initial_snapshot:
-                dirty.append(f"NEW({prefix}) {rel_path}")
+                dirty.append(f"NEW(!!) {rel_path}")
 
     if dirty:
         return False, f"Dirty tree outside build/ ({len(dirty)} items): {dirty}"
@@ -247,12 +236,12 @@ def run_t1(tools: dict[str, str], logger: Callable[[str], None]) -> bool:
         bld_code, bld_out, bld_err = run_cmd(bld_cmd, cwd=pdir, timeout=300.0)
         full_out = bld_out + "\n" + bld_err
 
-        # Count objects compiled from Ninja output [X/Y]
-        obj_matches = re.findall(r"\[(\d+)/(\d+)\]", full_out)
-        obj_count = obj_matches[-1][1] if obj_matches else "unknown"
+        # Count actual compiled .o/.obj files in build directory (T-n)
+        build_dir = pdir / "build" / preset
+        obj_files = list(build_dir.rglob("*.obj")) + list(build_dir.rglob("*.o"))
+        obj_count = len(obj_files)
 
         # Check freshness of both ELFs (mtime >= t1_start_time) (T-M2)
-        build_dir = pdir / "build" / preset
         cm7_elf = build_dir / "CM7" / "cm7_firmware.elf"
         cm4_elf = build_dir / "CM4" / "cm4_firmware.elf"
         single_elf = build_dir / f"{pname}.elf"
@@ -261,9 +250,9 @@ def run_t1(tools: dict[str, str], logger: Callable[[str], None]) -> bool:
         if cm7_elf.is_file() and cm4_elf.is_file():
             cm7_mtime = cm7_elf.stat().st_mtime
             cm4_mtime = cm4_elf.stat().st_mtime
-            elfs_valid = (cm7_mtime >= t1_start_time) and (cm4_mtime >= t1_start_time)
+            elfs_valid = (cm7_mtime >= t1_start_time - 1.0) and (cm4_mtime >= t1_start_time - 1.0) and (obj_count > 0)
         elif single_elf.is_file():
-            elfs_valid = (single_elf.stat().st_mtime >= t1_start_time)
+            elfs_valid = (single_elf.stat().st_mtime >= t1_start_time - 1.0) and (obj_count > 0)
 
         passed, warnings, detail = evaluate_build(bld_code, full_out, elfs_valid)
         logger(f"[host] CHECK build {pname} [{preset}]: {'PASS' if passed else 'FAIL'} "
@@ -301,8 +290,8 @@ def run_t1(tools: dict[str, str], logger: Callable[[str], None]) -> bool:
                 neg_bld_code, neg_full, neg_elf_found, expected_warnings=0
             )
 
-            # Must have at least one warning matching [-Wconversion] or [-Wsign-conversion]
-            has_wconversion = any("conversion" in w.lower() and ("-wconversion" in w.lower() or "-wsign-conversion" in w.lower()) for w in neg_warnings)
+            # Strict [-Wconversion] without matching [-Wsign-conversion] (T-n)
+            has_wconversion = any(re.search(r"\[-Wconversion\](?!\S)", w) or ("[-Wconversion]" in w) for w in neg_warnings)
             neg_control_ok = (not neg_passed) and (len(neg_warnings) >= 1) and has_wconversion
             logger(f"[host] CHECK T1 negative control (-Wconversion warnings={len(neg_warnings)}, has_flag={has_wconversion}): "
                    f"{'PASS' if neg_control_ok else 'FAIL'}")
@@ -322,9 +311,10 @@ def run_t2(tools: dict[str, str], logger: Callable[[str], None]) -> bool:
         logger("[host] CHECK header pathspec: FAIL (0 header files matched)")
         overall_ok = False
         return False
-    logger(f"[host] Header pathspec matched {len(headers)} files: {[h.name for h in headers]}")
+    header_rel_paths = [str(h.relative_to(REPO_ROOT)).replace("\\", "/") for h in sorted(headers)]
+    logger(f"[host] Header pathspec matched {len(headers)} files: {[h.name for h in sorted(headers)]}")
 
-    diff_cmd = ["git", "diff", "-U0", BASE_COMMIT, "--", "01_shared_drivers/04_uart/*.h"]
+    diff_cmd = ["git", "diff", "-U0", BASE_COMMIT, "--"] + header_rel_paths
     code, diff_out, err = run_cmd(diff_cmd, cwd=REPO_ROOT, timeout=30.0)
     if code != 0:
         logger(f"[host] CHECK header diff: FAIL (git diff failed: {err})")
@@ -424,6 +414,12 @@ def run_t2(tools: dict[str, str], logger: Callable[[str], None]) -> bool:
         st_elf_path = REPO_ROOT / st_elf_rel
         if not st_elf_path.is_file():
             logger(f"[host] CHECK positive control {st_elf_rel}: FAIL (selftest ELF missing)")
+            positive_control_ok = False
+            overall_ok = False
+            continue
+
+        if st_elf_path.stat().st_mtime < RUN_START_TIME:
+            logger(f"[host] CHECK positive control {st_elf_rel}: FAIL (selftest ELF is stale, not from this run)")
             positive_control_ok = False
             overall_ok = False
             continue

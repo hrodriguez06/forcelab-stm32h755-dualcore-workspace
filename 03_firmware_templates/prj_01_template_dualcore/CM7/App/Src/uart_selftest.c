@@ -141,6 +141,10 @@ static void verdict(bool ok, const char *fmt, ...)
     LOG("VERDICT %s %s", (s_step < k_ust_step_count) ? k_ust_steps[s_step].name : "-", ok ? "PASS" : "FAIL");
 }
 
+/* Forward declarations */
+static void bench_abort(const char *reason);
+static bool bench_claim(const GPIO_TypeDef *port, uint32_t pin, uint32_t mode, uint32_t af);
+
 /* ---- MCO1 Clock Reference (PA8 / DIO14) (S-B3) ----------------------------- */
 
 static uint32_t s_mco_saved = 0U;
@@ -148,6 +152,12 @@ static bool     s_mco_changed = false;
 
 static void mco1_enable(void)
 {
+    /* S4 claim on PA8 before configuring MCO1 (C-M11) */
+    if (!bench_claim(GPIOA, UART_PIN_MCO, GPIO_BM_MODE_AF, 0U))
+    {
+        bench_abort("MCO1 claim refused");
+        return;
+    }
     if (!s_mco_changed)
     {
         s_mco_saved = RCC->CFGR & (RCC_CFGR_MCO1 | RCC_CFGR_MCO1PRE);
@@ -228,6 +238,7 @@ static void bench_abort(const char *reason)
         s_fail++;
     }
     bench_safe();
+    mco1_restore();
     LOG("ABORT step=%s reason=%s", (s_step < k_ust_step_count) ? k_ust_steps[s_step].name : "-", reason);
 }
 
@@ -421,7 +432,43 @@ static void run_ut0(void)
 
     uint32_t pd6_ctrl = (GPIOD->IDR >> UART_PIN_RX) & 1U;
     verdict(pd6_ctrl == 0U, "UT0_CTRL negative control: PD5 low propagates to PD6");
-    step_end();
+    /* Do NOT call step_end() here: condition must hold until next handshake (C-m) */
+    s_step = UST_STEP_NONE;
+}
+
+/* Register snapshot helper (C-M4: MODER, AFR, PUPDR, OSPEEDR, CR1-CR3, BRR, PRESC, APB1LENR) */
+typedef struct {
+    uint32_t moder;
+    uint32_t afr0;
+    uint32_t afr1;
+    uint32_t pupdr;
+    uint32_t ospeedr;
+    uint32_t cr1;
+    uint32_t cr2;
+    uint32_t cr3;
+    uint32_t brr;
+    uint32_t presc;
+    uint32_t apb1lenr;
+} UartRegSnapshot_t;
+
+static void ut1_take_snapshot(UartRegSnapshot_t *s)
+{
+    s->moder    = GPIOD->MODER;
+    s->afr0     = GPIOD->AFR[0];
+    s->afr1     = GPIOD->AFR[1];
+    s->pupdr    = GPIOD->PUPDR;
+    s->ospeedr  = GPIOD->OSPEEDR;
+    s->cr1      = USART2->CR1;
+    s->cr2      = USART2->CR2;
+    s->cr3      = USART2->CR3;
+    s->brr      = USART2->BRR;
+    s->presc    = USART2->PRESC;
+    s->apb1lenr = RCC->APB1LENR;
+}
+
+static bool ut1_snapshots_match(const UartRegSnapshot_t *a, const UartRegSnapshot_t *b)
+{
+    return (memcmp(a, b, sizeof(UartRegSnapshot_t)) == 0);
 }
 
 static void run_ut1(void)
@@ -430,18 +477,11 @@ static void run_ut1(void)
 
     bool ok = true;
 
-    /* Ensure clocks are enabled for instances to properly test validation (S-M2) */
-    RCC->APB1LENR |= RCC_APB1LENR_USART2EN;
+    /* C-M4: Partir de reloj apagado y pines en entrada */
+    RCC->APB1LENR &= ~RCC_APB1LENR_USART2EN;
     (void)RCC->APB1LENR;
-
-    /* Claim pins for USART2 in AF7 */
-    if (!pin_cfg(GPIOD, UART_PIN_TX, GPIO_BM_MODE_AF, 7U, GPIO_BM_PULL_UP, 0U) ||
-        !pin_cfg(GPIOD, UART_PIN_RX, GPIO_BM_MODE_AF, 7U, GPIO_BM_PULL_UP, 0U))
-    {
-        verdict(false, "UT1 pin claim failed");
-        step_end();
-        return;
-    }
+    (void)pin_cfg(GPIOD, UART_PIN_TX, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_NONE, 0U);
+    (void)pin_cfg(GPIOD, UART_PIN_RX, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_NONE, 0U);
 
     static const UartBm_Pin_t bm_tx = { .port = GPIOD, .pin_idx = UART_PIN_TX, .af = 7U };
     static const UartBm_Pin_t bm_rx = { .port = GPIOD, .pin_idx = UART_PIN_RX, .af = 7U };
@@ -450,23 +490,8 @@ static void run_ut1(void)
     static const uart_hal_pin_t hal_tx = { .port = GPIOD, .pin_idx = UART_PIN_TX, .af = 7U };
     static const uart_hal_pin_t hal_rx = { .port = GPIOD, .pin_idx = UART_PIN_RX, .af = 7U };
 
-    /* Register snapshot helper */
-    typedef struct {
-        uint32_t cr1, cr2, cr3, brr, presc;
-        uint32_t moder, afr0, afr1;
-        uint32_t rcc;
-    } RegSnapshot_t;
-
-    RegSnapshot_t snap_before;
-    snap_before.cr1   = USART2->CR1;
-    snap_before.cr2   = USART2->CR2;
-    snap_before.cr3   = USART2->CR3;
-    snap_before.brr   = USART2->BRR;
-    snap_before.presc = USART2->PRESC;
-    snap_before.moder = GPIOD->MODER;
-    snap_before.afr0  = GPIOD->AFR[0];
-    snap_before.afr1  = GPIOD->AFR[1];
-    snap_before.rcc   = RCC->APB1LENR;
+    UartRegSnapshot_t snap_before;
+    ut1_take_snapshot(&snap_before);
 
     /* 1. BM Rejections */
     UartBm_Handle_t h_bm;
@@ -587,23 +612,10 @@ static void run_ut1(void)
     if (UART_HAL_InitEx(&h_hal, &cfg_hal_ex) != HAL_ERROR) { ok = false; }
     cfg_hal_ex.tx_pin = &hal_tx;
 
-    /* Verify snapshot preserved (U3) */
-    RegSnapshot_t snap_after;
-    snap_after.cr1   = USART2->CR1;
-    snap_after.cr2   = USART2->CR2;
-    snap_after.cr3   = USART2->CR3;
-    snap_after.brr   = USART2->BRR;
-    snap_after.presc = USART2->PRESC;
-    snap_after.moder = GPIOD->MODER;
-    snap_after.afr0  = GPIOD->AFR[0];
-    snap_after.afr1  = GPIOD->AFR[1];
-    snap_after.rcc   = RCC->APB1LENR;
-
-    if ((snap_before.cr1 != snap_after.cr1) || (snap_before.cr2 != snap_after.cr2) ||
-        (snap_before.cr3 != snap_after.cr3) || (snap_before.brr != snap_after.brr) ||
-        (snap_before.presc != snap_after.presc) || (snap_before.moder != snap_after.moder) ||
-        (snap_before.afr0 != snap_after.afr0) || (snap_before.afr1 != snap_after.afr1) ||
-        (snap_before.rcc != snap_after.rcc))
+    /* Verify snapshot preserved across all rejection tests (U3, C-M4) */
+    UartRegSnapshot_t snap_after;
+    ut1_take_snapshot(&snap_after);
+    if (!ut1_snapshots_match(&snap_before, &snap_after))
     {
         ok = false;
     }
@@ -614,7 +626,9 @@ static void run_ut1(void)
     cfg_bm.enable_clock = true;
     if (UART_BM_Init(&h_bm, &cfg_bm))
     {
-        if (USART2->CR1 == snap_before.cr1)
+        UartRegSnapshot_t snap_pos;
+        ut1_take_snapshot(&snap_pos);
+        if (ut1_snapshots_match(&snap_before, &snap_pos))
         {
             ok = false; /* valid init must change registers */
         }
@@ -624,6 +638,12 @@ static void run_ut1(void)
     {
         ok = false;
     }
+
+    /* Restore pins to safe input and clock off */
+    RCC->APB1LENR &= ~RCC_APB1LENR_USART2EN;
+    (void)RCC->APB1LENR;
+    (void)pin_cfg(GPIOD, UART_PIN_TX, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_NONE, 0U);
+    (void)pin_cfg(GPIOD, UART_PIN_RX, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_NONE, 0U);
 
     verdict(ok, "UT1 parameter rejection across BM, LL, HAL (U2, U3, D2)");
     step_end();
@@ -651,12 +671,15 @@ static void run_ut2(void)
     } cases[] = {
         { "UART4",   UART4,   100000000UL, 9600UL,     false },
         { "UART4",   UART4,   100000000UL, 115200UL,   false },
+        { "UART4",   UART4,   100000000UL, 1200UL,     false }, /* C-M5: PRESC=1 (div=2) because 100M/1200 > 65535 */
         { "UART5",   UART5,   100000000UL, 921600UL,   true  },
+        { "UART5",   UART5,   100000000UL, 300UL,      false }, /* C-M5: PRESC=3 (div=6) or PRESC=4 (div=8) */
         { "UART8",   UART8,   100000000UL, 3773585UL,  true  }, /* U5: div=53 odd accepted with correct applied BRR */
         { "UART8",   UART8,   100000000UL, 12500000UL, true  }, /* U5: div=16 even */
         { "USART1",  USART1,  80000000UL,  115200UL,   false },
         { "USART6",  USART6,  80000000UL,  921600UL,   true  },
         { "LPUART1", LPUART1, 25000000UL,  9600UL,     false },
+        { "LPUART1", LPUART1, 100000000UL, 9600UL,     false }, /* C-M5: PRESC=2 (div=4) because 100M > 4096*9600 */
     };
 
     /* Test both BM and LL on each row */
@@ -722,7 +745,7 @@ static void run_ut2(void)
     }
 
     /* 3. U5 Rejection tests: small odd divisors (div=17 and div=19) whose applied divisor
-     * error exceeds 2% must be REJECTED by both BM and LL (S-B5, U5) */
+     * error exceeds 2% must be REJECTED by both BM and LL (S-B5, U5, C-M5) */
     static const uint32_t u5_rejects[] = { 11764705UL, 10526315UL };
     for (size_t r = 0U; r < sizeof(u5_rejects) / sizeof(u5_rejects[0]); r++)
     {
@@ -737,11 +760,14 @@ static void run_ut2(void)
             .oversampling_8 = true,
         };
         UartBm_Handle_t h_bm;
-        if (UART_BM_Init(&h_bm, &cfg_bm))
+        bool bm_rej = !UART_BM_Init(&h_bm, &cfg_bm);
+        if (!bm_rej)
         {
-            ok = false; /* MUST reject */
+            ok = false;
             (void)UART_BM_Deinit(&h_bm);
         }
+        LOG("UT2 reject: tier=BM inst=UART8 f_ker=100000000 baud=%lu over8=1 status=%s",
+            (unsigned long)u5_rejects[r], bm_rej ? "REJECT" : "ACCEPT");
 
         UartLL_Config_t cfg_ll = {
             .instance = UART8,
@@ -756,12 +782,21 @@ static void run_ut2(void)
             .enable_clock = false,
         };
         UartLL_Handle_t h_ll;
-        if (UART_LL_Init(&h_ll, &cfg_ll))
+        bool ll_rej = !UART_LL_Init(&h_ll, &cfg_ll);
+        if (!ll_rej)
         {
-            ok = false; /* MUST reject */
+            ok = false;
             (void)UART_LL_Deinit(&h_ll);
         }
+        LOG("UT2 reject: tier=LL inst=UART8 f_ker=100000000 baud=%lu over8=1 status=%s",
+            (unsigned long)u5_rejects[r], ll_rej ? "REJECT" : "ACCEPT");
     }
+
+    /* Turn off test peripheral clocks (C-m) */
+    RCC->APB1LENR &= ~(RCC_APB1LENR_UART4EN | RCC_APB1LENR_UART5EN | RCC_APB1LENR_UART8EN | RCC_APB1LENR_USART2EN);
+    RCC->APB2ENR  &= ~(RCC_APB2ENR_USART1EN | RCC_APB2ENR_USART6EN);
+    RCC->APB4ENR  &= ~RCC_APB4ENR_LPUART1EN;
+    (void)RCC->APB4ENR;
 
     verdict(ok, "UT2 baudrate divider and prescaler calculations (BM, LL, U5, LPUART1)");
     step_end();
@@ -814,6 +849,12 @@ static void run_ut3(void)
             .tx_pin          = &bm_tx,
         };
 
+        if (!bench_claim(UART_BENCH_PORT_USART, UART_PIN_TX, GPIO_BM_MODE_AF, 7U))
+        {
+            ok = false;
+            break;
+        }
+
         UartBm_Handle_t h;
         if (!UART_BM_Init(&h, &cfg))
         {
@@ -825,6 +866,13 @@ static void run_ut3(void)
             bm_formats[i].name, (unsigned long)bm_formats[i].baud,
             bm_formats[i].over8 ? 1U : 0U, (unsigned long)USART2->PRESC, (unsigned long)USART2->BRR);
 
+        if (!sync0())
+        {
+            ok = false;
+            (void)UART_BM_Deinit(&h);
+            break;
+        }
+
         for (size_t j = 0U; j < pat_len; j++)
         {
             if (!UART_BM_WriteByte(&h, pat[j]))
@@ -833,8 +881,16 @@ static void run_ut3(void)
                 break;
             }
         }
-        (void)UART_BM_Flush(&h, 100000U);
-        while ((USART2->ISR & USART_ISR_TC) == 0U) {}
+        if (!UART_BM_Flush(&h, 100000U))
+        {
+            ok = false;
+        }
+        uint32_t tc_spin = 100000U;
+        while (((USART2->ISR & USART_ISR_TC) == 0U) && (tc_spin > 0U)) { tc_spin--; }
+        if (tc_spin == 0U)
+        {
+            ok = false;
+        }
         delay_ms(5U);
         (void)UART_BM_Deinit(&h);
     }
@@ -856,6 +912,12 @@ static void run_ut3(void)
 
     for (size_t i = 0U; i < sizeof(ll_formats) / sizeof(ll_formats[0]); i++)
     {
+        if (!bench_claim(UART_BENCH_PORT_USART, UART_PIN_TX, GPIO_BM_MODE_AF, 7U))
+        {
+            ok = false;
+            break;
+        }
+
         UartLL_Config_t cfg_ll = {
             .instance        = USART2,
             .kernel_clock_hz = 100000000UL,
@@ -882,6 +944,13 @@ static void run_ut3(void)
             (ll_formats[i].oversampling == LL_USART_OVERSAMPLING_8) ? 1U : 0U,
             (unsigned long)USART2->PRESC, (unsigned long)USART2->BRR);
 
+        if (!sync0())
+        {
+            ok = false;
+            (void)UART_LL_Deinit(&h_ll);
+            break;
+        }
+
         for (size_t j = 0U; j < pat_len; j++)
         {
             if (!UART_LL_WriteByte(&h_ll, pat[j]))
@@ -890,8 +959,16 @@ static void run_ut3(void)
                 break;
             }
         }
-        (void)UART_LL_Flush(&h_ll, 100000U);
-        while ((USART2->ISR & USART_ISR_TC) == 0U) {}
+        if (!UART_LL_Flush(&h_ll, 100000U))
+        {
+            ok = false;
+        }
+        uint32_t tc_spin = 100000U;
+        while (((USART2->ISR & USART_ISR_TC) == 0U) && (tc_spin > 0U)) { tc_spin--; }
+        if (tc_spin == 0U)
+        {
+            ok = false;
+        }
         delay_ms(5U);
         (void)UART_LL_Deinit(&h_ll);
     }
@@ -909,6 +986,12 @@ static void run_ut3(void)
 
     for (size_t i = 0U; i < sizeof(hal_formats) / sizeof(hal_formats[0]); i++)
     {
+        if (!bench_claim(UART_BENCH_PORT_USART, UART_PIN_TX, GPIO_BM_MODE_AF, 7U))
+        {
+            ok = false;
+            break;
+        }
+
         UART_HandleTypeDef h_hal;
         memset(&h_hal, 0, sizeof(h_hal));
         uart_hal_config_ex_t cfg_hal = {
@@ -933,11 +1016,23 @@ static void run_ut3(void)
             hal_formats[i].name, (unsigned long)hal_formats[i].baud,
             (unsigned long)USART2->PRESC, (unsigned long)USART2->BRR);
 
+        if (!sync0())
+        {
+            ok = false;
+            (void)HAL_UART_DeInit(&h_hal);
+            break;
+        }
+
         if (HAL_UART_Transmit(&h_hal, (uint8_t *)pat, (uint16_t)pat_len, 100U) != HAL_OK)
         {
             ok = false;
         }
-        while ((USART2->ISR & USART_ISR_TC) == 0U) {}
+        uint32_t tc_spin = 100000U;
+        while (((USART2->ISR & USART_ISR_TC) == 0U) && (tc_spin > 0U)) { tc_spin--; }
+        if (tc_spin == 0U)
+        {
+            ok = false;
+        }
         delay_ms(5U);
         (void)HAL_UART_DeInit(&h_hal);
     }
@@ -958,6 +1053,12 @@ static void run_ut4(void)
 
     /* 1. BM Loopback over JU1 (8N1 @ 115200) */
     {
+        if (!bench_claim(UART_BENCH_PORT_USART, UART_PIN_TX, GPIO_BM_MODE_AF, 7U) ||
+            !bench_claim(UART_BENCH_PORT_USART, UART_PIN_RX, GPIO_BM_MODE_AF, 7U))
+        {
+            ok = false;
+        }
+
         UartBm_Config_t cfg = {
             .instance        = USART2,
             .kernel_clock_hz = 100000000UL,
@@ -982,6 +1083,10 @@ static void run_ut4(void)
                 while (!UART_BM_ReadByte(&h, &rx) && (sp > 0U)) { sp--; }
                 if (rx != b) { ok = false; break; }
             }
+            (void)UART_BM_Flush(&h, 100000U);
+            uint32_t tc_spin = 100000U;
+            while (((USART2->ISR & USART_ISR_TC) == 0U) && (tc_spin > 0U)) { tc_spin--; }
+            if (tc_spin == 0U) { ok = false; }
             (void)UART_BM_Deinit(&h);
         }
         else
@@ -993,6 +1098,12 @@ static void run_ut4(void)
     /* 2. LL Loopback polled: FIFO off and FIFO on (S-M5) */
     for (int fifo = 0; fifo <= 1; fifo++)
     {
+        if (!bench_claim(UART_BENCH_PORT_USART, UART_PIN_TX, GPIO_BM_MODE_AF, 7U) ||
+            !bench_claim(UART_BENCH_PORT_USART, UART_PIN_RX, GPIO_BM_MODE_AF, 7U))
+        {
+            ok = false;
+        }
+
         UartLL_Config_t cfg = {
             .instance        = USART2,
             .kernel_clock_hz = 100000000UL,
@@ -1018,6 +1129,10 @@ static void run_ut4(void)
                 while (!UART_LL_ReadByte(&h, &rx) && (sp > 0U)) { sp--; }
                 if (rx != b) { ok = false; break; }
             }
+            (void)UART_LL_Flush(&h, 100000U);
+            uint32_t tc_spin = 100000U;
+            while (((USART2->ISR & USART_ISR_TC) == 0U) && (tc_spin > 0U)) { tc_spin--; }
+            if (tc_spin == 0U) { ok = false; }
             (void)UART_LL_Deinit(&h);
         }
         else
@@ -1028,6 +1143,12 @@ static void run_ut4(void)
 
     /* 3. LL Loopback: OVER8 (S-M5) */
     {
+        if (!bench_claim(UART_BENCH_PORT_USART, UART_PIN_TX, GPIO_BM_MODE_AF, 7U) ||
+            !bench_claim(UART_BENCH_PORT_USART, UART_PIN_RX, GPIO_BM_MODE_AF, 7U))
+        {
+            ok = false;
+        }
+
         UartLL_Config_t cfg = {
             .instance        = USART2,
             .kernel_clock_hz = 100000000UL,
@@ -1053,6 +1174,10 @@ static void run_ut4(void)
                 while (!UART_LL_ReadByte(&h, &rx) && (sp > 0U)) { sp--; }
                 if (rx != b) { ok = false; break; }
             }
+            (void)UART_LL_Flush(&h, 100000U);
+            uint32_t tc_spin = 100000U;
+            while (((USART2->ISR & USART_ISR_TC) == 0U) && (tc_spin > 0U)) { tc_spin--; }
+            if (tc_spin == 0U) { ok = false; }
             (void)UART_LL_Deinit(&h);
         }
         else
@@ -1063,6 +1188,12 @@ static void run_ut4(void)
 
     /* 4. LL Loopback: 7-bit mask verification (S-M5) */
     {
+        if (!bench_claim(UART_BENCH_PORT_USART, UART_PIN_TX, GPIO_BM_MODE_AF, 7U) ||
+            !bench_claim(UART_BENCH_PORT_USART, UART_PIN_RX, GPIO_BM_MODE_AF, 7U))
+        {
+            ok = false;
+        }
+
         UartLL_Config_t cfg = {
             .instance        = USART2,
             .kernel_clock_hz = 100000000UL,
@@ -1100,6 +1231,12 @@ static void run_ut4(void)
     static UartLL_Handle_t     h_ll;
 
     {
+        if (!bench_claim(UART_BENCH_PORT_USART, UART_PIN_TX, GPIO_BM_MODE_AF, 7U) ||
+            !bench_claim(UART_BENCH_PORT_USART, UART_PIN_RX, GPIO_BM_MODE_AF, 7U))
+        {
+            ok = false;
+        }
+
         UartLL_Config_t cfg = {
             .instance        = USART2,
             .kernel_clock_hz = 100000000UL,
@@ -1198,7 +1335,18 @@ static void run_ut5(void)
     bool ok = true;
 
     /* SU2: Ensure PD5 is in input safe state with pull-up. PD5 is NOT configured as output/AF. */
-    (void)pin_cfg(GPIOD, UART_PIN_TX, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_UP, 0U);
+    if (!pin_cfg(GPIOD, UART_PIN_TX, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_UP, 0U))
+    {
+        verdict(false, "UT5 SU2 pin_cfg PD5 input failed");
+        step_end();
+        return;
+    }
+    if (!bench_claim(UART_BENCH_PORT_USART, UART_PIN_RX, GPIO_BM_MODE_AF, 7U))
+    {
+        verdict(false, "UT5 claim RX failed");
+        step_end();
+        return;
+    }
 
     static const UartLL_Pin_t rx_pin = { .port = UART_BENCH_PORT_USART, .pin_idx = UART_PIN_RX, .af = 7U };
     UartLL_Config_t cfg = {
@@ -1230,75 +1378,105 @@ static void run_ut5(void)
     }
 
     /* Phase 1: Host injects PE via DIO15 */
-    if (sync0())
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
     {
-        if (sync0())
-        {
-            uint8_t rx_b = 0U;
-            (void)UART_LL_ReadByte(&h, &rx_b);
-            uint32_t err = UART_LL_TakeErrors(&h);
-            LOG("UT5 PE err=0x%lx (expected 0x%lx)", (unsigned long)err, (unsigned long)UART_LL_ERR_PE);
-            if ((err & UART_LL_ERR_PE) == 0U) { ok = false; }
-            if (UART_LL_TakeErrors(&h) != 0U) { ok = false; } /* single-shot */
-        }
+        uint8_t rx_b = 0U;
+        (void)UART_LL_ReadByte(&h, &rx_b);
+        uint32_t err = UART_LL_TakeErrors(&h);
+        LOG("UT5 PE err=0x%lx (expected 0x%lx)", (unsigned long)err, (unsigned long)UART_LL_ERR_PE);
+        if ((err & UART_LL_ERR_PE) == 0U) { ok = false; }
+        if (UART_LL_TakeErrors(&h) != 0U) { ok = false; } /* single-shot */
     }
 
     /* Phase 2: Host injects FE via DIO15 */
-    if (sync0())
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
     {
-        if (sync0())
-        {
-            uint8_t rx_b = 0U;
-            (void)UART_LL_ReadByte(&h, &rx_b);
-            uint32_t err = UART_LL_TakeErrors(&h);
-            LOG("UT5 FE err=0x%lx (expected 0x%lx)", (unsigned long)err, (unsigned long)UART_LL_ERR_FE);
-            if ((err & UART_LL_ERR_FE) == 0U) { ok = false; }
-            if (UART_LL_TakeErrors(&h) != 0U) { ok = false; }
-        }
+        uint8_t rx_b = 0U;
+        (void)UART_LL_ReadByte(&h, &rx_b);
+        uint32_t err = UART_LL_TakeErrors(&h);
+        LOG("UT5 FE err=0x%lx (expected 0x%lx)", (unsigned long)err, (unsigned long)UART_LL_ERR_FE);
+        if ((err & UART_LL_ERR_FE) == 0U) { ok = false; }
+        if (UART_LL_TakeErrors(&h) != 0U) { ok = false; }
     }
 
-    /* Phase 3: Host injects NE via DIO15 */
-    if (sync0())
+    /* Phase 3: Host injects BREAK via DIO15 */
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
     {
-        if (sync0())
-        {
-            uint8_t rx_b = 0U;
-            (void)UART_LL_ReadByte(&h, &rx_b);
-            uint32_t err = UART_LL_TakeErrors(&h);
-            LOG("UT5 NE err=0x%lx (flagged=%u)", (unsigned long)err, ((err & UART_LL_ERR_NE) != 0U) ? 1U : 0U);
-        }
+        uint8_t rx_b = 0U;
+        (void)UART_LL_ReadByte(&h, &rx_b);
+        uint32_t err = UART_LL_TakeErrors(&h);
+        LOG("UT5 BREAK err=0x%lx (expected FE 0x%lx)", (unsigned long)err, (unsigned long)UART_LL_ERR_FE);
+        if ((err & UART_LL_ERR_FE) == 0U) { ok = false; }
+        if (UART_LL_TakeErrors(&h) != 0U) { ok = false; }
     }
 
-    /* Phase 4: Host injects ORE (3 bytes sent without reading) */
-    if (sync0())
+    /* Phase 4: Host injects NE via DIO15 (short sub-bit pulse) */
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
     {
-        if (sync0())
+        uint8_t rx_b = 0U;
+        (void)UART_LL_ReadByte(&h, &rx_b);
+        uint32_t err = UART_LL_TakeErrors(&h);
+        LOG("UT5 NE err=0x%lx (flagged=%u)", (unsigned long)err, ((err & UART_LL_ERR_NE) != 0U) ? 1U : 0U);
+        if ((err & UART_LL_ERR_NE) == 0U)
         {
-            uint32_t err = UART_LL_TakeErrors(&h);
-            LOG("UT5 ORE err=0x%lx (expected 0x%lx)", (unsigned long)err, (unsigned long)UART_LL_ERR_ORE);
-            if ((err & UART_LL_ERR_ORE) == 0U) { ok = false; }
-            uint8_t rx_b = 0U;
-            while (UART_LL_ReadByte(&h, &rx_b)) {}
-            (void)UART_LL_TakeErrors(&h);
+            LOG("UT5 NE no detectado");
+            ok = false;
         }
+        (void)UART_LL_TakeErrors(&h);
     }
 
-    /* Phase 5: Clean frame control (no error expected) */
-    if (sync0())
+    /* Phase 5: Host injects ORE with FIFO enabled (18 bytes sent without reading) */
+    (void)UART_LL_Deinit(&h);
+    cfg.fifo_enable = true;
+    if (!UART_LL_Init(&h, &cfg)) { ok = false; }
+    (void)UART_LL_TakeErrors(&h);
+
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
     {
-        if (sync0())
-        {
-            uint8_t rx_b = 0U;
-            (void)UART_LL_ReadByte(&h, &rx_b);
-            uint32_t err = UART_LL_TakeErrors(&h);
-            LOG("UT5 clean frame err=0x%lx (expected 0)", (unsigned long)err);
-            if (err != 0U) { ok = false; }
-        }
+        uint32_t err = UART_LL_TakeErrors(&h);
+        LOG("UT5 ORE-FIFO err=0x%lx (expected 0x%lx)", (unsigned long)err, (unsigned long)UART_LL_ERR_ORE);
+        if ((err & UART_LL_ERR_ORE) == 0U) { ok = false; }
+        uint8_t rx_b = 0U;
+        while (UART_LL_ReadByte(&h, &rx_b)) {}
+        (void)UART_LL_TakeErrors(&h);
+    }
+
+    /* Phase 6: Host injects ORE without FIFO (3 bytes sent without reading) */
+    (void)UART_LL_Deinit(&h);
+    cfg.fifo_enable = false;
+    if (!UART_LL_Init(&h, &cfg)) { ok = false; }
+    (void)UART_LL_TakeErrors(&h);
+
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
+    {
+        uint32_t err = UART_LL_TakeErrors(&h);
+        LOG("UT5 ORE-NOFIFO err=0x%lx (expected 0x%lx)", (unsigned long)err, (unsigned long)UART_LL_ERR_ORE);
+        if ((err & UART_LL_ERR_ORE) == 0U) { ok = false; }
+        uint8_t rx_b = 0U;
+        while (UART_LL_ReadByte(&h, &rx_b)) {}
+        (void)UART_LL_TakeErrors(&h);
+    }
+
+    /* Phase 7: Clean frame control (no error expected) */
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
+    if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
+    {
+        uint8_t rx_b = 0U;
+        (void)UART_LL_ReadByte(&h, &rx_b);
+        uint32_t err = UART_LL_TakeErrors(&h);
+        LOG("UT5 clean frame err=0x%lx (expected 0)", (unsigned long)err);
+        if (err != 0U) { ok = false; }
     }
 
     (void)UART_LL_Deinit(&h);
 
-    verdict(ok, "UT5 error injection detection (PE, FE, NE, ORE, clean control)");
+    verdict(ok, "UT5 error injection detection (PE, FE, BREAK, NE, ORE-FIFO, ORE-NOFIFO, clean)");
     step_end();
 }
 
@@ -1316,6 +1494,16 @@ static void run_ut6(void)
         !pin_cfg(UART_BENCH_PORT_USART, UART_PIN_CTS, GPIO_BM_MODE_AF, 7U, GPIO_BM_PULL_NONE, 0U))
     {
         verdict(false, "UT6 pin_cfg RTS/CTS failed");
+        step_end();
+        return;
+    }
+
+    if (!bench_claim(UART_BENCH_PORT_USART, UART_PIN_TX, GPIO_BM_MODE_AF, 7U)  ||
+        !bench_claim(UART_BENCH_PORT_USART, UART_PIN_RX, GPIO_BM_MODE_AF, 7U)  ||
+        !bench_claim(UART_BENCH_PORT_USART, UART_PIN_RTS, GPIO_BM_MODE_AF, 7U) ||
+        !bench_claim(UART_BENCH_PORT_USART, UART_PIN_CTS, GPIO_BM_MODE_AF, 7U))
+    {
+        verdict(false, "UT6 bench_claim failed");
         step_end();
         return;
     }
@@ -1339,29 +1527,65 @@ static void run_ut6(void)
     UartLL_Handle_t h_fc;
     if (UART_LL_Init(&h_fc, &cfg_fc))
     {
-        /* Write N = 20 bytes (N > FIFO + 1) without draining RX. Check every write (S-M3) */
-        uint32_t written = 0U;
-        for (uint8_t b = 0U; b < 20U; b++)
+        /* Write N = 20 bytes with write verification.
+         * First 16 bytes fill the RX FIFO; RTS goes high, stopping TX on wire. */
+        uint32_t written1 = 0U;
+        for (uint8_t b = 0U; b < 16U; b++)
         {
             if (UART_LL_WriteByte(&h_fc, 0x40U + b))
             {
-                written++;
+                written1++;
             }
         }
-        LOG("UT6 FC phase: written=%lu/20", (unsigned long)written);
         delay_ms(5U);
 
         /* Flow control should prevent ORE */
-        uint32_t err_fc = UART_LL_TakeErrors(&h_fc);
-        if (err_fc != 0U)
+        uint32_t err_fc1 = UART_LL_TakeErrors(&h_fc);
+        if (err_fc1 != 0U)
         {
-            LOG("UT6 FC unexpected error=0x%lx", (unsigned long)err_fc);
+            LOG("UT6 FC unexpected error1=0x%lx", (unsigned long)err_fc1);
             ok = false;
         }
 
-        /* Drain RX */
-        uint8_t dummy = 0U;
-        while (UART_LL_ReadByte(&h_fc, &dummy)) {}
+        /* Drain 8 bytes from RX FIFO to de-assert RTS and resume TX */
+        uint8_t rx_dummy = 0U;
+        for (uint8_t i = 0U; i < 8U; i++)
+        {
+            if (!UART_LL_ReadByte(&h_fc, &rx_dummy)) { ok = false; }
+        }
+
+        /* Write remaining 4 bytes (total 20 bytes written) */
+        uint32_t written2 = 0U;
+        for (uint8_t b = 16U; b < 20U; b++)
+        {
+            if (UART_LL_WriteByte(&h_fc, 0x40U + b))
+            {
+                written2++;
+            }
+        }
+        delay_ms(5U);
+
+        uint32_t err_fc2 = UART_LL_TakeErrors(&h_fc);
+        if (err_fc2 != 0U)
+        {
+            LOG("UT6 FC unexpected error2=0x%lx", (unsigned long)err_fc2);
+            ok = false;
+        }
+
+        /* Drain remaining 12 bytes */
+        uint32_t read_count = 8U;
+        while (UART_LL_ReadByte(&h_fc, &rx_dummy))
+        {
+            read_count++;
+        }
+
+        if ((written1 + written2 != 20U) || (read_count != 20U))
+        {
+            ok = false;
+        }
+
+        LOG("UT6 FC phase: written=%lu/20 read=%lu/20 err=0x%lx",
+            (unsigned long)(written1 + written2), (unsigned long)read_count, (unsigned long)(err_fc1 | err_fc2));
 
         (void)UART_LL_Deinit(&h_fc);
     }
@@ -1370,7 +1594,7 @@ static void run_ut6(void)
         ok = false;
     }
 
-    /* 2. Negative Control: WITHOUT flow control, N = 20 bytes causes ORE (S-M3) */
+    /* 2. Negative Control: WITHOUT flow control, N = 20 bytes causes ORE (C-M2, S-M3) */
     UartLL_Config_t cfg_nofc = {
         .instance        = USART2,
         .kernel_clock_hz = 100000000UL,
@@ -1379,7 +1603,7 @@ static void run_ut6(void)
         .stop_bits       = LL_USART_STOPBITS_1,
         .parity          = LL_USART_PARITY_NONE,
         .oversampling    = LL_USART_OVERSAMPLING_16,
-        .fifo_enable     = false, /* No FIFO: 1 byte shift + 1 byte RDR -> 3rd byte causes ORE */
+        .fifo_enable     = true, /* Same FIFO configuration as FC phase (C-M2) */
         .hw_flow         = LL_USART_HWCONTROL_NONE,
         .enable_clock    = true,
         .tx_pin          = &tx,
@@ -1389,7 +1613,7 @@ static void run_ut6(void)
     UartLL_Handle_t h_nofc;
     if (UART_LL_Init(&h_nofc, &cfg_nofc))
     {
-        for (uint8_t b = 0U; b < 10U; b++)
+        for (uint8_t b = 0U; b < 20U; b++)
         {
             (void)UART_LL_WriteByte(&h_nofc, 0x60U + b);
             delay_ms(1U);
@@ -1436,6 +1660,14 @@ static void run_ut7(void)
         .af      = 7U
     };
 
+    if (!bench_claim(UART_BENCH_PORT_USART, UART_PIN_TX, GPIO_BM_MODE_AF, 7U) ||
+        !bench_claim(UART_BENCH_PORT_USART, UART_PIN_RX, GPIO_BM_MODE_AF, 7U))
+    {
+        verdict(false, "UT7 bench_claim failed");
+        step_end();
+        return;
+    }
+
     /* S-M1: 8E1 requires UART_WORDLENGTH_9B in STM32 HAL! */
     uart_hal_config_ex_t cfg = {
         .instance     = USART2,
@@ -1449,12 +1681,6 @@ static void run_ut7(void)
         .tx_pin       = &hal_tx_pin,
         .rx_pin       = &hal_rx_pin,
     };
-
-    /* Snapshot of pins before (S-M1) */
-    uint32_t snap_moder_before = GPIOD->MODER;
-    uint32_t snap_afr_before   = GPIOD->AFR[0];
-    (void)snap_moder_before;
-    (void)snap_afr_before;
 
     /* 1. Request CM4 to hold GPIO lock */
     if (cm4_send_cmd(UST_CMD_LOCK_ACQUIRE, CM4_TIMEOUT_MS))
@@ -1472,7 +1698,10 @@ static void run_ut7(void)
         {
             ok = false;
         }
-        (void)cm4_send_cmd(UST_CMD_LOCK_RELEASE, CM4_TIMEOUT_MS);
+        if (!cm4_send_cmd(UST_CMD_LOCK_RELEASE, CM4_TIMEOUT_MS))
+        {
+            ok = false;
+        }
     }
     else
     {
@@ -1482,11 +1711,26 @@ static void run_ut7(void)
     /* 2. Lock released: UART_HAL_InitEx must return HAL_OK */
     if (UART_HAL_InitEx(&huart2, &cfg) == HAL_OK)
     {
-        /* Verify pins were actually configured to AF7 */
-        uint32_t af_tx = (GPIOD->AFR[0] >> (UART_PIN_TX * 4U)) & 0xFU;
-        uint32_t af_rx = (GPIOD->AFR[0] >> (UART_PIN_RX * 4U)) & 0xFU;
-        if ((af_tx != 7U) || (af_rx != 7U))
+        /* Verify pin snapshot (C-M6: AF7, pull-up, very high speed) */
+        uint32_t moder_tx = (GPIOD->MODER >> (UART_PIN_TX * 2U)) & 3U;
+        uint32_t moder_rx = (GPIOD->MODER >> (UART_PIN_RX * 2U)) & 3U;
+        uint32_t afr_tx   = (GPIOD->AFR[0] >> (UART_PIN_TX * 4U)) & 0xFU;
+        uint32_t afr_rx   = (GPIOD->AFR[0] >> (UART_PIN_RX * 4U)) & 0xFU;
+        uint32_t pupd_tx  = (GPIOD->PUPDR >> (UART_PIN_TX * 2U)) & 3U;
+        uint32_t pupd_rx  = (GPIOD->PUPDR >> (UART_PIN_RX * 2U)) & 3U;
+        uint32_t spd_tx   = (GPIOD->OSPEEDR >> (UART_PIN_TX * 2U)) & 3U;
+        uint32_t spd_rx   = (GPIOD->OSPEEDR >> (UART_PIN_RX * 2U)) & 3U;
+
+        if ((moder_tx != 2U) || (moder_rx != 2U) ||
+            (afr_tx != 7U)   || (afr_rx != 7U)   ||
+            (pupd_tx != 1U)  || (pupd_rx != 1U)  ||
+            (spd_tx != 3U)   || (spd_rx != 3U))
         {
+            LOG("UT7 pin snapshot mismatch: moder=%lu,%lu afr=%lu,%lu pupd=%lu,%lu spd=%lu,%lu",
+                (unsigned long)moder_tx, (unsigned long)moder_rx,
+                (unsigned long)afr_tx, (unsigned long)afr_rx,
+                (unsigned long)pupd_tx, (unsigned long)pupd_rx,
+                (unsigned long)spd_tx, (unsigned long)spd_rx);
             ok = false;
         }
 
@@ -1524,6 +1768,14 @@ static void run_ut8(void)
 
     static const uart_hal_pin_t hal_tx_pin = { .port = UART_BENCH_PORT_USART, .pin_idx = UART_PIN_TX, .af = 7U };
     static const uart_hal_pin_t hal_rx_pin = { .port = UART_BENCH_PORT_USART, .pin_idx = UART_PIN_RX, .af = 7U };
+
+    if (!bench_claim(UART_BENCH_PORT_USART, UART_PIN_TX, GPIO_BM_MODE_AF, 7U) ||
+        !bench_claim(UART_BENCH_PORT_USART, UART_PIN_RX, GPIO_BM_MODE_AF, 7U))
+    {
+        verdict(false, "UT8 bench_claim failed");
+        step_end();
+        return;
+    }
 
     uart_hal_config_ex_t cfg_uart = {
         .instance     = USART2,
@@ -1633,6 +1885,9 @@ static void run_ut8(void)
     (void)HAL_DMA_DeInit(&s_hdma_usart2_tx);
     (void)HAL_UART_DeInit(&huart2);
 
+    /* Turn off DMA1 clock (C-m) */
+    __HAL_RCC_DMA1_CLK_DISABLE();
+
     verdict(ok, "UT8 UART_HAL_CheckDmaErrata in-vivo with DMA1 (bit 20, live transfer, busy, rejections)");
     step_end();
 }
@@ -1655,11 +1910,13 @@ static void run_ut9(void)
         .baudrate = 115200UL
     };
 
-    /* Snapshot PD8/PD9 */
-    uint32_t snap_moder = GPIOD->MODER;
-    uint32_t snap_pupdr = GPIOD->PUPDR;
-    (void)snap_moder;
-    (void)snap_pupdr;
+    if (!bench_claim(BOARD_CONSOLE_TX_PORT, UART_CONSOLE_TX_PIN_IDX, GPIO_BM_MODE_AF, 7U) ||
+        !bench_claim(BOARD_CONSOLE_RX_PORT, UART_CONSOLE_RX_PIN_IDX, GPIO_BM_MODE_AF, 7U))
+    {
+        verdict(false, "UT9 bench_claim console pins failed");
+        step_end();
+        return;
+    }
 
     /* 1. CM4 acquires cross-core GPIO lock */
     if (cm4_send_cmd(UST_CMD_LOCK_ACQUIRE, CM4_TIMEOUT_MS))
@@ -1678,7 +1935,10 @@ static void run_ut9(void)
         {
             ok = false;
         }
-        (void)cm4_send_cmd(UST_CMD_LOCK_RELEASE, CM4_TIMEOUT_MS);
+        if (!cm4_send_cmd(UST_CMD_LOCK_RELEASE, CM4_TIMEOUT_MS))
+        {
+            ok = false;
+        }
     }
     else
     {
@@ -1696,6 +1956,29 @@ static void run_ut9(void)
         ok = false;
     }
 
+    /* Verify pin snapshot (C-M6: AF7, pull-up, low speed on console pins PD8/PD9) */
+    uint32_t moder_tx = (GPIOD->MODER >> (UART_CONSOLE_TX_PIN_IDX * 2U)) & 3U;
+    uint32_t moder_rx = (GPIOD->MODER >> (UART_CONSOLE_RX_PIN_IDX * 2U)) & 3U;
+    uint32_t afr_tx   = (GPIOD->AFR[1] >> ((UART_CONSOLE_TX_PIN_IDX - 8U) * 4U)) & 0xFU;
+    uint32_t afr_rx   = (GPIOD->AFR[1] >> ((UART_CONSOLE_RX_PIN_IDX - 8U) * 4U)) & 0xFU;
+    uint32_t pupd_tx  = (GPIOD->PUPDR >> (UART_CONSOLE_TX_PIN_IDX * 2U)) & 3U;
+    uint32_t pupd_rx  = (GPIOD->PUPDR >> (UART_CONSOLE_RX_PIN_IDX * 2U)) & 3U;
+    uint32_t spd_tx   = (GPIOD->OSPEEDR >> (UART_CONSOLE_TX_PIN_IDX * 2U)) & 3U;
+    uint32_t spd_rx   = (GPIOD->OSPEEDR >> (UART_CONSOLE_RX_PIN_IDX * 2U)) & 3U;
+
+    if ((moder_tx != 2U) || (moder_rx != 2U) ||
+        (afr_tx != 7U)   || (afr_rx != 7U)   ||
+        (pupd_tx != 1U)  || (pupd_rx != 1U)  ||
+        (spd_tx != 0U)   || (spd_rx != 0U))
+    {
+        LOG("UT9 pin snapshot mismatch: moder=%lu,%lu afr=%lu,%lu pupd=%lu,%lu spd=%lu,%lu",
+            (unsigned long)moder_tx, (unsigned long)moder_rx,
+            (unsigned long)afr_tx, (unsigned long)afr_rx,
+            (unsigned long)pupd_tx, (unsigned long)pupd_rx,
+            (unsigned long)spd_tx, (unsigned long)spd_rx);
+        ok = false;
+    }
+
     /* 3. Re-initialize standard console handle */
     if (UART_Console_Init(115200UL) != HAL_OK)
     {
@@ -1706,38 +1989,20 @@ static void run_ut9(void)
     step_end();
 }
 
-static void run_ut10(void)
-{
-    if (!step_begin("UT10")) { return; }
-
-    bool ok = true;
-
-    /* Signal CM4 to run prj_04 regression loopback over JU1 (1 kOhm).
-     * No fabricated print per S-M6! */
-    if (cm4_send_cmd(UST_CMD_UT10, CM4_TIMEOUT_MS))
-    {
-        if (UST_AREA->m4_ut10_ok != 1U)
-        {
-            ok = false;
-        }
-    }
-    else
-    {
-        ok = false;
-    }
-
-    verdict(ok, "UT10 prj_04 regression loopback with 1k resistor");
-    step_end();
-}
-
 void UART_Selftest_CM7_Run(void)
 {
-    /* Wait for CM4 to signal ready (S-M10) */
+    /* Wait for CM4 to signal ready (S-M10, C-M3) */
     uint32_t wait_cm4 = 0U;
-    while ((UST_AREA->m4_ready != 1U) && (wait_cm4 < 2000U))
+    while ((UST_AREA->m4_ready != UST_AREA->session) && (wait_cm4 < 2000U))
     {
         delay_ms(1U);
         wait_cm4++;
+    }
+    if (UST_AREA->m4_ready != UST_AREA->session)
+    {
+        bench_abort("CM4 ready timeout");
+        mco1_restore();
+        return;
     }
 
     LOG("=== 04_uart selftest starting on CM7 ===");
@@ -1763,7 +2028,6 @@ void UART_Selftest_CM7_Run(void)
     run_ut7();
     run_ut8();
     run_ut9();
-    run_ut10();
 
     if (step_begin("DONE"))
     {
