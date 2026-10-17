@@ -152,7 +152,9 @@ def run_warm_resets(
             records.append(f"--- WARM RESET {i}/{target_count} ---\n")
 
             # Drain any buffered bytes from previous run
-            ser.read(4096)
+            time.sleep(0.05)
+            while ser.read(4096):
+                pass
 
             do_reset()
 
@@ -165,7 +167,8 @@ def run_warm_resets(
                 chunk = ser.read(1024)
                 if chunk:
                     raw_buf.extend(chunk)
-                    if stop_phrase.encode("utf-8") in raw_buf:
+                    banner_pos = raw_buf.find(b"=== STM32H755ZI")
+                    if banner_pos >= 0 and stop_phrase.encode("utf-8") in raw_buf[banner_pos:]:
                         found_alive = True
                         break
                 else:
