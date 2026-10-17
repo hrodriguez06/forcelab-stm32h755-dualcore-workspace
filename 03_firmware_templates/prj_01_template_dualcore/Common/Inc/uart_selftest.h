@@ -66,11 +66,19 @@ typedef enum
     UST_OWN_CM4
 } UstOwner_t;
 
+typedef enum
+{
+    UST_DIO15_NONE = 0,
+    UST_DIO15_OE   = 1, /* Static OE output (UT0 resistor check) */
+    UST_DIO15_DOUT = 2  /* Digital Out pattern generator output (UT5 error injection) */
+} UstDio15Mode_t;
+
 typedef struct
 {
     const char *name;
-    uint8_t     owner;     /* UstOwner_t: core that may claim USART2 pins in AF */
-    uint16_t    allow_pd;  /* bitmask of PD pins allowed (e.g. 1<<PD5 for UT0_CTRL) */
+    uint8_t     owner;          /* UstOwner_t: core that may claim USART2 pins in AF */
+    uint16_t    allow_pd;       /* bitmask of PD pins allowed (e.g. 1<<PD5 for UT0_CTRL) */
+    uint8_t     dio15_mode;     /* UstDio15Mode_t: AD2 DIO15 permission for SU1 */
 } UstStep_t;
 
 extern const UstStep_t k_ust_steps[];
@@ -85,6 +93,9 @@ bool ust_line_rule(uint32_t core, uint32_t step, const GPIO_TypeDef *port, uint3
                    uint32_t mode, uint32_t af, uint32_t otype, uint32_t pull);
 
 /* ---- SRAM4 coordination block ---------------------------------------------- */
+/* RM0399 §2.3.2: D3 Domain SRAM4 is mapped at 0x38000000 (size 64 KB, non-cacheable
+ * shared memory accessible by both Cortex-M7 and Cortex-M4 cores).
+ * Offset 0xE000 provides a dedicated 4 KB window for selftest inter-core coordination. */
 #define UST_AREA_ADDR        0x3800E000UL
 #define UST_AREA_MAGIC       0x55535431UL   /* "UST1" */
 
