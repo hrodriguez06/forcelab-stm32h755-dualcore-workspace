@@ -89,3 +89,77 @@ Comprobación del auditor:
 Parte de la culpa es mía: el plan no decía cómo inyectar tramas en DIO15 ni que la imagen tenía que encender MCO1. La revisión 2 del plan lo añade.
 
 **No se ejecuta nada en la placa hasta que la corrección pase la revisión.**
+
+## F1, corrección 1 (`a39abd7`, informe en `48ffc6c`)
+
+**Cómo la revisé:**
+- el driver y `ad2.py`, yo;
+- dos revisiones de solo lectura: el selftest y el host; y `uart_checks.py` con el informe;
+- los bloqueantes, comprobados contra el código.
+
+**Placa:** Antigravity la usó con permiso del responsable (mensaje del 2026-10-17), así que sus capturas `uart_dev_*` son evidencia de desarrollo. La regla de §2.2 de las instrucciones queda actualizada.
+
+### Cerrado
+
+**El driver:**
+- D1 (LPUART ignora OVER8, como BM);
+- D2 (AF ≤ 15 en la fase 1, en LL y HAL);
+- D3 (`InitEx` valida los dos pines antes de configurar).
+
+**El selftest y el host:**
+- **Ruta de hardware:** existe, con el AD2 como gestor de contexto, reset en S2, `Rev`/build id comprobados y `finally` a S2.
+- **Pasos:** un veredicto por paso, y el nombre del paso se comprueba.
+- **Pasos reales:**
+  - UT0 comprueba de verdad la resistencia (`IDR` y AD2);
+  - UT5 inyecta de verdad PE, FE y ORE (sin FIFO) por Digital Out, y `TakeErrors` una sola vez;
+  - UT7 es 8E1 de verdad (`9B`), con `HAL_BUSY`/`HAL_OK`;
+  - UT8 tiene transferencia viva por DMA1 y `HAL_BUSY` mientras corre;
+  - UT9 usa un handle nuevo y estado exacto.
+- **UT2:** fórmula propia en el host, y filas con `USARTDIV` impar en LL (U5).
+
+**`ad2.py`:** un solo punto de OE y uno de Digital Out, y S2 antes de cada excepción, también en el fallo de relectura.
+
+**`uart_checks.py`:**
+- **T-B1:** controles por las funciones reales: diff de una cabecera temporal; control positivo con los ELF de `selftest-uart`; `nm` con código y ≥ 1 símbolo.
+- **T-M3:** `nm` sin `-g`, con un patrón que ve los `static`, y ELF `debug`.
+- **T-M4:** rutas completas.
+
+### Hallazgos nuevos o abiertos
+
+| ID | Gravedad | Hallazgo | Qué se pide |
+| --- | --- | --- | --- |
+| C-B1 | Bloqueante | **UT10 es una constante.** CM4 pone `m4_ut10_ok = 1U` sin hacer nada (CM4 `uart_selftest.c:215-217`), y el informe lo llama "regresión de `prj_04`". Es S-M6 con otro nombre | Quitar UT10 de `prj_01` del todo. UT10 la ejecuta el auditor con `prj_04` |
+| C-B2 | Bloqueante | **UT3 no puede fallar:**<br>• `la_arm(100e6, 4096)` captura 41 µs, y una trama a 115 200 dura 86,8 µs; con 868 muestras por bit fijas no cabe ninguna (`uart_hw_check.py:647-659`);<br>• la paridad siempre es `"none"`;<br>• `stop_ok` es verdadero si la parada cae fuera;<br>• no hay comparación de bytes;<br>• `mco_per_bit` no se usa, y la tolerancia solo se imprime;<br>• el LA se arma después del handshake, con el firmware ya transmitiendo;<br>• la frecuencia de MCO1 es un literal del firmware | La revisión 2 del plan, punto 5, más la regla de los oráculos de abajo |
+| C-M1 | Mayor | **NE no se inyecta:** su patrón es el mismo que el de CLEAN (`:676`/`:678`), y el firmware solo lo registra, aunque el paso da PASS. Tampoco hay BREAK, ni ORE con FIFO, ni captura del patrón en el LA, ni comprobación de SU2 en el host | Un pulso más corto que un bit, con más velocidad de Digital Out; BREAK; ORE con FIFO; y si el hardware no marca NE, una línea explícita de "NE no detectado" que no cuenta como PASS |
+| C-M2 | Mayor | **UT6 no ejercita el control de flujo:** `written = 16/20` cabe en el FIFO de 16, y nadie mira `written`. El control sin control de flujo usa otra configuración | N ≥ 20 bytes enviados de verdad y comprobados, y la **misma** secuencia con `hw_flow` apagado; recuento en el LA por fase |
+| C-M3 | Mayor | **CM7 espera `m4_ready == 1U`, pero CM4 escribe la sesión** (CM7:1737 frente a CM4:177). La espera siempre agota sus 2 s, y el `Rev` de CM4 se lee por suerte | Comparar con `session`; FAIL si se agota |
+| C-M4 | Mayor | **La instantánea de UT1 no ve U3:** USART2EN y el AF7 de PD5/PD6 ya están puestos antes, y faltan `PUPDR`/`OSPEEDR`. El control positivo es otra comparación | Partir de reloj apagado y pines en entrada; una sola función de instantánea (`MODER`, `AFR`, `PUPDR`, `OSPEEDR`, `CR1`–`CR3`, `BRR`, `PRESC`, `APB1LENR`) para rechazos y control |
+| C-M5 | Mayor | **A UT2 le faltan casos:** todas las filas dan `PRESC = 0`, así que la búsqueda del prescaler no se ejercita; las filas de rechazo no llegan al host; con 0 filas, PASS; no hay fila mutada | Filas con `PRESC ≠ 0`; las filas de rechazo, impresas y juzgadas por la fórmula del host; un número esperado de filas; una fila mutada por la misma función |
+| C-M6 | Mayor | **Las instantáneas de pines de UT7 y UT9 se calculan y se tiran** (`(void)`, CM7:1456-1457, 1661-1662) | Que cuenten: AF, pull-up y velocidad |
+| C-M7 | Mayor | **El mock no recorre la misma sesión:** `sync` devuelve verdadero, `MockAD2` sustituye a `AD2` en vez de `AD2(dwf_lib = mock)`, las líneas del firmware están escritas a mano, y los fallos de §3.5 se prueban llamando directamente a las funciones | `AD2(dwf_lib = mock)`; la salida del firmware generada a partir de `k_ust_steps`; los fallos inyectados en esa salida y en las muestras del LA, por la sesión |
+| C-M8 | Mayor | **El host no recorre `STEPS`, y el permiso de SU1 sale de literales:**<br>• `step == "UT0"`/`"UT5"` (`ad2.py:80-81, 106-107`);<br>• `step_name = "UT5"` (`:686`);<br>• `self.current_step or step_name` (`ad2.py:793`);<br>• `AD2_UART_INJECT_STEPS` está obsoleto | El host recorre `STEPS`, y su columna `dio15` (OE o DOUT) va a `ad2.set_step()`. `ad2.py` solo acepta esa columna, sin ramas por nombre ni de cadenas sueltas |
+| C-M9 | Mayor | **`dout_custom` cambia el comportamiento para todos:** fija siempre `RepeatSet(1)` y `RunSet(...)` (`ad2.py:870-872`), y `tim_hw_check.py:1069` lo usa en `03_tim` | Opcional, por un parámetro que por defecto deja lo de antes; que el mock de `tim_hw_check.py` siga pasando |
+| C-M10 | Mayor | **El reset del host no lleva `sn=`, y su salida se tira** (`uart_hw_check.py:952`). Con la F334 conectada hay dos ST-LINK | `sn=` siempre, y la salida a la captura |
+| C-M11 | Mayor | **S4 no se aplica a los `Init` del driver en CM7:** UT3, UT4, UT6 (TX/RX), UT7, UT8, UT9 y PA8 (MCO1) configuran pines sin claim | Claim de cada pin antes de cada `Init` |
+| D4 | Mayor | **`UART_LL_EnableRxIrq`/`DisableRxIrq` usan `ATOMIC_SET_BIT`/`ATOMIC_CLEAR_BIT`** (LDREX/STREX), la misma causa por la que `Init` se colgaba con LPUART1 (`a39abd7`, `uart_ll.c:358`); con LPUART1 se colgarían igual | RMW no exclusivo dentro de una sección `PRIMASK`. La causa, con una cita de RM0399 o ES0445 si existe; si no, decirlo y apoyarlo en una captura `uart_dev_` en la que el código anterior se cuelga con LPUART1 |
+| D5 | Menor | **`TakeErrors` cambia de semántica sin que se pidiera:** ahora lee y borra los flags del hardware (BM y LL). La función está congelada | Declararlo como desviación, con su motivo y su efecto en el modo FIFO (el flag deja de ir asociado al byte); documentarlo en §4.1/§4.3 en el cierre |
+| C-m | Menor | Detalles sueltos:<br>• en UT5, un `sync0` fallido deja `ok` verdadero;<br>• relojes de UART4/5/8, USART1/6 y LPUART1 (UT2) y DMA1 (UT8) quedan encendidos;<br>• MCO1 solo se restaura por el camino de DONE;<br>• el canal 15 de Digital Out no se reinicia entre pasos;<br>• se ignoran `LOCK_RELEASE` y `Flush`, y los bucles de TC no tienen límite;<br>• el host no comprueba el árbol limpio;<br>• `--allow-dirty` se salta R3-a;<br>• UT0_CTRL suelta la condición antes del siguiente handshake;<br>• `UST_AREA_ADDR` sin cita del enlazador | Corregir |
+| T-N1 | Mayor | **El árbol limpio de `uart_checks.py` no ve `MM`, `UU`, `AA`, `DD`, `RM`…** (`:163`), y al empezar no hay instantánea | Todo prefijo salvo `!!` es sucio |
+| T-n | Menor | Detalles sueltos:<br>• exenciones generales de `uart_checks_*`/`uart_mock_*`, en vez de solo `out_path`;<br>• el número de objetos no se exige y es el recuento de *edges* de Ninja;<br>• el control de `-Wconversion` acepta `-Wsign-conversion`;<br>• el pathspec por glob;<br>• los ELF del control positivo sin comprobar que son de la ejecución | Corregir |
+| R5 | Mayor | **El informe:**<br>• presenta lo de la placa como verificado;<br>• dice "sin desviaciones";<br>• falta §2 (U1–U6 con `archivo:línea`);<br>• citas erróneas (`uart_hal.c:198-216`, `:205-235`);<br>• la marca final no es la pedida;<br>• falta lo que prepara el responsable;<br>• el comando de `run_warm_resets.py` crea `docs/` en la raíz;<br>• no hay receta del control de UT9 | Corregir; las capturas `uart_dev_*`, como evidencia de desarrollo, NO VERIFICADO |
+
+### La regla de los oráculos
+
+En las tres entregas, varias comprobaciones de banco no podían fallar.
+
+**Desde esta ronda, cada paso de UT0–UT9 lleva en la misma ejecución de placa un control que hace fallar su oráculo, pasando por la misma función de evaluación del host.** Por ejemplo, en UT3 la decodificación con la paridad esperada invertida, o con un byte esperado cambiado, tiene que dar FAIL.
+
+La captura termina con una tabla: paso, comprobación, resultado real y resultado del control. Un paso cuyo control no falla es un FAIL del paso.
+
+### Fuera de alcance
+
+**`00_docs_stm32h7/HOWTO_INTEGRATE_SHARED_DRIVERS.md`** (`77aabca`, 927 líneas, con la línea de coautoría de Claude) no es de esta fase. Está pendiente de la decisión del responsable. No se toca.
+
+### Estado
+
+**F1 no pasa.** El driver está bien, salvo D4 y D5. El selftest y el host han avanzado mucho, pero UT3 y UT10 no pueden fallar, NE y RTS/CTS no se ejercitan, y el mock no recorre la sesión real.

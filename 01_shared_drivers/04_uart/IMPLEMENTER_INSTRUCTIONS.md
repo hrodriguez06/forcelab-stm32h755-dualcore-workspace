@@ -54,7 +54,7 @@ Nada más: `git diff b41c4a7 --stat` lo demuestra.
 | En `ad2.py`: las guardas S3, S4, S5 y S11, sus listas de DIO, o cualquier cosa fuera de SU1 | Seguridad eléctrica del banco |
 | Hacer salida del AD2 cualquier DIO salvo DIO15, y DIO15 fuera de UT5 | SU1 |
 | Que `bench_claim()` acepte PE0–PE4, PE7 o el bus fuera de sus pasos; configurar PD3–PD6 fuera de `selftest-uart` | S4, SU4 |
-| Programar, resetear o leer la placa; abrir el AD2 (`flash.py`, `STM32_Programmer_CLI`, `monitor.py`, `uart_hw_check.py` o `run_warm_resets.py` contra el hardware) | **No tienes acceso a la placa ni al AD2.** El host se prueba con su mock |
+| Escribir registros por SWD fuera del flasheo normal; option bytes; borrado completo; actualizar el firmware del ST-LINK; usar el ST-LINK de la F334; abrir la interfaz de WaveForms | **Desde el 2026-10-17 puedes usar la placa y el AD2** (decisión del responsable):<br>• flashear imágenes del repo con el `tools/flash.py` de cada proyecto y `sn=0016000C4142501220353451`;<br>• ejecutar `uart_hw_check.py`, `monitor.py` y `tools/run_warm_resets.py`;<br>• leer por SWD y resetear por NRST;<br>• abrir el AD2 solo por `tools/ad2.py`.<br>Lo de esta fila sigue prohibido. Si la placa deja de responder, para y repórtalo. Tus capturas de placa llevan el prefijo `uart_dev_`, son evidencia de desarrollo y quedan NO VERIFICADO hasta el auditor. Al terminar, la placa queda con `prj_01` `debug` y el AD2 cerrado |
 | Escribir en `.git/config` o en la configuración de git, también desde un worktree (los worktrees comparten `.git/config`) | Pasó en el cierre de `00_gpio` |
 | Contar avisos con la salida de `build_all.ps1` | No imprime la salida del compilador |
 | Borrar o reescribir comentarios que no son de las líneas que cambias | Pasó en `08_eth` |
