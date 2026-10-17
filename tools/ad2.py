@@ -36,6 +36,11 @@ AD2_DIO_MCO1_PA8          = (1 << 14)  # DIO14 -> PA8 (Solo MCU) - PROHIBITED
 
 AD2_ALLOWED_STATIC_OUTPUTS = AD2_DIO_EXTI3_CM7 | AD2_DIO_EXTI4_CM4 | AD2_DIO_HOST_REQ
 
+# ---- SU1: UART RX injection (04_uart selftest, UT5) -------------------------
+# DIO15 -> PD6 (USART2_RX) is an AD2 output ONLY in UT5 steps.
+AD2_DIO_UART_RX_INJECT     = (1 << 15)  # DIO15 -> PD6
+AD2_UART_INJECT_STEPS      = ("UT5", "UT5_PE", "UT5_FE", "UT5_NE", "UT5_ORE")
+
 # ---- Digital Out (S11) -------------------------------------------------------
 # DIO1 -> PE9 and DIO3 -> PE11 (TIM1_CH1/CH2 capture inputs of 03_tim) are the
 # only lines the pattern generator may ever drive, and only in a "bus = AD2" step.
@@ -102,6 +107,38 @@ def ad2_set_oe(dwf_lib, hdwf: int, mask: int, step_bus_owner: int) -> None:
     dwf_lib.FDwfDigitalIOConfigure(ctypes.c_int(hdwf))
 
     # Read-back verification
+    readback = ctypes.c_uint32()
+    dwf_lib.FDwfDigitalIOOutputEnableGet(ctypes.c_int(hdwf), ctypes.byref(readback))
+    if (readback.value & 0xFFFF) != (mask & 0xFFFF):
+        raise AD2Error(f"OE read-back failed: expected 0x{mask:04X}, got 0x{readback.value:04X}")
+
+
+def ad2_set_uart_oe(dwf_lib, hdwf: int, mask: int, step_name: Optional[str]) -> None:
+    """Guard SU1: Allows DIO15 as output ONLY in steps declared in AD2_UART_INJECT_STEPS.
+
+    Static outputs (HOST_REQ DIO12) are allowed.
+    All other outputs are prohibited.
+    """
+    allowed = AD2_DIO_HOST_REQ
+    if step_name in AD2_UART_INJECT_STEPS:
+        allowed |= AD2_DIO_UART_RX_INJECT
+
+    if (mask & ~allowed) != 0:
+        try:
+            dwf_lib.FDwfDigitalIOReset(ctypes.c_int(hdwf))
+            dwf_lib.FDwfDigitalIOConfigure(ctypes.c_int(hdwf))
+        except Exception:
+            pass
+        ad2_dout_safe(dwf_lib, hdwf, strict=False)
+        prohibited = mask & ~allowed
+        raise AD2SafetyViolation(
+            f"SU1 Guard violation: prohibited bits 0x{prohibited:04X} in OE mask 0x{mask:04X} "
+            f"(allowed: 0x{allowed:04X}, step_name={step_name})"
+        )
+
+    dwf_lib.FDwfDigitalIOOutputEnableSet(ctypes.c_int(hdwf), ctypes.c_uint32(mask & 0xFFFF))
+    dwf_lib.FDwfDigitalIOConfigure(ctypes.c_int(hdwf))
+
     readback = ctypes.c_uint32()
     dwf_lib.FDwfDigitalIOOutputEnableGet(ctypes.c_int(hdwf), ctypes.byref(readback))
     if (readback.value & 0xFFFF) != (mask & 0xFFFF):
@@ -658,6 +695,10 @@ class AD2:
     def set_oe(self, mask: int, step_bus_owner: int) -> None:
         """S3: Set DIO output enable through guarded function."""
         ad2_set_oe(self._dwf, self._hdwf.value, mask, step_bus_owner)
+
+    def set_uart_oe(self, mask: int, step_name: Optional[str]) -> None:
+        """SU1: Set DIO output enable for UART bench, allowing DIO15 only in UT5."""
+        ad2_set_uart_oe(self._dwf, self._hdwf.value, mask, step_name)
 
     def get_oe(self) -> int:
         """Read back current Output Enable mask from hardware."""
