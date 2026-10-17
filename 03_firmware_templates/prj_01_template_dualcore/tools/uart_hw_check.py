@@ -108,19 +108,24 @@ def check_clean_tree(repo_root: pathlib.Path, out_file: Optional[pathlib.Path]) 
         if not line:
             continue
         code = line[:2]
-        path_str = line[3:].strip()
+        path_str = line[3:].strip().strip('"')
         if " -> " in path_str:
             path_str = path_str.split(" -> ")[1]
         p = (repo_root / path_str).resolve()
         if out_res and p == out_res:
             continue
-        # Also permit scratch files in brain artifact scratchpad
-        if ".gemini" in path_str or "build" in path_str:
+        if "build" in p.parts or ".gemini" in path_str:
             continue
-        # Ignored files under build/ are permitted
-        if code == "!!" and ("build/" in path_str or "build\\" in path_str):
+        # Permit captures in docs directories
+        if (p.parent == (repo_root / "01_shared_drivers" / "04_uart" / "docs").resolve()
+                and p.name.startswith("uart_checks_")):
             continue
-        dirty.append(line)
+        if (p.parent == (repo_root / "03_firmware_templates" / "prj_01_template_dualcore" / "docs").resolve()
+                and (p.name.startswith("uart_dev_") or p.name.startswith("uart_mock_"))):
+            continue
+        # Only non-ignored modifications or untracked files are dirty
+        if code != "!!":
+            dirty.append(line)
     if dirty:
         return False, f"working tree is dirty: {', '.join(dirty[:3])}"
     return True, "Tree is clean outside build/"
