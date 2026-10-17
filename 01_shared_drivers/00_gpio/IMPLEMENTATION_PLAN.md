@@ -19,6 +19,8 @@ Base y control: `main` en `f066a8e`.
 
 No hace falta el AD2 ni recablear: si sigue conectado, se deja sin abrir.
 
+**Decisiones del responsable (2026-10-16): aprobadas las cuatro, con la opción A en 1–3** (ver [Decisiones abiertas](#decisiones-abiertas)).
+
 **Reglas de verificación (heredadas de `08_eth` E3–E7 y de `00_gpio` F2):**
 - Cada comprobación puede fallar de verdad y cuenta en el veredicto.
 - Cada control negativo pasa por **la misma función** que la comprobación real, con una entrada mutada:
