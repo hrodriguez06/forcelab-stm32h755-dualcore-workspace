@@ -17,7 +17,7 @@
 const UstStep_t k_ust_steps[] = {
     { "UT0",       UST_OWN_CM7,  (1U << UART_PIN_TX), UST_DIO15_OE },   /* PD5 resting high, AD2 checks series R */
     { "UT0_CTRL",  UST_OWN_CM7,  (1U << UART_PIN_TX), UST_DIO15_NONE }, /* PD5 output low for negative control */
-    { "UT1",       UST_OWN_NONE, 0U,                  UST_DIO15_NONE },
+    { "UT1",       UST_OWN_CM7,  (1U << UART_PIN_TX) | (1U << UART_PIN_RX), UST_DIO15_NONE },
     { "UT2",       UST_OWN_NONE, 0U,                  UST_DIO15_NONE },
     { "UT3",       UST_OWN_CM7,  (1U << UART_PIN_TX) | (1U << UART_PIN_RX), UST_DIO15_NONE },
     { "UT4",       UST_OWN_CM7,  (1U << UART_PIN_TX) | (1U << UART_PIN_RX), UST_DIO15_NONE },
