@@ -1,6 +1,6 @@
 # Plan de implementación de `04_uart`: auditoría, correcciones y validación en el banco
 
-Oct 17, 2026 · @Hector · revisión 1
+Oct 17, 2026 · @Hector · revisión 2
 
 `04_uart` está "Hecho", pero sin auditoría independiente. Su única validación es del implementador (2026-09-22): un selftest en CM4 de `prj_04` con un cable PD5–PD6 y nueve bytes por velocidad (README §9). Este plan:
 - corrige lo que encontró mi auditoría del código (U1–U7);
@@ -16,6 +16,40 @@ Base y control: `main` en `b41c4a7` (cierre de `00_gpio`).
 **El desarrollador es Antigravity.** No tiene acceso a la placa ni al AD2:
 - el implementador entrega el firmware, las herramientas y las pruebas sin placa (T1, T2 y la prueba del host con el mock);
 - todo lo que necesita el banco (UT1–UT10 y las dos ejecuciones completas) lo ejecuta el auditor con las herramientas del implementador.
+
+**Revisión 2 (2026-10-17), tras la auditoría de F1 (`AUDIT.md`).** La revisión 1 dejaba dos huecos, y la entrega mostró qué faltaba precisar.
+
+1. **Cómo inyecta el AD2 (UT5).** La E/S estática desde Python no llega a 104 µs por bit, así que las tramas en DIO15 se generan con el **generador de patrones** (Digital Out, `ad2.dout_custom`), a 9600 baud.
+   - **SU1 pasa a ser:** DIO15 es salida del AD2, por OE estático o por Digital Out, solo en un paso cuya entrada de `STEPS` declare `DIO15`. El permiso sale del paso actual de la sesión, nunca de un literal que pase quien llama.
+   - **Un solo punto de OE y un solo punto de Digital Out (A27, S11):** se amplían `ad2_set_oe` y `ad2_set_dout` con esa excepción, sin crear otra llamada a `FDwfDigitalIOOutputEnableSet` ni a `FDwfDigitalOutEnableSet`.
+   - **Idle = Z** (`DWF_DOUT_IDLE_ZET`). El estado seguro reinicia Digital Out (`ad2_dout_safe`).
+   - **Ante cualquier violación, S2 antes de lanzar la excepción.**
+2. **MCO1.** La imagen `selftest-uart` saca MCO1 por PA8 (DIO14) mientras dura la sesión, como T10 de `selftest-gpio` (`gpio_selftest.c:1542`), y lo restaura al terminar. La frecuencia de MCO1 y su relación con `f_ker` de USART2 se imprimen y se usan en UT3.
+3. **El host tiene una ruta de hardware completa**, como `gpio_hw_check.py`:
+   - el AD2 como gestor de contexto;
+   - reset con el AD2 en S2;
+   - banner con `Rev` y build id de los dos núcleos, comprobados;
+   - recorre `STEPS`, un veredicto por paso;
+   - S2/SU3 en `finally`.
+
+   El implementador **escribe** esa ruta y la prueba con el mock por la misma sesión; solo no la **ejecuta** contra la placa.
+4. **UT0** comprueba también la resistencia, con DIO15 por OE estático, en un paso que lo declara:
+   - **con PD5 en alto**, el AD2 pone PD6 a 0, y el `IDR` de PD6 da 0 mientras el de PD5 sigue en 1. Eso solo es posible con resistencia en serie (3,3 mA);
+   - **sin AD2**, PD6 sigue a PD5.
+
+   La condición se mantiene hasta el siguiente handshake, y el veredicto sale de lo que leen el AD2 y el `IDR`.
+5. **UT3:**
+   - el LA (DIO15 y DIO14) se arma **antes** de la ventana de TX, a 100 MS/s, con las muestras suficientes para todas las tramas del paso. La frecuencia y las muestras van a la captura;
+   - se decodifica con los parámetros de cada formato: bits, paridad y paradas;
+   - las tramas se comparan byte a byte;
+   - el ancho de bit se mide en periodos de MCO1 sobre todas las tramas y se compara con el teórico del `PRESC`/`BRR` impresos, con una tolerancia del ±0,5 %, escrita en el código y en la captura;
+   - BM, LL y HAL (`InitEx`, con `UART_WORDLENGTH_9B` para 8E1).
+6. **UT9:**
+   - **HEAD:** con un handle nuevo (`gState = RESET`) para la instancia de la consola, con el lock tomado por CM4, da `HAL_BUSY`; con el lock libre, `HAL_OK`. Se comprueba con una instantánea de PD8/PD9.
+   - **El control se construye en la ejecución:** un worktree en HEAD con `01_shared_drivers/04_uart/uart_hal.c` sustituido por el de `b41c4a7` (`git show b41c4a7:…`), compilado con `selftest-uart`.
+   - **Criterio del control:** tiene que dar **exactamente** `HAL_OK` con el lock tomado. Un timeout o un aborto es FAIL, no "esperado".
+7. **UT10** es la ejecución real del selftest de `prj_04`, que hace el auditor. `prj_01` no imprime ninguna línea con su formato.
+8. **El mock reproduce la salida real del firmware** generada a partir de `k_ust_steps`, y los fallos se inyectan en esa salida y en las muestras del LA simuladas, por la misma sesión que la ejecución real.
 
 **Decisiones del responsable (2026-10-17): aprobadas las cuatro, con la opción A en 1–3** (ver [Decisiones abiertas](#decisiones-abiertas)).
 

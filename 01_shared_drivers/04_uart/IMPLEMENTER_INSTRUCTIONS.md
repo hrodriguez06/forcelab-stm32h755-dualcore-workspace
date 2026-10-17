@@ -2,7 +2,7 @@
 
 Oct 17, 2026 · @Hector
 
-Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 1) de esta carpeta:
+Vas a implementar el plan [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (revisión 2) de esta carpeta:
 - las correcciones U1–U6 del driver;
 - el preset `selftest-uart` de `prj_01`, con los pasos UT0–UT10;
 - el host `prj_01/tools/uart_hw_check.py` y su mock;
