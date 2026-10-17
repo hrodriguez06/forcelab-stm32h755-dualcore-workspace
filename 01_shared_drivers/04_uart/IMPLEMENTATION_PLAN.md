@@ -17,6 +17,8 @@ Base y control: `main` en `b41c4a7` (cierre de `00_gpio`).
 - el implementador entrega el firmware, las herramientas y las pruebas sin placa (T1, T2 y la prueba del host con el mock);
 - todo lo que necesita el banco (UT1–UT10 y las dos ejecuciones completas) lo ejecuta el auditor con las herramientas del implementador.
 
+**Decisiones del responsable (2026-10-17): aprobadas las cuatro, con la opción A en 1–3** (ver [Decisiones abiertas](#decisiones-abiertas)).
+
 **Reglas de verificación (heredadas de `00_gpio` y `08_eth`):**
 - **Comprobaciones reales:** cada una puede fallar de verdad y cuenta en el veredicto.
 - **Controles negativos:** cada uno pasa por **la misma función** que la comprobación real, con una entrada mutada:
