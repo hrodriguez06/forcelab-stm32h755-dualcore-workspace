@@ -100,13 +100,34 @@ def git_rev() -> str:
         return "unknown"
 
 
-def host_build_id(preset: str) -> str:
-    rev = git_rev()
-    build_dir = PROJECT / "build" / preset
-    h = hashlib.sha256()
-    h.update(rev.encode("utf-8"))
-    h.update(str(build_dir).encode("utf-8"))
-    return h.hexdigest()[:16]
+def host_build_id(preset: str, project: pathlib.Path = PROJECT) -> str:
+    """R3-a/R3-b: FW_BUILD_ID as cmake/fw_build_id.cmake computes it, over the
+    checkout of `project`: the first 16 hex digits of the SHA-256 of
+    "HEAD=" <git rev-parse HEAD, 40 hex>, the bytes of `git diff --no-color
+    HEAD`, "CMAKE_C_FLAGS=" <CMAKE_C_FLAGS of build/<preset>/CMakeCache.txt>
+    and " PRESET=" <preset>, no newline added. "unknown" when git or the cache
+    cannot be read; never an invented value.
+    """
+    try:
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(project),
+                              capture_output=True, check=True).stdout.strip()
+        diff = subprocess.run(["git", "diff", "--no-color", "HEAD"], cwd=str(project),
+                              capture_output=True, check=True).stdout
+        cache = (project / "build" / preset / "CMakeCache.txt").read_bytes()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    if not re.fullmatch(rb"[0-9a-f]{40}", head):
+        return "unknown"
+    flags = None
+    for line in cache.splitlines():
+        m = re.match(rb"^CMAKE_C_FLAGS:[A-Z]+=(.*)$", line)
+        if m:
+            flags = m.group(1)
+            break
+    if flags is None:
+        return "unknown"
+    payload = b"HEAD=" + head + diff + b"CMAKE_C_FLAGS=" + flags + b" PRESET=" + preset.encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()[:16]
 
 
 # ---- Formula Oracles --------------------------------------------------------
