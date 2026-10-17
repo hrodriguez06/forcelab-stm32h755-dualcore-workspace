@@ -1,0 +1,47 @@
+[+   0.001s] [host] argv: tools/eth_e3e6_checks.py --test t1,t2,t3 --output C:\Users\HRODRI~1\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\a435ba69-f99a-4dc8-9231-6c64b1c6d99b\scratchpad\eth_auditor_close_t1t3.txt
+[+   0.002s] [host] options: test=t1,t2,t3 output=C:\Users\HRODRI~1\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\a435ba69-f99a-4dc8-9231-6c64b1c6d99b\scratchpad\eth_auditor_close_t1t3.txt control_dir=C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7 allow_dirty=False sn=0016000C4142501220353451 target_ip=192.168.1.150 local_echo=False
+[+   0.042s] [host] HEAD: 18428f4997dba7b9229102f66f3d13372e23ff41
+[+   0.042s] [host] Working tree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+[+   0.043s] [host] Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7
+[+   5.204s] [host] working tree clean (start): PASS (Tree is clean outside build/)
+[+   5.813s] [host] Compiler: C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.EXE
+[+   5.813s] [host] Objdump:  C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-objdump.exe
+[+   5.814s] [host] CMake:    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cmake.win32_1.1.200.202605190741\tools\bin\cmake.EXE
+[+   5.814s] === Running T1 Checks (Build Matrix 8/8) ===
+[+   5.814s] [check] Compiling 8 matrix configurations directly via cmake --clean-first...
+[+  31.380s] [host] CHECK matrix prj_01_template_dualcore [debug]: PASS (code=0, objs=271, warnings=0, image=fresh (mtime=1792199752))
+[+  49.401s] [host] CHECK matrix prj_01_template_dualcore [release]: PASS (code=0, objs=271, warnings=0, image=fresh (mtime=1792199770))
+[+  80.582s] [host] CHECK matrix prj_02_eth_lwip_dualcore [debug]: PASS (code=0, objs=315, warnings=0, image=fresh (mtime=1792199801))
+[+ 107.744s] [host] CHECK matrix prj_02_eth_lwip_dualcore [release]: PASS (code=0, objs=315, warnings=0, image=fresh (mtime=1792199828))
+[+ 144.223s] [host] CHECK matrix prj_03_adc_dma_eth [debug]: PASS (code=0, objs=323, warnings=0, image=fresh (mtime=1792199864))
+[+ 172.311s] [host] CHECK matrix prj_03_adc_dma_eth [release]: PASS (code=0, objs=323, warnings=0, image=fresh (mtime=1792199892))
+[+ 207.940s] [host] CHECK matrix prj_04_adc_dma_bm_eth [debug]: PASS (code=0, objs=321, warnings=0, image=fresh (mtime=1792199928))
+[+ 233.541s] [host] CHECK matrix prj_04_adc_dma_bm_eth [release]: PASS (code=0, objs=321, warnings=0, image=fresh (mtime=1792199953))
+[+ 233.542s] [host] CHECK T1 matrix 8/8 (clean-first, 0 warnings): PASS (8/8 passed)
+[+ 233.691s] [host] CHECK T1 negative control (project flags deliberate warning detected & rejected): PASS (warnings=1)
+[+ 233.693s] === Running T2 Checks (prj_02, prj_03 & prj_04 Unchanged vs Control 69179d7) ===
+[+ 233.833s] [host] Control worktree setup: PASS (Control worktree at 69179d7 ready)
+[+ 233.833s] [check] Ensuring HEAD 6 configurations (prj_02, prj_03, prj_04) are compiled fresh in this execution...
+[+ 233.835s] [check] Compiling 6 control configurations (prj_02, prj_03, prj_04, debug & release) in-situ...
+[+ 432.847s] [check] Deep comparing ALLOC headers, raw contents, relocations and symbols across 12 objects...
+[+ 434.083s] [host] CHECK prj_02_eth_lwip_dualcore [debug] eth_hal.c.obj: PASS (Identical: 46 ALLOC sections, 37 content sections, 27 reloc sections, 62 symbols)
+[+ 435.406s] [host] CHECK prj_02_eth_lwip_dualcore [debug] ethernetif.c.obj: PASS (Identical: 29 ALLOC sections, 24 content sections, 16 reloc sections, 56 symbols)
+[+ 435.643s] [host] CHECK prj_02_eth_lwip_dualcore [release] eth_hal.c.obj: PASS (Identical: 42 ALLOC sections, 32 content sections, 24 reloc sections, 58 symbols)
+[+ 435.852s] [host] CHECK prj_02_eth_lwip_dualcore [release] ethernetif.c.obj: PASS (Identical: 22 ALLOC sections, 16 content sections, 11 reloc sections, 50 symbols)
+[+ 437.112s] [host] CHECK prj_03_adc_dma_eth [debug] eth_hal.c.obj: PASS (Identical: 46 ALLOC sections, 37 content sections, 27 reloc sections, 62 symbols)
+[+ 438.551s] [host] CHECK prj_03_adc_dma_eth [debug] ethernetif.c.obj: PASS (Identical: 29 ALLOC sections, 24 content sections, 16 reloc sections, 56 symbols)
+[+ 438.902s] [host] CHECK prj_03_adc_dma_eth [release] eth_hal.c.obj: PASS (Identical: 42 ALLOC sections, 32 content sections, 24 reloc sections, 58 symbols)
+[+ 439.084s] [host] CHECK prj_03_adc_dma_eth [release] ethernetif.c.obj: PASS (Identical: 22 ALLOC sections, 16 content sections, 11 reloc sections, 50 symbols)
+[+ 440.386s] [host] CHECK prj_04_adc_dma_bm_eth [debug] eth_hal.c.obj: PASS (Identical: 46 ALLOC sections, 37 content sections, 27 reloc sections, 62 symbols)
+[+ 441.782s] [host] CHECK prj_04_adc_dma_bm_eth [debug] ethernetif.c.obj: PASS (Identical: 29 ALLOC sections, 24 content sections, 16 reloc sections, 56 symbols)
+[+ 442.013s] [host] CHECK prj_04_adc_dma_bm_eth [release] eth_hal.c.obj: PASS (Identical: 42 ALLOC sections, 32 content sections, 24 reloc sections, 58 symbols)
+[+ 442.244s] [host] CHECK prj_04_adc_dma_bm_eth [release] ethernetif.c.obj: PASS (Identical: 22 ALLOC sections, 16 content sections, 11 reloc sections, 50 symbols)
+[+ 442.245s] [host] CHECK T2 all 12 objects identical to control: PASS (12/12 passed)
+[+ 442.245s] [host] CHECK T2 negative control (mutated section header size detected & rejected): PASS (Section header mismatch: {('.RxArraySection', ('00003000', '00000000', '00000000', '2**5', 'CONTENTS, ALLOC, LOAD, DATA')), ('.RxArraySection', ('0000ffff', '00000000', '00000000', '2**5', 'CONTENTS, ALLOC, LOAD, DATA'))})
+[+ 442.246s] === Running T3 Checks (E3 Callbacks Opt-Out & Linkage) ===
+[+ 442.739s] [host] CHECK nm on eth_hal.c object (rc==0 and ETH_Driver_Init present): PASS
+[+ 442.740s] [host] CHECK eth_hal.c -DETH_HAL_CUSTOM_CALLBACKS (0 of 6 callbacks defined in object): PASS (defined=[])
+[+ 442.838s] [host] CHECK partial link with custom callbacks (exit code 0): PASS (exit code 0)
+[+ 443.240s] [host] CHECK T3 negative control (link without macro fails with multiple definition): PASS (exit code 1, multiple definition detected)
+[+ 447.428s] [host] working tree clean (end): PASS (Tree is clean outside build/)
+[+ 447.429s] OVERALL VERDICT: PASS

@@ -19,7 +19,7 @@ Una fase (F1) y un cierre. Base y control: `main` en `69179d7`. Reglas para el i
 - **Medidas** (`docs/eth_e3e6_audit_t5t6_1150083.txt`):
   - con la carga una a una, el cero-copia de recepción rinde igual que la copia (6,19 frente a 6,28 Mbit/s);
   - con 32 en vuelo pierde 24 de 5000 tramas (`rx_nobuf` = 26) y rinde 32,8 frente a 54,1 Mbit/s;
-  - la copia almacena unas 24 tramas (8 búferes DMA y 16 pbufs), y el cero-copia solo los 12 búferes DMA que caben en SRAM3;
+  - la copia almacena unas 24 tramas (8 búferes DMA y 16 pbufs), y el cero-copia solo sus 12 búferes DMA (SRAM3 queda en 24 768 de 32 768 B; junto al pool de Tx caben como mucho 17, aún menos que 24);
   - no hay una medida de CPU que muestre ganancia.
 - **Qué cambia:**
   - se quita el código de cero-copia: `ETH_Driver_ReleaseRxBuffer`, `g_rx_rearm_pending`, la rama de `ethernetif.c`, `LWIP_SUPPORT_CUSTOM_PBUF` y las dos definiciones de `prj_02`;

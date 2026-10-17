@@ -410,7 +410,7 @@ Set `NET_USE_DHCP` to `1` in `CM7/App/Inc/net_config.h` and rebuild. The task re
 
 ## 9. Zero-copy receive evaluation & benchmark results
 
-The production driver uses a copy-based data path, where each frame is copied between lwIP pbufs and the driver's DMA buffers in `.eth_ram` (`.RxArraySection`). At 100 Mbps, this single `memcpy` of up to ~1.5 kB per frame consumes only a low single-digit percentage of the 400 MHz Cortex-M7.
+The production driver uses a copy-based data path, where each frame is copied between lwIP pbufs and the driver's DMA buffers in `.eth_ram` (`.RxArraySection`). At 100 Mbps, this single `memcpy` of up to ~1.5 kB per frame is estimated at a low single-digit percentage of the 400 MHz Cortex-M7 (an estimate; no CPU measurement has been taken).
 
 ### 9.1 Hardware benchmark results (October 2026)
 
@@ -428,15 +428,15 @@ In October 2026, a zero-copy receive architecture was implemented and benchmarke
 
 Under burst traffic, the copy architecture decouples DMA descriptor turnover from lwIP packet processing: the 8 DMA buffers are returned immediately to the descriptor ring while the packet payloads are queued in lwIP's 16 `PBUF_POOL` buffers (total buffering capacity ~24 frames).
 
-In zero-copy mode, lwIP holds each DMA buffer until upper-layer protocol and application processing complete. Because D2 SRAM3 (32 KB total) only accommodates 12 DMA buffers (18,432 B) alongside Tx buffers (6,144 B) and descriptor tables, a burst of 32 in-flight packets rapidly exhausts all 12 DMA buffers, starving the receiver ring and dropping frames (`rx_nobuf=26`).
+In zero-copy mode, lwIP holds each DMA buffer until upper-layer protocol and application processing complete. The prototype had 12 Rx DMA buffers (18,432 B), which with the Tx buffers (6,144 B) and descriptors put SRAM3 at 24,768 of 32,768 B. At most 17 Rx buffers fit beside the Tx pool, still fewer than the ~24 frames the copy path buffers. A burst of 32 in-flight packets exhausts the 12 DMA buffers, starving the receiver ring and dropping frames (`rx_nobuf=26`).
 
-Because zero-copy showed no measurable CPU savings and introduced a 39% burst throughput regression with frame loss, zero-copy receive (E6) was **measured and not adopted**.
+Because no CPU saving was measured and zero-copy introduced a 39% burst throughput regression with frame loss, zero-copy receive (E6) was **measured and not adopted**.
 
 ### 9.3 Guidelines for future zero-copy attempts
 
 If zero-copy is revisited for high-throughput bulk streaming, consider the following architectural paths:
 
-1. **Move Tx buffers to SRAM1**: Relocate `g_tx_pool` to the `.dma_buf` section in D2 SRAM1 (which is also non-cacheable and accessible by Ethernet DMA), freeing 6,144 B in SRAM3. This allows sizing `ETH_DRIVER_RX_BUFFER_COUNT` to 16–20 buffers within SRAM3.
+1. **Move Tx buffers to SRAM1**: Relocate `g_tx_pool` to the `.dma_buf` section in D2 SRAM1 (which is also non-cacheable and accessible by Ethernet DMA), freeing 6,144 B in SRAM3. `ETH_DRIVER_RX_BUFFER_COUNT` can then reach 21 within SRAM3 (17 without the move); check first that the project's memory map has room in SRAM1, and measure CPU load to know whether the change is worth it.
 2. **Hybrid zero-copy with copy fallback**: Pass incoming frames as zero-copy `pbuf_custom` while the DMA buffer pool has ample headroom, but automatically fall back to copying into standard `PBUF_POOL` pbufs when available DMA buffers fall below a safety threshold (e.g., ≤ 4).
 
 ---

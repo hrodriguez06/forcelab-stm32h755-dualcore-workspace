@@ -123,3 +123,50 @@ La siguiente ronda junta la corrección de F1 y el cierre del implementador:
 - los README.
 
 Se conservan E3 y el `#ifndef` del tamaño del pool.
+
+## Cierre del implementador (`dcf27e5`, informe en `da24735`)
+
+### Firmware
+
+Comparado con el control `69179d7`, el código solo cambia en:
+- el `#ifndef` de `ETH_DRIVER_RX_BUFFER_COUNT` (`eth_hal.h`);
+- el `#if !defined(ETH_HAL_CUSTOM_CALLBACKS)` alrededor de los seis callbacks (`eth_hal.c`).
+
+`prj_02` CM7 no tiene diferencias con el control.
+
+La entrega borró el bloque de comentario "HAL buffer-management hooks" de `eth_hal.c` y dejó una línea en blanco de más en `eth_hal.h`. Los restauré en `18428f4`, que solo toca comentarios.
+
+### T1–T3, ejecutadas por mí
+
+Captura `docs/eth_e3e6_audit_t1t3_18428f4.txt`: HEAD `18428f4`, **`OVERALL VERDICT: PASS`**.
+- **T1:** 8/8 con 0 avisos; el control con un aviso, rechazado.
+- **T2:** los 12 objetos (`eth_hal.c.obj` y `ethernetif.c.obj` de `prj_02`, `prj_03` y `prj_04`, `debug` y `release`) idénticos al control, que se compiló en la misma ejecución; la mutación, rechazada.
+- **T3:** con `-DETH_HAL_CUSTOM_CALLBACKS`, 0 de 6 callbacks y el enlace pasa; sin la macro, el enlace falla por definición múltiple.
+- El árbol, limpio fuera de `build/` al empezar y al terminar.
+
+**Coincide con la captura del implementador** (`eth_e3e6_t1t3_20eb735.txt`). No hace falta otra sesión de placa: `prj_02` vuelve a ser el control medido en `eth_e3e6_audit_t5t6_1150083.txt`.
+
+### README y `ETHERNET_BRINGUP.md`
+
+Las cifras de la sesión de placa coinciden con la captura: 6,28 y 6,19 Mbit/s, la razón 0,9859, 54,06 y 32,84 Mbit/s, 24 perdidos, `rx_nobuf=26` y Rev V.
+
+Corregí cuatro afirmaciones sin respaldo (en el commit que añade esta sección):
+- **"SRAM3 solo admite 12 búferes DMA" es falso.** El error venía de mi propio texto, en la revisión 3 del plan y en la sección de la corrección 2:
+  - con 12 búferes, SRAM3 queda en 24 768 de 32 768 B (T4, `eth_e3e6_audit_t1t4_1493792.txt`);
+  - junto al pool de Tx caben como mucho 17, y 21 si se mueve el Tx;
+  - la causa se mantiene, porque 17 sigue por debajo de las ~24 tramas de la copia. Lo corregí también en el plan.
+- **"Sin ganancia de CPU medible":** no se hizo ninguna medida de CPU; ahora lo dice así. La cifra de "un porcentaje bajo de un dígito" queda como estimación.
+- **"Control compilado in-tree":** se compila en un worktree aparte, en la misma ejecución.
+- **"La herramienta no crea archivos en el repo":** escribe en `build/`; ahora dice "limpio fuera de `build/`".
+
+El informe (§3) llama "12 descriptores" a lo que son 8 (4 de Rx y 4 de Tx); el total de 18 624 B es correcto. No lo corrijo, porque el informe se borra al cerrar.
+
+### Estado
+
+**E3–E7 pasa la auditoría:**
+- E3 resuelto;
+- E4 por diseño;
+- E6 medido y no adoptado;
+- E7 conservado.
+
+Quedan los pasos de cierre del responsable.

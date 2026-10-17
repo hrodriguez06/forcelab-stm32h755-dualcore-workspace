@@ -377,9 +377,9 @@ Captured in `docs/eth_e3e6_t1t3_20eb735.txt` using `tools/eth_e3e6_checks.py`:
 | Check | Result |
 | :--- | :--- |
 | **T1: Clean build matrix** | 8/8 configurations (`prj_01`..`prj_04`, `debug` and `release`) built clean-first with 0 warnings. Negative control with injected warning properly rejected. |
-| **T2: Binary invariance** | All 12 CM7 objects across `prj_02`, `prj_03`, and `prj_04` (`eth_hal.c.obj` and `ethernetif.c.obj`, `debug` and `release`) verified 100% byte-identical to control `69179d7` compiled in-tree across all ALLOC sections (including NOBITS), raw data, relocations, and symbols. Negative control properly rejected. |
+| **T2: Binary invariance** | All 12 CM7 objects across `prj_02`, `prj_03`, and `prj_04` (`eth_hal.c.obj` and `ethernetif.c.obj`, `debug` and `release`) verified 100% byte-identical to control `69179d7` built in a separate worktree in the same run, across all ALLOC sections (including NOBITS), raw data, relocations, and symbols. Negative control properly rejected. |
 | **T3: Callback opt-out (E3)** | When built with `-DETH_HAL_CUSTOM_CALLBACKS`, `eth_hal.c.obj` defines 0 of 6 HAL ETH callbacks while providing `ETH_Driver_Init`, linking cleanly against external callbacks. Without the macro, linking fails with duplicate symbol errors. |
-| **Working tree integrity** | Working tree verified clean before and after execution; tool creates no files in repo tree. |
+| **Working tree integrity** | Working tree (ignored files included) verified clean outside `build/` before and after execution. |
 
 #### 9.3.2 Auditor hardware benchmark session (commit `1150083`)
 
@@ -392,10 +392,11 @@ recorded in `docs/eth_e3e6_audit_t5t6_1150083.txt`:
 | **Windowed burst** (32 in flight, 5,000 pkts @ 1472 B UDP) | **54.06 Mbit/s**<br>5,000 / 5,000 rx, **0 lost**<br>`rx_nobuf=0`, `tx_nobuf=0` | **32.84 Mbit/s** (-39% throughput)<br>4,976 / 5,000 rx, **24 lost**<br>`rx_nobuf=26`, `tx_nobuf=0` | **Regression under burst** |
 
 **Hardware evaluation verdict**:
-Under sequential traffic, zero-copy yielded no measurable throughput or CPU gain. Under burst traffic,
+Under sequential traffic, zero-copy gave no throughput gain, and no CPU measurement was taken. Under burst traffic,
 the copy baseline absorbed datagram bursts via lwIP's 16 `PBUF_POOL` buffers while rapidly recycling
 the 8 DMA buffers back to the ring (~24 packets buffering capacity). Zero-copy retained DMA buffers
-during packet processing, but SRAM3 (32 KB limit) only accommodated 12 DMA buffers. Under a 32-packet
+during packet processing, and the prototype had 12 DMA buffers (SRAM3 at 24,768 of 32,768 B; at most
+17 fit beside the Tx pool, still fewer than the ~24 frames of the copy path). Under a 32-packet
 burst, descriptors exhausted, dropping 24 frames and degrading throughput by 39%. Consequently,
 Product Owner Decision (Plan Revision 3) **rejected zero-copy (E6)** and retained the proven copy data path.
 
@@ -462,7 +463,7 @@ E7), not on this driver.
 | # | Limitation | Status / Consequence |
 | :--- | :--- | :--- |
 | E4 | **One instance, global state.** The HAL handle, PHY and pools are file-scope statics. | **By design.** Matches the silicon (the STM32H755ZI has a single Ethernet MAC peripheral). Listed to document single-instance architecture. |
-| E6 | **Copy data path.** The lwIP glue copies each frame between pbufs and the SRAM3 pools (~1.5 kB per frame per direction). | **Measured and not adopted.** Implemented and benchmarked on hardware in October 2026 (`docs/eth_e3e6_audit_t5t6_1150083.txt`). Sequential throughput was equivalent (6.19 vs 6.28 Mbit/s), but windowed burst throughput regressed by 39% (32.84 vs 54.06 Mbit/s) with 24 dropped packets (`rx_nobuf=26`) due to SRAM3 pool capacity (12 DMA buffers vs 8 DMA + 16 pbufs in copy mode). Copy mode retained; see [section 9.3.2](#932-auditor-hardware-benchmark-session-commit-1150083) and `ETHERNET_BRINGUP.md` §9. |
+| E6 | **Copy data path.** The lwIP glue copies each frame between pbufs and the SRAM3 pools (~1.5 kB per frame per direction). | **Measured and not adopted.** Implemented and benchmarked on hardware in October 2026 (`docs/eth_e3e6_audit_t5t6_1150083.txt`). Sequential throughput was equivalent (6.19 vs 6.28 Mbit/s), but windowed burst throughput regressed by 39% (32.84 vs 54.06 Mbit/s) with 24 dropped packets (`rx_nobuf=26`) due to buffering capacity (12 DMA buffers in the prototype vs 8 DMA + 16 pbufs in copy mode). Copy mode retained; see [section 9.3.2](#932-auditor-hardware-benchmark-session-commit-1150083) and `ETHERNET_BRINGUP.md` §9. |
 | E7 | **`prj_eth_lwip_node` has a private copy** in `Custom_Drivers/08_eth/`. | **Deliberately kept.** Verification ran on those sources. Any driver fix here must be explicitly ported if needed. |
 
 ### 10.1 Resolved limitations
