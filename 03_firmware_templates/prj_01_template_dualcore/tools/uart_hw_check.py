@@ -205,6 +205,17 @@ def compute_presc_brr(inst: str, f_ker: int, baud: int, over8: bool) -> tuple[in
     return 0, 0
 
 
+def compute_actual_baud(f_ker: float, presc: int, brr: int, over8: bool) -> float:
+    presc_divs = [1, 2, 4, 6, 8, 10, 12, 16, 32, 64, 128, 256]
+    div = presc_divs[presc] if presc < len(presc_divs) else 1
+    ker_p = f_ker / div
+    if over8:
+        actual_div = (brr & 0xFFF0) | ((brr & 0x0007) << 1)
+        return (2.0 * ker_p) / actual_div if actual_div > 0 else 0.0
+    else:
+        return ker_p / brr if brr > 0 else 0.0
+
+
 # ---- UART Logic Analyzer Frame Decoder (E-M1, E-B3) -------------------------
 
 def decode_uart_frames(samples: list[int], bit_period_samples: int,
@@ -213,10 +224,27 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
     """Decodes UART frames and measures bit duration in MCO1 periods between real transitions."""
     frames: list[dict] = []
     n = len(samples)
-    i = 0
+    if n == 0 or bit_period_samples <= 0:
+        return frames
 
+    # 1. Debounce and collect MCO1 rising edges across the acquisition (E-M1)
+    mco_rises: list[int] = []
+    min_mco_spacing = max(2, int(0.6 * (rate / f_mco)))
+    for s in range(1, n):
+        if ((samples[s - 1] & DIO_MCO) == 0) and ((samples[s] & DIO_MCO) != 0):
+            if not mco_rises or (s - mco_rises[-1]) >= min_mco_spacing:
+                mco_rises.append(s)
+
+    mco_period_samples = 0.0
+    if len(mco_rises) >= 2:
+        mco_period_samples = (mco_rises[-1] - mco_rises[0]) / (len(mco_rises) - 1)
+    elif f_mco > 0:
+        mco_period_samples = rate / f_mco
+
+    # 2. Decode frames from DIO15 (DIO_RX)
+    i = 0
     while i < n:
-        # Find start bit falling edge on DIO15 (DIO_RX)
+        # Find start bit falling edge on DIO15 (preceded by line high)
         while i < n and (samples[i] & DIO_RX) == 0:
             i += 1
         while i < n and (samples[i] & DIO_RX) != 0:
@@ -224,7 +252,8 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
         if i >= n:
             break
 
-        start_edge = i
+        start_edge = i  # Real transition: start bit falling edge
+
         # Check start bit center is low
         sample_pt = i + int(round(0.5 * bit_period_samples))
         if sample_pt >= n:
@@ -265,10 +294,26 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
         else:
             stop_ok = False
 
+        # Measure bit duration between real transitions on DIO15 (E-M1)
         total_bits = 1 + data_bits + (1 if parity in ("even", "odd") else 0) + stop_bits
         frame_end = start_edge + int(round(total_bits * bit_period_samples))
         if frame_end > n:
             break
+
+        rx_transitions = [s for s in range(start_edge + 1, min(frame_end + 1, n))
+                          if ((samples[s] ^ samples[s - 1]) & DIO_RX)]
+
+        mco_per_bit = 0.0
+        if rx_transitions and mco_period_samples > 0:
+            last_edge = rx_transitions[-1]
+            span_samples = last_edge - start_edge
+            bits_spanned = round(span_samples / bit_period_samples)
+            if bits_spanned > 0:
+                bit_duration_samples = span_samples / float(bits_spanned)
+                mco_per_bit = bit_duration_samples / mco_period_samples
+
+        if mco_per_bit == 0.0 and mco_period_samples > 0:
+            mco_per_bit = bit_period_samples / mco_period_samples
 
         frames.append({
             "byte": val,
@@ -277,21 +322,10 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
             "start_edge": start_edge,
             "frame_end": frame_end,
             "total_bits": total_bits,
-            "mco_per_bit": 0.0
+            "mco_per_bit": mco_per_bit
         })
 
         i = frame_end
-
-    # E-M1: Measure bit width across all decoded frames in MCO1 periods
-    if frames:
-        t_first = frames[0]["start_edge"]
-        t_last = frames[-1]["frame_end"]
-        total_span_bits = max(1, int(round((t_last - t_first) / bit_period_samples)))
-        mco_rises = sum(1 for s in range(t_first + 1, min(t_last + 1, n))
-                        if (samples[s - 1] & DIO_MCO == 0) and (samples[s] & DIO_MCO != 0))
-        mco_per_bit = (mco_rises / total_span_bits) if total_span_bits > 0 else 0.0
-        for f in frames:
-            f["mco_per_bit"] = mco_per_bit
 
     return frames
 
@@ -327,14 +361,15 @@ def eval_ut2(rows: list[dict], rejects: list[dict], fw_pass: bool) -> bool:
 
 
 def eval_ut3(frames: list[dict], expected_bytes: list[int], exp_parity: str,
-             f_mco: float, baud: int, tolerance: float = 0.005) -> bool:
+             f_mco: float, baud: float, data_bits: int = 8, tolerance: float = 0.005) -> bool:
     if not frames:
         return False
     th_mco = f_mco / baud
+    mask = (1 << data_bits) - 1
     for i, f in enumerate(frames):
         if i >= len(expected_bytes):
             break
-        if f["byte"] != expected_bytes[i]:
+        if (f["byte"] & mask) != (expected_bytes[i] & mask):
             return False
         if not f["parity_ok"] or not f["stop_ok"]:
             return False
@@ -654,32 +689,35 @@ def generate_mock_lines() -> list[str]:
             lines.append("[uart] VERDICT UT2 PASS")
         elif step.name == "UT3":
             bm_formats = [
-                ("8N1", 115200, 0, 0x0, 0x364),
-                ("8E1", 115200, 0, 0x0, 0x364),
-                ("8O1", 115200, 0, 0x0, 0x364),
-                ("7E1", 115200, 0, 0x0, 0x364),
-                ("7N1", 115200, 0, 0x0, 0x364),
-                ("9N1", 115200, 0, 0x0, 0x364),
-                ("8N2", 115200, 0, 0x0, 0x364),
-                ("8N1", 9600,   0, 0x0, 0x28B0),
-                ("8N1", 921600, 1, 0x0, 0xDA),
+                ("8N1", 115200, 0),
+                ("8E1", 115200, 0),
+                ("8O1", 115200, 0),
+                ("7E1", 115200, 0),
+                ("7N1", 115200, 0),
+                ("9N1", 115200, 0),
+                ("8N2", 115200, 0),
+                ("8N1", 9600,   0),
+                ("8N1", 921600, 1),
             ]
-            for fmt, baud, over8, presc, brr in bm_formats:
-                lines.append(f"[uart] UT3 row: tier=BM format={fmt} baud={baud} over8={over8} presc=0x{presc:X} brr=0x{brr:X}")
+            for fmt, baud, over8 in bm_formats:
+                p, b = compute_presc_brr("USART2", 100000000, baud, bool(over8))
+                lines.append(f"[uart] UT3 row: tier=BM format={fmt} baud={baud} over8={over8} presc=0x{p:X} brr=0x{b:X}")
             ll_formats = [
-                ("8N1", 115200, 0, 0x0, 0x364),
-                ("8E1", 115200, 0, 0x0, 0x364),
-                ("7E1", 115200, 0, 0x0, 0x364),
-                ("9N1", 115200, 0, 0x0, 0x364),
+                ("8N1", 115200, 0),
+                ("8E1", 115200, 0),
+                ("7E1", 115200, 0),
+                ("9N1", 115200, 0),
             ]
-            for fmt, baud, over8, presc, brr in ll_formats:
-                lines.append(f"[uart] UT3 row: tier=LL format={fmt} baud={baud} over8={over8} presc=0x{presc:X} brr=0x{brr:X}")
+            for fmt, baud, over8 in ll_formats:
+                p, b = compute_presc_brr("USART2", 100000000, baud, bool(over8))
+                lines.append(f"[uart] UT3 row: tier=LL format={fmt} baud={baud} over8={over8} presc=0x{p:X} brr=0x{b:X}")
             hal_formats = [
-                ("8N1", 115200, 0, 0x0, 0x364),
-                ("8E1", 115200, 0, 0x0, 0x364),
+                ("8N1", 115200, 0),
+                ("8E1", 115200, 0),
             ]
-            for fmt, baud, over8, presc, brr in hal_formats:
-                lines.append(f"[uart] UT3 row: tier=HAL format={fmt} baud={baud} over8={over8} presc=0x{presc:X} brr=0x{brr:X}")
+            for fmt, baud, over8 in hal_formats:
+                p, b = compute_presc_brr("USART2", 100000000, baud, bool(over8))
+                lines.append(f"[uart] UT3 row: tier=HAL format={fmt} baud={baud} over8={over8} presc=0x{p:X} brr=0x{b:X}")
             lines.append("[uart] VERDICT UT3 PASS")
         elif step.name == "UT4":
             lines.append("[uart] UT4 loopback: sent=72 received=72 err=0x0")
@@ -1075,10 +1113,15 @@ class UartSession:
                 parity = "none" if fmt_str[1] == "N" else ("even" if fmt_str[1] == "E" else "odd")
                 stop_bits = int(fmt_str[2])
 
+                over8 = (int(m.group(4)) != 0)
+                presc_val = int(m.group(5), 16)
+                brr_val = int(m.group(6), 16)
+                baud_hw = compute_actual_baud(self.f_ker, presc_val, brr_val, over8)
+
                 # Sample rate: 100 MS/s for 115200 and 921600; 10 MS/s for 9600 to capture full frame
                 sample_rate = 10e6 if baud == 9600 else 100e6
                 if self.is_mock and hasattr(self.ad2._dwf, "mock_la_samples"):
-                    bp = int(round(sample_rate / baud))
+                    bp = int(round(sample_rate / baud_hw))
                     self.ad2._dwf.mock_la_samples = generate_mock_la_samples(
                         pat, bit_period=bp, data_bits=data_bits, parity=parity,
                         sample_rate=sample_rate, f_mco=self.f_mco
@@ -1097,10 +1140,10 @@ class UartSession:
                     parity=parity, stop_bits=stop_bits, f_mco=self.f_mco, baud=baud, rate=rate
                 )
 
-                row_real = eval_ut3(decoded, pat, parity, self.f_mco, baud, tolerance=0.005)
+                row_real = eval_ut3(decoded, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
                 # Negative control: mutate measured data (corrupt bit duration / mco_per_bit by 2.5%, violating 0.5% tolerance)
                 mutated_frames = [{**f, "mco_per_bit": f["mco_per_bit"] * 1.025} for f in decoded]
-                row_ctrl = eval_ut3(mutated_frames, pat, parity, self.f_mco, baud, tolerance=0.005)
+                row_ctrl = eval_ut3(mutated_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
 
                 ut3_row_results.append(row_real)
                 ctrl_ut3_results.append(row_ctrl)
