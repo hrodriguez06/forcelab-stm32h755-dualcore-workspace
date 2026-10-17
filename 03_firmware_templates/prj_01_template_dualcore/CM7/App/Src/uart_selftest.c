@@ -1716,6 +1716,8 @@ static void run_ut7(void)
         ok = false;
     }
 
+    uint8_t rx_val = 0U;
+
     /* 2. Lock released: UART_HAL_InitEx must return HAL_OK */
     if (UART_HAL_InitEx(&huart2, &cfg) == HAL_OK)
     {
@@ -1744,7 +1746,7 @@ static void run_ut7(void)
 
         /* Loopback check with 8E1: byte 0xA5 */
         uint8_t tx_val = 0xA5U;
-        uint8_t rx_val = 0U;
+        rx_val = 0U;
         if (HAL_UART_Transmit(&huart2, &tx_val, 1U, 100U) != HAL_OK ||
             HAL_UART_Receive(&huart2, &rx_val, 1U, 100U) != HAL_OK)
         {
