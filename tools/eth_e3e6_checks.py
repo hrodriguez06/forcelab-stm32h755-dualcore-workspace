@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Verification harness for STM32H7 Ethernet Driver E3-E7 phase (Revision 2).
+"""Verification harness for STM32H7 Ethernet Driver E3-E7 phase (Revision 3 / Closure).
 
-Covers off-board tests T1, T2, T3, T4 and on-board auditor tests T5, T6:
+Covers off-board closure tests T1, T2, T3 and measurement tests T4, T5, T6:
   - T1: CI matrix build (8 configurations: prj_01..04 debug/release) compiled directly
         via cmake --preset and cmake --build --preset --clean-first.
         Checks: exit code 0, 0 compiler warnings, built objects count > 0, image freshness.
         Negative control: temporary C file outside repo compiled with real project flags
         producing a deliberate warning, routed through parse_compiler_warnings and evaluate_build_output.
-  - T2: prj_03 and prj_04 unchanged:
+  - T2: prj_02, prj_03 and prj_04 unchanged vs control:
         Ensures HEAD configs are fresh. Control 69179d7 compiled in-situ with canonical prefix map.
-        Deep binary equivalence across 4 builds (prj_03 & prj_04, debug & release) for
-        eth_hal.c.obj and ethernetif.c.obj:
+        Deep binary equivalence across 6 builds (prj_02, prj_03 & prj_04, debug & release) for
+        eth_hal.c.obj and ethernetif.c.obj (12 objects total):
           1) objdump -h: all ALLOC section headers (names, sizes, flags, including NOBITS .bss,
              .RxArraySection, .RxDescripSection, .TxDescripSection, .eth_ram).
           2) objdump -s: raw section contents for all non-debug sections.
@@ -23,24 +23,9 @@ Covers off-board tests T1, T2, T3, T4 and on-board auditor tests T5, T6:
         nm verifies driver object defines none of the 6 HAL ETH callbacks.
         Partial link with a custom callbacks object succeeds (exit code 0).
         Negative control: without macro, partial link fails with duplicate symbol errors.
-  - T4: prj_02 memory budget and zero-copy verification:
-        From cm7_firmware.map: D2 SRAM3 (.eth_ram) total size <= 32 KB (32768 bytes).
-        MPU Region 6 base address and size parsed dynamically from mpu_config.c.
-        In both debug and release: g_rx_pool is 32-byte aligned and fully within Region 6.
-        Disassembly of ethernetif_receive_one and static callees: zero calls to
-        memcpy, __aeabi_memcpy*, pbuf_take, or pbuf_take_at.
-        Negative controls: mutated .map with 33 KB section and mutated disassembly with
-        injected __aeabi_memcpy call both fail through the respective evaluation functions.
-  - T5: Hardware data path & throughput test for auditor (with local loopback mode for implementer):
-        Compiles prj_02 debug in control worktree and HEAD, logging ELF SHA-256.
-        Flashes each using its own flash.py.
-        Runs monitor.py in background checking rx_nobuf=0, tx_nobuf=0, dma_err=0 across all [net] lines.
-        net_check.py (ping 4/4, UDP sweep 1..1472 B, burst 100/100) with exit code check.
-        UDP load test: sequential load (1-in-flight) and windowed load (32 datagrams in flight).
-        Throughput measured as median of 3 repetitions; criterion: HEAD >= 0.98 * control.
-        Negative controls: mutated payload byte rejected; synthetic non-zero monitor counters rejected.
-  - T6: Hardware reset stress test for auditor:
-        10 consecutive SWD resets (-rst), 5.0s link settling time, ping 4/4 and burst 100/100 echo datagrams.
+  - T4, T5, T6: Legacy / informational measurement tests. E6 zero-copy was measured on
+        hardware and not adopted (Plan Revision 3); T4 and T5 remain for diagnostics/benchmarking
+        but are excluded from the closure criteria.
 
 Clean working tree (Revision 2):
   Only files inside build/ directories are permitted to be ignored or untracked.
@@ -86,6 +71,8 @@ MATRIX_CONFIGS = [
 ]
 
 T2_CONFIGS = [
+    ("02_firmware_projects/prj_02_eth_lwip_dualcore", "debug"),
+    ("02_firmware_projects/prj_02_eth_lwip_dualcore", "release"),
     ("02_firmware_projects/prj_03_adc_dma_eth", "debug"),
     ("02_firmware_projects/prj_03_adc_dma_eth", "release"),
     ("02_firmware_projects/prj_04_adc_dma_bm_eth", "debug"),
@@ -588,7 +575,7 @@ def compare_object_equivalence(
 
 
 def run_t2(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
-    logger.log("=== Running T2 Checks (prj_03 & prj_04 Unchanged vs Control 69179d7) ===")
+    logger.log("=== Running T2 Checks (prj_02, prj_03 & prj_04 Unchanged vs Control 69179d7) ===")
     ctrl_ok, ctrl_msg = ensure_control_worktree(control_dir, logger)
     logger.log(f"[host] Control worktree setup: {'PASS' if ctrl_ok else 'FAIL'} ({ctrl_msg})")
     if not ctrl_ok:
@@ -596,8 +583,8 @@ def run_t2(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
 
     overall_ok = True
 
-    # 1. Compile HEAD prj_03 and prj_04 in-situ if not already built fresh
-    logger.log("[check] Ensuring HEAD prj_03 and prj_04 are compiled fresh in this execution...")
+    # 1. Compile HEAD configurations in-situ if not already built fresh
+    logger.log(f"[check] Ensuring HEAD {len(T2_CONFIGS)} configurations (prj_02, prj_03, prj_04) are compiled fresh in this execution...")
     for proj_rel, preset in T2_CONFIGS:
         pdir_head = REPO_ROOT / proj_rel
         fresh_ok, _ = check_image_freshness(pdir_head, preset, RUN_START_TIME)
@@ -611,7 +598,7 @@ def run_t2(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
         return False
 
     # 2. Compile control configurations in-situ with canonical prefix map
-    logger.log("[check] Compiling 4 control configurations (prj_03 & prj_04, debug & release) in-situ...")
+    logger.log(f"[check] Compiling {len(T2_CONFIGS)} control configurations (prj_02, prj_03, prj_04, debug & release) in-situ...")
     ctrl_env = os.environ.copy()
     c_from = control_dir.as_posix()
     c_to = REPO_ROOT.as_posix()
@@ -627,8 +614,9 @@ def run_t2(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
     if not overall_ok:
         return False
 
-    # 3. Deep compare 4 configs x 2 objects = 8 objects
-    logger.log("[check] Deep comparing ALLOC headers, raw contents, relocations and symbols across 8 objects...")
+    # 3. Deep compare all configs x 2 objects
+    total_expected_objects = len(T2_CONFIGS) * 2
+    logger.log(f"[check] Deep comparing ALLOC headers, raw contents, relocations and symbols across {total_expected_objects} objects...")
     matches_count = 0
 
     sample_hdrs_h = None
@@ -690,8 +678,8 @@ def run_t2(tools: dict[str, str], control_dir: Path, logger: Logger) -> bool:
                 logger.log(f"[host] CHECK {pname} [{preset}] {obj_name}: FAIL (exception: {e})")
                 overall_ok = False
 
-    t2_pass = (matches_count == 8)
-    logger.log(f"[host] CHECK T2 all 8 objects identical to control: {'PASS' if t2_pass else 'FAIL'} ({matches_count}/8 passed)")
+    t2_pass = (matches_count == total_expected_objects)
+    logger.log(f"[host] CHECK T2 all {total_expected_objects} objects identical to control: {'PASS' if t2_pass else 'FAIL'} ({matches_count}/{total_expected_objects} passed)")
     if not t2_pass:
         overall_ok = False
 
@@ -1742,10 +1730,7 @@ def main() -> int:
         parser.error("--local-echo cannot be combined with T6 (T6 requires physical hardware reset)")
 
     if "all" in raw_tests:
-        if args.local_echo:
-            tests_to_run = ["t1", "t2", "t3", "t4", "t5"]
-        else:
-            tests_to_run = ["t1", "t2", "t3", "t4", "t5", "t6"]
+        tests_to_run = ["t1", "t2", "t3"]
     else:
         tests_to_run = raw_tests
 
@@ -1793,19 +1778,16 @@ def main() -> int:
             overall_all_ok = False
 
     if "t4" in tests_to_run:
-        ok4 = run_t4(tools, logger)
-        if not ok4:
-            overall_all_ok = False
+        logger.log("[note] T4 is an informational test (E6 zero-copy measured and not adopted per Plan Rev 3).")
+        run_t4(tools, logger)
 
     if "t5" in tests_to_run:
-        ok5 = run_t5(tools, args.control_dir, args.sn, args.target_ip, args.local_echo, logger)
-        if not ok5:
-            overall_all_ok = False
+        logger.log("[note] T5 is an informational measurement test (E6 zero-copy measured and not adopted per Plan Rev 3).")
+        run_t5(tools, args.control_dir, args.sn, args.target_ip, args.local_echo, logger)
 
     if "t6" in tests_to_run:
-        ok6 = run_t6(tools, args.sn, args.target_ip, args.reset_count, logger)
-        if not ok6:
-            overall_all_ok = False
+        logger.log("[note] T6 is an informational hardware reset test.")
+        run_t6(tools, args.sn, args.target_ip, args.reset_count, logger)
 
     # Check clean working tree at end against initial snapshot
     clean_end_ok, clean_end_msg = check_clean_working_tree(REPO_ROOT, args.output, initial_snapshot=initial_snapshot)

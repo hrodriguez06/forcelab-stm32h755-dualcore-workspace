@@ -46,9 +46,6 @@
 #define PBUF_POOL_SIZE                 16
 #define PBUF_POOL_BUFSIZE            1536   /* one whole Ethernet frame     */
 
-/* ---- Zero-copy Rx (E6) ------------------------------------------------- */
-#define LWIP_SUPPORT_CUSTOM_PBUF        1
-
 /* ---- Protocols --------------------------------------------------------- */
 #define LWIP_ARP                        1
 #define ARP_TABLE_SIZE                 10

@@ -88,8 +88,6 @@ target_compile_definitions(${TARGET} PRIVATE
     ${COMMON_DEFINITIONS}
     CORE_CM7
     ETH_USE_HARDWARE_CHECKSUM=0
-    ETH_HAL_RX_ZERO_COPY=1
-    ETH_DRIVER_RX_BUFFER_COUNT=12U
     CMSIS_device_header="stm32h7xx.h"
 )
 

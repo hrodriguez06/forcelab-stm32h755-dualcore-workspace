@@ -185,9 +185,6 @@ static lan8742_t               g_phy;
 static uint8_t                 g_mac_addr[6];
 static eth_driver_callbacks_t  g_callbacks;
 static eth_driver_stats_t      g_stats;
-#if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
-static volatile uint32_t       g_rx_rearm_pending;
-#endif
 
 /* Re-entrant critical section: usable from thread context, from an ISR and
  * from inside a FreeRTOS critical section, because it restores the previous
@@ -736,42 +733,6 @@ void ETH_Driver_ReleasePacket(eth_rx_segment_t *packet)
     }
 }
 
-#if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
-uint32_t ETH_Driver_ReleaseRxBuffer(void *buffer)
-{
-    int32_t index = eth_rx_index_of((const uint8_t *)buffer);
-    uint32_t needs_rearm = 0U;
-
-    if (index >= 0)
-    {
-        uint32_t primask = eth_lock();
-        g_rx_slots[index].segment.next   = NULL;
-        g_rx_slots[index].segment.length = 0U;
-        g_rx_slots[index].in_use         = 0U;
-        if (g_rx_rearm_pending != 0U)
-        {
-            needs_rearm = 1U;
-            g_rx_rearm_pending = 0U;
-        }
-        eth_unlock(primask);
-    }
-
-    return needs_rearm;
-}
-#endif
-
-/* ==========================================================================
- * HAL buffer-management hooks.
- *
- * With USE_HAL_ETH_REGISTER_CALLBACKS == 0 (see stm32h7xx_hal_conf.h) the HAL
- * calls these __weak symbols directly, so overriding them here is the whole
- * registration mechanism. Turning register-callbacks on additionally requires
- * HAL_ETH_RegisterRxAllocateCallback() and friends in ETH_Driver_Init().
- *
- * If ETH_HAL_CUSTOM_CALLBACKS is defined by the project, all six HAL callbacks
- * below are omitted so that the project can provide its own implementations.
- * ========================================================================== */
-
 #if !defined(ETH_HAL_CUSTOM_CALLBACKS)
 void HAL_ETH_RxAllocateCallback(uint8_t **buff)
 {
@@ -792,12 +753,6 @@ void HAL_ETH_RxAllocateCallback(uint8_t **buff)
             break;
         }
     }
-#if defined(ETH_HAL_RX_ZERO_COPY) && (ETH_HAL_RX_ZERO_COPY != 0)
-    if (*buff == NULL)
-    {
-        g_rx_rearm_pending = 1U;
-    }
-#endif
     eth_unlock(primask);
 
     if (*buff == NULL)
