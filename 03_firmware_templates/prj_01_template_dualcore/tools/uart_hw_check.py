@@ -195,6 +195,9 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
     n = len(samples)
 
     while i < n:
+        # First ensure line is idle high
+        while i < n and (samples[i] & DIO_RX) == 0:
+            i += 1
         # Look for falling edge (start bit = 0)
         while i < n and (samples[i] & DIO_RX) != 0:
             i += 1
@@ -375,6 +378,13 @@ class _MockDwf:
         ref._obj.value = 0
         return 1
 
+    def FDwfDigitalOutRepeatSet(self, h, rep):         # noqa: N802
+        return 1
+
+    def FDwfDigitalOutRunSet(self, h, sec):            # noqa: N802
+        return 1
+
+
 
 class MockAD2:
     def __init__(self, mock_dwf: _MockDwf) -> None:
@@ -391,8 +401,15 @@ class MockAD2:
     def set_oe(self, mask: int) -> None:
         ad2_set_oe(self.mock_dwf, self._hdwf.value, mask, current_step=self.mock_dwf.current_step)
 
-    def dout_custom(self, ch: int, bits: list[int], bit_rate_hz: float) -> None:
+    def dout_custom(self, ch: int, divider: int, bits: list[int]) -> float:
         ad2_set_dout(self.mock_dwf, self._hdwf.value, 1 << ch, current_step=self.mock_dwf.current_step)
+        return 100e6 / divider
+
+    def set_dout(self, mask: int, step_bus_owner: int = 0, idle: int = 3, step_name: Optional[str] = None) -> None:
+        ad2_set_dout(self.mock_dwf, self._hdwf.value, mask, step_bus_owner, idle, step_name, current_step=self.mock_dwf.current_step)
+
+    def dout_clock_hz(self) -> float:
+        return 100e6
 
     def digital_io_write(self, value: int, mask: int = 0xFFFF) -> None:
         self.mock_dwf.FDwfDigitalIOOutputSet(self._hdwf, ctypes.c_uint32(value & mask))
@@ -628,11 +645,11 @@ class UartSession:
 
             # UT3: wire format encoding measured against MCO1 (S-B3)
             if not self.handshake("UT3"): return False
-            self.ad2.la_arm(100e6, samples=100000)
-            samples = self.ad2.la_read(100000) or ([0xFFFF] * 100000)
+            self.ad2.la_arm(100e6, samples=4096)
+            samples = self.ad2.la_read(4096) or ([0xFFFF] * 4096)
             # Tolerance: ±0.5% (written in code and report per plan)
             TOLERANCE_PERCENT = 0.5
-            decoded_frames = decode_uart_frames(samples, bit_period_samples=16)
+            decoded_frames = decode_uart_frames(samples, bit_period_samples=868)
             all_frames_valid = True
             for f in decoded_frames:
                 if not f["parity_ok"] or not f["stop_ok"]:
@@ -653,10 +670,24 @@ class UartSession:
 
             # UT5: error injection via DIO15 (SU1-SU3, S-B4)
             if not self.handshake("UT5"): return False
-            # 5 phases of timed frames at 9600 baud via ad2.dout_custom
-            for phase in ("PE", "FE", "NE", "ORE", "CLEAN"):
-                self.ad2.dout_custom(15, [0, 1, 0, 1, 0, 1, 0, 1, 0, 1], 9600.0)
-                time.sleep(0.005)
+            phases = [
+                ("PE", [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1]),
+                ("FE", [0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1]),
+                ("NE", [0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1]),
+                ("ORE", [0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1]),
+                ("CLEAN", [0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1]),
+            ]
+            clk_hz = getattr(self.ad2, "dout_clock_hz", lambda: 100e6)()
+            divider = int(round(clk_hz / 9600.0))
+            for phase_name, bits in phases:
+                if not self.sync(): return False
+                self.ad2.dout_custom(15, divider, bits)
+                if hasattr(self.ad2, "set_dout"):
+                    self.ad2.set_dout(1 << 15, 0, step_name="UT5")
+                time.sleep(len(bits) * 0.000105 + 0.005)
+                if hasattr(self.ad2, "set_dout"):
+                    self.ad2.set_dout(0, 0)
+                if not self.sync(): return False
             ut5_ok = self.drain_until_verdict("UT5")
             self.check("UT5 error injection detection (PE, FE, NE, ORE, clean control)", ut5_ok)
 

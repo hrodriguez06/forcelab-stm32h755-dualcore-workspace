@@ -1197,15 +1197,15 @@ static void run_ut5(void)
 
     bool ok = true;
 
-    /* SU2: Ensure PD5 is in input safe state. PD5 is NOT configured as output/AF. */
-    (void)pin_cfg(GPIOD, UART_PIN_TX, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_NONE, 0U);
+    /* SU2: Ensure PD5 is in input safe state with pull-up. PD5 is NOT configured as output/AF. */
+    (void)pin_cfg(GPIOD, UART_PIN_TX, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_UP, 0U);
 
     static const UartLL_Pin_t rx_pin = { .port = UART_BENCH_PORT_USART, .pin_idx = UART_PIN_RX, .af = 7U };
     UartLL_Config_t cfg = {
         .instance        = USART2,
         .kernel_clock_hz = 100000000UL,
         .baudrate        = 9600UL,
-        .data_bits       = LL_USART_DATAWIDTH_8B,
+        .data_bits       = LL_USART_DATAWIDTH_9B,
         .stop_bits       = LL_USART_STOPBITS_1,
         .parity          = LL_USART_PARITY_EVEN,
         .oversampling    = LL_USART_OVERSAMPLING_16,
@@ -1279,6 +1279,7 @@ static void run_ut5(void)
             if ((err & UART_LL_ERR_ORE) == 0U) { ok = false; }
             uint8_t rx_b = 0U;
             while (UART_LL_ReadByte(&h, &rx_b)) {}
+            (void)UART_LL_TakeErrors(&h);
         }
     }
 

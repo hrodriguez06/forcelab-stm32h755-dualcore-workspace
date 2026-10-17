@@ -245,6 +245,8 @@ def ad2_set_dout(dwf_lib, hdwf: int, mask: int, step_bus_owner: int = GPIO_BENCH
     """
     h = ctypes.c_int(hdwf)
     reason = None
+    if current_step is None and step_name is not None:
+        current_step = step_name
     allowed_dout = AD2_DOUT_ALLOWED
     if _step_declares_dio15_dout(current_step):
         allowed_dout |= AD2_DIO_UART_RX_INJECT
@@ -784,10 +786,11 @@ class AD2:
     # Configuration only, nothing below enables a channel or starts the
     # instrument: that is ad2_set_dout(), the single guarded path (S11 a).
 
-    def set_dout(self, mask: int, step_bus_owner: int, idle: int = DWF_DOUT_IDLE_ZET,
+    def set_dout(self, mask: int, step_bus_owner: int = GPIO_BENCH_BUS_NONE, idle: int = DWF_DOUT_IDLE_ZET,
                  step_name: Optional[str] = None) -> None:
         """S11: start (mask != 0) or stop (mask == 0) Digital Out through the guard."""
-        ad2_set_dout(self._dwf, self._hdwf.value, mask, step_bus_owner, idle, step_name)
+        ad2_set_dout(self._dwf, self._hdwf.value, mask, step_bus_owner, idle, step_name,
+                     current_step=self.current_step or step_name)
 
     def dout_clock_hz(self) -> float:
         """SDK section 10.2, FDwfDigitalOutInternalClockInfo: the clock the dividers divide."""
@@ -864,6 +867,9 @@ class AD2:
         self._dwf.FDwfDigitalOutDividerInitSet(self._hdwf, ch, ctypes.c_uint(0))
         self._dwf.FDwfDigitalOutDividerSet(self._hdwf, ch, ctypes.c_uint(divider))
         self._dwf.FDwfDigitalOutDataSet(self._hdwf, ch, buf, ctypes.c_uint(len(bits)))
+        self._dwf.FDwfDigitalOutRepeatSet(self._hdwf, ctypes.c_uint(1))
+        duration = len(bits) * divider / self.dout_clock_hz()
+        self._dwf.FDwfDigitalOutRunSet(self._hdwf, ctypes.c_double(duration))
         typ, div = ctypes.c_int(-1), ctypes.c_uint()
         self._dwf.FDwfDigitalOutTypeGet(self._hdwf, ch, ctypes.byref(typ))
         self._dwf.FDwfDigitalOutDividerGet(self._hdwf, ch, ctypes.byref(div))

@@ -355,8 +355,7 @@ bool UART_LL_Init(UartLL_Handle_t *h, const UartLL_Config_t *cfg)
         LL_USART_EnableFIFO(u);
     }
 
-    LL_USART_EnableDirectionTx(u);
-    LL_USART_EnableDirectionRx(u);
+    SET_BIT(u->CR1, USART_CR1_TE | USART_CR1_RE);
 
     /* 7. Enable peripheral */
     LL_USART_Enable(u);
@@ -507,14 +506,38 @@ bool UART_LL_Flush(UartLL_Handle_t *h, uint32_t spin_limit)
 
 uint32_t UART_LL_TakeErrors(UartLL_Handle_t *h)
 {
-    if (h == NULL)
+    if ((h == NULL) || (h->instance == NULL))
     {
         return 0;
     }
 
+    USART_TypeDef *u   = h->instance;
+    uint32_t       err = 0;
+
+    if (LL_USART_IsActiveFlag_ORE(u))
+    {
+        err |= UART_LL_ERR_ORE;
+        LL_USART_ClearFlag_ORE(u);
+    }
+    if (LL_USART_IsActiveFlag_FE(u))
+    {
+        err |= UART_LL_ERR_FE;
+        LL_USART_ClearFlag_FE(u);
+    }
+    if (LL_USART_IsActiveFlag_NE(u))
+    {
+        err |= UART_LL_ERR_NE;
+        LL_USART_ClearFlag_NE(u);
+    }
+    if (LL_USART_IsActiveFlag_PE(u))
+    {
+        err |= UART_LL_ERR_PE;
+        LL_USART_ClearFlag_PE(u);
+    }
+
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
-    uint32_t flags = h->error_flags;
+    uint32_t flags = h->error_flags | err;
     h->error_flags = 0;
     __set_PRIMASK(primask);
 
