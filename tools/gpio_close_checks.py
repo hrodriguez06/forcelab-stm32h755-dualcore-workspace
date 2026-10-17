@@ -1106,7 +1106,7 @@ def parse_swd_hotplug_output(cli_stdout: str) -> tuple[int, int]:
 def run_net_check_with_retry(
     logger: Logger,
     timeout_s: float = 20.0,
-    host: str = "192.168.1.50"
+    host: str = "192.168.1.150"
 ) -> bool:
     """Retries net_check.py until PASS or deadline (B5 compliance)."""
     deadline = time.time() + timeout_s
