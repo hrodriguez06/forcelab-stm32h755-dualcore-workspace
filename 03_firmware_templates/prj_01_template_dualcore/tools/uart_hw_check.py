@@ -127,6 +127,14 @@ def check_clean_tree(repo_root: pathlib.Path, out_file: Optional[pathlib.Path]) 
             continue
         if "build" in res.parts:
             continue
+        # Permit uart_checks capture in docs/
+        if (res.parent == (repo_root / "01_shared_drivers" / "04_uart" / "docs").resolve()
+                and res.name.startswith("uart_checks_")):
+            continue
+        # Permit mock capture in prj_01 docs/
+        if (res.parent == (repo_root / "03_firmware_templates" / "prj_01_template_dualcore" / "docs").resolve()
+                and res.name.startswith("uart_mock_")):
+            continue
         if prefix != "!!":
             dirty.append(f"{prefix} {rel}")
     if dirty:

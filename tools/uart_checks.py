@@ -150,6 +150,14 @@ def check_clean_working_tree(
             continue
         if "build" in resolved_path.parts:
             continue
+        # Permit uart_checks capture in docs/
+        if (resolved_path.parent == (repo_root / "01_shared_drivers" / "04_uart" / "docs").resolve()
+                and resolved_path.name.startswith("uart_checks_")):
+            continue
+        # Permit mock capture in prj_01 docs/
+        if (resolved_path.parent == (repo_root / "03_firmware_templates" / "prj_01_template_dualcore" / "docs").resolve()
+                and resolved_path.name.startswith("uart_mock_")):
+            continue
 
         if prefix != "!!":
             dirty.append(f"{prefix} {rel_path}")
