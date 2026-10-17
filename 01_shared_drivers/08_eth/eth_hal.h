@@ -45,7 +45,9 @@ extern "C" {
  * maximum tagged Ethernet frame, so a frame never spans two descriptors.
  */
 #define ETH_DRIVER_BUFFER_SIZE              1536U
+#ifndef ETH_DRIVER_RX_BUFFER_COUNT
 #define ETH_DRIVER_RX_BUFFER_COUNT             8U
+#endif
 #define ETH_DRIVER_TX_BUFFER_COUNT             4U
 
 /** Maximum payload this driver will transmit in one frame. */
@@ -229,6 +231,16 @@ void ETH_HAL_MspInit_User(ETH_HandleTypeDef *heth);
   * @brief  Weak user hook for Ethernet MSP de-initialization.
   */
 void ETH_HAL_MspDeInit_User(ETH_HandleTypeDef *heth);
+
+/* ---- Custom Callbacks Hook --------------------------------------------- */
+/**
+  * @note   Define ETH_HAL_CUSTOM_CALLBACKS at compile time to suppress definition
+  *         of the six HAL ETH callbacks (HAL_ETH_RxAllocateCallback,
+  *         HAL_ETH_RxLinkCallback, HAL_ETH_TxFreeCallback, HAL_ETH_RxCpltCallback,
+  *         HAL_ETH_TxCpltCallback, HAL_ETH_ErrorCallback) in eth_hal.c, allowing
+  *         the consuming project to provide its own HAL callbacks without duplicate
+  *         symbol errors.
+  */
 
 #ifdef __cplusplus
 }

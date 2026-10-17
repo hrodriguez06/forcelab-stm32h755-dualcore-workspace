@@ -1,0 +1,26 @@
+[+   0.001s] [host] argv: tools/eth_e3e6_checks.py --test t2 -o 01_shared_drivers/08_eth/docs/eth_e3e6_t2_ebf2398.txt
+[+   0.001s] [host] options: test=t2 output=01_shared_drivers\08_eth\docs\eth_e3e6_t2_ebf2398.txt control_dir=C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7 allow_dirty=False sn=0016000C4142501220353451 target_ip=192.168.1.150 local_echo=False
+[+   0.051s] [host] HEAD: ebf2398d81ea926f56ebd97c03a3e66fad86e794
+[+   0.051s] [host] Working tree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+[+   0.052s] [host] Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7
+[+   4.535s] [host] working tree clean (start): PASS (Tree is clean outside build/)
+[+   5.088s] [host] Compiler: C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.EXE
+[+   5.088s] [host] Objdump:  C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-objdump.exe
+[+   5.089s] [host] CMake:    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cmake.win32_1.1.200.202605190741\tools\bin\cmake.EXE
+[+   5.089s] === Running T2 Checks (prj_03 & prj_04 Unchanged vs Control 69179d7) ===
+[+   5.255s] [host] Control worktree setup: PASS (Control worktree at 69179d7 ready)
+[+   5.256s] [check] Ensuring HEAD prj_03 and prj_04 are compiled fresh in this execution...
+[+ 119.001s] [check] Compiling 4 control configurations (prj_03 & prj_04, debug & release) in-situ...
+[+ 266.671s] [check] Deep comparing ALLOC headers, raw contents, relocations and symbols across 8 objects...
+[+ 267.765s] [host] CHECK prj_03_adc_dma_eth [debug] eth_hal.c.obj: PASS (Identical: 46 ALLOC sections, 37 content sections, 27 reloc sections, 62 symbols)
+[+ 268.881s] [host] CHECK prj_03_adc_dma_eth [debug] ethernetif.c.obj: PASS (Identical: 29 ALLOC sections, 24 content sections, 16 reloc sections, 56 symbols)
+[+ 269.110s] [host] CHECK prj_03_adc_dma_eth [release] eth_hal.c.obj: PASS (Identical: 42 ALLOC sections, 32 content sections, 24 reloc sections, 58 symbols)
+[+ 269.288s] [host] CHECK prj_03_adc_dma_eth [release] ethernetif.c.obj: PASS (Identical: 22 ALLOC sections, 16 content sections, 11 reloc sections, 50 symbols)
+[+ 270.345s] [host] CHECK prj_04_adc_dma_bm_eth [debug] eth_hal.c.obj: PASS (Identical: 46 ALLOC sections, 37 content sections, 27 reloc sections, 62 symbols)
+[+ 271.450s] [host] CHECK prj_04_adc_dma_bm_eth [debug] ethernetif.c.obj: PASS (Identical: 29 ALLOC sections, 24 content sections, 16 reloc sections, 56 symbols)
+[+ 271.642s] [host] CHECK prj_04_adc_dma_bm_eth [release] eth_hal.c.obj: PASS (Identical: 42 ALLOC sections, 32 content sections, 24 reloc sections, 58 symbols)
+[+ 271.818s] [host] CHECK prj_04_adc_dma_bm_eth [release] ethernetif.c.obj: PASS (Identical: 22 ALLOC sections, 16 content sections, 11 reloc sections, 50 symbols)
+[+ 271.819s] [host] CHECK T2 all 8 objects identical to control: PASS (8/8 passed)
+[+ 271.819s] [host] CHECK T2 negative control (mutated section header size detected & rejected): PASS (Section header mismatch: {('.RxArraySection', ('0000ffff', '00000000', '00000000', '2**5', 'CONTENTS, ALLOC, LOAD, DATA')), ('.RxArraySection', ('00003000', '00000000', '00000000', '2**5', 'CONTENTS, ALLOC, LOAD, DATA'))})
+[+ 275.686s] [host] working tree clean (end): PASS (Tree is clean outside build/)
+[+ 275.687s] OVERALL VERDICT: PASS

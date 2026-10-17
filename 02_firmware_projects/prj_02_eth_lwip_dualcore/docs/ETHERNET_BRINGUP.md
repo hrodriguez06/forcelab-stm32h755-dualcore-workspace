@@ -408,17 +408,36 @@ Set `NET_USE_DHCP` to `1` in `CM7/App/Inc/net_config.h` and rebuild. The task re
 
 ---
 
-## 9. Moving to a zero-copy data path
+## 9. Zero-copy receive evaluation & benchmark results
 
-The driver copies each frame between lwIP pbufs and its own buffers in `.eth_ram`. That is one `memcpy` of up to ~1.5 kB per frame per direction, which at 100 Mbps costs a low single-digit percentage of a 400 MHz M7 — invisible for control traffic, and worth removing for sustained bulk transfer.
+The production driver uses a copy-based data path, where each frame is copied between lwIP pbufs and the driver's DMA buffers in `.eth_ram` (`.RxArraySection`). At 100 Mbps, this single `memcpy` of up to ~1.5 kB per frame is estimated at a low single-digit percentage of the 400 MHz Cortex-M7 (an estimate; no CPU measurement has been taken).
 
-To go zero-copy, lwIP's pbuf payloads must themselves live in `.eth_ram`:
+### 9.1 Hardware benchmark results (October 2026)
 
-1. Enable `LWIP_SUPPORT_CUSTOM_PBUF` and declare a custom pool whose backing memory is placed in `.RxArraySection`.
-2. Change `HAL_ETH_RxAllocateCallback()` to hand out that pool's payloads and `HAL_ETH_RxLinkCallback()` to chain `pbuf_custom` structures instead of `eth_rx_segment_t`.
-3. In `low_level_output()`, build the `ETH_BufferTypeDef` chain directly from the pbuf chain instead of calling `pbuf_copy_partial()`, and free the pbuf in `HAL_ETH_TxFreeCallback()` rather than returning a slot to the pool.
+In October 2026, a zero-copy receive architecture was implemented and benchmarked on hardware against the copy baseline on a NUCLEO-H755ZI-Q (captured in `01_shared_drivers/08_eth/docs/eth_e3e6_audit_t5t6_1150083.txt`):
 
-Budget the pools first: SRAM3 is 32 KB total and the current layout already uses about 19 KB. A zero-copy Rx pool large enough to absorb burst traffic may not fit alongside the Tx buffers, in which case move the Tx side to `.dma_buf` in SRAM1, which is equally non-cacheable and equally reachable by the ETH DMA.
+- **Zero-copy design**: Enabled `LWIP_SUPPORT_CUSTOM_PBUF=1`, wrapped incoming DMA buffers directly into `pbuf_custom` instances pointing to `.RxArraySection`, and freed the DMA buffers back to the driver when lwIP released the pbufs (`custom_free_function`).
+- **Sequential 1-in-flight load** (3 runs × 10,000 pkts @ 1472 B UDP payload):
+  - Copy control (`69179d7`, 8 DMA buffers + 16 pbufs): median **6.28 Mbit/s** (0 lost, `rx_nobuf=0`).
+  - Zero-copy (`1150083`, 12 DMA buffers): median **6.19 Mbit/s** (0 lost, `rx_nobuf=0`, 0.9859× control).
+- **Windowed burst load** (32 datagrams in flight, 5,000 pkts @ 1472 B UDP payload):
+  - Copy control: **54.06 Mbit/s**, 5,000/5,000 received, **0 lost**, `rx_nobuf=0`.
+  - Zero-copy: **32.84 Mbit/s** (-39% throughput regression), 4,976/5,000 received, **24 lost frames**, `rx_nobuf=26`.
+
+### 9.2 Why copy mode was retained
+
+Under burst traffic, the copy architecture decouples DMA descriptor turnover from lwIP packet processing: the 8 DMA buffers are returned immediately to the descriptor ring while the packet payloads are queued in lwIP's 16 `PBUF_POOL` buffers (total buffering capacity ~24 frames).
+
+In zero-copy mode, lwIP holds each DMA buffer until upper-layer protocol and application processing complete. The prototype had 12 Rx DMA buffers (18,432 B), which with the Tx buffers (6,144 B) and descriptors put SRAM3 at 24,768 of 32,768 B. At most 17 Rx buffers fit beside the Tx pool, still fewer than the ~24 frames the copy path buffers. A burst of 32 in-flight packets exhausts the 12 DMA buffers, starving the receiver ring and dropping frames (`rx_nobuf=26`).
+
+Because no CPU saving was measured and zero-copy introduced a 39% burst throughput regression with frame loss, zero-copy receive (E6) was **measured and not adopted**.
+
+### 9.3 Guidelines for future zero-copy attempts
+
+If zero-copy is revisited for high-throughput bulk streaming, consider the following architectural paths:
+
+1. **Move Tx buffers to SRAM1**: Relocate `g_tx_pool` to the `.dma_buf` section in D2 SRAM1 (which is also non-cacheable and accessible by Ethernet DMA), freeing 6,144 B in SRAM3. `ETH_DRIVER_RX_BUFFER_COUNT` can then reach 21 within SRAM3 (17 without the move); check first that the project's memory map has room in SRAM1, and measure CPU load to know whether the change is worth it.
+2. **Hybrid zero-copy with copy fallback**: Pass incoming frames as zero-copy `pbuf_custom` while the DMA buffer pool has ample headroom, but automatically fall back to copying into standard `PBUF_POOL` pbufs when available DMA buffers fall below a safety threshold (e.g., ≤ 4).
 
 ---
 

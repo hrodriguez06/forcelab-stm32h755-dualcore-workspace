@@ -1,0 +1,20 @@
+[+   0.001s] [host] argv: tools/eth_e3e6_checks.py --test t5 --local-echo -o 01_shared_drivers/08_eth/docs/eth_e3e6_t5_local_ebf2398.txt
+[+   0.001s] [host] options: test=t5 output=01_shared_drivers\08_eth\docs\eth_e3e6_t5_local_ebf2398.txt control_dir=C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7 allow_dirty=False sn=0016000C4142501220353451 target_ip=192.168.1.150 local_echo=True
+[+   0.048s] [host] HEAD: ebf2398d81ea926f56ebd97c03a3e66fad86e794
+[+   0.048s] [host] Working tree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+[+   0.049s] [host] Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7
+[+   4.741s] [host] working tree clean (start): PASS (Tree is clean outside build/)
+[+   5.257s] [host] Compiler: C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.EXE
+[+   5.258s] [host] Objdump:  C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-objdump.exe
+[+   5.258s] [host] CMake:    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cmake.win32_1.1.200.202605190741\tools\bin\cmake.EXE
+[+   5.259s] === Running T5 Checks (UDP Load Test & Hardware Verification: LOCAL_LOOPBACK) ===
+[+   5.259s] [host] CHECK T5 negative control (mutated payload detected & rejected): PASS
+[+   5.260s] [host] CHECK T5 negative control (synthetic non-zero monitor counters detected & rejected): PASS
+[+   5.261s] [check] Starting local UDP echo server on 127.0.0.1 to verify sequential and windowed load engines...
+[+   5.263s] [host] Local echo server running on 127.0.0.1:59394
+[+   7.787s] [udp_seq] Sent: 10000/10000, Recv: 10000/10000, Corrupt: 0, Time: 2.52s, Throughput: 46.66 Mbit/s
+[+   7.787s] [host] CHECK local sequential UDP load 10000/10000 @ 1472 B: PASS (46.66 Mbit/s)
+[+   8.899s] [udp_win] In-flight=32, Sent: 5000/5000, Recv: 5000/5000, Corrupt: 0, Time: 1.11s, Throughput: 52.98 Mbit/s
+[+   8.900s] [host] CHECK local windowed (32 in flight) UDP load 5000/5000 @ 1472 B: PASS (52.98 Mbit/s)
+[+  12.882s] [host] working tree clean (end): PASS (Tree is clean outside build/)
+[+  12.883s] OVERALL VERDICT: PASS

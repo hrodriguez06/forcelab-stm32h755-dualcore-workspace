@@ -1,0 +1,471 @@
+[+   0.001s] [host] argv: tools/eth_e3e6_checks.py --test t5,t6 --output C:\Users\HRODRI~1\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\a435ba69-f99a-4dc8-9231-6c64b1c6d99b\scratchpad\eth_auditor_t5t6_1150083.txt
+[+   0.002s] [host] options: test=t5,t6 output=C:\Users\HRODRI~1\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\a435ba69-f99a-4dc8-9231-6c64b1c6d99b\scratchpad\eth_auditor_t5t6_1150083.txt control_dir=C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7 allow_dirty=False sn=0016000C4142501220353451 target_ip=192.168.1.150 local_echo=False
+[+   0.047s] [host] HEAD: 11500837b464bb76e7c1e967143472482d8e5a6d
+[+   0.048s] [host] Working tree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+[+   0.048s] [host] Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7
+[+   5.539s] [host] working tree clean (start): PASS (Tree is clean outside build/)
+[+   6.133s] [host] Compiler: C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.EXE
+[+   6.134s] [host] Objdump:  C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-objdump.exe
+[+   6.134s] [host] CMake:    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cmake.win32_1.1.200.202605190741\tools\bin\cmake.EXE
+[+   6.135s] === Running T5 Checks (UDP Load Test & Hardware Verification: HARDWARE) ===
+[+   6.136s] [host] CHECK T5 negative control (mutated payload detected & rejected): PASS
+[+   6.136s] [host] CHECK T5 negative control (synthetic non-zero monitor counters detected & rejected): PASS
+[+   6.137s] [host] CHECK T5 negative control (empty monitor log detected & rejected): PASS
+[+   6.275s] [auditor] Control worktree setup: PASS (Control worktree at 69179d7 ready)
+[+   6.275s] [auditor] Compiling prj_02 debug in control worktree and HEAD...
+[+  78.559s] [auditor] Control CM7 ELF SHA-256: ae8372ad915e9520153acd7fc9123c7165ada7037a3a11b53d819dcfd45f9113 (C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7\02_firmware_projects\prj_02_eth_lwip_dualcore\build\debug\CM7\cm7_firmware.elf)
+[+  78.559s] [auditor] Control CM4 ELF SHA-256: fb84292bd95d034e13e61112908572fd1207b8eb6f8f272e817826d56fdcea33 (C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7\02_firmware_projects\prj_02_eth_lwip_dualcore\build\debug\CM4\cm4_firmware.elf)
+[+  78.560s] [auditor] HEAD CM7 ELF SHA-256:    2b8f0cded8c6a5e6eb0ddbeaecb663039074f6fce5d12e8a93008588b13c71b0 (C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_02_eth_lwip_dualcore\build\debug\CM7\cm7_firmware.elf)
+[+  78.561s] [auditor] HEAD CM4 ELF SHA-256:    73fcd2ca19815e5d6d9109f72bc9c81a928050f974bd3fc5bc8f2b0a6806cea9 (C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_02_eth_lwip_dualcore\build\debug\CM4\cm4_firmware.elf)
+[+  78.562s] [auditor] CHECK control vs HEAD CM7 images are distinct: PASS
+[+  78.565s] [auditor] Flashing control image to board 0016000C4142501220353451 using control's flash.py...
+[+  81.167s] [flash_ctrl] --- flash.py control stdout/stderr begin ---
+[+  81.167s] [flash_ctrl] 
+[+  81.168s] [flash_ctrl] Target   : STM32H755ZI / Nucleo-H755ZI-Q
+[+  81.168s] [flash_ctrl] Backend  : cubeprog  (connect mode UR)
+[+  81.169s] [flash_ctrl] Preset   : debug
+[+  81.169s] [flash_ctrl] Probe    : ST-LINK SN 0016000C4142501220353451
+[+  81.170s] [flash_ctrl]   CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,298,944 B)
+[+  81.170s] [flash_ctrl]   CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (1,837,468 B)
+[+  81.171s] [flash_ctrl] 
+[+  81.171s] [flash_ctrl] $ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7\02_firmware_projects\prj_02_eth_lwip_dualcore\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7\02_firmware_projects\prj_02_eth_lwip_dualcore\build\debug\CM4\cm4_firmware.elf -v -rst
+[+  81.172s] [flash_ctrl] 
+[+  81.172s] [flash_ctrl]       -------------------------------------------------------------------
+[+  81.172s] [flash_ctrl]                        STM32CubeProgrammer v2.23.0                  
+[+  81.173s] [flash_ctrl]       -------------------------------------------------------------------
+[+  81.173s] [flash_ctrl] 
+[+  81.174s] [flash_ctrl] ST-LINK SN  : 0016000C4142501220353451
+[+  81.174s] [flash_ctrl] ST-LINK FW  : V3J17M11
+[+  81.175s] [flash_ctrl] Board       : NUCLEO-H755ZI-Q
+[+  81.175s] [flash_ctrl] Voltage     : 3.27V
+[+  81.175s] [flash_ctrl] SWD freq    : 8000 KHz
+[+  81.176s] [flash_ctrl] Connect mode: Under Reset
+[+  81.176s] [flash_ctrl] Reset mode  : Hardware reset
+[+  81.177s] [flash_ctrl] Device ID   : 0x450
+[+  81.177s] [flash_ctrl] Revision ID : Rev V
+[+  81.178s] [flash_ctrl] Device name : STM32H7xx
+[+  81.178s] [flash_ctrl] NVM size    : 2 MBytes
+[+  81.179s] [flash_ctrl] Device type : MCU
+[+  81.180s] [flash_ctrl] Device CPU  : Cortex-M7/M4
+[+  81.180s] [flash_ctrl] BL Version  : 0x92
+[+  81.181s] [flash_ctrl] 
+[+  81.181s] [flash_ctrl] 
+[+  81.182s] [flash_ctrl] 
+[+  81.182s] [flash_ctrl] Opening and parsing file: cm7_firmware.elf
+[+  81.183s] [flash_ctrl] 
+[+  81.184s] [flash_ctrl] 
+[+  81.185s] [flash_ctrl] Memory Programming ...
+[+  81.185s] [flash_ctrl]   File          : cm7_firmware.elf
+[+  81.186s] [flash_ctrl]   Size          : 85.69 KB 
+[+  81.187s] [flash_ctrl]   Address       : 0x08000000
+[+  81.188s] [flash_ctrl] 
+[+  81.188s] [flash_ctrl] 
+[+  81.189s] [flash_ctrl] Erasing memory corresponding to segment 0:
+[+  81.190s] [flash_ctrl] Erasing internal memory sector 0
+[+  81.190s] [flash_ctrl] Download in Progress:
+[+  81.191s] [flash_ctrl] ±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+[+  81.191s] [flash_ctrl] ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+[+  81.192s] [flash_ctrl] 
+[+  81.193s] [flash_ctrl] File download complete
+[+  81.193s] [flash_ctrl] Time elapsed during download operation: 00:00:01.198
+[+  81.194s] [flash_ctrl] 
+[+  81.195s] [flash_ctrl] 
+[+  81.195s] [flash_ctrl] Opening and parsing file: cm4_firmware.elf
+[+  81.196s] [flash_ctrl] 
+[+  81.197s] [flash_ctrl] 
+[+  81.197s] [flash_ctrl] Memory Programming ...
+[+  81.197s] [flash_ctrl]   File          : cm4_firmware.elf
+[+  81.198s] [flash_ctrl]   Size          : 2.54 KB 
+[+  81.198s] [flash_ctrl]   Address       : 0x08100000
+[+  81.199s] [flash_ctrl] 
+[+  81.199s] [flash_ctrl] 
+[+  81.200s] [flash_ctrl] Erasing memory corresponding to segment 0:
+[+  81.200s] [flash_ctrl] Erasing internal memory sector 8
+[+  81.201s] [flash_ctrl] Download in Progress:
+[+  81.201s] [flash_ctrl] ±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+[+  81.202s] [flash_ctrl] ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+[+  81.202s] [flash_ctrl] 
+[+  81.202s] [flash_ctrl] File download complete
+[+  81.203s] [flash_ctrl] Time elapsed during download operation: 00:00:00.877
+[+  81.203s] [flash_ctrl] 
+[+  81.204s] [flash_ctrl] 
+[+  81.204s] [flash_ctrl] 
+[+  81.205s] [flash_ctrl] Verifying...
+[+  81.205s] [flash_ctrl] 
+[+  81.206s] [flash_ctrl] 
+[+  81.206s] [flash_ctrl] Read progress:
+[+  81.207s] [flash_ctrl] ±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+[+  81.207s] [flash_ctrl] ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+[+  81.208s] [flash_ctrl] 
+[+  81.208s] [flash_ctrl] Time elapsed during verifying operation: 00:00:00.009
+[+  81.208s] [flash_ctrl] 
+[+  81.209s] [flash_ctrl] 
+[+  81.209s] [flash_ctrl] Download verified successfully
+[+  81.210s] [flash_ctrl] 
+[+  81.210s] [flash_ctrl] 
+[+  81.211s] [flash_ctrl] 
+[+  81.211s] [flash_ctrl] MCU Reset
+[+  81.212s] [flash_ctrl] 
+[+  81.212s] [flash_ctrl] Software reset is performed
+[+  81.213s] [flash_ctrl] 
+[+  81.213s] [flash_ctrl] Done.
+[+  81.214s] [flash_ctrl] --- flash.py control stdout/stderr end ---
+[+  90.465s] [auditor] Control net_check: PASS (exit code 0)
+[+  90.466s] [auditor] Running control sequential load test rep 1/3...
+[+ 109.212s] [udp_seq] Sent: 10000/10000, Recv: 10000/10000, Corrupt: 0, Time: 18.75s, Throughput: 6.28 Mbit/s
+[+ 109.214s] [auditor] Running control sequential load test rep 2/3...
+[+ 127.980s] [udp_seq] Sent: 10000/10000, Recv: 10000/10000, Corrupt: 0, Time: 18.76s, Throughput: 6.28 Mbit/s
+[+ 127.980s] [auditor] Running control sequential load test rep 3/3...
+[+ 146.471s] [udp_seq] Sent: 10000/10000, Recv: 10000/10000, Corrupt: 0, Time: 18.49s, Throughput: 6.37 Mbit/s
+[+ 146.473s] [auditor] Control throughput median: 6.28 Mbit/s (runs: [6.282054495135654, 6.27560770089277, 6.368690238128485])
+[+ 146.474s] [auditor] Running control windowed load test (32 in flight, 5000 datagrams)...
+[+ 147.565s] [udp_win] In-flight=32, Sent: 5000/5000, Recv: 5000/5000, Corrupt: 0, Lost: 0, Time: 1.09s, Throughput: 54.06 Mbit/s
+[+ 147.566s] [auditor] Waiting 6.0s for post-traffic [net] monitor sample...
+[+ 153.595s] [auditor] Control monitor log SHA-256: 1886fb37828be3fad975c6776c5af534370fa862d1f30413c6b0e7990a40287a
+[+ 153.596s] [monitor_ctrl] --- Control monitor log begin ---
+[+ 153.596s] [monitor_ctrl] [   1.239] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[+ 153.597s] [monitor_ctrl] [   1.246] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[+ 153.597s] [monitor_ctrl] [   1.249] [net] link up: 100 Mbps full duplex
+[+ 153.597s] [monitor_ctrl] [   1.636] [ipc] m7=4 m4=16  (CPU2 alive)
+[+ 153.598s] [monitor_ctrl] [   3.610] [ipc] m7=8 m4=32  (CPU2 alive)
+[+ 153.598s] [monitor_ctrl] [   4.613] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.599s] [monitor_ctrl] [   5.584] [ipc] m7=12 m4=47  (CPU2 alive)
+[+ 153.599s] [monitor_ctrl] [   7.559] [ipc] m7=16 m4=62  (CPU2 alive)
+[+ 153.600s] [monitor_ctrl] [   9.533] [ipc] m7=20 m4=78  (CPU2 alive)
+[+ 153.600s] [monitor_ctrl] [   9.557] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=373 tx=374 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.600s] [monitor_ctrl] [  11.508] [ipc] m7=24 m4=93  (CPU2 alive)
+[+ 153.601s] [monitor_ctrl] [  13.483] [ipc] m7=28 m4=109  (CPU2 alive)
+[+ 153.601s] [monitor_ctrl] [  14.502] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3049 tx=3049 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.602s] [monitor_ctrl] [  15.457] [ipc] m7=32 m4=124  (CPU2 alive)
+[+ 153.602s] [monitor_ctrl] [  17.431] [ipc] m7=36 m4=139  (CPU2 alive)
+[+ 153.603s] [monitor_ctrl] [  19.406] [ipc] m7=40 m4=155  (CPU2 alive)
+[+ 153.603s] [monitor_ctrl] [  19.446] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=5705 tx=5705 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.604s] [monitor_ctrl] [  21.381] [ipc] m7=44 m4=170  (CPU2 alive)
+[+ 153.604s] [monitor_ctrl] [  23.355] [ipc] m7=48 m4=185  (CPU2 alive)
+[+ 153.605s] [monitor_ctrl] [  24.390] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=8325 tx=8324 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.605s] [monitor_ctrl] [  25.330] [ipc] m7=52 m4=201  (CPU2 alive)
+[+ 153.605s] [monitor_ctrl] [  27.304] [ipc] m7=56 m4=216  (CPU2 alive)
+[+ 153.606s] [monitor_ctrl] [  29.279] [ipc] m7=60 m4=232  (CPU2 alive)
+[+ 153.606s] [monitor_ctrl] [  29.335] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=10946 tx=10944 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.607s] [monitor_ctrl] [  31.253] [ipc] m7=64 m4=247  (CPU2 alive)
+[+ 153.607s] [monitor_ctrl] [  33.228] [ipc] m7=68 m4=262  (CPU2 alive)
+[+ 153.608s] [monitor_ctrl] [  34.280] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=13664 tx=13660 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.608s] [monitor_ctrl] [  35.204] [ipc] m7=72 m4=278  (CPU2 alive)
+[+ 153.609s] [monitor_ctrl] [  37.179] [ipc] m7=76 m4=293  (CPU2 alive)
+[+ 153.609s] [monitor_ctrl] [  39.154] [ipc] m7=80 m4=308  (CPU2 alive)
+[+ 153.609s] [monitor_ctrl] [  39.226] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=16341 tx=16337 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.610s] [monitor_ctrl] [  41.129] [ipc] m7=84 m4=324  (CPU2 alive)
+[+ 153.610s] [monitor_ctrl] [  43.105] [ipc] m7=88 m4=339  (CPU2 alive)
+[+ 153.611s] [monitor_ctrl] [  44.172] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=18927 tx=18923 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.611s] [monitor_ctrl] [  45.080] [ipc] m7=92 m4=355  (CPU2 alive)
+[+ 153.612s] [monitor_ctrl] [  47.054] [ipc] m7=96 m4=370  (CPU2 alive)
+[+ 153.612s] [monitor_ctrl] [  49.030] [ipc] m7=100 m4=385  (CPU2 alive)
+[+ 153.612s] [monitor_ctrl] [  49.117] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=21543 tx=21538 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.613s] [monitor_ctrl] [  51.005] [ipc] m7=104 m4=401  (CPU2 alive)
+[+ 153.613s] [monitor_ctrl] [  52.980] [ipc] m7=108 m4=416  (CPU2 alive)
+[+ 153.614s] [monitor_ctrl] [  54.064] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=24247 tx=24242 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.614s] [monitor_ctrl] [  54.956] [ipc] m7=112 m4=432  (CPU2 alive)
+[+ 153.615s] [monitor_ctrl] [  56.930] [ipc] m7=116 m4=447  (CPU2 alive)
+[+ 153.615s] [monitor_ctrl] [  58.906] [ipc] m7=120 m4=462  (CPU2 alive)
+[+ 153.615s] [monitor_ctrl] [  59.009] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=26896 tx=26891 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.616s] [monitor_ctrl] [  60.880] [ipc] m7=124 m4=478  (CPU2 alive)
+[+ 153.616s] [monitor_ctrl] [  62.856] [ipc] m7=128 m4=493  (CPU2 alive)
+[+ 153.617s] [monitor_ctrl] [  63.954] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=29546 tx=29540 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.617s] [monitor_ctrl] [  64.830] [ipc] m7=132 m4=508  (CPU2 alive)
+[+ 153.618s] [monitor_ctrl] [  66.805] [ipc] m7=136 m4=524  (CPU2 alive)
+[+ 153.618s] [monitor_ctrl] [  68.780] [ipc] m7=140 m4=539  (CPU2 alive)
+[+ 153.618s] [monitor_ctrl] [  68.899] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=35120 tx=35114 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 153.619s] [monitor_ctrl] [  70.754] [ipc] m7=144 m4=555  (CPU2 alive)
+[+ 153.620s] [monitor_ctrl] --- Control monitor log end ---
+[+ 153.620s] [auditor] Control monitor check: PASS (All 14 [net] samples clean (0 errors))
+[+ 153.622s] [auditor] Flashing HEAD image to board 0016000C4142501220353451 using HEAD's flash.py...
+[+ 156.148s] [flash_head] --- flash.py HEAD stdout/stderr begin ---
+[+ 156.149s] [flash_head] 
+[+ 156.149s] [flash_head] Target   : STM32H755ZI / Nucleo-H755ZI-Q
+[+ 156.150s] [flash_head] Backend  : cubeprog  (connect mode UR)
+[+ 156.150s] [flash_head] Preset   : debug
+[+ 156.151s] [flash_head] Probe    : ST-LINK SN 0016000C4142501220353451
+[+ 156.151s] [flash_head]   CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,292,184 B)
+[+ 156.151s] [flash_head]   CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (1,836,348 B)
+[+ 156.152s] [flash_head] 
+[+ 156.152s] [flash_head] $ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_02_eth_lwip_dualcore\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_02_eth_lwip_dualcore\build\debug\CM4\cm4_firmware.elf -v -rst
+[+ 156.153s] [flash_head] 
+[+ 156.153s] [flash_head]       -------------------------------------------------------------------
+[+ 156.154s] [flash_head]                        STM32CubeProgrammer v2.23.0                  
+[+ 156.154s] [flash_head]       -------------------------------------------------------------------
+[+ 156.156s] [flash_head] 
+[+ 156.158s] [flash_head] ST-LINK SN  : 0016000C4142501220353451
+[+ 156.159s] [flash_head] ST-LINK FW  : V3J17M11
+[+ 156.160s] [flash_head] Board       : NUCLEO-H755ZI-Q
+[+ 156.161s] [flash_head] Voltage     : 3.27V
+[+ 156.162s] [flash_head] SWD freq    : 8000 KHz
+[+ 156.164s] [flash_head] Connect mode: Under Reset
+[+ 156.165s] [flash_head] Reset mode  : Hardware reset
+[+ 156.166s] [flash_head] Device ID   : 0x450
+[+ 156.167s] [flash_head] Revision ID : Rev V
+[+ 156.168s] [flash_head] Device name : STM32H7xx
+[+ 156.169s] [flash_head] NVM size    : 2 MBytes
+[+ 156.170s] [flash_head] Device type : MCU
+[+ 156.171s] [flash_head] Device CPU  : Cortex-M7/M4
+[+ 156.172s] [flash_head] BL Version  : 0x92
+[+ 156.172s] [flash_head] 
+[+ 156.173s] [flash_head] 
+[+ 156.174s] [flash_head] 
+[+ 156.174s] [flash_head] Opening and parsing file: cm7_firmware.elf
+[+ 156.175s] [flash_head] 
+[+ 156.176s] [flash_head] 
+[+ 156.176s] [flash_head] Memory Programming ...
+[+ 156.177s] [flash_head]   File          : cm7_firmware.elf
+[+ 156.177s] [flash_head]   Size          : 85.23 KB 
+[+ 156.178s] [flash_head]   Address       : 0x08000000
+[+ 156.178s] [flash_head] 
+[+ 156.178s] [flash_head] 
+[+ 156.179s] [flash_head] Erasing memory corresponding to segment 0:
+[+ 156.179s] [flash_head] Erasing internal memory sector 0
+[+ 156.180s] [flash_head] Download in Progress:
+[+ 156.180s] [flash_head] ±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+[+ 156.181s] [flash_head] ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+[+ 156.181s] [flash_head] 
+[+ 156.182s] [flash_head] File download complete
+[+ 156.182s] [flash_head] Time elapsed during download operation: 00:00:01.194
+[+ 156.183s] [flash_head] 
+[+ 156.183s] [flash_head] 
+[+ 156.184s] [flash_head] Opening and parsing file: cm4_firmware.elf
+[+ 156.184s] [flash_head] 
+[+ 156.185s] [flash_head] 
+[+ 156.185s] [flash_head] Memory Programming ...
+[+ 156.185s] [flash_head]   File          : cm4_firmware.elf
+[+ 156.186s] [flash_head]   Size          : 2.54 KB 
+[+ 156.186s] [flash_head]   Address       : 0x08100000
+[+ 156.187s] [flash_head] 
+[+ 156.187s] [flash_head] 
+[+ 156.188s] [flash_head] Erasing memory corresponding to segment 0:
+[+ 156.189s] [flash_head] Erasing internal memory sector 8
+[+ 156.190s] [flash_head] Download in Progress:
+[+ 156.191s] [flash_head] ±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+[+ 156.191s] [flash_head] ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+[+ 156.192s] [flash_head] 
+[+ 156.193s] [flash_head] File download complete
+[+ 156.193s] [flash_head] Time elapsed during download operation: 00:00:00.865
+[+ 156.194s] [flash_head] 
+[+ 156.194s] [flash_head] 
+[+ 156.195s] [flash_head] 
+[+ 156.196s] [flash_head] Verifying...
+[+ 156.196s] [flash_head] 
+[+ 156.196s] [flash_head] 
+[+ 156.197s] [flash_head] Read progress:
+[+ 156.197s] [flash_head] ±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+[+ 156.198s] [flash_head] ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+[+ 156.198s] [flash_head] 
+[+ 156.199s] [flash_head] Time elapsed during verifying operation: 00:00:00.009
+[+ 156.199s] [flash_head] 
+[+ 156.200s] [flash_head] 
+[+ 156.200s] [flash_head] Download verified successfully
+[+ 156.201s] [flash_head] 
+[+ 156.201s] [flash_head] 
+[+ 156.202s] [flash_head] 
+[+ 156.202s] [flash_head] MCU Reset
+[+ 156.203s] [flash_head] 
+[+ 156.203s] [flash_head] Software reset is performed
+[+ 156.204s] [flash_head] 
+[+ 156.204s] [flash_head] Done.
+[+ 156.205s] [flash_head] --- flash.py HEAD stdout/stderr end ---
+[+ 165.396s] [auditor] HEAD net_check: PASS (exit code 0)
+[+ 165.397s] [auditor] Running HEAD sequential load test rep 1/3...
+[+ 184.720s] [udp_seq] Sent: 10000/10000, Recv: 10000/10000, Corrupt: 0, Time: 19.32s, Throughput: 6.09 Mbit/s
+[+ 184.721s] [auditor] Running HEAD sequential load test rep 2/3...
+[+ 203.736s] [udp_seq] Sent: 10000/10000, Recv: 10000/10000, Corrupt: 0, Time: 19.01s, Throughput: 6.19 Mbit/s
+[+ 203.737s] [auditor] Running HEAD sequential load test rep 3/3...
+[+ 222.578s] [udp_seq] Sent: 10000/10000, Recv: 10000/10000, Corrupt: 0, Time: 18.84s, Throughput: 6.25 Mbit/s
+[+ 222.578s] [auditor] HEAD throughput median: 6.19 Mbit/s (runs: [6.094447741259748, 6.1932502229244095, 6.250431455460431])
+[+ 222.579s] [auditor] Running HEAD windowed load test (32 in flight, 5000 datagrams)...
+[+ 224.364s] [udp_win] In-flight=32, Sent: 5000/5000, Recv: 4976/5000, Corrupt: 0, Lost: 24, Time: 1.78s, Throughput: 32.84 Mbit/s
+[+ 224.365s] [auditor] Waiting 6.0s for post-traffic [net] monitor sample...
+[+ 230.383s] [auditor] HEAD monitor log SHA-256: ef144c35f84aad3da7d0d713dd4141c5c129aaf4dd098e8830a5e2c95cfa6aeb
+[+ 230.384s] [monitor_head] --- HEAD monitor log begin ---
+[+ 230.384s] [monitor_head] [   1.298] [phy] bcr=1100 bsr=782D anar=01E1 anlpar=45E1 physcsr=1058
+[+ 230.385s] [monitor_head] [   1.305] [phy] partner advertised: 100BASE-TX-FD 100BASE-TX-HD 10BASE-T-FD 10BASE-T-HD
+[+ 230.385s] [monitor_head] [   1.308] [net] link up: 100 Mbps full duplex
+[+ 230.386s] [monitor_head] [   1.695] [ipc] m7=4 m4=16  (CPU2 alive)
+[+ 230.386s] [monitor_head] [   3.669] [ipc] m7=8 m4=32  (CPU2 alive)
+[+ 230.387s] [monitor_head] [   4.672] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=0 tx=1 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.387s] [monitor_head] [   5.643] [ipc] m7=12 m4=47  (CPU2 alive)
+[+ 230.388s] [monitor_head] [   7.618] [ipc] m7=16 m4=62  (CPU2 alive)
+[+ 230.389s] [monitor_head] [   9.593] [ipc] m7=20 m4=78  (CPU2 alive)
+[+ 230.389s] [monitor_head] [   9.617] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=444 tx=444 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.390s] [monitor_head] [  11.567] [ipc] m7=24 m4=93  (CPU2 alive)
+[+ 230.390s] [monitor_head] [  13.541] [ipc] m7=28 m4=109  (CPU2 alive)
+[+ 230.391s] [monitor_head] [  14.560] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=3011 tx=3011 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.392s] [monitor_head] [  15.515] [ipc] m7=32 m4=124  (CPU2 alive)
+[+ 230.392s] [monitor_head] [  17.490] [ipc] m7=36 m4=139  (CPU2 alive)
+[+ 230.392s] [monitor_head] [  19.465] [ipc] m7=40 m4=155  (CPU2 alive)
+[+ 230.393s] [monitor_head] [  19.505] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=5563 tx=5563 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.393s] [monitor_head] [  21.440] [ipc] m7=44 m4=170  (CPU2 alive)
+[+ 230.394s] [monitor_head] [  23.415] [ipc] m7=48 m4=185  (CPU2 alive)
+[+ 230.394s] [monitor_head] [  24.451] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=8116 tx=8116 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.395s] [monitor_head] [  25.390] [ipc] m7=52 m4=201  (CPU2 alive)
+[+ 230.395s] [monitor_head] [  27.365] [ipc] m7=56 m4=216  (CPU2 alive)
+[+ 230.395s] [monitor_head] [  29.340] [ipc] m7=60 m4=232  (CPU2 alive)
+[+ 230.396s] [monitor_head] [  29.396] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=10707 tx=10706 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.396s] [monitor_head] [  31.315] [ipc] m7=64 m4=247  (CPU2 alive)
+[+ 230.397s] [monitor_head] [  33.291] [ipc] m7=68 m4=262  (CPU2 alive)
+[+ 230.397s] [monitor_head] [  34.342] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=13278 tx=13277 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.398s] [monitor_head] [  35.266] [ipc] m7=72 m4=278  (CPU2 alive)
+[+ 230.398s] [monitor_head] [  37.242] [ipc] m7=76 m4=293  (CPU2 alive)
+[+ 230.399s] [monitor_head] [  39.218] [ipc] m7=80 m4=308  (CPU2 alive)
+[+ 230.400s] [monitor_head] [  39.289] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=15848 tx=15847 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.400s] [monitor_head] [  41.193] [ipc] m7=84 m4=324  (CPU2 alive)
+[+ 230.401s] [monitor_head] [  43.168] [ipc] m7=88 m4=339  (CPU2 alive)
+[+ 230.402s] [monitor_head] [  44.235] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=18496 tx=18494 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.402s] [monitor_head] [  45.144] [ipc] m7=92 m4=355  (CPU2 alive)
+[+ 230.403s] [monitor_head] [  47.119] [ipc] m7=96 m4=370  (CPU2 alive)
+[+ 230.403s] [monitor_head] [  49.094] [ipc] m7=100 m4=385  (CPU2 alive)
+[+ 230.404s] [monitor_head] [  49.181] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=21093 tx=21091 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.404s] [monitor_head] [  51.068] [ipc] m7=104 m4=401  (CPU2 alive)
+[+ 230.405s] [monitor_head] [  53.044] [ipc] m7=108 m4=416  (CPU2 alive)
+[+ 230.405s] [monitor_head] [  54.127] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=23719 tx=23716 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.406s] [monitor_head] [  55.020] [ipc] m7=112 m4=432  (CPU2 alive)
+[+ 230.407s] [monitor_head] [  56.996] [ipc] m7=116 m4=447  (CPU2 alive)
+[+ 230.407s] [monitor_head] [  58.971] [ipc] m7=120 m4=462  (CPU2 alive)
+[+ 230.408s] [monitor_head] [  59.075] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=26310 tx=26307 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.408s] [monitor_head] [  60.947] [ipc] m7=124 m4=478  (CPU2 alive)
+[+ 230.409s] [monitor_head] [  62.923] [ipc] m7=128 m4=493  (CPU2 alive)
+[+ 230.409s] [monitor_head] [  64.022] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=28953 tx=28949 rx_nobuf=0 tx_nobuf=0 dma_err=0
+[+ 230.410s] [monitor_head] [  64.898] [ipc] m7=132 m4=508  (CPU2 alive)
+[+ 230.410s] [monitor_head] [  66.881] [ipc] m7=136 m4=524  (CPU2 alive)
+[+ 230.411s] [monitor_head] [  68.849] [ipc] m7=140 m4=539  (CPU2 alive)
+[+ 230.411s] [monitor_head] [  68.973] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=35118 tx=35090 rx_nobuf=26 tx_nobuf=0 dma_err=0
+[+ 230.412s] [monitor_head] [  70.824] [ipc] m7=144 m4=555  (CPU2 alive)
+[+ 230.412s] [monitor_head] [  72.800] [ipc] m7=148 m4=570  (CPU2 alive)
+[+ 230.413s] [monitor_head] [  73.919] [net] link=100 Mbps full duplex ip=192.168.1.150 rx=35118 tx=35090 rx_nobuf=26 tx_nobuf=0 dma_err=0
+[+ 230.413s] [monitor_head] --- HEAD monitor log end ---
+[+ 230.414s] [auditor] HEAD monitor check: FAIL (FAIL: Non-zero error counters in 2 samples: ['rx_nobuf=26, tx_nobuf=0, dma_err=0', 'rx_nobuf=26, tx_nobuf=0, dma_err=0'])
+[+ 230.415s] [auditor] CHECK T5 throughput comparison (HEAD median 6.19 >= 0.98 * control 6.28, ratio=0.9859): PASS
+[+ 230.417s] === Running T6 Checks (10 SWD Resets on Board 0016000C4142501220353451) ===
+[+ 230.417s] [auditor] T6 pre-reset: Flashing verified HEAD debug image...
+[+ 230.426s] [auditor] T6 HEAD CM7 ELF SHA-256: 2b8f0cded8c6a5e6eb0ddbeaecb663039074f6fce5d12e8a93008588b13c71b0
+[+ 230.431s] [auditor] T6 HEAD CM4 ELF SHA-256: 73fcd2ca19815e5d6d9109f72bc9c81a928050f974bd3fc5bc8f2b0a6806cea9
+[+ 232.953s] [flash_t6] --- flash.py T6 pre-reset stdout/stderr begin ---
+[+ 232.954s] [flash_t6] 
+[+ 232.955s] [flash_t6] Target   : STM32H755ZI / Nucleo-H755ZI-Q
+[+ 232.955s] [flash_t6] Backend  : cubeprog  (connect mode UR)
+[+ 232.956s] [flash_t6] Preset   : debug
+[+ 232.956s] [flash_t6] Probe    : ST-LINK SN 0016000C4142501220353451
+[+ 232.956s] [flash_t6]   CPU1 (Cortex-M7)       bank 1 @ 0x08000000  build\debug\CM7\cm7_firmware.elf  (3,292,184 B)
+[+ 232.957s] [flash_t6]   CPU2 (Cortex-M4)       bank 2 @ 0x08100000  build\debug\CM4\cm4_firmware.elf  (1,836,348 B)
+[+ 232.957s] [flash_t6] 
+[+ 232.958s] [flash_t6] $ C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD mode=UR sn=0016000C4142501220353451 -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_02_eth_lwip_dualcore\build\debug\CM7\cm7_firmware.elf -w C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755\02_firmware_projects\prj_02_eth_lwip_dualcore\build\debug\CM4\cm4_firmware.elf -v -rst
+[+ 232.958s] [flash_t6] 
+[+ 232.959s] [flash_t6]       -------------------------------------------------------------------
+[+ 232.959s] [flash_t6]                        STM32CubeProgrammer v2.23.0                  
+[+ 232.960s] [flash_t6]       -------------------------------------------------------------------
+[+ 232.960s] [flash_t6] 
+[+ 232.961s] [flash_t6] ST-LINK SN  : 0016000C4142501220353451
+[+ 232.961s] [flash_t6] ST-LINK FW  : V3J17M11
+[+ 232.961s] [flash_t6] Board       : NUCLEO-H755ZI-Q
+[+ 232.962s] [flash_t6] Voltage     : 3.27V
+[+ 232.962s] [flash_t6] SWD freq    : 8000 KHz
+[+ 232.963s] [flash_t6] Connect mode: Under Reset
+[+ 232.963s] [flash_t6] Reset mode  : Hardware reset
+[+ 232.963s] [flash_t6] Device ID   : 0x450
+[+ 232.964s] [flash_t6] Revision ID : Rev V
+[+ 232.964s] [flash_t6] Device name : STM32H7xx
+[+ 232.965s] [flash_t6] NVM size    : 2 MBytes
+[+ 232.965s] [flash_t6] Device type : MCU
+[+ 232.966s] [flash_t6] Device CPU  : Cortex-M7/M4
+[+ 232.966s] [flash_t6] BL Version  : 0x92
+[+ 232.967s] [flash_t6] 
+[+ 232.968s] [flash_t6] 
+[+ 232.969s] [flash_t6] 
+[+ 232.969s] [flash_t6] Opening and parsing file: cm7_firmware.elf
+[+ 232.970s] [flash_t6] 
+[+ 232.970s] [flash_t6] 
+[+ 232.971s] [flash_t6] Memory Programming ...
+[+ 232.971s] [flash_t6]   File          : cm7_firmware.elf
+[+ 232.972s] [flash_t6]   Size          : 85.23 KB 
+[+ 232.972s] [flash_t6]   Address       : 0x08000000
+[+ 232.972s] [flash_t6] 
+[+ 232.973s] [flash_t6] 
+[+ 232.973s] [flash_t6] Erasing memory corresponding to segment 0:
+[+ 232.974s] [flash_t6] Erasing internal memory sector 0
+[+ 232.974s] [flash_t6] Download in Progress:
+[+ 232.975s] [flash_t6] ±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 0%
+[+ 232.975s] [flash_t6] ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+[+ 232.976s] [flash_t6] 
+[+ 232.976s] [flash_t6] File download complete
+[+ 232.976s] [flash_t6] Time elapsed during download operation: 00:00:01.191
+[+ 232.977s] [flash_t6] 
+[+ 232.977s] [flash_t6] 
+[+ 232.978s] [flash_t6] Opening and parsing file: cm4_firmware.elf
+[+ 232.978s] [flash_t6] 
+[+ 232.978s] [flash_t6] 
+[+ 232.979s] [flash_t6] Memory Programming ...
+[+ 232.979s] [flash_t6]   File          : cm4_firmware.elf
+[+ 232.980s] [flash_t6]   Size          : 2.54 KB 
+[+ 232.980s] [flash_t6]   Address       : 0x08100000
+[+ 232.981s] [flash_t6] 
+[+ 232.981s] [flash_t6] 
+[+ 232.982s] [flash_t6] Erasing memory corresponding to segment 0:
+[+ 232.982s] [flash_t6] Erasing internal memory sector 8
+[+ 232.982s] [flash_t6] Download in Progress:
+[+ 232.983s] [flash_t6] ±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+[+ 232.984s] [flash_t6] ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+[+ 232.984s] [flash_t6] 
+[+ 232.985s] [flash_t6] File download complete
+[+ 232.985s] [flash_t6] Time elapsed during download operation: 00:00:00.874
+[+ 232.985s] [flash_t6] 
+[+ 232.986s] [flash_t6] 
+[+ 232.986s] [flash_t6] 
+[+ 232.987s] [flash_t6] Verifying...
+[+ 232.987s] [flash_t6] 
+[+ 232.988s] [flash_t6] 
+[+ 232.988s] [flash_t6] Read progress:
+[+ 232.988s] [flash_t6] ±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±± 50%
+[+ 232.989s] [flash_t6] ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ 100%
+[+ 232.989s] [flash_t6] 
+[+ 232.990s] [flash_t6] Time elapsed during verifying operation: 00:00:00.007
+[+ 232.990s] [flash_t6] 
+[+ 232.990s] [flash_t6] 
+[+ 232.991s] [flash_t6] Download verified successfully
+[+ 232.991s] [flash_t6] 
+[+ 232.992s] [flash_t6] 
+[+ 232.992s] [flash_t6] 
+[+ 232.993s] [flash_t6] MCU Reset
+[+ 232.993s] [flash_t6] 
+[+ 232.994s] [flash_t6] Software reset is performed
+[+ 232.994s] [flash_t6] 
+[+ 232.995s] [flash_t6] Done.
+[+ 232.995s] [flash_t6] --- flash.py T6 pre-reset stdout/stderr end ---
+[+ 232.995s] [auditor] Reset 1/10: triggering SWD reset via STM32_Programmer_CLI...
+[+ 236.368s] [auditor] Reset 1/10: Ethernet link active after 3.2s
+[+ 240.656s] [auditor] Reset 1/10 verification: PASS
+[+ 240.656s] [auditor] Reset 2/10: triggering SWD reset via STM32_Programmer_CLI...
+[+ 244.013s] [auditor] Reset 2/10: Ethernet link active after 3.2s
+[+ 248.221s] [auditor] Reset 2/10 verification: PASS
+[+ 248.222s] [auditor] Reset 3/10: triggering SWD reset via STM32_Programmer_CLI...
+[+ 251.564s] [auditor] Reset 3/10: Ethernet link active after 3.2s
+[+ 255.753s] [auditor] Reset 3/10 verification: PASS
+[+ 255.754s] [auditor] Reset 4/10: triggering SWD reset via STM32_Programmer_CLI...
+[+ 259.150s] [auditor] Reset 4/10: Ethernet link active after 3.2s
+[+ 263.372s] [auditor] Reset 4/10 verification: PASS
+[+ 263.373s] [auditor] Reset 5/10: triggering SWD reset via STM32_Programmer_CLI...
+[+ 266.770s] [auditor] Reset 5/10: Ethernet link active after 3.3s
+[+ 270.971s] [auditor] Reset 5/10 verification: PASS
+[+ 270.972s] [auditor] Reset 6/10: triggering SWD reset via STM32_Programmer_CLI...
+[+ 274.368s] [auditor] Reset 6/10: Ethernet link active after 3.2s
+[+ 278.578s] [auditor] Reset 6/10 verification: PASS
+[+ 278.579s] [auditor] Reset 7/10: triggering SWD reset via STM32_Programmer_CLI...
+[+ 281.891s] [auditor] Reset 7/10: Ethernet link active after 3.2s
+[+ 286.083s] [auditor] Reset 7/10 verification: PASS
+[+ 286.084s] [auditor] Reset 8/10: triggering SWD reset via STM32_Programmer_CLI...
+[+ 289.495s] [auditor] Reset 8/10: Ethernet link active after 3.3s
+[+ 293.644s] [auditor] Reset 8/10 verification: PASS
+[+ 293.645s] [auditor] Reset 9/10: triggering SWD reset via STM32_Programmer_CLI...
+[+ 296.983s] [auditor] Reset 9/10: Ethernet link active after 3.2s
+[+ 301.142s] [auditor] Reset 9/10 verification: PASS
+[+ 301.143s] [auditor] Reset 10/10: triggering SWD reset via STM32_Programmer_CLI...
+[+ 304.550s] [auditor] Reset 10/10: Ethernet link active after 3.3s
+[+ 308.710s] [auditor] Reset 10/10 verification: PASS
+[+ 308.711s] [auditor] CHECK T6 10 resets: PASS (10/10 passed)
+[+ 313.251s] [host] working tree clean (end): PASS (Tree is clean outside build/)
+[+ 313.252s] OVERALL VERDICT: FAIL

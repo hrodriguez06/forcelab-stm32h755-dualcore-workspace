@@ -1,0 +1,20 @@
+[+   0.001s] [host] argv: tools/eth_e3e6_checks.py --test t4 -o 01_shared_drivers/08_eth/docs/eth_e3e6_t4_ebf2398.txt
+[+   0.001s] [host] options: test=t4 output=01_shared_drivers\08_eth\docs\eth_e3e6_t4_ebf2398.txt control_dir=C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7 allow_dirty=False sn=0016000C4142501220353451 target_ip=192.168.1.150 local_echo=False
+[+   0.051s] [host] HEAD: ebf2398d81ea926f56ebd97c03a3e66fad86e794
+[+   0.052s] [host] Working tree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755
+[+   0.052s] [host] Control worktree: C:\Users\hrodriguez\Documents\R+D\00_Embedded_System\00_STmicro\stm32h755_control_69179d7
+[+   4.710s] [host] working tree clean (start): PASS (Tree is clean outside build/)
+[+   5.259s] [host] Compiler: C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-gcc.EXE
+[+   5.260s] [host] Objdump:  C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin\arm-none-eabi-objdump.exe
+[+   5.260s] [host] CMake:    C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cmake.win32_1.1.200.202605190741\tools\bin\cmake.EXE
+[+   5.260s] === Running T4 Checks (prj_02 Memory Budget & Zero-Copy Disassembly) ===
+[+  39.250s] [host] CHECK prj_02 D2 SRAM3 usage (<= 32 KB): PASS (SRAM3 size = 24768 B / 32768 B (75.59%))
+[+  39.251s] [host] Parsed MPU Region 6 from mpu_config.c: base=0x30040000, size=32768 B
+[+  39.275s] [host] CHECK [debug] g_rx_pool 32-byte aligned & in MPU Region 6: PASS (addr=0x300400c0..0x300448c0, align32=True, in_r6=True)
+[+  39.297s] [host] CHECK [release] g_rx_pool 32-byte aligned & in MPU Region 6: PASS (addr=0x300400c0..0x300448c0, align32=True, in_r6=True)
+[+  39.339s] [host] CHECK [debug] zero-copy disassembly (no memcpy/__aeabi_memcpy/pbuf_take calls): PASS (detected=[])
+[+  39.376s] [host] CHECK [release] zero-copy disassembly (no memcpy/__aeabi_memcpy/pbuf_take calls): PASS (detected=[])
+[+  39.477s] [host] CHECK T4 negative control (.map 33 KB detected & rejected): PASS (SRAM3 size = 33792 B / 32768 B (103.12%))
+[+  39.480s] [host] CHECK T4 negative control (injected __aeabi_memcpy in disasm detected & rejected): PASS (['12:\tf7ff fffe\tbl\t0 <__aeabi_memcpy>', '12:\tf7ff fffe\tbl\t0 <__aeabi_memcpy>', '12:\tf7ff fffe\tbl\t0 <__aeabi_memcpy>'])
+[+  43.375s] [host] working tree clean (end): PASS (Tree is clean outside build/)
+[+  43.376s] OVERALL VERDICT: PASS

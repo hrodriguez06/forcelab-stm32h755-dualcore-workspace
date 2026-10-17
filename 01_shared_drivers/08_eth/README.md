@@ -83,6 +83,16 @@ Accepted identifier: `PHYI1R = 0x0007`, `PHYI2R & 0xFFF0 = 0xC130` (any silicon
 revision). Anything else is `LAN8742_ERROR_ID`; `0xFFFF` everywhere means no
 answer on MDIO.
 
+### 2.3 Compile-time configuration macros
+
+| Macro | Default | Purpose |
+| :--- | :--- | :--- |
+| `ETH_DRIVER_RX_BUFFER_COUNT` | `8U` | Number of 1536 B Rx buffers in `.RxArraySection` (D2 SRAM3). Guarded by `#ifndef`; can be overridden by project builds. Subject to the 32 KB SRAM3 limit enforced by `_Static_assert`. |
+| `ETH_HAL_CUSTOM_CALLBACKS` | Not defined | If defined, `eth_hal.c` omits the 6 default HAL ETH callbacks (`HAL_ETH_RxAllocateCallback`, `RxLinkCallback`, `TxFreeCallback`, `RxCpltCallback`, `TxCpltCallback`, `ErrorCallback`), allowing application-provided implementations without duplicate symbol collisions. |
+| `ETH_HAL_CUSTOM_MSP` | Not defined | If defined, `eth_hal.c` omits `HAL_ETH_MspInit` and `HAL_ETH_MspDeInit`, allowing the application to supply custom MSP routines in `stm32h7xx_hal_msp.c`. |
+| `ETH_DRIVER_IRQ_PRIORITY` | `6U` | NVIC preemption priority for `ETH_IRQn`. |
+| `ETH_USE_HARDWARE_CHECKSUM` | `0` | Selects MAC hardware checksum insertion on transmit and verification on receive. |
+
 ---
 
 ## 3. Project contract
@@ -355,7 +365,42 @@ writes the write-once supply configuration (`HAL_PWREx_ConfigSupply`) and waits 
 which writes it, with no power cycle in between. A project defect, not a driver one,
 fixed in `5dd43a2` (`prj_02` README section 6).
 
-### 9.3 Later images
+### 9.3 Validation of E3–E7 (2026-10-16)
+
+The E3–E7 cycle addressed callback decoupling (E3), zero-copy receive performance (E6),
+single-instance architecture validation (E4), and private copy governance (E7).
+
+#### 9.3.1 Off-board verification (T1–T3, commit `20eb735`)
+
+Captured in `docs/eth_e3e6_t1t3_20eb735.txt` using `tools/eth_e3e6_checks.py`:
+
+| Check | Result |
+| :--- | :--- |
+| **T1: Clean build matrix** | 8/8 configurations (`prj_01`..`prj_04`, `debug` and `release`) built clean-first with 0 warnings. Negative control with injected warning properly rejected. |
+| **T2: Binary invariance** | All 12 CM7 objects across `prj_02`, `prj_03`, and `prj_04` (`eth_hal.c.obj` and `ethernetif.c.obj`, `debug` and `release`) verified 100% byte-identical to control `69179d7` built in a separate worktree in the same run, across all ALLOC sections (including NOBITS), raw data, relocations, and symbols. Negative control properly rejected. |
+| **T3: Callback opt-out (E3)** | When built with `-DETH_HAL_CUSTOM_CALLBACKS`, `eth_hal.c.obj` defines 0 of 6 HAL ETH callbacks while providing `ETH_Driver_Init`, linking cleanly against external callbacks. Without the macro, linking fails with duplicate symbol errors. |
+| **Working tree integrity** | Working tree (ignored files included) verified clean outside `build/` before and after execution. |
+
+#### 9.3.2 Auditor hardware benchmark session (commit `1150083`)
+
+Conducted on NUCLEO-H755ZI-Q (SN `0016000C4142501220353451`, Rev V) with `prj_02` `debug`,
+recorded in `docs/eth_e3e6_audit_t5t6_1150083.txt`:
+
+| Benchmark | Control (`69179d7`, copy, 8 DMA + 16 pbufs) | Zero-copy prototype (`1150083`, 12 DMA) | Outcome |
+| :--- | :--- | :--- | :--- |
+| **Sequential 1-in-flight** (3 × 10,000 pkts @ 1472 B UDP) | 6.28 / 6.28 / 6.27 Mbit/s<br>**Median: 6.28 Mbit/s** (0 lost, `rx_nobuf=0`) | 6.19 / 6.20 / 6.19 Mbit/s<br>**Median: 6.19 Mbit/s** (0 lost, `rx_nobuf=0`) | Parity (0.9859× control) |
+| **Windowed burst** (32 in flight, 5,000 pkts @ 1472 B UDP) | **54.06 Mbit/s**<br>5,000 / 5,000 rx, **0 lost**<br>`rx_nobuf=0`, `tx_nobuf=0` | **32.84 Mbit/s** (-39% throughput)<br>4,976 / 5,000 rx, **24 lost**<br>`rx_nobuf=26`, `tx_nobuf=0` | **Regression under burst** |
+
+**Hardware evaluation verdict**:
+Under sequential traffic, zero-copy gave no throughput gain, and no CPU measurement was taken. Under burst traffic,
+the copy baseline absorbed datagram bursts via lwIP's 16 `PBUF_POOL` buffers while rapidly recycling
+the 8 DMA buffers back to the ring (~24 packets buffering capacity). Zero-copy retained DMA buffers
+during packet processing, and the prototype had 12 DMA buffers (SRAM3 at 24,768 of 32,768 B; at most
+17 fit beside the Tx pool, still fewer than the ~24 frames of the copy path). Under a 32-packet
+burst, descriptors exhausted, dropping 24 frames and degrading throughput by 39%. Consequently,
+Product Owner Decision (Plan Revision 3) **rejected zero-copy (E6)** and retained the proven copy data path.
+
+### 9.4 Later images
 
 - `prj_04` boot capture (`prj_04 docs/boot_capture.txt`): PHY registers as above,
   `link up: 100 Mbps full duplex`, `rx_nobuf=0 tx_nobuf=0 dma_err=0`.
@@ -365,7 +410,7 @@ fixed in `5dd43a2` (`prj_02` README section 6).
 
 Neither is a data-path test on its own; 9.1 is.
 
-### 9.4 Re-running it
+### 9.5 Re-running it
 
 With the image running and the host on the same segment:
 
@@ -384,7 +429,7 @@ ends agree. The staged bring-up procedure (placement, MPU, clocks, MDIO, link,
 ARP, errata read-back) is `<project>/docs/ETHERNET_BRINGUP.md`, identical in
 `prj_02`, `prj_03` and `prj_04`.
 
-### 9.5 Not exercised on hardware
+### 9.6 Not exercised on hardware
 
 Say so rather than assume it:
 
@@ -400,6 +445,8 @@ Say so rather than assume it:
 - **`ETH_USE_HARDWARE_CHECKSUM = 1`**: never built into a tested image.
 - **`ETH_HAL_CUSTOM_MSP`** and a strong `ETH_HAL_MspInit_User()`: no consumer
   uses either.
+- **`ETH_HAL_CUSTOM_CALLBACKS`**: verified off-board by T3; no consumer uses it
+  on hardware.
 - **`HAL_ETH_DeInit()` / `ETH_HAL_MspDeInit_User()`**: the de-initialization path
   (restoring RMII pins to analog via `GPIO_HAL_DeinitPin()` and disabling peripheral
   clocks and interrupts) is not called by any project in the workspace.
@@ -413,17 +460,17 @@ E7), not on this driver.
 
 ## 10. Known limitations
 
-| # | Limitation | Consequence |
+| # | Limitation | Status / Consequence |
 | :--- | :--- | :--- |
-| E3 | **HAL callbacks cannot be turned off.** Only the MSP has an opt-out (`ETH_HAL_CUSTOM_MSP`); the buffer and event callbacks above are always strong symbols. | A project cannot use this driver for the MAC and its own HAL ETH callbacks at the same time. |
-| E4 | **One instance, global state.** The HAL handle, PHY and pools are file-scope statics. | Matches the silicon (one ETH MAC); listed so nobody tries a second instance. |
-| E6 | **Copy data path.** The lwIP glue copies each frame between pbufs and the SRAM3 pools (~1.5 kB per frame per direction). | Invisible for control traffic; worth removing for bulk transfer. `ETHERNET_BRINGUP.md` section 9 has the zero-copy plan and its SRAM3 budget. |
-| E7 | **`prj_eth_lwip_node` has a private copy** in `Custom_Drivers/08_eth/`, deliberately kept (its verification ran on those sources). | **A fix here does not reach it.** Porting an errata workaround there is an explicit decision followed by a re-run of its bring-up. |
+| E4 | **One instance, global state.** The HAL handle, PHY and pools are file-scope statics. | **By design.** Matches the silicon (the STM32H755ZI has a single Ethernet MAC peripheral). Listed to document single-instance architecture. |
+| E6 | **Copy data path.** The lwIP glue copies each frame between pbufs and the SRAM3 pools (~1.5 kB per frame per direction). | **Measured and not adopted.** Implemented and benchmarked on hardware in October 2026 (`docs/eth_e3e6_audit_t5t6_1150083.txt`). Sequential throughput was equivalent (6.19 vs 6.28 Mbit/s), but windowed burst throughput regressed by 39% (32.84 vs 54.06 Mbit/s) with 24 dropped packets (`rx_nobuf=26`) due to buffering capacity (12 DMA buffers in the prototype vs 8 DMA + 16 pbufs in copy mode). Copy mode retained; see [section 9.3.2](#932-auditor-hardware-benchmark-session-commit-1150083) and `ETHERNET_BRINGUP.md` §9. |
+| E7 | **`prj_eth_lwip_node` has a private copy** in `Custom_Drivers/08_eth/`. | **Deliberately kept.** Verification ran on those sources. Any driver fix here must be explicitly ported if needed. |
 
-### 10.1 Resolved limitations (2026-10-11)
+### 10.1 Resolved limitations
 
 - **E1 (Fallback pin defaults):** Closed in `d4feb24`. `board_def.h` is unconditionally included inside `HAL_ETH_MODULE_ENABLED`. Every missing `BOARD_ETH_<SIG>_PORT` and `_PIN` macro triggers an explicit compile-time `#error` referencing Rule 1 (`01_shared_drivers/README.md`). Fallback pin defaults have been completely removed.
 - **E2 (`USE_HAL_ETH_REGISTER_CALLBACKS == 0` assumed):** Closed in `d4feb24`. Enforced at compile time with `#error` if `USE_HAL_ETH_REGISTER_CALLBACKS` is defined and non-zero.
+- **E3 (HAL callbacks cannot be turned off):** Closed in `20eb735`. Guarded by `#if !defined(ETH_HAL_CUSTOM_CALLBACKS)`. An application requiring custom HAL ETH callbacks can define `ETH_HAL_CUSTOM_CALLBACKS`, omitting the default callbacks in `eth_hal.c` and avoiding duplicate symbol collisions. Verified off-board by T3.
 - **E5 (`g_stats` non-atomic):** Closed in `d4feb24`. All five counters are incremented atomically using `__atomic_fetch_add(&g_stats.<field>, 1U, __ATOMIC_RELAXED)` (generating `ldrex`/`strex` loops on Cortex-M7), eliminating races between task and ISR.
 - **E8 (Cross-core GPIO race):** Closed as a driver limitation in `d4feb24` and completed in `fe572f3`. The driver replaces `HAL_GPIO_Init()` with `GPIO_HAL_Init()` for pin configuration and `HAL_GPIO_DeInit()` with `GPIO_HAL_DeinitPin()` for pin de-initialization in `ETH_HAL_MspDeInit_User()`, routing all GPIO register modifications through `gpio_bm` critical sections (G13) without altering shared EXTI registers. Full cross-core race protection requires the consuming project to install `GPIO_BM_SetSharedLock()` on both cores, which is part of the project contract ([section 3](#3-project-contract) and [section 8](#8-dual-core-rules)), not a driver limitation.
 
@@ -453,10 +500,10 @@ E7), not on this driver.
 7. **Before merging:**
    - `.\tools\build_all.ps1 -Clean`, 8/8 with `-Werror`;
    - `py tools/eth_build_checks.py` passes all checks;
-   - flash `prj_02` (or any ETH project), run [section 9.4](#94-re-running-it),
+   - flash `prj_02` (or any ETH project), run [section 9.5](#95-re-running-it),
      and update the record in `prj_02 README.md` section 6 with the image hash;
    - if the change touches link handling or an erratum, run the matching item of
-     [section 9.5](#95-not-exercised-on-hardware) and move it out of that list;
+     [section 9.6](#96-not-exercised-on-hardware) and move it out of that list;
    - decide explicitly whether the change is ported to `prj_eth_lwip_node` (E7).
 
 ---
@@ -475,11 +522,17 @@ E7), not on this driver.
 | Limitations E1, E2, E5, E8 closed: `board_def.h` mandatory, callbacks checked, atomic stats, `GPIO_HAL_Init` | `d4feb24`, `709b869`, `bb70e56` |
 | Close documentation and correction (M1, m1, m3, m4, m5): failure semantics, compiler error lines, `GPIO_HAL_DeinitPin`, expanded T4 | `a8ef75e`, `f6a7cc7`, `987967a`, `0a10e25`, `fe572f3`, `e47c780` |
 | Close audit passes at `2165309`, with the auditor's T6 on the final image | `9fb3443` |
+| E3 callback opt-out and E6 zero-copy prototype (`tools/eth_e3e6_checks.py`, T1–T5 off-board) | `15d1d3a` |
+| Auditor hardware benchmark on NUCLEO-H755ZI-Q: zero-copy regresses under burst (32.84 vs 54.06 Mbit/s, 24 dropped frames) | `805ed29`, `afe605c` |
+| Plan revision 3: zero-copy removed, E3 callback opt-out kept, T2 extended to `prj_02`, verified off-board (T1–T3) | `20eb735`, `cb09823` |
+| Close audit passes: the auditor's own T1–T3 run at `18428f4` (`docs/eth_e3e6_audit_t1t3_18428f4.txt`), SRAM3 and CPU claims corrected | `18428f4`, `c22f445` |
 
-Process documents (`IMPLEMENTATION_PLAN.md` revision 1, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md`,
+Process documents (`IMPLEMENTATION_PLAN.md` revision 3, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md`,
 `AUDIT.md`) were removed after the close; each is at the parent of the commit that removes it:
 
 ```bash
 git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/08_eth/IMPLEMENTATION_PLAN.md)^:01_shared_drivers/08_eth/IMPLEMENTATION_PLAN.md
-git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/08_eth/AUDIT.md)^:01_shared_drivers/08_eth/AUDIT.md   # and the other two
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/08_eth/AUDIT.md)^:01_shared_drivers/08_eth/AUDIT.md
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/08_eth/IMPLEMENTER_INSTRUCTIONS.md)^:01_shared_drivers/08_eth/IMPLEMENTER_INSTRUCTIONS.md
+git show $(git log -1 --format=%h --diff-filter=D -- 01_shared_drivers/08_eth/IMPLEMENTATION_REPORT.md)^:01_shared_drivers/08_eth/IMPLEMENTATION_REPORT.md
 ```
