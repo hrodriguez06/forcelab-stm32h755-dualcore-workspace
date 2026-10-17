@@ -192,14 +192,98 @@ bool UART_LL_Init(UartLL_Handle_t *h, const UartLL_Config_t *cfg)
         return false;
     }
 
-    /* LPUART does not support 0.5 or 1.5 stop bits */
+    /* =========================================================================
+     * Phase 1: Pure parameter validation & calculation (U2, U3).
+     * ZERO hardware registers (GPIO, RCC, or USART) are touched before this completes.
+     * ========================================================================= */
+
+    /* 1.1 Data bits validation (LL_USART_DATAWIDTH_*) */
+    if ((cfg->data_bits != LL_USART_DATAWIDTH_7B) &&
+        (cfg->data_bits != LL_USART_DATAWIDTH_8B) &&
+        (cfg->data_bits != LL_USART_DATAWIDTH_9B))
+    {
+        return false;
+    }
+
+    /* 1.2 Stop bits validation (LL_USART_STOPBITS_*) */
+    if ((cfg->stop_bits != LL_USART_STOPBITS_0_5) &&
+        (cfg->stop_bits != LL_USART_STOPBITS_1) &&
+        (cfg->stop_bits != LL_USART_STOPBITS_1_5) &&
+        (cfg->stop_bits != LL_USART_STOPBITS_2))
+    {
+        return false;
+    }
+
+    /* RM0399 §52.4.4: LPUART does not support 0.5 or 1.5 stop bits */
     if (desc->is_lpuart &&
         ((cfg->stop_bits == LL_USART_STOPBITS_0_5) || (cfg->stop_bits == LL_USART_STOPBITS_1_5)))
     {
         return false;
     }
 
-    /* 1. Optional GPIO configuration */
+    /* 1.3 Parity validation (LL_USART_PARITY_*) */
+    if ((cfg->parity != LL_USART_PARITY_NONE) &&
+        (cfg->parity != LL_USART_PARITY_EVEN) &&
+        (cfg->parity != LL_USART_PARITY_ODD))
+    {
+        return false;
+    }
+
+    /* 1.4 Hardware flow control validation (LL_USART_HWCONTROL_*) */
+    if ((cfg->hw_flow != LL_USART_HWCONTROL_NONE) &&
+        (cfg->hw_flow != LL_USART_HWCONTROL_RTS) &&
+        (cfg->hw_flow != LL_USART_HWCONTROL_CTS) &&
+        (cfg->hw_flow != LL_USART_HWCONTROL_RTS_CTS))
+    {
+        return false;
+    }
+
+    /* 1.5 Oversampling validation (LL_USART_OVERSAMPLING_*) */
+    if ((cfg->oversampling != LL_USART_OVERSAMPLING_16) &&
+        (cfg->oversampling != LL_USART_OVERSAMPLING_8))
+    {
+        return false;
+    }
+
+    /* RM0399 §52.4.4: LPUART does not support OVER8 */
+    if (desc->is_lpuart && (cfg->oversampling != LL_USART_OVERSAMPLING_16))
+    {
+        return false;
+    }
+
+    /* 1.6 Optional pin parameter validation without touching hardware */
+    if (cfg->tx_pin != NULL)
+    {
+        if ((cfg->tx_pin->port == NULL) || (cfg->tx_pin->pin_idx > 15U) ||
+            !GPIO_BM_IsValidPort(cfg->tx_pin->port))
+        {
+            return false;
+        }
+    }
+
+    if (cfg->rx_pin != NULL)
+    {
+        if ((cfg->rx_pin->port == NULL) || (cfg->rx_pin->pin_idx > 15U) ||
+            !GPIO_BM_IsValidPort(cfg->rx_pin->port))
+        {
+            return false;
+        }
+    }
+
+    /* 1.7 Determine Prescaler and validate Baud Rate */
+    uint32_t presc = 0;
+    if (!UART_LL_SelectPrescaler(cfg->kernel_clock_hz, cfg->baudrate, desc->is_lpuart,
+                                 cfg->oversampling, &presc))
+    {
+        return false;
+    }
+
+    /* =========================================================================
+     * Phase 2: Hardware configuration.
+     * All inputs verified; begin applying changes to hardware.
+     * ========================================================================= */
+
+    /* 2.1 Optional GPIO configuration */
     if (cfg->tx_pin != NULL)
     {
         if (!GPIO_BM_ConfigAlternate(cfg->tx_pin->port, cfg->tx_pin->pin_idx,
@@ -220,18 +304,10 @@ bool UART_LL_Init(UartLL_Handle_t *h, const UartLL_Config_t *cfg)
         }
     }
 
-    /* 2. Clock gating in RCC */
+    /* 2.2 Clock gating in RCC */
     if (cfg->enable_clock)
     {
         UART_LL_EnableBusClock(desc->bus, desc->enr_mask);
-    }
-
-    /* 3. Determine Prescaler and validate Baud Rate */
-    uint32_t presc = 0;
-    if (!UART_LL_SelectPrescaler(cfg->kernel_clock_hz, cfg->baudrate, desc->is_lpuart,
-                                cfg->oversampling, &presc))
-    {
-        return false;
     }
 
     USART_TypeDef *u = cfg->instance;
