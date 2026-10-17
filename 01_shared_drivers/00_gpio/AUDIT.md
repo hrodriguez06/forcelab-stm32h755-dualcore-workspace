@@ -36,3 +36,51 @@
 ### Estado
 
 **F1 no pasa.** K1 está bien; la herramienta necesita una ronda: B1–B7, M1 y m1–m3.
+
+## F1, corrección 1 (`5826eb2`, informe en `ac59a73`)
+
+### La herramienta
+
+Cerrados B1–B7, M1 y m1–m3:
+- **T1** compila ella misma las 8 configuraciones. El control usa la misma tubería con `-Wconversion` en un directorio temporal y da 224 avisos.
+- **`git config`:** ninguna escritura.
+- **T2** compara los dos conjuntos de objetos en ambos sentidos.
+- **T3** compila con las cabeceras, defines e includes reales de `gpio_hal.c.obj`.
+- **T4:**
+  - compila sus imágenes en la ejecución;
+  - flashea con el `flash.py` de cada proyecto y exige `Download verified successfully`;
+  - reintenta `net_check` hasta 20 s;
+  - hace los resets con `-hardRst`, cada uno en la captura;
+  - pasa los controles por la salida real del CLI.
+
+**Un fallo más, que corregí yo en `987f310`:** `run_net_check_with_retry()` usaba `192.168.1.50`, y la placa está en `192.168.1.150` (`net_config.h` de los tres proyectos). Todos los `net_check` de T4 habrían fallado.
+
+### Ejecución del auditor: T1–T4 en la placa
+
+Captura `docs/gpio_close_audit_t1t4_987f310.txt`: HEAD `987f310`, SN `0016000C4142501220353451`, **`OVERALL VERDICT: PASS`**, 55 comprobaciones PASS y 0 FAIL.
+- **T1:** 8/8 y los tres presets de selftest, con 0 avisos; el control, con 224.
+- **T2:**
+  - los 6 CM7 sin `HAL_EnableCompensationCell` y con `GPIO_BM_EnableCompensationCell` sin definir en `main.c.obj`;
+  - las tres funciones idénticas;
+  - 2454 objetos idénticos al control `f066a8e`, compilado en la ejecución;
+  - los tres controles, rechazados.
+- **T3:** enlaza; sin `gpio_bm`, falla por `undefined reference`.
+- **T4:**
+
+| Imagen | `SYSCFG_CCCSR` | `RCC_CR` | `net_check` |
+| --- | --- | --- | --- |
+| `prj_02` `debug` | `0x00000101` (EN, READY) | `0x0307C1A5` (CSIRDY) | PASS |
+| `prj_03` `debug` | `0x00000101` | `0x0F07C1A5` | PASS |
+| `prj_04` `debug` | `0x00000101` | `0x0F07C1A5` | PASS; 5/5 resets por NRST, cada uno con `READY = 1` y `net_check` PASS |
+| `prj_04` `release` | `0x00000101` | `0x0F07C1A5` | PASS |
+
+- **Controles de T4:** la salida real del CLI con `READY = 0`, y aparte con `EN = 0`, da FAIL.
+- **El primer `net_check` falla en cada arranque y el segundo pasa.** Se pierde un ping (ICMP 3/4) mientras sube el enlace, que es lo que justifica los reintentos.
+- **Los bits 26–27 de `RCC_CR`** (`PLL2ON`, `PLL2RDY`) solo están en `prj_03` y `prj_04`, que usan PLL2 para el ADC.
+
+### Estado
+
+**F1 pasa.** Queda autorizado el cierre del implementador (K3):
+- el README según el Diseño 3 del plan;
+- en el README, solo las capturas que respaldan una afirmación actual: `gpio_close_t1t3_2f929a4.txt` es de la herramienta con B1–B7 y se borra (regla 7 de §14);
+- §9 y §13.4 citan `gpio_close_audit_t1t4_987f310.txt` para T4.
