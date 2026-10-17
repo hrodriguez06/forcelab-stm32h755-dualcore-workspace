@@ -308,12 +308,15 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
             last_edge = rx_transitions[-1]
             span_samples = last_edge - start_edge
             bits_spanned = round(span_samples / bit_period_samples)
-            if bits_spanned > 0:
+            if bits_spanned >= 3:
                 bit_duration_samples = span_samples / float(bits_spanned)
                 mco_per_bit = bit_duration_samples / mco_period_samples
 
-        if mco_per_bit == 0.0 and mco_period_samples > 0:
-            mco_per_bit = bit_period_samples / mco_period_samples
+        if mco_per_bit == 0.0:
+            if frames and frames[-1]["mco_per_bit"] > 0.0:
+                mco_per_bit = frames[-1]["mco_per_bit"]
+            elif mco_period_samples > 0:
+                mco_per_bit = bit_period_samples / mco_period_samples
 
         frames.append({
             "byte": val,
@@ -325,7 +328,7 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
             "mco_per_bit": mco_per_bit
         })
 
-        i = frame_end
+        i = start_edge + int(round((total_bits - 0.5) * bit_period_samples))
 
     return frames
 
@@ -361,21 +364,24 @@ def eval_ut2(rows: list[dict], rejects: list[dict], fw_pass: bool) -> bool:
 
 
 def eval_ut3(frames: list[dict], expected_bytes: list[int], exp_parity: str,
-             f_mco: float, baud: float, data_bits: int = 8, tolerance: float = 0.005) -> bool:
+             f_mco: float, baud: float, data_bits: int = 8, tolerance: float = 0.005) -> tuple[bool, str]:
     if not frames:
-        return False
+        return False, "no frames decoded"
     th_mco = f_mco / baud
     mask = (1 << data_bits) - 1
     for i, f in enumerate(frames):
         if i >= len(expected_bytes):
             break
         if (f["byte"] & mask) != (expected_bytes[i] & mask):
-            return False
-        if not f["parity_ok"] or not f["stop_ok"]:
-            return False
-        if abs(f["mco_per_bit"] - th_mco) / th_mco > tolerance:
-            return False
-    return True
+            return False, f"frame {i} byte mismatch: got 0x{f['byte']:X} exp 0x{expected_bytes[i]:X} (mask 0x{mask:X})"
+        if not f["parity_ok"]:
+            return False, f"frame {i} parity error"
+        if not f["stop_ok"]:
+            return False, f"frame {i} stop bit error"
+        err_mco = abs(f["mco_per_bit"] - th_mco) / th_mco
+        if err_mco > tolerance:
+            return False, f"frame {i} mco error {err_mco*100:.3f}% > {tolerance*100:.1f}% (meas={f['mco_per_bit']:.3f} th={th_mco:.3f})"
+    return True, "OK"
 
 
 def eval_ut4(sent: int, received: int, err: int, fw_pass: bool) -> bool:
@@ -1134,16 +1140,19 @@ class UartSession:
                 if not self.sync(): return False
 
                 samples = self.ad2.la_read(n, timeout_s=3.0) or ([0xFFFF] * n)
-                bit_period_samples = int(round(rate / baud))
+                bit_period_samples = int(round(rate / baud_hw))
                 decoded = decode_uart_frames(
                     samples, bit_period_samples, data_bits=data_bits,
-                    parity=parity, stop_bits=stop_bits, f_mco=self.f_mco, baud=baud, rate=rate
+                    parity=parity, stop_bits=stop_bits, f_mco=self.f_mco, baud=baud_hw, rate=rate
                 )
 
-                row_real = eval_ut3(decoded, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
+                row_real, row_msg = eval_ut3(decoded, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
                 # Negative control: mutate measured data (corrupt bit duration / mco_per_bit by 2.5%, violating 0.5% tolerance)
                 mutated_frames = [{**f, "mco_per_bit": f["mco_per_bit"] * 1.025} for f in decoded]
-                row_ctrl = eval_ut3(mutated_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
+                row_ctrl, _ = eval_ut3(mutated_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
+
+                if not row_real:
+                    self.log(f"[host] UT3 row {row_idx} FAIL: tier={tier} fmt={fmt_str} baud={baud} over8={over8} ({row_msg})")
 
                 ut3_row_results.append(row_real)
                 ctrl_ut3_results.append(row_ctrl)
