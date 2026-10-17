@@ -7,6 +7,7 @@
 
 #include "uart_hal.h"
 #include "gpio_hal.h"
+#include "gpio_bm.h"
 
 #if defined(HAL_UART_MODULE_ENABLED)
 
@@ -181,29 +182,62 @@ HAL_StatusTypeDef UART_HAL_InitEx(UART_HandleTypeDef *huart, const uart_hal_conf
         return HAL_ERROR;
     }
 
-    if (config->enable_clock)
-    {
-        UART_HAL_EnableInstanceClock(config->instance);
-    }
-
+    /* Validate and configure pins before enabling peripheral clock (U6) */
     if (config->tx_pin != NULL)
     {
-        if (!GPIO_BM_ConfigAlternate(config->tx_pin->port, config->tx_pin->pin_idx,
-                                     config->tx_pin->af, GPIO_BM_PULL_UP,
-                                     GPIO_BM_SPEED_VERY_HIGH))
+        if ((config->tx_pin->port == NULL) || (config->tx_pin->pin_idx > 15U) ||
+            !GPIO_BM_IsValidPort(config->tx_pin->port))
         {
             return HAL_ERROR;
+        }
+
+        GpioBm_PinConfig_t pin_cfg = {
+            .port             = config->tx_pin->port,
+            .pin_idx          = config->tx_pin->pin_idx,
+            .mode             = GPIO_BM_MODE_AF,
+            .otype            = GPIO_BM_OTYPE_PP,
+            .speed            = GPIO_BM_SPEED_VERY_HIGH,
+            .pull             = GPIO_BM_PULL_UP,
+            .af               = config->tx_pin->af,
+            .initial_level    = 0U,
+            .allow_debug_pins = false
+        };
+        GpioBm_Status_t st = GPIO_BM_ConfigPin(&pin_cfg);
+        if (st != GPIO_BM_OK)
+        {
+            return (st == GPIO_BM_ERR_BUSY) ? HAL_BUSY : HAL_ERROR;
         }
     }
 
     if (config->rx_pin != NULL)
     {
-        if (!GPIO_BM_ConfigAlternate(config->rx_pin->port, config->rx_pin->pin_idx,
-                                     config->rx_pin->af, GPIO_BM_PULL_UP,
-                                     GPIO_BM_SPEED_VERY_HIGH))
+        if ((config->rx_pin->port == NULL) || (config->rx_pin->pin_idx > 15U) ||
+            !GPIO_BM_IsValidPort(config->rx_pin->port))
         {
             return HAL_ERROR;
         }
+
+        GpioBm_PinConfig_t pin_cfg = {
+            .port             = config->rx_pin->port,
+            .pin_idx          = config->rx_pin->pin_idx,
+            .mode             = GPIO_BM_MODE_AF,
+            .otype            = GPIO_BM_OTYPE_PP,
+            .speed            = GPIO_BM_SPEED_VERY_HIGH,
+            .pull             = GPIO_BM_PULL_UP,
+            .af               = config->rx_pin->af,
+            .initial_level    = 0U,
+            .allow_debug_pins = false
+        };
+        GpioBm_Status_t st = GPIO_BM_ConfigPin(&pin_cfg);
+        if (st != GPIO_BM_OK)
+        {
+            return (st == GPIO_BM_ERR_BUSY) ? HAL_BUSY : HAL_ERROR;
+        }
+    }
+
+    if (config->enable_clock)
+    {
+        UART_HAL_EnableInstanceClock(config->instance);
     }
 
     huart->Instance                    = config->instance;
