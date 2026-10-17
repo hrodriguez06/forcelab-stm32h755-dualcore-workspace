@@ -525,6 +525,7 @@ E7), not on this driver.
 | E3 callback opt-out and E6 zero-copy prototype (`tools/eth_e3e6_checks.py`, T1–T5 off-board) | `15d1d3a` |
 | Auditor hardware benchmark on NUCLEO-H755ZI-Q: zero-copy regresses under burst (32.84 vs 54.06 Mbit/s, 24 dropped frames) | `805ed29`, `afe605c` |
 | Plan revision 3: zero-copy removed, E3 callback opt-out kept, T2 extended to `prj_02`, verified off-board (T1–T3) | `20eb735`, `cb09823` |
+| Close audit passes: the auditor's own T1–T3 run at `18428f4` (`docs/eth_e3e6_audit_t1t3_18428f4.txt`), SRAM3 and CPU claims corrected | `18428f4`, `c22f445` |
 
 Process documents (`IMPLEMENTATION_PLAN.md` revision 3, `IMPLEMENTER_INSTRUCTIONS.md`, `IMPLEMENTATION_REPORT.md`,
 `AUDIT.md`) were removed after the close; each is at the parent of the commit that removes it:
