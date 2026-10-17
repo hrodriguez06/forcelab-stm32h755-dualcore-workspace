@@ -71,3 +71,45 @@ Revisé yo el firmware. La herramienta la revisó un subagente; los hallazgos de
 ### Estado
 
 **F1 no pasa todavía, por la parte de placa de la herramienta.** El firmware y T1–T4 están bien. Siguiente ronda, solo la herramienta de T5/T6 (lo de arriba). Después, la sesión de placa.
+
+## F1, corrección 2 (`1150083`, herramienta en `15d1d3a`) y sesión de placa
+
+### La herramienta (revisada por mí)
+
+B2 está cerrado:
+- `evaluate_monitor_net_lines` exige al menos 2 líneas `[net]`;
+- el monitor corre con `PYTHONIOENCODING=utf-8:backslashreplace` y `--timestamps`;
+- espera 6 s tras cada carga y comprueba `poll()`;
+- guarda el log y su SHA-256 en la captura.
+
+**B1 está cerrado:** el control y HEAD se compilan en la ejecución y se comparan sus SHA-256, que deben ser distintos.
+
+**La carga en ventana:** en la prueba local (`eth_e3e6_t5_local_15d1d3a.txt`) aguanta un eco que corrompe (19 corruptas) y uno que pierde (25 caducadas). `--local-echo` impide T6.
+
+### Sesión de placa (`eth_e3e6_audit_t5t6_1150083.txt`, HEAD `1150083`, `prj_02` `debug`)
+
+Imágenes compiladas en la ejecución:
+- **control:** CM7 `ae8372ad…`;
+- **HEAD:** CM7 `2b8f0cde…`.
+
+| Prueba | Control (copia, 8 búferes) | HEAD (cero-copia, 12 búferes) |
+| --- | --- | --- |
+| `net_check` | PASS | PASS |
+| Carga una a una, 3 × 10 000 × 1472 B | 30 000/30 000, mediana 6,28 Mbit/s | 30 000/30 000, mediana 6,19 Mbit/s (0,986 × el control: pasa el 0,98) |
+| Carga con 32 en vuelo, 5000 × 1472 B | **5000/5000, 54,06 Mbit/s, 0 perdidos** | **4976/5000, 32,84 Mbit/s, 24 perdidos** |
+| `[net]` del monitor | `rx_nobuf=0` en todas las muestras | **`rx_nobuf=26`** en las dos últimas muestras |
+| T6, 10 resets | — | 10/10 (enlace a los 3,2–3,3 s, ping y eco) |
+
+`OVERALL VERDICT: FAIL`, por el monitor de HEAD.
+
+**Qué significa:**
+- **El cero-copia funciona y no se atasca** (F-B1 resuelto: la carga termina y T6 pasa), y a una trama cada vez rinde igual que la copia.
+- **Bajo ráfaga empeora la recepción:** pierde tramas (`rx_nobuf` = 26) y rinde un 39 % menos.
+- **La causa probable es la capacidad de búfer:**
+  - con la copia, los 8 búferes DMA se devuelven enseguida y las tramas esperan en los 16 pbufs de `PBUF_POOL`, unas 24 tramas en total;
+  - con el cero-copia, solo caben los 12 búferes DMA que lwIP retiene hasta procesar el eco.
+- **No hay una medida de CPU** que muestre la ganancia que justificaba E6.
+
+### Estado
+
+**F1 no pasa.** No es un fallo de la herramienta: es un resultado del producto. Tal como está, E6 es una regresión de `prj_02` bajo ráfaga. La decisión es del responsable.
