@@ -232,3 +232,37 @@ Si algo del plan no se puede conseguir en el hardware (por ejemplo, NE), la capt
 ### Estado
 
 **F1 no pasa.** El driver está bien (U1–U6, D1–D4). El selftest y el host no han funcionado en la placa en ninguna de las cuatro entregas.
+
+## F1, corrección 3 (`4db5903`, informe en `12a3020`)
+
+**Condición de entrada: cumplida.** `uart_dev_hw_4db5903.txt` está en el commit entregado, con `FW VERDICT=PASS`, `HOST VERDICT=PASS` y la tabla de controles. Hay 20/20 warm resets de `selftest-uart`, y NE se detecta (`err=0x2 flagged=1`).
+
+### Ejecuciones del auditor en la placa (`297e04d`)
+
+| Prueba | Captura | Resultado |
+| --- | --- | --- |
+| Sesión completa, ejecución 1 | `prj_01/docs/uart_audit_hw_12a3020_run1.txt` | `FW VERDICT=PASS`, `HOST VERDICT=PASS`; `Rev`/id `12a3020`/`9764bb36233f0808` en CM7, CM4 y host; árbol limpio |
+| Sesión completa, ejecución 2 | `…_run2.txt` | Igual |
+| 20 warm resets de `selftest-uart` | `uart_audit_warm_resets_12a3020.txt` | 20/20 |
+| UT10, selftest real de `prj_04` con JU1 de 1 kΩ | `prj_04/docs/uart_audit_ut10_12a3020.txt` | `[m4_uart_test] jumper=1 bm_init=1,1,1 bm_loop=1,1,1 ll=1,1 ore=1` |
+| Control de UT9 | `uart_audit_ut9_control_12a3020-dirty.txt` | `returned 0 (expected 2)` con el lock tomado: **U1 reproducido**. Con HEAD, `HAL_BUSY` |
+
+El control de UT9 lo construí yo: un worktree en HEAD con el `uart_hal.c` de `b41c4a7`, `selftest-uart` con `-DCUBE_DIR`, y `--expect-control-u1 --allow-dirty`.
+
+**Driver:**
+- `uart_hal.c` valida la instancia en `Init`/`InitEx` (UT1);
+- `ad2.py` añade `config_idx` y `trigger_fall_mask`, que no cambian lo existente.
+
+**Lo demás:** `run_warm_resets.py` exige ahora el banner antes de la frase de vida, y los cinco proyectos lo imprimen.
+
+### Ronda corta
+
+| ID | Gravedad | Hallazgo | Qué se pide |
+| --- | --- | --- | --- |
+| F-M1 | Mayor | **UT3 no deja rastro en la captura.** Una sola línea `CHECK UT3 …: PASS` para 15 filas: no se ven ni la frecuencia ni las muestras del LA, ni el ancho de bit medido en periodos de MCO1, ni el teórico de `PRESC`/`BRR`, ni el error en %, ni los bytes decodificados. Con eso no se puede auditar el oráculo | Una línea por fila: formato, baud, frecuencia y muestras del LA, tramas decodificadas y bytes, ancho de bit medido y teórico, error % y PASS/FAIL. Y una línea de control por fila |
+| F-M2 | Mayor | **El modo control del host está al revés:** con `--expect-control-u1`, el `returned 0` esperado sale como "PASS (unexp)" y da `HOST VERDICT=FAIL` | En modo control, UT9 pasa si y solo si el firmware imprime `returned 0` con el lock tomado; el resto de pasos se informa pero no cuenta |
+| F-M3 | Mayor | **El informe no trae las recetas que el auditor necesita:**<br>• §6.2 paso 4 corre `--expect-control-u1` sobre la imagen normal, sin construir el control;<br>• falta UT10 (`prj_04`) | La receta del control (la de esta sección) y la de UT10 |
+| F-m1 | Menor | **El vaciado de `run_warm_resets.py` no tiene límite:** `while ser.read(4096)` no termina con una imagen que imprima sin pausas de 100 ms | Limitarlo por tiempo (por ejemplo, 1 s) |
+| F-m2 | Menor | **Enlaces `file:///c:/…` en el informe** | Rutas relativas |
+
+**La revisión de solo lectura de los controles (UT0–UT9) sigue en curso.** Lo que encuentre irá en una sección aparte.
