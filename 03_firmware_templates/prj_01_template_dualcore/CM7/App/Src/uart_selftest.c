@@ -2072,4 +2072,9 @@ void UART_Selftest_CM7_Run(void)
         LOG("FW VERDICT=%s", (s_fail == 0U) ? "PASS" : "FAIL");
         step_end();
     }
+    else
+    {
+        (void)cm4_send_cmd(UST_CMD_DONE, 500U);
+        mco1_restore();
+    }
 }

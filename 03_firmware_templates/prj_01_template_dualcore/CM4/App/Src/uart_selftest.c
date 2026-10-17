@@ -179,9 +179,14 @@ void UART_Selftest_CM4_Run(void)
 
     for (;;)
     {
+        uint32_t t0 = HAL_GetTick();
         while (UST_AREA->cmd_seq == last_seq)
         {
-            /* Spin waiting for command from CM7 */
+            if ((HAL_GetTick() - t0) > 3000U)
+            {
+                UST_AREA->m4_timeout = 1U;
+                return;
+            }
         }
 
         uint32_t cmd = UST_AREA->cmd;
