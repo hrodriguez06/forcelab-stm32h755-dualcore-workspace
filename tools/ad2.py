@@ -632,8 +632,10 @@ def i2c_synth_analog(frames: list[tuple[str, list[int], bool]], rate_hz: float, 
 class AD2:
     """Analog Discovery 2 instrument controller with safety guards."""
 
-    def __init__(self, sn: Optional[str] = "210321B5D38D", dwf_lib: Any = None) -> None:
+    def __init__(self, sn: Optional[str] = "210321B5D38D", dwf_lib: Any = None,
+                 config_idx: int = -1) -> None:
         self.target_sn = sn
+        self.config_idx = config_idx
         self._hdwf = ctypes.c_int(0)
         self._output_val = 0
         self.current_step: Any = None
@@ -686,7 +688,10 @@ class AD2:
         if device_idx < 0:
             raise AD2Error(f"AD2 with SN matching '{self.target_sn}' not found in {num_devices} devices.")
 
-        ret = self._dwf.FDwfDeviceOpen(ctypes.c_int(device_idx), ctypes.byref(self._hdwf))
+        if self.config_idx >= 0 and hasattr(self._dwf, "FDwfDeviceConfigOpen"):
+            ret = self._dwf.FDwfDeviceConfigOpen(ctypes.c_int(device_idx), ctypes.c_int(self.config_idx), ctypes.byref(self._hdwf))
+        else:
+            ret = self._dwf.FDwfDeviceOpen(ctypes.c_int(device_idx), ctypes.byref(self._hdwf))
         if ret == 0 or self._hdwf.value == 0:
             err = self._get_err_msg()
             raise AD2Error(f"Failed to open AD2 (idx={device_idx}): {err}")
@@ -910,12 +915,12 @@ class AD2:
             time.sleep(0.001)
 
     def la_arm(self, rate_hz: float, samples: int, trigger_rise_mask: int = 0,
-               prefill: int = 0) -> tuple[float, int]:
+               prefill: int = 0, trigger_fall_mask: int = 0) -> tuple[float, int]:
         """Arm the logic analyzer on DIO0..15 (16-bit samples).
 
-        With `trigger_rise_mask`, the capture starts on a rising edge of any of
-        those DIOs (for example HOST_REQ, which the host raises itself), with
-        `prefill` samples before the trigger. Without it, it starts at once.
+        With `trigger_rise_mask` or `trigger_fall_mask`, the capture starts on
+        an edge of any of those DIOs (e.g. falling edge of UART RX for start bit),
+        with `prefill` samples before the trigger. Without it, it starts at once.
         Returns (actual rate in Hz, buffer size in samples).
         """
         div = max(1, int(round(self.DIGITAL_IN_CLOCK_HZ / rate_hz)))
@@ -926,10 +931,11 @@ class AD2:
         self._dwf.FDwfDigitalInDividerSet(self._hdwf, ctypes.c_uint(div))
         self._dwf.FDwfDigitalInSampleFormatSet(self._hdwf, ctypes.c_int(16))
         self._dwf.FDwfDigitalInBufferSizeSet(self._hdwf, ctypes.c_int(n))
-        if trigger_rise_mask:
+        if trigger_rise_mask or trigger_fall_mask:
             self._dwf.FDwfDigitalInTriggerSourceSet(self._hdwf, ctypes.c_ubyte(3))  # trigsrcDetectorDigitalIn
             self._dwf.FDwfDigitalInTriggerSet(self._hdwf, ctypes.c_uint(0), ctypes.c_uint(0),
-                                              ctypes.c_uint(trigger_rise_mask & 0xFFFF), ctypes.c_uint(0))
+                                              ctypes.c_uint(trigger_rise_mask & 0xFFFF),
+                                              ctypes.c_uint(trigger_fall_mask & 0xFFFF))
             self._dwf.FDwfDigitalInTriggerPositionSet(self._hdwf, ctypes.c_uint(max(0, n - prefill)))
         else:
             self._dwf.FDwfDigitalInTriggerSourceSet(self._hdwf, ctypes.c_ubyte(0))  # trigsrcNone

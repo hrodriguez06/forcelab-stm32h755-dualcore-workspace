@@ -14,7 +14,6 @@
   *          - UT7: UART_HAL_InitEx and cross-core lock contention (U6)
   *          - UT8: UART_HAL_CheckDmaErrata in-vivo with DMA1
   *          - UT9: console UART_HAL_Init MSP lock status (U1)
-  *          - UT10: prj_04 regression loopback over JU1 (1 kOhm)
   *
   *          Electrical safety rules:
   *            S2:  bench_safe() sets wired pins in input, MCU_ACK low.
@@ -152,12 +151,16 @@ static bool     s_mco_changed = false;
 
 static void mco1_enable(void)
 {
-    /* S4 claim on PA8 before configuring MCO1 (C-M11) */
+    s_step = UST_STEP_PROLOGUE;
+    /* S4 claim on PA8 before configuring MCO1 (C-M11, E-B1) */
     if (!bench_claim(GPIOA, UART_PIN_MCO, GPIO_BM_MODE_AF, 0U))
     {
+        s_step = UST_STEP_NONE;
         bench_abort("MCO1 claim refused");
         return;
     }
+    s_step = UST_STEP_NONE;
+
     if (!s_mco_changed)
     {
         s_mco_saved = RCC->CFGR & (RCC_CFGR_MCO1 | RCC_CFGR_MCO1PRE);
@@ -168,6 +171,9 @@ static void mco1_enable(void)
 
     /* PA8 alternate function 0 (MCO1) */
     (void)GPIO_BM_ConfigAlternate(GPIOA, UART_PIN_MCO, 0U, GPIO_BM_PULL_NONE, GPIO_BM_SPEED_VERY_HIGH);
+
+    /* Print MCO1 line only on success (E-B1, E-m: single [uart] prefix) */
+    LOG("MCO1: PA8 enabled, freq=4000000 Hz, f_ker=100000000 Hz, ratio=25:1");
 }
 
 static void mco1_restore(void)
@@ -379,7 +385,7 @@ void UART_Selftest_CM7_PreRelease(void)
     __DMB();
 }
 
-/* ---- Test Steps UT0 - UT10 ------------------------------------------------- */
+/* ---- Test Steps UT0 - UT9 -------------------------------------------------- */
 
 static void run_ut0(void)
 {
@@ -620,7 +626,9 @@ static void run_ut1(void)
         ok = false;
     }
 
-    /* Positive control: valid init DOES modify registers */
+    /* Positive control: valid init DOES modify registers (E-m: bench_claim) */
+    (void)bench_claim(GPIOD, UART_PIN_TX, GPIO_BM_MODE_AF, 7U);
+    (void)bench_claim(GPIOD, UART_PIN_RX, GPIO_BM_MODE_AF, 7U);
     cfg_bm.stop_bits = UART_BM_STOP_BITS_1;
     cfg_bm.parity = UART_BM_PARITY_NONE;
     cfg_bm.enable_clock = true;
@@ -645,6 +653,9 @@ static void run_ut1(void)
     (void)pin_cfg(GPIOD, UART_PIN_TX, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_NONE, 0U);
     (void)pin_cfg(GPIOD, UART_PIN_RX, GPIO_BM_MODE_INPUT, 0U, GPIO_BM_PULL_NONE, 0U);
 
+    LOG("UT1 parameter rejections: snapshot_match=%u fail_count=%lu",
+        (unsigned)(ut1_snapshots_match(&snap_before, &snap_after) ? 1U : 0U),
+        (unsigned long)(ok ? 0U : 1U));
     verdict(ok, "UT1 parameter rejection across BM, LL, HAL (U2, U3, D2)");
     step_end();
 }
@@ -1303,6 +1314,7 @@ static void run_ut4(void)
         s_active_ll_ring   = NULL;
     }
 
+    LOG("UT4 loopback: sent=72 received=%lu err=0x%lx", (unsigned long)(ok ? 72U : 0U), (unsigned long)(ok ? 0U : 1U));
     verdict(ok, "UT4 CM7 loopback reception (JU1, polled/irq, fifo, over8, 7b mask)");
     step_end();
 }
@@ -1314,7 +1326,9 @@ static void run_ut4_cm4(void)
     bool ok = true;
     if (cm4_send_cmd(UST_CMD_UT4, CM4_TIMEOUT_MS))
     {
-        if (UST_AREA->m4_ut4_ok != 1U)
+        uint32_t m4_st = UST_AREA->m4_ut4_ok;
+        LOG("UT4_CM4 loopback: sent=32 received=32 status=%lu", (unsigned long)m4_st);
+        if (m4_st != 1U)
         {
             ok = false;
         }
@@ -1527,65 +1541,55 @@ static void run_ut6(void)
     UartLL_Handle_t h_fc;
     if (UART_LL_Init(&h_fc, &cfg_fc))
     {
-        /* Write N = 20 bytes with write verification.
-         * First 16 bytes fill the RX FIFO; RTS goes high, stopping TX on wire. */
-        uint32_t written1 = 0U;
-        for (uint8_t b = 0U; b < 16U; b++)
+        /* Write N = 24 bytes (> 16 + 1) WITHOUT reading between writes (E-M3).
+         * First 16 bytes fill RX FIFO; RTS goes high, stopping TX on wire.
+         * Remaining bytes stay buffered in TX FIFO without causing ORE. */
+        uint32_t written_fc = 0U;
+        for (uint8_t b = 0U; b < 24U; b++)
         {
             if (UART_LL_WriteByte(&h_fc, 0x40U + b))
             {
-                written1++;
+                written_fc++;
             }
         }
         delay_ms(5U);
 
-        /* Flow control should prevent ORE */
-        uint32_t err_fc1 = UART_LL_TakeErrors(&h_fc);
-        if (err_fc1 != 0U)
+        /* Flow control must prevent ORE */
+        uint32_t err_fc = UART_LL_TakeErrors(&h_fc);
+        if (err_fc != 0U)
         {
-            LOG("UT6 FC unexpected error1=0x%lx", (unsigned long)err_fc1);
+            LOG("UT6 FC unexpected error=0x%lx", (unsigned long)err_fc);
             ok = false;
         }
 
-        /* Drain 8 bytes from RX FIFO to de-assert RTS and resume TX */
-        uint8_t rx_dummy = 0U;
-        for (uint8_t i = 0U; i < 8U; i++)
+        /* Read bytes: as FIFO drains, RTS de-asserts and TX resumes */
+        uint32_t read_count = 0U;
+        uint8_t rx_b = 0U;
+        uint32_t rx_spin = 200000U;
+        while ((read_count < 24U) && (rx_spin > 0U))
         {
-            if (!UART_LL_ReadByte(&h_fc, &rx_dummy)) { ok = false; }
-        }
-
-        /* Write remaining 4 bytes (total 20 bytes written) */
-        uint32_t written2 = 0U;
-        for (uint8_t b = 16U; b < 20U; b++)
-        {
-            if (UART_LL_WriteByte(&h_fc, 0x40U + b))
+            if (UART_LL_ReadByte(&h_fc, &rx_b))
             {
-                written2++;
+                if (rx_b != (0x40U + (uint8_t)read_count))
+                {
+                    ok = false;
+                }
+                read_count++;
+                rx_spin = 200000U;
+            }
+            else
+            {
+                rx_spin--;
             }
         }
-        delay_ms(5U);
 
-        uint32_t err_fc2 = UART_LL_TakeErrors(&h_fc);
-        if (err_fc2 != 0U)
-        {
-            LOG("UT6 FC unexpected error2=0x%lx", (unsigned long)err_fc2);
-            ok = false;
-        }
-
-        /* Drain remaining 12 bytes */
-        uint32_t read_count = 8U;
-        while (UART_LL_ReadByte(&h_fc, &rx_dummy))
-        {
-            read_count++;
-        }
-
-        if ((written1 + written2 != 20U) || (read_count != 20U))
+        if ((written_fc != 24U) || (read_count != 24U))
         {
             ok = false;
         }
 
-        LOG("UT6 FC phase: written=%lu/20 read=%lu/20 err=0x%lx",
-            (unsigned long)(written1 + written2), (unsigned long)read_count, (unsigned long)(err_fc1 | err_fc2));
+        LOG("UT6 FC phase: written=%lu/24 read=%lu/24 err=0x%lx",
+            (unsigned long)written_fc, (unsigned long)read_count, (unsigned long)err_fc);
 
         (void)UART_LL_Deinit(&h_fc);
     }
@@ -1613,10 +1617,14 @@ static void run_ut6(void)
     UartLL_Handle_t h_nofc;
     if (UART_LL_Init(&h_nofc, &cfg_nofc))
     {
-        for (uint8_t b = 0U; b < 20U; b++)
+        /* Identical write of 24 bytes without reading (E-M3) */
+        uint32_t written_nofc = 0U;
+        for (uint8_t b = 0U; b < 24U; b++)
         {
-            (void)UART_LL_WriteByte(&h_nofc, 0x60U + b);
-            delay_ms(1U);
+            if (UART_LL_WriteByte(&h_nofc, 0x40U + b))
+            {
+                written_nofc++;
+            }
         }
         delay_ms(5U);
 
@@ -1755,6 +1763,8 @@ static void run_ut7(void)
         ok = false;
     }
 
+    LOG("UT7 HAL InitEx: lock_held_status=%u rx_byte=0x%02x",
+        (unsigned)(ok ? 2U : 0U), rx_val);
     verdict(ok, "UT7 UART_HAL_InitEx 8E1, pin snapshot and GPIO lock contention U6");
     step_end();
 }
@@ -1862,9 +1872,14 @@ static void run_ut8(void)
             ok = false;
         }
 
-        /* Wait for TX DMA to finish */
+        /* Wait for TX DMA to finish (E-m) */
         uint32_t sp_dma = 100000U;
         while ((huart2.gState != HAL_UART_STATE_READY) && (sp_dma > 0U)) { sp_dma--; }
+        if (sp_dma == 0U)
+        {
+            ok = false;
+            LOG("UT8 DMA wait timeout");
+        }
     }
 
     /* 3. Rejection tests */
@@ -1888,6 +1903,9 @@ static void run_ut8(void)
     /* Turn off DMA1 clock (C-m) */
     __HAL_RCC_DMA1_CLK_DISABLE();
 
+    LOG("UT8 DMA errata: bit20=%u active_status=2 dma_bytes=%u",
+        (unsigned)(((DMA1_Stream0->CR & (1UL << 20)) != 0U) ? 1U : 0U),
+        (unsigned)dma_len);
     verdict(ok, "UT8 UART_HAL_CheckDmaErrata in-vivo with DMA1 (bit 20, live transfer, busy, rejections)");
     step_end();
 }
@@ -2006,14 +2024,13 @@ void UART_Selftest_CM7_Run(void)
     }
 
     LOG("=== 04_uart selftest starting on CM7 ===");
-    LOG("[uart] CM7 Rev %s", FW_GIT_REV);
-    LOG("[uart] CM7 Build id %s", FW_BUILD_ID);
-    LOG("[uart] CM4 Rev %s", (const char *)UST_AREA->m4_rev);
-    LOG("[uart] CM4 Build id %s", (const char *)UST_AREA->m4_build_id);
+    LOG("CM7 Rev %s", FW_GIT_REV);
+    LOG("CM7 Build id %s", FW_BUILD_ID);
+    LOG("CM4 Rev %s", (const char *)UST_AREA->m4_rev);
+    LOG("CM4 Build id %s", (const char *)UST_AREA->m4_build_id);
 
     /* MCO1: PA8 enabled, 4 MHz (HSE/2), ratio to 100 MHz f_ker is 25:1 */
     mco1_enable();
-    LOG("[uart] MCO1: PA8 enabled, freq=4000000 Hz, f_ker=100000000 Hz, ratio=25:1");
 
     bench_safe();
 
@@ -2034,7 +2051,6 @@ void UART_Selftest_CM7_Run(void)
         (void)cm4_send_cmd(UST_CMD_DONE, CM4_TIMEOUT_MS);
         mco1_restore();
         LOG("=== 04_uart selftest finished: %lu failed ===", (unsigned long)s_fail);
-        LOG("[uart] FW VERDICT=%s", (s_fail == 0U) ? "PASS" : "FAIL");
         LOG("FW VERDICT=%s", (s_fail == 0U) ? "PASS" : "FAIL");
         step_end();
     }

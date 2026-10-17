@@ -7,7 +7,6 @@
   *          - UST_CMD_UT4: LL interrupt-driven reception over loopback (JU1)
   *          - UST_CMD_LOCK_ACQUIRE: take cross-core GPIO lock (BOARD_GPIO_HSEM_ID)
   *          - UST_CMD_LOCK_RELEASE: release cross-core GPIO lock
-  *          - UST_CMD_UT10: prj_04 regression loopback tests over JU1
   *          - UST_CMD_DONE: exit selftest to application loop
   ******************************************************************************
   */

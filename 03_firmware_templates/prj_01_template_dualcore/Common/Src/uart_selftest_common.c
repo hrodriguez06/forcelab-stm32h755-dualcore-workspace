@@ -65,9 +65,19 @@ bool ust_line_rule(uint32_t core, uint32_t step, const GPIO_TypeDef *port, uint3
         return true;
     }
 
-    /* Out of step boundaries, no outputs or alternate functions allowed */
-    if (step >= k_ust_step_count)
+    /* Out of step boundaries, no outputs or alternate functions allowed, except declared prologue for MCO1 (E-B1) */
+    if ((step >= k_ust_step_count) && (step != UST_STEP_PROLOGUE))
     {
+        return false;
+    }
+
+    if (step == UST_STEP_PROLOGUE)
+    {
+        /* In prologue, only PA8 (MCO1 in AF0) on CM7 is authorized */
+        if ((core == 0U) && (port == GPIOA) && (pin == UART_PIN_MCO))
+        {
+            return (mode == GPIO_BM_MODE_AF) && (af == 0U);
+        }
         return false;
     }
 

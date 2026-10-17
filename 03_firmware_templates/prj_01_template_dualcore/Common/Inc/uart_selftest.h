@@ -84,6 +84,7 @@ typedef struct
 extern const UstStep_t k_ust_steps[];
 extern const uint32_t  k_ust_step_count;
 
+#define UST_STEP_PROLOGUE    0xFFFFFFFEUL
 #define UST_STEP_NONE        0xFFFFFFFFUL
 
 uint32_t ust_step_index(const char *name);
