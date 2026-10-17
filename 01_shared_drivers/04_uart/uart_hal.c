@@ -158,7 +158,20 @@ HAL_StatusTypeDef UART_HAL_Init(UART_HandleTypeDef *huart, const uart_hal_config
     huart->Init.ClockPrescaler         = UART_PRESCALER_DIV1;
     huart->AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
 
-    return HAL_UART_Init(huart);
+    s_msp_gpio_status = HAL_OK;
+
+    HAL_StatusTypeDef status = HAL_UART_Init(huart);
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    if (s_msp_gpio_status != HAL_OK)
+    {
+        return s_msp_gpio_status;
+    }
+
+    return HAL_OK;
 }
 
 HAL_StatusTypeDef UART_HAL_InitEx(UART_HandleTypeDef *huart, const uart_hal_config_ex_t *config)
