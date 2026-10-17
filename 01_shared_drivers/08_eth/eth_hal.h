@@ -169,7 +169,6 @@ eth_driver_status_t ETH_Driver_ReadPacket(eth_rx_segment_t **packet);
 /** @brief  Returns a whole segment chain to the Rx pool. */
 void ETH_Driver_ReleasePacket(eth_rx_segment_t *packet);
 
-
 /* ---- Diagnostics ------------------------------------------------------- */
 
 /** @brief  The HAL handle, for HAL_ETH_ReadPHYRegister() and for debugging. */

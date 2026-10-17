@@ -733,6 +733,18 @@ void ETH_Driver_ReleasePacket(eth_rx_segment_t *packet)
     }
 }
 
+/* ==========================================================================
+ * HAL buffer-management hooks.
+ *
+ * With USE_HAL_ETH_REGISTER_CALLBACKS == 0 (see stm32h7xx_hal_conf.h) the HAL
+ * calls these __weak symbols directly, so overriding them here is the whole
+ * registration mechanism. Turning register-callbacks on additionally requires
+ * HAL_ETH_RegisterRxAllocateCallback() and friends in ETH_Driver_Init().
+ *
+ * A project that defines ETH_HAL_CUSTOM_CALLBACKS gets none of the six below
+ * and must provide its own (E3).
+ * ========================================================================== */
+
 #if !defined(ETH_HAL_CUSTOM_CALLBACKS)
 void HAL_ETH_RxAllocateCallback(uint8_t **buff)
 {
