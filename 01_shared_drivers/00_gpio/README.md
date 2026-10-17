@@ -26,7 +26,7 @@ all projects with independent bench validation and audit (F1 audit passed with c
 at `a20e27c`, close audit passed at `009e997`, cold boot T6b passed at `51efd1e`; see
 [section 13.2](#132-f1c-in-prj_03-done-in-drivergpio-f1c-closed)).
 Finding G1 is closed in all projects that had it (`prj_04` and `prj_03`). **EXTI 0–15 and
-the compensation cell are implemented in gpio_bm (F2); the driver is complete and closed (K1–K5, Oct 2026).** A code audit on 2026-09-30 (of `cc1ee88`) found
+the compensation cell are implemented in `gpio_bm` (F2); the driver is complete and closed (K1–K5, Oct 2026).** A code audit on 2026-09-30 (of `cc1ee88`) found
 no blocking defect; its findings A1–A7 and their fixes are in
 [section 12](#12-findings). The fixes were then run on the bench, where the
 premise of A1 turned out wrong (an unclocked port reads all ones, not zero), and
@@ -653,7 +653,7 @@ identical revision `85b4325` and build id `4a036898df066354` on both cores.
 Independent auditor check of T18 and build matrix (`gpio_f2_audit_checks_6999210.txt`):
 `OVERALL VERDICT: PASS`.
 
-**At `f3fc263` (driver close audit on hardware).** Independent auditor run of `tools/gpio_close_checks.py --test all --sn 0016000C4142501220353451` on target board (`01_shared_drivers/00_gpio/docs/gpio_close_audit_t1t4_987f310.txt`): 55/55 checks PASS, 0 FAIL (`OVERALL VERDICT: PASS`). Validated production compensation cell initialization (K1) on hardware for `prj_02`, `prj_03`, and `prj_04` (`SYSCFG_CCCSR = 0x00000101`, `READY = 1`, `EN = 1`; `RCC_CR.CSIRDY = 1`), ethernet connectivity (`net_check`), and 5/5 warm resets via `-hardRst` in `prj_04` debug.
+**At `987f310` (driver close audit on hardware, recorded in `f3fc263`).** Independent auditor run of `tools/gpio_close_checks.py --test all --sn 0016000C4142501220353451` on target board (`01_shared_drivers/00_gpio/docs/gpio_close_audit_t1t4_987f310.txt`): 55/55 checks PASS, 0 FAIL (`OVERALL VERDICT: PASS`). Validated production compensation cell initialization (K1) on hardware for `prj_02`, `prj_03`, and `prj_04` (`SYSCFG_CCCSR = 0x00000101`, `READY = 1`, `EN = 1`; `RCC_CR.CSIRDY = 1`), ethernet connectivity (`net_check`), and 5/5 warm resets via `-hardRst` in `prj_04` debug.
 
 | Test | What it proves | Negative control | Result |
 | :--- | :--- | :--- | :--- |
@@ -1015,7 +1015,7 @@ cmake --preset selftest-gpio -DCMAKE_C_FLAGS=
 | `prj_03_adc_dma_eth` | BM (hook) on both cores; BM | `Shared_GpioLockInstall()` on both cores since F1c (`90a866f`); `GPIO_BM_ConfigPin` in CM4 ADC (`ee5e3b3`); `GPIO_BM_EnableCompensationCell()` in CM7 `CompensationCell_Init()` (K1) |
 | `prj_04_adc_dma_bm_eth` | BM (hook) on both cores; BM / HAL | `Shared_GpioLockInstall()` on both cores since F1b (`9051a6a`); `GPIO_BM_ConfigPin` in CM4 ADC (`53f0f88`); `gpio_bm` in CM4 selftests (`ee2ba23`); `GPIO_BM_EnableCompensationCell()` in CM7 `CompensationCell_Init()` (K1) |
 
-The EXTI 0–15 and compensation cell APIs of `gpio_bm` are validated in `prj_01` `selftest-gpio`. Production firmware in `prj_02`, `prj_03` and `prj_04` enables the compensation cell through `GPIO_BM_EnableCompensationCell()` in CM7 startup (`CompensationCell_Init()`, K1); `prj_01` production does not use high-speed I/O interfaces and leaves the cell unclocked. EXTI functions are available from any tier via `gpio_bm` (K2).
+The EXTI 0–15 and compensation cell APIs of `gpio_bm` are validated in `prj_01` `selftest-gpio`. Production firmware in `prj_02`, `prj_03` and `prj_04` enables the compensation cell through `GPIO_BM_EnableCompensationCell()` in CM7 startup (`CompensationCell_Init()`, K1); `prj_01` production does not use high-speed I/O interfaces and leaves the cell disabled. EXTI functions are available from any tier via `gpio_bm` (K2).
 
 ---
 
@@ -1372,7 +1372,7 @@ The close of `00_gpio` aligned production firmware with the driver's hardware co
 
 **Validation evidence:**
 - **T1 (`docs/gpio_close_t1t3_5826eb2.txt`):** 8/8 matrix builds compiled directly (`compile_single_config` with `--clean-first`) with 0 warnings and 0 errors; 3 selftest presets PASS; negative control with `-DCMAKE_C_FLAGS=-Wconversion` in temporary build directory detects 224 warnings and evaluates to FAIL.
-- **T2 (`docs/gpio_close_t1t3_5826eb2.txt`):** CM7 `main.c.obj` in all 3 projects has `GPIO_BM_EnableCompensationCell` undefined (`U`) and 0 references to `HAL_EnableCompensationCell` in object and ELF; `CompensationCell_Init()` text is 100% byte-identical across `prj_02`, `prj_03`, `prj_04` (1674 chars); bidirectional object comparison matches 320 objects per preset; deep binary equivalence verifies 2,454 objects identical to control `f066a8e`; 3 negative controls pass through identical functions and evaluate to FAIL.
+- **T2 (`docs/gpio_close_t1t3_5826eb2.txt`):** CM7 `main.c.obj` in all 3 projects has `GPIO_BM_EnableCompensationCell` undefined (`U`) and 0 references to `HAL_EnableCompensationCell` in object and ELF; `CompensationCell_Init()` text is 100% byte-identical across `prj_02`, `prj_03`, `prj_04` (1674 chars); bidirectional object sets match per preset (271 in `prj_01`, 314 in `prj_02`, 322 in `prj_03`, 320 in `prj_04`); deep binary equivalence verifies 2,454 objects identical to control `f066a8e`; 3 negative controls pass through identical functions and evaluate to FAIL.
 - **T3 (`docs/gpio_close_t1t3_5826eb2.txt`):** Temporary `.c` outside repo includes real `gpio_hal.h` and `gpio_bm.h`, compiles with exact DEFINES, FLAGS and INCLUDES extracted from `build.ninja` for `gpio_hal.c.obj`, and links against `gpio_hal.c.obj` and `gpio_bm.c.obj` with 0 unresolved symbols in full link and partial link (`-r`); negative control without `gpio_bm.c.obj` fails with undefined references to `GPIO_BM_*`.
 - **T4 simulated (`docs/gpio_close_t4sim_5826eb2.txt`):** Full simulated target execution with `SIMULATED` header; negative controls on CLI text (`READY=0`, `EN=0`) evaluate to FAIL.
 - **T1–T4 board audit (`docs/gpio_close_audit_t1t4_987f310.txt`):** Auditor execution on hardware (SN `0016000C4142501220353451`):
