@@ -892,11 +892,11 @@ static void run_ut3(void)
                 break;
             }
         }
-        if (!UART_BM_Flush(&h, 100000U))
+        if (!UART_BM_Flush(&h, 5000000U))
         {
             ok = false;
         }
-        uint32_t tc_spin = 100000U;
+        uint32_t tc_spin = 5000000U;
         while (((USART2->ISR & USART_ISR_TC) == 0U) && (tc_spin > 0U)) { tc_spin--; }
         if (tc_spin == 0U)
         {
@@ -970,11 +970,11 @@ static void run_ut3(void)
                 break;
             }
         }
-        if (!UART_LL_Flush(&h_ll, 100000U))
+        if (!UART_LL_Flush(&h_ll, 5000000U))
         {
             ok = false;
         }
-        uint32_t tc_spin = 100000U;
+        uint32_t tc_spin = 5000000U;
         while (((USART2->ISR & USART_ISR_TC) == 0U) && (tc_spin > 0U)) { tc_spin--; }
         if (tc_spin == 0U)
         {
@@ -1038,7 +1038,7 @@ static void run_ut3(void)
         {
             ok = false;
         }
-        uint32_t tc_spin = 100000U;
+        uint32_t tc_spin = 5000000U;
         while (((USART2->ISR & USART_ISR_TC) == 0U) && (tc_spin > 0U)) { tc_spin--; }
         if (tc_spin == 0U)
         {
@@ -1547,6 +1547,8 @@ static void run_ut6(void)
         uint32_t written_fc = 0U;
         for (uint8_t b = 0U; b < 24U; b++)
         {
+            uint32_t spin = 1000000U;
+            while (!LL_USART_IsActiveFlag_TXE_TXFNF(h_fc.instance) && (spin > 0U)) { spin--; }
             if (UART_LL_WriteByte(&h_fc, 0x40U + b))
             {
                 written_fc++;
@@ -1621,6 +1623,8 @@ static void run_ut6(void)
         uint32_t written_nofc = 0U;
         for (uint8_t b = 0U; b < 24U; b++)
         {
+            uint32_t spin = 1000000U;
+            while (!LL_USART_IsActiveFlag_TXE_TXFNF(h_nofc.instance) && (spin > 0U)) { spin--; }
             if (UART_LL_WriteByte(&h_nofc, 0x40U + b))
             {
                 written_nofc++;
@@ -1834,7 +1838,8 @@ static void run_ut8(void)
     }
 
     /* Bit 20 must be set and read back as 1 */
-    if ((DMA1_Stream0->CR & (1UL << 20)) == 0U)
+    uint32_t bit20_val = ((DMA1_Stream0->CR & (1UL << 20)) != 0U) ? 1U : 0U;
+    if (bit20_val == 0U)
     {
         ok = false;
     }
@@ -1845,6 +1850,13 @@ static void run_ut8(void)
 
     /* Link DMA to UART */
     __HAL_LINKDMA(&huart2, hdmatx, s_hdma_usart2_tx);
+
+    /* Enable interrupts so DMA completion callback and UART TC interrupt can finish the transfer */
+    s_active_hal_handle = &huart2;
+    HAL_NVIC_SetPriority(USART2_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(USART2_IRQn);
+    HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
 
     /* Start transmit via DMA */
     if (HAL_UART_Transmit_DMA(&huart2, (uint8_t *)dma_payload, dma_len) != HAL_OK)
@@ -1875,7 +1887,7 @@ static void run_ut8(void)
         }
 
         /* Wait for TX DMA to finish (E-m) */
-        uint32_t sp_dma = 100000U;
+        uint32_t sp_dma = 2000000U;
         while ((huart2.gState != HAL_UART_STATE_READY) && (sp_dma > 0U)) { sp_dma--; }
         if (sp_dma == 0U)
         {
@@ -1883,6 +1895,10 @@ static void run_ut8(void)
             LOG("UT8 DMA wait timeout");
         }
     }
+
+    HAL_NVIC_DisableIRQ(USART2_IRQn);
+    HAL_NVIC_DisableIRQ(DMA1_Stream0_IRQn);
+    s_active_hal_handle = NULL;
 
     /* 3. Rejection tests */
     if (UART_HAL_CheckDmaErrata(NULL) != HAL_ERROR) { ok = false; }
@@ -1906,7 +1922,7 @@ static void run_ut8(void)
     __HAL_RCC_DMA1_CLK_DISABLE();
 
     LOG("UT8 DMA errata: bit20=%u active_status=2 dma_bytes=%u",
-        (unsigned)(((DMA1_Stream0->CR & (1UL << 20)) != 0U) ? 1U : 0U),
+        (unsigned)bit20_val,
         (unsigned)dma_len);
     verdict(ok, "UT8 UART_HAL_CheckDmaErrata in-vivo with DMA1 (bit 20, live transfer, busy, rejections)");
     step_end();

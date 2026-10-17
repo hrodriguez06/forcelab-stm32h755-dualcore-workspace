@@ -47,6 +47,17 @@
 
 static UART_HandleTypeDef g_console;
 
+static bool UART_HAL_IsValidInstance(const USART_TypeDef *instance)
+{
+    return (instance == USART1) || (instance == USART2) || (instance == USART3) ||
+           (instance == UART4)  || (instance == UART5)  || (instance == USART6) ||
+           (instance == UART7)  || (instance == UART8)
+#if defined(LPUART1)
+           || (instance == LPUART1)
+#endif
+           ;
+}
+
 static void UART_HAL_EnableInstanceClock(USART_TypeDef *instance)
 {
     if (instance == USART1) { __HAL_RCC_USART1_CLK_ENABLE(); }
@@ -142,7 +153,7 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
 
 HAL_StatusTypeDef UART_HAL_Init(UART_HandleTypeDef *huart, const uart_hal_config_t *config)
 {
-    if ((huart == NULL) || (config == NULL) || (config->instance == NULL))
+    if ((huart == NULL) || (config == NULL) || (config->instance == NULL) || !UART_HAL_IsValidInstance(config->instance))
     {
         return HAL_ERROR;
     }
@@ -177,7 +188,7 @@ HAL_StatusTypeDef UART_HAL_Init(UART_HandleTypeDef *huart, const uart_hal_config
 
 HAL_StatusTypeDef UART_HAL_InitEx(UART_HandleTypeDef *huart, const uart_hal_config_ex_t *config)
 {
-    if ((huart == NULL) || (config == NULL) || (config->instance == NULL))
+    if ((huart == NULL) || (config == NULL) || (config->instance == NULL) || !UART_HAL_IsValidInstance(config->instance))
     {
         return HAL_ERROR;
     }

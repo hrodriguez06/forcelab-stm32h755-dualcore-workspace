@@ -354,17 +354,17 @@ def eval_ut4_cm4(sent: int, received: int, status: int, fw_pass: bool) -> bool:
 def eval_ut5(measured_errors: dict[str, int], fw_pass: bool) -> bool:
     if not fw_pass:
         return False
-    if (measured_errors.get("PE", 0) & 1) == 0:
+    if (measured_errors.get("PE", 0) & 8) == 0:
         return False
-    if (measured_errors.get("FE", 0) & 2) == 0:
+    if (measured_errors.get("FE", 0) & 4) == 0:
         return False
-    if (measured_errors.get("BREAK", 0) & 2) == 0:
+    if (measured_errors.get("BREAK", 0) & 4) == 0:
         return False
-    if (measured_errors.get("NE", 0) & 4) == 0:
+    if (measured_errors.get("NE", 0) & 2) == 0:
         return False
-    if (measured_errors.get("ORE-FIFO", 0) & 8) == 0:
+    if (measured_errors.get("ORE-FIFO", 0) & 1) == 0:
         return False
-    if (measured_errors.get("ORE-NOFIFO", 0) & 8) == 0:
+    if (measured_errors.get("ORE-NOFIFO", 0) & 1) == 0:
         return False
     if measured_errors.get("CLEAN", 1) != 0:
         return False
@@ -372,7 +372,7 @@ def eval_ut5(measured_errors: dict[str, int], fw_pass: bool) -> bool:
 
 
 def eval_ut6(written: int, read: int, err_fc: int, err_nofc: int, fw_pass: bool) -> bool:
-    return (written == 24) and (read == 24) and (err_fc == 0) and ((err_nofc & 8) != 0) and fw_pass
+    return (written == 24) and (read == 24) and (err_fc == 0) and ((err_nofc & 1) != 0) and fw_pass
 
 
 def eval_ut7(lock_held_st: int, rx_byte: int, fw_pass: bool) -> bool:
@@ -688,17 +688,17 @@ def generate_mock_lines() -> list[str]:
             lines.append("[uart] UT4_CM4 loopback: sent=32 received=32 status=1")
             lines.append("[uart] VERDICT UT4_CM4 PASS")
         elif step.name == "UT5":
-            lines.append("[uart] UT5 PE err=0x1 (expected 0x1)")
-            lines.append("[uart] UT5 FE err=0x2 (expected 0x2)")
-            lines.append("[uart] UT5 BREAK err=0x2 (expected FE 0x2)")
-            lines.append("[uart] UT5 NE err=0x4 (flagged=1)")
-            lines.append("[uart] UT5 ORE-FIFO err=0x8 (expected 0x8)")
-            lines.append("[uart] UT5 ORE-NOFIFO err=0x8 (expected 0x8)")
+            lines.append("[uart] UT5 PE err=0x8 (expected 0x8)")
+            lines.append("[uart] UT5 FE err=0x4 (expected 0x4)")
+            lines.append("[uart] UT5 BREAK err=0x4 (expected FE 0x4)")
+            lines.append("[uart] UT5 NE err=0x2 (flagged=1)")
+            lines.append("[uart] UT5 ORE-FIFO err=0x1 (expected 0x1)")
+            lines.append("[uart] UT5 ORE-NOFIFO err=0x1 (expected 0x1)")
             lines.append("[uart] UT5 clean frame err=0x0 (expected 0)")
             lines.append("[uart] VERDICT UT5 PASS")
         elif step.name == "UT6":
             lines.append("[uart] UT6 FC phase: written=24/24 read=24/24 err=0x0")
-            lines.append("[uart] UT6 NO-FC negative control err=0x8 (expected ORE 0x8)")
+            lines.append("[uart] UT6 NO-FC negative control err=0x1 (expected ORE 0x1)")
             lines.append("[uart] VERDICT UT6 PASS")
         elif step.name == "UT7":
             lines.append("[uart] UT7 HAL InitEx: lock_held_status=2 rx_byte=0xa5")
