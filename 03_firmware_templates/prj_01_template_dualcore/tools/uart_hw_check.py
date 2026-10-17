@@ -483,6 +483,7 @@ class UartSession:
         self.con = con
         self.log = log
         self.expect_control_u1 = expect_control_u1
+        self.mock = isinstance(ad2, MockAD2)
         self.checks: list[tuple[str, bool, str]] = []
         self.current_step = ""
 
@@ -517,11 +518,16 @@ class UartSession:
             self.check(f"step_timeout_{expected_name}", False, "timeout waiting for STEP")
             return False
 
+        return self.sync()
+
+    def sync(self) -> bool:
+        if self.mock:
+            return True
         # Wait ACK high (up to 10 s per S-m)
         t0 = time.monotonic()
         while not (self.ad2.digital_io_read() & DIO_ACK):
             if time.monotonic() - t0 > 10.0:
-                self.check(f"ack_high_{expected_name}", False, "timeout waiting for MCU_ACK high")
+                self.check("sync_timeout_ack_high", False, "timeout waiting for MCU_ACK high")
                 return False
             time.sleep(0.001)
 
@@ -532,7 +538,7 @@ class UartSession:
         t0 = time.monotonic()
         while self.ad2.digital_io_read() & DIO_ACK:
             if time.monotonic() - t0 > 10.0:
-                self.check(f"ack_low_{expected_name}", False, "timeout waiting for MCU_ACK low")
+                self.check("sync_timeout_ack_low", False, "timeout waiting for MCU_ACK low")
                 return False
             time.sleep(0.001)
 
@@ -557,6 +563,7 @@ class UartSession:
         try:
             # UT0: bench resting state and 1k series resistor
             if not self.handshake("UT0"): return False
+            if not self.sync(): return False
             resting_high = ((self.ad2.digital_io_read() & DIO_RX) != 0)
             self.check("UT0 resting line high", resting_high, f"DIO15={'1' if resting_high else '0'}")
 
@@ -565,13 +572,22 @@ class UartSession:
             self.ad2.digital_io_write(0, DIO_RX)
             time.sleep(0.002)
 
+            # Signal MCU that DIO15 is low
+            if not self.sync(): return False
+
             # Release back to input
             self.ad2.set_oe(DIO_REQ)
+            time.sleep(0.002)
+
+            # Signal MCU that DIO15 is released
+            if not self.sync(): return False
+
             ut0_fw_ok = self.drain_until_verdict("UT0")
             self.check("UT0 resting state and series resistor", ut0_fw_ok and resting_high)
 
             # UT0_CTRL: negative control with PD5 low
             if not self.handshake("UT0_CTRL"): return False
+            if not self.sync(): return False
             ctrl_low = ((self.ad2.digital_io_read() & DIO_RX) == 0)
             self.check("UT0_CTRL negative control line low", ctrl_low, f"DIO15={'0' if ctrl_low else '1'}")
             ut0_ctrl_fw_ok = self.drain_until_verdict("UT0_CTRL")

@@ -103,8 +103,8 @@ bool ust_line_rule(uint32_t core, uint32_t step, const GPIO_TypeDef *port, uint3
 
         if ((pin >= UART_PIN_CTS) && (pin <= UART_PIN_RX))
         {
-            /* In UT0_CTRL, PD5 is driven as GPIO output low */
-            if ((strcmp(s->name, "UT0_CTRL") == 0) && (pin == UART_PIN_TX))
+            /* In UT0 and UT0_CTRL, PD5 is driven as GPIO output (high in UT0, low in UT0_CTRL) */
+            if (((strcmp(s->name, "UT0") == 0) || (strcmp(s->name, "UT0_CTRL") == 0)) && (pin == UART_PIN_TX))
             {
                 return (core == 0U) && (mode == GPIO_BM_MODE_OUTPUT);
             }
