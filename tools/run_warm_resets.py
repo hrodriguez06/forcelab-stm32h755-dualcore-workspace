@@ -19,6 +19,12 @@ differs fails the run, with its reason, and the exit code is 1. In this mode the
 capture starts with "[host] argv: ..." and "[host] options: project=...
 preset=... count=..." (R4-b).
 
+Identity mode needs that contract on both sides, and only prj_01 has it. A
+project without it is refused with an error before any reset: prj_02 and
+prj_03 embed no revision (no tools/gpio_hw_check.py), and prj_04 has FW_GIT_REV
+in its banner but no build id, no build lines and no host_build_id(). Run them
+without --project/--preset, where the host's HEAD is recorded instead.
+
 With --sn <serial> (default None), STM32_Programmer_CLI targets that specific
 ST-LINK probe. If --port is omitted and --sn is provided, the port is resolved
 via monitor.port_for_sn(sn); otherwise it falls back to autodetect().
@@ -64,11 +70,30 @@ class Identity:
     """--project/--preset: what the image must say it is (R3-c)."""
 
     def __init__(self, project: Path, preset: str) -> None:
-        spec = importlib.util.spec_from_file_location("gpio_hw_check", project / "tools" / "gpio_hw_check.py")
+        unsupported = (f"Error: --project {project} has no identity contract (tools/gpio_hw_check.py with "
+                       "host_build_id() and tree_record(), firmware printing '[sys] build' and "
+                       "'[sys] cpu2 build'); run without --project/--preset")
+        path = project / "tools" / "gpio_hw_check.py"
+        if not path.is_file():
+            raise SystemExit(unsupported)
+        # Registered under a name of its own before exec_module: @dataclass looks
+        # the class's module up in sys.modules (prj_04's gpio_hw_check.py), and a
+        # project's own "gpio_hw_check" import must not be shadowed. It stays
+        # registered while self.ghc is in use; a failed load takes it out again.
+        name = f"_run_warm_resets_ghc_{project.name}"
+        spec = importlib.util.spec_from_file_location(name, path)
         if spec is None or spec.loader is None:
-            raise SystemExit(f"Error: no tools/gpio_hw_check.py in {project}")
+            raise SystemExit(f"Error: cannot load {path}")
         self.ghc = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(self.ghc)
+        sys.modules[name] = self.ghc
+        try:
+            spec.loader.exec_module(self.ghc)
+        except BaseException:
+            sys.modules.pop(name, None)
+            raise
+        if not all(callable(getattr(self.ghc, f, None)) for f in ("host_build_id", "tree_record")):
+            sys.modules.pop(name, None)
+            raise SystemExit(unsupported)
         self.project = project
         self.preset = preset
         self.build_id = self.ghc.host_build_id(preset, project)
