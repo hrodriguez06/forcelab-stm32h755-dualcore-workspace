@@ -170,8 +170,7 @@ static void mco1_enable(void)
     MODIFY_REG(RCC->CFGR, RCC_CFGR_MCO1 | RCC_CFGR_MCO1PRE, RCC_CFGR_MCO1_1 | RCC_CFGR_MCO1PRE_1);
 
     /* PA8 alternate function 0 (MCO1) */
-    GpioBm_Status_t st = GPIO_BM_ConfigAlternate(GPIOA, UART_PIN_MCO, 0U, GPIO_BM_PULL_NONE, GPIO_BM_SPEED_LOW);
-    if (st != GPIO_BM_OK)
+    if (!GPIO_BM_ConfigAlternate(GPIOA, UART_PIN_MCO, 0U, GPIO_BM_PULL_NONE, GPIO_BM_SPEED_LOW))
     {
         bench_abort("MCO1 pin config failed");
         return;
