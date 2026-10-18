@@ -3,12 +3,13 @@
   * @file    led_selftest.c
   * @brief   01_led driver selftest implementation (preset selftest-led, CM7).
   *
-  *          Tests LT1-LT5 according to 01_shared_drivers/01_led/IMPLEMENTATION_PLAN.md:
+  *          Tests LT1-LT5 according to 01_shared_drivers/01_led/IMPLEMENTATION_PLAN.md
+  *          and AUDIT.md requirements:
   *            LT1: L3 - validation, section, cross-core hook, read-back
-  *            LT2: L5 - invalid port/pin handling and rejection
-  *            LT3: L4 - atomic LED_Toggle vs periodic TIM17 ISR race condition
-  *            LT4: G14 - LED_PanicRed exception direct RMW
-  *            LT5: Final state restoration
+  *            LT2: L5 - invalid port/pin rejection and 15-word register snapshots
+  *            LT3: L4 - atomic LED_Toggle vs periodic TIM17 ISR race condition (DWT-measured)
+  *            LT4: G14 - LED_PanicRed exception direct RMW, green pin unchanged
+  *            LT5: Final state restoration, TIM17 stopped, pins restored
   ******************************************************************************
   */
 
@@ -16,6 +17,7 @@
 #include "led_bm.h"
 #include "gpio_bm.h"
 #include "board_def.h"
+#include "shared_memory.h"
 #include "app_log.h"
 #include "fw_build_id.h"
 #include "stm32h7xx.h"
@@ -25,7 +27,6 @@
 #include <string.h>
 
 #define LT3_N               200000UL
-#define LT3_FREQ_HZ         200000UL     /* 200 kHz from 200 MHz APB2 timer clock (ARR=999) */
 
 /* Forward declaration for LT3 local control function */
 static void old_LED_Toggle(led_t led);
@@ -128,6 +129,19 @@ static void take_gpio_snapshot_15(uint32_t out[15])
     out[14] = GPIOE->ODR;
 }
 
+static void print_snapshot_15(const char *label, const uint32_t s[15])
+{
+    APP_LOG("[led] %s_A: %08lX %08lX %08lX %08lX %08lX",
+            label,
+            (unsigned long)s[0], (unsigned long)s[1], (unsigned long)s[2], (unsigned long)s[3], (unsigned long)s[4]);
+    APP_LOG("[led] %s_B: %08lX %08lX %08lX %08lX %08lX",
+            label,
+            (unsigned long)s[5], (unsigned long)s[6], (unsigned long)s[7], (unsigned long)s[8], (unsigned long)s[9]);
+    APP_LOG("[led] %s_E: %08lX %08lX %08lX %08lX %08lX",
+            label,
+            (unsigned long)s[10], (unsigned long)s[11], (unsigned long)s[12], (unsigned long)s[13], (unsigned long)s[14]);
+}
+
 void LED_Selftest_Run(void)
 {
     App_Log_Init();
@@ -139,19 +153,26 @@ void LED_Selftest_Run(void)
     bool fw_pass = true;
 
     /* ---- LT1 (L3): Section, lock hook and read-back ------------------------ */
-    (void)GPIO_BM_DeinitPin(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_BIT);
-    (void)GPIO_BM_DeinitPin(BOARD_LED_YELLOW_PORT, BOARD_LED_YELLOW_BIT);
-    (void)GPIO_BM_DeinitPin(BOARD_LED_RED_PORT, BOARD_LED_RED_BIT);
+    GpioBm_Status_t st_deinit_g = GPIO_BM_DeinitPin(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_BIT);
+    GpioBm_Status_t st_deinit_y = GPIO_BM_DeinitPin(BOARD_LED_YELLOW_PORT, BOARD_LED_YELLOW_BIT);
+    GpioBm_Status_t st_deinit_r = GPIO_BM_DeinitPin(BOARD_LED_RED_PORT, BOARD_LED_RED_BIT);
 
-    const GpioBm_SharedLock_t hook_true = {
-        .lock = lt1_lock_true,
-        .unlock = lt1_unlock,
-        .ctx = NULL
-    };
-    GPIO_BM_SetSharedLock(&hook_true);
+    GpioBm_PinConfig_t pre_g, pre_y, pre_r;
+    GpioBm_Status_t st_read_pre_g = GPIO_BM_ReadConfig(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_BIT, &pre_g);
+    GpioBm_Status_t st_read_pre_y = GPIO_BM_ReadConfig(BOARD_LED_YELLOW_PORT, BOARD_LED_YELLOW_BIT, &pre_y);
+    GpioBm_Status_t st_read_pre_r = GPIO_BM_ReadConfig(BOARD_LED_RED_PORT, BOARD_LED_RED_BIT, &pre_r);
 
-    s_lt1_lock_count = 0U;
-    s_lt1_unlock_count = 0U;
+    APP_LOG("[led] LT1_PRE: deinit_rc=%d,%d,%d read_rc=%d,%d,%d modes=%lu,%lu,%lu",
+            (int)st_deinit_g, (int)st_deinit_y, (int)st_deinit_r,
+            (int)st_read_pre_g, (int)st_read_pre_y, (int)st_read_pre_r,
+            (unsigned long)pre_g.mode, (unsigned long)pre_y.mode, (unsigned long)pre_r.mode);
+
+    if ((st_deinit_g != GPIO_BM_OK) || (st_deinit_y != GPIO_BM_OK) || (st_deinit_r != GPIO_BM_OK) ||
+        (st_read_pre_g != GPIO_BM_OK) || (st_read_pre_y != GPIO_BM_OK) || (st_read_pre_r != GPIO_BM_OK) ||
+        (pre_g.mode != GPIO_BM_MODE_ANALOG) || (pre_y.mode != GPIO_BM_MODE_ANALOG) || (pre_r.mode != GPIO_BM_MODE_ANALOG))
+    {
+        fw_pass = false;
+    }
 
     const led_driver_config_t board_cfg = {
         .leds = {
@@ -161,7 +182,17 @@ void LED_Selftest_Run(void)
         }
     };
 
+    const GpioBm_SharedLock_t hook_true = {
+        .lock = lt1_lock_true,
+        .unlock = lt1_unlock,
+        .ctx = NULL
+    };
+
+    s_lt1_lock_count = 0U;
+    s_lt1_unlock_count = 0U;
+    GPIO_BM_SetSharedLock(&hook_true);
     uint32_t mask_lt1 = LED_Init_ConfigEx(&board_cfg);
+    Shared_GpioLockInstall(); /* Restore production cross-core hook immediately (A3) */
 
     GpioBm_PinConfig_t cfg_g, cfg_y, cfg_r;
     (void)GPIO_BM_ReadConfig(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_BIT, &cfg_g);
@@ -191,10 +222,15 @@ void LED_Selftest_Run(void)
         fw_pass = false;
     }
 
-    /* LT1 Control: lock() returns false */
-    (void)GPIO_BM_DeinitPin(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_BIT);
-    (void)GPIO_BM_DeinitPin(BOARD_LED_YELLOW_PORT, BOARD_LED_YELLOW_BIT);
-    (void)GPIO_BM_DeinitPin(BOARD_LED_RED_PORT, BOARD_LED_RED_BIT);
+    /* LT1 Control: lock() returns false, registers must remain untouched */
+    GpioBm_Status_t st_ctrl_deinit_g = GPIO_BM_DeinitPin(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_BIT);
+    GpioBm_Status_t st_ctrl_deinit_y = GPIO_BM_DeinitPin(BOARD_LED_YELLOW_PORT, BOARD_LED_YELLOW_BIT);
+    GpioBm_Status_t st_ctrl_deinit_r = GPIO_BM_DeinitPin(BOARD_LED_RED_PORT, BOARD_LED_RED_BIT);
+
+    GpioBm_PinConfig_t ctrl_pre_g, ctrl_pre_y, ctrl_pre_r;
+    (void)GPIO_BM_ReadConfig(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_BIT, &ctrl_pre_g);
+    (void)GPIO_BM_ReadConfig(BOARD_LED_YELLOW_PORT, BOARD_LED_YELLOW_BIT, &ctrl_pre_y);
+    (void)GPIO_BM_ReadConfig(BOARD_LED_RED_PORT, BOARD_LED_RED_BIT, &ctrl_pre_r);
 
     uint32_t snap_lt1_ctrl_pre[15];
     take_gpio_snapshot_15(snap_lt1_ctrl_pre);
@@ -204,9 +240,12 @@ void LED_Selftest_Run(void)
         .unlock = lt1_unlock,
         .ctx = NULL
     };
-    GPIO_BM_SetSharedLock(&hook_false);
 
+    s_lt1_lock_count = 0U;
+    s_lt1_unlock_count = 0U;
+    GPIO_BM_SetSharedLock(&hook_false);
     uint32_t mask_lt1_ctrl = LED_Init_ConfigEx(&board_cfg);
+    Shared_GpioLockInstall(); /* Restore production cross-core hook immediately (A3) */
 
     LED_Set(LED_GREEN, 1U);
     LED_Set(LED_YELLOW, 1U);
@@ -215,33 +254,40 @@ void LED_Selftest_Run(void)
     uint32_t snap_lt1_ctrl_post[15];
     take_gpio_snapshot_15(snap_lt1_ctrl_post);
 
-    bool ctrl_lt1_regs_equal = (memcmp(snap_lt1_ctrl_pre, snap_lt1_ctrl_post, sizeof(snap_lt1_ctrl_pre)) == 0);
     uint32_t ctrl_odr_g = (BOARD_LED_GREEN_PORT->ODR >> BOARD_LED_GREEN_BIT) & 1U;
     uint32_t ctrl_odr_y = (BOARD_LED_YELLOW_PORT->ODR >> BOARD_LED_YELLOW_BIT) & 1U;
     uint32_t ctrl_odr_r = (BOARD_LED_RED_PORT->ODR >> BOARD_LED_RED_BIT) & 1U;
 
-    APP_LOG("[led] LT1_CTRL: mask=0x%02lX regs_equal=%u odr_g=%lu odr_y=%lu odr_r=%lu",
-            (unsigned long)mask_lt1_ctrl, ctrl_lt1_regs_equal ? 1U : 0U,
+    APP_LOG("[led] LT1_CTRL: mask=0x%02lX lock=%lu unlock=%lu deinit_rc=%d,%d,%d modes=%lu,%lu,%lu odr_g=%lu odr_y=%lu odr_r=%lu",
+            (unsigned long)mask_lt1_ctrl, (unsigned long)s_lt1_lock_count, (unsigned long)s_lt1_unlock_count,
+            (int)st_ctrl_deinit_g, (int)st_ctrl_deinit_y, (int)st_ctrl_deinit_r,
+            (unsigned long)ctrl_pre_g.mode, (unsigned long)ctrl_pre_y.mode, (unsigned long)ctrl_pre_r.mode,
             (unsigned long)ctrl_odr_g, (unsigned long)ctrl_odr_y, (unsigned long)ctrl_odr_r);
 
-    if ((mask_lt1_ctrl != 0U) || !ctrl_lt1_regs_equal || (ctrl_odr_g != 0U) || (ctrl_odr_y != 0U) || (ctrl_odr_r != 0U))
+    print_snapshot_15("LT1_CTRL_PRE", snap_lt1_ctrl_pre);
+    print_snapshot_15("LT1_CTRL_POST", snap_lt1_ctrl_post);
+
+    if ((mask_lt1_ctrl != 0U) || (memcmp(snap_lt1_ctrl_pre, snap_lt1_ctrl_post, sizeof(snap_lt1_ctrl_pre)) != 0) ||
+        (ctrl_odr_g != 0U) || (ctrl_odr_y != 0U) || (ctrl_odr_r != 0U))
     {
         fw_pass = false;
     }
 
-    /* Restore normal lock and init for next step */
-    GPIO_BM_SetSharedLock(NULL);
     LED_Init();
 
     /* ---- LT2 (L5): Bad table rejection and snapshot verification ----------- */
     uint32_t snap_lt2_pre[15];
     take_gpio_snapshot_15(snap_lt2_pre);
 
+    /* Invalid table:
+     * - green: pin_num 16 (> 15)
+     * - yellow: port address 0x58024000 (beyond GPIOK 0x58022800, reserved boundary RM0399 §2.2 / Tab 8)
+     * - red: PA13 (SWD TMS/SWDIO pin) */
     const led_driver_config_t bad_cfg = {
         .leds = {
-            [LED_GREEN]  = { .port = BOARD_LED_GREEN_PORT,    .pin_num = 16U },                        /* pin_num > 15 */
-            [LED_YELLOW] = { .port = (GPIO_TypeDef *)0x58024000UL, .pin_num = BOARD_LED_YELLOW_BIT }, /* invalid port address */
-            [LED_RED]    = { .port = GPIOA,                   .pin_num = 13U }                         /* PA13 = SWD pin */
+            [LED_GREEN]  = { .port = BOARD_LED_GREEN_PORT,         .pin_num = 16U },
+            [LED_YELLOW] = { .port = (GPIO_TypeDef *)0x58024000UL, .pin_num = BOARD_LED_YELLOW_BIT },
+            [LED_RED]    = { .port = GPIOA,                        .pin_num = 13U }
         }
     };
 
@@ -257,13 +303,14 @@ void LED_Selftest_Run(void)
     uint32_t snap_lt2_post_ops[15];
     take_gpio_snapshot_15(snap_lt2_post_ops);
 
-    bool init_equal = (memcmp(snap_lt2_pre, snap_lt2_post_init, sizeof(snap_lt2_pre)) == 0);
-    bool ops_equal  = (memcmp(snap_lt2_pre, snap_lt2_post_ops, sizeof(snap_lt2_pre)) == 0);
+    APP_LOG("[led] LT2: mask=0x%02lX", (unsigned long)mask_lt2);
+    print_snapshot_15("LT2_PRE", snap_lt2_pre);
+    print_snapshot_15("LT2_POST_INIT", snap_lt2_post_init);
+    print_snapshot_15("LT2_POST_OPS", snap_lt2_post_ops);
 
-    APP_LOG("[led] LT2: mask=0x%02lX init_equal=%u ops_equal=%u",
-            (unsigned long)mask_lt2, init_equal ? 1U : 0U, ops_equal ? 1U : 0U);
-
-    if ((mask_lt2 != 0U) || !init_equal || !ops_equal)
+    if ((mask_lt2 != 0U) ||
+        (memcmp(snap_lt2_pre, snap_lt2_post_init, sizeof(snap_lt2_pre)) != 0) ||
+        (memcmp(snap_lt2_pre, snap_lt2_post_ops, sizeof(snap_lt2_pre)) != 0))
     {
         fw_pass = false;
     }
@@ -276,9 +323,9 @@ void LED_Selftest_Run(void)
 
     const led_driver_config_t semi_bad_cfg = {
         .leds = {
-            [LED_GREEN]  = { .port = BOARD_LED_GREEN_PORT,    .pin_num = BOARD_LED_GREEN_BIT },
+            [LED_GREEN]  = { .port = BOARD_LED_GREEN_PORT,         .pin_num = BOARD_LED_GREEN_BIT },
             [LED_YELLOW] = { .port = (GPIO_TypeDef *)0x58024000UL, .pin_num = BOARD_LED_YELLOW_BIT },
-            [LED_RED]    = { .port = GPIOA,                   .pin_num = 13U }
+            [LED_RED]    = { .port = GPIOA,                        .pin_num = 13U }
         }
     };
 
@@ -287,15 +334,12 @@ void LED_Selftest_Run(void)
     uint32_t snap_lt2_ctrl_post[15];
     take_gpio_snapshot_15(snap_lt2_ctrl_post);
 
-    uint32_t pb0_mode_before = (snap_lt2_ctrl_pre[5] >> (BOARD_LED_GREEN_BIT * 2U)) & 3U;
-    uint32_t pb0_mode_after  = (snap_lt2_ctrl_post[5] >> (BOARD_LED_GREEN_BIT * 2U)) & 3U;
-    bool gpiob_changed = (pb0_mode_before != pb0_mode_after) && (pb0_mode_after == GPIO_BM_MODE_OUTPUT);
+    APP_LOG("[led] LT2_CTRL: mask=0x%02lX", (unsigned long)mask_lt2_ctrl);
+    print_snapshot_15("LT2_CTRL_PRE", snap_lt2_ctrl_pre);
+    print_snapshot_15("LT2_CTRL_POST", snap_lt2_ctrl_post);
 
-    APP_LOG("[led] LT2_CTRL: mask=0x%02lX pb0_mode_before=%lu pb0_mode_after=%lu gpiob_changed=%u",
-            (unsigned long)mask_lt2_ctrl, (unsigned long)pb0_mode_before, (unsigned long)pb0_mode_after,
-            gpiob_changed ? 1U : 0U);
-
-    if ((mask_lt2_ctrl != 0x01U) || !gpiob_changed)
+    if ((mask_lt2_ctrl != 0x01U) ||
+        (memcmp(snap_lt2_ctrl_pre, snap_lt2_ctrl_post, sizeof(snap_lt2_ctrl_pre)) == 0))
     {
         fw_pass = false;
     }
@@ -303,6 +347,15 @@ void LED_Selftest_Run(void)
     LED_Init();
 
     /* ---- LT3 (L4): Atomic LED_Toggle vs Periodic TIM17 ISR ----------------- */
+    /* Enable DWT cycle counter for raw frequency measurement (A4) */
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
+    /* Save state to restore upon LT3 completion (A11) */
+    uint32_t prev_basepri = __get_BASEPRI();
+    uint32_t prev_apb2enr = RCC->APB2ENR;
+    uint32_t prev_tim17_prio = NVIC_GetPriority(TIM17_IRQn);
+
     RCC->APB2ENR |= RCC_APB2ENR_TIM17EN;
     (void)RCC->APB2ENR;
     TIM17->CR1  = 0U;
@@ -311,7 +364,7 @@ void LED_Selftest_Run(void)
     TIM17->EGR  = TIM_EGR_UG;
     TIM17->SR   = 0U;
     TIM17->DIER = TIM_DIER_UIE;
-    /* Ensure BASEPRI is 0 so interrupts at priority 6 are not masked */
+
     __set_BASEPRI(0);
     NVIC_SetPriority(TIM17_IRQn, 6U);
     NVIC_ClearPendingIRQ(TIM17_IRQn);
@@ -322,6 +375,17 @@ void LED_Selftest_Run(void)
     s_isr_count = 0U;
     TIM17->CR1 = TIM_CR1_CEN;
 
+    /* Measure ISR frequency against raw DWT cycles (A4) */
+    uint32_t dwt_start = DWT->CYCCNT;
+    uint32_t isr_start = s_isr_count;
+    while ((s_isr_count - isr_start) < 1000U)
+    {
+        /* Sample 1000 ISRs (~5 ms at 200 kHz) */
+    }
+    uint32_t dwt_end = DWT->CYCCNT;
+    uint32_t isr_end = s_isr_count;
+    uint32_t dwt_cycles = dwt_end - dwt_start;
+    uint32_t dwt_isrs = isr_end - isr_start;
 
     uint32_t real_lost = 0U;
     uint32_t real_window_isrs = 0U;
@@ -392,21 +456,26 @@ void LED_Selftest_Run(void)
         }
     }
 
-    /* Clean up TIM17: stopped, DIER=0, pending cleared, clock restored */
+    /* Clean up TIM17: stopped, DIER=0, pending cleared, priority and clock restored (A11, A12) */
     TIM17->CR1  = 0U;
     TIM17->DIER = 0U;
     NVIC_DisableIRQ(TIM17_IRQn);
     TIM17->SR   = 0U;
     NVIC_ClearPendingIRQ(TIM17_IRQn);
-    RCC->APB2ENR &= ~RCC_APB2ENR_TIM17EN;
-    (void)RCC->APB2ENR;
+    NVIC_SetPriority(TIM17_IRQn, prev_tim17_prio);
 
-    APP_LOG("[led] LT3: N=%lu freq_hz=%lu window_isrs=%lu lost=%lu",
-            (unsigned long)LT3_N, (unsigned long)LT3_FREQ_HZ,
-            (unsigned long)real_window_isrs, (unsigned long)real_lost);
-    APP_LOG("[led] LT3_CTRL: N=%lu freq_hz=%lu window_isrs=%lu lost=%lu",
-            (unsigned long)LT3_N, (unsigned long)LT3_FREQ_HZ,
-            (unsigned long)ctrl_window_isrs, (unsigned long)ctrl_lost);
+    if ((prev_apb2enr & RCC_APB2ENR_TIM17EN) == 0U)
+    {
+        RCC->APB2ENR &= ~RCC_APB2ENR_TIM17EN;
+        (void)RCC->APB2ENR;
+    }
+    __set_BASEPRI(prev_basepri);
+
+    APP_LOG("[led] LT3: N=%lu dwt_cycles=%lu dwt_isrs=%lu cpu_hz=%lu window_isrs=%lu lost=%lu",
+            (unsigned long)LT3_N, (unsigned long)dwt_cycles, (unsigned long)dwt_isrs,
+            (unsigned long)SystemCoreClock, (unsigned long)real_window_isrs, (unsigned long)real_lost);
+    APP_LOG("[led] LT3_CTRL: N=%lu window_isrs=%lu lost=%lu",
+            (unsigned long)LT3_N, (unsigned long)ctrl_window_isrs, (unsigned long)ctrl_lost);
 
     if ((real_lost != 0U) || (ctrl_lost == 0U))
     {
@@ -432,14 +501,22 @@ void LED_Selftest_Run(void)
     (void)GPIO_BM_ReadConfig(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_BIT, &green_after);
     uint32_t green_odr_after = (BOARD_LED_GREEN_PORT->ODR >> BOARD_LED_GREEN_BIT) & 1U;
 
-    bool green_unchanged = (green_before.mode == green_after.mode) &&
-                           (green_before.pull == green_after.pull) &&
-                           (green_odr_before == green_odr_after);
-
     APP_LOG("[led] LT4: red_mode=%lu red_odr=%lu",
             (unsigned long)red_after.mode, (unsigned long)red_odr_after);
-    APP_LOG("[led] LT4_CTRL: green_unchanged=%u green_mode=%lu green_odr=%lu",
-            green_unchanged ? 1U : 0U, (unsigned long)green_after.mode, (unsigned long)green_odr_after);
+    APP_LOG("[led] LT4_GREEN_PRE: mode=%lu otype=%lu speed=%lu pull=%lu odr=%lu",
+            (unsigned long)green_before.mode, (unsigned long)green_before.otype,
+            (unsigned long)green_before.speed, (unsigned long)green_before.pull,
+            (unsigned long)green_odr_before);
+    APP_LOG("[led] LT4_GREEN_POST: mode=%lu otype=%lu speed=%lu pull=%lu odr=%lu",
+            (unsigned long)green_after.mode, (unsigned long)green_after.otype,
+            (unsigned long)green_after.speed, (unsigned long)green_after.pull,
+            (unsigned long)green_odr_after);
+
+    bool green_unchanged = (green_before.mode == green_after.mode) &&
+                           (green_before.otype == green_after.otype) &&
+                           (green_before.speed == green_after.speed) &&
+                           (green_before.pull == green_after.pull) &&
+                           (green_odr_before == green_odr_after);
 
     if ((red_after.mode != GPIO_BM_MODE_OUTPUT) || (red_odr_after != 1U) || !green_unchanged)
     {
@@ -449,13 +526,21 @@ void LED_Selftest_Run(void)
     LED_Init();
 
     /* ---- LT5: Final restoration -------------------------------------------- */
-    LED_Init();
-    GPIO_BM_SetSharedLock(NULL);
+    /* Single LED_Init call (A12) and restore production cross-core hook (A3) */
+    Shared_GpioLockInstall();
 
-    bool tim17_stopped = ((TIM17->CR1 & TIM_CR1_CEN) == 0U) &&
-                         ((TIM17->DIER & TIM_DIER_UIE) == 0U) &&
-                         (NVIC_GetPendingIRQ(TIM17_IRQn) == 0U) &&
-                         ((RCC->APB2ENR & RCC_APB2ENR_TIM17EN) == 0U);
+    uint32_t tim17_cr1 = TIM17->CR1;
+    uint32_t tim17_dier = TIM17->DIER;
+    uint32_t tim17_nvic = NVIC_GetPendingIRQ(TIM17_IRQn);
+    uint32_t tim17_apb2 = RCC->APB2ENR & RCC_APB2ENR_TIM17EN;
+
+    APP_LOG("[led] LT5_TIM17: cr1=0x%04lX dier=0x%04lX nvic_pending=%lu apb2enr=0x%08lX",
+            (unsigned long)tim17_cr1, (unsigned long)tim17_dier, (unsigned long)tim17_nvic, (unsigned long)tim17_apb2);
+
+    bool tim17_stopped = ((tim17_cr1 & TIM_CR1_CEN) == 0U) &&
+                         ((tim17_dier & TIM_DIER_UIE) == 0U) &&
+                         (tim17_nvic == 0U) &&
+                         (tim17_apb2 == 0U);
 
     GpioBm_PinConfig_t fin_g, fin_y, fin_r;
     (void)GPIO_BM_ReadConfig(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_BIT, &fin_g);
@@ -466,7 +551,6 @@ void LED_Selftest_Run(void)
     uint32_t fin_odr_y = (BOARD_LED_YELLOW_PORT->ODR >> BOARD_LED_YELLOW_BIT) & 1U;
     uint32_t fin_odr_r = (BOARD_LED_RED_PORT->ODR >> BOARD_LED_RED_BIT) & 1U;
 
-    APP_LOG("[led] LT5: tim17_stopped=%u", tim17_stopped ? 1U : 0U);
     APP_LOG("[led] LT5_PINS: G(mode=%lu,otype=%lu,speed=%lu,pull=%lu,odr=%lu) "
             "Y(mode=%lu,otype=%lu,speed=%lu,pull=%lu,odr=%lu) "
             "R(mode=%lu,otype=%lu,speed=%lu,pull=%lu,odr=%lu)",
@@ -483,6 +567,9 @@ void LED_Selftest_Run(void)
     {
         fw_pass = false;
     }
+
+    /* Final guarantee: production cross-core hook installed */
+    Shared_GpioLockInstall();
 
     APP_LOG("[led] FW VERDICT=%s", fw_pass ? "PASS" : "FAIL");
 }

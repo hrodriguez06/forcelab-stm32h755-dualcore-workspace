@@ -34,6 +34,7 @@ Standard library only.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import re
@@ -882,10 +883,13 @@ def verify_t4_led_state(
 
     words_match = (words == UM2408_ORACLE_WORDS)
 
-    if regs_b is None:
-        regs_b = {"moder": moder_b, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0}
-    if regs_e is None:
-        regs_e = {"moder": moder_e, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0}
+    if regs_b is None or regs_e is None:
+        return False, "regs_b and regs_e are mandatory (SWD extended register telemetry missing)"
+    for reg_key in ("moder", "otyper", "ospeedr", "pupdr", "odr"):
+        if reg_key not in regs_b:
+            return False, f"Missing required register '{reg_key}' in regs_b"
+        if reg_key not in regs_e:
+            return False, f"Missing required register '{reg_key}' in regs_e"
 
     # Pin checks for PB0 (Green LED), PB14 (Red LED), PE1 (Yellow LED)
     # MODER: 0b01 = output (1)
@@ -956,6 +960,12 @@ def run_t4(tools: dict[str, str], sn: str, logger: Logger) -> bool:
         logger.log("[host] ERROR: Could not verify fresh compilation of debug images from HEAD for T4.")
         return False
 
+    last_measured_words = None
+    last_measured_moder_b = None
+    last_measured_moder_e = None
+    last_measured_regs_b = None
+    last_measured_regs_e = None
+
     for proj_rel in PROJECTS:
         pdir = REPO_ROOT / proj_rel
         pname = pdir.name
@@ -1024,22 +1034,32 @@ def run_t4(tools: dict[str, str], sn: str, logger: Logger) -> bool:
             logger.log(f"[host] CHECK {pname} SWD RAM & registers: {'PASS' if proj_ok else 'FAIL'} ({proj_detail})")
             if not proj_ok:
                 overall_ok = False
+            else:
+                last_measured_words = list(words)
+                last_measured_moder_b = moder_b
+                last_measured_moder_e = moder_e
+                last_measured_regs_b = copy.deepcopy(regs_b)
+                last_measured_regs_e = copy.deepcopy(regs_e)
         except Exception as e:
             logger.log(f"[host] FAIL {pname} SWD read: {e}")
             overall_ok = False
 
-    # Negative controls for T4 (m5: mutated RAM table and mutated GPIO registers)
+    # Negative controls for T4: Mutating actual measured hardware telemetry (A6)
+    if last_measured_regs_b is None or last_measured_regs_e is None or last_measured_words is None:
+        logger.log("[host] FAIL: No successful project measurement available to build mutated negative controls")
+        return False
+
     with tempfile.TemporaryDirectory(prefix="led_t4_neg_") as tmp_dir:
-        # Negative control 1: Mutated RAM state (PB0 pin number = 2)
+        # Negative control 1: Mutated RAM state from measured words (PB0 pin number changed to 2)
         neg_ram_path = Path(tmp_dir) / "mutated_ram.json"
-        mutated_words = list(UM2408_ORACLE_WORDS)
+        mutated_words = list(last_measured_words)
         mutated_words[1] = 2
         fake_ram_data = {
             "words": mutated_words,
-            "moder_b": 0x10000001,
-            "moder_e": 0x00000004,
-            "regs_b": {"moder": 0x10000001, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0},
-            "regs_e": {"moder": 0x00000004, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0},
+            "moder_b": last_measured_moder_b,
+            "moder_e": last_measured_moder_e,
+            "regs_b": copy.deepcopy(last_measured_regs_b),
+            "regs_e": copy.deepcopy(last_measured_regs_e),
         }
         neg_ram_path.write_text(json.dumps(fake_ram_data), encoding="utf-8")
         loaded_ram = json.loads(neg_ram_path.read_text(encoding="utf-8"))
@@ -1052,15 +1072,17 @@ def run_t4(tools: dict[str, str], sn: str, logger: Logger) -> bool:
         if not neg_ram_pass:
             overall_ok = False
 
-        # Negative control 2: Mutated MODER state (PB0 configured as 00b input instead of 01b output)
+        # Negative control 2: Mutated MODER state from measured regs_b (PB0 configured as 00b input)
         neg_moder_path = Path(tmp_dir) / "mutated_moder.json"
-        bad_moder_b = 0x10000000  # PB0 mode = 00b (input)
+        mutated_regs_b_moder = copy.deepcopy(last_measured_regs_b)
+        mutated_regs_b_moder["moder"] &= ~(3 << (0 * 2))  # PB0 mode = 00b (input)
+        bad_moder_b = mutated_regs_b_moder["moder"]
         fake_moder_data = {
-            "words": list(UM2408_ORACLE_WORDS),
+            "words": list(last_measured_words),
             "moder_b": bad_moder_b,
-            "moder_e": 0x00000004,
-            "regs_b": {"moder": bad_moder_b, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0},
-            "regs_e": {"moder": 0x00000004, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0},
+            "moder_e": last_measured_moder_e,
+            "regs_b": mutated_regs_b_moder,
+            "regs_e": copy.deepcopy(last_measured_regs_e),
         }
         neg_moder_path.write_text(json.dumps(fake_moder_data), encoding="utf-8")
         loaded_moder = json.loads(neg_moder_path.read_text(encoding="utf-8"))
@@ -1073,15 +1095,16 @@ def run_t4(tools: dict[str, str], sn: str, logger: Logger) -> bool:
         if not neg_moder_pass:
             overall_ok = False
 
-        # Negative control 3: Mutated PUPDR state (PB0 pull-up enabled)
+        # Negative control 3: Mutated PUPDR state from measured regs_b (PB0 pull-up enabled)
         neg_pupdr_path = Path(tmp_dir) / "mutated_pupdr.json"
-        bad_pupdr_b = 0x00000001  # PB0 pull = 01b (pull-up)
+        mutated_regs_b_pupdr = copy.deepcopy(last_measured_regs_b)
+        mutated_regs_b_pupdr["pupdr"] |= (1 << (0 * 2))  # PB0 pull = 01b (pull-up)
         fake_pupdr_data = {
-            "words": list(UM2408_ORACLE_WORDS),
-            "moder_b": 0x10000001,
-            "moder_e": 0x00000004,
-            "regs_b": {"moder": 0x10000001, "otyper": 0, "ospeedr": 0, "pupdr": bad_pupdr_b, "odr": 0},
-            "regs_e": {"moder": 0x00000004, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0},
+            "words": list(last_measured_words),
+            "moder_b": last_measured_moder_b,
+            "moder_e": last_measured_moder_e,
+            "regs_b": mutated_regs_b_pupdr,
+            "regs_e": copy.deepcopy(last_measured_regs_e),
         }
         neg_pupdr_path.write_text(json.dumps(fake_pupdr_data), encoding="utf-8")
         loaded_pupdr = json.loads(neg_pupdr_path.read_text(encoding="utf-8"))

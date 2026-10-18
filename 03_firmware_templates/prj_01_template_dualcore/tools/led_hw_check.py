@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 STMicroelectronics & Antigravity
-# All rights reserved.
 #
 # Hardware check host for 01_led selftest (preset selftest-led).
 # Evaluates steps LT1 - LT5 on live board or via mock session.
@@ -36,7 +34,7 @@ except ImportError:
     autodetect = None
     port_for_sn = None
 
-# Hardware target defaults (NUCLEO-H755ZI-Q ST-LINK serial number cited from plan/session)
+# Hardware target defaults (NUCLEO-H755ZI-Q ST-LINK serial number cited from IMPLEMENTER_INSTRUCTIONS.md §2.2)
 DEFAULT_SN = "0016000C4142501220353451"
 DEFAULT_BAUD = 115200
 
@@ -84,8 +82,6 @@ def check_clean_tree(repo_root: pathlib.Path, out_file: Optional[pathlib.Path]) 
             continue
         if "build" in p.parts:
             continue
-        if "docs" in p.parts and p.name.startswith("led_dev_"):
-            continue
         if code != "!!":
             dirty.append(line)
     if dirty:
@@ -130,35 +126,46 @@ class PinInfo:
     odr: int
 
 @dataclasses.dataclass
+class Lt1Pre:
+    deinit_rc: tuple[int, int, int]
+    read_rc: tuple[int, int, int]
+    modes: tuple[int, int, int]
+
+@dataclasses.dataclass
 class Lt1Data:
+    pre: Optional[Lt1Pre]
     mask: int
     lock: int
     unlock: int
     pins: dict[str, PinInfo]
     ctrl_mask: int
-    ctrl_regs_equal: int
-    ctrl_odr_g: int
-    ctrl_odr_y: int
-    ctrl_odr_r: int
+    ctrl_lock: int
+    ctrl_unlock: int
+    ctrl_deinit_rc: tuple[int, int, int]
+    ctrl_modes: tuple[int, int, int]
+    ctrl_odr: tuple[int, int, int]
+    ctrl_snap_pre: list[int]
+    ctrl_snap_post: list[int]
 
 @dataclasses.dataclass
 class Lt2Data:
     mask: int
-    init_equal: int
-    ops_equal: int
+    snap_pre: list[int]
+    snap_post_init: list[int]
+    snap_post_ops: list[int]
     ctrl_mask: int
-    ctrl_pb0_mode_before: int
-    ctrl_pb0_mode_after: int
-    ctrl_gpiob_changed: int
+    ctrl_snap_pre: list[int]
+    ctrl_snap_post: list[int]
 
 @dataclasses.dataclass
 class Lt3Data:
     n: int
-    freq_hz: int
+    dwt_cycles: int
+    dwt_isrs: int
+    cpu_hz: int
     window_isrs: int
     lost: int
     ctrl_n: int
-    ctrl_freq_hz: int
     ctrl_window_isrs: int
     ctrl_lost: int
 
@@ -166,13 +173,15 @@ class Lt3Data:
 class Lt4Data:
     red_mode: int
     red_odr: int
-    ctrl_green_unchanged: int
-    ctrl_green_mode: int
-    ctrl_green_odr: int
+    green_pre: Optional[PinInfo]
+    green_post: Optional[PinInfo]
 
 @dataclasses.dataclass
 class Lt5Data:
-    tim17_stopped: int
+    tim17_cr1: int
+    tim17_dier: int
+    tim17_nvic: int
+    tim17_apb2: int
     pins: dict[str, PinInfo]
 
 @dataclasses.dataclass
@@ -189,10 +198,56 @@ class SelftestRunData:
 
 # ---- Step Evaluation Oracles -----------------------------------------------
 
+def eval_snapshot_equal(pre: list[int], post: list[int]) -> tuple[bool, str]:
+    """Universal step oracle: verifies equality across 15 GPIO register words."""
+    if len(pre) != 15 or len(post) != 15:
+        return False, f"snapshot length mismatch: {len(pre)} vs {len(post)} (expected 15 words)"
+    if pre != post:
+        diffs = [f"word[{i}]: 0x{pre[i]:08X} != 0x{post[i]:08X}" for i in range(15) if pre[i] != post[i]]
+        return False, f"snapshots differ in {len(diffs)} words ({', '.join(diffs[:2])})"
+    return True, "15-word snapshots are identical"
+
+
+def eval_pin_equal(pre: Optional[PinInfo], post: Optional[PinInfo]) -> tuple[bool, str]:
+    """Universal pin oracle: checks whether all fields of a pin remain identical."""
+    if pre is None or post is None:
+        return False, "missing pin snapshot"
+    if pre != post:
+        return False, f"pin state changed: pre={pre} post={post}"
+    return True, "pin state unchanged"
+
+
+def eval_tim17_stopped(cr1: int, dier: int, nvic_pending: int, apb2enr: int) -> tuple[bool, str]:
+    """Universal timer oracle: checks that TIM17 is stopped, DIER=0, NVIC=0, APB2ENR=0."""
+    errors = []
+    if (cr1 & 1) != 0:
+        errors.append(f"TIM17 CR1 CEN bit is set (0x{cr1:04X})")
+    if (dier & 1) != 0:
+        errors.append(f"TIM17 DIER UIE bit is set (0x{dier:04X})")
+    if nvic_pending != 0:
+        errors.append(f"TIM17 NVIC pending is set ({nvic_pending})")
+    if (apb2enr & 0x00040000) != 0:
+        errors.append(f"TIM17 APB2 clock enable bit is set (0x{apb2enr:08X})")
+    if errors:
+        return False, "; ".join(errors)
+    return True, "TIM17 stopped, DIER=0, NVIC=0, APB2=0"
+
+
 def eval_lt1(d: Lt1Data) -> tuple[bool, str]:
     """Evaluates LT1: L3 validation, section, cross-core hook, read-back."""
     errors = []
-    # Real checks
+    # Pre-state verification
+    if not d.pre:
+        errors.append("missing LT1 pre-deinit telemetry")
+    else:
+        if d.pre.deinit_rc != (0, 0, 0):
+            errors.append(f"deinit_rc != (0,0,0) (got {d.pre.deinit_rc})")
+        if d.pre.read_rc != (0, 0, 0):
+            errors.append(f"read_rc != (0,0,0) (got {d.pre.read_rc})")
+        if d.pre.modes != (3, 3, 3):
+            errors.append(f"modes != analog (3,3,3) (got {d.pre.modes})")
+
+    # Real init checks
     if d.mask != 0x07:
         errors.append(f"real mask != 0x07 (got 0x{d.mask:02X})")
     if d.lock < 3:
@@ -215,13 +270,17 @@ def eval_lt1(d: Lt1Data) -> tuple[bool, str]:
         if p.odr != 0:
             errors.append(f"pin {name} odr != 0 (got {p.odr})")
 
-    # Control checks
+    # Control checks: hook returned false -> mask 0, lock invoked, snapshots identical
     if d.ctrl_mask != 0x00:
         errors.append(f"ctrl mask != 0x00 (got 0x{d.ctrl_mask:02X})")
-    if d.ctrl_regs_equal != 1:
-        errors.append(f"ctrl regs_equal != 1 (got {d.ctrl_regs_equal})")
-    if d.ctrl_odr_g != 0 or d.ctrl_odr_y != 0 or d.ctrl_odr_r != 0:
-        errors.append(f"ctrl odr changed ({d.ctrl_odr_g},{d.ctrl_odr_y},{d.ctrl_odr_r})")
+    if d.ctrl_lock < 1:
+        errors.append(f"ctrl lock count < 1 (got {d.ctrl_lock})")
+    if d.ctrl_odr != (0, 0, 0):
+        errors.append(f"ctrl odr changed (got {d.ctrl_odr})")
+
+    snap_ok, snap_msg = eval_snapshot_equal(d.ctrl_snap_pre, d.ctrl_snap_post)
+    if not snap_ok:
+        errors.append(f"ctrl snapshots modified: {snap_msg}")
 
     if errors:
         return False, "; ".join(errors)
@@ -229,29 +288,32 @@ def eval_lt1(d: Lt1Data) -> tuple[bool, str]:
 
 
 def eval_lt2(d: Lt2Data) -> tuple[bool, str]:
-    """Evaluates LT2: L5 invalid port/pin handling and rejection."""
+    """Evaluates LT2: L5 invalid port/pin handling and rejection via 15-word snapshots."""
     errors = []
     # Real checks: bad table completely rejected
     if d.mask != 0x00:
         errors.append(f"real mask != 0x00 (got 0x{d.mask:02X})")
-    if d.init_equal != 1:
-        errors.append(f"real init_equal != 1 (got {d.init_equal})")
-    if d.ops_equal != 1:
-        errors.append(f"real ops_equal != 1 (got {d.ops_equal})")
 
-    # Control checks: semi-bad table accepts green only and alters PB0
+    ok_init, msg_init = eval_snapshot_equal(d.snap_pre, d.snap_post_init)
+    if not ok_init:
+        errors.append(f"real pre vs post_init mismatch: {msg_init}")
+
+    ok_ops, msg_ops = eval_snapshot_equal(d.snap_pre, d.snap_post_ops)
+    if not ok_ops:
+        errors.append(f"real pre vs post_ops mismatch: {msg_ops}")
+
+    # Control checks: semi-bad table accepts green only (mask=0x01) and ALTERS the snapshot
     if d.ctrl_mask != 0x01:
         errors.append(f"ctrl mask != 0x01 (got 0x{d.ctrl_mask:02X})")
-    if d.ctrl_pb0_mode_before != 3:
-        errors.append(f"ctrl pb0_mode_before != 3 (got {d.ctrl_pb0_mode_before})")
-    if d.ctrl_pb0_mode_after != 1:
-        errors.append(f"ctrl pb0_mode_after != 1 (got {d.ctrl_pb0_mode_after})")
-    if d.ctrl_gpiob_changed != 1:
-        errors.append(f"ctrl gpiob_changed != 1 (got {d.ctrl_gpiob_changed})")
+
+    # Control snapshot equality check: MUST DIFFER (eval_snapshot_equal must return False)
+    ctrl_equal, _ = eval_snapshot_equal(d.ctrl_snap_pre, d.ctrl_snap_post)
+    if ctrl_equal:
+        errors.append("ctrl snapshot pre vs post unexpectedly identical (hardware was not modified)")
 
     if errors:
         return False, "; ".join(errors)
-    return True, f"mask=0x{d.mask:02X} init_equal={d.init_equal} ops_equal={d.ops_equal} ctrl=OK"
+    return True, f"mask=0x{d.mask:02X} init_snap=OK ops_snap=OK ctrl_snap=OK"
 
 
 def eval_lt3(d: Lt3Data) -> tuple[bool, str]:
@@ -259,8 +321,16 @@ def eval_lt3(d: Lt3Data) -> tuple[bool, str]:
     errors = []
     if d.n < 100000:
         errors.append(f"N too small ({d.n} < 100000)")
-    if d.freq_hz < 100000:
-        errors.append(f"freq_hz too small ({d.freq_hz} < 100000)")
+
+    # DWT-measured frequency check (A4)
+    if d.dwt_cycles == 0:
+        errors.append("dwt_cycles == 0 (cycle counter not running)")
+        calc_freq = 0
+    else:
+        calc_freq = (d.dwt_isrs * d.cpu_hz) // d.dwt_cycles
+    if calc_freq < 100000:
+        errors.append(f"DWT measured frequency too low ({calc_freq} Hz < 100000 Hz)")
+
     if d.window_isrs == 0:
         errors.append("real window_isrs == 0 (timer ISR did not run)")
     if d.lost != 0:
@@ -274,33 +344,33 @@ def eval_lt3(d: Lt3Data) -> tuple[bool, str]:
 
     if errors:
         return False, "; ".join(errors)
-    return True, f"N={d.n} freq={d.freq_hz} window_isrs={d.window_isrs} lost={d.lost} ctrl_lost={d.ctrl_lost}"
+    return True, f"N={d.n} freq_calc={calc_freq}Hz window_isrs={d.window_isrs} lost={d.lost} ctrl_lost={d.ctrl_lost}"
 
 
 def eval_lt4(d: Lt4Data) -> tuple[bool, str]:
-    """Evaluates LT4: G14 LED_PanicRed exception direct RMW."""
+    """Evaluates LT4: G14 LED_PanicRed exception direct RMW, green pin unchanged."""
     errors = []
     if d.red_mode != 1:
         errors.append(f"red_mode != 1 (got {d.red_mode})")
     if d.red_odr != 1:
         errors.append(f"red_odr != 1 (got {d.red_odr})")
-    if d.ctrl_green_unchanged != 1:
-        errors.append(f"ctrl_green_unchanged != 1 (got {d.ctrl_green_unchanged})")
-    if d.ctrl_green_mode != 1:
-        errors.append(f"ctrl_green_mode != 1 (got {d.ctrl_green_mode})")
-    if d.ctrl_green_odr != 0:
-        errors.append(f"ctrl_green_odr != 0 (got {d.ctrl_green_odr})")
+
+    green_ok, green_msg = eval_pin_equal(d.green_pre, d.green_post)
+    if not green_ok:
+        errors.append(f"green pin altered: {green_msg}")
 
     if errors:
         return False, "; ".join(errors)
-    return True, f"red_mode={d.red_mode} red_odr={d.red_odr} ctrl_green_unchanged={d.ctrl_green_unchanged}"
+    return True, f"red_mode={d.red_mode} red_odr={d.red_odr} green_pin=UNCHANGED"
 
 
 def eval_lt5(d: Lt5Data) -> tuple[bool, str]:
     """Evaluates LT5: Final state restoration."""
     errors = []
-    if d.tim17_stopped != 1:
-        errors.append(f"tim17_stopped != 1 (got {d.tim17_stopped})")
+    tim_ok, tim_msg = eval_tim17_stopped(d.tim17_cr1, d.tim17_dier, d.tim17_nvic, d.tim17_apb2)
+    if not tim_ok:
+        errors.append(f"TIM17 not stopped: {tim_msg}")
+
     for name in ("G", "Y", "R"):
         p = d.pins.get(name)
         if not p:
@@ -319,7 +389,7 @@ def eval_lt5(d: Lt5Data) -> tuple[bool, str]:
 
     if errors:
         return False, "; ".join(errors)
-    return True, f"tim17_stopped={d.tim17_stopped} pins=OK"
+    return True, f"{tim_msg} pins=OK"
 
 
 # ---- Console Output Parsing -------------------------------------------------
@@ -327,13 +397,34 @@ def eval_lt5(d: Lt5Data) -> tuple[bool, str]:
 def parse_console_lines(lines: list[str]) -> SelftestRunData:
     data = SelftestRunData(rev="unknown", build_id="unknown")
 
+    # Snapshot dictionary storage during parsing
+    snapshots: dict[str, list[int]] = {}
+
     for line in lines:
         line = line.strip()
+
         # [sys] build rev=3e03485-dirty id=e78987ed88727437
         m = re.search(r"\[sys\]\s+build\s+rev=(\S+)\s+id=(\S+)", line)
         if m:
             data.rev = m.group(1)
             data.build_id = m.group(2)
+            continue
+
+        # [led] LT1_PRE: deinit_rc=0,0,0 read_rc=0,0,0 modes=3,3,3
+        m = re.search(r"\[led\]\s+LT1_PRE:\s+deinit_rc=(-?\d+),(-?\d+),(-?\d+)\s+read_rc=(-?\d+),(-?\d+),(-?\d+)\s+modes=(\d+),(\d+),(\d+)", line)
+        if m:
+            pre = Lt1Pre(
+                deinit_rc=(int(m.group(1)), int(m.group(2)), int(m.group(3))),
+                read_rc=(int(m.group(4)), int(m.group(5)), int(m.group(6))),
+                modes=(int(m.group(7)), int(m.group(8)), int(m.group(9)))
+            )
+            if not data.lt1:
+                data.lt1 = Lt1Data(pre=pre, mask=0, lock=0, unlock=0, pins={},
+                                   ctrl_mask=0, ctrl_lock=0, ctrl_unlock=0,
+                                   ctrl_deinit_rc=(0,0,0), ctrl_modes=(0,0,0), ctrl_odr=(0,0,0),
+                                   ctrl_snap_pre=[], ctrl_snap_post=[])
+            else:
+                data.lt1.pre = pre
             continue
 
         # [led] LT1: mask=0x07 lock=3 unlock=3
@@ -343,8 +434,10 @@ def parse_console_lines(lines: list[str]) -> SelftestRunData:
             lock = int(m.group(2))
             unlock = int(m.group(3))
             if not data.lt1:
-                data.lt1 = Lt1Data(mask=mask, lock=lock, unlock=unlock, pins={},
-                                   ctrl_mask=0, ctrl_regs_equal=0, ctrl_odr_g=0, ctrl_odr_y=0, ctrl_odr_r=0)
+                data.lt1 = Lt1Data(pre=None, mask=mask, lock=lock, unlock=unlock, pins={},
+                                   ctrl_mask=0, ctrl_lock=0, ctrl_unlock=0,
+                                   ctrl_deinit_rc=(0,0,0), ctrl_modes=(0,0,0), ctrl_odr=(0,0,0),
+                                   ctrl_snap_pre=[], ctrl_snap_post=[])
             else:
                 data.lt1.mask = mask
                 data.lt1.lock = lock
@@ -366,92 +459,109 @@ def parse_console_lines(lines: list[str]) -> SelftestRunData:
                     odr=int(pin_m.group(6))
                 )
             if not data.lt1:
-                data.lt1 = Lt1Data(mask=0, lock=0, unlock=0, pins=pins,
-                                   ctrl_mask=0, ctrl_regs_equal=0, ctrl_odr_g=0, ctrl_odr_y=0, ctrl_odr_r=0)
+                data.lt1 = Lt1Data(pre=None, mask=0, lock=0, unlock=0, pins=pins,
+                                   ctrl_mask=0, ctrl_lock=0, ctrl_unlock=0,
+                                   ctrl_deinit_rc=(0,0,0), ctrl_modes=(0,0,0), ctrl_odr=(0,0,0),
+                                   ctrl_snap_pre=[], ctrl_snap_post=[])
             else:
                 data.lt1.pins = pins
             continue
 
-        # [led] LT1_CTRL: mask=0x00 regs_equal=1 odr_g=0 odr_y=0 odr_r=0
-        m = re.search(r"\[led\]\s+LT1_CTRL:\s+mask=0x([0-9a-fA-F]+)\s+regs_equal=(\d+)\s+odr_g=(\d+)\s+odr_y=(\d+)\s+odr_r=(\d+)", line)
-        if m:
-            if not data.lt1:
-                data.lt1 = Lt1Data(mask=0, lock=0, unlock=0, pins={},
-                                   ctrl_mask=int(m.group(1), 16),
-                                   ctrl_regs_equal=int(m.group(2)),
-                                   ctrl_odr_g=int(m.group(3)),
-                                   ctrl_odr_y=int(m.group(4)),
-                                   ctrl_odr_r=int(m.group(5)))
-            else:
-                data.lt1.ctrl_mask = int(m.group(1), 16)
-                data.lt1.ctrl_regs_equal = int(m.group(2))
-                data.lt1.ctrl_odr_g = int(m.group(3))
-                data.lt1.ctrl_odr_y = int(m.group(4))
-                data.lt1.ctrl_odr_r = int(m.group(5))
-            continue
-
-        # [led] LT2: mask=0x00 init_equal=1 ops_equal=1
-        m = re.search(r"\[led\]\s+LT2:\s+mask=0x([0-9a-fA-F]+)\s+init_equal=(\d+)\s+ops_equal=(\d+)", line)
+        # [led] LT1_CTRL: mask=0x00 lock=1 unlock=0 deinit_rc=0,0,0 modes=3,3,3 odr_g=0 odr_y=0 odr_r=0
+        m = re.search(r"\[led\]\s+LT1_CTRL:\s+mask=0x([0-9a-fA-F]+)\s+lock=(\d+)\s+unlock=(\d+)\s+deinit_rc=(-?\d+),(-?\d+),(-?\d+)\s+modes=(\d+),(\d+),(\d+)\s+odr_g=(\d+)\s+odr_y=(\d+)\s+odr_r=(\d+)", line)
         if m:
             mask = int(m.group(1), 16)
-            init_eq = int(m.group(2))
-            ops_eq = int(m.group(3))
+            lock = int(m.group(2))
+            unlock = int(m.group(3))
+            deinit_rc = (int(m.group(4)), int(m.group(5)), int(m.group(6)))
+            modes = (int(m.group(7)), int(m.group(8)), int(m.group(9)))
+            odrs = (int(m.group(10)), int(m.group(11)), int(m.group(12)))
+            if not data.lt1:
+                data.lt1 = Lt1Data(pre=None, mask=0, lock=0, unlock=0, pins={},
+                                   ctrl_mask=mask, ctrl_lock=lock, ctrl_unlock=unlock,
+                                   ctrl_deinit_rc=deinit_rc, ctrl_modes=modes, ctrl_odr=odrs,
+                                   ctrl_snap_pre=[], ctrl_snap_post=[])
+            else:
+                data.lt1.ctrl_mask = mask
+                data.lt1.ctrl_lock = lock
+                data.lt1.ctrl_unlock = unlock
+                data.lt1.ctrl_deinit_rc = deinit_rc
+                data.lt1.ctrl_modes = modes
+                data.lt1.ctrl_odr = odrs
+            continue
+
+        # Snapshot parsing helper: [led] <LABEL>_[ABE]: <w0> <w1> <w2> <w3> <w4>
+        m = re.search(r"\[led\]\s+(\S+)_(A|B|E):\s+([0-9a-fA-F\s]+)", line)
+        if m:
+            label = m.group(1)
+            port = m.group(2)
+            words = [int(w, 16) for w in m.group(3).split()]
+            if label not in snapshots:
+                snapshots[label] = [0] * 15
+            idx = 0 if port == "A" else (5 if port == "B" else 10)
+            for i, w in enumerate(words):
+                if idx + i < 15:
+                    snapshots[label][idx + i] = w
+            continue
+
+        # [led] LT2: mask=0x00
+        m = re.search(r"\[led\]\s+LT2:\s+mask=0x([0-9a-fA-F]+)", line)
+        if m:
+            mask = int(m.group(1), 16)
             if not data.lt2:
-                data.lt2 = Lt2Data(mask=mask, init_equal=init_eq, ops_equal=ops_eq,
-                                   ctrl_mask=0, ctrl_pb0_mode_before=0, ctrl_pb0_mode_after=0, ctrl_gpiob_changed=0)
+                data.lt2 = Lt2Data(mask=mask, snap_pre=[], snap_post_init=[], snap_post_ops=[],
+                                   ctrl_mask=0, ctrl_snap_pre=[], ctrl_snap_post=[])
             else:
                 data.lt2.mask = mask
-                data.lt2.init_equal = init_eq
-                data.lt2.ops_equal = ops_eq
             continue
 
-        # [led] LT2_CTRL: mask=0x01 pb0_mode_before=3 pb0_mode_after=1 gpiob_changed=1
-        m = re.search(r"\[led\]\s+LT2_CTRL:\s+mask=0x([0-9a-fA-F]+)\s+pb0_mode_before=(\d+)\s+pb0_mode_after=(\d+)\s+gpiob_changed=(\d+)", line)
+        # [led] LT2_CTRL: mask=0x01
+        m = re.search(r"\[led\]\s+LT2_CTRL:\s+mask=0x([0-9a-fA-F]+)", line)
         if m:
+            mask = int(m.group(1), 16)
             if not data.lt2:
-                data.lt2 = Lt2Data(mask=0, init_equal=0, ops_equal=0,
-                                   ctrl_mask=int(m.group(1), 16),
-                                   ctrl_pb0_mode_before=int(m.group(2)),
-                                   ctrl_pb0_mode_after=int(m.group(3)),
-                                   ctrl_gpiob_changed=int(m.group(4)))
+                data.lt2 = Lt2Data(mask=0, snap_pre=[], snap_post_init=[], snap_post_ops=[],
+                                   ctrl_mask=mask, ctrl_snap_pre=[], ctrl_snap_post=[])
             else:
-                data.lt2.ctrl_mask = int(m.group(1), 16)
-                data.lt2.ctrl_pb0_mode_before = int(m.group(2))
-                data.lt2.ctrl_pb0_mode_after = int(m.group(3))
-                data.lt2.ctrl_gpiob_changed = int(m.group(4))
+                data.lt2.ctrl_mask = mask
             continue
 
-        # [led] LT3: N=200000 freq_hz=200000 window_isrs=6986 lost=0
-        m = re.search(r"\[led\]\s+LT3:\s+N=(\d+)\s+freq_hz=(\d+)\s+window_isrs=(\d+)\s+lost=(\d+)", line)
+        # [led] LT3: N=200000 dwt_cycles=2000000 dwt_isrs=1000 cpu_hz=400000000 window_isrs=6986 lost=0
+        m = re.search(r"\[led\]\s+LT3:\s+N=(\d+)\s+dwt_cycles=(\d+)\s+dwt_isrs=(\d+)\s+cpu_hz=(\d+)\s+window_isrs=(\d+)\s+lost=(\d+)", line)
         if m:
             n = int(m.group(1))
-            f = int(m.group(2))
-            w = int(m.group(3))
-            lost = int(m.group(4))
+            cycles = int(m.group(2))
+            isrs = int(m.group(3))
+            cpu = int(m.group(4))
+            w = int(m.group(5))
+            lost = int(m.group(6))
             if not data.lt3:
-                data.lt3 = Lt3Data(n=n, freq_hz=f, window_isrs=w, lost=lost,
-                                   ctrl_n=0, ctrl_freq_hz=0, ctrl_window_isrs=0, ctrl_lost=0)
+                data.lt3 = Lt3Data(n=n, dwt_cycles=cycles, dwt_isrs=isrs, cpu_hz=cpu,
+                                   window_isrs=w, lost=lost,
+                                   ctrl_n=0, ctrl_window_isrs=0, ctrl_lost=0)
             else:
                 data.lt3.n = n
-                data.lt3.freq_hz = f
+                data.lt3.dwt_cycles = cycles
+                data.lt3.dwt_isrs = isrs
+                data.lt3.cpu_hz = cpu
                 data.lt3.window_isrs = w
                 data.lt3.lost = lost
             continue
 
-        # [led] LT3_CTRL: N=200000 freq_hz=200000 window_isrs=7531 lost=2152
-        m = re.search(r"\[led\]\s+LT3_CTRL:\s+N=(\d+)\s+freq_hz=(\d+)\s+window_isrs=(\d+)\s+lost=(\d+)", line)
+        # [led] LT3_CTRL: N=200000 window_isrs=7225 lost=2155
+        m = re.search(r"\[led\]\s+LT3_CTRL:\s+N=(\d+)\s+window_isrs=(\d+)\s+lost=(\d+)", line)
         if m:
+            cn = int(m.group(1))
+            cw = int(m.group(2))
+            clost = int(m.group(3))
             if not data.lt3:
-                data.lt3 = Lt3Data(n=0, freq_hz=0, window_isrs=0, lost=0,
-                                   ctrl_n=int(m.group(1)),
-                                   ctrl_freq_hz=int(m.group(2)),
-                                   ctrl_window_isrs=int(m.group(3)),
-                                   ctrl_lost=int(m.group(4)))
+                data.lt3 = Lt3Data(n=0, dwt_cycles=0, dwt_isrs=0, cpu_hz=0,
+                                   window_isrs=0, lost=0,
+                                   ctrl_n=cn, ctrl_window_isrs=cw, ctrl_lost=clost)
             else:
-                data.lt3.ctrl_n = int(m.group(1))
-                data.lt3.ctrl_freq_hz = int(m.group(2))
-                data.lt3.ctrl_window_isrs = int(m.group(3))
-                data.lt3.ctrl_lost = int(m.group(4))
+                data.lt3.ctrl_n = cn
+                data.lt3.ctrl_window_isrs = cw
+                data.lt3.ctrl_lost = clost
             continue
 
         # [led] LT4: red_mode=1 red_odr=1
@@ -460,35 +570,48 @@ def parse_console_lines(lines: list[str]) -> SelftestRunData:
             rm = int(m.group(1))
             ro = int(m.group(2))
             if not data.lt4:
-                data.lt4 = Lt4Data(red_mode=rm, red_odr=ro,
-                                   ctrl_green_unchanged=0, ctrl_green_mode=0, ctrl_green_odr=0)
+                data.lt4 = Lt4Data(red_mode=rm, red_odr=ro, green_pre=None, green_post=None)
             else:
                 data.lt4.red_mode = rm
                 data.lt4.red_odr = ro
             continue
 
-        # [led] LT4_CTRL: green_unchanged=1 green_mode=1 green_odr=0
-        m = re.search(r"\[led\]\s+LT4_CTRL:\s+green_unchanged=(\d+)\s+green_mode=(\d+)\s+green_odr=(\d+)", line)
+        # [led] LT4_GREEN_PRE: mode=1 otype=0 speed=0 pull=0 odr=0
+        m = re.search(r"\[led\]\s+LT4_GREEN_PRE:\s+mode=(\d+)\s+otype=(\d+)\s+speed=(\d+)\s+pull=(\d+)\s+odr=(\d+)", line)
         if m:
+            gp = PinInfo(mode=int(m.group(1)), otype=int(m.group(2)), speed=int(m.group(3)),
+                         pull=int(m.group(4)), odr=int(m.group(5)))
             if not data.lt4:
-                data.lt4 = Lt4Data(red_mode=0, red_odr=0,
-                                   ctrl_green_unchanged=int(m.group(1)),
-                                   ctrl_green_mode=int(m.group(2)),
-                                   ctrl_green_odr=int(m.group(3)))
+                data.lt4 = Lt4Data(red_mode=0, red_odr=0, green_pre=gp, green_post=None)
             else:
-                data.lt4.ctrl_green_unchanged = int(m.group(1))
-                data.lt4.ctrl_green_mode = int(m.group(2))
-                data.lt4.ctrl_green_odr = int(m.group(3))
+                data.lt4.green_pre = gp
             continue
 
-        # [led] LT5: tim17_stopped=1
-        m = re.search(r"\[led\]\s+LT5:\s+tim17_stopped=(\d+)", line)
+        # [led] LT4_GREEN_POST: mode=1 otype=0 speed=0 pull=0 odr=0
+        m = re.search(r"\[led\]\s+LT4_GREEN_POST:\s+mode=(\d+)\s+otype=(\d+)\s+speed=(\d+)\s+pull=(\d+)\s+odr=(\d+)", line)
         if m:
-            ts = int(m.group(1))
-            if not data.lt5:
-                data.lt5 = Lt5Data(tim17_stopped=ts, pins={})
+            gp = PinInfo(mode=int(m.group(1)), otype=int(m.group(2)), speed=int(m.group(3)),
+                         pull=int(m.group(4)), odr=int(m.group(5)))
+            if not data.lt4:
+                data.lt4 = Lt4Data(red_mode=0, red_odr=0, green_pre=None, green_post=gp)
             else:
-                data.lt5.tim17_stopped = ts
+                data.lt4.green_post = gp
+            continue
+
+        # [led] LT5_TIM17: cr1=0x0000 dier=0x0000 nvic_pending=0 apb2enr=0x00000000
+        m = re.search(r"\[led\]\s+LT5_TIM17:\s+cr1=0x([0-9a-fA-F]+)\s+dier=0x([0-9a-fA-F]+)\s+nvic_pending=(\d+)\s+apb2enr=0x([0-9a-fA-F]+)", line)
+        if m:
+            cr1 = int(m.group(1), 16)
+            dier = int(m.group(2), 16)
+            nvic = int(m.group(3))
+            apb2 = int(m.group(4), 16)
+            if not data.lt5:
+                data.lt5 = Lt5Data(tim17_cr1=cr1, tim17_dier=dier, tim17_nvic=nvic, tim17_apb2=apb2, pins={})
+            else:
+                data.lt5.tim17_cr1 = cr1
+                data.lt5.tim17_dier = dier
+                data.lt5.tim17_nvic = nvic
+                data.lt5.tim17_apb2 = apb2
             continue
 
         # [led] LT5_PINS: G(...) Y(...) R(...)
@@ -506,7 +629,7 @@ def parse_console_lines(lines: list[str]) -> SelftestRunData:
                     odr=int(pin_m.group(6))
                 )
             if not data.lt5:
-                data.lt5 = Lt5Data(tim17_stopped=0, pins=pins)
+                data.lt5 = Lt5Data(tim17_cr1=0, tim17_dier=0, tim17_nvic=0, tim17_apb2=0, pins=pins)
             else:
                 data.lt5.pins = pins
             continue
@@ -516,6 +639,17 @@ def parse_console_lines(lines: list[str]) -> SelftestRunData:
         if m:
             data.fw_verdict = m.group(1)
             continue
+
+    # Assign gathered snapshots into step data structures
+    if data.lt1:
+        data.lt1.ctrl_snap_pre = snapshots.get("LT1_CTRL_PRE", [])
+        data.lt1.ctrl_snap_post = snapshots.get("LT1_CTRL_POST", [])
+    if data.lt2:
+        data.lt2.snap_pre = snapshots.get("LT2_PRE", [])
+        data.lt2.snap_post_init = snapshots.get("LT2_POST_INIT", [])
+        data.lt2.snap_post_ops = snapshots.get("LT2_POST_OPS", [])
+        data.lt2.ctrl_snap_pre = snapshots.get("LT2_CTRL_PRE", [])
+        data.lt2.ctrl_snap_post = snapshots.get("LT2_CTRL_POST", [])
 
     return data
 
@@ -527,18 +661,20 @@ def evaluate_run(data: SelftestRunData, log: Callable[[str], None],
                  allow_dirty: bool = False) -> bool:
     all_ok = True
 
-    # 1. Provenance Checks
-    rev_match = (data.rev == expected_rev) or (data.rev.startswith(expected_rev) and (allow_dirty or not data.rev.endswith("-dirty")))
-    if not allow_dirty and data.rev.endswith("-dirty"):
-        rev_match = False
-    log(f"[host] CHECK provenance_git_rev: {'PASS' if rev_match else 'FAIL'} (fw_rev={data.rev}, host_head={expected_rev})")
-    if not rev_match:
+    # 1. Provenance Checks (A5: --allow-dirty never yields PASS)
+    if allow_dirty:
+        log("[host] CHECK provenance: NOT VERIFIED (--allow-dirty flag active)")
         all_ok = False
+    else:
+        rev_match = (data.rev == expected_rev) and not data.rev.endswith("-dirty")
+        log(f"[host] CHECK provenance_git_rev: {'PASS' if rev_match else 'FAIL'} (fw_rev={data.rev}, host_head={expected_rev})")
+        if not rev_match:
+            all_ok = False
 
-    id_match = (data.build_id == expected_build_id) or (allow_dirty and data.build_id != "unknown")
-    log(f"[host] CHECK provenance_build_id: {'PASS' if id_match else 'FAIL'} (fw_id={data.build_id}, host_id={expected_build_id})")
-    if not id_match and not allow_dirty:
-        all_ok = False
+        id_match = (data.build_id == expected_build_id) and (data.build_id != "unknown")
+        log(f"[host] CHECK provenance_build_id: {'PASS' if id_match else 'FAIL'} (fw_id={data.build_id}, host_id={expected_build_id})")
+        if not id_match:
+            all_ok = False
 
     # 2. LT1 Evaluation & Mutations
     if not data.lt1:
@@ -550,7 +686,7 @@ def evaluate_run(data: SelftestRunData, log: Callable[[str], None],
         if not ok1:
             all_ok = False
 
-        # Mutation tests through eval_lt1
+        # Mutation: pull on pin G
         mut_lt1_pull = copy.deepcopy(data.lt1)
         mut_lt1_pull.pins["G"].pull = 1
         m_ok, _ = eval_lt1(mut_lt1_pull)
@@ -558,17 +694,20 @@ def evaluate_run(data: SelftestRunData, log: Callable[[str], None],
         if m_ok:
             all_ok = False
 
-        mut_lt1_mask = copy.deepcopy(data.lt1)
-        mut_lt1_mask.mask = 0x06
-        m_ok, _ = eval_lt1(mut_lt1_mask)
-        log(f"[host] CHECK lt1_mutation_mask_rejected: {'PASS' if not m_ok else 'FAIL'}")
-        if m_ok:
-            all_ok = False
-
+        # Mutation: lock count altered
         mut_lt1_lock = copy.deepcopy(data.lt1)
         mut_lt1_lock.unlock = mut_lt1_lock.lock - 1
         m_ok, _ = eval_lt1(mut_lt1_lock)
         log(f"[host] CHECK lt1_mutation_lock_rejected: {'PASS' if not m_ok else 'FAIL'}")
+        if m_ok:
+            all_ok = False
+
+        # Mutation: control snapshot altered
+        mut_lt1_snap = copy.deepcopy(data.lt1)
+        if mut_lt1_snap.ctrl_snap_post:
+            mut_lt1_snap.ctrl_snap_post[5] ^= 0x01
+        m_ok, _ = eval_lt1(mut_lt1_snap)
+        log(f"[host] CHECK lt1_mutation_ctrl_snap_rejected: {'PASS' if not m_ok else 'FAIL'}")
         if m_ok:
             all_ok = False
 
@@ -582,24 +721,20 @@ def evaluate_run(data: SelftestRunData, log: Callable[[str], None],
         if not ok2:
             all_ok = False
 
-        mut_lt2_mask = copy.deepcopy(data.lt2)
-        mut_lt2_mask.mask = 0x01
-        m_ok, _ = eval_lt2(mut_lt2_mask)
-        log(f"[host] CHECK lt2_mutation_mask_rejected: {'PASS' if not m_ok else 'FAIL'}")
-        if m_ok:
-            all_ok = False
-
+        # Mutation: pre vs post_init snapshot mismatch
         mut_lt2_init = copy.deepcopy(data.lt2)
-        mut_lt2_init.init_equal = 0
+        if mut_lt2_init.snap_post_init:
+            mut_lt2_init.snap_post_init[0] ^= 0x01
         m_ok, _ = eval_lt2(mut_lt2_init)
         log(f"[host] CHECK lt2_mutation_init_rejected: {'PASS' if not m_ok else 'FAIL'}")
         if m_ok:
             all_ok = False
 
+        # Mutation: control snapshot unchanged (failed negative control)
         mut_lt2_ctrl = copy.deepcopy(data.lt2)
-        mut_lt2_ctrl.ctrl_gpiob_changed = 0
+        mut_lt2_ctrl.ctrl_snap_post = list(mut_lt2_ctrl.ctrl_snap_pre)
         m_ok, _ = eval_lt2(mut_lt2_ctrl)
-        log(f"[host] CHECK lt2_mutation_ctrl_rejected: {'PASS' if not m_ok else 'FAIL'}")
+        log(f"[host] CHECK lt2_mutation_ctrl_unchanged_rejected: {'PASS' if not m_ok else 'FAIL'}")
         if m_ok:
             all_ok = False
 
@@ -629,6 +764,14 @@ def evaluate_run(data: SelftestRunData, log: Callable[[str], None],
         if m_ok:
             all_ok = False
 
+        # Mutation: measured DWT frequency too low (< 100 kHz)
+        mut_lt3_freq = copy.deepcopy(data.lt3)
+        mut_lt3_freq.dwt_cycles = mut_lt3_freq.dwt_cycles * 5
+        m_ok, _ = eval_lt3(mut_lt3_freq)
+        log(f"[host] CHECK lt3_mutation_freq_low_rejected: {'PASS' if not m_ok else 'FAIL'}")
+        if m_ok:
+            all_ok = False
+
     # 5. LT4 Evaluation & Mutations
     if not data.lt4:
         log("[host] CHECK lt4: FAIL (LT4 data missing)")
@@ -639,17 +782,20 @@ def evaluate_run(data: SelftestRunData, log: Callable[[str], None],
         if not ok4:
             all_ok = False
 
-        mut_lt4_odr = copy.deepcopy(data.lt4)
-        mut_lt4_odr.red_odr = 0
-        m_ok, _ = eval_lt4(mut_lt4_odr)
-        log(f"[host] CHECK lt4_mutation_red_odr_rejected: {'PASS' if not m_ok else 'FAIL'}")
+        # Mutation: green pin modified by PanicRed
+        mut_lt4_green = copy.deepcopy(data.lt4)
+        if mut_lt4_green.green_post:
+            mut_lt4_green.green_post.mode = 0
+        m_ok, _ = eval_lt4(mut_lt4_green)
+        log(f"[host] CHECK lt4_mutation_green_modified_rejected: {'PASS' if not m_ok else 'FAIL'}")
         if m_ok:
             all_ok = False
 
-        mut_lt4_ctrl = copy.deepcopy(data.lt4)
-        mut_lt4_ctrl.ctrl_green_unchanged = 0
-        m_ok, _ = eval_lt4(mut_lt4_ctrl)
-        log(f"[host] CHECK lt4_mutation_green_ctrl_rejected: {'PASS' if not m_ok else 'FAIL'}")
+        # Mutation: red pin not output
+        mut_lt4_red = copy.deepcopy(data.lt4)
+        mut_lt4_red.red_mode = 0
+        m_ok, _ = eval_lt4(mut_lt4_red)
+        log(f"[host] CHECK lt4_mutation_red_not_output_rejected: {'PASS' if not m_ok else 'FAIL'}")
         if m_ok:
             all_ok = False
 
@@ -663,10 +809,19 @@ def evaluate_run(data: SelftestRunData, log: Callable[[str], None],
         if not ok5:
             all_ok = False
 
+        # Mutation: TIM17 CEN bit still set
         mut_lt5_tim = copy.deepcopy(data.lt5)
-        mut_lt5_tim.tim17_stopped = 0
+        mut_lt5_tim.tim17_cr1 = 1
         m_ok, _ = eval_lt5(mut_lt5_tim)
         log(f"[host] CHECK lt5_mutation_tim17_running_rejected: {'PASS' if not m_ok else 'FAIL'}")
+        if m_ok:
+            all_ok = False
+
+        # Mutation: pin pull not none
+        mut_lt5_pull = copy.deepcopy(data.lt5)
+        mut_lt5_pull.pins["G"].pull = 1
+        m_ok, _ = eval_lt5(mut_lt5_pull)
+        log(f"[host] CHECK lt5_mutation_pin_pull_rejected: {'PASS' if not m_ok else 'FAIL'}")
         if m_ok:
             all_ok = False
 
@@ -679,58 +834,111 @@ def evaluate_run(data: SelftestRunData, log: Callable[[str], None],
     return all_ok
 
 
-# ---- Mock Suite -------------------------------------------------------------
+# ---- Mock Suite (A11) -------------------------------------------------------
 
-def generate_mock_lines(rev: str = "mock_rev", build_id: str = "mock_id") -> list[str]:
-    return [
+def generate_mock_lines(rev: str = "mock_rev", build_id: str = "mock_id",
+                        mutation: Optional[str] = None) -> list[str]:
+    """Generates synthetic console lines to verify parser and step oracles end-to-end."""
+    lines = [
         " ",
         "=== STM32H755ZI 01_led driver selftest - CPU1 (Cortex-M7) ===",
         f"[sys] build rev={rev} id={build_id}",
+        "[led] LT1_PRE: deinit_rc=0,0,0 read_rc=0,0,0 modes=3,3,3",
         "[led] LT1: mask=0x07 lock=3 unlock=3",
         "[led] LT1_PINS: G(mode=1,otype=0,speed=0,pull=0,odr=0) Y(mode=1,otype=0,speed=0,pull=0,odr=0) R(mode=1,otype=0,speed=0,pull=0,odr=0)",
-        "[led] LT1_CTRL: mask=0x00 regs_equal=1 odr_g=0 odr_y=0 odr_r=0",
-        "[led] LT2: mask=0x00 init_equal=1 ops_equal=1",
-        "[led] LT2_CTRL: mask=0x01 pb0_mode_before=3 pb0_mode_after=1 gpiob_changed=1",
-        "[led] LT3: N=200000 freq_hz=200000 window_isrs=7000 lost=0",
-        "[led] LT3_CTRL: N=200000 freq_hz=200000 window_isrs=7000 lost=2000",
+        "[led] LT1_CTRL: mask=0x00 lock=1 unlock=0 deinit_rc=0,0,0 modes=3,3,3 odr_g=0 odr_y=0 odr_r=0",
+        "[led] LT1_CTRL_PRE_A: 28000000 00000000 0C000000 24000000 00000000",
+        "[led] LT1_CTRL_PRE_B: 00000280 00000000 000000C0 00000100 00000000",
+        "[led] LT1_CTRL_PRE_E: 00000000 00000000 00000000 00000000 00000000",
+        "[led] LT1_CTRL_POST_A: 28000000 00000000 0C000000 24000000 00000000",
+        "[led] LT1_CTRL_POST_B: 00000280 00000000 000000C0 00000100 00000000",
+        "[led] LT1_CTRL_POST_E: 00000000 00000000 00000000 00000000 00000000",
+        "[led] LT2: mask=0x00",
+        "[led] LT2_PRE_A: 28000000 00000000 0C000000 24000000 00000000",
+        "[led] LT2_PRE_B: 10000001 00000000 000000C0 00000100 00000000",
+        "[led] LT2_PRE_E: 00000004 00000000 00000000 00000000 00000000",
+        "[led] LT2_POST_INIT_A: 28000000 00000000 0C000000 24000000 00000000",
+        "[led] LT2_POST_INIT_B: 10000001 00000000 000000C0 00000100 00000000",
+        "[led] LT2_POST_INIT_E: 00000004 00000000 00000000 00000000 00000000",
+        "[led] LT2_POST_OPS_A: 28000000 00000000 0C000000 24000000 00000000",
+        "[led] LT2_POST_OPS_B: 10000001 00000000 000000C0 00000100 00000000",
+        "[led] LT2_POST_OPS_E: 00000004 00000000 00000000 00000000 00000000",
+        "[led] LT2_CTRL: mask=0x01",
+        "[led] LT2_CTRL_PRE_A: 28000000 00000000 0C000000 24000000 00000000",
+        "[led] LT2_CTRL_PRE_B: 10000003 00000000 000000C0 00000100 00000000",
+        "[led] LT2_CTRL_PRE_E: 00000004 00000000 00000000 00000000 00000000",
+        "[led] LT2_CTRL_POST_A: 28000000 00000000 0C000000 24000000 00000000",
+        "[led] LT2_CTRL_POST_B: 10000001 00000000 000000C0 00000100 00000000",
+        "[led] LT2_CTRL_POST_E: 00000004 00000000 00000000 00000000 00000000",
+        "[led] LT3: N=200000 dwt_cycles=2000000 dwt_isrs=1000 cpu_hz=400000000 window_isrs=7000 lost=0",
+        "[led] LT3_CTRL: N=200000 window_isrs=7000 lost=2000",
         "[led] LT4: red_mode=1 red_odr=1",
-        "[led] LT4_CTRL: green_unchanged=1 green_mode=1 green_odr=0",
-        "[led] LT5: tim17_stopped=1",
+        "[led] LT4_GREEN_PRE: mode=1 otype=0 speed=0 pull=0 odr=0",
+        "[led] LT4_GREEN_POST: mode=1 otype=0 speed=0 pull=0 odr=0",
+        "[led] LT5_TIM17: cr1=0x0000 dier=0x0000 nvic_pending=0 apb2enr=0x00000000",
         "[led] LT5_PINS: G(mode=1,otype=0,speed=0,pull=0,odr=0) Y(mode=1,otype=0,speed=0,pull=0,odr=0) R(mode=1,otype=0,speed=0,pull=0,odr=0)",
         "[led] FW VERDICT=PASS"
     ]
 
+    if mutation == "lt3_lost_gt_0":
+        lines = [re.sub(r"lost=0", "lost=5", l) if "[led] LT3:" in l else l for l in lines]
+    elif mutation == "lt3_ctrl_lost_eq_0":
+        lines = [re.sub(r"lost=2000", "lost=0", l) if "[led] LT3_CTRL:" in l else l for l in lines]
+    elif mutation == "lt1_pull_activated":
+        lines = [re.sub(r"G\(mode=1,otype=0,speed=0,pull=0,odr=0\)", "G(mode=1,otype=0,speed=0,pull=1,odr=0)", l) for l in lines]
+    elif mutation == "missing_lt3":
+        lines = [l for l in lines if "[led] LT3:" not in l]
+    elif mutation == "lt2_post_ops_changed":
+        lines = [re.sub(r"00000004", "00000005", l) if "LT2_POST_OPS_E:" in l else l for l in lines]
+
+    return lines
+
 
 def run_mock_suite(log: Callable[[str], None]) -> bool:
     log("[mock] === Running Mock Host Evaluation Suite ===")
+
+    # 1. Nominal run through parser and evaluation pipeline (without allow_dirty)
     nominal_lines = generate_mock_lines("mock_rev", "mock_id")
     nom_data = parse_console_lines(nominal_lines)
-
-    nom_ok = evaluate_run(nom_data, log, expected_rev="mock_rev", expected_build_id="mock_id", allow_dirty=True)
+    nom_ok = evaluate_run(nom_data, log, expected_rev="mock_rev", expected_build_id="mock_id", allow_dirty=False)
     log(f"[mock] CHECK mock_nominal: {'PASS' if nom_ok else 'FAIL'}")
 
-    # Mandatory Failure 1: lost > 0 in LT3 real run
-    fail1_data = copy.deepcopy(nom_data)
-    fail1_data.lt3.lost = 5
-    f1_ok, _ = eval_lt3(fail1_data.lt3)
+    # 2. Mandatory Failure 1: lost > 0 in LT3 real run via console line mutation
+    fail1_lines = generate_mock_lines("mock_rev", "mock_id", mutation="lt3_lost_gt_0")
+    f1_data = parse_console_lines(fail1_lines)
+    f1_ok = evaluate_run(f1_data, lambda _: None, expected_rev="mock_rev", expected_build_id="mock_id", allow_dirty=False)
     f1_detected = (not f1_ok)
     log(f"[mock] CHECK mock_failure_lt3_real_lost_gt_0_detected: {'PASS' if f1_detected else 'FAIL'}")
 
-    # Mandatory Failure 2: lost = 0 in LT3 control run
-    fail2_data = copy.deepcopy(nom_data)
-    fail2_data.lt3.ctrl_lost = 0
-    f2_ok, _ = eval_lt3(fail2_data.lt3)
+    # 3. Mandatory Failure 2: lost = 0 in LT3 control run via console line mutation
+    fail2_lines = generate_mock_lines("mock_rev", "mock_id", mutation="lt3_ctrl_lost_eq_0")
+    f2_data = parse_console_lines(fail2_lines)
+    f2_ok = evaluate_run(f2_data, lambda _: None, expected_rev="mock_rev", expected_build_id="mock_id", allow_dirty=False)
     f2_detected = (not f2_ok)
     log(f"[mock] CHECK mock_failure_lt3_ctrl_lost_eq_0_detected: {'PASS' if f2_detected else 'FAIL'}")
 
-    # Mandatory Failure 3: pin in LT1 with pull
-    fail3_data = copy.deepcopy(nom_data)
-    fail3_data.lt1.pins["Y"].pull = 2
-    f3_ok, _ = eval_lt1(fail3_data.lt1)
+    # 4. Mandatory Failure 3: pin in LT1 with pull via console line mutation
+    fail3_lines = generate_mock_lines("mock_rev", "mock_id", mutation="lt1_pull_activated")
+    f3_data = parse_console_lines(fail3_lines)
+    f3_ok = evaluate_run(f3_data, lambda _: None, expected_rev="mock_rev", expected_build_id="mock_id", allow_dirty=False)
     f3_detected = (not f3_ok)
     log(f"[mock] CHECK mock_failure_lt1_pin_with_pull_detected: {'PASS' if f3_detected else 'FAIL'}")
 
-    all_mock_ok = nom_ok and f1_detected and f2_detected and f3_detected
+    # 5. Missing LT line case (A11)
+    fail4_lines = generate_mock_lines("mock_rev", "mock_id", mutation="missing_lt3")
+    f4_data = parse_console_lines(fail4_lines)
+    f4_ok = evaluate_run(f4_data, lambda _: None, expected_rev="mock_rev", expected_build_id="mock_id", allow_dirty=False)
+    f4_detected = (not f4_ok)
+    log(f"[mock] CHECK mock_failure_missing_lt_line_detected: {'PASS' if f4_detected else 'FAIL'}")
+
+    # 6. Altered snapshot in LT2 via console line mutation
+    fail5_lines = generate_mock_lines("mock_rev", "mock_id", mutation="lt2_post_ops_changed")
+    f5_data = parse_console_lines(fail5_lines)
+    f5_ok = evaluate_run(f5_data, lambda _: None, expected_rev="mock_rev", expected_build_id="mock_id", allow_dirty=False)
+    f5_detected = (not f5_ok)
+    log(f"[mock] CHECK mock_failure_lt2_snapshot_mismatch_detected: {'PASS' if f5_detected else 'FAIL'}")
+
+    all_mock_ok = nom_ok and f1_detected and f2_detected and f3_detected and f4_detected and f5_detected
     verdict_str = "PASS" if all_mock_ok else "FAIL"
     log(f"[mock] OVERALL MOCK VERDICT: {verdict_str}")
     log(f"HOST VERDICT={verdict_str}")
@@ -748,7 +956,7 @@ def main() -> int:
     parser.add_argument("--out", default=None,
                         help="Output capture file path")
     parser.add_argument("--allow-dirty", action="store_true",
-                        help="Allow dirty working tree or unverified build id (development only)")
+                        help="Allow dirty working tree (development only; yields HOST VERDICT != PASS)")
     parser.add_argument("--mock", action="store_true",
                         help="Run mock evaluation suite without board")
     parser.add_argument("--preset", default="selftest-led",
@@ -827,6 +1035,10 @@ def main() -> int:
                     stamp(f"[host] HOTPLUG reset failed ({res.returncode}), trying direct: {' '.join(cmd_alt)}")
                     res = subprocess.run(cmd_alt, capture_output=True, text=True)
                 stamp(f"[host] reset returned rc={res.returncode}")
+                if res.returncode != 0:
+                    stamp(f"[host] ERROR: SWD reset failed with rc={res.returncode}")
+                    stamp("HOST VERDICT=FAIL")
+                    return 1
 
             # Capture console stream
             t_start = time.time()
@@ -868,7 +1080,7 @@ def main() -> int:
     run_data = parse_console_lines(raw_fw_lines)
     ok = evaluate_run(run_data, stamp, expected_rev=head_rev, expected_build_id=exp_id, allow_dirty=args.allow_dirty)
 
-    verdict_str = "PASS" if ok else "FAIL"
+    verdict_str = "PASS" if ok else ("NOT VERIFIED" if args.allow_dirty else "FAIL")
     stamp(f"[host] OVERALL HARDWARE VERDICT: {verdict_str}")
     stamp(f"HOST VERDICT={verdict_str}")
 

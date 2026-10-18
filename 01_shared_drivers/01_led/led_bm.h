@@ -66,6 +66,9 @@ typedef enum
 
 /**
   * @brief  Initializes the LED driver with injected hardware pin configuration.
+  * @note   Configures each pin via GPIO_BM_ConfigOutput (push-pull, low speed,
+  *         no pull, initially LOW) under the GPIO critical section and cross-core
+  *         lock. Any pin whose configuration fails is disabled (port set to NULL).
   * @param  config Pointer to hardware mapping configuration structure.
   */
 void LED_Init_Config(const led_driver_config_t *config);
@@ -81,8 +84,11 @@ uint32_t LED_Init_ConfigEx(const led_driver_config_t *config);
 
 /**
   * @brief  Enables the GPIO clocks and drives the three LEDs as outputs.
-  * @note   Uses RCC and GPIO registers directly, safe before MPU/clock setup.
-  *         Uses default board configuration (board_def.h / Nucleo fallback).
+  * @note   Configures each pin via GPIO_BM_ConfigOutput (push-pull, low speed,
+  *         no pull, initially LOW) under the GPIO critical section and cross-core
+  *         lock. Safe before MPU/clock setup. Uses default board configuration
+  *         (board_def.h / Nucleo fallback). Any pin whose configuration fails
+  *         is disabled (port set to NULL).
   */
 void LED_Init(void);
 
