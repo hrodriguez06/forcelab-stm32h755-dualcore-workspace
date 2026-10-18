@@ -698,3 +698,16 @@ selftest. Before changing the driver:
 | Phase F1 audit passed: 5/5 auditor board runs at `2611907`, 20/20 warm resets, UT9 control in worktree, UT10 in prj_04 | `954c97a`, `9304ed5` |
 | Phase F1 formal close: address audit findings I-1..I-7, protocol barriers, lock release check, doc updates, capture pruning | `9229773` |
 | Close audited: 3/3 auditor board runs at `f584633`, 20/20 warm resets, UT9 control, UT10; documentation fixes by the owner | `7ba86c1` |
+
+The implementation plan, the implementer's instructions, the implementation
+report and the audit record were removed once what a user of the driver needs
+was folded into this README. The audit record lists every finding of the seven
+F1 rounds and the close, with the captures each one was judged on. The
+documents stay in git history:
+
+```bash
+git show 599efdd:01_shared_drivers/04_uart/IMPLEMENTATION_PLAN.md
+git show 599efdd:01_shared_drivers/04_uart/IMPLEMENTER_INSTRUCTIONS.md
+git show 599efdd:01_shared_drivers/04_uart/IMPLEMENTATION_REPORT.md
+git show 599efdd:01_shared_drivers/04_uart/AUDIT.md
+```
