@@ -50,14 +50,15 @@ static led_driver_config_t g_led_config = {
     }
 };
 
-void LED_Init_Config(const led_driver_config_t *config)
+uint32_t LED_Init_ConfigEx(const led_driver_config_t *config)
 {
     if (config == NULL)
     {
-        return;
+        return 0U;
     }
 
     g_led_config = *config;
+    uint32_t mask = 0U;
 
     for (uint32_t i = 0; i < (uint32_t)LED_COUNT; i++)
     {
@@ -69,7 +70,11 @@ void LED_Init_Config(const led_driver_config_t *config)
          * before MODER within the critical section and cross-core lock (00_gpio/README.md §3.3),
          * and performs read-back verification. */
         if (GPIO_BM_ConfigOutput(port, bit, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW,
-                                 GPIO_BM_PULL_NONE, 0U) != GPIO_BM_OK)
+                                 GPIO_BM_PULL_NONE, 0U) == GPIO_BM_OK)
+        {
+            mask |= (1UL << i);
+        }
+        else
         {
             /* If configuration fails (invalid port/pin, SWD pin, LCKR frozen,
              * cross-core lock timeout, or read-back mismatch), disable the LED
@@ -77,6 +82,13 @@ void LED_Init_Config(const led_driver_config_t *config)
             g_led_config.leds[i].port = NULL;
         }
     }
+
+    return mask;
+}
+
+void LED_Init_Config(const led_driver_config_t *config)
+{
+    (void)LED_Init_ConfigEx(config);
 }
 
 void LED_Init(void)
