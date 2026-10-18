@@ -143,6 +143,12 @@ void LED_Toggle(led_t led)
         return;
     }
 
+    /* Atomic on calling core: mask interrupts to prevent race condition with
+     * ISRs or other threads on this core (01_led/IMPLEMENTATION_PLAN.md L4).
+     * Cross-core toggle remains non-atomic (no HSEM). */
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
     if (port->ODR & (1UL << bit))
     {
         port->BSRR = (1UL << (bit + 16U));
@@ -151,6 +157,8 @@ void LED_Toggle(led_t led)
     {
         port->BSRR = (1UL << bit);
     }
+
+    __set_PRIMASK(primask);
 }
 
 void LED_BootStage(led_boot_stage_t stage)
