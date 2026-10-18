@@ -18,6 +18,10 @@ the host revision and the id, with --title as a subtitle. The first reset that
 differs fails the run, with its reason, and the exit code is 1. In this mode the
 capture starts with "[host] argv: ..." and "[host] options: project=...
 preset=... count=..." (R4-b).
+
+With --sn <serial> (default None), STM32_Programmer_CLI targets that specific
+ST-LINK probe. If --port is omitted and --sn is provided, the port is resolved
+via monitor.port_for_sn(sn); otherwise it falls back to autodetect().
 """
 
 from __future__ import annotations
@@ -41,9 +45,13 @@ from tools.monitor import SerialPort, autodetect
 CLI_PATH = r"C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe"
 
 
-def do_reset() -> None:
+def do_reset(sn: Optional[str] = None) -> None:
+    cmd = [CLI_PATH, "-c", "port=SWD"]
+    if sn:
+        cmd.append(f"sn={sn}")
+    cmd.extend(["mode=HOTPLUG", "-rst"])
     res = subprocess.run(
-        [CLI_PATH, "-c", "port=SWD", "mode=HOTPLUG", "-rst"],
+        cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -106,6 +114,8 @@ def run_warm_resets(
     identity: Optional[Identity] = None,
     argv_line: str = "",
     options_line: str = "",
+    banner: str = "=== STM32H755ZI",
+    sn: Optional[str] = None,
 ) -> int:
     print(f"Opening {port_name}...")
     git_rev = "unknown"
@@ -122,13 +132,15 @@ def run_warm_resets(
             records.append(argv_line + "\n")
         if options_line:
             records.append(options_line + "\n")
+        sn_cmd = f" sn={sn}" if sn else ""
         if identity is None:
             header = (
                 "================================================================================\n"
                 f"{title}\n"
                 f"Firmware Git Revision: {git_rev}\n"
+                f"Expected boot banner: {banner}\n"
                 "Target: NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK V3)\n"
-                "Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst\n"
+                f"Reset method: STM32_Programmer_CLI -c port=SWD{sn_cmd} mode=HOTPLUG -rst\n"
                 "================================================================================\n\n"
             )
         else:
@@ -140,9 +152,10 @@ def run_warm_resets(
                 f"Host checkout: {identity.rev}; build id of build/{identity.preset}: {identity.build_id} "
                 "(host_build_id of tools/gpio_hw_check.py)\n"
                 "Each reset must print '[sys] build' and '[sys] cpu2 build' with this rev and id.\n"
+                f"Expected boot banner: {banner}\n"
                 + "".join(f"{line}\n" for line in identity.tree_lines())
                 + "Target: NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK V3)\n"
-                "Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst\n"
+                f"Reset method: STM32_Programmer_CLI -c port=SWD{sn_cmd} mode=HOTPLUG -rst\n"
                 "================================================================================\n\n"
             )
         records.append(header)
@@ -151,10 +164,13 @@ def run_warm_resets(
             print(f"[{i}/{target_count}] Triggering warm reset...", end="", flush=True)
             records.append(f"--- WARM RESET {i}/{target_count} ---\n")
 
-            # Drain any buffered bytes from previous run
-            ser.read(4096)
+            # Drain any buffered bytes from previous run (bounded by 1.0 s timeout, F-m1)
+            time.sleep(0.05)
+            t_drain = time.monotonic()
+            while time.monotonic() - t_drain < 1.0 and ser.read(4096):
+                pass
 
-            do_reset()
+            do_reset(sn)
 
             # Collect output until stop_phrase or timeout
             t0 = time.monotonic()
@@ -165,7 +181,8 @@ def run_warm_resets(
                 chunk = ser.read(1024)
                 if chunk:
                     raw_buf.extend(chunk)
-                    if stop_phrase.encode("utf-8") in raw_buf:
+                    banner_pos = raw_buf.find(banner.encode("utf-8"))
+                    if banner_pos >= 0 and stop_phrase.encode("utf-8") in raw_buf[banner_pos:]:
                         found_alive = True
                         break
                 else:
@@ -174,7 +191,7 @@ def run_warm_resets(
             text = raw_buf.decode("utf-8", errors="replace").replace("\r\n", "\n")
 
             # Find the banner start
-            banner_idx = text.find("=== STM32H755ZI")
+            banner_idx = text.find(banner)
             if banner_idx >= 0:
                 text = text[banner_idx:]
 
@@ -225,13 +242,23 @@ def main() -> None:
                         help="project dir whose build/<preset> the image must match (with --preset)")
     parser.add_argument("--preset", default=None, help="configure preset of the flashed image (with --project)")
     parser.add_argument("--count", type=int, default=20, help="number of warm resets (default 20)")
+    parser.add_argument("--banner", default="=== STM32H755ZI", help="expected boot banner prefix (default '=== STM32H755ZI')")
+    parser.add_argument("--sn", default=None, help="ST-LINK serial number (optional; defaults to None; determines port via port_for_sn when --port is not given)")
     args = parser.parse_args()
     if args.count < 1:
         sys.exit("Error: --count must be at least 1")
     if (args.project is None) != (args.preset is None):
         sys.exit("Error: --project and --preset go together")
 
-    port = args.port or autodetect()
+    if args.port:
+        port = args.port
+    elif args.sn:
+        from tools.monitor import port_for_sn
+        port = port_for_sn(args.sn)
+        if not port:
+            sys.exit(f"Error: no ST-LINK serial port found for SN {args.sn}")
+    else:
+        port = autodetect()
     if not port:
         sys.exit("Error: no ST-LINK serial port found")
 
@@ -239,10 +266,11 @@ def main() -> None:
     # R4-b: the arguments first; the resolved options only in the identity mode,
     # so that without the new options argv is the one line added to the old format.
     argv_line = f"[host] argv: {shlex.join(sys.argv[1:])}"
-    options_line = (f"[host] options: project={identity.project} preset={identity.preset} count={args.count}"
+    options_line = (f"[host] options: project={identity.project} preset={identity.preset} count={args.count} banner={args.banner}"
                     if identity is not None else "")
     sys.exit(run_warm_resets(port, args.out, args.title, target_count=args.count, identity=identity,
-                             argv_line=argv_line, options_line=options_line))
+                             argv_line=argv_line, options_line=options_line, banner=args.banner,
+                             sn=args.sn))
 
 
 if __name__ == "__main__":

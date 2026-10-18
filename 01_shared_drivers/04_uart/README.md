@@ -4,10 +4,14 @@ Peripheral-First (Plan A), 3-tier shared UART driver for the STM32H755ZI dual-co
 microcontroller: USART1, USART2, USART3, UART4, UART5, USART6, UART7, UART8 and
 LPUART1. Asynchronous mode only.
 
-Status: the BM and LL tiers and the HAL console were validated on a
-NUCLEO-H755ZI-Q (silicon Rev V, `REV_ID = 0x2003`) on 2026-09-22 with a PD5-PD6
-loopback. What that run covers, and what it does not, is in
-[section 9](#9-validation).
+Status: Phase F1 is closed. All three driver tiers (BM, LL, HAL), the console,
+and live hardware operations were validated on a NUCLEO-H755ZI-Q (silicon Rev V,
+`REV_ID = 0x2003`), dual-core (Cortex-M7 at 400 MHz, Cortex-M4 at 200 MHz,
+`pclk1 = 100 MHz`), using loopbacks JU1 (PD5 -> 1.0 kΩ -> PD6) and JU2
+(PD4 RTS -> PD3 CTS), and Analog Discovery 2 DIO15 (for logic analyzer wire
+decoding and error injection). Deviations D5 and D6 were approved by the
+catalogue owner on 2026-10-17. Full test descriptions, hardware captures,
+and pruned capture records are in [section 9](#9-validation).
 
 ---
 
@@ -42,18 +46,18 @@ target_link_libraries(cm4_firmware PRIVATE stm32h7_driver_uart_bm)   # or _ll, o
 
 | Feature | BM | LL | HAL |
 | :--- | :---: | :---: | :---: |
-| USART1..8 and LPUART1 | yes | yes | yes |
-| Baud rate from an injected kernel clock, prescaler search, ±2 % check | yes | yes | no (HAL computes it, `PRESC` fixed at /1) |
+| USART1..8 and LPUART1 | yes | yes | yes (rejects unknown instances upfront, D6) |
+| Baud rate from an injected kernel clock, prescaler search, ±2 % check | yes | yes (effective divider check, U5) | no (HAL computes it, `PRESC` fixed at /1) |
 | Oversampling by 16 or 8 (USART only) | yes | yes | yes |
-| 7 / 8 / 9-bit words, parity, stop bits | yes | yes | yes |
+| 7 / 8 / 9-bit words, parity, stop bits | yes (8-bit data max for byte I/O, U7) | yes (8-bit data max for byte I/O, U7) | yes |
 | RTS / CTS hardware flow control | yes | yes | yes |
 | Hardware FIFO (`FIFOEN`) | yes | yes | no |
-| Optional pin muxing and bus clock enable | yes | yes | yes (`InitEx`) |
+| Optional pin muxing and bus clock enable | yes | yes | yes (`InitEx`, returns `HAL_BUSY` on lock timeout, U6) |
 | Polling TX / RX without SysTick, bounded by a spin count | yes | yes | no (HAL tick) |
 | Interrupt-driven RX into a ring buffer | no | yes | via HAL callbacks (application) |
-| Error capture: ORE, FE, NE, PE | yes | yes | HAL `ErrorCode` |
+| Error capture: ORE, FE, NE, PE | yes (`TakeErrors` reads/clears hardware flags, D5) | yes (`TakeErrors` reads/clears hardware flags, D5) | HAL `ErrorCode` |
 | ES0445 DMA workaround check (bit 20 of `DMA_SxCR`) | - | - | yes (`UART_HAL_CheckDmaErrata`) |
-| Board console from `board_def.h` | - | - | yes (`UART_Console_*`) |
+| Board console from `board_def.h` | - | - | yes (`UART_Console_*`, returns MSP status, U1) |
 
 The same function names exist in BM and LL (`Init`, `Deinit`, `WriteByte`,
 `Write`, `ReadByte`, `Flush`, `TakeErrors`), so moving a module from one tier to
@@ -137,9 +141,12 @@ Since F1b of `00_gpio`, the default MSP configures the console pins using
 every register access inside `gpio_bm`'s critical section (cross-core if the
 project installs the shared lock hook, or local `PRIMASK` otherwise). Any error
 from `GPIO_HAL_Init()` is captured in `s_msp_gpio_status` and propagated by
-`UART_HAL_InitEx()` / `UART_Console_Init()`, returning the MSP status (`HAL_BUSY`
-if the lock timed out, or `HAL_ERROR` on any other failure) rather than silently
-proceeding with misconfigured pins.
+`UART_Console_Init()`, `UART_HAL_InitEx()`, and `UART_HAL_Init()` (U1), returning
+the MSP status (`HAL_BUSY` if the cross-core lock timed out, or `HAL_ERROR` on
+any other pin setup failure) rather than silently proceeding with misconfigured
+pins. In `UART_HAL_Init()`, if the console MSP fails, `s_msp_gpio_status` is
+returned directly to the caller and the handle remains in `HAL_UART_STATE_RESET`
+(U1), preventing silent operation with disconnected hardware.
 
 | Situation | What to do |
 | :--- | :--- |
@@ -156,13 +163,13 @@ proceeding with misconfigured pins.
 
 | Function | Blocking | Returns | Notes |
 | :--- | :--- | :--- | :--- |
-| `Init(h, cfg)` | up to 100 000 spins for `TEACK` / `REACK` | `false` on a bad parameter, an unknown instance, a baud rate that cannot be reached within ±2 %, or no acknowledge | Every rejection happens **before** the USART registers are touched, so a refused call leaves a running UART as it was. The optional pins and bus clock are set up first, though. BM checks every framing constant; LL checks only the LPUART stop bits and hands the rest to the LL setters as given. |
+| `Init(h, cfg)` | up to 100 000 spins for `TEACK` / `REACK` | `false` on a bad parameter, an unknown instance, a baud rate that cannot be reached within ±2 %, or no acknowledge | Every parameter rejection happens **before** any USART registers are touched, so a refused call leaves a running UART as it was and registers `CR1`..`CR3` clean (U2, U3, U4). BM checks every framing constant; LL checks framing constants, instance validity, and LPUART stop bits upfront (U2, U3). The optional pins and bus clock are set up before peripheral register configuration. |
 | `Deinit(h)` | no | `false` if `h` is not initialised | Clears `UE`, `CR1..CR3`. Leaves the bus clock and the pins as they are. |
-| `WriteByte(h, b)` | no | `false` if `TXE` / `TXFNF` is not set | |
-| `Write(h, d, n, spin_limit)` | yes, at most `spin_limit` spins **per byte** | bytes written | A short count means a timeout. |
-| `ReadByte(h, b)` | no | `false` if nothing was received | Clears ORE / FE / NE / PE first and records them in `h->error_flags`. |
+| `WriteByte(h, b)` | no | `false` if `TXE` / `TXFNF` is not set | Only 8 bits are written; bit 8 of 9-bit data is not accessible (U7). |
+| `Write(h, d, n, spin_limit)` | yes, at most `spin_limit` spins **per byte** | bytes written | A short count means a timeout. Operates on 8-bit bytes (U7). |
+| `ReadByte(h, b)` | no | `false` if nothing was received | Clears ORE / FE / NE / PE first and records them in `h->error_flags`. Returns low 8 bits (U7). |
 | `Flush(h, spin_limit)` | yes | `false` on timeout | Waits for `TC`: the last stop bit has left the pin. Call it before `Deinit`, a baud change or entering a low-power mode. |
-| `TakeErrors(h)` | no | `UART_*_ERR_*` mask | Returns and clears the accumulated flags inside a `PRIMASK` critical section, so it is safe against `UART_LL_IrqService` running on the same core. |
+| `TakeErrors(h)` | no | `UART_*_ERR_*` mask | Returns and clears accumulated error flags inside a `PRIMASK` critical section. In addition, it reads and clears hardware error flags (`ORE`, `NE`, `FE`, `PE`) directly from the peripheral registers (`ISR` / `ICR`), ensuring pending hardware errors are harvested even if no byte read occurred (approved deviation D5, 2026-10-17). Safe against `UART_LL_IrqService` on the same core. |
 | `UART_LL_EnableRxIrq(h, irqn, prio)` | no | `false` if `h` is not initialised | Enables `RXNEIE` / `RXFNEIE` and `EIE`, sets the NVIC priority and enables the IRQ. |
 | `UART_LL_DisableRxIrq(h, irqn)` | no | - | The reverse. |
 | `UART_LL_IrqService(h, ring)` | no | - | Call it from the IRQ vector. Records errors, then drains `RDR` / the RX FIFO into `ring`. Bytes that do not fit are dropped. |
@@ -193,8 +200,10 @@ Pass `0` and `Write` returns `0` without sending anything.
   field in `UartLL_Config_t` is called `data_bits`, but it takes the
   `LL_USART_DATAWIDTH_*` constants unchanged. `UART_LL_ReadByte` returns the
   raw low byte, parity bit included, if there is one in bit 7.
-- 9-bit data cannot be read through `ReadByte` in either tier: the API returns
-  `uint8_t`, so bit 8 is lost.
+- **9-bit data limitation (U7).** 9-bit data words cannot be read through `ReadByte`
+  or written through `Write` / `WriteByte`: the APIs operate on `uint8_t`, so bit 8
+  cannot be written or read. 9-bit framing is intended for 8-bit payloads with parity
+  or requires direct register manipulation of `TDR` and `RDR`.
 
 ### 4.3 Error flags
 
@@ -203,8 +212,15 @@ Pass `0` and `Write` returns `0` without sending anything.
 bit positions (`USART_ISR_ORE` is bit 3). The flags accumulate in the handle
 until `TakeErrors()` returns them.
 
-An overrun that is never cleared stops reception. `ReadByte` and `IrqService`
-clear it on every call, so reading regularly is enough.
+In addition to accumulating flags during byte reads or IRQ handling, `TakeErrors()`
+reads active error flags directly from the hardware `USART_ISR` register and
+clears them via `USART_ICR` inside a local `PRIMASK` critical section (approved
+deviation D5, 2026-10-17). This guarantees that hardware errors do not remain stuck
+in peripheral registers even if the application polls error flags without reading
+data.
+
+An overrun that is never cleared stops reception. `ReadByte`, `IrqService`, and
+`TakeErrors` clear it on every call, so regular polling is enough.
 
 ### 4.4 The LL ring buffer
 
@@ -223,13 +239,13 @@ static UartLL_RingBuffer_t rx_ring = { .data = rx_storage, .size = sizeof(rx_sto
 
 | Function | Status | Notes |
 | :--- | :--- | :--- |
-| `UART_HAL_Init(huart, cfg)` | original, frozen | 8N1, no flow control, oversampling 16. |
+| `UART_HAL_Init(huart, cfg)` | original, frozen | 8N1, no flow control, oversampling 16. Rejects non-UART instances upfront with `HAL_ERROR` (approved deviation D6, 2026-10-17). Propagates console MSP status and leaves handle in `RESET` on pin error (U1). |
 | `UART_HAL_Write(huart, data, len)` | original, frozen | 100 ms timeout; the status is discarded. |
-| `UART_Console_Init(baud)` | original, frozen | Instance from `BOARD_CONSOLE_UART_INSTANCE`; pins through the MSP hook. Returns the MSP status (`HAL_BUSY` on lock timeout, `HAL_ERROR` on failure) if pin initialization fails. |
+| `UART_Console_Init(baud)` | original, frozen | Instance from `BOARD_CONSOLE_UART_INSTANCE`; pins through the MSP hook. Returns the MSP status (`HAL_BUSY` on cross-core lock timeout, `HAL_ERROR` on pin failure) if pin initialization fails (U1). |
 | `UART_Console_Write(data, len)` | original, frozen | |
 | `UART_Console_GetHandle()` | original, frozen | For `HAL_UART_IRQHandler` and debugging. |
 | `UART_HAL_MspInit_User()` / `MspDeInit_User()` | original, frozen, weak | See [3.1](#31-overriding-the-console-msp). Default MSP uses `GPIO_HAL_Init` / `GPIO_HAL_DeinitPin` within `gpio_bm`'s critical section (cross-core if hook installed, otherwise local `PRIMASK`). |
-| `UART_HAL_InitEx(huart, cfg)` | new | Framing, flow control, oversampling, optional bus clock and pins (pull-up, very high speed). `PRESC` is fixed at /1. Returns MSP status (`HAL_BUSY` or `HAL_ERROR`) if pin setup fails. |
+| `UART_HAL_InitEx(huart, cfg)` | new | Framing, flow control, oversampling, optional bus clock and pins (pull-up, very high speed). `PRESC` is fixed at /1. Rejects non-UART instances upfront with `HAL_ERROR` (approved deviation D6, 2026-10-17). Returns MSP status (`HAL_BUSY` on lock timeout, `HAL_ERROR` on failure) if pin setup fails (U6). |
 | `UART_HAL_WriteEx(huart, data, len, timeout_ms)` | new | Returns the `HAL_StatusTypeDef`. |
 | `UART_HAL_CheckDmaErrata(hdma)` | new | See [section 8](#8-silicon-errata-es0445). |
 
@@ -403,8 +419,11 @@ whose divider is in range and whose baud rate is within ±2 % of the request.
 | LPUART1 | `LPUARTDIV = 256 × f_ker_pres / baud` | 0x300 ≤ `BRR` ≤ 0xFFFFF, 3·baud ≤ `f_ker_pres` ≤ 4096·baud | `BRR = LPUARTDIV` |
 
 In OVER8 the hardware drops bit 0 of `USARTDIV`, so an odd divider runs as the
-even one below it. The ±2 % check uses the divider the hardware will actually
-apply, not the rounded one.
+even one below it (`USARTDIV & ~1U`). The ±2 % check in BM and LL uses the
+*effective* divider the hardware will actually apply
+(`eff_div = (oversampling == 8) ? (div & ~1U) : div`), rather than the unadjusted
+rounded quotient (U5). This ensures small and odd dividers never pass validation
+with an unachievable theoretical rate.
 
 Reference values, recomputed from the formulas above:
 
@@ -458,86 +477,175 @@ rate at a high kernel clock therefore needs BM or LL.
 
 ## 9. Validation
 
-Board: NUCLEO-H755ZI-Q, silicon Rev V (`0x2003`), CPU1 at 400 MHz, CPU2 at
-200 MHz, pclk1 = 100 MHz. Capture: [`prj_04 docs/boot_capture.txt`](../../02_firmware_projects/prj_04_adc_dma_bm_eth/docs/boot_capture.txt).
+Board: NUCLEO-H755ZI-Q (silicon Rev V, `REV_ID = 0x2003`), dual-core (Cortex-M7 at 400 MHz,
+Cortex-M4 at 200 MHz, `pclk1 = 100 MHz`). Instrument: Analog Discovery 2 (SN `210321B5D38D`).
+Wiring:
+- **JU1**: Loopback wire with **1.0 kΩ** series resistor between PD5 (USART2_TX, CN9-6) and PD6 (USART2_RX, CN9-4). The 1.0 kΩ resistor limits contention current to ≤ 3.3 mA during AD2 error injection.
+- **JU2**: Direct wire between PD4 (USART2_RTS, CN9-8) and PD3 (USART2_CTS, CN9-10) for hardware flow control.
+- **DIO15**: Connected to PD6 (CN9-4) for logic analyzer frame decoding (UT3, UT4, UT6, UT8) and error injection (UT5).
+- **DIO14**: Connected to PA8 (MCO1) outputting HSE/10 = 800 kHz, used as external clock reference for baud rate measurement (UT3).
 
-| Test | Tier / core | Result |
-| :--- | :--- | :--- |
-| Console on USART3, 115 200, OVER16, `f_ker` = 64 MHz, before `SystemClock_Config()` | BM, CPU1 | `[boot_bm] ...` line received on the VCP |
-| Console on USART3 through `UART_Console_*` for the whole firmware run | HAL, CPU1 | full log received |
-| Loopback PD5 → PD6 (USART2), 9 bytes each at 9 600 and 115 200 (OVER16) and 921 600 (OVER8), FIFO off | BM, CPU2 | `bm_loop=1,1,1` |
-| Loopback PD5 → PD6 at 921 600 (OVER8), RX through `USART2_IRQn` into the ring buffer | LL, CPU2 | `ll=1,1` |
-| Hardware overrun: two bytes sent, none read; ORE seen in `USART_ISR`, cleared by `ReadByte`, returned once by `TakeErrors` | LL, CPU2 | `ore=1` |
-| Strict build (`-Wall -Wextra -Wshadow -Wdouble-promotion -Wundef -Werror`) of `uart_bm.c` and `uart_ll.c` for CM4 and CM7 | BM, LL | clean |
-| prj_02, prj_03, prj_04 (selftest OFF and ON) and the dual-core template | all | build with 0 warnings |
+Selftest suite: `03_firmware_templates/prj_01_template_dualcore`, preset `selftest-uart`.
+Host evaluation harness: `03_firmware_templates/prj_01_template_dualcore/tools/uart_hw_check.py`.
 
-**USART with DMA** was exercised later by the shared DMA driver's selftest
-(2026-09-25, `02_dma/README.md` §9, capture in
-`prj_04 docs/dma_selftest_capture.txt`). That run did not go through
-`UART_HAL_CheckDmaErrata`:
+### 9.1 Phase F1 Test Matrix (UT0–UT10)
 
-| Test | Tier / core | Result |
-| :--- | :--- | :--- |
-| USART2 TX → RX by DMA over the PD5 → PD6 wire, 115 200 baud; TRBUFF read back as 1 on both streams without being requested | `dma_bm` and `dma_ll`, CPU2 | `T3_UART=PASS` |
-| USART3 (console) TX by DMA2; `CR` read right after `HAL_DMA_Init()` shows TRBUFF = 1 | `dma_hal`, CPU1 | `T10_USART3_DMA: PASS` |
+Every step in UT0–UT9 runs a negative control in the same hardware session that mutates measured data or hardware conditions through the identical host evaluation function to ensure no test can pass unconditionally. UT9 has two: in the run, the measured lock-held return replaced by 0 must FAIL; and the separate control build must reproduce U1:
 
-**Not validated on hardware yet:**
+| Test | Description and Tier | Oracle | Negative Control (same session) | Result |
+| :--- | :--- | :--- | :--- | :---: |
+| **UT0** | Bench resting state: JU1 (1 kΩ), JU2, DIO15 connected and idle, PD6 high | AD2 reads PD6 high (1) | MCU drives PD5 low via GPIO; AD2 reads 0 | **PASS** |
+| **UT1** | Parameter rejection across BM, LL, and HAL: unknown instance, out-of-range framing, unreachable baud rate (U2, U3), and non-UART instance (D6). Before/after register snapshots show 0 register alterations (U4) | Register snapshot comparison | Valid configuration in same table changes snapshot | **PASS** |
+| **UT2** | Prescaler and BRR formulas across BM and LL for USART1, USART6, USART2, UART4, UART5, UART7, UART8, and LPUART1. Checks effective divider applied in hardware for OVER8 odd dividers (U5) | Host mathematical formula | Mutated row in host evaluation table evaluates to FAIL | **PASS** |
+| **UT3** | Physical wire framing, 15 rows of 6 frames each: BM 8N1, 8E1, 8O1, 7E1, 7N1, 9N1 and 8N2 at 115 200, plus 8N1 at 9600 and at 921 600 (OVER8); LL 8N1, 8E1, 7E1 and 9N1 at 115 200; HAL (`InitEx`) 8N1 and 8E1 at 115 200. Measures the bit period against MCO1 (DIO14) to ±0.5 % | AD2 logic analyzer (20 MS/s at 115 200, 2 MS/s at 9600, 100 MS/s at 921 600) decodes all 6 frames of each row | 5 mutations per row on measured data: dropped frame, +2·tol timing, bit flip, inverted parity (on parity rows), corrupted stop bit. All evaluate to FAIL (or N/A for parity on parity-none rows) | **PASS** |
+| **UT4** | Loopback transmission over JU1 on CM7: BM and LL, FIFO disabled and enabled (`RXFNE`), 7-bit mask, OVER8 and OVER16. All 72/72 bytes verified | Transmitted vs received data match | Corrupted expected byte evaluates to FAIL | **PASS** |
+| **UT4_CM4** | Loopback transmission over JU1 on CM4: LL interrupt-driven reception into ring buffer with FIFO enabled. 16/16 bytes verified | Ring buffer data matches sent pattern | Corrupted byte evaluates to FAIL | **PASS** |
+| **UT5** | Error injection via AD2 DIO15 into PD6: PE (corrupted parity), FE (stop bit at 0 and BREAK), NE (short pulse at 9/16 bit sample), ORE with and without FIFO. `TakeErrors()` harvests hardware flags directly (D5) | Flag verification via `TakeErrors()` | Clean frame produces no errors | **PASS** |
+| **UT6** | RTS/CTS hardware flow control over JU2: 24 bytes sent with flow control enabled without ORE. Without flow control, unread RX overflows and triggers ORE | Frame count in LA and ORE flag assertion | Identical sequence without flow control asserts ORE | **PASS** |
+| **UT7** | `UART_HAL_InitEx` on USART2 (CM7, non-console): framing 8E1, pull-up, high-speed pins. Cross-core GPIO lock held by CM4 returns `HAL_BUSY` (U6); lock released returns `HAL_OK` | Returned status and register snapshot | Lock free returns `HAL_OK` | **PASS** |
+| **UT8** | `UART_HAL_CheckDmaErrata` on live DMA1 transfer (bit 20 set and verified). Rejection with active stream (`HAL_BUSY`), non-UART request (`HAL_ERROR`), and BDMA handle (`HAL_ERROR`) | `DMA_SxCR` bit 20 read-back and returned status. The three rejections are judged by the firmware | The same host evaluation with the measured `bit20` replaced by 0 gives FAIL | **PASS** |
+| **UT9** | U1 verification: `UART_HAL_Init` on console handle with GPIO lock held by CM4 returns `HAL_BUSY`; lock released returns `HAL_OK`. Handle left clean in `RESET` on error | Returned status and PD8/PD9 pin configuration | Separate control build: this tree with the `uart_hal.c` of `b41c4a7` returns `HAL_OK` with the lock held (defect U1 reproduced), see [9.4](#94-reproducing-the-selftest) | **PASS** |
+| **UT10** | Regression check: real selftest of `02_firmware_projects/prj_04_adc_dma_bm_eth` runs with JU1 1 kΩ loopback | VCP console output: `[m4_uart_test] jumper=1 bm_init=1,1,1 bm_loop=1,1,1 ll=1,1 ore=1` | None in the run (`jumper=0` would show a missing JU1) | **PASS** |
 
-- LPUART1;
-- RTS/CTS flow control;
-- parity and 7-bit framing on the wire;
-- the RX FIFO path (`fifo_enable = true`);
-- `UART_HAL_InitEx` on an instance other than the console;
-- `UART_HAL_CheckDmaErrata` itself on a live DMA transfer.
+### 9.2 Validation Evidence and Captures
 
-The baud-rate code for all of them is covered by the table in
-[section 6](#6-baud-rate-computation-bm-and-ll).
+**Auditor runs at `f584633` (the final firmware; recorded in `7ba86c1`):**
+- **Full hardware session (3/3 consecutive runs):**
+  - [`uart_audit_hw_f584633_run1.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_f584633_run1.txt)
+  - [`uart_audit_hw_f584633_run2.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_f584633_run2.txt)
+  - [`uart_audit_hw_f584633_run3.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_f584633_run3.txt)
+  *All 3 runs:* `FW VERDICT=PASS`, `HOST VERDICT=PASS`, `m4_done_ack=1`, 15/15 UT3 rows PASS, all negative control mutations evaluate to expected FAIL (or N/A for parity on the 9 rows without parity).
+- **20 Warm Resets:** [`uart_audit_warm_resets_f584633.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_warm_resets_f584633.txt) — 20/20 resets PASS with matching revision and build ID.
+- **UT9 control build:** [`uart_audit_ut9_control_f584633-dirty.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_ut9_control_f584633-dirty.txt) — this tree with the `uart_hal.c` of `b41c4a7`: U1 reproduced (`returned 0 (expected 2)`), and the host passes it in control mode. [`uart_audit_ut9_control_f584633_fixed_image.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_ut9_control_f584633_fixed_image.txt) is the same control mode run against the fixed image (`returned 2`): the host gives `HOST VERDICT=FAIL`, as it must.
+- **UT10 Regression in prj_04:** [`uart_audit_ut10_f584633.txt`](../../02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_f584633.txt) — the expected line with the JU1 1 kΩ loopback.
 
-### 9.1 Reproducing the selftest
+**Developer Deliverable Captures (closure at `9229773`):**
+- Hardware session run 1: [`uart_dev_hw_9229773_run1.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9229773_run1.txt)
+- Hardware session run 2: [`uart_dev_hw_9229773_run2.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9229773_run2.txt)
+- 20 Warm resets: [`uart_dev_warm_resets_9229773.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_9229773.txt)
+- Offline checks T1/T2: [`uart_checks_9229773.txt`](docs/uart_checks_9229773.txt)
 
-The selftest lives in prj_04 and is off by default. It drives PD5 as an output
-while it probes for the cable, so do not enable it on a board where PD5 is
-wired to something else.
+### 9.3 Pruned Captures Catalog (Rule 7 of `00_gpio/README.md` §14)
 
-1. Fit a wire between PD5 (USART2_TX) and PD6 (USART2_RX). Their connector
-   positions on the Nucleo-144 are in UM2408
-   (`00_docs_stm32h7/docs/02_board_hardware/`).
-2. From `02_firmware_projects/prj_04_adc_dma_bm_eth`, build the `selftest-uart`
-   preset (`UART_DRIVER_SELFTEST=ON`, the ADC and DMA selftests off, in its own
-   `build/selftest-uart` tree):
+In accordance with rule 7 of `00_gpio/README.md` §14, intermediate development captures, superseded auditor runs prior to `f584633`, and mock outputs have been pruned from the working tree. They can be retrieved from git history at the commit hashes listed below:
+
+| Pruned Capture | Type | Original Commit | Reason for Pruning |
+| :--- | :--- | :---: | :--- |
+| `01_shared_drivers/04_uart/docs/uart_checks_474f514.txt` | Offline checks T1/T2 | `c42381e` | Superseded by final closure check |
+| `01_shared_drivers/04_uart/docs/uart_checks_4db5903.txt` | Offline checks T1/T2 | `12a3020` | Superseded by final closure check |
+| `01_shared_drivers/04_uart/docs/uart_checks_76eb6d7.txt` | Offline checks T1/T2 | `01ef495` | Superseded by final closure check |
+| `01_shared_drivers/04_uart/docs/uart_checks_9864bc9.txt` | Offline checks T1/T2 | `f34fe82` | Superseded by final closure check |
+| `01_shared_drivers/04_uart/docs/uart_checks_9b9fe37.txt` | Offline checks T1/T2 | `adc848d` | Superseded by final closure check |
+| `01_shared_drivers/04_uart/docs/uart_checks_a39abd7.txt` | Offline checks T1/T2 | `641ac26` | Superseded by final closure check |
+| `01_shared_drivers/04_uart/docs/uart_checks_ab390d3.txt` | Offline checks T1/T2 | `2611907` | Superseded by final closure check `9229773` |
+| `01_shared_drivers/04_uart/docs/uart_checks_fdbf306.txt` | Offline checks T1/T2 | `9d2edd2` | Superseded by final closure check |
+| `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_12a3020.txt` | UT10 audit capture | `297e04d` | Superseded by auditor run `2611907` |
+| `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_9d2edd2.txt` | UT10 audit capture | `8d04a51` | Superseded by auditor run `2611907` |
+| `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_adc848d.txt` | UT10 audit capture | `882b5a9` | Superseded by auditor run `2611907` |
+| `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_2611907.txt` | UT10 audit capture | `954c97a` | Superseded by auditor run `f584633` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_2611907_run1.txt` … `_run5.txt` | Audit hardware runs 1–5 | `954c97a` | Superseded by auditor runs `f584633` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_ut9_control_2611907-dirty.txt` | UT9 control audit | `954c97a` | Superseded by auditor control `f584633` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_warm_resets_2611907.txt` | Warm resets 20x audit | `954c97a` | Superseded by auditor warm resets `f584633` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_12a3020_run1.txt` | Audit hardware run 1 | `297e04d` | Superseded by auditor 5/5 runs `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_12a3020_run2.txt` | Audit hardware run 2 | `297e04d` | Superseded by auditor 5/5 runs `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_9d2edd2_run1.txt` | Audit hardware run 1 | `8d04a51` | Superseded by auditor 5/5 runs `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_9d2edd2_run2.txt` | Audit hardware run 2 | `8d04a51` | Superseded by auditor 5/5 runs `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_adc848d_run1.txt` | Audit hardware run 1 | `882b5a9` | Superseded by auditor 5/5 runs `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_adc848d_run2.txt` | Audit hardware run 2 | `882b5a9` | Superseded by auditor 5/5 runs `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_c42381e.txt` | Audit hardware run | `52fef6e` | Superseded by auditor 5/5 runs `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_ut9_control_12a3020-dirty.txt` | UT9 control audit | `297e04d` | Superseded by auditor control `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_ut9_control_9d2edd2-dirty.txt` | UT9 control audit | `8d04a51` | Superseded by auditor control `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_ut9_control_adc848d-dirty.txt` | UT9 control audit | `882b5a9` | Superseded by auditor control `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_warm_resets_12a3020.txt` | Warm resets 20x audit | `297e04d` | Superseded by auditor warm resets `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_warm_resets_9d2edd2.txt` | Warm resets 20x audit | `8d04a51` | Superseded by auditor warm resets `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_warm_resets_adc848d.txt` | Warm resets 20x audit | `882b5a9` | Superseded by auditor warm resets `2611907` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_4db5903.txt` | Dev hardware run | `12a3020` | Superseded by final dev runs |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9b9fe37.txt` | Dev hardware run | `adc848d` | Superseded by final dev runs |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_a39abd7.txt` | Dev hardware run | `641ac26` | Superseded by final dev runs |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3.txt` | Dev hardware run (redundant) | `2611907` | Redundant with `_run1.txt` (I-7) |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run1.txt` | Dev hardware run 1 | `2611907` | Superseded by final closure runs `9229773` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run2.txt` | Dev hardware run 2 | `2611907` | Superseded by final closure runs `9229773` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_fdbf306.txt` | Dev hardware run | `9d2edd2` | Superseded by final dev runs |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets.txt` | Dev warm resets | `641ac26` | Superseded by final dev warm resets |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_4db5903.txt` | Dev warm resets | `12a3020` | Superseded by final dev warm resets |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_9b9fe37.txt` | Dev warm resets | `adc848d` | Superseded by final dev warm resets |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_ab390d3.txt` | Dev warm resets | `2611907` | Superseded by final closure warm resets `9229773` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_fdbf306.txt` | Dev warm resets | `9d2edd2` | Superseded by final dev warm resets |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_mock_474f514.txt` | Mock check | `c42381e` | Superseded by final test suite |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_mock_593d720.txt` | Mock check | `ae3e620` | Superseded by final test suite |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_mock_9864bc9.txt` | Mock check | `f34fe82` | Superseded by final test suite |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_mock_a39abd7.txt` | Mock check | `641ac26` | Superseded by final test suite |
+
+### 9.4 Reproducing the Selftest
+
+#### prj_01 Dual-Core Selftest (UT0–UT9)
+1. Fit jumper JU1: PD5 (USART2_TX, CN9-6) through 1.0 kΩ series resistor to PD6 (USART2_RX, CN9-4).
+2. Fit jumper JU2: PD4 (USART2_RTS, CN9-8) directly to PD3 (USART2_CTS, CN9-10).
+3. Connect AD2 DIO15 to PD6 (CN9-4) and DIO14 to PA8 (MCO1, CN10-4).
+4. Build and flash preset `selftest-uart`:
    ```powershell
    . .\tools\env.ps1
-   cmake --preset selftest-uart
-   cmake --build --preset selftest-uart
+   cd 03_firmware_templates/prj_01_template_dualcore
+   cmake --preset selftest-uart --fresh
+   cmake --build build/selftest-uart
+   py tools/flash.py --preset selftest-uart --sn 0016000C4142501220353451
    ```
-3. Flash both cores and watch the console:
+5. Run the hardware validation check (the tree must be clean and committed):
    ```powershell
-   py tools/flash.py --preset selftest-uart --core both
-   py tools/monitor.py
+   py tools/uart_hw_check.py --out docs/uart_dev_hw_run.txt
    ```
-4. Expected line:
+
+#### UT9 control build (defect U1 reproduced)
+Run it from a worktree with a **short path** next to the checkout: under a long
+path (such as a temporary directory) CMake's compiler check fails, nothing is
+flashed, and the run silently tests the image already on the board.
+```powershell
+$main = (Get-Location).Path          # the main checkout
+$wt   = "..\wt_u9"
+git worktree add --detach $wt HEAD
+git -C $wt checkout b41c4a7 -- 01_shared_drivers/04_uart/uart_hal.c
+cd "$wt\03_firmware_templates\prj_01_template_dualcore"
+cmake --preset selftest-uart --fresh "-DCUBE_DIR=$main\02_firmware_projects\prj_eth_lwip_node\external\STM32CubeH7"
+cmake --build build/selftest-uart
+py tools/flash.py --preset selftest-uart --sn 0016000C4142501220353451
+py tools/uart_hw_check.py --expect-control-u1 --allow-dirty --out "$main\uart_ut9_control.txt"
+cd $main; git worktree remove --force $wt
+```
+The capture must show `UT9 fresh handle with lock held: returned 0 (expected 2)`
+and `HOST VERDICT=PASS`. Flash `selftest-uart` from the main checkout afterwards.
+
+#### prj_04 Production Selftest Regression (UT10)
+1. With JU1 (1 kΩ) in place between PD5 and PD6:
+   ```powershell
+   . .\tools\env.ps1
+   cmake -S 02_firmware_projects/prj_04_adc_dma_bm_eth -B 02_firmware_projects/prj_04_adc_dma_bm_eth/build/selftest-uart --preset selftest-uart
+   cmake --build 02_firmware_projects/prj_04_adc_dma_bm_eth/build/selftest-uart
+   py 02_firmware_projects/prj_04_adc_dma_bm_eth/tools/flash.py --preset selftest-uart --sn 0016000C4142501220353451
+   ```
+2. Start the monitor and perform a hardware reset:
+   ```powershell
+   Start-Process -NoNewWindow py "tools/monitor.py --sn 0016000C4142501220353451 --timeout 10"
+   STM32_Programmer_CLI.exe -c port=SWD sn=0016000C4142501220353451 mode=HOTPLUG -hardRst
+   ```
+3. Expected output line:
    ```text
    [m4_uart_test] jumper=1 bm_init=1,1,1 bm_loop=1,1,1 ll=1,1 ore=1
    ```
-   `jumper=0` means the wire was not detected. The loopback fields then read
-   `skip`, and only `Init()` has been exercised.
-
-Flash the normal build afterwards; the selftest is not meant to stay on a board.
 
 ---
 
 ## 10. Limitations
 
-- No DMA helpers in BM and LL. Use `02_dma` for the stream and set
-  `CR3.DMAT` / `DMAR` in the application. `dma_bm` and `dma_ll` set TRBUFF
-  (ES0445 2.20.3) on their own for USART/UART requests, so
-  `enable_trbuff = true` is no longer needed.
+- **9-bit data restriction (U7):** `ReadByte` returns `uint8_t` and `Write`/`WriteByte` accepts `uint8_t`, so bit 8 cannot be transferred via standard byte APIs. 9-bit data width is supported for 8 data bits with hardware parity; applications requiring 9 raw data bits must access `TDR` and `RDR` directly.
+- **Handle re-initialization without deinit (U7):** Calling `Init` on a handle that was previously initialized without calling `Deinit` first may leave the peripheral half-configured if a subsequent parameter check fails. Callers must invoke `Deinit` before re-configuring an active handle.
+- **D4 (observed on this board, LPUART1):** ST LL's `ATOMIC_*` macros (`LDREX`/`STREX` exclusive load/store sequences) hung the core when applied to LPUART1 registers on the NUCLEO-H755ZI-Q. This was observed on the board; the cause was not measured, and no ES0445 erratum describes it. `uart_ll.c` therefore performs these read-modify-write register accesses under a local `PRIMASK` critical section instead of using `ATOMIC_*`.
+- **Noise Error (NE) detection:** Noise detection in the receiver hardware uses 3-sample majority voting at bit center. A glitch pulse injected at 9/16 of the bit time reliably triggers `NE` in UT5.
+- **LPUART1 live wire unexercised:** LPUART1 was validated on hardware for prescaler search and divider registers (`PRESC` and `BRR` in UT2). Live wire reception and transmission was not exercised on the bench because LPUART1 pins (PB6/PB7, Arduino D1/D0) depend on Nucleo solder bridges (UM2408 SB11, SB96, SB15, SB94) that may connect them to the ST-LINK VCP.
+- **Unexercised features:** Synchronous mode, Smartcard (ISO 7816-3), IrDA SIR ENDEC, LIN mode, RS-485 driver enable hardware flow, and multiprocessor communication mode are not supported.
+- No DMA helpers in BM and LL. Use `02_dma` for the stream and set `CR3.DMAT` / `DMAR` in the application. `dma_bm` and `dma_ll` set TRBUFF (ES0445 2.20.3) on their own for USART/UART requests, so `enable_trbuff = true` is no longer needed.
 - No TX interrupt path in LL; TX is polling only.
-- `ReadByte` returns 8 bits, so 9-bit data loses bit 8.
 - The HAL tier keeps `PRESC` at /1 and does not expose the FIFO.
 - `Deinit` does not gate the bus clock or release the pins.
-- Synchronous, smartcard, IrDA, LIN, RS-485 driver-enable and multiprocessor
-  modes are not supported.
 
 ---
 
@@ -556,7 +664,7 @@ selftest. Before changing the driver:
    `kernel_clock_hz` (BM/LL), or `board_def.h` (HAL console). The driver never
    touches the kernel clock mux: it sits in the RCC bank both cores share (§2.1).
 3. **Validate before touching the USART registers.** A refused `Init` must leave a
-   running UART as it was (§4.1).
+   running UART as it was (§4.1, U2–U4).
 4. **BM and LL keep the same function names and semantics**, so that moving a
    module between them only changes the prefix and the constants (§1.1). The one
    documented difference is how word length is counted (§4.2).
@@ -567,8 +675,9 @@ selftest. Before changing the driver:
    default.
 7. **Before merging:**
    - `.\tools\build_all.ps1 -Clean`, 8/8 with `-Werror`;
-   - the `prj_04` `selftest-uart` build, run on the board with the PD5-PD6 wire;
-   - the expected line of §9.1 recorded in `prj_04 docs/boot_capture.txt`.
+   - the `prj_01` `selftest-uart` suite run on the board with JU1 (1 kΩ), JU2, and DIO15;
+   - the `prj_04` `selftest-uart` build, run on the board with the JU1 wire;
+   - the expected line of §9.4 recorded in `prj_04 docs/boot_capture.txt`.
 
 ---
 
@@ -582,3 +691,23 @@ selftest. Before changing the driver:
 | README rewritten around what was validated | `b23b99b` |
 | USART + DMA exercised by the `02_dma` selftest (T3, T10) | `02_dma/README.md` §13 |
 | Default MSP migrated to `GPIO_HAL_Init` / `GPIO_HAL_DeinitPin` under `gpio_bm` (F1b, H3, G13) | `c8001bf` |
+| Phase F1 driver fixes: U1–U6, D1–D3, then D4 (no `ATOMIC_*` on LPUART1) and D5 | `006c62b` … `9b9c1a0`, `0163b35`, `f8ef5c2` |
+| Phase F1 selftest: dual-core `selftest-uart` (UT0–UT10), AD2 bench with SU1–SU4, framing decode with MCO1 clock reference | `593d720` … `43b3a79` |
+| Phase F1 audit corrections: 5 measured mutations per UT3 row, DONE handshake race fix, MCO1 duty-cycle coverage, dynamic kernel clock from `RCC_D2CCIP2R` | `aa70914` … `ab390d3` |
+| Catalogue owner approval of deviations D5 (`TakeErrors` hardware harvesting) and D6 (HAL instance validation) (2026-10-17) | `9304ed5` |
+| Phase F1 audit passed: 5/5 auditor board runs at `2611907`, 20/20 warm resets, UT9 control in worktree, UT10 in prj_04 | `954c97a`, `9304ed5` |
+| Phase F1 formal close: address audit findings I-1..I-7, protocol barriers, lock release check, doc updates, capture pruning | `9229773` |
+| Close audited: 3/3 auditor board runs at `f584633`, 20/20 warm resets, UT9 control, UT10; documentation fixes by the owner | `7ba86c1` |
+
+The implementation plan, the implementer's instructions, the implementation
+report and the audit record were removed once what a user of the driver needs
+was folded into this README. The audit record lists every finding of the seven
+F1 rounds and the close, with the captures each one was judged on. The
+documents stay in git history:
+
+```bash
+git show 599efdd:01_shared_drivers/04_uart/IMPLEMENTATION_PLAN.md
+git show 599efdd:01_shared_drivers/04_uart/IMPLEMENTER_INSTRUCTIONS.md
+git show 599efdd:01_shared_drivers/04_uart/IMPLEMENTATION_REPORT.md
+git show 599efdd:01_shared_drivers/04_uart/AUDIT.md
+```

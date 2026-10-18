@@ -59,6 +59,17 @@ if(I2C_DRIVER_SELFTEST AND (GPIO_DRIVER_SELFTEST OR TIM_DRIVER_SELFTEST OR SPI_D
         "SPI_DRIVER_SELFTEST: each owns the AD2 bench lines through its own step table. Configure one "
         "of them (presets selftest-gpio, selftest-tim, selftest-spi or selftest-i2c).")
 endif()
+# 04_uart: the Analog Discovery 2 bench and JU1/JU2 of 01_shared_drivers/04_uart/
+# IMPLEMENTATION_PLAN.md. Preset selftest-uart; never in a product image.
+# It drives the same bench lines from its own step table, so one image never carries
+# it together with another selftest.
+option(UART_DRIVER_SELFTEST "Build the 04_uart selftest (needs the AD2 bench and JU1/JU2)" OFF)
+if(UART_DRIVER_SELFTEST AND (GPIO_DRIVER_SELFTEST OR TIM_DRIVER_SELFTEST OR SPI_DRIVER_SELFTEST OR I2C_DRIVER_SELFTEST))
+    message(FATAL_ERROR
+        "UART_DRIVER_SELFTEST is incompatible with other driver selftests: "
+        "each owns the AD2 bench lines through its own step table. Configure one of them "
+        "(presets selftest-gpio, selftest-tim, selftest-spi, selftest-i2c or selftest-uart).")
+endif()
 
 # Every selftest capture starts with the revision it was built from, and says
 # -dirty when tracked files differ from it, so a capture can be traced to a

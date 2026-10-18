@@ -150,7 +150,17 @@ static bool UART_LL_SelectPrescaler(uint32_t ker_ck, uint32_t baud, bool is_lpua
                 {
                     continue;
                 }
-                actual = (2U * ker_p) / usartdiv;
+
+                /* RM0399 51.5.5: BRR[2:0] = USARTDIV[3:0] >> 1, BRR[3] = 0, BRR[15:4] = USARTDIV[15:4] */
+                uint32_t brr = (usartdiv & 0xFFF0UL) | ((usartdiv & 0x000FUL) >> 1);
+
+                /* Actual hardware division factor reconstructed from programmed BRR (U5) */
+                uint32_t actual_div = (brr & 0xFFF0UL) | ((brr & 0x0007UL) << 1);
+                if (actual_div == 0U)
+                {
+                    continue;
+                }
+                actual = (2U * ker_p) / actual_div;
             }
             else
             {
@@ -192,14 +202,97 @@ bool UART_LL_Init(UartLL_Handle_t *h, const UartLL_Config_t *cfg)
         return false;
     }
 
-    /* LPUART does not support 0.5 or 1.5 stop bits */
+    /* =========================================================================
+     * Phase 1: Pure parameter validation & calculation (U2, U3).
+     * ZERO hardware registers (GPIO, RCC, or USART) are touched before this completes.
+     * ========================================================================= */
+
+    /* 1.1 Data bits validation (LL_USART_DATAWIDTH_*) */
+    if ((cfg->data_bits != LL_USART_DATAWIDTH_7B) &&
+        (cfg->data_bits != LL_USART_DATAWIDTH_8B) &&
+        (cfg->data_bits != LL_USART_DATAWIDTH_9B))
+    {
+        return false;
+    }
+
+    /* 1.2 Stop bits validation (LL_USART_STOPBITS_*) */
+    if ((cfg->stop_bits != LL_USART_STOPBITS_0_5) &&
+        (cfg->stop_bits != LL_USART_STOPBITS_1) &&
+        (cfg->stop_bits != LL_USART_STOPBITS_1_5) &&
+        (cfg->stop_bits != LL_USART_STOPBITS_2))
+    {
+        return false;
+    }
+
+    /* RM0399 §52.4.4: LPUART does not support 0.5 or 1.5 stop bits */
     if (desc->is_lpuart &&
         ((cfg->stop_bits == LL_USART_STOPBITS_0_5) || (cfg->stop_bits == LL_USART_STOPBITS_1_5)))
     {
         return false;
     }
 
-    /* 1. Optional GPIO configuration */
+    /* 1.3 Parity validation (LL_USART_PARITY_*) */
+    if ((cfg->parity != LL_USART_PARITY_NONE) &&
+        (cfg->parity != LL_USART_PARITY_EVEN) &&
+        (cfg->parity != LL_USART_PARITY_ODD))
+    {
+        return false;
+    }
+
+    /* 1.4 Hardware flow control validation (LL_USART_HWCONTROL_*) */
+    if ((cfg->hw_flow != LL_USART_HWCONTROL_NONE) &&
+        (cfg->hw_flow != LL_USART_HWCONTROL_RTS) &&
+        (cfg->hw_flow != LL_USART_HWCONTROL_CTS) &&
+        (cfg->hw_flow != LL_USART_HWCONTROL_RTS_CTS))
+    {
+        return false;
+    }
+
+    /* 1.5 Oversampling validation (LL_USART_OVERSAMPLING_*)
+     * RM0399 §52.4.4: LPUART only supports 16x oversampling by hardware design;
+     * oversampling is ignored for LPUART (D1), matching BM behavior (uart_bm.c:362). */
+    if (!desc->is_lpuart)
+    {
+        if ((cfg->oversampling != LL_USART_OVERSAMPLING_16) &&
+            (cfg->oversampling != LL_USART_OVERSAMPLING_8))
+        {
+            return false;
+        }
+    }
+
+    /* 1.6 Optional pin parameter validation without touching hardware (D2) */
+    if (cfg->tx_pin != NULL)
+    {
+        if ((cfg->tx_pin->port == NULL) || (cfg->tx_pin->pin_idx > 15U) ||
+            (cfg->tx_pin->af > 15U) || !GPIO_BM_IsValidPort(cfg->tx_pin->port))
+        {
+            return false;
+        }
+    }
+
+    if (cfg->rx_pin != NULL)
+    {
+        if ((cfg->rx_pin->port == NULL) || (cfg->rx_pin->pin_idx > 15U) ||
+            (cfg->rx_pin->af > 15U) || !GPIO_BM_IsValidPort(cfg->rx_pin->port))
+        {
+            return false;
+        }
+    }
+
+    /* 1.7 Determine Prescaler and validate Baud Rate */
+    uint32_t presc = 0;
+    if (!UART_LL_SelectPrescaler(cfg->kernel_clock_hz, cfg->baudrate, desc->is_lpuart,
+                                 cfg->oversampling, &presc))
+    {
+        return false;
+    }
+
+    /* =========================================================================
+     * Phase 2: Hardware configuration.
+     * All inputs verified; begin applying changes to hardware.
+     * ========================================================================= */
+
+    /* 2.1 Optional GPIO configuration */
     if (cfg->tx_pin != NULL)
     {
         if (!GPIO_BM_ConfigAlternate(cfg->tx_pin->port, cfg->tx_pin->pin_idx,
@@ -220,24 +313,19 @@ bool UART_LL_Init(UartLL_Handle_t *h, const UartLL_Config_t *cfg)
         }
     }
 
-    /* 2. Clock gating in RCC */
+    /* 2.2 Clock gating in RCC */
     if (cfg->enable_clock)
     {
         UART_LL_EnableBusClock(desc->bus, desc->enr_mask);
     }
 
-    /* 3. Determine Prescaler and validate Baud Rate */
-    uint32_t presc = 0;
-    if (!UART_LL_SelectPrescaler(cfg->kernel_clock_hz, cfg->baudrate, desc->is_lpuart,
-                                cfg->oversampling, &presc))
-    {
-        return false;
-    }
-
     USART_TypeDef *u = cfg->instance;
 
-    /* 4. Disable peripheral */
+    /* 2.3 Disable peripheral and reset control registers to known state (U4, RM0399 §51.5.2 / §52.4.2) */
     LL_USART_Disable(u);
+    u->CR1 = 0U;
+    u->CR2 = 0U;
+    u->CR3 = 0U;
 
     /* 5. Set Prescaler and Baudrate via LL static inlines */
     if (desc->is_lpuart)
@@ -267,8 +355,7 @@ bool UART_LL_Init(UartLL_Handle_t *h, const UartLL_Config_t *cfg)
         LL_USART_EnableFIFO(u);
     }
 
-    LL_USART_EnableDirectionTx(u);
-    LL_USART_EnableDirectionRx(u);
+    SET_BIT(u->CR1, USART_CR1_TE | USART_CR1_RE);
 
     /* 7. Enable peripheral */
     LL_USART_Enable(u);
@@ -419,14 +506,38 @@ bool UART_LL_Flush(UartLL_Handle_t *h, uint32_t spin_limit)
 
 uint32_t UART_LL_TakeErrors(UartLL_Handle_t *h)
 {
-    if (h == NULL)
+    if ((h == NULL) || (h->instance == NULL))
     {
         return 0;
     }
 
+    USART_TypeDef *u   = h->instance;
+    uint32_t       err = 0;
+
+    if (LL_USART_IsActiveFlag_ORE(u))
+    {
+        err |= UART_LL_ERR_ORE;
+        LL_USART_ClearFlag_ORE(u);
+    }
+    if (LL_USART_IsActiveFlag_FE(u))
+    {
+        err |= UART_LL_ERR_FE;
+        LL_USART_ClearFlag_FE(u);
+    }
+    if (LL_USART_IsActiveFlag_NE(u))
+    {
+        err |= UART_LL_ERR_NE;
+        LL_USART_ClearFlag_NE(u);
+    }
+    if (LL_USART_IsActiveFlag_PE(u))
+    {
+        err |= UART_LL_ERR_PE;
+        LL_USART_ClearFlag_PE(u);
+    }
+
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
-    uint32_t flags = h->error_flags;
+    uint32_t flags = h->error_flags | err;
     h->error_flags = 0;
     __set_PRIMASK(primask);
 
@@ -442,8 +553,15 @@ bool UART_LL_EnableRxIrq(UartLL_Handle_t *h, IRQn_Type irqn, uint32_t priority)
 
     USART_TypeDef *u = h->instance;
 
-    LL_USART_EnableIT_RXNE_RXFNE(u);
-    LL_USART_EnableIT_ERROR(u);
+    /* D4: Avoid ATOMIC_SET_BIT (LDREX/STREX) inside LL_USART_EnableIT_*, which
+     * hangs on D3 domain peripherals (such as LPUART1 at 0x58000C00) because D3
+     * bus architecture does not support exclusive access monitors. Use non-exclusive
+     * RMW protected by PRIMASK. */
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    SET_BIT(u->CR1, USART_CR1_RXNEIE_RXFNEIE);
+    SET_BIT(u->CR3, USART_CR3_EIE);
+    __set_PRIMASK(primask);
 
     NVIC_SetPriority(irqn, priority);
     NVIC_EnableIRQ(irqn);
@@ -460,10 +578,14 @@ void UART_LL_DisableRxIrq(UartLL_Handle_t *h, IRQn_Type irqn)
 
     USART_TypeDef *u = h->instance;
 
-    LL_USART_DisableIT_RXNE_RXFNE(u);
-    LL_USART_DisableIT_ERROR(u);
-
     NVIC_DisableIRQ(irqn);
+
+    /* D4: Non-exclusive RMW inside PRIMASK instead of ATOMIC_CLEAR_BIT */
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    CLEAR_BIT(u->CR1, USART_CR1_RXNEIE_RXFNEIE);
+    CLEAR_BIT(u->CR3, USART_CR3_EIE);
+    __set_PRIMASK(primask);
 }
 
 void UART_LL_IrqService(UartLL_Handle_t *h, UartLL_RingBuffer_t *ring)

@@ -574,14 +574,39 @@ bool UART_BM_Flush(UartBm_Handle_t *h, uint32_t spin_limit)
 
 uint32_t UART_BM_TakeErrors(UartBm_Handle_t *h)
 {
-    if (h == NULL)
+    if ((h == NULL) || (h->instance == NULL))
     {
         return 0;
     }
 
+    USART_TypeDef *u   = h->instance;
+    uint32_t       isr = u->ISR;
+    uint32_t       err = 0;
+
+    if (isr & USART_ISR_ORE)
+    {
+        err |= UART_BM_ERR_ORE;
+        u->ICR = USART_ICR_ORECF;
+    }
+    if (isr & USART_ISR_FE)
+    {
+        err |= UART_BM_ERR_FE;
+        u->ICR = USART_ICR_FECF;
+    }
+    if (isr & USART_ISR_NE)
+    {
+        err |= UART_BM_ERR_NE;
+        u->ICR = USART_ICR_NECF;
+    }
+    if (isr & USART_ISR_PE)
+    {
+        err |= UART_BM_ERR_PE;
+        u->ICR = USART_ICR_PECF;
+    }
+
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
-    uint32_t flags = h->error_flags;
+    uint32_t flags = h->error_flags | err;
     h->error_flags = 0;
     __set_PRIMASK(primask);
 
