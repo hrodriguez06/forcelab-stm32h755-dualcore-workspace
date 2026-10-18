@@ -57,6 +57,14 @@
       "binaryDir": "${sourceDir}/build/selftest-uart",
       "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "UART_DRIVER_SELFTEST": "ON", "FW_PRESET": "selftest-uart" }
+    },
+    {
+      "name": "selftest-led",
+      "displayName": "Dual-Core Debug with the 01_led selftest (CM7 only, no AD2)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/selftest-led",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "LED_DRIVER_SELFTEST": "ON", "FW_PRESET": "selftest-led" }
     }
   ],
   "buildPresets": [
@@ -66,6 +74,7 @@
     { "name": "selftest-tim",  "configurePreset": "selftest-tim"  },
     { "name": "selftest-spi",  "configurePreset": "selftest-spi"  },
     { "name": "selftest-i2c",  "configurePreset": "selftest-i2c"  },
-    { "name": "selftest-uart", "configurePreset": "selftest-uart" }
+    { "name": "selftest-uart", "configurePreset": "selftest-uart" },
+    { "name": "selftest-led",  "configurePreset": "selftest-led"  }
   ]
 }

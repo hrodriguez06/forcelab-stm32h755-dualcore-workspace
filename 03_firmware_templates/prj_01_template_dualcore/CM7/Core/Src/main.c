@@ -40,6 +40,9 @@
 #if defined(UART_DRIVER_SELFTEST)
 #include "uart_selftest.h"
 #endif
+#if defined(LED_DRIVER_SELFTEST)
+#include "led_selftest.h"
+#endif
 
 static void SystemClock_Config(void);
 static void PeripheralClock_Config(void);
@@ -144,6 +147,13 @@ int main(void)
     if (HSEM_BM_BootReleaseCpu2(HSEM_ID_BOOT_SYNC, 400000000UL) != HSEM_BM_OK)
     {
         Error_Handler();
+    }
+#endif
+
+#if defined(LED_DRIVER_SELFTEST)
+    LED_Selftest_Run();
+    for (;;)
+    {
     }
 #endif
 
