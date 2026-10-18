@@ -151,9 +151,10 @@ def run_warm_resets(
             print(f"[{i}/{target_count}] Triggering warm reset...", end="", flush=True)
             records.append(f"--- WARM RESET {i}/{target_count} ---\n")
 
-            # Drain any buffered bytes from previous run
+            # Drain any buffered bytes from previous run (bounded by 1.0 s timeout, F-m1)
             time.sleep(0.05)
-            while ser.read(4096):
+            t_drain = time.monotonic()
+            while time.monotonic() - t_drain < 1.0 and ser.read(4096):
                 pass
 
             do_reset()

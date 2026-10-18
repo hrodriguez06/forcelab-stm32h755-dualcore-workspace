@@ -426,7 +426,7 @@ def eval_ut8(bit20: int, active_status: int, dma_bytes: int, fw_pass: bool) -> b
 
 def eval_ut9(ret_held: int, ret_free: int, fw_pass: bool, expect_control: bool = False) -> bool:
     if expect_control:
-        return (ret_held == 0) and (not fw_pass)
+        return ret_held == 0
     return (ret_held == 2) and (ret_free == 0) and fw_pass
 
 
@@ -1151,8 +1151,32 @@ class UartSession:
                 mutated_frames = [{**f, "mco_per_bit": f["mco_per_bit"] * 1.025} for f in decoded]
                 row_ctrl, _ = eval_ut3(mutated_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
 
-                if not row_real:
-                    self.log(f"[host] UT3 row {row_idx} FAIL: tier={tier} fmt={fmt_str} baud={baud} over8={over8} ({row_msg})")
+                th_mco = self.f_mco / baud_hw
+                if decoded:
+                    meas_mco = sum(f["mco_per_bit"] for f in decoded) / len(decoded)
+                    err_pct = (meas_mco - th_mco) / th_mco * 100.0
+                    bytes_str = "[" + ", ".join(f"0x{f['byte']:02X}" for f in decoded) + "]"
+                    meas_ctrl_mco = meas_mco * 1.025
+                    err_ctrl_pct = (meas_ctrl_mco - th_mco) / th_mco * 100.0
+                else:
+                    meas_mco = 0.0
+                    err_pct = 999.0
+                    bytes_str = "[]"
+                    meas_ctrl_mco = 0.0
+                    err_ctrl_pct = 999.0
+
+                status_real_str = "PASS" if row_real else f"FAIL ({row_msg})"
+                status_ctrl_str = "FAIL (exp)" if not row_ctrl else "PASS (unexp)"
+
+                self.log(
+                    f"[host] UT3 row {row_idx:02d}: tier={tier} fmt={fmt_str} baud={baud} "
+                    f"la={rate/1e6:.0f}MS/s/{n} frames={len(decoded)} bytes={bytes_str} "
+                    f"bit_meas={meas_mco:.3f} bit_th={th_mco:.3f} err={err_pct:+.2f}% -> {status_real_str}"
+                )
+                self.log(
+                    f"[host] UT3 row {row_idx:02d} ctrl: fmt={fmt_str} baud={baud} "
+                    f"bit_mutated={meas_ctrl_mco:.3f} err={err_ctrl_pct:+.2f}% -> {status_ctrl_str}"
+                )
 
                 ut3_row_results.append(row_real)
                 ctrl_ut3_results.append(row_ctrl)
@@ -1409,18 +1433,32 @@ class UartSession:
                     ut9_ok = "PASS" in line
                     break
 
-            real_ut9 = eval_ut9(ret_held, ret_free, ut9_ok, self.expect_control_u1)
-            ctrl_ut9 = eval_ut9(0, ret_free, ut9_ok, self.expect_control_u1)  # Mutated lock held return
-            self.record_oracle("UT9", "U1 console handle GPIO lock and state reset", real_ut9, not ctrl_ut9)
-            self.check("UT9 console handle GPIO lock error propagation", real_ut9 and not ctrl_ut9)
+            if self.expect_control_u1:
+                u1_reproduced = (ret_held == 0)
+                self.record_oracle("UT9", "U1 console handle GPIO lock (expect ret=0)", u1_reproduced, True)
+                self.check("UT9 U1 control reproduction (expect ret=0)", u1_reproduced)
+            else:
+                real_ut9 = eval_ut9(ret_held, ret_free, ut9_ok, False)
+                ctrl_ut9 = eval_ut9(0, ret_free, ut9_ok, False)  # Mutated lock held return
+                self.record_oracle("UT9", "U1 console handle GPIO lock and state reset", real_ut9, not ctrl_ut9)
+                self.check("UT9 console handle GPIO lock error propagation", real_ut9 and not ctrl_ut9)
 
             # -----------------------------------------------------------------
             # DONE
             # -----------------------------------------------------------------
-            if not self.handshake("DONE"): return False
+            if not self.handshake("DONE"):
+                if not self.expect_control_u1:
+                    return False
             done_pass = self.drain_until_verdict("DONE")
 
             self.print_oracle_summary()
+
+            if self.expect_control_u1:
+                # F-M2: en modo control, el resto de pasos se informa pero no cuenta;
+                # UT9 pasa si y solo si el firmware imprime `returned 0` con el lock tomado.
+                overall = (ret_held == 0)
+                self.log(f"[host] Control mode (--expect-control-u1): UT9 ret_held={ret_held} -> {'PASS (U1 reproduced)' if overall else 'FAIL'}")
+                return overall
 
             overall = (all(passed for _, passed, _ in self.checks) and
                        all(entry["verdict"] == "PASS" for entry in self.oracle_table) and
