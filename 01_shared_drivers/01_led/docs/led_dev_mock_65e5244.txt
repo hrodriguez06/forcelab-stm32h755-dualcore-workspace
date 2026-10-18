@@ -1,0 +1,31 @@
+[+   0.000s] [host] argv: 03_firmware_templates/prj_01_template_dualcore/tools/led_hw_check.py --mock --out 01_shared_drivers/01_led/docs/led_dev_mock_65e5244.txt
+[+   0.000s] [host] options: preset=selftest-led sn=0016000C4142501220353451 port=None out=01_shared_drivers/01_led/docs/led_dev_mock_65e5244.txt allow_dirty=False mock=True
+[+   0.001s] [mock] === Running Mock Host Evaluation Suite ===
+[+   0.004s] [host] CHECK provenance_git_rev: PASS (fw_rev=mock_rev, host_head=mock_rev)
+[+   0.004s] [host] CHECK provenance_build_id: PASS (fw_id=mock_id, host_id=mock_id)
+[+   0.004s] [host] CHECK lt1: PASS (mask=0x07 lock=3/3 pins=OK ctrl=OK)
+[+   0.004s] [host] CHECK lt1_mutation_pull_rejected: PASS
+[+   0.005s] [host] CHECK lt1_mutation_lock_rejected: PASS
+[+   0.005s] [host] CHECK lt1_mutation_ctrl_snap_rejected: PASS
+[+   0.005s] [host] CHECK lt2: PASS (mask=0x00 init_snap=OK ops_snap=OK ctrl_snap=OK)
+[+   0.005s] [host] CHECK lt2_mutation_init_rejected: PASS
+[+   0.005s] [host] CHECK lt2_mutation_ctrl_unchanged_rejected: PASS
+[+   0.005s] [host] CHECK lt3: PASS (N=200000 freq_calc=200000Hz window_isrs=7000 lost=0 ctrl_lost=2000)
+[+   0.005s] [host] CHECK lt3_mutation_lost_gt_0_rejected: PASS
+[+   0.005s] [host] CHECK lt3_mutation_ctrl_lost_eq_0_rejected: PASS
+[+   0.005s] [host] CHECK lt3_mutation_freq_low_rejected: PASS
+[+   0.005s] [host] CHECK lt4: PASS (red_mode=1 red_odr=1 green_pin=UNCHANGED)
+[+   0.005s] [host] CHECK lt4_mutation_green_modified_rejected: PASS
+[+   0.005s] [host] CHECK lt4_mutation_red_not_output_rejected: PASS
+[+   0.005s] [host] CHECK lt5: PASS (TIM17 stopped, DIER=0, NVIC=0, APB2=0 pins=OK)
+[+   0.005s] [host] CHECK lt5_mutation_tim17_running_rejected: PASS
+[+   0.005s] [host] CHECK lt5_mutation_pin_pull_rejected: PASS
+[+   0.005s] [host] CHECK fw_verdict: PASS (verdict=PASS)
+[+   0.005s] [mock] CHECK mock_nominal: PASS
+[+   0.006s] [mock] CHECK mock_failure_lt3_real_lost_gt_0_detected: PASS
+[+   0.006s] [mock] CHECK mock_failure_lt3_ctrl_lost_eq_0_detected: PASS
+[+   0.007s] [mock] CHECK mock_failure_lt1_pin_with_pull_detected: PASS
+[+   0.008s] [mock] CHECK mock_failure_missing_lt_line_detected: PASS
+[+   0.008s] [mock] CHECK mock_failure_lt2_snapshot_mismatch_detected: PASS
+[+   0.008s] [mock] OVERALL MOCK VERDICT: PASS
+[+   0.008s] HOST VERDICT=PASS
