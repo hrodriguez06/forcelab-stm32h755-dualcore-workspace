@@ -76,6 +76,7 @@ SELFTEST_PRESETS = {
         "selftest-tim",
         "selftest-spi",
         "selftest-i2c",
+        "selftest-led",
     ],
     "02_firmware_projects/prj_04_adc_dma_bm_eth": [
         "selftest",
@@ -868,21 +869,60 @@ def parse_nm_symbol(nm_cmd: str, elf_path: Path, sym_name: str) -> int:
     raise ValueError(f"Symbol {sym_name} not found in {elf_path}")
 
 
-def verify_t4_led_state(words: list[int], moder_b: int, moder_e: int) -> tuple[bool, str]:
+def verify_t4_led_state(
+    words: list[int],
+    moder_b: int,
+    moder_e: int,
+    regs_b: dict[str, int] | None = None,
+    regs_e: dict[str, int] | None = None,
+) -> tuple[bool, str]:
     """Shared comparison function for T4 board readings and negative controls."""
     if len(words) < 6:
         return False, f"Expected 6 words in g_led_config, got {len(words)}"
 
     words_match = (words == UM2408_ORACLE_WORDS)
 
-    # MODER output mode is 0b01
-    pb0_mode = (moder_b >> (0 * 2)) & 3
-    pb14_mode = (moder_b >> (14 * 2)) & 3
-    pe1_mode = (moder_e >> (1 * 2)) & 3
+    if regs_b is None:
+        regs_b = {"moder": moder_b, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0}
+    if regs_e is None:
+        regs_e = {"moder": moder_e, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0}
 
-    pins_ok = (pb0_mode == 1) and (pb14_mode == 1) and (pe1_mode == 1)
+    # Pin checks for PB0 (Green LED), PB14 (Red LED), PE1 (Yellow LED)
+    # MODER: 0b01 = output (1)
+    # OTYPER: 0 = push-pull (0)
+    # OSPEEDR: 0b00 = low speed (0)
+    # PUPDR: 0b00 = no pull (0)
+    # ODR: output bit 0 or 1
+    pb0_mode = (regs_b.get("moder", moder_b) >> (0 * 2)) & 3
+    pb0_otype = (regs_b.get("otyper", 0) >> 0) & 1
+    pb0_speed = (regs_b.get("ospeedr", 0) >> (0 * 2)) & 3
+    pb0_pull = (regs_b.get("pupdr", 0) >> (0 * 2)) & 3
+    pb0_odr = (regs_b.get("odr", 0) >> 0) & 1
+
+    pb14_mode = (regs_b.get("moder", moder_b) >> (14 * 2)) & 3
+    pb14_otype = (regs_b.get("otyper", 0) >> 14) & 1
+    pb14_speed = (regs_b.get("ospeedr", 0) >> (14 * 2)) & 3
+    pb14_pull = (regs_b.get("pupdr", 0) >> (14 * 2)) & 3
+    pb14_odr = (regs_b.get("odr", 0) >> 14) & 1
+
+    pe1_mode = (regs_e.get("moder", moder_e) >> (1 * 2)) & 3
+    pe1_otype = (regs_e.get("otyper", 0) >> 1) & 1
+    pe1_speed = (regs_e.get("ospeedr", 0) >> (1 * 2)) & 3
+    pe1_pull = (regs_e.get("pupdr", 0) >> (1 * 2)) & 3
+    pe1_odr = (regs_e.get("odr", 0) >> 1) & 1
+
+    pb0_ok = (pb0_mode == 1) and (pb0_otype == 0) and (pb0_speed == 0) and (pb0_pull == 0)
+    pb14_ok = (pb14_mode == 1) and (pb14_otype == 0) and (pb14_speed == 0) and (pb14_pull == 0)
+    pe1_ok = (pe1_mode == 1) and (pe1_otype == 0) and (pe1_speed == 0) and (pe1_pull == 0)
+
+    pins_ok = pb0_ok and pb14_ok and pe1_ok
     passed = words_match and pins_ok
-    detail = f"words_match={words_match}, PB0_mode={pb0_mode}, PB14_mode={pb14_mode}, PE1_mode={pe1_mode}"
+    detail = (
+        f"words_match={words_match}, "
+        f"PB0(mode={pb0_mode},otype={pb0_otype},speed={pb0_speed},pull={pb0_pull},odr={pb0_odr}), "
+        f"PB14(mode={pb14_mode},otype={pb14_otype},speed={pb14_speed},pull={pb14_pull},odr={pb14_odr}), "
+        f"PE1(mode={pe1_mode},otype={pe1_otype},speed={pe1_speed},pull={pe1_pull},odr={pe1_odr})"
+    )
     return passed, detail
 
 
@@ -908,7 +948,7 @@ def ensure_debug_images_compiled(tools: dict[str, str], logger: Logger) -> bool:
 
 
 def run_t4(tools: dict[str, str], sn: str, logger: Logger) -> bool:
-    logger.log(f"=== Running T4 Checks (Hardware: Flash & SWD RAM / MODER with sn={sn}) ===")
+    logger.log(f"=== Running T4 Checks (Hardware: Flash & SWD RAM / Registers with sn={sn}) ===")
     overall_ok = True
 
     # M2: Ensure debug images are compiled in current run from HEAD and verified
@@ -946,36 +986,67 @@ def run_t4(tools: dict[str, str], sn: str, logger: Logger) -> bool:
             # 3. Read 6 words from g_led_config
             words = read_swd_mem32(tools["programmer"], sn, led_cfg_addr, 6)
 
-            # 4. Read MODER of GPIOB and GPIOE
-            moder_b = read_swd_mem32(tools["programmer"], sn, GPIOB_BASE, 1)[0]
-            moder_e = read_swd_mem32(tools["programmer"], sn, GPIOE_BASE, 1)[0]
+            # 4. Read MODER, OTYPER, OSPEEDR, PUPDR, ODR of GPIOB and GPIOE
+            # Offsets: 0x00=MODER, 0x04=OTYPER, 0x08=OSPEEDR, 0x0C=PUPDR, 0x10=IDR, 0x14=ODR
+            regs_b_words = read_swd_mem32(tools["programmer"], sn, GPIOB_BASE, 6)
+            regs_e_words = read_swd_mem32(tools["programmer"], sn, GPIOE_BASE, 6)
+
+            regs_b = {
+                "moder": regs_b_words[0],
+                "otyper": regs_b_words[1],
+                "ospeedr": regs_b_words[2],
+                "pupdr": regs_b_words[3],
+                "odr": regs_b_words[5],
+            }
+            regs_e = {
+                "moder": regs_e_words[0],
+                "otyper": regs_e_words[1],
+                "ospeedr": regs_e_words[2],
+                "pupdr": regs_e_words[3],
+                "odr": regs_e_words[5],
+            }
+            moder_b = regs_b["moder"]
+            moder_e = regs_e["moder"]
 
             # m7: Log exact hexadecimal values read from SWD
             words_hex = [hex(w) for w in words]
-            pb0_mode = (moder_b >> (0 * 2)) & 3
-            pb14_mode = (moder_b >> (14 * 2)) & 3
-            pe1_mode = (moder_e >> (1 * 2)) & 3
             logger.log(f"  [SWD read] {pname} g_led_config: {words_hex}")
-            logger.log(f"  [SWD read] {pname} MODER_B: {hex(moder_b)} (PB0={pb0_mode}, PB14={pb14_mode}), MODER_E: {hex(moder_e)} (PE1={pe1_mode})")
+            logger.log(
+                f"  [SWD read] {pname} GPIOB: MODER={hex(regs_b['moder'])} OTYPER={hex(regs_b['otyper'])} "
+                f"OSPEEDR={hex(regs_b['ospeedr'])} PUPDR={hex(regs_b['pupdr'])} ODR={hex(regs_b['odr'])}"
+            )
+            logger.log(
+                f"  [SWD read] {pname} GPIOE: MODER={hex(regs_e['moder'])} OTYPER={hex(regs_e['otyper'])} "
+                f"OSPEEDR={hex(regs_e['ospeedr'])} PUPDR={hex(regs_e['pupdr'])} ODR={hex(regs_e['odr'])}"
+            )
 
-            proj_ok, proj_detail = verify_t4_led_state(words, moder_b, moder_e)
-            logger.log(f"[host] CHECK {pname} SWD RAM & MODER: {'PASS' if proj_ok else 'FAIL'} ({proj_detail})")
+            proj_ok, proj_detail = verify_t4_led_state(words, moder_b, moder_e, regs_b, regs_e)
+            logger.log(f"[host] CHECK {pname} SWD RAM & registers: {'PASS' if proj_ok else 'FAIL'} ({proj_detail})")
             if not proj_ok:
                 overall_ok = False
         except Exception as e:
             logger.log(f"[host] FAIL {pname} SWD read: {e}")
             overall_ok = False
 
-    # Negative controls for T4 (m5: mutated RAM table and mutated MODER register)
+    # Negative controls for T4 (m5: mutated RAM table and mutated GPIO registers)
     with tempfile.TemporaryDirectory(prefix="led_t4_neg_") as tmp_dir:
         # Negative control 1: Mutated RAM state (PB0 pin number = 2)
         neg_ram_path = Path(tmp_dir) / "mutated_ram.json"
         mutated_words = list(UM2408_ORACLE_WORDS)
         mutated_words[1] = 2
-        fake_ram_data = {"words": mutated_words, "moder_b": 0x10000001, "moder_e": 0x00000004}
+        fake_ram_data = {
+            "words": mutated_words,
+            "moder_b": 0x10000001,
+            "moder_e": 0x00000004,
+            "regs_b": {"moder": 0x10000001, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0},
+            "regs_e": {"moder": 0x00000004, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0},
+        }
         neg_ram_path.write_text(json.dumps(fake_ram_data), encoding="utf-8")
         loaded_ram = json.loads(neg_ram_path.read_text(encoding="utf-8"))
-        neg_ram_ok, neg_ram_detail = verify_t4_led_state(loaded_ram["words"], loaded_ram["moder_b"], loaded_ram["moder_e"])
+        neg_ram_ok, neg_ram_detail = verify_t4_led_state(
+            loaded_ram["words"], loaded_ram["moder_b"], loaded_ram["moder_e"],
+            loaded_ram.get("regs_b"), loaded_ram.get("regs_e")
+        )
         neg_ram_pass = (neg_ram_ok is False)
         logger.log(f"[host] CHECK T4 negative control 1 (mutated RAM state rejected): {'PASS' if neg_ram_pass else 'FAIL'} ({neg_ram_detail})")
         if not neg_ram_pass:
@@ -984,13 +1055,43 @@ def run_t4(tools: dict[str, str], sn: str, logger: Logger) -> bool:
         # Negative control 2: Mutated MODER state (PB0 configured as 00b input instead of 01b output)
         neg_moder_path = Path(tmp_dir) / "mutated_moder.json"
         bad_moder_b = 0x10000000  # PB0 mode = 00b (input)
-        fake_moder_data = {"words": list(UM2408_ORACLE_WORDS), "moder_b": bad_moder_b, "moder_e": 0x00000004}
+        fake_moder_data = {
+            "words": list(UM2408_ORACLE_WORDS),
+            "moder_b": bad_moder_b,
+            "moder_e": 0x00000004,
+            "regs_b": {"moder": bad_moder_b, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0},
+            "regs_e": {"moder": 0x00000004, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0},
+        }
         neg_moder_path.write_text(json.dumps(fake_moder_data), encoding="utf-8")
         loaded_moder = json.loads(neg_moder_path.read_text(encoding="utf-8"))
-        neg_moder_ok, neg_moder_detail = verify_t4_led_state(loaded_moder["words"], loaded_moder["moder_b"], loaded_moder["moder_e"])
+        neg_moder_ok, neg_moder_detail = verify_t4_led_state(
+            loaded_moder["words"], loaded_moder["moder_b"], loaded_moder["moder_e"],
+            loaded_moder.get("regs_b"), loaded_moder.get("regs_e")
+        )
         neg_moder_pass = (neg_moder_ok is False)
         logger.log(f"[host] CHECK T4 negative control 2 (mutated MODER register rejected): {'PASS' if neg_moder_pass else 'FAIL'} ({neg_moder_detail})")
         if not neg_moder_pass:
+            overall_ok = False
+
+        # Negative control 3: Mutated PUPDR state (PB0 pull-up enabled)
+        neg_pupdr_path = Path(tmp_dir) / "mutated_pupdr.json"
+        bad_pupdr_b = 0x00000001  # PB0 pull = 01b (pull-up)
+        fake_pupdr_data = {
+            "words": list(UM2408_ORACLE_WORDS),
+            "moder_b": 0x10000001,
+            "moder_e": 0x00000004,
+            "regs_b": {"moder": 0x10000001, "otyper": 0, "ospeedr": 0, "pupdr": bad_pupdr_b, "odr": 0},
+            "regs_e": {"moder": 0x00000004, "otyper": 0, "ospeedr": 0, "pupdr": 0, "odr": 0},
+        }
+        neg_pupdr_path.write_text(json.dumps(fake_pupdr_data), encoding="utf-8")
+        loaded_pupdr = json.loads(neg_pupdr_path.read_text(encoding="utf-8"))
+        neg_pupdr_ok, neg_pupdr_detail = verify_t4_led_state(
+            loaded_pupdr["words"], loaded_pupdr["moder_b"], loaded_pupdr["moder_e"],
+            loaded_pupdr.get("regs_b"), loaded_pupdr.get("regs_e")
+        )
+        neg_pupdr_pass = (neg_pupdr_ok is False)
+        logger.log(f"[host] CHECK T4 negative control 3 (mutated PUPDR register rejected): {'PASS' if neg_pupdr_pass else 'FAIL'} ({neg_pupdr_detail})")
+        if not neg_pupdr_pass:
             overall_ok = False
 
     logger.log(f"[host] T4 VERDICT: {'PASS' if overall_ok else 'FAIL'}")
