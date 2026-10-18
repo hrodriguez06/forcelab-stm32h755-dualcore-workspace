@@ -369,3 +369,80 @@ La revisión de solo lectura de `4db5903` terminó después de enviar la ronda c
 ### Estado
 
 **F1 no pasa, por H-M1 y H-M2.** El resto de la fase está cerrado en la placa.
+
+## F1, corrección 6 (`ab390d3`, informe en `2611907`)
+
+**Condición de entrada: cumplida.** `uart_dev_hw_ab390d3_run1.txt` y `_run2.txt`, con todo PASS y `m4_done_ack=1`.
+
+### Ejecuciones del auditor en la placa (`954c97a`)
+
+| Prueba | Captura | Resultado |
+| --- | --- | --- |
+| Cinco sesiones completas seguidas | `prj_01/docs/uart_audit_hw_2611907_run1.txt` … `_run5.txt` | **5/5:**<br>• `FW VERDICT=PASS` y `HOST VERDICT=PASS`;<br>• `m4_done_ack=1`, unos 5 ms después de `STEP DONE`;<br>• 15/15 filas de UT3;<br>• los 15 controles de cinco mutaciones: FAIL esperado, o N/A para la paridad en las filas sin paridad;<br>• unos 12 s por sesión, sin la espera de 10 s |
+| 20 warm resets | `uart_audit_warm_resets_2611907.txt` | 20/20 |
+| Control de UT9 (receta corregida: worktree, `git -C <wt> checkout b41c4a7 -- …`, `-DCUBE_DIR`) | `uart_audit_ut9_control_2611907-dirty.txt` | U1 reproducido; el host da PASS en modo control |
+| UT10, `prj_04` | `prj_04/docs/uart_audit_ut10_2611907.txt` | Línea esperada |
+
+### Revisión del código
+
+**Cerrado:**
+- **H-M1:** cinco mutaciones por fila sobre los datos medidos y por `eval_ut3`, con una línea por fila. Si un control pasa, falla el paso.
+- **H-M2:**
+  - CM4 solo sale del bucle por cambio de sesión;
+  - CM7 comprueba la confirmación, y el host exige `m4_done_ack=1`;
+  - SRAM4 es no cacheable para CM7 (MPU R7), y todos los campos son `volatile`.
+- **H-m1:** `D2CCIP2R`, y PCLK1 o aborto.
+- **H-m2:** MCO1 cubre todas las tramas, sin huecos de más de 1,5 periodos.
+- **H-m3, H-m4, H-m5 y H-m7.**
+
+La sonda de UT3 (`probe_ut3_r7`) rechaza todos los fallos y, en ningún caso, la fila real pasa con un control también en PASS. El driver y `ad2.py` no cambian.
+
+**Quedan (menores y triviales), para el cierre:**
+
+| ID | Hallazgo | Qué se pide |
+| --- | --- | --- |
+| I-1 | **La receta del control de UT9** pasa un `-DCUBE_DIR` que no existe (`…/00_STmicro/STM32CubeH7`) | `<checkout principal>/02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7` |
+| I-2 | **La receta de UT10:**<br>• pasa `--port` y `--sn` a la vez, y `monitor.py` lo rechaza;<br>• no configura `prj_04/build/selftest-uart` | Solo `--sn`; `cmake --preset selftest-uart` antes |
+| I-3 | **`run_warm_resets.py --sn`** fija por defecto el SN de esta placa, así que con otra sonda el reset falla. Además, el puerto sigue saliendo de `autodetect()` | Por defecto `None`. Con `--sn` y sin `--port`, el puerto de `monitor.port_for_sn(sn)`. El docstring lo dice |
+| I-4 | **Barreras del protocolo:**<br>• CM4 lee `cmd` antes de releer `cmd_seq`, sin DMB;<br>• CM7 lee los resultados tras la confirmación sin DMB | CM4: `seq = cmd_seq; __DMB(); cmd = …`; CM7: `__DMB()` antes del `return` de `cm4_send_cmd` |
+| I-5 | **LOCK_RELEASE:** CM4 confirma aunque `HSEM_BM_Release` falle, y CM7 no comprueba `lock_held == 0` | Comprobarlo |
+| I-6 | **`m4_timeout`** ya no se usa, pero sigue en `uart_selftest.h:122` | Quitarlo, o decir que está sin uso |
+| I-7 | **El informe:**<br>• R:35 "FAIL (exp)" en todas (la paridad es N/A en 9 filas);<br>• `uart_dev_hw_ab390d3.txt` es idéntico a `_run1` | Precisarlo; dejar una sola copia |
+
+### Decisión del responsable (2026-10-17)
+
+**D5 y D6, aprobadas:**
+- D5: `TakeErrors` lee y borra los flags del hardware;
+- D6: `UART_HAL_Init`/`InitEx` rechazan una instancia que no es USART1–8 ni LPUART1.
+
+Se documentan en el README en el cierre.
+
+### Estado
+
+**F1 pasa.** Queda autorizado el cierre del implementador, con I-1–I-7. I-4–I-6 tocan firmware, así que hace falta su ejecución de placa y otra mía.
+
+**El README (en inglés), según la sección "Cierre" del plan:**
+- **Estado.**
+- **§1.1.**
+- **§3.1:** U1, la consola devuelve el estado de sus pines.
+- **§4:**
+  - LL valida antes de tocar el hardware (U2, U3) y deja `CR1`–`CR3` limpios (U4);
+  - D5, `TakeErrors`;
+  - D6;
+  - `InitEx` con `HAL_BUSY` (U6);
+  - con 9 bits de datos, tampoco se puede escribir el bit 8 (U7).
+- **§6:** el divisor aplicado en LL, U5.
+- **§9:** UT0–UT10, con las capturas finales (las de `ab390d3` y las del auditor en `2611907`).
+- **§10:**
+  - U7, `Init` a medio camino;
+  - D4: `ATOMIC_*` (LDREX/STREX) se cuelga con LPUART1, por eso LL usa RMW en `PRIMASK`. Medido en la placa, sin cita de ES0445;
+  - NE, detectado con el pulso a 9/16;
+  - LPUART1 solo en `PRESC`/`BRR`;
+  - lo no ejercitado.
+- **§12.**
+- **`00_gpio/README.md` §8:** JU1, JU2 y DIO15, con SU1–SU4.
+
+**Capturas (regla 7 de `00_gpio/README.md` §14):**
+- solo quedan las que respaldan una afirmación actual;
+- las superadas (las de desarrollo y de auditoría anteriores a `ab390d3`/`2611907`, y los mocks y `uart_checks` anteriores) se borran;
+- se listan en una tabla de §9 con el commit desde el que se pueden leer.
