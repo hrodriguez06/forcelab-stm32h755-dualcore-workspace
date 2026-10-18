@@ -106,6 +106,7 @@ def run_warm_resets(
     identity: Optional[Identity] = None,
     argv_line: str = "",
     options_line: str = "",
+    banner: str = "=== STM32H755ZI",
 ) -> int:
     print(f"Opening {port_name}...")
     git_rev = "unknown"
@@ -168,7 +169,7 @@ def run_warm_resets(
                 chunk = ser.read(1024)
                 if chunk:
                     raw_buf.extend(chunk)
-                    banner_pos = raw_buf.find(b"=== STM32H755ZI")
+                    banner_pos = raw_buf.find(banner.encode("utf-8"))
                     if banner_pos >= 0 and stop_phrase.encode("utf-8") in raw_buf[banner_pos:]:
                         found_alive = True
                         break
@@ -178,7 +179,7 @@ def run_warm_resets(
             text = raw_buf.decode("utf-8", errors="replace").replace("\r\n", "\n")
 
             # Find the banner start
-            banner_idx = text.find("=== STM32H755ZI")
+            banner_idx = text.find(banner)
             if banner_idx >= 0:
                 text = text[banner_idx:]
 
@@ -229,6 +230,7 @@ def main() -> None:
                         help="project dir whose build/<preset> the image must match (with --preset)")
     parser.add_argument("--preset", default=None, help="configure preset of the flashed image (with --project)")
     parser.add_argument("--count", type=int, default=20, help="number of warm resets (default 20)")
+    parser.add_argument("--banner", default="=== STM32H755ZI", help="expected boot banner prefix (default '=== STM32H755ZI')")
     args = parser.parse_args()
     if args.count < 1:
         sys.exit("Error: --count must be at least 1")
@@ -246,7 +248,7 @@ def main() -> None:
     options_line = (f"[host] options: project={identity.project} preset={identity.preset} count={args.count}"
                     if identity is not None else "")
     sys.exit(run_warm_resets(port, args.out, args.title, target_count=args.count, identity=identity,
-                             argv_line=argv_line, options_line=options_line))
+                             argv_line=argv_line, options_line=options_line, banner=args.banner))
 
 
 if __name__ == "__main__":

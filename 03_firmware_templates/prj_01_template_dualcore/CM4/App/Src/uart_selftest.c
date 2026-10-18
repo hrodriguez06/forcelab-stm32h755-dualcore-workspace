@@ -136,8 +136,12 @@ static bool run_cm4_ut4(void)
         spin--;
     }
 
+    size_t rx_cnt = UartLL_RingBuffer_Count(&s_cm4_ring);
+    UST_AREA->arg0 = (uint32_t)written;
+    UST_AREA->arg1 = (uint32_t)rx_cnt;
+
     bool match = true;
-    if (UartLL_RingBuffer_Count(&s_cm4_ring) != len)
+    if (rx_cnt != len)
     {
         match = false;
     }

@@ -116,13 +116,6 @@ def check_clean_tree(repo_root: pathlib.Path, out_file: Optional[pathlib.Path]) 
             continue
         if "build" in p.parts or ".gemini" in path_str:
             continue
-        # Permit captures in docs directories
-        if (p.parent == (repo_root / "01_shared_drivers" / "04_uart" / "docs").resolve()
-                and p.name.startswith("uart_checks_")):
-            continue
-        if (p.parent == (repo_root / "03_firmware_templates" / "prj_01_template_dualcore" / "docs").resolve()
-                and (p.name.startswith("uart_dev_") or p.name.startswith("uart_mock_"))):
-            continue
         # Only non-ignored modifications or untracked files are dirty
         if code != "!!":
             dirty.append(line)
@@ -236,10 +229,11 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
                 mco_rises.append(s)
 
     mco_period_samples = 0.0
-    if len(mco_rises) >= 2:
+    if len(mco_rises) >= 10:
         mco_period_samples = (mco_rises[-1] - mco_rises[0]) / (len(mco_rises) - 1)
-    elif f_mco > 0:
-        mco_period_samples = rate / f_mco
+    else:
+        # N3: Fail explicitly when MCO1 clock is missing or too few edges; no silent theoretical fallback
+        return []
 
     # 2. Decode frames from DIO15 (DIO_RX)
     i = 0
@@ -286,13 +280,17 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
                 parity_ok = False
             cur_bit_pos += 1.0
 
-        # Stop bit check
+        # Stop bit(s) check (N2: check all stop bits to distinguish 8N2 from 8N1)
         stop_ok = True
-        pt = i + int(round(cur_bit_pos * bit_period_samples))
-        if pt < n:
-            stop_ok = ((samples[pt] & DIO_RX) != 0)
-        else:
-            stop_ok = False
+        for s_idx in range(stop_bits):
+            pt = i + int(round((cur_bit_pos + s_idx) * bit_period_samples))
+            if pt < n:
+                if (samples[pt] & DIO_RX) == 0:
+                    stop_ok = False
+                    break
+            else:
+                stop_ok = False
+                break
 
         # Measure bit duration between real transitions on DIO15 (E-M1)
         total_bits = 1 + data_bits + (1 if parity in ("even", "odd") else 0) + stop_bits
@@ -304,6 +302,7 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
                           if ((samples[s] ^ samples[s - 1]) & DIO_RX)]
 
         mco_per_bit = 0.0
+        measurable = False
         if rx_transitions and mco_period_samples > 0:
             last_edge = rx_transitions[-1]
             span_samples = last_edge - start_edge
@@ -311,9 +310,10 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
             if bits_spanned >= 3:
                 bit_duration_samples = span_samples / float(bits_spanned)
                 mco_per_bit = bit_duration_samples / mco_period_samples
+                measurable = True
 
-        if mco_per_bit == 0.0:
-            if frames and frames[-1]["mco_per_bit"] > 0.0:
+        if not measurable:
+            if frames and frames[-1].get("measurable", False):
                 mco_per_bit = frames[-1]["mco_per_bit"]
             elif mco_period_samples > 0:
                 mco_per_bit = bit_period_samples / mco_period_samples
@@ -325,7 +325,8 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
             "start_edge": start_edge,
             "frame_end": frame_end,
             "total_bits": total_bits,
-            "mco_per_bit": mco_per_bit
+            "mco_per_bit": mco_per_bit,
+            "measurable": measurable
         })
 
         i = start_edge + int(round((total_bits - 0.5) * bit_period_samples))
@@ -335,8 +336,10 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
 
 # ---- Pure Evaluation Functions (The Oracle Rule, E-M2) -----------------------
 
-def eval_ut0(resting_high: bool, pd6_low_when_oe: bool, restored_high: bool, fw_pass: bool) -> bool:
-    return resting_high and pd6_low_when_oe and restored_high and fw_pass
+def eval_ut0(resting_high: bool, pd6_low_when_oe: bool, restored_high: bool,
+             mcu_low: int, mcu_high: int, mcu_rest: int, fw_pass: bool) -> bool:
+    return (resting_high and pd6_low_when_oe and restored_high and
+            (mcu_low == 0) and (mcu_high == 1) and (mcu_rest == 1) and fw_pass)
 
 
 def eval_ut0_ctrl(line_low: bool, fw_pass: bool) -> bool:
@@ -378,9 +381,10 @@ def eval_ut3(frames: list[dict], expected_bytes: list[int], exp_parity: str,
             return False, f"frame {i} parity error"
         if not f["stop_ok"]:
             return False, f"frame {i} stop bit error"
-        err_mco = abs(f["mco_per_bit"] - th_mco) / th_mco
-        if err_mco > tolerance:
-            return False, f"frame {i} mco error {err_mco*100:.3f}% > {tolerance*100:.1f}% (meas={f['mco_per_bit']:.3f} th={th_mco:.3f})"
+        if f.get("measurable", False):
+            err_mco = abs(f["mco_per_bit"] - th_mco) / th_mco
+            if err_mco > tolerance:
+                return False, f"frame {i} mco error {err_mco*100:.3f}% > {tolerance*100:.1f}% (meas={f['mco_per_bit']:.3f} th={th_mco:.3f})"
     return True, "OK"
 
 
@@ -389,7 +393,7 @@ def eval_ut4(sent: int, received: int, err: int, fw_pass: bool) -> bool:
 
 
 def eval_ut4_cm4(sent: int, received: int, status: int, fw_pass: bool) -> bool:
-    return (sent == 32) and (received == 32) and (status == 1) and fw_pass
+    return (sent == 16) and (received == 16) and (status == 1) and fw_pass
 
 
 def eval_ut5(measured_errors: dict[str, int], fw_pass: bool) -> bool:
@@ -664,6 +668,7 @@ def generate_mock_lines() -> list[str]:
 
         lines.append(f"[uart] STEP {step.name} v=1")
         if step.name == "UT0":
+            lines.append("[uart] UT0 bench resting state and 1k resistor (low=0, high=1, rest=1) -> PASS")
             lines.append("[uart] VERDICT UT0 PASS")
         elif step.name == "UT0_CTRL":
             lines.append("[uart] VERDICT UT0_CTRL PASS")
@@ -729,7 +734,7 @@ def generate_mock_lines() -> list[str]:
             lines.append("[uart] UT4 loopback: sent=72 received=72 err=0x0")
             lines.append("[uart] VERDICT UT4 PASS")
         elif step.name == "UT4_CM4":
-            lines.append("[uart] UT4_CM4 loopback: sent=32 received=32 status=1")
+            lines.append("[uart] UT4_CM4 loopback: sent=16 received=16 status=1")
             lines.append("[uart] VERDICT UT4_CM4 PASS")
         elif step.name == "UT5":
             lines.append("[uart] UT5 PE err=0x8 (expected 0x8)")
@@ -758,7 +763,7 @@ def generate_mock_lines() -> list[str]:
 
 
 def generate_mock_la_samples(pattern: list[int], bit_period: int = 868,
-                             data_bits: int = 8, parity: str = "none",
+                             data_bits: int = 8, parity: str = "none", stop_bits: int = 1,
                              corrupt_parity: bool = False, frame_limit: Optional[int] = None,
                              sample_rate: float = 100e6, f_mco: float = 4000000.0) -> list[int]:
     """Generates synthesized 16-bit logic analyzer samples containing MCO1 and UART frames."""
@@ -787,10 +792,8 @@ def generate_mock_la_samples(pattern: list[int], bit_period: int = 868,
             if corrupt_parity:
                 par ^= 1
             samples += [DIO_RX if par else 0] * bit_period
-        # Stop bit = 1
-        samples += [DIO_RX] * bit_period
-        # Inter-frame gap
-        samples += [DIO_RX] * bit_period
+        # Stop bit(s) = 1 (N15: accept stop_bits, remove extra inter-frame idle gap)
+        samples += [DIO_RX] * (bit_period * stop_bits)
         count += 1
 
     # Pad remaining to 16384 with idle high
@@ -1010,9 +1013,27 @@ class UartSession:
             if not self.sync(): return False
             pd6_restored = ((self.ad2.digital_io_read() & DIO_RX) != 0)
 
-            ut0_fw_ok = self.drain_until_verdict("UT0")
-            real_ut0 = eval_ut0(resting_high, pd6_low, pd6_restored, ut0_fw_ok)
-            ctrl_ut0 = eval_ut0(not resting_high, pd6_low, pd6_restored, ut0_fw_ok)  # Mutated resting low
+            mcu_low = -1
+            mcu_high = -1
+            mcu_rest = -1
+            ut0_fw_ok = False
+            t_end = time.monotonic() + 10.0
+            while time.monotonic() < t_end:
+                line = self.con.readline(timeout_s=2.0)
+                if line is None:
+                    continue
+                self.log(line)
+                m = re.search(r"UT0 bench resting state and 1k resistor \(low=(\d+), high=(\d+), rest=(\d+)\)", line)
+                if m:
+                    mcu_low = int(m.group(1))
+                    mcu_high = int(m.group(2))
+                    mcu_rest = int(m.group(3))
+                if "[uart] VERDICT UT0" in line:
+                    ut0_fw_ok = "PASS" in line
+                    break
+
+            real_ut0 = eval_ut0(resting_high, pd6_low, pd6_restored, mcu_low, mcu_high, mcu_rest, ut0_fw_ok)
+            ctrl_ut0 = eval_ut0(resting_high, pd6_low, pd6_restored, mcu_low, 0, mcu_rest, ut0_fw_ok)  # Mutated MCU PD5
             self.record_oracle("UT0", "Bench resting state and 1k resistor", real_ut0, not ctrl_ut0)
             self.check("UT0 resting state and series resistor", real_ut0 and not ctrl_ut0)
 
@@ -1124,13 +1145,19 @@ class UartSession:
                 brr_val = int(m.group(6), 16)
                 baud_hw = compute_actual_baud(self.f_ker, presc_val, brr_val, over8)
 
-                # Sample rate: 100 MS/s for 115200 and 921600; 10 MS/s for 9600 to capture full frame
-                sample_rate = 10e6 if baud == 9600 else 100e6
+                # Dimension sample_rate according to baud (N1)
+                if baud == 9600:
+                    sample_rate = 10e6
+                elif baud == 921600:
+                    sample_rate = 100e6
+                else:
+                    sample_rate = 20e6
+
                 if self.is_mock and hasattr(self.ad2._dwf, "mock_la_samples"):
                     bp = int(round(sample_rate / baud_hw))
                     self.ad2._dwf.mock_la_samples = generate_mock_la_samples(
                         pat, bit_period=bp, data_bits=data_bits, parity=parity,
-                        sample_rate=sample_rate, f_mco=self.f_mco
+                        stop_bits=stop_bits, sample_rate=sample_rate, f_mco=self.f_mco
                     )
 
                 # Arm LA with falling edge trigger on DIO15 (E-B3)
@@ -1152,14 +1179,20 @@ class UartSession:
                 row_ctrl, _ = eval_ut3(mutated_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
 
                 th_mco = self.f_mco / baud_hw
-                if decoded:
+                meas_frames = [f for f in decoded if f.get("measurable", False)]
+                if meas_frames:
+                    meas_mco = sum(f["mco_per_bit"] for f in meas_frames) / len(meas_frames)
+                elif decoded:
                     meas_mco = sum(f["mco_per_bit"] for f in decoded) / len(decoded)
+                else:
+                    meas_mco = 0.0
+
+                if decoded:
                     err_pct = (meas_mco - th_mco) / th_mco * 100.0
                     bytes_str = "[" + ", ".join(f"0x{f['byte']:02X}" for f in decoded) + "]"
                     meas_ctrl_mco = meas_mco * 1.025
                     err_ctrl_pct = (meas_ctrl_mco - th_mco) / th_mco * 100.0
                 else:
-                    meas_mco = 0.0
                     err_pct = 999.0
                     bytes_str = "[]"
                     meas_ctrl_mco = 0.0
@@ -1255,15 +1288,15 @@ class UartSession:
             ore_fifo_11b   = clean_11b * 18
             ore_nofifo_11b = clean_11b * 3
 
-            # Sub-bit glitch pattern for NE (E-M4): 4 sub-samples per bit
+            # Sub-bit glitch pattern for NE (N10): 16 sub-samples per bit, centered at 9/16
             ne_sub_bits = []
             for b_idx, b_val in enumerate(clean_11b):
-                if b_idx == 2:  # Data bit 1 (which is 0): inject a 1-sample glitch in middle
-                    ne_sub_bits.extend([0, 1, 0, 0])
+                if b_idx == 2:  # Data bit 1 (which is 0): glitch at sub-sample 8 (9th of 16, i.e. 9/16)
+                    ne_sub_bits.extend([0]*8 + [1] + [0]*7)
                 elif b_val == 1:
-                    ne_sub_bits.extend([1, 1, 1, 1])
+                    ne_sub_bits.extend([1] * 16)
                 else:
-                    ne_sub_bits.extend([0, 0, 0, 0])
+                    ne_sub_bits.extend([0] * 16)
 
             phases = [
                 ("PE", pe_11b, False),
@@ -1280,13 +1313,11 @@ class UartSession:
 
             for phase_name, bits, is_ne in phases:
                 if not self.sync(): return False
-                if is_ne:
-                    div = max(1, divider // 4)
-                    dur = len(bits) * (div / clk_hz)
-                    self.ad2.dout_custom(15, div, bits, single_shot=True)
-                else:
-                    dur = len(bits) * (divider / clk_hz)
-                    self.ad2.dout_custom(15, divider, bits, single_shot=True)
+                div = max(1, divider // 16) if is_ne else divider
+                dur = len(bits) * (div / clk_hz)
+                baud_eff = clk_hz / div / (16 if is_ne else 1)
+                self.log(f"[host] UT5 DOUT phase={phase_name}: div={div} bits={len(bits)} dur={dur*1e3:.2f}ms baud={baud_eff:.0f}")
+                self.ad2.dout_custom(15, div, bits, single_shot=True)
 
                 # E-B4: Start DOUT, wait, stop DOUT, reset DOUT
                 self.ad2.set_dout(1 << 15)
