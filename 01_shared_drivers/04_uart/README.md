@@ -9,8 +9,8 @@ and live hardware operations were validated on a NUCLEO-H755ZI-Q (silicon Rev V,
 `REV_ID = 0x2003`), dual-core (Cortex-M7 at 400 MHz, Cortex-M4 at 200 MHz,
 `pclk1 = 100 MHz`), using loopbacks JU1 (PD5 -> 1.0 kΩ -> PD6) and JU2
 (PD4 RTS -> PD3 CTS), and Analog Discovery 2 DIO15 (for logic analyzer wire
-decoding and error injection). Deviations D5 and D6 were formally approved by
-technical leadership on 2026-10-17. Full test descriptions, hardware captures,
+decoding and error injection). Deviations D5 and D6 were approved by the
+catalogue owner on 2026-10-17. Full test descriptions, hardware captures,
 and pruned capture records are in [section 9](#9-validation).
 
 ---
@@ -490,36 +490,34 @@ Host evaluation harness: `03_firmware_templates/prj_01_template_dualcore/tools/u
 
 ### 9.1 Phase F1 Test Matrix (UT0–UT10)
 
-Every step in UT0–UT9 runs a negative control in the same hardware session that mutates measured data or hardware conditions through the identical host evaluation function to ensure no test can pass unconditionally:
+Every step in UT0–UT9 runs a negative control in the same hardware session that mutates measured data or hardware conditions through the identical host evaluation function to ensure no test can pass unconditionally. UT9 has two: in the run, the measured lock-held return replaced by 0 must FAIL; and the separate control build must reproduce U1:
 
 | Test | Description and Tier | Oracle | Negative Control (same session) | Result |
 | :--- | :--- | :--- | :--- | :---: |
 | **UT0** | Bench resting state: JU1 (1 kΩ), JU2, DIO15 connected and idle, PD6 high | AD2 reads PD6 high (1) | MCU drives PD5 low via GPIO; AD2 reads 0 | **PASS** |
 | **UT1** | Parameter rejection across BM, LL, and HAL: unknown instance, out-of-range framing, unreachable baud rate (U2, U3), and non-UART instance (D6). Before/after register snapshots show 0 register alterations (U4) | Register snapshot comparison | Valid configuration in same table changes snapshot | **PASS** |
 | **UT2** | Prescaler and BRR formulas across BM and LL for USART1, USART6, USART2, UART4, UART5, UART7, UART8, and LPUART1. Checks effective divider applied in hardware for OVER8 odd dividers (U5) | Host mathematical formula | Mutated row in host evaluation table evaluates to FAIL | **PASS** |
-| **UT3** | Physical wire framing across BM, LL, and HAL (`InitEx`): 8N1, 8E1, 8O1, 7E1, 7N1, 9N1, 1 and 2 stop bits at 9600, 115200, and 921600 baud (OVER8). Measures bit period against MCO1 (DIO14) to ±0.5% | AD2 Logic Analyzer at 100 MS/s or 2 MS/s decodes all frames | 5 mutations per row on measured data: dropped frame, +2·tol timing, bit flip, inverted parity (on parity rows), corrupted stop bit. All evaluate to FAIL (or N/A for parity on parity-none rows) | **PASS** |
+| **UT3** | Physical wire framing, 15 rows of 6 frames each: BM 8N1, 8E1, 8O1, 7E1, 7N1, 9N1 and 8N2 at 115 200, plus 8N1 at 9600 and at 921 600 (OVER8); LL 8N1, 8E1, 7E1 and 9N1 at 115 200; HAL (`InitEx`) 8N1 and 8E1 at 115 200. Measures the bit period against MCO1 (DIO14) to ±0.5 % | AD2 logic analyzer (20 MS/s at 115 200, 2 MS/s at 9600, 100 MS/s at 921 600) decodes all 6 frames of each row | 5 mutations per row on measured data: dropped frame, +2·tol timing, bit flip, inverted parity (on parity rows), corrupted stop bit. All evaluate to FAIL (or N/A for parity on parity-none rows) | **PASS** |
 | **UT4** | Loopback transmission over JU1 on CM7: BM and LL, FIFO disabled and enabled (`RXFNE`), 7-bit mask, OVER8 and OVER16. All 72/72 bytes verified | Transmitted vs received data match | Corrupted expected byte evaluates to FAIL | **PASS** |
 | **UT4_CM4** | Loopback transmission over JU1 on CM4: LL interrupt-driven reception into ring buffer with FIFO enabled. 16/16 bytes verified | Ring buffer data matches sent pattern | Corrupted byte evaluates to FAIL | **PASS** |
 | **UT5** | Error injection via AD2 DIO15 into PD6: PE (corrupted parity), FE (stop bit at 0 and BREAK), NE (short pulse at 9/16 bit sample), ORE with and without FIFO. `TakeErrors()` harvests hardware flags directly (D5) | Flag verification via `TakeErrors()` | Clean frame produces no errors | **PASS** |
 | **UT6** | RTS/CTS hardware flow control over JU2: 24 bytes sent with flow control enabled without ORE. Without flow control, unread RX overflows and triggers ORE | Frame count in LA and ORE flag assertion | Identical sequence without flow control asserts ORE | **PASS** |
 | **UT7** | `UART_HAL_InitEx` on USART2 (CM7, non-console): framing 8E1, pull-up, high-speed pins. Cross-core GPIO lock held by CM4 returns `HAL_BUSY` (U6); lock released returns `HAL_OK` | Returned status and register snapshot | Lock free returns `HAL_OK` | **PASS** |
-| **UT8** | `UART_HAL_CheckDmaErrata` on live DMA1 transfer (bit 20 set and verified). Rejection with active stream (`HAL_BUSY`), non-UART request (`HAL_ERROR`), and BDMA handle (`HAL_ERROR`) | `DMA_SxCR` bit 20 read-back and returned status | All 3 rejection cases evaluate to FAIL if accepted | **PASS** |
-| **UT9** | U1 verification: `UART_HAL_Init` on console handle with GPIO lock held by CM4 returns `HAL_BUSY`; lock released returns `HAL_OK`. Handle left clean in `RESET` on error | Returned status and PD8/PD9 pin configuration | Negative control on base commit `b41c4a7` returned `HAL_OK` (reproducing defect U1) | **PASS** |
-| **UT10** | Regression check: real selftest of `02_firmware_projects/prj_04_adc_dma_bm_eth` runs with JU1 1 kΩ loopback | VCP console output: `[m4_uart_test] jumper=1 bm_init=1,1,1 bm_loop=1,1,1 ll=1,1 ore=1` | Missing jumper reports `jumper=0` | **PASS** |
+| **UT8** | `UART_HAL_CheckDmaErrata` on live DMA1 transfer (bit 20 set and verified). Rejection with active stream (`HAL_BUSY`), non-UART request (`HAL_ERROR`), and BDMA handle (`HAL_ERROR`) | `DMA_SxCR` bit 20 read-back and returned status. The three rejections are judged by the firmware | The same host evaluation with the measured `bit20` replaced by 0 gives FAIL | **PASS** |
+| **UT9** | U1 verification: `UART_HAL_Init` on console handle with GPIO lock held by CM4 returns `HAL_BUSY`; lock released returns `HAL_OK`. Handle left clean in `RESET` on error | Returned status and PD8/PD9 pin configuration | Separate control build: this tree with the `uart_hal.c` of `b41c4a7` returns `HAL_OK` with the lock held (defect U1 reproduced), see [9.4](#94-reproducing-the-selftest) | **PASS** |
+| **UT10** | Regression check: real selftest of `02_firmware_projects/prj_04_adc_dma_bm_eth` runs with JU1 1 kΩ loopback | VCP console output: `[m4_uart_test] jumper=1 bm_init=1,1,1 bm_loop=1,1,1 ll=1,1 ore=1` | None in the run (`jumper=0` would show a missing JU1) | **PASS** |
 
 ### 9.2 Validation Evidence and Captures
 
-**Auditor Execution (commit `954c97a` / `2611907`):**
-- **Full hardware session (5/5 consecutive runs):**
-  - [`uart_audit_hw_2611907_run1.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_2611907_run1.txt)
-  - [`uart_audit_hw_2611907_run2.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_2611907_run2.txt)
-  - [`uart_audit_hw_2611907_run3.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_2611907_run3.txt)
-  - [`uart_audit_hw_2611907_run4.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_2611907_run4.txt)
-  - [`uart_audit_hw_2611907_run5.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_2611907_run5.txt)
-  *All 5 runs:* `FW VERDICT=PASS`, `HOST VERDICT=PASS`, `m4_done_ack=1`, 15/15 UT3 rows PASS, all negative control mutations evaluate to expected FAIL (or N/A).
-- **20 Warm Resets:** [`uart_audit_warm_resets_2611907.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_warm_resets_2611907.txt) — 20/20 resets PASS with matching revision and build ID.
-- **UT9 Negative Control Reproduction:** [`uart_audit_ut9_control_2611907-dirty.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_ut9_control_2611907-dirty.txt) — defect U1 reproduced on `b41c4a7` (`returned 0, expected 2`).
-- **UT10 Regression in prj_04:** [`uart_audit_ut10_2611907.txt`](../../02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_2611907.txt) — PASS with JU1 1 kΩ loopback.
+**Auditor runs at `f584633` (the final firmware; recorded in `7ba86c1`):**
+- **Full hardware session (3/3 consecutive runs):**
+  - [`uart_audit_hw_f584633_run1.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_f584633_run1.txt)
+  - [`uart_audit_hw_f584633_run2.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_f584633_run2.txt)
+  - [`uart_audit_hw_f584633_run3.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_f584633_run3.txt)
+  *All 3 runs:* `FW VERDICT=PASS`, `HOST VERDICT=PASS`, `m4_done_ack=1`, 15/15 UT3 rows PASS, all negative control mutations evaluate to expected FAIL (or N/A for parity on the 9 rows without parity).
+- **20 Warm Resets:** [`uart_audit_warm_resets_f584633.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_warm_resets_f584633.txt) — 20/20 resets PASS with matching revision and build ID.
+- **UT9 control build:** [`uart_audit_ut9_control_f584633-dirty.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_ut9_control_f584633-dirty.txt) — this tree with the `uart_hal.c` of `b41c4a7`: U1 reproduced (`returned 0 (expected 2)`), and the host passes it in control mode. [`uart_audit_ut9_control_f584633_fixed_image.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_ut9_control_f584633_fixed_image.txt) is the same control mode run against the fixed image (`returned 2`): the host gives `HOST VERDICT=FAIL`, as it must.
+- **UT10 Regression in prj_04:** [`uart_audit_ut10_f584633.txt`](../../02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_f584633.txt) — the expected line with the JU1 1 kΩ loopback.
 
 **Developer Deliverable Captures (closure at `9229773`):**
 - Hardware session run 1: [`uart_dev_hw_9229773_run1.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9229773_run1.txt)
@@ -529,7 +527,7 @@ Every step in UT0–UT9 runs a negative control in the same hardware session tha
 
 ### 9.3 Pruned Captures Catalog (Rule 7 of `00_gpio/README.md` §14)
 
-In accordance with rule 7 of `00_gpio/README.md` §14, intermediate development captures, superseded auditor runs prior to `2611907`, and mock outputs have been pruned from the working tree. They can be retrieved from git history at the commit hashes listed below:
+In accordance with rule 7 of `00_gpio/README.md` §14, intermediate development captures, superseded auditor runs prior to `f584633`, and mock outputs have been pruned from the working tree. They can be retrieved from git history at the commit hashes listed below:
 
 | Pruned Capture | Type | Original Commit | Reason for Pruning |
 | :--- | :--- | :---: | :--- |
@@ -544,6 +542,10 @@ In accordance with rule 7 of `00_gpio/README.md` §14, intermediate development 
 | `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_12a3020.txt` | UT10 audit capture | `297e04d` | Superseded by auditor run `2611907` |
 | `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_9d2edd2.txt` | UT10 audit capture | `8d04a51` | Superseded by auditor run `2611907` |
 | `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_adc848d.txt` | UT10 audit capture | `882b5a9` | Superseded by auditor run `2611907` |
+| `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_2611907.txt` | UT10 audit capture | `954c97a` | Superseded by auditor run `f584633` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_2611907_run1.txt` … `_run5.txt` | Audit hardware runs 1–5 | `954c97a` | Superseded by auditor runs `f584633` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_ut9_control_2611907-dirty.txt` | UT9 control audit | `954c97a` | Superseded by auditor control `f584633` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_warm_resets_2611907.txt` | Warm resets 20x audit | `954c97a` | Superseded by auditor warm resets `f584633` |
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_12a3020_run1.txt` | Audit hardware run 1 | `297e04d` | Superseded by auditor 5/5 runs `2611907` |
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_12a3020_run2.txt` | Audit hardware run 2 | `297e04d` | Superseded by auditor 5/5 runs `2611907` |
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_hw_9d2edd2_run1.txt` | Audit hardware run 1 | `8d04a51` | Superseded by auditor 5/5 runs `2611907` |
@@ -583,13 +585,34 @@ In accordance with rule 7 of `00_gpio/README.md` §14, intermediate development 
 4. Build and flash preset `selftest-uart`:
    ```powershell
    . .\tools\env.ps1
-   cmake --build 03_firmware_templates/prj_01_template_dualcore/build/selftest-uart
-   py 03_firmware_templates/prj_01_template_dualcore/tools/flash.py --preset selftest-uart --sn 0016000C4142501220353451
+   cd 03_firmware_templates/prj_01_template_dualcore
+   cmake --preset selftest-uart --fresh
+   cmake --build build/selftest-uart
+   py tools/flash.py --preset selftest-uart --sn 0016000C4142501220353451
    ```
-5. Run the hardware validation check:
+5. Run the hardware validation check (the tree must be clean and committed):
    ```powershell
-   py 03_firmware_templates/prj_01_template_dualcore/tools/uart_hw_check.py --out 03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_run.txt
+   py tools/uart_hw_check.py --out docs/uart_dev_hw_run.txt
    ```
+
+#### UT9 control build (defect U1 reproduced)
+Run it from a worktree with a **short path** next to the checkout: under a long
+path (such as a temporary directory) CMake's compiler check fails, nothing is
+flashed, and the run silently tests the image already on the board.
+```powershell
+$main = (Get-Location).Path          # the main checkout
+$wt   = "..\wt_u9"
+git worktree add --detach $wt HEAD
+git -C $wt checkout b41c4a7 -- 01_shared_drivers/04_uart/uart_hal.c
+cd "$wt\03_firmware_templates\prj_01_template_dualcore"
+cmake --preset selftest-uart --fresh "-DCUBE_DIR=$main\02_firmware_projects\prj_eth_lwip_node\external\STM32CubeH7"
+cmake --build build/selftest-uart
+py tools/flash.py --preset selftest-uart --sn 0016000C4142501220353451
+py tools/uart_hw_check.py --expect-control-u1 --allow-dirty --out "$main\uart_ut9_control.txt"
+cd $main; git worktree remove --force $wt
+```
+The capture must show `UT9 fresh handle with lock held: returned 0 (expected 2)`
+and `HOST VERDICT=PASS`. Flash `selftest-uart` from the main checkout afterwards.
 
 #### prj_04 Production Selftest Regression (UT10)
 1. With JU1 (1 kΩ) in place between PD5 and PD6:
@@ -615,7 +638,7 @@ In accordance with rule 7 of `00_gpio/README.md` §14, intermediate development 
 
 - **9-bit data restriction (U7):** `ReadByte` returns `uint8_t` and `Write`/`WriteByte` accepts `uint8_t`, so bit 8 cannot be transferred via standard byte APIs. 9-bit data width is supported for 8 data bits with hardware parity; applications requiring 9 raw data bits must access `TDR` and `RDR` directly.
 - **Handle re-initialization without deinit (U7):** Calling `Init` on a handle that was previously initialized without calling `Deinit` first may leave the peripheral half-configured if a subsequent parameter check fails. Callers must invoke `Deinit` before re-configuring an active handle.
-- **D4 (Measured Hardware Fact on LPUART1):** In `uart_ll.c`, ST LL's `ATOMIC_*` macros (which expand to `LDREX`/`STREX` exclusive load/store sequences) cause the Cortex-M core to hang when executing against LPUART1 in the D3 power/clock domain. This is an observed, measured physical hardware fact on the STM32H755ZI (NUCLEO-H755ZI-Q board), independent of any published errata citation. To prevent core hangs, `uart_ll.c` performs read-modify-write register accesses under a local `PRIMASK` critical section instead of using `ATOMIC_*`.
+- **D4 (observed on this board, LPUART1):** ST LL's `ATOMIC_*` macros (`LDREX`/`STREX` exclusive load/store sequences) hung the core when applied to LPUART1 registers on the NUCLEO-H755ZI-Q. This was observed on the board; the cause was not measured, and no ES0445 erratum describes it. `uart_ll.c` therefore performs these read-modify-write register accesses under a local `PRIMASK` critical section instead of using `ATOMIC_*`.
 - **Noise Error (NE) detection:** Noise detection in the receiver hardware uses 3-sample majority voting at bit center. A glitch pulse injected at 9/16 of the bit time reliably triggers `NE` in UT5.
 - **LPUART1 live wire unexercised:** LPUART1 was validated on hardware for prescaler search and divider registers (`PRESC` and `BRR` in UT2). Live wire reception and transmission was not exercised on the bench because LPUART1 pins (PB6/PB7, Arduino D1/D0) depend on Nucleo solder bridges (UM2408 SB11, SB96, SB15, SB94) that may connect them to the ST-LINK VCP.
 - **Unexercised features:** Synchronous mode, Smartcard (ISO 7816-3), IrDA SIR ENDEC, LIN mode, RS-485 driver enable hardware flow, and multiprocessor communication mode are not supported.
@@ -668,8 +691,10 @@ selftest. Before changing the driver:
 | README rewritten around what was validated | `b23b99b` |
 | USART + DMA exercised by the `02_dma` selftest (T3, T10) | `02_dma/README.md` §13 |
 | Default MSP migrated to `GPIO_HAL_Init` / `GPIO_HAL_DeinitPin` under `gpio_bm` (F1b, H3, G13) | `c8001bf` |
-| Phase F1 implementation: unified dual-core selftest (UT0–UT9), AD2 test bench, framing decode with MCO1 clock reference | `474f514` … `9827978` |
-| Phase F1 audit corrections: 5 measured mutations per UT3 row, DONE handshake race fix, MCO1 duty-cycle coverage, dynamic kernel clock from `RCC_D2CCIP2R` | `4db5903` … `ab390d3` |
-| Technical leadership approval of deviations D5 (`TakeErrors` hardware harvesting) and D6 (HAL instance validation) (2026-10-17) | `9304ed5` |
-| Phase F1 audit passed: 5/5 auditor board runs at `954c97a`, 20/20 warm resets, UT9 control in worktree, UT10 in prj_04 | `954c97a`, `9304ed5` |
+| Phase F1 driver fixes: U1–U6, D1–D3, then D4 (no `ATOMIC_*` on LPUART1) and D5 | `006c62b` … `9b9c1a0`, `0163b35`, `f8ef5c2` |
+| Phase F1 selftest: dual-core `selftest-uart` (UT0–UT10), AD2 bench with SU1–SU4, framing decode with MCO1 clock reference | `593d720` … `43b3a79` |
+| Phase F1 audit corrections: 5 measured mutations per UT3 row, DONE handshake race fix, MCO1 duty-cycle coverage, dynamic kernel clock from `RCC_D2CCIP2R` | `aa70914` … `ab390d3` |
+| Catalogue owner approval of deviations D5 (`TakeErrors` hardware harvesting) and D6 (HAL instance validation) (2026-10-17) | `9304ed5` |
+| Phase F1 audit passed: 5/5 auditor board runs at `2611907`, 20/20 warm resets, UT9 control in worktree, UT10 in prj_04 | `954c97a`, `9304ed5` |
 | Phase F1 formal close: address audit findings I-1..I-7, protocol barriers, lock release check, doc updates, capture pruning | `9229773` |
+| Close audited: 3/3 auditor board runs at `f584633`, 20/20 warm resets, UT9 control, UT10; documentation fixes by the owner | `7ba86c1` |

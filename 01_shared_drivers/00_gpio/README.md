@@ -581,10 +581,10 @@ Since `04_uart` the bench also has the UART loopbacks: **JU1** connects PD5
 and **JU2** connects PD4 (USART2_RTS, CN9-8) directly to PD3 (USART2_CTS, CN9-10).
 **DIO15** of the AD2 is connected to PD6 (CN9-4) for logic analyzer frame capture
 and error injection (UT5). The 1.0 kΩ series resistor in JU1 limits contention
-current to ≤ 3.3 mA during AD2 error injection on PD6 (`04_uart/README.md` §8).
+current to ≤ 3.3 mA during AD2 error injection on PD6 (`04_uart/README.md` §9).
 
-**Electrical safety.** There are no series resistors, so nothing limits the
-current in a contention (DS12923 table 11: 20 mA per pin, +0 mA injection on FT
+**Electrical safety.** Apart from the 1.0 kΩ of JU1, there are no series
+resistors, so nothing limits the current in a contention (DS12923 table 11: 20 mA per pin, +0 mA injection on FT
 pins). A contention or an injection can damage a pin with no immediate symptom.
 These rules cannot be relaxed:
 
@@ -600,14 +600,14 @@ These rules cannot be relaxed:
 | S8 | No output enabled before the banner `GPIO_BENCH v1 idle` of a clean `Rev` has been read | `gpio_hw_check.py` |
 | S9 | AD2 on USB whenever the Nucleo is powered; GND first on, last off; never unplug or reset the Nucleo with the script running | Procedure below |
 | S10 | Flash or reset only with the AD2 in S2 (the MCU puts every pin in analog meanwhile) | The script resets the board itself, with the AD2 in S2 |
-| SU1 | DIO15 is an AD2 output only in steps whose step definition explicitly declares DIO15 (UT5 error injection, UT0 line check); otherwise input | `tools/ad2.py` (`ad2_set_oe`, `ad2_digital_out_start`); S3/S11 guard |
+| SU1 | DIO15 is an AD2 output only in steps whose step definition declares DIO15 in its `STEPS` entry (`OE` in UT0, `DOUT` in UT5); otherwise input | `tools/ad2.py` (`ad2_set_oe`, `ad2_set_dout`); S3/S11 guard |
 | SU2 | While AD2 drives PD6, PD5 must remain idle / not driving (USART2 `TE = 0` or GPIO input) | `CM7/App/Src/uart_selftest.c` (`bench_claim()`); host check |
 | SU3 | On open, close, between steps, and on any exception, timeout, or abort, DIO15 reverts to input (S2) | `tools/ad2.py` (`set_safe_state()`, `bench_safe()`, `try/finally`) |
 | SU4 | Pins PD3–PD6 are configured solely by the `selftest-uart` firmware; no other `prj_01` preset or image touches them | Firmware configuration guard |
 
 Never connected to the board: W1, W2, V+, V−; any DIO to 3V3, 5V, VIN, NRST,
 BOOT0 or a pin not in the table above; any component other than the four of
-PF14/PF15.
+PF14/PF15 and the 1.0 kΩ resistor of JU1.
 
 **Procedure:**
 1. Connect GND first, then the DIO lines.
