@@ -266,3 +266,65 @@ El control de UT9 lo construí yo: un worktree en HEAD con el `uart_hal.c` de `b
 | F-m2 | Menor | **Enlaces `file:///c:/…` en el informe** | Rutas relativas |
 
 **La revisión de solo lectura de los controles (UT0–UT9) sigue en curso.** Lo que encuentre irá en una sección aparte.
+
+### Ampliación de la corrección 3 (enviada por mensaje el 2026-10-17, registrada aquí)
+
+La revisión de solo lectura de `4db5903` terminó después de enviar la ronda corta. Estos hallazgos se mandaron a la misma conversación:
+
+| ID | Gravedad | Hallazgo |
+| --- | --- | --- |
+| N1 | Bloqueante | **UT3 decodifica una sola trama en 14 de las 15 filas, y `eval_ut3` no exige el número de tramas** |
+| N2 | Mayor | **Solo se comprueba el primer bit de parada** |
+| N3 | Mayor | **Sin MCO1, se usa en silencio el valor teórico** |
+| N4 | Mayor | **La línea de MCO1 del firmware es un literal, y se descarta el resultado de `ConfigAlternate`** |
+| N5 | Mayor | **UT1, UT4, UT4_CM4, UT7 y UT8 imprimen valores derivados de `ok`; el host no lee los `IDR` de UT0** |
+| N6 | Mayor | **La captura no registra lo que mide el AD2** en UT0, en UT3 por fila, ni en UT5 por fase |
+| N7 | Mayor | **El modo control de UT9 está al revés** |
+| N8 | Mayor | **`UART_HAL_IsValidInstance` cambia el driver congelado sin declararlo**, y las citas de `uart_hal.c` se han movido |
+| N9 | Mayor | **Afirmaciones falsas en el informe** |
+| N12 | Mayor | **CM7 no lee `m4_timeout`, y las ventanas dependen de la latencia del host** |
+| N10, N11, N13–N15 | Menor | Pulso de NE; LA en UT4–UT8; exenciones del árbol limpio; vaciado y banner de `run_warm_resets.py`; tramas no medibles y mock |
+
+## F1, corrección 4 (`fdbf306`, informe en `9d2edd2`)
+
+**Condición de entrada: cumplida.** `uart_dev_hw_fdbf306.txt` está en el commit entregado, con todo PASS y la tabla de controles.
+
+### Ejecuciones del auditor en la placa (`8d04a51`)
+
+| Prueba | Captura | Resultado |
+| --- | --- | --- |
+| Sesión completa, ejecuciones 1 y 2 | `prj_01/docs/uart_audit_hw_9d2edd2_run1.txt`, `_run2.txt` | `FW VERDICT=PASS`, `HOST VERDICT=PASS`; `Rev`/id `9d2edd2`/`b4b837ff98857d86` en CM7, CM4 y host; las 15 filas de UT3, cada una con su línea y su control |
+| 20 warm resets de `selftest-uart` | `uart_audit_warm_resets_9d2edd2.txt` | 20/20 |
+| UT10, `prj_04` | `prj_04/docs/uart_audit_ut10_9d2edd2.txt` | `[m4_uart_test] jumper=1 bm_init=1,1,1 bm_loop=1,1,1 ll=1,1 ore=1` |
+| Control de UT9 (worktree con el `uart_hal.c` de `b41c4a7`) | `uart_audit_ut9_control_9d2edd2-dirty.txt` | `returned 0 (expected 2)`, y el host da `HOST VERDICT=PASS` en modo control: U1 reproducido y juzgado bien |
+
+### Revisión del código
+
+**Cerrado:**
+- F-M1, F-M2, F-M3, F-m1 y F-m2;
+- N2: cada bit de parada; la sonda detecta 8N2 enviado con una parada;
+- N5: valores reales, salvo `sent = 72`, que es literal;
+- N7;
+- N10: NE a 9/16 del bit, detectado;
+- N14: el banner por defecto vale para los cinco proyectos;
+- N15.
+
+**El driver no cambia en esta ronda.** La sonda de UT3 detecta:
+- un bit un 0,6 % o un 1 % lento;
+- la paridad invertida;
+- la longitud de palabra equivocada;
+- bytes 2–6 erróneos a 115 200;
+- MCO1 ausente o a 4,1 MHz;
+- el LA sin datos.
+
+| ID | Gravedad | Hallazgo | Qué se pide |
+| --- | --- | --- | --- |
+| G-B1 | Bloqueante | **N1 sigue abierto.** `eval_ut3` solo recorre las tramas que hay (`uart_hw_check.py:375-377`), sin exigir `len(frames) == len(pat)`. La fila de 9600 captura 1,64 ms (10 MS/s y 16 384 muestras) para 6,25 ms de tramas: en la placa sale `frames=1 bytes=[0x55] -> PASS` (`uart_audit_hw_9d2edd2_run1.txt:108`). La sonda da PASS con solo el primer byte enviado, con 3 de 6 y con bytes 2–6 erróneos a 9600 | Exigir `len(frames) == len(pat)`, con un control que quite una trama de los datos medidos. Para 9600, que quepan las 6 tramas con MCO1 en la misma captura (una captura por trama, o MCO1 más lento con menos MS/s) |
+| G-M1 | Mayor | **El informe:**<br>• describe mal los N (R:34 sobre N1, R:35 "1,5 bits de parada", R:40, R:42, R:44, R:46);<br>• cita líneas de `uart_hal.c` que no son (U1 es 173-186, U6 229-233/249-253, D6 156-159/191-194, D2 199-200/208-209);<br>• titula §3 "Desviaciones Aprobadas", y D6 nadie la aprobó;<br>• presenta las capturas `uart_dev_` como "Verificación en Hardware Real" | Describir cada N como se pidió; citas exactas; "declarada, pendiente de aprobación"; "evidencia de desarrollo" |
+| G-M2 | Mayor | **N12 sigue a medias:**<br>• CM4 se rinde a los 3 s sin comando (CM4 `uart_selftest.c:189-193`), cuando UT5/UT6 los marca el host;<br>• `m4_timeout` solo se lee en el camino de DONE y solo se imprime si no es 0;<br>• el host no lo lee | CM4 espera hasta DONE o aborto, sin plazo propio; `m4_timeout=` siempre en la captura, y el host lo exige a 0 |
+| G-M3 | Mayor | **Las recetas del informe (§6.2):**<br>• la del control de UT9 modifica el checkout compartido;<br>• la de UT10 abre el monitor sin reset, así que la línea ya ha salido;<br>• ninguna lleva `--sn` | El control, en un worktree (`git worktree add --detach`, `git show b41c4a7:… >`, `-DCUBE_DIR`); UT10, con reset NRST tras abrir el monitor; `--sn` en todas |
+| G-m | Menor | Detalles sueltos:<br>• N3: registrar el periodo y el número de flancos de MCO1 por fila, y exigir flancos a lo largo de las tramas (MCO1 que se para a mitad da PASS);<br>• N4: leer la fuente de MCO1 y el reloj de USART2 en vez de `HSE_VALUE` y el literal de 100 MHz;<br>• `sent = 72` literal;<br>• valores por defecto permisivos en UT1 (`snap=1, fail=0` si falta la línea);<br>• en UT5 no se comprueba el byte recibido;<br>• N6: los valores del AD2 de UT0/UT0_CTRL no van a la captura;<br>• exención `.gemini`;<br>• el mock usa un periodo de bit entero (+0,23 %);<br>• el banner no queda registrado en `run_warm_resets`;<br>• N11 (LA en UT4–UT8) ni hecho ni argumentado | Corregir o argumentar |
+
+### Estado
+
+**F1 no pasa, por G-B1.** Todo lo demás de la placa pasa, en las ejecuciones del implementador y en las mías. Lo que queda es G-B1, el informe, G-M2, G-M3 y menores.
