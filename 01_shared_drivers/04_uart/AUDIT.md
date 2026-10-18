@@ -446,3 +446,55 @@ Se documentan en el README en el cierre.
 - solo quedan las que respaldan una afirmación actual;
 - las superadas (las de desarrollo y de auditoría anteriores a `ab390d3`/`2611907`, y los mocks y `uart_checks` anteriores) se borran;
 - se listan en una tabla de §9 con el commit desde el que se pueden leer.
+
+## Cierre del implementador (`9229773`, informe en `f584633`)
+
+**Condición de entrada: cumplida.** `uart_dev_hw_9229773_run1.txt` y `_run2.txt`, con todo PASS y `m4_done_ack=1`, más `uart_dev_warm_resets_9229773.txt` (20/20) y `uart_checks_9229773.txt`. Árbol limpio y sin escrituras en `.git/config` (sin cambios desde el 2026-10-17 01:26).
+
+### Ejecuciones del auditor en la placa (en `f584633`)
+
+`selftest-uart` compila con 0 avisos (salida de `cmake --build`).
+
+| Prueba | Captura | Resultado |
+| --- | --- | --- |
+| Tres sesiones completas seguidas | `prj_01/docs/uart_audit_hw_f584633_run1.txt` … `_run3.txt` | **3/3:**<br>• `FW VERDICT=PASS` y `HOST VERDICT=PASS`;<br>• `Rev`/id `f584633`/`5f1db20ea787773e` en CM7, CM4 y host;<br>• `m4_done_ack=1`;<br>• 15/15 filas de UT3 y 15/15 líneas de control con las cinco mutaciones en FAIL esperado (o N/A en paridad);<br>• UT7 y UT9 con la comprobación nueva de `lock_held` |
+| 20 warm resets, con `--sn` y sin `--port` (I-3: el puerto sale de `port_for_sn`) | `uart_audit_warm_resets_f584633.txt` | 20/20 |
+| Control de UT9 (worktree en `f584633` con el `uart_hal.c` de `b41c4a7`) | `uart_audit_ut9_control_f584633-dirty.txt` | `returned 0 (expected 2)`: U1 reproducido; el host da PASS en modo control |
+| Control de UT9 sobre la imagen corregida (accidental, ver abajo) | `uart_audit_ut9_control_f584633_fixed_image.txt` | `returned 2`, y el modo control da `HOST VERDICT=FAIL`, como debe |
+| UT10, `prj_04` (`cmake --preset selftest-uart --fresh`, `monitor.py --sn`, `-hardRst`) | `prj_04/docs/uart_audit_ut10_f584633.txt` | `[m4_uart_test] jumper=1 bm_init=1,1,1 bm_loop=1,1,1 ll=1,1 ore=1` |
+
+**El control accidental.** El primer intento de control puso el worktree en el scratchpad. La ruta superó el límite de Windows en el `try_compile` de CMake, la configuración falló, y `flash.py` no grabó nada. `uart_hw_check.py --expect-control-u1` corrió entonces contra la imagen corregida, y la juzgó FAIL. Con un worktree de ruta corta (`00_STmicro/wt_u9`) el control salió bien. Ya no queda ningún worktree.
+
+`prj_01` `debug` queda otra vez en la placa.
+
+### Revisión del código
+
+**Cerrado:**
+- **I-1:** la receta del control de UT9 usa `CUBE_DIR` del checkout principal (informe:205-206);
+- **I-2:** la receta de UT10 configura `prj_04` y usa solo `--sn`;
+- **I-3:** `--sn` sin valor por defecto; con `--sn` y sin `--port`, el puerto sale de `monitor.port_for_sn` (probado en la placa);
+- **I-4:** CM4 lee `cmd_seq`, `__DMB()` y después `cmd`; CM7 hace `__DMB()` antes de devolver la confirmación. CM4 ya tenía `__DMB()` antes y después de escribir `ack_seq`;
+- **I-5:** CM4 deja `lock_held = 1` si `HSEM_BM_Release` falla, y CM7 exige `lock_held == 0` tras LOCK_RELEASE en UT7 y UT9;
+- **I-6:** `m4_timeout` fuera del área de UART. Las otras áreas (`gpio`, `i2c`, `spi`, `tim`) tienen su propio campo y no cambian;
+- **I-7:** la paridad N/A en 9 filas está en el informe, y queda una sola copia de la captura.
+
+**El driver y `ad2.py` no cambian.** Los cambios son el firmware del selftest (I-4–I-6), `run_warm_resets.py`, los README y la limpieza.
+
+**Limpieza de capturas.** Las 41 capturas borradas están en la tabla de README §9.3, y cada una se puede leer en el commit que indica (comprobado con `git cat-file -e` una a una).
+
+### Pendiente de documentación (para el cierre del responsable)
+
+| ID | Dónde | Hallazgo | Corrección |
+| --- | --- | --- | --- |
+| R-1 | README:12-13, :673 | D5/D6 "approved by technical leadership" | Aprobadas por el responsable del catálogo |
+| R-2 | README:671 | `474f514` es un hash anterior al rebase y no está en la rama | `43b3a79` |
+| R-3 | README:500 | UT3 "100 MS/s or 2 MS/s" y "1 and 2 stop bits" | 20 MS/s a 115 200, 2 MS/s a 9600, 100 MS/s a 921 600; las 15 filas reales (8N2, solo 8N1/8E1 en HAL) |
+| R-4 | README:506 | El control de UT8 dice "rejections evaluate to FAIL if accepted" | El control muta `bit20 = 0` en `eval_ut8`; los rechazos solo los juzga el firmware |
+| R-5 | README:507-508 | UT9 "on base commit `b41c4a7`"; UT10 presenta `jumper=0` como control | UT9: HEAD con el `uart_hal.c` de `b41c4a7`; UT10 no tiene control en la ejecución |
+| R-6 | README:618 | D4 atribuye el cuelgue al dominio D3 | Solo lo observado; la causa no está medida |
+| R-7 | README §9.2, §9.4 | Las capturas del auditor citadas son las de `2611907`; la receta de `prj_01` no configura; falta la receta del control de UT9 | Citar las de `f584633` y retirar las de `2611907` a §9.3; añadir `cmake --preset selftest-uart`; la receta del control, con worktree de ruta corta |
+| R-8 | `00_gpio/README.md` §8 | Remite a `04_uart/README.md` §8 (es §9); SU1 cita `ad2_digital_out_start`, que no existe (`ad2_set_dout`); "no series resistors" y "the four of PF14/PF15" no cuentan la resistencia de JU1 | Corregir |
+
+### Estado
+
+**El cierre del implementador pasa.** Quedan R-1–R-8, todos de documentación, y los pasos de cierre del responsable.
