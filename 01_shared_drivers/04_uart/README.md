@@ -521,11 +521,11 @@ Every step in UT0–UT9 runs a negative control in the same hardware session tha
 - **UT9 Negative Control Reproduction:** [`uart_audit_ut9_control_2611907-dirty.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_audit_ut9_control_2611907-dirty.txt) — defect U1 reproduced on `b41c4a7` (`returned 0, expected 2`).
 - **UT10 Regression in prj_04:** [`uart_audit_ut10_2611907.txt`](../../02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_2611907.txt) — PASS with JU1 1 kΩ loopback.
 
-**Developer Deliverable Captures (commits `ab390d3` and closure):**
-- Hardware session run 1: [`uart_dev_hw_ab390d3_run1.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run1.txt)
-- Hardware session run 2: [`uart_dev_hw_ab390d3_run2.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run2.txt)
-- 20 Warm resets: [`uart_dev_warm_resets_ab390d3.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_ab390d3.txt)
-- Offline checks T1/T2: [`uart_checks_ab390d3.txt`](docs/uart_checks_ab390d3.txt)
+**Developer Deliverable Captures (closure at `9229773`):**
+- Hardware session run 1: [`uart_dev_hw_9229773_run1.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9229773_run1.txt)
+- Hardware session run 2: [`uart_dev_hw_9229773_run2.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9229773_run2.txt)
+- 20 Warm resets: [`uart_dev_warm_resets_9229773.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_9229773.txt)
+- Offline checks T1/T2: [`uart_checks_9229773.txt`](docs/uart_checks_9229773.txt)
 
 ### 9.3 Pruned Captures Catalog (Rule 7 of `00_gpio/README.md` §14)
 
@@ -539,6 +539,7 @@ In accordance with rule 7 of `00_gpio/README.md` §14, intermediate development 
 | `01_shared_drivers/04_uart/docs/uart_checks_9864bc9.txt` | Offline checks T1/T2 | `f34fe82` | Superseded by final closure check |
 | `01_shared_drivers/04_uart/docs/uart_checks_9b9fe37.txt` | Offline checks T1/T2 | `adc848d` | Superseded by final closure check |
 | `01_shared_drivers/04_uart/docs/uart_checks_a39abd7.txt` | Offline checks T1/T2 | `641ac26` | Superseded by final closure check |
+| `01_shared_drivers/04_uart/docs/uart_checks_ab390d3.txt` | Offline checks T1/T2 | `2611907` | Superseded by final closure check `9229773` |
 | `01_shared_drivers/04_uart/docs/uart_checks_fdbf306.txt` | Offline checks T1/T2 | `9d2edd2` | Superseded by final closure check |
 | `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_12a3020.txt` | UT10 audit capture | `297e04d` | Superseded by auditor run `2611907` |
 | `02_firmware_projects/prj_04_adc_dma_bm_eth/docs/uart_audit_ut10_9d2edd2.txt` | UT10 audit capture | `8d04a51` | Superseded by auditor run `2611907` |
@@ -560,10 +561,13 @@ In accordance with rule 7 of `00_gpio/README.md` §14, intermediate development 
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9b9fe37.txt` | Dev hardware run | `adc848d` | Superseded by final dev runs |
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_a39abd7.txt` | Dev hardware run | `641ac26` | Superseded by final dev runs |
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3.txt` | Dev hardware run (redundant) | `2611907` | Redundant with `_run1.txt` (I-7) |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run1.txt` | Dev hardware run 1 | `2611907` | Superseded by final closure runs `9229773` |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run2.txt` | Dev hardware run 2 | `2611907` | Superseded by final closure runs `9229773` |
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_fdbf306.txt` | Dev hardware run | `9d2edd2` | Superseded by final dev runs |
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets.txt` | Dev warm resets | `641ac26` | Superseded by final dev warm resets |
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_4db5903.txt` | Dev warm resets | `12a3020` | Superseded by final dev warm resets |
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_9b9fe37.txt` | Dev warm resets | `adc848d` | Superseded by final dev warm resets |
+| `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_ab390d3.txt` | Dev warm resets | `2611907` | Superseded by final closure warm resets `9229773` |
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_fdbf306.txt` | Dev warm resets | `9d2edd2` | Superseded by final dev warm resets |
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_mock_474f514.txt` | Mock check | `c42381e` | Superseded by final test suite |
 | `03_firmware_templates/prj_01_template_dualcore/docs/uart_mock_593d720.txt` | Mock check | `ae3e620` | Superseded by final test suite |
@@ -668,4 +672,4 @@ selftest. Before changing the driver:
 | Phase F1 audit corrections: 5 measured mutations per UT3 row, DONE handshake race fix, MCO1 duty-cycle coverage, dynamic kernel clock from `RCC_D2CCIP2R` | `4db5903` … `ab390d3` |
 | Technical leadership approval of deviations D5 (`TakeErrors` hardware harvesting) and D6 (HAL instance validation) (2026-10-17) | `9304ed5` |
 | Phase F1 audit passed: 5/5 auditor board runs at `954c97a`, 20/20 warm resets, UT9 control in worktree, UT10 in prj_04 | `954c97a`, `9304ed5` |
-| Phase F1 formal close: address audit findings I-1..I-7, protocol barriers, lock release check, doc updates, capture pruning | `current` |
+| Phase F1 formal close: address audit findings I-1..I-7, protocol barriers, lock release check, doc updates, capture pruning | `9229773` |

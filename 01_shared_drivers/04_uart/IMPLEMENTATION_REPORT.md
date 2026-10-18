@@ -1,10 +1,10 @@
-# Informe de Implementación: Fase F1 del Driver `04_uart` (Sexta Corrección de Auditoría)
+# Informe de Implementación: Fase F1 del Driver `04_uart` (Cierre Formal)
 
 **Fecha:** 2026-10-17  
 **Rama:** `driver/uart-audit`  
 **Base:** `main` (`b41c4a7`)  
-**Último commit de código / herramienta:** `ab390d3`  
-**Estado de la fase:** F1 CORREGIDA 6 PARA AUDITORIA  
+**Último commit de código / herramienta:** `9229773`  
+**Estado de la fase:** CIERRE ENTREGADO PARA AUDITORIA  
 
 ---
 
@@ -98,8 +98,8 @@ El Analizador Lógico (LA) del AD2 está dedicado a **UT3** para inspeccionar la
 
 La suite completa de selftest y oráculo de hardware ha sido ejecutada físicamente contra la placa NUCLEO-H755ZI-Q (`sn=0016000C4142501220353451`) conectada al Analog Discovery 2 (`sn=210321B5D38D`) dos veces consecutivas:
 
-- **Captura Ejecución 1:** [03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run1.txt](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run1.txt)
-- **Captura Ejecución 2:** [03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run2.txt](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run2.txt)
+- **Captura Ejecución 1:** [03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9229773_run1.txt](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9229773_run1.txt)
+- **Captura Ejecución 2:** [03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9229773_run2.txt](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9229773_run2.txt)
 - **Veredicto Firmware:** `FW VERDICT=PASS` (en ambas ejecuciones)
 - **Veredicto Host:** `HOST VERDICT=PASS` (en ambas ejecuciones)
 - **Handshake DONE:** `m4_done_ack=1` en ambas ejecuciones, verificado por el host.
@@ -125,16 +125,16 @@ La suite completa de selftest y oráculo de hardware ha sido ejecutada físicame
 
 ### Prueba de Resets en Caliente (20 Warm Resets)
 - **Preset:** `selftest-uart` en `prj_01_template_dualcore`.
-- **Comando:** `py tools/run_warm_resets.py --project 03_firmware_templates/prj_01_template_dualcore --preset selftest-uart --out 03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_ab390d3.txt --title "selftest-uart 20 warm resets" --count 20 --sn 0016000C4142501220353451`
-- **Resultado:** **20/20 resets superados exitosamente**, alcanzando `(CPU2 alive)`, reportando `Reset method: STM32_Programmer_CLI -c port=SWD sn=0016000C4142501220353451 mode=HOTPLUG -rst`, y verificando identidad de revisión (`ab390d3`) e id de compilación (`c1d8890dd8cd3f7d`) en cada iteración.
-- **Captura:** [03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_ab390d3.txt](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_ab390d3.txt).
+- **Comando:** `py tools/run_warm_resets.py --project 03_firmware_templates/prj_01_template_dualcore --preset selftest-uart --out 03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_9229773.txt --title "selftest-uart 20 warm resets" --count 20 --sn 0016000C4142501220353451`
+- **Resultado:** **20/20 resets superados exitosamente**, alcanzando `(CPU2 alive)`, reportando `Reset method: STM32_Programmer_CLI -c port=SWD sn=0016000C4142501220353451 mode=HOTPLUG -rst`, y verificando identidad de revisión (`9229773`) e id de compilación (`803ad0f4d7feaed1`) en cada iteración.
+- **Captura:** [03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_9229773.txt](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_9229773.txt).
 
 ---
 
 ## 5. Resultados de Verificación Off-Board y Capturas Commiteadas
 
 ### T1: Matriz de Compilación (11 Presets)
-- **Herramienta:** `tools/uart_checks.py --output 01_shared_drivers/04_uart/docs/uart_checks_ab390d3.txt`
+- **Herramienta:** `tools/uart_checks.py --output 01_shared_drivers/04_uart/docs/uart_checks_9229773.txt`
 - **Resultados:** 11/11 presets compilados con `cmake --build --clean-first`, 0 errores, 0 avisos del compilador:
   - `prj_01_template_dualcore` [`debug`]: **PASS** (0 warnings, 274 objetos).
   - `prj_01_template_dualcore` [`release`]: **PASS** (0 warnings, 274 objetos).
@@ -154,7 +154,7 @@ La suite completa de selftest y oráculo de hardware ha sido ejecutada físicame
 - **Control Negativo de Cabeceras:** Modificación sintética evaluada con `git diff --no-index` detecta 1 línea eliminada (**PASS**).
 - **Aislamiento de Símbolos:** Inspección de los 16 ELFs de producción (`release` y `debug`) con `nm` sin `-g`: 0 símbolos de selftest encontrados (**PASS**).
 - **Control Positivo de Símbolos:** ELFs de `selftest-uart` evaluados por la misma función detectan 17 símbolos en CM7 y 4 en CM4 (**PASS**).
-- **Captura commiteada:** [docs/uart_checks_ab390d3.txt](docs/uart_checks_ab390d3.txt).
+- **Captura commiteada:** [docs/uart_checks_9229773.txt](docs/uart_checks_9229773.txt).
 
 ---
 
@@ -284,9 +284,9 @@ Conforme a la aprobación de la dirección técnica:
 - [x] T1 y T2 pasan con 0 avisos del compilador contados desde la salida de `cmake --build` en las 11 configuraciones.
 - [x] Controles negativos de T1 y T2 pasan a través de la misma función evaluadora con entradas mutadas fuera del repo.
 - [x] Suite mock off-board de `uart_hw_check.py` pasa con veredicto PASS.
-- [x] Ejecución en hardware real con capturas [`uart_dev_hw_ab390d3_run1.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run1.txt) y [`uart_dev_hw_ab390d3_run2.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run2.txt) con `FW VERDICT=PASS`, `HOST VERDICT=PASS` y 12/12 pasos de la tabla Oracle en PASS.
+- [x] Ejecución en hardware real con capturas [`uart_dev_hw_9229773_run1.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9229773_run1.txt) y [`uart_dev_hw_9229773_run2.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9229773_run2.txt) con `FW VERDICT=PASS`, `HOST VERDICT=PASS` y 12/12 pasos de la tabla Oracle en PASS.
 - [x] Handshake de DONE con confirmación explícita `m4_done_ack=1` en CM4, CM7 y host.
-- [x] 20/20 warm resets en `selftest-uart` con captura [`uart_dev_warm_resets_ab390d3.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_ab390d3.txt) alcanzando `(CPU2 alive)`.
+- [x] 20/20 warm resets en `selftest-uart` con captura [`uart_dev_warm_resets_9229773.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_9229773.txt) alcanzando `(CPU2 alive)`.
 - [x] Placa flasheada con preset de producción `debug` y AD2 en estado seguro S2.
 - [x] Desviaciones `D5` (`TakeErrors`) y `D6` (`UART_HAL_IsValidInstance`) formalmente aprobadas por la dirección técnica el 2026-10-17.
 - [x] Hallazgos I-1 a I-7 resueltos en firmware, herramientas y documentación.
@@ -296,4 +296,4 @@ Conforme a la aprobación de la dirección técnica:
 - [x] Citas a archivos, líneas, conectores y constantes verificadas contra HEAD.
 - [x] Ninguna escritura realizada en la configuración de git ni enlaces absolutos `file:///`.
 
-F1 CORREGIDA 6 PARA AUDITORIA ab390d3
+CIERRE ENTREGADO PARA AUDITORIA 9229773

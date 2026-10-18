@@ -1,0 +1,213 @@
+[+   0.000s] [host] argv: --out 03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_9229773_run1.txt
+[+   0.000s] [host] options: preset=selftest-uart allow_dirty=False mock_test=False expect_control_u1=False
+[+   0.000s] [host] uart_hw_check.py, host checkout 9229773, protocol v1
+[+   5.855s] [host] clean tree at start: PASS (Tree is clean outside build/)
+[+   6.269s] [host] build id of this checkout and build/selftest-uart: 803ad0f4d7feaed1
+[+   7.035s] [ad2] opened in S2 (config 6, 16k buffer): OE=0x0000 DIO=0x8FFE
+[+   7.400s] [host] reset through SWD (sn=0016000C4142501220353451): C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD sn=0016000C4142501220353451 mode=HOTPLUG -rst
+[+   7.554s] [host] SWD reset rc=0
+[+   7.554s] [swd] -------------------------------------------------------------------
+[+   7.554s] [swd] STM32CubeProgrammer v2.23.0
+[+   7.554s] [swd] -------------------------------------------------------------------
+[+   7.554s] [swd] ST-LINK SN  : 0016000C4142501220353451
+[+   7.554s] [swd] ST-LINK FW  : V3J17M11
+[+   7.554s] [swd] Board       : NUCLEO-H755ZI-Q
+[+   7.554s] [swd] Voltage     : 3.27V
+[+   7.554s] [swd] SWD freq    : 8000 KHz
+[+   7.554s] [swd] Connect mode: Hot Plug
+[+   7.554s] [swd] Reset mode  : Software reset
+[+   7.554s] [swd] Device ID   : 0x450
+[+   7.554s] [swd] Revision ID : Rev V
+[+   7.554s] [swd] Device name : STM32H7xx
+[+   7.554s] [swd] NVM size    : 2 MBytes
+[+   7.554s] [swd] Device type : MCU
+[+   7.554s] [swd] Device CPU  : Cortex-M7/M4
+[+   7.554s] [swd] BL Version  : 0x92
+[+   7.554s] [swd] MCU Reset
+[+   7.554s] [swd] Software reset is performed
+[+   7.554s]  
+[+   7.555s] === STM32H755ZI dual-core template - CPU1 (Cortex-M7) ===
+[+   7.555s] [sys] build rev=9229773 id=803ad0f4d7feaed1
+[+   7.555s] [sys] sysclk=400000000 Hz hclk=200000000 Hz
+[+   7.556s] [sys] silicon revision id=0x2003
+[+   7.556s] [ipc] shared block at 0x38008000, magic=0x48375353
+[+   7.559s] [ipc] CPU2 boot handshake: enabled (HSEM 0)
+[+   7.564s] [uart] === 04_uart selftest starting on CM7 ===
+[+   7.566s] [uart] CM7 Rev 9229773
+[+   7.569s] [uart] CM7 Build id 803ad0f4d7feaed1
+[+   7.571s] [uart] CM4 Rev 9229773
+[+   7.574s] [uart] CM4 Build id 803ad0f4d7feaed1
+[+   7.574s] [host] R4-a: cm7 Rev=9229773 id=803ad0f4d7feaed1; cm4 Rev=9229773 id=803ad0f4d7feaed1; host HEAD=9229773
+[+   7.581s] [uart] MCO1: PA8 enabled, freq=800000 Hz, f_ker=100000000 Hz, ratio=125:1
+[+   7.589s] [uart] STEP UT0 v=1
+[+   7.602s] [ad2] UT0 measurements: resting_high=True pd6_low=True pd6_restored=True
+[+   7.609s] [uart] UT0 bench resting state and 1k resistor (low=0, high=1, rest=1) -> PASS
+[+   7.611s] [uart] VERDICT UT0 PASS
+[+   7.611s] [host] CHECK UT0 resting state and series resistor: PASS
+[+   7.619s] [uart] STEP UT0_CTRL v=1
+[+   7.624s] [ad2] UT0_CTRL measurement: ctrl_low=True
+[+   7.629s] [uart] UT0_CTRL negative control: PD5 low propagates to PD6 -> PASS
+[+   7.631s] [uart] VERDICT UT0_CTRL PASS
+[+   7.631s] [host] CHECK UT0_CTRL negative control line low: PASS
+[+   7.640s] [uart] STEP UT1 v=1
+[+   7.648s] [uart] UT1 parameter rejections: snapshot_match=1 fail_count=0
+[+   7.655s] [uart] UT1 parameter rejection across BM, LL, HAL (U2, U3, D2) -> PASS
+[+   7.657s] [uart] VERDICT UT1 PASS
+[+   7.657s] [host] CHECK UT1 parameter rejection across BM, LL, HAL: PASS
+[+   7.665s] [uart] STEP UT2 v=1
+[+   7.674s] [uart] UT2 row: tier=BM inst=UART4 f_ker=100000000 baud=9600 over8=0 presc=0x0 brr=0x28b1
+[+   7.682s] [uart] UT2 row: tier=LL inst=UART4 f_ker=100000000 baud=9600 over8=0 presc=0x0 brr=0x28b1
+[+   7.690s] [uart] UT2 row: tier=BM inst=UART4 f_ker=100000000 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   7.698s] [uart] UT2 row: tier=LL inst=UART4 f_ker=100000000 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   7.706s] [uart] UT2 row: tier=BM inst=UART4 f_ker=100000000 baud=1200 over8=0 presc=0x1 brr=0xa2c3
+[+   7.714s] [uart] UT2 row: tier=LL inst=UART4 f_ker=100000000 baud=1200 over8=0 presc=0x1 brr=0xa2c3
+[+   7.721s] [uart] UT2 row: tier=BM inst=UART5 f_ker=100000000 baud=921600 over8=1 presc=0x0 brr=0xd4
+[+   7.729s] [uart] UT2 row: tier=LL inst=UART5 f_ker=100000000 baud=921600 over8=1 presc=0x0 brr=0xd4
+[+   7.737s] [uart] UT2 row: tier=BM inst=UART5 f_ker=100000000 baud=300 over8=0 presc=0x3 brr=0xd904
+[+   7.745s] [uart] UT2 row: tier=LL inst=UART5 f_ker=100000000 baud=300 over8=0 presc=0x3 brr=0xd904
+[+   7.753s] [uart] UT2 row: tier=BM inst=UART8 f_ker=100000000 baud=3773585 over8=1 presc=0x0 brr=0x32
+[+   7.761s] [uart] UT2 row: tier=LL inst=UART8 f_ker=100000000 baud=3773585 over8=1 presc=0x0 brr=0x32
+[+   7.769s] [uart] UT2 row: tier=BM inst=UART8 f_ker=100000000 baud=12500000 over8=1 presc=0x0 brr=0x10
+[+   7.777s] [uart] UT2 row: tier=LL inst=UART8 f_ker=100000000 baud=12500000 over8=1 presc=0x0 brr=0x10
+[+   7.785s] [uart] UT2 row: tier=BM inst=USART1 f_ker=80000000 baud=115200 over8=0 presc=0x0 brr=0x2b6
+[+   7.792s] [uart] UT2 row: tier=LL inst=USART1 f_ker=80000000 baud=115200 over8=0 presc=0x0 brr=0x2b6
+[+   7.800s] [uart] UT2 row: tier=BM inst=USART6 f_ker=80000000 baud=921600 over8=1 presc=0x0 brr=0xa7
+[+   7.808s] [uart] UT2 row: tier=LL inst=USART6 f_ker=80000000 baud=921600 over8=1 presc=0x0 brr=0xa7
+[+   7.816s] [uart] UT2 row: tier=BM inst=LPUART1 f_ker=25000000 baud=9600 over8=0 presc=0x0 brr=0xa2c2b
+[+   7.824s] [uart] UT2 row: tier=LL inst=LPUART1 f_ker=25000000 baud=9600 over8=0 presc=0x0 brr=0xa2c2b
+[+   7.832s] [uart] UT2 row: tier=BM inst=LPUART1 f_ker=100000000 baud=9600 over8=0 presc=0x2 brr=0xa2c2b
+[+   7.840s] [uart] UT2 row: tier=LL inst=LPUART1 f_ker=100000000 baud=9600 over8=0 presc=0x2 brr=0xa2c2b
+[+   7.848s] [uart] UT2 reject: tier=BM inst=UART8 f_ker=100000000 baud=11764705 over8=1 status=REJECT
+[+   7.856s] [uart] UT2 reject: tier=LL inst=UART8 f_ker=100000000 baud=11764705 over8=1 status=REJECT
+[+   7.864s] [uart] UT2 reject: tier=BM inst=UART8 f_ker=100000000 baud=10526315 over8=1 status=REJECT
+[+   7.872s] [uart] UT2 reject: tier=LL inst=UART8 f_ker=100000000 baud=10526315 over8=1 status=REJECT
+[+   7.879s] [uart] UT2 baudrate divider and prescaler calculations (BM, LL, U5, LPUART1) -> PASS
+[+   7.881s] [uart] VERDICT UT2 PASS
+[+   7.881s] [host] CHECK UT2 BRR/PRESC formula calculations and U5 checks: PASS
+[+   7.889s] [uart] STEP UT3 v=1
+[+   7.898s] [uart] UT3 row: tier=BM format=8N1 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   7.916s] [host] UT3 row 00: tier=BM fmt=8N1 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF] mco_edges=662 mco_per=24.76 bit_meas=6.943 bit_th=6.944 err=-0.02% -> PASS
+[+   7.916s] [host] UT3 row 00 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=N/A stop_bit=FAIL (exp)
+[+   7.916s] [uart] UT3 row: tier=BM format=8E1 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   7.929s] [host] UT3 row 01: tier=BM fmt=8E1 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF] mco_edges=662 mco_per=24.75 bit_meas=6.943 bit_th=6.944 err=-0.01% -> PASS
+[+   7.929s] [host] UT3 row 01 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=FAIL (exp) stop_bit=FAIL (exp)
+[+   7.932s] [uart] UT3 row: tier=BM format=8O1 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   7.945s] [host] UT3 row 02: tier=BM fmt=8O1 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF] mco_edges=662 mco_per=24.75 bit_meas=6.945 bit_th=6.944 err=+0.01% -> PASS
+[+   7.945s] [host] UT3 row 02 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=FAIL (exp) stop_bit=FAIL (exp)
+[+   7.947s] [uart] UT3 row: tier=BM format=7E1 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   7.960s] [host] UT3 row 03: tier=BM fmt=7E1 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0x2A, 0x25, 0x5A, 0x00, 0x7F] mco_edges=662 mco_per=24.75 bit_meas=6.943 bit_th=6.944 err=-0.01% -> PASS
+[+   7.960s] [host] UT3 row 03 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=FAIL (exp) stop_bit=FAIL (exp)
+[+   7.962s] [uart] UT3 row: tier=BM format=7N1 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   7.977s] [host] UT3 row 04: tier=BM fmt=7N1 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0x2A, 0x25, 0x5A, 0x00, 0x7F] mco_edges=662 mco_per=24.74 bit_meas=6.944 bit_th=6.944 err=-0.00% -> PASS
+[+   7.977s] [host] UT3 row 04 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=N/A stop_bit=FAIL (exp)
+[+   7.977s] [uart] UT3 row: tier=BM format=9N1 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   7.989s] [host] UT3 row 05: tier=BM fmt=9N1 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF] mco_edges=662 mco_per=24.74 bit_meas=6.943 bit_th=6.944 err=-0.01% -> PASS
+[+   7.989s] [host] UT3 row 05 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=N/A stop_bit=FAIL (exp)
+[+   7.992s] [uart] UT3 row: tier=BM format=8N2 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   8.007s] [host] UT3 row 06: tier=BM fmt=8N2 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF] mco_edges=662 mco_per=24.75 bit_meas=6.944 bit_th=6.944 err=+0.01% -> PASS
+[+   8.007s] [host] UT3 row 06 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=N/A stop_bit=FAIL (exp)
+[+   8.007s] [uart] UT3 row: tier=BM format=8N1 baud=9600 over8=0 presc=0x0 brr=0x28b1
+[+   8.028s] [host] UT3 row 07: tier=BM fmt=8N1 baud=9600 la=2MS/s/16384 frames=6 bytes=[0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF] mco_edges=6623 mco_per=2.47 bit_meas=83.345 bit_th=83.336 err=+0.01% -> PASS
+[+   8.028s] [host] UT3 row 07 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=N/A stop_bit=FAIL (exp)
+[+   8.029s] [uart] UT3 row: tier=BM format=8N1 baud=921600 over8=1 presc=0x0 brr=0xd4
+[+   8.040s] [host] UT3 row 08: tier=BM fmt=8N1 baud=921600 la=100MS/s/16384 frames=6 bytes=[0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF] mco_edges=133 mco_per=123.71 bit_meas=0.864 bit_th=0.864 err=-0.01% -> PASS
+[+   8.040s] [host] UT3 row 08 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=N/A stop_bit=FAIL (exp)
+[+   8.043s] [uart] UT3 row: tier=LL format=8N1 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   8.056s] [host] UT3 row 09: tier=LL fmt=8N1 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF] mco_edges=662 mco_per=24.75 bit_meas=6.943 bit_th=6.944 err=-0.01% -> PASS
+[+   8.056s] [host] UT3 row 09 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=N/A stop_bit=FAIL (exp)
+[+   8.058s] [uart] UT3 row: tier=LL format=8E1 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   8.072s] [host] UT3 row 10: tier=LL fmt=8E1 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF] mco_edges=662 mco_per=24.74 bit_meas=6.945 bit_th=6.944 err=+0.01% -> PASS
+[+   8.072s] [host] UT3 row 10 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=FAIL (exp) stop_bit=FAIL (exp)
+[+   8.073s] [uart] UT3 row: tier=LL format=7E1 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   8.086s] [host] UT3 row 11: tier=LL fmt=7E1 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0x2A, 0x25, 0x5A, 0x00, 0x7F] mco_edges=662 mco_per=24.75 bit_meas=6.943 bit_th=6.944 err=-0.01% -> PASS
+[+   8.086s] [host] UT3 row 11 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=FAIL (exp) stop_bit=FAIL (exp)
+[+   8.088s] [uart] UT3 row: tier=LL format=9N1 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   8.100s] [host] UT3 row 12: tier=LL fmt=9N1 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF] mco_edges=663 mco_per=24.74 bit_meas=6.943 bit_th=6.944 err=-0.01% -> PASS
+[+   8.100s] [host] UT3 row 12 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=N/A stop_bit=FAIL (exp)
+[+   8.103s] [uart] UT3 row: tier=HAL format=8N1 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   8.117s] [host] UT3 row 13: tier=HAL fmt=8N1 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF] mco_edges=662 mco_per=24.75 bit_meas=6.944 bit_th=6.944 err=+0.00% -> PASS
+[+   8.117s] [host] UT3 row 13 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=N/A stop_bit=FAIL (exp)
+[+   8.118s] [uart] UT3 row: tier=HAL format=8E1 baud=115200 over8=0 presc=0x0 brr=0x364
+[+   8.130s] [host] UT3 row 14: tier=HAL fmt=8E1 baud=115200 la=20MS/s/16384 frames=6 bytes=[0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF] mco_edges=663 mco_per=24.74 bit_meas=6.943 bit_th=6.944 err=-0.01% -> PASS
+[+   8.130s] [host] UT3 row 14 ctrl: drop_frame=FAIL (exp) timing(+1.0%)=FAIL (exp) bit_flip=FAIL (exp) parity=FAIL (exp) stop_bit=FAIL (exp)
+[+   8.133s] [uart] UT3 wire format encoding across BM, LL, HAL (MCO1 ratio 125:1) -> PASS
+[+   8.135s] [uart] VERDICT UT3 PASS
+[+   8.135s] [host] CHECK UT3 wire format encoding across BM, LL, HAL (MCO1 ±0.5% tolerance): PASS
+[+   8.143s] [uart] STEP UT4 v=1
+[+   8.154s] [uart] UT4 loopback: sent=72 received=72 err=0x0
+[+   8.161s] [uart] UT4 CM7 loopback reception (JU1, polled/irq, fifo, over8, 7b mask) -> PASS
+[+   8.164s] [uart] VERDICT UT4 PASS
+[+   8.164s] [host] CHECK UT4 loopback reception CM7 (polled, irq, fifo, over8, 7b mask): PASS
+[+   8.171s] [uart] STEP UT4_CM4 v=1
+[+   8.179s] [uart] UT4_CM4 loopback: sent=16 received=16 status=1
+[+   8.184s] [uart] UT4_CM4 CM4 loopback reception (JU1) -> PASS
+[+   8.186s] [uart] VERDICT UT4_CM4 PASS
+[+   8.186s] [host] CHECK UT4_CM4 loopback reception CM4: PASS
+[+   8.194s] [uart] STEP UT5 v=1
+[+   8.197s] [host] UT5 DOUT phase=PE: div=10417 bits=11 dur=1.15ms baud=9600
+[+   8.228s] [host] UT5 DOUT phase=FE: div=10417 bits=11 dur=1.15ms baud=9600
+[+   8.259s] [host] UT5 DOUT phase=BREAK: div=10417 bits=11 dur=1.15ms baud=9600
+[+   8.290s] [host] UT5 DOUT phase=NE: div=651 bits=176 dur=1.15ms baud=9601
+[+   8.320s] [host] UT5 DOUT phase=ORE-FIFO: div=10417 bits=198 dur=20.63ms baud=9600
+[+   8.371s] [host] UT5 DOUT phase=ORE-NOFIFO: div=10417 bits=33 dur=3.44ms baud=9600
+[+   8.408s] [host] UT5 DOUT phase=CLEAN: div=10417 bits=11 dur=1.15ms baud=9600
+[+   8.437s] [uart] UT5 PE byte=0x55 err=0x8 (expected 0x8)
+[+   8.439s] [uart] UT5 FE byte=0x55 err=0x4 (expected 0x4)
+[+   8.439s] [uart] UT5 BREAK err=0x4 (expected FE 0x4)
+[+   8.440s] [uart] UT5 NE err=0x2 (flagged=1)
+[+   8.441s] [uart] UT5 ORE-FIFO err=0x1 (expected 0x1)
+[+   8.442s] [uart] UT5 ORE-NOFIFO err=0x1 (expected 0x1)
+[+   8.443s] [uart] UT5 clean frame byte=0x55 err=0x0 (expected 0x55, err 0)
+[+   8.450s] [uart] UT5 error injection detection (PE, FE, BREAK, NE, ORE-FIFO, ORE-NOFIFO, clean) -> PASS
+[+   8.452s] [uart] VERDICT UT5 PASS
+[+   8.452s] [host] CHECK UT5 error injection detection (PE, FE, NE, ORE, clean control): PASS (clean_byte=0x55)
+[+   8.461s] [uart] STEP UT6 v=1
+[+   8.474s] [uart] UT6 FC phase: written=24/24 read=24/24 err=0x0
+[+   8.485s] [uart] UT6 NO-FC negative control err=0x1 (expected ORE 0x1)
+[+   8.491s] [uart] UT6 RTS/CTS flow control over JU2 (with ORE negative control) -> PASS
+[+   8.493s] [uart] VERDICT UT6 PASS
+[+   8.493s] [host] CHECK UT6 RTS/CTS flow control over JU2 (with ORE negative control): PASS
+[+   8.501s] [uart] STEP UT7 v=1
+[+   8.510s] [uart] UT7 HAL InitEx: lock_held_status=2 rx_byte=0xa5
+[+   8.517s] [uart] UT7 UART_HAL_InitEx 8E1, pin snapshot and GPIO lock contention U6 -> PASS
+[+   8.519s] [uart] VERDICT UT7 PASS
+[+   8.519s] [host] CHECK UT7 HAL InitEx 8E1 and GPIO lock contention: PASS
+[+   8.526s] [uart] STEP UT8 v=1
+[+   8.535s] [uart] UT8 DMA errata: bit20=1 active_status=2 dma_bytes=20
+[+   8.544s] [uart] UT8 UART_HAL_CheckDmaErrata in-vivo with DMA1 (bit 20, live transfer, busy, rejections) -> PASS
+[+   8.546s] [uart] VERDICT UT8 PASS
+[+   8.546s] [host] CHECK UT8 DMA errata live transfer and rejections: PASS
+[+   8.553s] [uart] STEP UT9 v=1
+[+   8.562s] [uart] UT9 fresh handle with lock held: returned 2 (expected 2)
+[+   8.568s] [uart] UT9 fresh handle with lock free: returned 0 (expected 0)
+[+   8.574s] [uart] UT9 UART_HAL_Init console MSP GPIO lock status U1 -> PASS
+[+   8.576s] [uart] VERDICT UT9 PASS
+[+   8.576s] [host] CHECK UT9 console handle GPIO lock error propagation: PASS
+[+   8.584s] [uart] STEP DONE v=1
+[+   8.588s] [uart] m4_done_ack=1
+[+   8.593s] [uart] === 04_uart selftest finished: 0 failed ===
+[+   8.595s] [uart] FW VERDICT=PASS
+[+   8.595s] [host] CHECK CM4 DONE acknowledged (m4_done_ack == 1): PASS (m4_done_ack=1)
+[+   8.595s] 
+[+   8.595s] ========================================================================================
+[+   8.595s] [oracle] ORACLE VERIFICATION TABLE (The Oracle Rule)
+[+   8.595s] ========================================================================================
+[+   8.595s] | Step       | Check Name                                 | Real   | Control     | Status |
+[+   8.595s] |------------|--------------------------------------------|--------|-------------|--------|
+[+   8.595s] | UT0        | Bench resting state and 1k resistor        | PASS   | FAIL (exp)  | PASS   |
+[+   8.595s] | UT0_CTRL   | Negative control line low                  | PASS   | FAIL (exp)  | PASS   |
+[+   8.595s] | UT1        | Parameter rejections across BM, LL, HAL    | PASS   | FAIL (exp)  | PASS   |
+[+   8.595s] | UT2        | Baudrate PRESC/BRR formula and U5 checks   | PASS   | FAIL (exp)  | PASS   |
+[+   8.595s] | UT3        | Wire format and bit period against MCO1    | PASS   | FAIL (exp)  | PASS   |
+[+   8.595s] | UT4        | CM7 loopback reception over JU1            | PASS   | FAIL (exp)  | PASS   |
+[+   8.595s] | UT4_CM4    | CM4 loopback reception over JU1            | PASS   | FAIL (exp)  | PASS   |
+[+   8.595s] | UT5        | Error injection (PE, FE, NE, ORE, clean)   | PASS   | FAIL (exp)  | PASS   |
+[+   8.595s] | UT6        | RTS/CTS flow control over JU2              | PASS   | FAIL (exp)  | PASS   |
+[+   8.595s] | UT7        | HAL InitEx 8E1 and GPIO lock contention    | PASS   | FAIL (exp)  | PASS   |
+[+   8.595s] | UT8        | DMA errata live transfer and rejections    | PASS   | FAIL (exp)  | PASS   |
+[+   8.595s] | UT9        | U1 console handle GPIO lock and state reset | PASS   | FAIL (exp)  | PASS   |
+[+   8.595s] ========================================================================================
+[+   8.595s] 
+[+  13.236s] [host] clean tree at end: PASS (Tree is clean outside build/)
+[+  13.236s] [host] OVERALL HARDWARE VERDICT: PASS
+[+  13.236s] HOST VERDICT=PASS
