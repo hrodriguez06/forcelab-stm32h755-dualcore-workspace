@@ -181,6 +181,14 @@ if(UART_DRIVER_SELFTEST)
     )
 endif()
 
+# 01_led selftest, CPU1 side: tests LT1-LT5 (no AD2).
+if(LED_DRIVER_SELFTEST)
+    target_compile_definitions(${TARGET} PRIVATE LED_DRIVER_SELFTEST=1)
+    target_sources(${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/App/Src/led_selftest.c
+    )
+endif()
+
 set_target_properties(${TARGET} PROPERTIES
     OUTPUT_NAME ${TARGET}
     SUFFIX ".elf"

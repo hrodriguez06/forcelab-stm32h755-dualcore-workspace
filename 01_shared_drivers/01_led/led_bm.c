@@ -50,36 +50,57 @@ static led_driver_config_t g_led_config = {
     }
 };
 
-void LED_Init_Config(const led_driver_config_t *config)
+uint32_t LED_Init_ConfigEx(const led_driver_config_t *config)
 {
     if (config == NULL)
     {
-        return;
+        return 0U;
     }
 
     g_led_config = *config;
+    uint32_t mask = 0U;
 
     for (uint32_t i = 0; i < (uint32_t)LED_COUNT; i++)
     {
         GPIO_TypeDef *port = g_led_config.leds[i].port;
         uint32_t bit = g_led_config.leds[i].pin_num;
 
-        if (port != NULL)
+        /* Configure LED pin as output: push-pull, low speed, no pull, initially LOW (off).
+         * GPIO_BM_ConfigOutput validates port and pin before touching registers, sets BSRR
+         * before MODER within the critical section and cross-core lock (00_gpio/README.md §3.3),
+         * and performs read-back verification. */
+        if (GPIO_BM_ConfigOutput(port, bit, GPIO_BM_OTYPE_PP, GPIO_BM_SPEED_LOW,
+                                 GPIO_BM_PULL_NONE, 0U) == GPIO_BM_OK)
         {
-            (void)GPIO_BM_EnablePortClock(port);
-
-            /* MODER: 0b01 = general purpose output. */
-            MODIFY_REG(port->MODER, (3UL << (bit * 2U)), (1UL << (bit * 2U)));
-
-            /* Turn off initially: active high, BSRR high half resets the pin */
-            port->BSRR = (1UL << (bit + 16U));
+            mask |= (1UL << i);
+        }
+        else
+        {
+            /* If configuration fails (invalid port/pin, SWD pin, LCKR frozen,
+             * cross-core lock timeout, or read-back mismatch), disable the LED
+             * so subsequent operations (Set, Toggle, BootStage, PanicRed) ignore it. */
+            g_led_config.leds[i].port = NULL;
         }
     }
+
+    return mask;
+}
+
+void LED_Init_Config(const led_driver_config_t *config)
+{
+    (void)LED_Init_ConfigEx(config);
 }
 
 void LED_Init(void)
 {
-    LED_Init_Config(&g_led_config);
+    const led_driver_config_t default_cfg = {
+        .leds = {
+            [LED_GREEN]  = { .port = BOARD_LED_GREEN_PORT,  .pin_num = BOARD_LED_GREEN_BIT },
+            [LED_YELLOW] = { .port = BOARD_LED_YELLOW_PORT, .pin_num = BOARD_LED_YELLOW_BIT },
+            [LED_RED]    = { .port = BOARD_LED_RED_PORT,    .pin_num = BOARD_LED_RED_BIT }
+        }
+    };
+    LED_Init_Config(&default_cfg);
 }
 
 void LED_Set(led_t led, uint32_t on)
@@ -122,6 +143,12 @@ void LED_Toggle(led_t led)
         return;
     }
 
+    /* Atomic on calling core: mask interrupts to prevent race condition with
+     * ISRs or other threads on this core (01_led/IMPLEMENTATION_PLAN.md L4).
+     * Cross-core toggle remains non-atomic (no HSEM). */
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
     if (port->ODR & (1UL << bit))
     {
         port->BSRR = (1UL << (bit + 16U));
@@ -130,6 +157,8 @@ void LED_Toggle(led_t led)
     {
         port->BSRR = (1UL << bit);
     }
+
+    __set_PRIMASK(primask);
 }
 
 void LED_BootStage(led_boot_stage_t stage)
@@ -149,6 +178,8 @@ void LED_PanicRed(void)
     if (red_port != NULL)
     {
         (void)GPIO_BM_EnablePortClock(red_port);
+        /* Exception G14: emergency panic path is terminal and must not wait
+         * on locks or critical sections (00_gpio/README.md §3.3, G14). Direct RMW. */
         MODIFY_REG(red_port->MODER, (3UL << (red_bit * 2U)), (1UL << (red_bit * 2U)));
         red_port->BSRR = (1UL << red_bit);
     }

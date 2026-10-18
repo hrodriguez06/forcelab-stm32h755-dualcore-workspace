@@ -70,6 +70,13 @@ if(UART_DRIVER_SELFTEST AND (GPIO_DRIVER_SELFTEST OR TIM_DRIVER_SELFTEST OR SPI_
         "each owns the AD2 bench lines through its own step table. Configure one of them "
         "(presets selftest-gpio, selftest-tim, selftest-spi, selftest-i2c or selftest-uart).")
 endif()
+# 01_led: L3-L5 selftest (CM7 only, no AD2). Preset selftest-led; never in a product image.
+option(LED_DRIVER_SELFTEST "Build the 01_led selftest (CM7 only, no AD2)" OFF)
+if(LED_DRIVER_SELFTEST AND (GPIO_DRIVER_SELFTEST OR TIM_DRIVER_SELFTEST OR SPI_DRIVER_SELFTEST OR I2C_DRIVER_SELFTEST OR UART_DRIVER_SELFTEST))
+    message(FATAL_ERROR
+        "LED_DRIVER_SELFTEST is incompatible with other driver selftests. Configure one of them "
+        "(presets selftest-gpio, selftest-tim, selftest-spi, selftest-i2c, selftest-uart or selftest-led).")
+endif()
 
 # Every selftest capture starts with the revision it was built from, and says
 # -dirty when tracked files differ from it, so a capture can be traced to a

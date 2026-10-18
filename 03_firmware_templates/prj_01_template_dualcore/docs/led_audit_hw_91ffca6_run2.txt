@@ -1,0 +1,68 @@
+[+   0.000s] [host] argv: tools/led_hw_check.py --out C:\Users\HRODRI~1\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\a435ba69-f99a-4dc8-9231-6c64b1c6d99b\scratchpad\led_audit2_run2.txt
+[+   0.000s] [host] options: preset=selftest-led sn=0016000C4142501220353451 port=None out=C:\Users\HRODRI~1\AppData\Local\Temp\claude\C--Users-hrodriguez-Documents-R-D-00-Embedded-System-00-STmicro-stm32h755\a435ba69-f99a-4dc8-9231-6c64b1c6d99b\scratchpad\led_audit2_run2.txt allow_dirty=False mock=False
+[+   0.496s] [host] git rev=91ffca6 expected_build_id=bd199a037b1dbbac
+[+   5.596s] [host] CHECK tree_clean: PASS (Tree is clean outside build/)
+[+   5.601s] [host] using serial port COM4
+[+   5.601s] [host] opening serial port COM4 at 115200 baud
+[+   5.603s] [host] triggering SWD reset: C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe -c port=SWD sn=0016000C4142501220353451 mode=HOTPLUG -rst
+[+   5.783s] [host] reset returned rc=0
+[+   5.783s] [target]  
+[+   5.783s] [target] === STM32H755ZI 01_led driver selftest - CPU1 (Cortex-M7) ===
+[+   5.783s] [target] [sys] build rev=91ffca6 id=bd199a037b1dbbac
+[+   5.783s] [target] [led] LT1_PRE: deinit_rc=0,0,0 read_rc=0,0,0 modes=3,3,3
+[+   5.783s] [target] [led] LT1: mask=0x07 lock=3 unlock=3
+[+   5.789s] [target] [led] LT1_PINS: G(mode=1,otype=0,speed=0,pull=0,odr=0) Y(mode=1,otype=0,speed=0,pull=0,odr=0) R(mode=1,otype=0,speed=0,pull=0,odr=0)
+[+   5.797s] [target] [led] LT1_CTRL: mask=0x00 lock=3 unlock=0 deinit_rc=0,0,0 modes=3,3,3 odr_g=0 odr_y=0 odr_r=0
+[+   5.803s] [target] [led] LT1_CTRL_PRE_A: ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF
+[+   5.809s] [target] [led] LT1_CTRL_PRE_B: FFFFFEBF 00000000 000000C0 00000100 00000000
+[+   5.815s] [target] [led] LT1_CTRL_PRE_E: FFFFFFFF 00000000 00000000 00000000 00000000
+[+   5.821s] [target] [led] LT1_CTRL_POST_A: ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF
+[+   5.826s] [target] [led] LT1_CTRL_POST_B: FFFFFEBF 00000000 000000C0 00000100 00000000
+[+   5.832s] [target] [led] LT1_CTRL_POST_E: FFFFFFFF 00000000 00000000 00000000 00000000
+[+   5.834s] [target] [led] LT2: mask=0x00
+[+   5.840s] [target] [led] LT2_PRE_A: ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF
+[+   5.845s] [target] [led] LT2_PRE_B: DFFFFEBD 00000000 000000C0 00000100 00000000
+[+   5.851s] [target] [led] LT2_PRE_E: FFFFFFF7 00000000 00000000 00000000 00000000
+[+   5.857s] [target] [led] LT2_POST_INIT_A: ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF
+[+   5.862s] [target] [led] LT2_POST_INIT_B: DFFFFEBD 00000000 000000C0 00000100 00000000
+[+   5.868s] [target] [led] LT2_POST_INIT_E: FFFFFFF7 00000000 00000000 00000000 00000000
+[+   5.874s] [target] [led] LT2_POST_OPS_A: ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF
+[+   5.880s] [target] [led] LT2_POST_OPS_B: DFFFFEBD 00000000 000000C0 00000100 00000000
+[+   5.886s] [target] [led] LT2_POST_OPS_E: FFFFFFF7 00000000 00000000 00000000 00000000
+[+   5.888s] [target] [led] LT2_CTRL: mask=0x01
+[+   5.894s] [target] [led] LT2_CTRL_PRE_A: ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF
+[+   5.900s] [target] [led] LT2_CTRL_PRE_B: DFFFFEBF 00000000 000000C0 00000100 00000000
+[+   5.906s] [target] [led] LT2_CTRL_PRE_E: FFFFFFF7 00000000 00000000 00000000 00000000
+[+   5.912s] [target] [led] LT2_CTRL_POST_A: ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF ABFFFFFF
+[+   5.918s] [target] [led] LT2_CTRL_POST_B: DFFFFEBD 00000000 000000C0 00000100 00000000
+[+   5.924s] [target] [led] LT2_CTRL_POST_E: FFFFFFF7 00000000 00000000 00000000 00000000
+[+   6.047s] [target] [led] LT3: N=200000 dwt_cycles=2000129 dwt_isrs=1000 cpu_hz=400000000 window_isrs=6992 lost=0
+[+   6.051s] [target] [led] LT3_CTRL: N=200000 window_isrs=6974 lost=2081
+[+   6.054s] [target] [led] LT4: red_mode=1 red_odr=1
+[+   6.059s] [target] [led] LT4_GREEN_PRE: mode=1 otype=0 speed=0 pull=0 odr=0
+[+   6.064s] [target] [led] LT4_GREEN_POST: mode=1 otype=0 speed=0 pull=0 odr=0
+[+   6.071s] [target] [led] LT5_TIM17: cr1=0x0000 dier=0x0000 nvic_pending=0 apb2enr=0x00000000
+[+   6.082s] [target] [led] LT5_PINS: G(mode=1,otype=0,speed=0,pull=0,odr=0) Y(mode=1,otype=0,speed=0,pull=0,odr=0) R(mode=1,otype=0,speed=0,pull=0,odr=0)
+[+   6.084s] [target] [led] FW VERDICT=PASS
+[+   6.293s] [host] CHECK provenance_git_rev: PASS (fw_rev=91ffca6, host_head=91ffca6)
+[+   6.293s] [host] CHECK provenance_build_id: PASS (fw_id=bd199a037b1dbbac, host_id=bd199a037b1dbbac)
+[+   6.293s] [host] CHECK lt1: PASS (mask=0x07 lock=3/3 pins=OK ctrl=OK)
+[+   6.293s] [host] CHECK lt1_mutation_pull_rejected: PASS
+[+   6.293s] [host] CHECK lt1_mutation_lock_rejected: PASS
+[+   6.293s] [host] CHECK lt1_mutation_ctrl_snap_rejected: PASS
+[+   6.293s] [host] CHECK lt2: PASS (mask=0x00 init_snap=OK ops_snap=OK ctrl_snap=OK)
+[+   6.293s] [host] CHECK lt2_mutation_init_rejected: PASS
+[+   6.293s] [host] CHECK lt2_mutation_ctrl_unchanged_rejected: PASS
+[+   6.293s] [host] CHECK lt3: PASS (N=200000 freq_calc=199987Hz window_isrs=6992 lost=0 ctrl_lost=2081)
+[+   6.293s] [host] CHECK lt3_mutation_lost_gt_0_rejected: PASS
+[+   6.294s] [host] CHECK lt3_mutation_ctrl_lost_eq_0_rejected: PASS
+[+   6.294s] [host] CHECK lt3_mutation_freq_low_rejected: PASS
+[+   6.294s] [host] CHECK lt4: PASS (red_mode=1 red_odr=1 green_pin=UNCHANGED)
+[+   6.294s] [host] CHECK lt4_mutation_green_modified_rejected: PASS
+[+   6.294s] [host] CHECK lt4_mutation_red_not_output_rejected: PASS
+[+   6.294s] [host] CHECK lt5: PASS (TIM17 stopped, DIER=0, NVIC=0, APB2=0 pins=OK)
+[+   6.294s] [host] CHECK lt5_mutation_tim17_running_rejected: PASS
+[+   6.294s] [host] CHECK lt5_mutation_pin_pull_rejected: PASS
+[+   6.294s] [host] CHECK fw_verdict: PASS (verdict=PASS)
+[+   6.294s] [host] OVERALL HARDWARE VERDICT: PASS
+[+   6.294s] HOST VERDICT=PASS
