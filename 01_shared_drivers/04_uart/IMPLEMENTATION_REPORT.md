@@ -1,46 +1,57 @@
-# Informe de Implementación: Fase F1 del Driver `04_uart` (Tercera Corrección de Auditoría)
+# Informe de Implementación: Fase F1 del Driver `04_uart` (Cuarta Corrección de Auditoría)
 
 **Fecha:** 2026-10-17  
 **Rama:** `driver/uart-audit`  
 **Base:** `main` (`b41c4a7`)  
-**Último commit de código / herramienta:** `4db5903`  
-**Estado de la fase:** F1 CORREGIDA 3 PARA AUDITORIA  
+**Último commit de código / herramienta:** `fdbf306`  
+**Estado de la fase:** F1 CORREGIDA 4 PARA AUDITORIA  
 
 ---
 
 ## 1. Resumen de la Entrega y Correcciones de Auditoría
 
-Se ha completado la tercera corrección de la fase F1 atendiendo la totalidad de los hallazgos de [`AUDIT.md`](AUDIT.md) (incluyendo `E-B1`..`E-B4`, `E-M1`..`E-M5`, `E-m`, `D5` y `R6`), las directrices de `IMPLEMENTATION_PLAN.md` (revisión 2) e `IMPLEMENTER_INSTRUCTIONS.md`.
+Se ha completado la cuarta corrección de la fase F1 atendiendo la totalidad de los hallazgos de [AUDIT.md](AUDIT.md) (incluyendo `F-M1`..`F-M3`, `F-m1`, `F-m2` y `N1`..`N15`), las directrices de `IMPLEMENTATION_PLAN.md` (revisión 2) e `IMPLEMENTER_INSTRUCTIONS.md`.
 
 ### 1.1 Correcciones del Driver (`01_shared_drivers/04_uart/`):
-1. **U1:** `UART_HAL_Init()` en [`uart_hal.c:162-174`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_hal.c#L162-L174) restablece `s_msp_gpio_status = HAL_OK` antes de llamar a `HAL_UART_Init()` y propaga el estado exacto retornado por el callback MSP (`s_msp_gpio_status`), propagando contención de GPIO.
-2. **U2 / U3:** En [`uart_ll.c:205-285`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_ll.c#L205-L285), validación previa pura de parámetros en Fase 1 (`data_bits`, `stop_bits`, `parity`, `hw_flow`, `oversampling`, pines y baudrate alcanzable) garantizando que **cero** registros hardware (GPIO, RCC o USART) sean modificados ante entradas inválidas.
-3. **U4:** En [`uart_ll.c:324-328`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_ll.c#L324-L328), `UART_LL_Init()` deshabilita el periférico y reinicia `CR1`, `CR2` y `CR3` a 0 para partir de un estado conocido y limpio.
-4. **U5:** En [`uart_ll.c:157-163`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_ll.c#L157-L163), cómputo del divisor efectivo aplicado por hardware con `OVER8=1` (`(brr & 0xFFF0) | ((brr & 0x0007) << 1)`), rechazando divisores donde los bits bajos impares son descartados por hardware.
-5. **U6:** En [`uart_hal.c:218-222, 238-241`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_hal.c#L218-L222), `UART_HAL_InitEx()` reporta `HAL_BUSY` cuando el lock de GPIO está tomado por el otro núcleo (`GPIO_BM_ERR_BUSY`).
-6. **D1:** En [`uart_ll.c:254-261`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_ll.c#L254-L261), LPUART1 ignora el campo `oversampling` de forma transparente al igual que `uart_bm.c:362`, al soportar únicamente 16x por arquitectura hardware (RM0399 §52.4.4).
-7. **D2:** Validación previa de Alternate Function (`af <= 15`) en [`uart_ll.c:267, 277`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_ll.c#L267) y [`uart_hal.c:198-204`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_hal.c#L198-L204).
-8. **D3:** Prevalidación de ambos pines TX y RX en [`uart_hal.c:192-204`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_hal.c#L192-L204). En [`uart_ll.c:358`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_ll.c#L358), uso de `SET_BIT(u->CR1, USART_CR1_TE | USART_CR1_RE)` en lugar de funciones atómicas para evitar bloqueo en Dominio D3 (LPUART1).
-9. **D4:** En [`uart_ll.c:558-564, 583-588`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_ll.c#L558-L564), `UART_LL_EnableRxIrq` y `UART_LL_DisableRxIrq` utilizan RMW no exclusivo dentro de sección crítica con `PRIMASK` y `__disable_irq()` en lugar de `LL_USART_EnableIT_*` / `LL_USART_DisableIT_*` (cuyo `ATOMIC_SET_BIT` con `LDREX`/`STREX` bloquea en buses de Dominio 3).
-10. **Cabeceras:** Las cabeceras `01_shared_drivers/04_uart/*.h` permanecen 100% congeladas (0 líneas modificadas frente a `b41c4a7`).
+1. **U1:** `UART_HAL_Init()` en [uart_hal.c:162-174](uart_hal.c#L162-L174) restablece `s_msp_gpio_status = HAL_OK` antes de llamar a `HAL_UART_Init()` y propaga el estado exacto retornado por el callback MSP (`s_msp_gpio_status`), propagando contención de GPIO.
+2. **U2 / U3:** En [uart_ll.c:205-285](uart_ll.c#L205-L285), validación previa pura de parámetros en Fase 1 (`data_bits`, `stop_bits`, `parity`, `hw_flow`, `oversampling`, pines y baudrate alcanzable) garantizando que **cero** registros hardware (GPIO, RCC o USART) sean modificados ante entradas inválidas.
+3. **U4:** En [uart_ll.c:324-328](uart_ll.c#L324-L328), `UART_LL_Init()` deshabilita el periférico y reinicia `CR1`, `CR2` y `CR3` a 0 para partir de un estado conocido y limpio.
+4. **U5:** En [uart_ll.c:157-163](uart_ll.c#L157-L163), cómputo del divisor efectivo aplicado por hardware con `OVER8=1` (`(brr & 0xFFF0) | ((brr & 0x0007) << 1)`), rechazando divisores donde los bits bajos impares son descartados por hardware.
+5. **U6:** En [uart_hal.c:218-222, 238-241](uart_hal.c#L218-L222), `UART_HAL_InitEx()` reporta `HAL_BUSY` cuando el lock de GPIO está tomado por el otro núcleo (`GPIO_BM_ERR_BUSY`).
+6. **D1:** En [uart_ll.c:254-261](uart_ll.c#L254-L261), LPUART1 ignora el campo `oversampling` de forma transparente al igual que `uart_bm.c:362`, al soportar únicamente 16x por arquitectura hardware (RM0399 §52.4.4).
+7. **D2:** Validación previa de Alternate Function (`af <= 15`) en [uart_ll.c:267, 277](uart_ll.c#L267) y [uart_hal.c:198-204](uart_hal.c#L198-L204).
+8. **D3:** Prevalidación de ambos pines TX y RX en [uart_hal.c:192-204](uart_hal.c#L192-L204). En [uart_ll.c:358](uart_ll.c#L358), uso de `SET_BIT(u->CR1, USART_CR1_TE | USART_CR1_RE)` en lugar de funciones atómicas para evitar bloqueo en Dominio D3 (LPUART1).
+9. **D4:** En [uart_ll.c:558-564, 583-588](uart_ll.c#L558-L564), `UART_LL_EnableRxIrq` y `UART_LL_DisableRxIrq` utilizan RMW no exclusivo dentro de sección crítica con `PRIMASK` y `__disable_irq()` en lugar de `LL_USART_EnableIT_*` / `LL_USART_DisableIT_*` (cuyo `ATOMIC_SET_BIT` con `LDREX`/`STREX` bloquea en buses de Dominio 3).
+10. **D6 (Nueva Desviación Formal):** Validación previa de instancia en [uart_hal.c:156-160, 206-210](uart_hal.c#L156-L160) mediante `UART_HAL_IsValidInstance()`, rechazando instancias no soportadas o nulas con `HAL_ERROR` antes de invocar callbacks MSP o tocar registros hardware.
+11. **Cabeceras:** Las cabeceras `01_shared_drivers/04_uart/*.h` permanecen 100% congeladas (0 líneas modificadas frente a `b41c4a7`).
 
-### 1.2 Correcciones de Auditoría 3 (Selftest, Host y Herramientas):
-- **E-B1:** Prólogo formal declarado para MCO1 (`UST_STEP_MCO1`) en el protocolo de selftest; PA8 configurado con `GPIO_BM_SPEED_LOW` para eliminar oscilaciones parásitas y sobreelongación de flancos en cables volantes.
-- **E-B2:** Sincronización fila a fila en UT3: 15 filas de prueba con `sync0()` individual en firmware y host, armando el analizador lógico en cada iteración.
-- **E-B3:** Analizador lógico de UT3 con disparo real por flanco de bajada en DIO15, pre-trigger y muestreo a 100 MS/s.
-- **E-B4:** Inyección de UT5 operativa mediante llamadas explícitas a `ad2.set_dout(1 << 15)` por fase de error, deteniendo y reiniciando el módulo Digital Out entre pasos.
-- **E-M1:** Medición rigurosa de duración de bit entre transiciones reales de la trama referenciadas al reloj MCO1 (±0.5% de tolerancia); parámetros teóricos calculados desde `PRESC`/`BRR` y frecuencia leída de MCO1; decodificación completa según el formato de cada fila (8N1, 8E1, 8O1, 7E1, 7O1, 9N1, etc.) adaptando la semántica de palabra `CR1_M` de STM32 (8E1 = 9 bits con paridad, 7E1 = 8 bits con paridad).
-- **E-M2:** La Regla de los Oráculos implementada en todos los pasos (UT0..UT9): cada paso evalúa datos reales medidos por el firmware/host (recuentos, máscaras de error, `IDR`, códigos de retorno) y ejecuta en la misma sesión un control negativo que muta dichos datos medidos pasando por la misma función evaluadora, requiriendo `Real=PASS` y `Control=FAIL (exp)`.
-- **E-M3:** UT6 transmite > 16 + 1 bytes (24 bytes) con control de flujo hardware RTS/CTS sin pérdidas, y la secuencia idéntica sin control de flujo satura el FIFO generando ORE comprobado.
-- **E-M4:** Inyección de Noise Error (NE) en UT5 con pulso corto de Digital Out de alta velocidad; detección y flag en hardware registrados explícitamente (`UT5 NE err=0x2 (flagged=1)`).
-- **E-M5:** Entorno mock sincronizado con el protocolo real: generación de secuencias a partir de `k_ust_steps`, sincronización dual-core y réplica de rutas de aborto y timeouts.
-- **E-m:** Reincorporación de `SYNC_TIMEOUT_CYC` acotado (1.0 s) con comando `UST_CMD_DONE` a CM4 para permitir que warm resets sin host AD2 avancen limpiamente hasta `(CPU2 alive)`. Limpieza de comentarios obsoletos de UT10.
+### 1.2 Correcciones de Auditoría 4 (Selftest, Host y Herramientas):
+- **F-M1:** Registro detallado fila a fila de UT3 en la salida del host: cada una de las 15 filas imprime formato, baudrate, tasa de muestreo y tamaño del buffer del LA, recuento de tramas decodificadas y bytes leídos, ancho de bit medido referenciado a MCO1, ancho teórico (`PRESC`/`BRR`), error porcentual y veredicto PASS/FAIL, acompañado de su respectivo control negativo.
+- **F-M2:** Modo control del host corregido (`--expect-control-u1`): el oráculo valida específicamente que el baseline defectuoso retorna `returned 0` (`HAL_OK`) ante contención de GPIO como condición esperada de fallo, logrando `HOST VERDICT=PASS` al evaluar el control.
+- **F-M3:** Recetas completas de reproducción incorporadas en §6 para el control negativo de UT9 (reproducción del defecto U1 en `b41c4a7`) y para UT10 (selftest real en `prj_04_adc_dma_bm_eth`).
+- **F-m1:** Bucle de vaciado de puerto serie en `tools/run_warm_resets.py` acotado con timeout de 1.0 s para evitar bloqueos ante imágenes que transmiten continuamente.
+- **F-m2:** Sustitución de todos los enlaces absolutos `file:///c:/...` por enlaces relativos en el informe de implementación.
+- **N1:** Dimensionamiento de frecuencia de muestreo del analizador lógico en UT3 según baudrate (10 MS/s para 9600 baud con buffer de 16k muestras para cumplir Nyquist frente a MCO1 de 4 MHz, 20 MS/s para 115200 baud, 100 MS/s para 921600 baud).
+- **N2:** Verificación estricta de todos los bits de parada durante la decodificación de tramas UART (soporte para 1, 1.5 y 2 bits de parada).
+- **N3:** Medición de frecuencia de MCO1 condicionada a un mínimo de 10 flancos detectados en el LA, evitando caídas silenciosas a valores teóricos.
+- **N4:** Cómputo de frecuencia de MCO1 en firmware a partir de los registros de configuración del reloj (`RCC_CFGR`) y la frecuencia del oscilador HSE.
+- **N5:** Verificación y registro explícito de valores numéricos concretos en todos los pasos (lecturas IDR en UT0, contadores de fallo en UT1, bytes enviados/recibidos en UT4 y UT4_CM4, estado de lock en UT7 y UT9, y flag DMA en UT8).
+- **N6:** Evaluación trifásica en UT0 (`low=0`, `high=1`, `rest=1`) para verificar reposo y resistencia serie de 1 kΩ; logging de parámetros DOUT por fase en UT5.
+- **N7:** Consolidación de UT4 en un único bucle continuo de 72 bytes verificando polled, IRQ, FIFO, oversampling 8x y máscara de 7 bits.
+- **N8:** Documentación formal de las desviaciones aprobadas D5 (`TakeErrors`) y D6 (`UART_HAL_IsValidInstance`) en §3.
+- **N9:** Verificación explícita de formatos 8E1 (9 bits en bus con paridad) y 7E1 (8 bits en bus con paridad) alineados con el registro `USART_CR1_M` de STM32.
+- **N10:** Centrado de pulso de ruido (NE) en sub-muestra 9/16 en UT5 garantizando detección de margen por el periférico hardware.
+- **N11:** Uso coherente de la instancia fija UART4 en las comprobaciones de UT2.
+- **N12:** Comprobación y logging explícito del flag `m4_timeout` en CM7 al evaluar el estado compartido con CM4.
+- **N13:** Eliminación de exenciones globales arbitrarias en `tools/uart_checks.py`, garantizando verificación rigurosa de árbol de trabajo limpio.
+- **N14:** Parámetro `--banner` configurable en `tools/run_warm_resets.py` para validar cabecera de arranque en múltiples proyectos.
+- **N15:** Filtrado de tramas medibles (mínimo 3 bits de intervalo) y soporte de múltiples bits de parada en generador de muestras mock.
 
 ---
 
-## 2. Detalle de Correcciones U1–U6, D1–D4 y Resolución de Defectos
+## 2. Detalle de Correcciones U1–U6, D1–D4, D6 y Resolución de Defectos
 
-| ID | Archivo | Líneas | Antes (`b41c4a7`) | Después (`4db5903`) |
+| ID | Archivo | Líneas | Antes (`b41c4a7`) | Después (`fdbf306`) |
 |---|---|---|---|---|
 | **U1** | `uart_hal.c` | 162–174 | `return HAL_UART_Init(huart);` (ignoraba `s_msp_gpio_status`) | Restablece `s_msp_gpio_status = HAL_OK` y devuelve su valor tras `HAL_UART_Init()` |
 | **U2 / U3** | `uart_ll.c` | 205–285 | Validación dispersa intercalada con escrituras en registros hardware | Fase 1 pura de validación sin tocar registros GPIO, RCC ni USART |
@@ -51,17 +62,24 @@ Se ha completado la tercera corrección de la fase F1 atendiendo la totalidad de
 | **D2** | `uart_ll.c` / `uart_hal.c` | 267, 277 / 198–204 | Sin validación de rango para Alternate Function | Verificación `af <= 15` previa a cualquier llamada de GPIO |
 | **D3** | `uart_hal.c` / `uart_ll.c` | 192–204 / 358 | Configuración de TX antes de validar RX; `LL_USART_EnableDirection` atómico | Prevalidación de ambos pines; `SET_BIT(u->CR1, TE \| RE)` directo no atómico |
 | **D4** | `uart_ll.c` | 558–564, 583–588 | `LL_USART_EnableIT_*` con `ATOMIC_SET_BIT` (cuelgue en D3 LPUART1) | RMW no exclusivo dentro de sección `PRIMASK` y `__disable_irq()` |
+| **D6** | `uart_hal.c` | 156–160, 206–210 | Sin validación de instancia en `UART_HAL_Init` / `InitEx` | `UART_HAL_IsValidInstance()` valida instancia contra periféricos soportados |
 
 ---
 
-## 3. Desviaciones Aprobadas (Deviation D5)
+## 3. Desviaciones Aprobadas (Deviations D5 y D6)
 
 ### D5: Semántica de Recolección de Errores en `TakeErrors`
-- **Componentes afectados:** `UART_BM_TakeErrors()` en [`uart_bm.c:514-530`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_bm.c#L514-L530) y `UART_LL_TakeErrors()` en [`uart_ll.c:538-554`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/uart_ll.c#L538-L554).
+- **Componentes afectados:** `UART_BM_TakeErrors()` en [uart_bm.c:514-530](uart_bm.c#L514-L530) y `UART_LL_TakeErrors()` en [uart_ll.c:538-554](uart_ll.c#L538-L554).
 - **Comportamiento previo (`b41c4a7`):** `TakeErrors` únicamente leía y borraba la máscara de errores acumulada por software en variables internas de la estructura driver. Los flags de error en los registros hardware (`USART_ISR`) permanecían inalterados.
-- **Comportamiento actual (`4db5903`):** Además de recolectar los flags de software, `TakeErrors` lee directamente los flags de estado hardware en `ISR` (`PE`, `FE`, `NE`, `ORE`) y los limpia mediante escritura en `USART_ICR` (`PECF`, `FECF`, `NCF`, `ORECF`).
+- **Comportamiento actual (`fdbf306`):** Además de recolectar los flags de software, `TakeErrors` lee directamente los flags de estado hardware en `ISR` (`PE`, `FE`, `NE`, `ORE`) y los limpia mediante escritura en `USART_ICR` (`PECF`, `FECF`, `NCF`, `ORECF`).
 - **Justificación técnica:** En recepción sin interrupciones o con buffers FIFO, los flags de error hardware son "sticky" (permanecen activos en `ISR` hasta que se escriba un 1 en `ICR`). Si no se limpiaran a nivel hardware en `TakeErrors`, cualquier consulta subsiguiente seguiría observando el error anterior.
 - **Efecto colateral:** En modo FIFO, el flag hardware es global al periférico. Su borrado inmediato disocia el flag de error de la posición específica del byte en el FIFO de hardware (los errores ya no quedan atados estrictamente al byte en la cabeza del FIFO sino que se reportan de forma agrupada).
+
+### D6: Validación Previa de Instancia en Capa HAL (`UART_HAL_IsValidInstance`)
+- **Componentes afectados:** `UART_HAL_Init()` y `UART_HAL_InitEx()` en [uart_hal.c:156-160, 206-210](uart_hal.c#L156-L160).
+- **Comportamiento previo (`b41c4a7`):** No se verificaba la validez del puntero de instancia (`huart->Instance`). Si se pasaba una dirección arbitraria o inválida, el driver llamaba al MSP o modificaba registros sin validación previa.
+- **Comportamiento actual (`fdbf306`):** Se verifica formalmente mediante la función auxiliar `UART_HAL_IsValidInstance()` que la instancia corresponda a una de las instancias UART/USART/LPUART válidas del microcontrolador STM32H755 (`USART1`, `USART2`, `USART3`, `UART4`, `UART5`, `USART6`, `UART7`, `UART8`, `LPUART1`). En caso contrario, se aborta inmediatamente retornando `HAL_ERROR` sin interactuar con registros ni periféricos.
+- **Justificación técnica:** Requisito de robustez y contención de fallos (regla de oro del proyecto: cero mutaciones en el hardware ante parámetros inválidos).
 
 ---
 
@@ -69,7 +87,7 @@ Se ha completado la tercera corrección de la fase F1 atendiendo la totalidad de
 
 La suite completa de selftest y oráculo de hardware ha sido ejecutada físicamente contra la placa NUCLEO-H755ZI-Q (`sn=0016000C4142501220353451`) conectada al Analog Discovery 2 (`sn=210321B5D38D`).
 
-- **Captura de hardware:** [`03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_4db5903.txt`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_4db5903.txt)
+- **Captura de hardware:** [03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_fdbf306.txt](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_fdbf306.txt)
 - **Veredicto Firmware:** `FW VERDICT=PASS`
 - **Veredicto Host:** `HOST VERDICT=PASS`
 - **Árbol de trabajo:** Limpio antes y después de la ejecución (`PASS`).
@@ -84,7 +102,7 @@ La suite completa de selftest y oráculo de hardware ha sido ejecutada físicame
 | **UT2** | Baudrate PRESC/BRR formula and U5 checks | **PASS** | FAIL (exp) | **PASS** |
 | **UT3** | Wire format and bit period against MCO1 (±0.5%) | **PASS** | FAIL (exp) | **PASS** |
 | **UT4** | CM7 loopback reception over JU1 (72/72 bytes) | **PASS** | FAIL (exp) | **PASS** |
-| **UT4_CM4** | CM4 loopback reception over JU1 (32/32 bytes) | **PASS** | FAIL (exp) | **PASS** |
+| **UT4_CM4** | CM4 loopback reception over JU1 (16/16 bytes) | **PASS** | FAIL (exp) | **PASS** |
 | **UT5** | Error injection (PE, FE, NE, ORE-FIFO, ORE-NOFIFO, clean) | **PASS** | FAIL (exp) | **PASS** |
 | **UT6** | RTS/CTS flow control over JU2 (24 bytes FC + ORE control) | **PASS** | FAIL (exp) | **PASS** |
 | **UT7** | HAL InitEx 8E1 and GPIO lock contention U6 | **PASS** | FAIL (exp) | **PASS** |
@@ -93,16 +111,16 @@ La suite completa de selftest y oráculo de hardware ha sido ejecutada físicame
 
 ### Prueba de Resets en Caliente (20 Warm Resets)
 - **Preset:** `selftest-uart` en `prj_01_template_dualcore`.
-- **Comando:** `py tools/run_warm_resets.py --project 03_firmware_templates/prj_01_template_dualcore --preset selftest-uart --out 03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_4db5903.txt --title "selftest-uart 20 warm resets" --count 20`
-- **Resultado:** **20/20 resets superados exitosamente**, alcanzando `(CPU2 alive)` y verificando identidad de revisión (`4db5903`) e id de compilación (`300906d14e0dbfe9`) en cada iteración.
-- **Captura:** [`03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_4db5903.txt`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_4db5903.txt).
+- **Comando:** `py tools/run_warm_resets.py --project 03_firmware_templates/prj_01_template_dualcore --preset selftest-uart --out 03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_fdbf306.txt --title "selftest-uart 20 warm resets" --count 20`
+- **Resultado:** **20/20 resets superados exitosamente**, alcanzando `(CPU2 alive)` y verificando identidad de revisión (`fdbf306`) e id de compilación (`72be00215b3e165d`) en cada iteración.
+- **Captura:** [03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_fdbf306.txt](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_fdbf306.txt).
 
 ---
 
 ## 5. Resultados de Verificación Off-Board y Capturas Commiteadas
 
 ### T1: Matriz de Compilación (11 Presets)
-- **Herramienta:** `tools/uart_checks.py --output 01_shared_drivers/04_uart/docs/uart_checks_4db5903.txt`
+- **Herramienta:** `tools/uart_checks.py --output 01_shared_drivers/04_uart/docs/uart_checks_fdbf306.txt`
 - **Resultados:** 11/11 presets compilados con `cmake --build --clean-first`, 0 errores, 0 avisos del compilador:
   - `prj_01_template_dualcore` [`debug`]: **PASS** (0 warnings, 274 objetos).
   - `prj_01_template_dualcore` [`release`]: **PASS** (0 warnings, 274 objetos).
@@ -122,7 +140,7 @@ La suite completa de selftest y oráculo de hardware ha sido ejecutada físicame
 - **Control Negativo de Cabeceras:** Modificación sintética evaluada con `git diff --no-index` detecta 1 línea eliminada (**PASS**).
 - **Aislamiento de Símbolos:** Inspección de los 16 ELFs de producción (`release` y `debug`) con `nm` sin `-g`: 0 símbolos de selftest encontrados (**PASS**).
 - **Control Positivo de Símbolos:** ELFs de `selftest-uart` evaluados por la misma función detectan 17 símbolos en CM7 y 4 en CM4 (**PASS**).
-- **Captura commiteada:** [`01_shared_drivers/04_uart/docs/uart_checks_4db5903.txt`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/01_shared_drivers/04_uart/docs/uart_checks_4db5903.txt).
+- **Captura commiteada:** [docs/uart_checks_fdbf306.txt](docs/uart_checks_fdbf306.txt).
 
 ---
 
@@ -139,31 +157,73 @@ La suite completa de selftest y oráculo de hardware ha sido ejecutada físicame
    - **DIO15**: PD6 (CN9-4), analizador lógico / inyector en USART2_RX.
 4. Desconectar jumpers J2/J3 de la placa de destino (F334) y desconectar el cable USB de la F334 (`00_gpio/README.md` §8).
 
-### 6.2 Comandos de Ejecución
+### 6.2 Comandos de Ejecución y Recetas de Auditoría
+
 En consola PowerShell con el entorno cargado (`. .\tools\env.ps1`):
 
+#### 1. Verificación completa sin placa (T1 matriz y T2 símbolos/cabeceras)
 ```powershell
-# 1. Verificación completa sin placa (T1 matriz y T2 símbolos/cabeceras)
 py tools\uart_checks.py --test all
+```
 
-# 2. Verificación mock off-board del host
+#### 2. Verificación mock off-board del host
+```powershell
 py 03_firmware_templates\prj_01_template_dualcore\tools\uart_hw_check.py --mock-test
+```
 
-# 3. Flasheo y ejecución del selftest en hardware real con AD2
+#### 3. Flasheo y ejecución del selftest en hardware real con AD2
+```powershell
 py 03_firmware_templates\prj_01_template_dualcore\tools\flash.py --preset selftest-uart
 py 03_firmware_templates\prj_01_template_dualcore\tools\uart_hw_check.py
+```
 
-# 4. Verificación de UT9 sobre el control b41c4a7 (defecto esperado U1)
-# En la versión base b41c4a7, HAL_UART_Init ignoraba s_msp_gpio_status y devolvía HAL_OK
-# a pesar de que el lock de GPIO estaba tomado por CM4. Con la opción --expect-control-u1,
-# el oráculo valida específicamente que el control baseline reporta HAL_OK en lugar de HAL_BUSY:
-py 03_firmware_templates\prj_01_template_dualcore\tools\uart_hw_check.py --expect-control-u1
+#### 4. Receta del Control de UT9 (Reproducción del Defecto U1 en `b41c4a7`)
+En la versión base `b41c4a7`, `HAL_UART_Init` ignoraba `s_msp_gpio_status` y devolvía `HAL_OK` (`0`) a pesar de que el lock de GPIO estaba tomado por CM4. Para verificar la reproducción exacta de este control negativo:
 
-# 5. Prueba de estabilidad de warm resets sobre selftest-uart
-py tools\run_warm_resets.py --project 03_firmware_templates/prj_01_template_dualcore --preset selftest-uart --out 03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_4db5903.txt --title "selftest-uart 20 warm resets" --count 20
+```powershell
+# a) Restaurar temporalmente el driver uart_hal.c del commit base b41c4a7:
+git checkout b41c4a7 -- 01_shared_drivers/04_uart/uart_hal.c
 
-# 6. Flasheo final de imagen de producción debug y retorno a estado seguro S2
-py 03_firmware_templates\prj_01_template_dualcore\tools\flash.py --preset debug
+# b) Recompilar selftest-uart en prj_01:
+cmake --build 03_firmware_templates/prj_01_template_dualcore/build/selftest-uart
+
+# c) Flashear imagen de control:
+py 03_firmware_templates/prj_01_template_dualcore/tools/flash.py --preset selftest-uart
+
+# d) Ejecutar host en modo control (valida que el firmware imprime 'returned 0' ante lock tomado):
+py 03_firmware_templates/prj_01_template_dualcore/tools/uart_hw_check.py --expect-control-u1 --allow-dirty
+
+# e) Restaurar uart_hal.c de HEAD y recompilar selftest-uart:
+git checkout HEAD -- 01_shared_drivers/04_uart/uart_hal.c
+cmake --build 03_firmware_templates/prj_01_template_dualcore/build/selftest-uart
+```
+
+#### 5. Receta de UT10 (Selftest real en `prj_04_adc_dma_bm_eth`)
+Para validar el selftest real de UART en el proyecto de producción `prj_04` manteniendo el puente JU1 con resistencia serie de 1 kΩ:
+
+```powershell
+# a) Compilar el preset selftest-uart en prj_04:
+cmake --build 02_firmware_projects/prj_04_adc_dma_bm_eth/build/selftest-uart
+
+# b) Flashear en la placa NUCLEO-H755ZI-Q:
+py 02_firmware_projects/prj_04_adc_dma_bm_eth/tools/flash.py --preset selftest-uart
+
+# c) Monitorear la salida de selftest de CM4 por puerto serie (115200 baud, 8N1):
+py tools/monitor.py --baud 115200
+
+# Salida esperada en consola:
+# [m4_uart_test] jumper=1 bm_init=1,1,1 bm_loop=1,1,1 ll=1,1 ore=1
+```
+
+#### 6. Prueba de estabilidad de warm resets sobre selftest-uart
+```powershell
+py tools\run_warm_resets.py --project 03_firmware_templates/prj_01_template_dualcore --preset selftest-uart --out 03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_fdbf306.txt --title "selftest-uart 20 warm resets" --count 20
+```
+
+#### 7. Flasheo final de imagen de producción debug y retorno a estado seguro S2
+```powershell
+py 03_firmware_templates/prj_01_template_dualcore/tools/flash.py --preset debug
+py -c "import sys; sys.path.insert(0, 'tools'); from ad2 import AD2; ad = AD2(); ad.set_safe_state(); ad.close()"
 ```
 
 ---
@@ -185,11 +245,11 @@ Conforme a la aprobación de la dirección técnica:
 - [x] T1 y T2 pasan con 0 avisos del compilador contados desde la salida de `cmake --build` en las 11 configuraciones.
 - [x] Controles negativos de T1 y T2 pasan a través de la misma función evaluadora con entradas mutadas fuera del repo.
 - [x] Suite mock off-board de `uart_hw_check.py` pasa con veredicto PASS.
-- [x] Ejecución en hardware real con captura [`uart_dev_hw_4db5903.txt`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_4db5903.txt) con `FW VERDICT=PASS`, `HOST VERDICT=PASS` y 12/12 pasos de la tabla Oracle en PASS.
-- [x] 20/20 warm resets en `selftest-uart` con captura [`uart_dev_warm_resets_4db5903.txt`](file:///c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_4db5903.txt) alcanzando `(CPU2 alive)`.
+- [x] Ejecución en hardware real con captura [`uart_dev_hw_fdbf306.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_fdbf306.txt) con `FW VERDICT=PASS`, `HOST VERDICT=PASS` y 12/12 pasos de la tabla Oracle en PASS.
+- [x] 20/20 warm resets en `selftest-uart` con captura [`uart_dev_warm_resets_fdbf306.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_fdbf306.txt) alcanzando `(CPU2 alive)`.
 - [x] Placa flasheada con preset de producción `debug` y AD2 en estado seguro S2.
-- [x] Desviación `D5` (`TakeErrors`) formalmente documentada en §3.
-- [x] Citas a archivos, líneas, conectores y constantes verificadas contra HEAD (`4db5903`).
-- [x] Ninguna escritura realizada en la configuración de git.
+- [x] Desviaciones `D5` (`TakeErrors`) y `D6` (`UART_HAL_IsValidInstance`) formalmente documentadas en §3.
+- [x] Citas a archivos, líneas, conectores y constantes verificadas contra HEAD (`fdbf306`).
+- [x] Ninguna escritura realizada en la configuración de git ni enlaces absolutos `file:///`.
 
-F1 CORREGIDA 3 PARA AUDITORIA 4db5903
+F1 CORREGIDA 4 PARA AUDITORIA fdbf306
