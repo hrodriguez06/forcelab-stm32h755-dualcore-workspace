@@ -166,8 +166,8 @@ static void mco1_enable(void)
         s_mco_saved = RCC->CFGR & (RCC_CFGR_MCO1 | RCC_CFGR_MCO1PRE);
         s_mco_changed = true;
     }
-    /* MCO1 = HSE (8 MHz) / 2 = 4 MHz on PA8 (AF0). RCC_CFGR is CPU1 register */
-    MODIFY_REG(RCC->CFGR, RCC_CFGR_MCO1 | RCC_CFGR_MCO1PRE, RCC_CFGR_MCO1_1 | RCC_CFGR_MCO1PRE_1);
+    /* MCO1 = HSE (8 MHz) / 10 = 800 kHz on PA8 (AF0). RCC_CFGR is CPU1 register */
+    MODIFY_REG(RCC->CFGR, RCC_CFGR_MCO1 | RCC_CFGR_MCO1PRE, RCC_CFGR_MCO1_1 | (10U << RCC_CFGR_MCO1PRE_Pos));
 
     /* PA8 alternate function 0 (MCO1) */
     if (!GPIO_BM_ConfigAlternate(GPIOA, UART_PIN_MCO, 0U, GPIO_BM_PULL_NONE, GPIO_BM_SPEED_LOW))
@@ -176,13 +176,29 @@ static void mco1_enable(void)
         return;
     }
 
-    /* Compute MCO1 frequency from RCC_CFGR and clock tree (N4) */
+    /* Compute MCO1 frequency dynamically from RCC_CFGR and clock tree (N4) */
     uint32_t cfgr = RCC->CFGR;
     uint32_t mco1_pre = (cfgr & RCC_CFGR_MCO1PRE) >> RCC_CFGR_MCO1PRE_Pos;
     uint32_t mco1_div = (mco1_pre > 0U) ? mco1_pre : 1U;
-    uint32_t mco1_src_freq = HSE_VALUE;
+
+    uint32_t mco1_sel = (cfgr & RCC_CFGR_MCO1) >> RCC_CFGR_MCO1_Pos;
+    uint32_t mco1_src_freq;
+    switch (mco1_sel)
+    {
+        case 0U: mco1_src_freq = HSI_VALUE; break;
+        case 1U: mco1_src_freq = LSE_VALUE; break;
+        case 2U: mco1_src_freq = HSE_VALUE; break;
+        case 4U: mco1_src_freq = 48000000UL; break;
+        default: mco1_src_freq = HSE_VALUE; break;
+    }
     uint32_t mco1_freq = mco1_src_freq / mco1_div;
-    uint32_t f_ker = 100000000UL;
+
+    /* Dynamically read USART2 kernel clock from HAL clock tree (N4) */
+    uint32_t f_ker = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_USART234578);
+    if (f_ker == 0U)
+    {
+        f_ker = 100000000UL;
+    }
     uint32_t ratio = (mco1_freq > 0U) ? (f_ker / mco1_freq) : 0U;
 
     /* Print MCO1 line only on success (E-B1, E-m: single [uart] prefix) */
@@ -1065,7 +1081,7 @@ static void run_ut3(void)
         (void)HAL_UART_DeInit(&h_hal);
     }
 
-    verdict(ok, "UT3 wire format encoding across BM, LL, HAL (MCO1 ratio 25:1)");
+    verdict(ok, "UT3 wire format encoding across BM, LL, HAL (MCO1 ratio 125:1)");
     step_end();
 }
 
@@ -1074,6 +1090,7 @@ static void run_ut4(void)
     if (!step_begin("UT4")) { return; }
 
     bool ok = true;
+    uint32_t total_sent = 0U;
     uint32_t total_received = 0U;
     uint32_t total_err = 0U;
     static const UartBm_Pin_t bm_tx = { .port = UART_BENCH_PORT_USART, .pin_idx = UART_PIN_TX, .af = 7U };
@@ -1107,6 +1124,7 @@ static void run_ut4(void)
         {
             for (uint8_t b = 0x30U; b < 0x38U; b++)
             {
+                total_sent++;
                 (void)UART_BM_WriteByte(&h, b);
                 uint8_t rx = 0U;
                 uint32_t sp = 100000U;
@@ -1163,6 +1181,7 @@ static void run_ut4(void)
         {
             for (uint8_t b = 0x41U; b < 0x49U; b++)
             {
+                total_sent++;
                 (void)UART_LL_WriteByte(&h, b);
                 uint8_t rx = 0U;
                 uint32_t sp = 100000U;
@@ -1218,6 +1237,7 @@ static void run_ut4(void)
         {
             for (uint8_t b = 0x50U; b < 0x58U; b++)
             {
+                total_sent++;
                 (void)UART_LL_WriteByte(&h, b);
                 uint8_t rx = 0U;
                 uint32_t sp = 100000U;
@@ -1274,6 +1294,7 @@ static void run_ut4(void)
             /* Send 8 bytes with MSB set: 0x80..0x87. In 7-bit mode, HW masks to 0x00..0x07 */
             for (uint8_t b = 0x80U; b < 0x88U; b++)
             {
+                total_sent++;
                 (void)UART_LL_WriteByte(&h, b);
                 uint8_t rx = 0U;
                 uint32_t sp = 100000U;
@@ -1337,6 +1358,7 @@ static void run_ut4(void)
                 static const uint8_t test_data[32] = "CM7_UART_LL_IRQ_TEST_0123456789!";
                 const size_t len = sizeof(test_data);
 
+                total_sent += len;
                 (void)UART_LL_Write(&h_ll, test_data, len, 50000U);
                 (void)UART_LL_Flush(&h_ll, 50000U);
 
@@ -1382,8 +1404,8 @@ static void run_ut4(void)
         s_active_ll_ring   = NULL;
     }
 
-    LOG("UT4 loopback: sent=72 received=%lu err=0x%lx", (unsigned long)total_received, (unsigned long)total_err);
-    verdict(ok && (total_received == 72U) && (total_err == 0U), "UT4 CM7 loopback reception (JU1, polled/irq, fifo, over8, 7b mask)");
+    LOG("UT4 loopback: sent=%lu received=%lu err=0x%lx", (unsigned long)total_sent, (unsigned long)total_received, (unsigned long)total_err);
+    verdict(ok && (total_sent == 72U) && (total_received == 72U) && (total_err == 0U), "UT4 CM7 loopback reception (JU1, polled/irq, fifo, over8, 7b mask)");
     step_end();
 }
 
@@ -1469,7 +1491,7 @@ static void run_ut5(void)
         uint8_t rx_b = 0U;
         (void)UART_LL_ReadByte(&h, &rx_b);
         uint32_t err = UART_LL_TakeErrors(&h);
-        LOG("UT5 PE err=0x%lx (expected 0x%lx)", (unsigned long)err, (unsigned long)UART_LL_ERR_PE);
+        LOG("UT5 PE byte=0x%02x err=0x%lx (expected 0x%lx)", (unsigned)rx_b, (unsigned long)err, (unsigned long)UART_LL_ERR_PE);
         if ((err & UART_LL_ERR_PE) == 0U) { ok = false; }
         if (UART_LL_TakeErrors(&h) != 0U) { ok = false; } /* single-shot */
     }
@@ -1481,7 +1503,7 @@ static void run_ut5(void)
         uint8_t rx_b = 0U;
         (void)UART_LL_ReadByte(&h, &rx_b);
         uint32_t err = UART_LL_TakeErrors(&h);
-        LOG("UT5 FE err=0x%lx (expected 0x%lx)", (unsigned long)err, (unsigned long)UART_LL_ERR_FE);
+        LOG("UT5 FE byte=0x%02x err=0x%lx (expected 0x%lx)", (unsigned)rx_b, (unsigned long)err, (unsigned long)UART_LL_ERR_FE);
         if ((err & UART_LL_ERR_FE) == 0U) { ok = false; }
         if (UART_LL_TakeErrors(&h) != 0U) { ok = false; }
     }
@@ -1548,15 +1570,15 @@ static void run_ut5(void)
         (void)UART_LL_TakeErrors(&h);
     }
 
-    /* Phase 7: Clean frame control (no error expected) */
+    /* Phase 7: Clean frame control (no error expected, received byte 0x55) */
     if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
     if (!sync0()) { ok = false; (void)UART_LL_Deinit(&h); step_end(); return; }
     {
         uint8_t rx_b = 0U;
-        (void)UART_LL_ReadByte(&h, &rx_b);
+        bool read_ok = UART_LL_ReadByte(&h, &rx_b);
         uint32_t err = UART_LL_TakeErrors(&h);
-        LOG("UT5 clean frame err=0x%lx (expected 0)", (unsigned long)err);
-        if (err != 0U) { ok = false; }
+        LOG("UT5 clean frame byte=0x%02x err=0x%lx (expected 0x55, err 0)", (unsigned)rx_b, (unsigned long)err);
+        if ((err != 0U) || !read_ok || (rx_b != 0x55U)) { ok = false; }
     }
 
     (void)UART_LL_Deinit(&h);
@@ -2145,6 +2167,7 @@ void UART_Selftest_CM7_Run(void)
     {
         (void)cm4_send_cmd(UST_CMD_DONE, CM4_TIMEOUT_MS);
         mco1_restore();
+        LOG("m4_timeout=%lu", (unsigned long)UST_AREA->m4_timeout);
         if (UST_AREA->m4_timeout != 0U)
         {
             LOG("CM4 reported timeout error: %lu", (unsigned long)UST_AREA->m4_timeout);

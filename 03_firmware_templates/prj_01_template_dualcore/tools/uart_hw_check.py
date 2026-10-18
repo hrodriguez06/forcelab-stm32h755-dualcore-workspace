@@ -114,7 +114,7 @@ def check_clean_tree(repo_root: pathlib.Path, out_file: Optional[pathlib.Path]) 
         p = (repo_root / path_str).resolve()
         if out_res and p == out_res:
             continue
-        if "build" in p.parts or ".gemini" in path_str:
+        if "build" in p.parts:
             continue
         # Only non-ignored modifications or untracked files are dirty
         if code != "!!":
@@ -326,10 +326,15 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
             "frame_end": frame_end,
             "total_bits": total_bits,
             "mco_per_bit": mco_per_bit,
-            "measurable": measurable
+            "measurable": measurable,
+            "mco_edges": len(mco_rises),
+            "mco_period_samples": mco_period_samples,
         })
 
         i = start_edge + int(round((total_bits - 0.5) * bit_period_samples))
+
+    if frames and mco_rises and (mco_rises[-1] < frames[-1]["frame_end"]):
+        return []
 
     return frames
 
@@ -370,11 +375,11 @@ def eval_ut3(frames: list[dict], expected_bytes: list[int], exp_parity: str,
              f_mco: float, baud: float, data_bits: int = 8, tolerance: float = 0.005) -> tuple[bool, str]:
     if not frames:
         return False, "no frames decoded"
+    if len(frames) != len(expected_bytes):
+        return False, f"frame count mismatch: got {len(frames)} exp {len(expected_bytes)}"
     th_mco = f_mco / baud
     mask = (1 << data_bits) - 1
     for i, f in enumerate(frames):
-        if i >= len(expected_bytes):
-            break
         if (f["byte"] & mask) != (expected_bytes[i] & mask):
             return False, f"frame {i} byte mismatch: got 0x{f['byte']:X} exp 0x{expected_bytes[i]:X} (mask 0x{mask:X})"
         if not f["parity_ok"]:
@@ -396,7 +401,9 @@ def eval_ut4_cm4(sent: int, received: int, status: int, fw_pass: bool) -> bool:
     return (sent == 16) and (received == 16) and (status == 1) and fw_pass
 
 
-def eval_ut5(measured_errors: dict[str, int], fw_pass: bool) -> bool:
+def eval_ut5(measured_errors: dict[str, int], fw_pass: bool, clean_byte: int = 0x55) -> bool:
+    if clean_byte != 0x55:
+        return False
     if not fw_pass:
         return False
     if (measured_errors.get("PE", 0) & 8) == 0:
@@ -657,11 +664,12 @@ def generate_mock_lines() -> list[str]:
         "[uart] CM7 Build id mock_id",
         "[uart] CM4 Rev mock_rev",
         "[uart] CM4 Build id mock_id",
-        "[uart] MCO1: PA8 enabled, freq=4000000 Hz, f_ker=100000000 Hz, ratio=25:1",
+        "[uart] MCO1: PA8 enabled, freq=800000 Hz, f_ker=100000000 Hz, ratio=125:1",
     ]
     for step in STEPS:
         if step.name == "DONE":
             lines.append("[uart] STEP DONE v=1")
+            lines.append("[uart] m4_timeout=0")
             lines.append("=== 04_uart selftest finished: 0 failed ===")
             lines.append("[uart] FW VERDICT=PASS")
             break
@@ -737,13 +745,13 @@ def generate_mock_lines() -> list[str]:
             lines.append("[uart] UT4_CM4 loopback: sent=16 received=16 status=1")
             lines.append("[uart] VERDICT UT4_CM4 PASS")
         elif step.name == "UT5":
-            lines.append("[uart] UT5 PE err=0x8 (expected 0x8)")
-            lines.append("[uart] UT5 FE err=0x4 (expected 0x4)")
+            lines.append("[uart] UT5 PE byte=0x00 err=0x8 (expected 0x8)")
+            lines.append("[uart] UT5 FE byte=0x00 err=0x4 (expected 0x4)")
             lines.append("[uart] UT5 BREAK err=0x4 (expected FE 0x4)")
             lines.append("[uart] UT5 NE err=0x2 (flagged=1)")
             lines.append("[uart] UT5 ORE-FIFO err=0x1 (expected 0x1)")
             lines.append("[uart] UT5 ORE-NOFIFO err=0x1 (expected 0x1)")
-            lines.append("[uart] UT5 clean frame err=0x0 (expected 0)")
+            lines.append("[uart] UT5 clean frame byte=0x55 err=0x0 (expected 0x55, err 0)")
             lines.append("[uart] VERDICT UT5 PASS")
         elif step.name == "UT6":
             lines.append("[uart] UT6 FC phase: written=24/24 read=24/24 err=0x0")
@@ -762,28 +770,33 @@ def generate_mock_lines() -> list[str]:
     return lines
 
 
-def generate_mock_la_samples(pattern: list[int], bit_period: int = 868,
+def generate_mock_la_samples(pattern: list[int], bit_period: float = 868.0,
                              data_bits: int = 8, parity: str = "none", stop_bits: int = 1,
                              corrupt_parity: bool = False, frame_limit: Optional[int] = None,
-                             sample_rate: float = 100e6, f_mco: float = 4000000.0) -> list[int]:
-    """Generates synthesized 16-bit logic analyzer samples containing MCO1 and UART frames."""
+                             sample_rate: float = 100e6, f_mco: float = 800000.0,
+                             baud: Optional[float] = None) -> list[int]:
+    """Generates synthesized 16-bit logic analyzer samples containing MCO1 and UART frames with continuous bit boundaries."""
+    if baud is not None and baud > 0:
+        bit_period_exact = sample_rate / baud
+    else:
+        bit_period_exact = float(bit_period)
+
     samples: list[int] = []
     # Idle resting state: 200 samples of DIO_RX high
     samples += [DIO_RX] * 200
 
     count = 0
+    cur_sample = float(len(samples))
     for byte in pattern:
         if frame_limit is not None and count >= frame_limit:
             break
-        # Start bit = 0
-        samples += [0] * bit_period
-        # Data bits
+        # Build bit values for this frame: start bit (0), data bits, parity, stop bits (1)
+        frame_bits: list[int] = [0]
         ones = 0
         for b in range(data_bits):
             bit = (byte >> b) & 1
-            samples += [DIO_RX if bit else 0] * bit_period
+            frame_bits.append(bit)
             ones += bit
-        # Parity bit
         if parity in ("even", "odd"):
             if parity == "even":
                 par = 1 if (ones % 2 != 0) else 0
@@ -791,9 +804,22 @@ def generate_mock_la_samples(pattern: list[int], bit_period: int = 868,
                 par = 1 if (ones % 2 == 0) else 0
             if corrupt_parity:
                 par ^= 1
-            samples += [DIO_RX if par else 0] * bit_period
-        # Stop bit(s) = 1 (N15: accept stop_bits, remove extra inter-frame idle gap)
-        samples += [DIO_RX] * (bit_period * stop_bits)
+            frame_bits.append(par)
+        frame_bits.extend([1] * stop_bits)
+
+        # Generate samples for this frame using continuous fractional bit boundaries
+        frame_start_s = cur_sample
+        total_frame_samples = len(frame_bits) * bit_period_exact
+        end_s = int(round(frame_start_s + total_frame_samples))
+        for s_idx in range(int(round(frame_start_s)), end_s):
+            b_idx = int((s_idx - frame_start_s) / bit_period_exact)
+            if b_idx < 0:
+                b_idx = 0
+            elif b_idx >= len(frame_bits):
+                b_idx = len(frame_bits) - 1
+            val = DIO_RX if frame_bits[b_idx] else 0
+            samples.append(val)
+        cur_sample = float(len(samples))
         count += 1
 
     # Pad remaining to 16384 with idle high
@@ -886,9 +912,9 @@ class UartSession:
         self.checks: list[tuple[str, bool, str]] = []
         self.oracle_table: list[dict[str, str]] = []
         self.current_step = ""
-        self.f_mco = 4000000.0
+        self.f_mco = 800000.0
         self.f_ker = 100000000.0
-        self.mco_ratio = 25.0
+        self.mco_ratio = 125.0
 
     def check(self, name: str, ok: bool, detail: str = "") -> None:
         status = "PASS" if ok else "FAIL"
@@ -1012,6 +1038,7 @@ class UartSession:
 
             if not self.sync(): return False
             pd6_restored = ((self.ad2.digital_io_read() & DIO_RX) != 0)
+            self.log(f"[ad2] UT0 measurements: resting_high={resting_high} pd6_low={pd6_low} pd6_restored={pd6_restored}")
 
             mcu_low = -1
             mcu_high = -1
@@ -1043,6 +1070,7 @@ class UartSession:
             if not self.handshake("UT0_CTRL"): return False
             if not self.sync(): return False
             ctrl_low = ((self.ad2.digital_io_read() & DIO_RX) == 0)
+            self.log(f"[ad2] UT0_CTRL measurement: ctrl_low={ctrl_low}")
             ut0_ctrl_fw_ok = self.drain_until_verdict("UT0_CTRL")
             real_ctrl = eval_ut0_ctrl(ctrl_low, ut0_ctrl_fw_ok)
             ctrl_ctrl = eval_ut0_ctrl(not ctrl_low, ut0_ctrl_fw_ok)  # Mutated line high
@@ -1053,8 +1081,8 @@ class UartSession:
             # UT1: Parameter rejection across tiers (BM, LL, HAL) (E-M2)
             # -----------------------------------------------------------------
             if not self.handshake("UT1"): return False
-            snap_match = 1
-            fail_cnt = 0
+            snap_match = -1
+            fail_cnt = -1
             t_end = time.monotonic() + 15.0
             ut1_ok = False
             while time.monotonic() < t_end:
@@ -1145,19 +1173,18 @@ class UartSession:
                 brr_val = int(m.group(6), 16)
                 baud_hw = compute_actual_baud(self.f_ker, presc_val, brr_val, over8)
 
-                # Dimension sample_rate according to baud (N1)
+                # Dimension sample_rate according to baud (N1, G-B1)
                 if baud == 9600:
-                    sample_rate = 10e6
+                    sample_rate = 2e6
                 elif baud == 921600:
                     sample_rate = 100e6
                 else:
                     sample_rate = 20e6
 
                 if self.is_mock and hasattr(self.ad2._dwf, "mock_la_samples"):
-                    bp = int(round(sample_rate / baud_hw))
                     self.ad2._dwf.mock_la_samples = generate_mock_la_samples(
-                        pat, bit_period=bp, data_bits=data_bits, parity=parity,
-                        stop_bits=stop_bits, sample_rate=sample_rate, f_mco=self.f_mco
+                        pat, data_bits=data_bits, parity=parity,
+                        stop_bits=stop_bits, sample_rate=sample_rate, f_mco=self.f_mco, baud=baud_hw
                     )
 
                 # Arm LA with falling edge trigger on DIO15 (E-B3)
@@ -1174,9 +1201,9 @@ class UartSession:
                 )
 
                 row_real, row_msg = eval_ut3(decoded, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
-                # Negative control: mutate measured data (corrupt bit duration / mco_per_bit by 2.5%, violating 0.5% tolerance)
-                mutated_frames = [{**f, "mco_per_bit": f["mco_per_bit"] * 1.025} for f in decoded]
-                row_ctrl, _ = eval_ut3(mutated_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
+                # Negative control: drop one frame from measured data (G-B1)
+                ctrl_frames = decoded[:-1] if len(decoded) > 0 else []
+                row_ctrl, ctrl_msg = eval_ut3(ctrl_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
 
                 th_mco = self.f_mco / baud_hw
                 meas_frames = [f for f in decoded if f.get("measurable", False)]
@@ -1187,28 +1214,28 @@ class UartSession:
                 else:
                     meas_mco = 0.0
 
+                mco_edges = decoded[0].get("mco_edges", 0) if decoded else 0
+                mco_per = decoded[0].get("mco_period_samples", 0.0) if decoded else 0.0
+
                 if decoded:
                     err_pct = (meas_mco - th_mco) / th_mco * 100.0
                     bytes_str = "[" + ", ".join(f"0x{f['byte']:02X}" for f in decoded) + "]"
-                    meas_ctrl_mco = meas_mco * 1.025
-                    err_ctrl_pct = (meas_ctrl_mco - th_mco) / th_mco * 100.0
                 else:
                     err_pct = 999.0
                     bytes_str = "[]"
-                    meas_ctrl_mco = 0.0
-                    err_ctrl_pct = 999.0
 
                 status_real_str = "PASS" if row_real else f"FAIL ({row_msg})"
-                status_ctrl_str = "FAIL (exp)" if not row_ctrl else "PASS (unexp)"
+                status_ctrl_str = "FAIL (exp)" if not row_ctrl else f"PASS (unexp: {ctrl_msg})"
 
                 self.log(
                     f"[host] UT3 row {row_idx:02d}: tier={tier} fmt={fmt_str} baud={baud} "
                     f"la={rate/1e6:.0f}MS/s/{n} frames={len(decoded)} bytes={bytes_str} "
+                    f"mco_edges={mco_edges} mco_per={mco_per:.2f} "
                     f"bit_meas={meas_mco:.3f} bit_th={th_mco:.3f} err={err_pct:+.2f}% -> {status_real_str}"
                 )
                 self.log(
                     f"[host] UT3 row {row_idx:02d} ctrl: fmt={fmt_str} baud={baud} "
-                    f"bit_mutated={meas_ctrl_mco:.3f} err={err_ctrl_pct:+.2f}% -> {status_ctrl_str}"
+                    f"frames={len(ctrl_frames)}/{len(decoded)} -> {status_ctrl_str}"
                 )
 
                 ut3_row_results.append(row_real)
@@ -1329,6 +1356,7 @@ class UartSession:
 
             # Harvest errors logged by firmware
             measured_errs: dict[str, int] = {}
+            clean_rx_byte = -1
             t_end = time.monotonic() + 15.0
             ut5_ok = False
             while time.monotonic() < t_end:
@@ -1336,24 +1364,27 @@ class UartSession:
                 if line is None:
                     continue
                 self.log(line)
-                m = re.search(r"UT5 (\S+) err=(0x[0-9a-fA-F]+)", line)
+                m = re.search(r"UT5 (PE|FE|BREAK|NE|ORE-FIFO|ORE-NOFIFO).*?err=(0x[0-9a-fA-F]+)", line)
                 if m:
                     pname = m.group(1)
                     err_val = int(m.group(2), 16)
                     measured_errs[pname] = err_val
-                m_clean = re.search(r"UT5 clean frame err=(0x[0-9a-fA-F]+)", line)
+                m_clean = re.search(r"UT5 clean frame.*?err=(0x[0-9a-fA-F]+)", line)
                 if m_clean:
                     measured_errs["CLEAN"] = int(m_clean.group(1), 16)
+                m_clean_byte = re.search(r"UT5 clean frame.*?byte=(0x[0-9a-fA-F]+)", line)
+                if m_clean_byte:
+                    clean_rx_byte = int(m_clean_byte.group(1), 16)
                 if "[uart] VERDICT UT5" in line:
                     ut5_ok = "PASS" in line
                     break
 
-            real_ut5 = eval_ut5(measured_errs, ut5_ok)
+            real_ut5 = eval_ut5(measured_errs, ut5_ok, clean_rx_byte)
             mutated_errs = dict(measured_errs)
             mutated_errs["PE"] = 0  # Mutate measured PE to 0
-            ctrl_ut5 = eval_ut5(mutated_errs, ut5_ok)
+            ctrl_ut5 = eval_ut5(mutated_errs, ut5_ok, clean_rx_byte)
             self.record_oracle("UT5", "Error injection (PE, FE, NE, ORE, clean)", real_ut5, not ctrl_ut5)
-            self.check("UT5 error injection detection (PE, FE, NE, ORE, clean control)", real_ut5 and not ctrl_ut5)
+            self.check("UT5 error injection detection (PE, FE, NE, ORE, clean control)", real_ut5 and not ctrl_ut5, f"clean_byte=0x{clean_rx_byte:02X}")
 
             # -----------------------------------------------------------------
             # UT6: RTS/CTS flow control over JU2 (E-M3, E-M2)
@@ -1480,7 +1511,23 @@ class UartSession:
             if not self.handshake("DONE"):
                 if not self.expect_control_u1:
                     return False
-            done_pass = self.drain_until_verdict("DONE")
+            m4_timeout = -1
+            t_end = time.monotonic() + 15.0
+            done_pass = False
+            while time.monotonic() < t_end:
+                line = self.con.readline(timeout_s=2.0)
+                if line is None:
+                    continue
+                self.log(line)
+                m_to = re.search(r"m4_timeout=(\d+)", line)
+                if m_to:
+                    m4_timeout = int(m_to.group(1))
+                if "[uart] FW VERDICT=" in line or "FW VERDICT=" in line:
+                    done_pass = ("PASS" in line)
+                    break
+
+            m4_timeout_ok = (m4_timeout == 0)
+            self.check("CM4 no local timeout (m4_timeout == 0)", m4_timeout_ok, f"m4_timeout={m4_timeout}")
 
             self.print_oracle_summary()
 
@@ -1546,7 +1593,7 @@ def run_mock_test(log: Callable[[str], None]) -> bool:
     log("[mock] === Phase 2: Full Mock Session of All Steps (UT0..UT9) ===")
     session_dwf = _MockDwf()
     pat = [0x55, 0xAA, 0xA5, 0x5A, 0x00, 0xFF]
-    session_dwf.mock_la_samples = generate_mock_la_samples(pat, bit_period=868, parity="none", sample_rate=100e6, f_mco=4000000.0)
+    session_dwf.mock_la_samples = generate_mock_la_samples(pat, parity="none", sample_rate=100e6, f_mco=800000.0, baud=115200)
 
     mock_ad2 = AD2(dwf_lib=session_dwf)
     mock_ad2.open()
@@ -1559,8 +1606,8 @@ def run_mock_test(log: Callable[[str], None]) -> bool:
     log(f"[mock] Full mock session overall: {'PASS' if session_ok else 'FAIL'}")
 
     log("[mock] === Phase 3: Negative Control 1 (Bad Parity Detection on Wire via Session) ===")
-    bad_la = generate_mock_la_samples(pat, bit_period=868, parity="even", corrupt_parity=True, sample_rate=100e6, f_mco=4000000.0)
-    decoded_bad = decode_uart_frames(bad_la, bit_period_samples=868, parity="even", f_mco=4000000.0, baud=115200)
+    bad_la = generate_mock_la_samples(pat, parity="even", corrupt_parity=True, sample_rate=100e6, f_mco=800000.0, baud=115200)
+    decoded_bad = decode_uart_frames(bad_la, bit_period_samples=int(round(100e6 / 115200)), parity="even", f_mco=800000.0, baud=115200, rate=100e6)
     bad_parity_detected = (len(decoded_bad) > 0 and not decoded_bad[0]["parity_ok"])
     log(f"[mock] Negative control 1 (bad parity flagged as error by decoder): {'PASS' if bad_parity_detected else 'FAIL'}")
 

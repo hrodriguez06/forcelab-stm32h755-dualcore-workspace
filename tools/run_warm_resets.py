@@ -128,6 +128,7 @@ def run_warm_resets(
                 "================================================================================\n"
                 f"{title}\n"
                 f"Firmware Git Revision: {git_rev}\n"
+                f"Expected boot banner: {banner}\n"
                 "Target: NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK V3)\n"
                 "Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst\n"
                 "================================================================================\n\n"
@@ -141,6 +142,7 @@ def run_warm_resets(
                 f"Host checkout: {identity.rev}; build id of build/{identity.preset}: {identity.build_id} "
                 "(host_build_id of tools/gpio_hw_check.py)\n"
                 "Each reset must print '[sys] build' and '[sys] cpu2 build' with this rev and id.\n"
+                f"Expected boot banner: {banner}\n"
                 + "".join(f"{line}\n" for line in identity.tree_lines())
                 + "Target: NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK V3)\n"
                 "Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst\n"
@@ -245,7 +247,7 @@ def main() -> None:
     # R4-b: the arguments first; the resolved options only in the identity mode,
     # so that without the new options argv is the one line added to the old format.
     argv_line = f"[host] argv: {shlex.join(sys.argv[1:])}"
-    options_line = (f"[host] options: project={identity.project} preset={identity.preset} count={args.count}"
+    options_line = (f"[host] options: project={identity.project} preset={identity.preset} count={args.count} banner={args.banner}"
                     if identity is not None else "")
     sys.exit(run_warm_resets(port, args.out, args.title, target_count=args.count, identity=identity,
                              argv_line=argv_line, options_line=options_line, banner=args.banner))

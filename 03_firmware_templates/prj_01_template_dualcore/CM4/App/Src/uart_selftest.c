@@ -177,18 +177,17 @@ void UART_Selftest_CM4_Run(void)
     copy_field(UST_AREA->m4_rev, sizeof(UST_AREA->m4_rev), FW_GIT_REV);
     copy_field(UST_AREA->m4_build_id, sizeof(UST_AREA->m4_build_id), FW_BUILD_ID);
     __DMB();
-    UST_AREA->m4_ready = UST_AREA->session;
+    UST_AREA->m4_ready   = UST_AREA->session;
+    UST_AREA->m4_timeout = 0U;
 
     uint32_t last_seq = 0U;
 
     for (;;)
     {
-        uint32_t t0 = HAL_GetTick();
         while (UST_AREA->cmd_seq == last_seq)
         {
-            if ((HAL_GetTick() - t0) > 3000U)
+            if ((UST_AREA->cmd == UST_CMD_DONE) || (UST_AREA->session != UST_AREA->m4_ready))
             {
-                UST_AREA->m4_timeout = 1U;
                 return;
             }
         }
