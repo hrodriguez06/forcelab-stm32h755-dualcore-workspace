@@ -41,9 +41,13 @@ from tools.monitor import SerialPort, autodetect
 CLI_PATH = r"C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe"
 
 
-def do_reset() -> None:
+def do_reset(sn: str = "0016000C4142501220353451") -> None:
+    cmd = [CLI_PATH, "-c", "port=SWD"]
+    if sn:
+        cmd.append(f"sn={sn}")
+    cmd.extend(["mode=HOTPLUG", "-rst"])
     res = subprocess.run(
-        [CLI_PATH, "-c", "port=SWD", "mode=HOTPLUG", "-rst"],
+        cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -107,6 +111,7 @@ def run_warm_resets(
     argv_line: str = "",
     options_line: str = "",
     banner: str = "=== STM32H755ZI",
+    sn: str = "0016000C4142501220353451",
 ) -> int:
     print(f"Opening {port_name}...")
     git_rev = "unknown"
@@ -130,7 +135,7 @@ def run_warm_resets(
                 f"Firmware Git Revision: {git_rev}\n"
                 f"Expected boot banner: {banner}\n"
                 "Target: NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK V3)\n"
-                "Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst\n"
+                f"Reset method: STM32_Programmer_CLI -c port=SWD sn={sn} mode=HOTPLUG -rst\n"
                 "================================================================================\n\n"
             )
         else:
@@ -145,7 +150,7 @@ def run_warm_resets(
                 f"Expected boot banner: {banner}\n"
                 + "".join(f"{line}\n" for line in identity.tree_lines())
                 + "Target: NUCLEO-H755ZI-Q (Silicon Rev V, ID 0x450, ST-LINK V3)\n"
-                "Reset method: STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -rst\n"
+                f"Reset method: STM32_Programmer_CLI -c port=SWD sn={sn} mode=HOTPLUG -rst\n"
                 "================================================================================\n\n"
             )
         records.append(header)
@@ -160,7 +165,7 @@ def run_warm_resets(
             while time.monotonic() - t_drain < 1.0 and ser.read(4096):
                 pass
 
-            do_reset()
+            do_reset(sn)
 
             # Collect output until stop_phrase or timeout
             t0 = time.monotonic()
@@ -233,6 +238,7 @@ def main() -> None:
     parser.add_argument("--preset", default=None, help="configure preset of the flashed image (with --project)")
     parser.add_argument("--count", type=int, default=20, help="number of warm resets (default 20)")
     parser.add_argument("--banner", default="=== STM32H755ZI", help="expected boot banner prefix (default '=== STM32H755ZI')")
+    parser.add_argument("--sn", default="0016000C4142501220353451", help="ST-LINK serial number")
     args = parser.parse_args()
     if args.count < 1:
         sys.exit("Error: --count must be at least 1")
@@ -250,7 +256,8 @@ def main() -> None:
     options_line = (f"[host] options: project={identity.project} preset={identity.preset} count={args.count} banner={args.banner}"
                     if identity is not None else "")
     sys.exit(run_warm_resets(port, args.out, args.title, target_count=args.count, identity=identity,
-                             argv_line=argv_line, options_line=options_line, banner=args.banner))
+                             argv_line=argv_line, options_line=options_line, banner=args.banner,
+                             sn=args.sn))
 
 
 if __name__ == "__main__":

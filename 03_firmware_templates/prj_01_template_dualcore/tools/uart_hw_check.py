@@ -213,7 +213,7 @@ def compute_actual_baud(f_ker: float, presc: int, brr: int, over8: bool) -> floa
 
 def decode_uart_frames(samples: list[int], bit_period_samples: int,
                        data_bits: int = 8, parity: str = "none", stop_bits: int = 1,
-                       f_mco: float = 4000000.0, baud: int = 115200, rate: float = 100e6) -> list[dict]:
+                       f_mco: float = 800000.0, baud: int = 115200, rate: float = 100e6) -> list[dict]:
     """Decodes UART frames and measures bit duration in MCO1 periods between real transitions."""
     frames: list[dict] = []
     n = len(samples)
@@ -333,8 +333,25 @@ def decode_uart_frames(samples: list[int], bit_period_samples: int,
 
         i = start_edge + int(round((total_bits - 0.5) * bit_period_samples))
 
-    if frames and mco_rises and (mco_rises[-1] < frames[-1]["frame_end"]):
-        return []
+    # H-m2: verify first MCO1 edge <= first start_edge, MCO1 spans to last frame_end,
+    # and consecutive MCO1 edge spacing <= 1.5 * mco_period_samples within the frames interval.
+    if frames and mco_rises:
+        t_start = frames[0]["start_edge"]
+        t_end = frames[-1]["frame_end"]
+        if mco_rises[0] > t_start:
+            return []
+        if mco_rises[-1] < t_end:
+            return []
+        idx_start = 0
+        while idx_start + 1 < len(mco_rises) and mco_rises[idx_start + 1] <= t_start:
+            idx_start += 1
+        idx_end = len(mco_rises) - 1
+        while idx_end - 1 >= 0 and mco_rises[idx_end - 1] >= t_end:
+            idx_end -= 1
+        max_spacing = 1.5 * mco_period_samples
+        for k in range(idx_start, idx_end):
+            if (mco_rises[k + 1] - mco_rises[k]) > max_spacing:
+                return []
 
     return frames
 
@@ -377,6 +394,9 @@ def eval_ut3(frames: list[dict], expected_bytes: list[int], exp_parity: str,
         return False, "no frames decoded"
     if len(frames) != len(expected_bytes):
         return False, f"frame count mismatch: got {len(frames)} exp {len(expected_bytes)}"
+    meas_cnt = sum(1 for f in frames if f.get("measurable", False))
+    if meas_cnt < 4:
+        return False, f"too few measurable frames: got {meas_cnt} exp >= 4"
     th_mco = f_mco / baud
     mask = (1 << data_bits) - 1
     for i, f in enumerate(frames):
@@ -669,7 +689,7 @@ def generate_mock_lines() -> list[str]:
     for step in STEPS:
         if step.name == "DONE":
             lines.append("[uart] STEP DONE v=1")
-            lines.append("[uart] m4_timeout=0")
+            lines.append("[uart] m4_done_ack=1")
             lines.append("=== 04_uart selftest finished: 0 failed ===")
             lines.append("[uart] FW VERDICT=PASS")
             break
@@ -1201,9 +1221,37 @@ class UartSession:
                 )
 
                 row_real, row_msg = eval_ut3(decoded, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
-                # Negative control: drop one frame from measured data (G-B1)
-                ctrl_frames = decoded[:-1] if len(decoded) > 0 else []
-                row_ctrl, ctrl_msg = eval_ut3(ctrl_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
+
+                # Negative controls (H-M1): evaluate 5 mutations per row on measured data
+                # 1. Drop one frame
+                ctrl1_frames = decoded[:-1] if len(decoded) > 0 else []
+                c1_res, c1_msg = eval_ut3(ctrl1_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
+                c1_str = "FAIL (exp)" if not c1_res else f"PASS (unexp: {c1_msg})"
+
+                # 2. Timing error (mco_per_bit * (1.0 + 2 * tolerance))
+                ctrl2_frames = [{**f, "mco_per_bit": f["mco_per_bit"] * (1.0 + 2.0 * 0.005)} for f in decoded]
+                c2_res, c2_msg = eval_ut3(ctrl2_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
+                c2_str = "FAIL (exp)" if not c2_res else f"PASS (unexp: {c2_msg})"
+
+                # 3. Invert data bit
+                ctrl3_frames = [{**f, "byte": (f["byte"] ^ 1)} if i == 0 else {**f} for i, f in enumerate(decoded)]
+                c3_res, c3_msg = eval_ut3(ctrl3_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
+                c3_str = "FAIL (exp)" if not c3_res else f"PASS (unexp: {c3_msg})"
+
+                # 4. Parity error (in rows with parity)
+                c4_res = False
+                c4_str = "N/A"
+                if parity != "none":
+                    ctrl4_frames = [{**f, "parity_ok": False} if i == 0 else {**f} for i, f in enumerate(decoded)]
+                    c4_res, c4_msg = eval_ut3(ctrl4_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
+                    c4_str = "FAIL (exp)" if not c4_res else f"PASS (unexp: {c4_msg})"
+
+                # 5. Stop bit error
+                ctrl5_frames = [{**f, "stop_ok": False} if i == 0 else {**f} for i, f in enumerate(decoded)]
+                c5_res, c5_msg = eval_ut3(ctrl5_frames, pat, parity, self.f_mco, baud_hw, data_bits=data_bits, tolerance=0.005)
+                c5_str = "FAIL (exp)" if not c5_res else f"PASS (unexp: {c5_msg})"
+
+                row_ctrl = c1_res or c2_res or c3_res or c4_res or c5_res
 
                 th_mco = self.f_mco / baud_hw
                 meas_frames = [f for f in decoded if f.get("measurable", False)]
@@ -1225,7 +1273,6 @@ class UartSession:
                     bytes_str = "[]"
 
                 status_real_str = "PASS" if row_real else f"FAIL ({row_msg})"
-                status_ctrl_str = "FAIL (exp)" if not row_ctrl else f"PASS (unexp: {ctrl_msg})"
 
                 self.log(
                     f"[host] UT3 row {row_idx:02d}: tier={tier} fmt={fmt_str} baud={baud} "
@@ -1234,8 +1281,8 @@ class UartSession:
                     f"bit_meas={meas_mco:.3f} bit_th={th_mco:.3f} err={err_pct:+.2f}% -> {status_real_str}"
                 )
                 self.log(
-                    f"[host] UT3 row {row_idx:02d} ctrl: fmt={fmt_str} baud={baud} "
-                    f"frames={len(ctrl_frames)}/{len(decoded)} -> {status_ctrl_str}"
+                    f"[host] UT3 row {row_idx:02d} ctrl: drop_frame={c1_str} timing(+1.0%)={c2_str} "
+                    f"bit_flip={c3_str} parity={c4_str} stop_bit={c5_str}"
                 )
 
                 ut3_row_results.append(row_real)
@@ -1511,7 +1558,7 @@ class UartSession:
             if not self.handshake("DONE"):
                 if not self.expect_control_u1:
                     return False
-            m4_timeout = -1
+            m4_done_ack = -1
             t_end = time.monotonic() + 15.0
             done_pass = False
             while time.monotonic() < t_end:
@@ -1519,15 +1566,15 @@ class UartSession:
                 if line is None:
                     continue
                 self.log(line)
-                m_to = re.search(r"m4_timeout=(\d+)", line)
-                if m_to:
-                    m4_timeout = int(m_to.group(1))
+                m_ack = re.search(r"m4_done_ack=(\d+)", line)
+                if m_ack:
+                    m4_done_ack = int(m_ack.group(1))
                 if "[uart] FW VERDICT=" in line or "FW VERDICT=" in line:
                     done_pass = ("PASS" in line)
                     break
 
-            m4_timeout_ok = (m4_timeout == 0)
-            self.check("CM4 no local timeout (m4_timeout == 0)", m4_timeout_ok, f"m4_timeout={m4_timeout}")
+            m4_done_ack_ok = (m4_done_ack == 1)
+            self.check("CM4 DONE acknowledged (m4_done_ack == 1)", m4_done_ack_ok, f"m4_done_ack={m4_done_ack}")
 
             self.print_oracle_summary()
 

@@ -188,17 +188,26 @@ static void mco1_enable(void)
         case 0U: mco1_src_freq = HSI_VALUE; break;
         case 1U: mco1_src_freq = LSE_VALUE; break;
         case 2U: mco1_src_freq = HSE_VALUE; break;
+        case 3U:
+        {
+            PLL1_ClocksTypeDef pll1;
+            HAL_RCCEx_GetPLL1ClockFreq(&pll1);
+            mco1_src_freq = pll1.PLL1_Q_Frequency;
+            break;
+        }
         case 4U: mco1_src_freq = 48000000UL; break;
         default: mco1_src_freq = HSE_VALUE; break;
     }
     uint32_t mco1_freq = mco1_src_freq / mco1_div;
 
-    /* Dynamically read USART2 kernel clock from HAL clock tree (N4) */
-    uint32_t f_ker = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_USART234578);
-    if (f_ker == 0U)
+    /* Verify USART2 kernel clock source in RCC->D2CCIP2R (H-m1) */
+    uint32_t sel = RCC->D2CCIP2R & RCC_D2CCIP2R_USART28SEL;
+    if (sel != RCC_USART234578CLKSOURCE_D2PCLK1)
     {
-        f_ker = 100000000UL;
+        bench_abort("USART2 kernel clock not D2PCLK1");
+        return;
     }
+    uint32_t f_ker = HAL_RCC_GetPCLK1Freq();
     uint32_t ratio = (mco1_freq > 0U) ? (f_ker / mco1_freq) : 0U;
 
     /* Print MCO1 line only on success (E-B1, E-m: single [uart] prefix) */
@@ -1124,8 +1133,16 @@ static void run_ut4(void)
         {
             for (uint8_t b = 0x30U; b < 0x38U; b++)
             {
-                total_sent++;
-                (void)UART_BM_WriteByte(&h, b);
+                if (UART_BM_WriteByte(&h, b))
+                {
+                    total_sent++;
+                }
+                else
+                {
+                    total_err++;
+                    ok = false;
+                    break;
+                }
                 uint8_t rx = 0U;
                 uint32_t sp = 100000U;
                 while (!UART_BM_ReadByte(&h, &rx) && (sp > 0U)) { sp--; }
@@ -1181,8 +1198,16 @@ static void run_ut4(void)
         {
             for (uint8_t b = 0x41U; b < 0x49U; b++)
             {
-                total_sent++;
-                (void)UART_LL_WriteByte(&h, b);
+                if (UART_LL_WriteByte(&h, b))
+                {
+                    total_sent++;
+                }
+                else
+                {
+                    total_err++;
+                    ok = false;
+                    break;
+                }
                 uint8_t rx = 0U;
                 uint32_t sp = 100000U;
                 while (!UART_LL_ReadByte(&h, &rx) && (sp > 0U)) { sp--; }
@@ -1237,8 +1262,16 @@ static void run_ut4(void)
         {
             for (uint8_t b = 0x50U; b < 0x58U; b++)
             {
-                total_sent++;
-                (void)UART_LL_WriteByte(&h, b);
+                if (UART_LL_WriteByte(&h, b))
+                {
+                    total_sent++;
+                }
+                else
+                {
+                    total_err++;
+                    ok = false;
+                    break;
+                }
                 uint8_t rx = 0U;
                 uint32_t sp = 100000U;
                 while (!UART_LL_ReadByte(&h, &rx) && (sp > 0U)) { sp--; }
@@ -1294,8 +1327,16 @@ static void run_ut4(void)
             /* Send 8 bytes with MSB set: 0x80..0x87. In 7-bit mode, HW masks to 0x00..0x07 */
             for (uint8_t b = 0x80U; b < 0x88U; b++)
             {
-                total_sent++;
-                (void)UART_LL_WriteByte(&h, b);
+                if (UART_LL_WriteByte(&h, b))
+                {
+                    total_sent++;
+                }
+                else
+                {
+                    total_err++;
+                    ok = false;
+                    break;
+                }
                 uint8_t rx = 0U;
                 uint32_t sp = 100000U;
                 while (!UART_LL_ReadByte(&h, &rx) && (sp > 0U)) { sp--; }
@@ -1358,8 +1399,13 @@ static void run_ut4(void)
                 static const uint8_t test_data[32] = "CM7_UART_LL_IRQ_TEST_0123456789!";
                 const size_t len = sizeof(test_data);
 
-                total_sent += len;
-                (void)UART_LL_Write(&h_ll, test_data, len, 50000U);
+                size_t written = UART_LL_Write(&h_ll, test_data, len, 50000U);
+                total_sent += written;
+                if (written != len)
+                {
+                    total_err++;
+                    ok = false;
+                }
                 (void)UART_LL_Flush(&h_ll, 50000U);
 
                 uint32_t sp = 200000U;
@@ -2146,7 +2192,7 @@ void UART_Selftest_CM7_Run(void)
     LOG("CM4 Rev %s", (const char *)UST_AREA->m4_rev);
     LOG("CM4 Build id %s", (const char *)UST_AREA->m4_build_id);
 
-    /* MCO1: PA8 enabled, 4 MHz (HSE/2), ratio to 100 MHz f_ker is 25:1 */
+    /* MCO1: PA8 enabled, 800 kHz (HSE/10), ratio to 100 MHz f_ker is 125:1 */
     mco1_enable();
 
     bench_safe();
@@ -2165,12 +2211,12 @@ void UART_Selftest_CM7_Run(void)
 
     if (step_begin("DONE"))
     {
-        (void)cm4_send_cmd(UST_CMD_DONE, CM4_TIMEOUT_MS);
+        bool m4_ack = cm4_send_cmd(UST_CMD_DONE, CM4_TIMEOUT_MS);
         mco1_restore();
-        LOG("m4_timeout=%lu", (unsigned long)UST_AREA->m4_timeout);
-        if (UST_AREA->m4_timeout != 0U)
+        LOG("m4_done_ack=%u", m4_ack ? 1U : 0U);
+        if (!m4_ack)
         {
-            LOG("CM4 reported timeout error: %lu", (unsigned long)UST_AREA->m4_timeout);
+            LOG("CM4 failed to acknowledge DONE");
             s_fail++;
         }
         LOG("=== 04_uart selftest finished: %lu failed ===", (unsigned long)s_fail);
