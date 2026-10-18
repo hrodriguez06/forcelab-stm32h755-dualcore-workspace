@@ -119,7 +119,6 @@ typedef struct
     volatile char     m4_rev[24];
     volatile char     m4_build_id[24];
     volatile uint32_t m4_ready;
-    volatile uint32_t m4_timeout;
 
     volatile uint32_t cmd;
     volatile uint32_t arg0;

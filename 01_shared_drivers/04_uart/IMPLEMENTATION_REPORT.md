@@ -32,7 +32,7 @@ Se ha completado la sexta corrección de la fase F1 atendiendo la totalidad de l
   3. `bit_flip`: inversión de un bit de datos (`byte ^ 1`), evaluando rechazo por discordancia de byte (`byte mismatch`).
   4. `parity`: inversión de paridad (`parity_ok = False` en las filas configuradas con paridad), evaluando rechazo por paridad (`parity error`).
   5. `stop_bit`: corrupción del bit de parada (`stop_ok = False`), evaluando rechazo por bit de parada (`stop bit error`).
-  Cada una de estas 5 mutaciones se evalúa estrictamente a través de `eval_ut3()` y se registra en la captura como `FAIL (exp)`.
+  Cada una de estas mutaciones se evalúa estrictamente a través de `eval_ut3()` y se registra en la captura como `FAIL (exp)` (con la mutación de paridad evaluada como `FAIL (exp)` en las 6 filas con paridad configurada, y reportada como `N/A` en las 9 filas con paridad ninguna).
 - **H-M2 (Corrección de Carrera en Handshake de DONE y Protocolo Limpio):**
   - En CM4 [uart_selftest.c](../../03_firmware_templates/prj_01_template_dualcore/CM4/App/Src/uart_selftest.c), se eliminó la comprobación `cmd == UST_CMD_DONE` del bucle `while (cmd_seq == last_seq)`, asegurando que CM4 espere a que CM7 incremente la secuencia y procese el comando en el switch, actualizando `UST_AREA->ack_seq = last_seq` con barrera de memoria `__DMB()` antes de finalizar la tarea.
   - En CM7 [uart_selftest.c](../../03_firmware_templates/prj_01_template_dualcore/CM7/App/Src/uart_selftest.c), se comprueba el retorno booleano de `cm4_send_cmd(UST_CMD_DONE, CM4_TIMEOUT_MS)`. Si CM4 no confirma el comando, se incrementa `s_fail`.
@@ -75,22 +75,22 @@ El Analizador Lógico (LA) del AD2 está dedicado a **UT3** para inspeccionar la
 
 ---
 
-## 3. Desviaciones del Driver (D5 y D6 Declaradas, Pendientes de Aprobación)
+## 3. Desviaciones del Driver (D5 y D6 Aprobadas Formalmente, 2026-10-17)
 
-### D5: Semántica de Recolección de Errores en `TakeErrors` (Declarada, Pendiente de Aprobación)
+### D5: Semántica de Recolección de Errores en `TakeErrors` (Aprobada 2026-10-17)
 - **Componentes afectados:** `UART_BM_TakeErrors()` en [uart_bm.c:575-609](uart_bm.c#L575-L609) y `UART_LL_TakeErrors()` en [uart_ll.c:514-536](uart_ll.c#L514-L536).
 - **Comportamiento previo (`b41c4a7`):** `TakeErrors` únicamente leía y borraba la máscara de errores acumulada por software en variables internas de la estructura driver. Los flags de error en los registros hardware (`USART_ISR`) permanecían inalterados.
 - **Comportamiento actual (`ab390d3`):** Además de recolectar los flags de software, `TakeErrors` lee directamente los flags de estado hardware en `ISR` (`PE`, `FE`, `NE`, `ORE`) y los limpia mediante escritura en `USART_ICR` (`PECF`, `FECF`, `NCF`, `ORECF`).
 - **Justificación técnica:** En recepción sin interrupciones o con buffers FIFO, los flags de error hardware son persistentes en `ISR` hasta que se escriba en `ICR`. Si no se limpiaran a nivel hardware en `TakeErrors`, cualquier consulta subsiguiente continuaría reportando el error previo.
 - **Efecto colateral:** En modo FIFO, el flag hardware es global al periférico. Su borrado inmediato disocia el flag de error de la posición específica del byte en el FIFO de hardware (los errores se reportan de forma agregada).
-- **Estado:** **Declarada formalmente en esta fase, pendiente de aprobación formal del auditor.**
+- **Estado:** **Aprobada por la dirección técnica el 2026-10-17.**
 
-### D6: Validación Previa de Instancia en Capa HAL (`UART_HAL_IsValidInstance`) (Declarada, Pendiente de Aprobación)
+### D6: Validación Previa de Instancia en Capa HAL (`UART_HAL_IsValidInstance`) (Aprobada 2026-10-17)
 - **Componentes afectados:** `UART_HAL_Init()` y `UART_HAL_InitEx()` en [uart_hal.c:156-159, 191-194](uart_hal.c#L156-L159).
 - **Comportamiento previo (`b41c4a7`):** No se verificaba la validez del puntero de instancia (`huart->Instance`). Si se pasaba una dirección arbitraria o inválida, el driver llamaba al MSP o modificaba registros sin validación previa.
 - **Comportamiento actual (`ab390d3`):** Se verifica formalmente mediante la función auxiliar `UART_HAL_IsValidInstance()` que la instancia corresponda a una de las instancias UART/USART/LPUART válidas del microcontrolador STM32H755 (`USART1`, `USART2`, `USART3`, `UART4`, `UART5`, `USART6`, `UART7`, `UART8`, `LPUART1`). En caso contrario, se aborta inmediatamente retornando `HAL_ERROR` sin interactuar con registros ni periféricos.
 - **Justificación técnica:** Requisito de robustez y contención de fallos para garantizar cero mutaciones en el hardware ante parámetros inválidos.
-- **Estado:** **Declarada formalmente en esta fase, pendiente de aprobación formal del auditor.**
+- **Estado:** **Aprobada por la dirección técnica el 2026-10-17.**
 
 ---
 
@@ -98,7 +98,6 @@ El Analizador Lógico (LA) del AD2 está dedicado a **UT3** para inspeccionar la
 
 La suite completa de selftest y oráculo de hardware ha sido ejecutada físicamente contra la placa NUCLEO-H755ZI-Q (`sn=0016000C4142501220353451`) conectada al Analog Discovery 2 (`sn=210321B5D38D`) dos veces consecutivas:
 
-- **Captura principal de hardware:** [03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3.txt](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3.txt)
 - **Captura Ejecución 1:** [03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run1.txt](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run1.txt)
 - **Captura Ejecución 2:** [03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run2.txt](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_hw_ab390d3_run2.txt)
 - **Veredicto Firmware:** `FW VERDICT=PASS` (en ambas ejecuciones)
@@ -204,7 +203,7 @@ git worktree add --detach ..\stm32h755-ut9-control ab390d3
 git -C ..\stm32h755-ut9-control checkout b41c4a7 -- 01_shared_drivers/04_uart/uart_hal.c
 
 # c) Configurar y compilar selftest-uart en el worktree pasando CUBE_DIR si aplica:
-cmake -S ..\stm32h755-ut9-control\03_firmware_templates\prj_01_template_dualcore -B ..\stm32h755-ut9-control\03_firmware_templates\prj_01_template_dualcore\build\selftest-uart --preset selftest-uart -DCUBE_DIR=c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/STM32CubeH7
+cmake -S ..\stm32h755-ut9-control\03_firmware_templates\prj_01_template_dualcore -B ..\stm32h755-ut9-control\03_firmware_templates\prj_01_template_dualcore\build\selftest-uart --preset selftest-uart -DCUBE_DIR=c:/Users/hrodriguez/Documents/R+D/00_Embedded_System/00_STmicro/stm32h755/02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7
 cmake --build ..\stm32h755-ut9-control\03_firmware_templates\prj_01_template_dualcore\build\selftest-uart
 
 # d) Flashear imagen de control usando el ST-LINK SN:
@@ -224,14 +223,15 @@ py 03_firmware_templates\prj_01_template_dualcore\tools\flash.py --preset selfte
 Para validar el selftest real de UART en el proyecto de producción `prj_04` manteniendo el puente JU1 con resistencia serie de 1 kΩ:
 
 ```powershell
-# a) Compilar el preset selftest-uart en prj_04:
+# a) Configurar y compilar el preset selftest-uart en prj_04:
+cmake -S 02_firmware_projects\prj_04_adc_dma_bm_eth -B 02_firmware_projects\prj_04_adc_dma_bm_eth\build\selftest-uart --preset selftest-uart
 cmake --build 02_firmware_projects\prj_04_adc_dma_bm_eth\build\selftest-uart
 
 # b) Flashear en la placa NUCLEO-H755ZI-Q con --sn:
 py 02_firmware_projects\prj_04_adc_dma_bm_eth\tools\flash.py --preset selftest-uart --sn 0016000C4142501220353451
 
 # c) Abrir el monitor serie con timeout y ST-LINK SN en segundo plano:
-Start-Process -NoNewWindow py "tools\monitor.py --port COM4 --sn 0016000C4142501220353451 --timeout 10"
+Start-Process -NoNewWindow py "tools\monitor.py --sn 0016000C4142501220353451 --timeout 10"
 
 # d) Emitir un reset NRST por hardware por SWD tras abrir el monitor para capturar el arranque:
 STM32_Programmer_CLI.exe -c port=SWD sn=0016000C4142501220353451 mode=HOTPLUG -hardRst
@@ -263,7 +263,21 @@ Conforme a la aprobación de la dirección técnica:
 
 ---
 
-## 8. Checklist Final de Entrega
+## 8. Resolución de Hallazgos I-1 a I-7 (Cierre Formal de Fase F1)
+
+| ID | Hallazgo | Resolución Aplicada |
+|---|---|---|
+| **I-1** | Ruta de `-DCUBE_DIR` en receta de UT9 apuntaba a directorio inexistente | Corregida a `<checkout principal>/02_firmware_projects/prj_eth_lwip_node/external/STM32CubeH7` |
+| **I-2** | Receta de UT10 pasaba `--port` y `--sn` simultáneos y omitía configuración de build | Monitor invocado únicamente con `--sn 0016000C4142501220353451`; añadido paso previo `cmake -S ... -B ... --preset selftest-uart` |
+| **I-3** | `run_warm_resets.py` fijaba SN por defecto y resolvía puerto vía `autodetect()` | `--sn` fijado a `None` por defecto; si se pasa `--sn` sin `--port`, se resuelve mediante `monitor.port_for_sn(sn)`; docstring y help actualizados |
+| **I-4** | Barreras de memoria en protocolo de selftest | En CM4 `UART_Selftest_CM4_Run()`: lectura de `last_seq = UST_AREA->cmd_seq; __DMB(); cmd = UST_AREA->cmd;`. En CM7 `cm4_send_cmd()`: `__DMB();` antes de retornar el estado |
+| **I-5** | Verificación de liberación de lock cross-core en `UST_CMD_LOCK_RELEASE` | En CM4: asignación explícita `UST_AREA->lock_held = 1U` si `HSEM_BM_Release()` falla. En CM7 `run_ut7()` y `run_ut9()`: comprobación mandatoria de `UST_AREA->lock_held == 0U` tras liberar lock |
+| **I-6** | Campo `m4_timeout` en desuso | Eliminado de `UstArea_t` en `Common/Inc/uart_selftest.h` |
+| **I-7** | Precisión de evaluación de paridad y eliminación de captura redundante | Documentado formalmente que la paridad evalúa `FAIL (exp)` en las 6 filas con paridad y `N/A` en las 9 filas sin paridad. Eliminada la captura redundante `uart_dev_hw_ab390d3.txt`, conservando `_run1.txt` y `_run2.txt` |
+
+---
+
+## 9. Checklist Final de Entrega
 
 - [x] `git status --porcelain -u --ignored`: vacío salvo `build/` tras commitear el informe y capturas.
 - [x] `git diff b41c4a7 -- 01_shared_drivers/04_uart/*.h`: 100% congeladas (0 líneas modificadas).
@@ -274,8 +288,12 @@ Conforme a la aprobación de la dirección técnica:
 - [x] Handshake de DONE con confirmación explícita `m4_done_ack=1` en CM4, CM7 y host.
 - [x] 20/20 warm resets en `selftest-uart` con captura [`uart_dev_warm_resets_ab390d3.txt`](../../03_firmware_templates/prj_01_template_dualcore/docs/uart_dev_warm_resets_ab390d3.txt) alcanzando `(CPU2 alive)`.
 - [x] Placa flasheada con preset de producción `debug` y AD2 en estado seguro S2.
-- [x] Desviaciones `D5` (`TakeErrors`, [uart_bm.c:575-609](uart_bm.c#L575-L609) y [uart_ll.c:514-536](uart_ll.c#L514-L536)) y `D6` (`UART_HAL_IsValidInstance`, [uart_hal.c:156-159, 191-194](uart_hal.c#L156-L159)) formalmente declaradas pendientes de aprobación en §3.
-- [x] Citas a archivos, líneas, conectores y constantes verificadas contra HEAD (`ab390d3`).
+- [x] Desviaciones `D5` (`TakeErrors`) y `D6` (`UART_HAL_IsValidInstance`) formalmente aprobadas por la dirección técnica el 2026-10-17.
+- [x] Hallazgos I-1 a I-7 resueltos en firmware, herramientas y documentación.
+- [x] Documentación en `01_shared_drivers/04_uart/README.md` actualizada en inglés conforme a plan de cierre.
+- [x] Documentación en `01_shared_drivers/00_gpio/README.md` §8 actualizada con JU1, JU2, DIO15 y SU1–SU4.
+- [x] Capturas obsoletas podadas según la regla 7 de `00_gpio/README.md` §14 y catalogadas en `04_uart/README.md` §9.3.
+- [x] Citas a archivos, líneas, conectores y constantes verificadas contra HEAD.
 - [x] Ninguna escritura realizada en la configuración de git ni enlaces absolutos `file:///`.
 
 F1 CORREGIDA 6 PARA AUDITORIA ab390d3

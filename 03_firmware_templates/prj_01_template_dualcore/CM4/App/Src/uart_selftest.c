@@ -191,8 +191,9 @@ void UART_Selftest_CM4_Run(void)
             }
         }
 
+        last_seq = UST_AREA->cmd_seq;
+        __DMB();
         uint32_t cmd = UST_AREA->cmd;
-        last_seq     = UST_AREA->cmd_seq;
 
         switch (cmd)
         {
@@ -215,6 +216,10 @@ void UART_Selftest_CM4_Run(void)
                 if (HSEM_BM_Release(BOARD_GPIO_HSEM_ID, 0U) == HSEM_BM_OK)
                 {
                     UST_AREA->lock_held = 0U;
+                }
+                else
+                {
+                    UST_AREA->lock_held = 1U;
                 }
                 break;
 

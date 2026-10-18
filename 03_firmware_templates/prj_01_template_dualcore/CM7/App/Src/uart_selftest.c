@@ -411,7 +411,9 @@ static bool cm4_send_cmd(UstCmd_t cmd, uint32_t timeout_ms)
         waited++;
     }
 
-    return (UST_AREA->ack_seq == next_seq);
+    bool acked = (UST_AREA->ack_seq == next_seq);
+    __DMB();
+    return acked;
 }
 
 /* ---- Entry Points ---------------------------------------------------------- */
@@ -1850,7 +1852,7 @@ static void run_ut7(void)
         {
             ok = false;
         }
-        if (!cm4_send_cmd(UST_CMD_LOCK_RELEASE, CM4_TIMEOUT_MS))
+        if (!cm4_send_cmd(UST_CMD_LOCK_RELEASE, CM4_TIMEOUT_MS) || (UST_AREA->lock_held != 0U))
         {
             ok = false;
         }
@@ -2116,7 +2118,7 @@ static void run_ut9(void)
         {
             ok = false;
         }
-        if (!cm4_send_cmd(UST_CMD_LOCK_RELEASE, CM4_TIMEOUT_MS))
+        if (!cm4_send_cmd(UST_CMD_LOCK_RELEASE, CM4_TIMEOUT_MS) || (UST_AREA->lock_held != 0U))
         {
             ok = false;
         }
