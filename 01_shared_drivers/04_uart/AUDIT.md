@@ -328,3 +328,44 @@ La revisión de solo lectura de `4db5903` terminó después de enviar la ronda c
 ### Estado
 
 **F1 no pasa, por G-B1.** Todo lo demás de la placa pasa, en las ejecuciones del implementador y en las mías. Lo que queda es G-B1, el informe, G-M2, G-M3 y menores.
+
+## F1, corrección 5 (`9b9fe37`, informe en `adc848d`)
+
+**Condición de entrada: cumplida.** `uart_dev_hw_9b9fe37.txt`, con todo PASS y `m4_timeout=0`.
+
+### Ejecuciones del auditor en la placa (`882b5a9`)
+
+| Prueba | Captura | Resultado |
+| --- | --- | --- |
+| Sesión completa, ejecuciones 1 y 2 | `prj_01/docs/uart_audit_hw_adc848d_run1.txt`, `_run2.txt` | `FW VERDICT=PASS`, `HOST VERDICT=PASS`; las 15 filas de UT3 decodifican las 6 tramas, también la de 9600 a 2 MS/s |
+| 20 warm resets | `uart_audit_warm_resets_adc848d.txt` | 20/20 |
+| UT10, `prj_04` | `prj_04/docs/uart_audit_ut10_adc848d.txt` | Línea esperada |
+| Control de UT9 | `uart_audit_ut9_control_adc848d-dirty.txt` | U1 reproducido; el host da PASS en modo control |
+
+**En la ejecución 1, CM7 esperó 9,9 s entre `STEP DONE` y `m4_timeout=0`**, y aun así todo salió PASS. En la ejecución 2 no ocurrió.
+
+### Revisión del código
+
+**Cerrado:**
+- **G-B1:** `len(frames) == len(expected)` (`uart_hw_check.py:378-379`), y 9600 a 2 MS/s con las 6 tramas. La sonda detecta todos los casos de tramas y de bytes.
+- **G-M2:** CM4 sin plazo propio, y `m4_timeout` siempre impreso; con la salvedad de H-M2.
+- **Citas de `uart_hal.c`**, y los títulos de §3 y §4 del informe.
+- **El cambio de MCO1:** `/10`, solo en `selftest-uart`, restaurado en cada salida, y el host toma `f_mco` de la línea.
+
+**El driver y `ad2.py` no cambian.**
+
+| ID | Gravedad | Hallazgo | Qué se pide |
+| --- | --- | --- | --- |
+| H-M1 | Mayor | **El control de UT3 solo ejercita el número de tramas** (`decoded[:-1]`, `uart_hw_check.py:1204-1206`). La ronda anterior controlaba el tiempo (×1,025), y ahora el tiempo, los bytes, la paridad y la parada no tienen control en la ejecución | Por fila, por `eval_ut3` y con los datos medidos: quitar una trama; `mco_per_bit × (1 + 2·tol)`; invertir un bit de dato; `parity_ok = False` en las filas con paridad; `stop_ok = False`. Cada una registrada, y todas tienen que dar FAIL |
+| H-M2 | Mayor | **El handshake de DONE tiene una carrera y oculta su fallo:**<br>• CM4 sale del bucle con `cmd == DONE` (CM4 `:189`) antes de mirar `cmd_seq`, así que si lee entre las dos escrituras de CM7 no confirma;<br>• CM7 descarta el resultado (`(void)cm4_send_cmd(UST_CMD_DONE…)`, CM7 `:2168`) y espera 10 s. Pasó en la ejecución 1 del auditor;<br>• `m4_timeout` solo se escribe a 0 (CM4 `:181`), así que la comprobación del host (`:1529-1530`) no puede fallar | Quitar la condición `cmd == DONE` del bucle; contar la falta de confirmación como fallo e imprimir `m4_done_ack=`, que el host exige; que `m4_timeout` refleje un plazo real o quitarlo |
+| H-m1 | Menor | **`f_ker` cae siempre al literal de 100 MHz:** `HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_USART234578)` devuelve 0 en este HAL. El informe (R:34) dice lo contrario | Leer `RCC->D2CCIP2R` USART234578SEL; si es D2PCLK1, `HAL_RCC_GetPCLK1Freq()`; con otra fuente, abortar |
+| H-m2 | Menor | **MCO1 solo se comprueba al final:** pasan MCO1 presente solo después de las tramas y huecos cortos. A 2 MS/s el margen de ciclo de trabajo es estrecho (≥ 40,5 %) | Primer flanco ≤ primer inicio de trama, y separación entre flancos ≤ 1,5 × `mco_per` dentro de las tramas; o MCO1 /16. El criterio de R:29 no es Nyquist |
+| H-m3 | Menor | **`total_sent` cuenta iteraciones:** se descartan los resultados de `WriteByte`/`Write` (CM7:1127-1362) | Contar lo que se envía de verdad |
+| H-m4 | Menor | **Ninguna trama medible en una fila da PASS de tiempo** (`:390`) | Al menos 4 de 6 medibles por fila |
+| H-m5 | Menor | **El informe:**<br>• las citas de D5 (`uart_bm.c:514-530`, `uart_ll.c:538-554`) no son de `TakeErrors` (es `uart_bm.c:575-609` y `uart_ll.c:514-536`);<br>• R:82 dice que D5 está aprobada, y no lo está;<br>• R:13 dice "N1..N15 atendidos", pero la lista se borró;<br>• exageraciones: R:31, R:32, R:33, R:35, R:46, R:53 | Corregir; D5 y D6, "declaradas, pendientes de aprobación" |
+| H-m6 | Menor | **Las recetas no se pueden ejecutar:**<br>• el control de UT9 no configura el `build/` del worktree (`cmake --preset selftest-uart -DCUBE_DIR=…`);<br>• `git show … >` en PowerShell 5.1 escribe UTF-16;<br>• sin `--out` fuera del worktree, la captura se borra con el worktree;<br>• en UT10, el monitor está comentado y sin `--sn`, `monitor.py --baud` no existe y `-rst` no es NRST (es `-hardRst`);<br>• `run_warm_resets.py` resetea sin `sn=` (`:46`) | `git -C <wt> checkout b41c4a7 -- …/uart_hal.c`; configurar con `-DCUBE_DIR`; `--out` fuera; UT10 con `monitor.py --sn … --timeout` y `-hardRst`; `run_warm_resets.py` con `sn=` |
+| H-m7 | Trivial | Comentario obsoleto de MCO1 a 4 MHz (CM7 `:2149`); `f_mco = 4000000.0` por defecto (`:216`); el mapeo de `mco1_sel` (CM7 `:186-193`) | Corregir |
+
+### Estado
+
+**F1 no pasa, por H-M1 y H-M2.** El resto de la fase está cerrado en la placa.
