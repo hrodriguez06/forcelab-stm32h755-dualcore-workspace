@@ -52,3 +52,47 @@ Auditor: Claude (responsable del plan). Implementador: Antigravity.
 **El cierre no pasa, por A1.** El driver está bien, y en la placa todo pasa en las ejecuciones del implementador y en las mías. Lo que falla es la evidencia: el host no ve los datos medidos, los controles no pasan por el oráculo, y el hook no se restaura.
 
 La siguiente entrega necesita, en el commit entregado: dos `led_dev_hw_<hash>` con el árbol limpio, T4 con el árbol limpio, la captura de T1–T3 y la del mock.
+
+## Entrega 2 (`65e5244`, informe en `91ffca6`)
+
+**Condición de entrada: cumplida.** En el commit entregado están `led_dev_hw_65e5244_run1.txt` y `_run2.txt`, T4 (`led_dev_t4_65e5244.txt`), T1–T3 (`led_dev_t1t3_65e5244.txt`) y el mock (`led_dev_mock_65e5244.txt`), todo con el árbol limpio al empezar y al terminar y sin `--allow-dirty`. Una sola copia de cada captura. `led_bm.c` no cambia desde la entrega 1, y `led_bm.h` solo cambia comentarios. Sin escrituras en `.git/config`.
+
+### Ejecuciones del auditor en la placa (en `91ffca6`)
+
+| Prueba | Captura | Resultado |
+| --- | --- | --- |
+| `selftest-led` (0 avisos), tres sesiones | `prj_01/docs/led_audit_hw_91ffca6_run1.txt` … `_run3.txt` | 3/3 `HOST VERDICT=PASS`, `rev`/id `91ffca6`/`bd199a037b1dbbac`. LT3: la ISR, medida con DWT, a 199 987 Hz; real `lost=0` con 6992 ISR en la ventana, control `lost=2081` con 6974 |
+| T4 con el árbol limpio | `01_led/docs/led_audit_t4_91ffca6.txt` | PASS en los cuatro proyectos; los tres controles mutan los registros medidos |
+
+Los warm resets de la entrega 1 siguen valiendo: el código de producción (`led_bm.c` y los proyectos) no cambió. T1–T3 los cubre la captura del implementador en `65e5244`. La mía en `53f03cc` difiere solo en el selftest y en comentarios de `led_bm.h`. `prj_01` `debug` queda otra vez en la placa.
+
+### Revisión
+
+**Cerrado:**
+- **A1:** las instantáneas de 15 palabras, los campos de los pines, el estado previo de LT1 (retornos de `DeinitPin`/`ReadConfig` y pines en analógico) y los registros de TIM17 salen en hex, y el host decide;
+- **A2:** `eval_snapshot_equal`, `eval_pin_equal` y `eval_tim17_stopped` se aplican al paso real y a su control;
+- **A3:** `Shared_GpioLockInstall()` se restaura tras cada sustitución del hook;
+- **A4:** la frecuencia sale de cuentas y ciclos de DWT;
+- **A5:** con `--allow-dirty`, `provenance: NOT VERIFIED`;
+- **A6:** los controles de T4 mutan los registros medidos, y faltar `regs_b`/`regs_e` da FAIL;
+- **A7:** capturas de T1–T3 y del mock (el mock pasa líneas de consola con fallos por el parser, incluida una línea LT ausente);
+- **A8–A12.**
+
+**Quedan (menores, los corrige el responsable en el cierre):**
+
+| ID | Hallazgo |
+| --- | --- |
+| B1 | La receta del informe (§6) guarda la ejecución 1 dentro del repo: la ejecución 2 ve un archivo sin seguimiento y falla el árbol limpio. La receta del README guarda las capturas fuera del repo, o las commitea entre ejecuciones |
+| B2 | La desviación 2 del informe cita `g_default_led_config`; el código usa una tabla local `default_cfg` (`led_bm.c:96-103`) |
+| B3 | La cabecera de `LED_Init` (`led_bm.h`) dice "board_def.h / Nucleo fallback", pero desde L2 ya no hay respaldo: sin las macros, `#error` |
+| B4 | Si `CM4_BOOT_ENABLED = 0`, el selftest instala con `Shared_GpioLockInstall()` un hook que el arranque no habría instalado. En `prj_01` vale 1 |
+
+### Estado
+
+**El cierre pasa.** Quedan B1–B4, más los pasos de cierre del responsable:
+- README de `01_led` (§2, §3.1, §5 y §6, más la observación del HSEM ocupado en la inicialización);
+- la fila de la hoja de ruta;
+- retirar las capturas superadas;
+- quitar el worktree de control `stm32h755_control_9dc6896` que dejó T3;
+- borrar los documentos de proceso;
+- fusionar.
