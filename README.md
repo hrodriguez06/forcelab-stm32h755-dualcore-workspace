@@ -2,7 +2,8 @@
 
 > **Target Audience:** Firmware Developers, Systems Architects, and AI Assistants (Antigravity, Claude Code).  
 > **Hardware Target:** STM32H755ZI (Dual-Core Arm Cortex-M7 @ 480 MHz + Cortex-M4 @ 240 MHz).  
-> **Toolchain:** CMake + Ninja + GNU Arm Embedded Toolchain (`arm-none-eabi-gcc`) + Visual Studio Code.
+> **Toolchain:** CMake + Ninja + GNU Arm Embedded Toolchain (`arm-none-eabi-gcc`) + Visual Studio Code.  
+> 📖 **New Collaborators / Onboarding:** Read the **[Collaborator & Development Guide (CONTRIBUTING.md)](CONTRIBUTING.md)** for environment setup, building, and flashing instructions.
 
 ---
 
