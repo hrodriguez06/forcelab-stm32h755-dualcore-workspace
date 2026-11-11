@@ -1,199 +1,201 @@
-# 🛠️ Guía del Colaborador & Manual de Desarrollo (Onboarding)
+# 🛠️ Collaborator Guide & Development Manual (Onboarding)
 
-Bienvenido al repositorio **`forcelab-stm32h755-dualcore-workspace`**. Este espacio de trabajo está diseñado como un monorepo modular para desarrollo de firmware embebido en arquitecturas dual-core **STM32H755ZI** (Arm Cortex-M7 @ 480 MHz + Arm Cortex-M4 @ 240 MHz).
+> 🌐 **Language / Idioma:** **English** | [Español](CONTRIBUTING.es.md)
 
-Esta guía te proporcionará el paso a paso exacto para configurar tu entorno, clonar dependencias, compilar firmware, flashear la placa y seguir el flujo de trabajo en Git.
+Welcome to the **`forcelab-stm32h755-dualcore-workspace`** repository. This workspace is engineered as a modular monorepo for dual-core embedded firmware development targeting the **STM32H755ZI** (Arm Cortex-M7 @ 480 MHz + Arm Cortex-M4 @ 240 MHz).
 
----
-
-## 📑 Tabla de Contenidos
-1. [Requisitos Previos del Sistema](#1-requisitos-previos-del-sistema)
-2. [Paso a Paso de Inicio Rápido (Quickstart)](#2-paso-a-paso-de-inicio-rápido-quickstart)
-3. [Restauración del SDK STM32CubeH7 (¡Crítico!)](#3-restauración-del-sdk-stm32cubeh7-crítico)
-4. [Compilación de Proyectos Dual-Core](#4-compilación-de-proyectos-dual-core)
-5. [Flasheo, Monitorización y Pruebas en Hardware](#5-flasheo-monitorización-y-pruebas-en-hardware)
-6. [Arquitectura y Reglas de Desarrollo](#6-arquitectura-y-reglas-de-desarrollo)
-7. [Flujo de Trabajo en Git (Branching & Commits)](#7-flujo-de-trabajo-en-git-branching--commits)
-8. [Resolución de Problemas Frecuentes (FAQ)](#8-resolución-de-problemas-frecuentes-faq)
+This guide provides step-by-step instructions to configure your environment, clone dependencies, compile firmware, flash hardware, and follow the project's Git workflow.
 
 ---
 
-## 1. Requisitos Previos del Sistema
+## 📑 Table of Contents
+1. [System Prerequisites](#1-system-prerequisites)
+2. [Quickstart Setup](#2-quickstart-setup)
+3. [Restoring the STM32CubeH7 SDK (Critical!)](#3-restoring-the-stm32cubeh7-sdk-critical)
+4. [Building Dual-Core Firmware Projects](#4-building-dual-core-firmware-projects)
+5. [Flashing, Monitoring & Hardware Testing](#5-flashing-monitoring--hardware-testing)
+6. [Architecture & Development Rules](#6-architecture--development-rules)
+7. [Git Workflow (Branching & Commits)](#7-git-workflow-branching--commits)
+8. [Frequently Asked Questions & Troubleshooting (FAQ)](#8-frequently-asked-questions--troubleshooting-faq)
 
-Asegúrate de contar con las siguientes herramientas en tu máquina de desarrollo:
+---
 
-| Herramienta | Versión mínima | Propósito |
+## 1. System Prerequisites
+
+Ensure the following tools are installed on your host development machine:
+
+| Tool | Minimum Version | Purpose |
 | :--- | :--- | :--- |
-| **Git** | 2.30+ | Control de versiones (activar `core.longpaths` en Windows). |
-| **GNU Arm Toolchain** | 12.3+ (`arm-none-eabi-gcc`) | Compilador cruzado para arquitecturas Cortex-M. |
-| **CMake** | 3.22+ | Sistema de generación de compilación. |
-| **Ninja** | 1.10+ | Generador de compilación de alta velocidad. |
-| **Python** | 3.10+ | Para scripts de flasheo, monitorización serie y dashboards. |
-| **VS Code** (Recomendado) | Actual | Editor de código configurado mediante workspace. |
-| **STM32CubeProgrammer / OpenOCD** | Actual | Herramienta de flasheo para ST-Link V3. |
+| **Git** | 2.30+ | Version control (enable `core.longpaths` on Windows). |
+| **GNU Arm Toolchain** | 12.3+ (`arm-none-eabi-gcc`) | Cross-compiler for Cortex-M architectures. |
+| **CMake** | 3.22+ | Build configuration and generation system. |
+| **Ninja** | 1.10+ | Fast build execution engine. |
+| **Python** | 3.10+ | For automated dual-core flasher, serial monitor, and telemetry scripts. |
+| **VS Code** (Recommended) | Latest | Multi-root workspace editor environment. |
+| **STM32CubeProgrammer / OpenOCD** | Latest | Hardware programming utilities for ST-LINK V3. |
 
-> 💡 **Tip para Windows:** Si tienes instalado STM32CubeIDE o STM32CubeCLT, puedes cargar automáticamente la toolchain al `PATH` ejecutando en PowerShell:
+> 💡 **Tip for Windows:** If STM32CubeIDE or STM32CubeCLT is installed, you can automatically add the toolchain to your PowerShell `$env:PATH` by running:
 > ```powershell
 > .\tools\env.ps1
 > ```
 
 ---
 
-## 2. Paso a Paso de Inicio Rápido (Quickstart)
+## 2. Quickstart Setup
 
 ```powershell
-# 1. Clonar el repositorio
+# 1. Clone the repository
 git clone https://github.com/hrodriguez06/forcelab-stm32h755-dualcore-workspace.git
 cd forcelab-stm32h755-dualcore-workspace
 
-# 2. Habilitar rutas largas en Windows (evita errores con paths de ST)
+# 2. Enable long paths in Windows (prevents MAX_PATH errors with nested ST trees)
 git config core.longpaths true
 
-# 3. Inicializar el SDK de STM32CubeH7 de forma ligera
+# 3. Restore the lightweight STM32CubeH7 SDK
 .\tools\init_cube_submodule.ps1
 
-# 4. Abrir en VS Code con el workspace multi-root
+# 4. Open the multi-root workspace in VS Code
 code stm32h755.code-workspace
 ```
 
 ---
 
-## 3. Restauración del SDK STM32CubeH7 (¡Crítico!)
+## 3. Restoring the STM32CubeH7 SDK (Critical!)
 
-> ⚠️ **ADVERTENCIA IMPORTANTE:**  
-> **NUNCA ejecutes `git submodule update --init --recursive`.**  
-> El paquete oficial de ST contiene más de 52 submódulos anidados y rutas de más de 260 caracteres que fallan en Windows, descargando además más de 350 MB innecesarios.
+> ⚠️ **CRITICAL WARNING:**  
+> **DO NOT run `git submodule update --init --recursive`.**  
+> ST's upstream package contains 52 nested submodules and deep paths exceeding the Windows 260-character limit. A recursive clone fails midway, leaving broken checkouts while downloading ~350 MB of redundant files.
 
-El repositorio incluye un script especializado:
+Use the workspace's dedicated initialization script instead:
 ```powershell
 .\tools\init_cube_submodule.ps1
 ```
-* **Qué hace:** Descarga de forma parcial (`--filter=blob:none`), somera (`--depth 1`) y dispersa (`sparse-checkout`) únicamente las carpetas `Drivers` (CMSIS, HAL) y `Middlewares` (FreeRTOS, LwIP) requeridas por el firmware.
-* **Tiempo estimado:** ~20-30 segundos (solo ~26 MB frente a 359 MB).
-* **Verificación:** Puedes chequear el estado sin alterar nada ejecutando:
+* **How it works:** Executes a partial (`--filter=blob:none`), shallow (`--depth 1`), and sparse checkout restricted to `Drivers` (CMSIS, HAL) and `Middlewares` (FreeRTOS, LwIP).
+* **Speed & Size:** Completes in ~20–30 seconds (~26 MB vs. 359 MB).
+* **Verification:** To check if the submodule is valid without modifying files:
   ```powershell
   .\tools\init_cube_submodule.ps1 -Check
   ```
 
 ---
 
-## 4. Compilación de Proyectos Dual-Core
+## 4. Building Dual-Core Firmware Projects
 
-Los proyectos se encuentran en la carpeta `02_firmware_projects/`. Cada proyecto compila **ambos núcleos (CM7 y CM4)** en un único paso de configuración:
+Firmware projects reside in `02_firmware_projects/`. Each project builds **both cores (CM7 and CM4)** in a single configuration step:
 
-### Ejemplo: Compilar `prj_04_adc_dma_bm_eth`
+### Example: Building `prj_04_adc_dma_bm_eth`
 
 ```powershell
 cd 02_firmware_projects/prj_04_adc_dma_bm_eth
 
-# Configurar con Ninja
+# Configure build directory with Ninja
 cmake -B build -G Ninja
 
-# Compilar ambos firmwares
+# Compile both targets
 cmake --build build
 ```
 
-### Usando CMake Presets (Alternativa recomendada):
+### Using CMake Presets (Recommended):
 ```powershell
-# Configuración y compilación en modo Debug
+# Debug preset
 cmake --preset debug
 cmake --build --preset debug
 
-# O para Release
+# Release preset
 cmake --preset release
 cmake --build --preset release
 ```
 
-### Salida esperada en la carpeta `build/`:
-* `cm7_firmware.elf` / `.bin`: Firmware para Cortex-M7 (asignado a Flash Bank 1: `0x08000000`).
-* `cm4_firmware.elf` / `.bin`: Firmware para Cortex-M4 (asignado a Flash Bank 2: `0x08100000`).
+### Generated Artifacts in `build/`:
+* `cm7_firmware.elf` / `.bin`: Cortex-M7 firmware (Flash Bank 1: `0x08000000`, FreeRTOS + lwIP Ethernet).
+* `cm4_firmware.elf` / `.bin`: Cortex-M4 firmware (Flash Bank 2: `0x08100000`, Bare-Metal ADC1 + DMA1).
 
 ---
 
-## 5. Flasheo, Monitorización y Pruebas en Hardware
+## 5. Flashing, Monitoring & Hardware Testing
 
-Conecta tu placa **NUCLEO-H755ZI-Q** por USB (puerto ST-LINK):
+Connect your **NUCLEO-H755ZI-Q** board via the ST-LINK USB port:
 
-### A. Flasheo Dual-Core automático
-Desde la raíz del proyecto específico o desde la raíz del workspace:
+### A. Automatic Dual-Core Flash
+Run from either the project directory or the workspace root:
 ```powershell
-# Flashea automáticamente CM7 en Bank 1 y CM4 en Bank 2
+# Programs CM7 into Flash Bank 1 and CM4 into Flash Bank 2
 python tools/flash.py
 ```
 
-### B. Monitor Serial ST-Link (VCP)
-Abre la consola serie sin necesidad de programas externos (Putty/TeraTerm):
+### B. ST-LINK Virtual COM Port (VCP) Monitor
+View live serial telemetry without external terminal software (PuTTY / TeraTerm):
 ```powershell
 python tools/monitor.py
 ```
 
-### C. Prueba de Red Ethernet (Ping + UDP Echo)
-Para proyectos que utilicen lwIP (ej. `prj_04`, `prj_05`, `prj_06`):
+### C. Ethernet Network Check (Ping + UDP Echo)
+For projects using lwIP (e.g., `prj_04`, `prj_05`, `prj_06`):
 ```powershell
 python tools/net_check.py 192.168.1.50
 ```
 
 ---
 
-## 6. Arquitectura y Reglas de Desarrollo
+## 6. Architecture & Development Rules
 
-Al desarrollar o modificar código en este repositorio, debes cumplir las siguientes reglas arquitectónicas:
+When adding or modifying code, adhere strictly to the workspace architecture:
 
-1. **Separación Estricta de Núcleos:**
-   * **Cortex-M7 (CPU1):** Orquestador general, networking (FreeRTOS + LwIP Ethernet), interfaz de usuario/telemetría y DSP pesado.
-   * **Cortex-M4 (CPU2):** Determinismo estricto, **Bare-Metal (sin RTOS)** para bucles de control rápido y adquisición ADC/DMA.
-2. **Capas de Drivers en `01_shared_drivers/`:**
-   * `*_hal.[c|h]`: Implementaciones de alto nivel ST HAL.
-   * `*_ll.[c|h]`: Envoltorios de bajo nivel ST LL orientados a rendimiento.
-   * `*_bm.[c|h]`: Registros puros Bare-Metal sin overhead de librerías.
-3. **Memoria Compartida y D-Cache:**
-   * Los buffers de intercambio inter-core (SRAM4 / AXI SRAM) y descriptores DMA deben estar alineados a **32 bytes** (`ALIGN_32BYTES`) y gestionados con invalidación/limpieza de caché (`SCB_CleanDCache`, `SCB_InvalidateDCache`) según las guías en `00_docs_stm32h7/docs/00_core_and_system/cache_mpu_rules.md`.
-4. **Sincronización Inter-Core:**
-   * Todo arranque y paso de mensajes entre núcleos se sincroniza mediante **Semáforos de Hardware (HSEM)**. CM7 inicia primero, enciende relojes y despierta al CM4 liberando `HSEM 0`.
+1. **Strict Core Separation:**
+   * **Cortex-M7 (CPU1):** System coordinator, FreeRTOS, networking (lwIP Ethernet), user interface, UDP telemetry, and high-load DSP (FFT / CWT).
+   * **Cortex-M4 (CPU2):** Real-time determinism, **Bare-Metal (no RTOS)**, dedicated to fast control loops and ADC/DMA acquisition pipelines.
+2. **Three-Tier Driver Architecture (`01_shared_drivers/`):**
+   * `*_hal.[c|h]`: High-level ST HAL API implementations.
+   * `*_ll.[c|h]`: Low-Level ST API register wrappers focused on latency.
+   * `*_bm.[c|h]`: Pure Bare-Metal register operations without library overhead.
+3. **Shared Memory & D-Cache Coherency:**
+   * Inter-core buffers (SRAM4 / AXI SRAM) and DMA descriptors must be **32-byte aligned** (`ALIGN_32BYTES`) and protected by explicit cache maintenance (`SCB_CleanDCache`, `SCB_InvalidateDCache`). See `00_docs_stm32h7/docs/00_core_and_system/cache_mpu_rules.md`.
+4. **Hardware Semaphore (HSEM) Synchronization:**
+   * Dual-core boots and message queues synchronize via ST Hardware Semaphores. CM7 boots first, initializes clocks, and releases CM4 by freeing `HSEM 0`.
 
 ---
 
-## 7. Flujo de Trabajo en Git (Branching & Commits)
+## 7. Git Workflow (Branching & Commits)
 
-Para mantener la estabilidad del repositorio:
+To ensure code quality and maintain repository stability:
 
-### Estrategia de Ramas
-* **`main`:** Código estable y probado en hardware. Protegido contra commits directos.
-* **`feature/<nombre>`:** Nuevas funcionalidades (ej. `feature/spi-dma-driver`).
-* **`fix/<nombre>`:** Corrección de fallos (ej. `fix/adc-calibration-offset`).
-* **`docs/<nombre>`:** Actualizaciones de documentación técnica.
+### Branching Model
+* **`main`:** Stable, verified firmware. Direct commits are restricted.
+* **`feature/<name>`:** New capabilities (e.g., `feature/spi-dma-driver`).
+* **`fix/<name>`:** Bug fixes (e.g., `fix/adc-calibration-offset`).
+* **`docs/<name>`:** Technical documentation improvements.
 
-### Convención de Commits (Conventional Commits)
-Usa mensajes claros, en minúsculas y con prefijos de tipo:
+### Commit Messages (Conventional Commits)
+Write concise commit subjects with typed scopes:
 * `feat(adc): add oversampling configuration support`
 * `fix(eth): handle link-down reconnection in lwip task`
 * `refactor(hsem): unify lock timeout handling`
 * `docs(readme): update nucleo jumper wiring table`
 
-### Creación de Pull Requests (PR)
-1. Actualiza tu rama con respecto a `main` antes de enviar (`git pull origin main --rebase`).
-2. Verifica que el proyecto compila limpio (`cmake --build build`).
-3. Describe en la PR:
-   - Resumen de los cambios.
-   - Proyectos de firmware impactados.
-   - Pruebas realizadas en hardware (si aplica).
+### Pull Request (PR) Checklist
+1. Rebase your branch against the latest `main`: `git pull origin main --rebase`.
+2. Ensure clean compilation: `cmake --build build`.
+3. Provide in your PR:
+   - Summary of modifications.
+   - Affected firmware project(s).
+   - Real hardware test results (board, probe, test output).
 
 ---
 
-## 8. Resolución de Problemas Frecuentes (FAQ)
+## 8. Frequently Asked Questions & Troubleshooting (FAQ)
 
 ### ❓ `Fatal error: STM32CubeH7 is missing or incomplete`
-* **Causa:** No se ha ejecutado el script de restauración del SDK.
-* **Solución:** Ejecuta `.\tools\init_cube_submodule.ps1` desde la raíz del workspace.
+* **Root Cause:** The SDK submodule has not been restored.
+* **Fix:** Run `.\tools\init_cube_submodule.ps1` from the workspace root.
 
-### ❓ `Filename too long` en Git para Windows
-* **Causa:** Rutas profundas de ST superan los 260 caracteres de la API Win32 antigua.
-* **Solución:** Ejecuta `git config --system core.longpaths true` con permisos de administrador.
+### ❓ `Filename too long` error on Windows
+* **Root Cause:** Nested ST repository paths exceed the legacy 260-character limit.
+* **Fix:** Run `git config --system core.longpaths true` from an elevated shell.
 
 ### ❓ `arm-none-eabi-gcc: command not found`
-* **Causa:** El compilador cruzado no está en las variables de entorno.
-* **Solución:** Ejecuta `.\tools\env.ps1` en PowerShell o añade manualmente la carpeta `bin` de tu toolchain al `PATH`.
+* **Root Cause:** GCC compiler is not registered in the system `$PATH`.
+* **Fix:** Run `.\tools\env.ps1` in PowerShell or add your GNU Arm toolchain `bin/` directory to `$PATH`.
 
-### ❓ ST-Link no detecta la placa o el target no responde
-* **Causa:** Placa en estado de bajo consumo o debugger bloqueado en dual-core.
-* **Solución:** Mantén presionado el botón negro de **RESET** en la placa Nucleo, ejecuta `python tools/flash.py` y suelta el botón cuando comience la conexión.
+### ❓ ST-LINK fails to connect or target is halted
+* **Root Cause:** Microcontroller is in low-power sleep mode or debug interface is blocked during dual-core lockup.
+* **Fix:** Hold down the black **USER RESET** button on the Nucleo board, execute `python tools/flash.py`, and release the button as soon as OpenOCD / STM32CubeProgrammer initiates connection.
